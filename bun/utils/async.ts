@@ -58,7 +58,7 @@ export async function pollUntil<T>(
 
     try {
       const res = fn();
-      const val = (res as Promise<unknown>).then ? await res : res;
+      const val = res && (res as Promise<unknown>).then ? await res : res;
       return val;
     } catch (e) {
       lastError = e as Error;

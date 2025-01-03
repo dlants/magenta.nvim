@@ -9,7 +9,21 @@ M.setup = function(opts)
   M.options = vim.tbl_deep_extend("force", M.defaults, opts or {})
 
   M.start(true)
-  vim.api.nvim_set_keymap("n", "<leader>m", ":Magenta toggle<CR>", {silent = true, noremap = true})
+  vim.api.nvim_set_keymap("n", "<leader>mt", ":Magenta toggle<CR>", {silent = true, noremap = true})
+  vim.api.nvim_set_keymap("n", "<leader>mf", ":Magenta context-file %<CR>", {silent = true, noremap = true})
+  vim.api.nvim_set_keymap(
+    "n",
+    "<leader>mf",
+    "",
+    {
+      noremap = true,
+      silent = true,
+      callback = function()
+        local current_file = vim.fn.expand("%:p")
+        vim.cmd("Magenta context-file " .. current_file)
+      end
+    }
+  )
 end
 
 M.testSetup = function()

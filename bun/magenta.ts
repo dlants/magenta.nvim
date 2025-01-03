@@ -6,6 +6,8 @@ import { pos } from "./tea/view.ts";
 import type { Nvim } from "bunvim";
 import { Lsp } from "./lsp.ts";
 import { PROVIDER_NAMES, type ProviderName } from "./providers/provider.ts";
+import { getcwd } from "./nvim/nvim.ts";
+import path from "node:path";
 
 // these constants should match lua/magenta/init.lua
 const MAGENTA_COMMAND = "magentaCommand";
@@ -57,6 +59,35 @@ export class Magenta {
         } else {
           this.nvim.logger?.error(`Provider ${provider} is not supported.`);
         }
+        break;
+      }
+
+      case "context-file": {
+        const filePath = rest[0];
+        if (typeof filePath != "string") {
+          throw new Error(`context-file must be followed by a file path`);
+        }
+
+        let absFilePath;
+        let relFilePath;
+        const cwd = await getcwd(this.nvim);
+        if (path.isAbsolute(filePath)) {
+          absFilePath = filePath;
+          relFilePath = path.relative(cwd, filePath);
+        } else {
+          absFilePath = path.resolve(cwd, filePath);
+          relFilePath = filePath;
+        }
+
+        this.chatApp.dispatch({
+          type: "context-manager-msg",
+          msg: {
+            type: "add-file-context",
+            absFilePath,
+            relFilePath,
+          },
+        });
+
         break;
       }
 
@@ -135,7 +166,11 @@ export class Magenta {
       try {
         await magenta.command(args[0] as string);
       } catch (err) {
-        nvim.logger?.error(err as Error);
+        nvim.logger?.error(
+          err instanceof Error
+            ? `Error executing command ${args[0] as string}: ${err.message}\n${err.stack}`
+            : JSON.stringify(err),
+        );
       }
     });
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { withDriver } from "./test/preamble";
+import { pollUntil } from "./utils/async";
 
 describe("bun/magenta.spec.ts", () => {
   it("clear command should work", async () => {
@@ -72,6 +73,53 @@ Stopped (end_turn)`);
         const winbar = await displayState.inputWindow.getOption("winbar");
         expect(winbar).toBe(`Magenta Input (openai)`);
       }
+    });
+  });
+
+  it("context-file end-to-end", async () => {
+    await withDriver(async (driver) => {
+      await driver.showSidebar();
+      await driver.nvim.call("nvim_command", [
+        "Magenta context-file ./bun/test/fixtures/poem.txt",
+      ]);
+
+      await driver.assertDisplayBufferContains(`\
+# context:
+file: \`./bun/test/fixtures/poem.txt\``);
+
+      await driver.inputMagentaText("check out this file");
+      await driver.send();
+      await pollUntil(() => {
+        if (driver.mockAnthropic.requests.length != 1) {
+          throw new Error(`Expected a message to be pending.`);
+        }
+      });
+      const request =
+        driver.mockAnthropic.requests[driver.mockAnthropic.requests.length - 1];
+      expect(request.messages).toEqual([
+        {
+          content: [
+            {
+              text: "check out this file",
+              type: "text",
+            },
+          ],
+          role: "user",
+        },
+        {
+          content: `\
+Files:
+Here are the contents of file \`bun/test/fixtures/poem.txt\`:
+\`\`\`
+Moonlight whispers through the trees,
+Silver shadows dance with ease.
+Stars above like diamonds bright,
+Paint their stories in the night.
+
+\`\`\``,
+          role: "user",
+        },
+      ]);
     });
   });
 });

@@ -10,6 +10,10 @@ export class NvimBuffer {
     private nvim: Nvim,
   ) {}
 
+  getOption(option: string) {
+    return this.nvim.call("nvim_buf_get_option", [this.id, option]);
+  }
+
   setOption(option: string, value: unknown) {
     return this.nvim.call("nvim_buf_set_option", [this.id, option, value]);
   }

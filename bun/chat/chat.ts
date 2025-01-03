@@ -1,5 +1,6 @@
 import * as Part from "./part.ts";
 import * as Message from "./message.ts";
+import * as ContextManager from "../context/context-manager.ts";
 import {
   type Dispatch,
   parallelThunks,
@@ -38,7 +39,9 @@ export type Model = {
   conversation: ConversationState;
   messages: Message.Model[];
   toolManager: ToolManager.Model;
+  contextManager: ContextManager.Model;
 };
+
 type WrappedMessageMsg = {
   type: "message-msg";
   msg: Message.Msg;
@@ -48,6 +51,10 @@ type WrappedMessageMsg = {
 export type Msg =
   | WrappedMessageMsg
   | { type: "choose-provider"; provider: ProviderName }
+  | {
+      type: "context-manager-msg";
+      msg: ContextManager.Msg;
+    }
   | {
       type: "add-message";
       role: Role;
@@ -84,6 +91,8 @@ export function init({ nvim, lsp }: { nvim: Nvim; lsp: Lsp }) {
   const idCounter = new IdCounter("message_");
   const partModel = Part.init({ nvim, lsp });
   const toolManagerModel = ToolManager.init({ nvim, lsp });
+  const contextManagerModel = ContextManager.init({ nvim });
+
   const messageModel = Message.init({ nvim, lsp });
 
   function initModel(): Model {
@@ -92,6 +101,7 @@ export function init({ nvim, lsp }: { nvim: Nvim; lsp: Lsp }) {
       conversation: { state: "stopped", stopReason: "end_turn" },
       messages: [],
       toolManager: toolManagerModel.initModel(),
+      contextManager: contextManagerModel.initModel(),
     };
   }
 
@@ -333,6 +343,16 @@ ${msg.error.stack}`,
         ];
       }
 
+      case "context-manager-msg": {
+        const [nextContextManager, contextManagerThunk] =
+          contextManagerModel.update(msg.msg, model.contextManager);
+        model.contextManager = nextContextManager;
+        return [
+          model,
+          parallelThunks(wrapThunk("context-manager-msg", contextManagerThunk)),
+        ];
+      }
+
       case "clear": {
         return [initModel()];
       }
@@ -383,7 +403,7 @@ ${msg.error.stack}`,
 
   function sendMessage(model: Model): Thunk<Msg> {
     return async function (dispatch: Dispatch<Msg>) {
-      const messages = getMessages(model);
+      const messages = await getMessages(model);
 
       dispatch({
         type: "conversation-state",
@@ -456,11 +476,19 @@ ${msg.error.stack}`,
             ]
           }`
         : d`Stopped (${model.conversation.stopReason || ""})`
+    }${
+      model.conversation.state == "stopped" &&
+      !contextManagerModel.isContextEmpty(model.contextManager)
+        ? d`\n${contextManagerModel.view({
+            model: model.contextManager,
+            dispatch: (msg) => dispatch({ type: "context-manager-msg", msg }),
+          })}`
+        : ""
     }`;
   };
 
-  function getMessages(model: Model): ProviderMessage[] {
-    return model.messages.flatMap((msg) => {
+  async function getMessages(model: Model): Promise<ProviderMessage[]> {
+    const messages = model.messages.flatMap((msg) => {
       const messageContent: ProviderMessageContent[] = [];
       const toolResponseContent: ProviderMessageContent[] = [];
 
@@ -511,6 +539,19 @@ ${msg.error.stack}`,
 
       return out;
     });
+
+    const contextMessage = await contextManagerModel.getContextMessage(
+      model.contextManager,
+    );
+
+    if (contextMessage) {
+      nvim.logger?.debug(
+        `Got context message: ${JSON.stringify(contextMessage)}`,
+      );
+      messages.push(contextMessage);
+    }
+
+    return messages;
   }
 
   return {
