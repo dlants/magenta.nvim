@@ -4,7 +4,7 @@ local M = {}
 M.defaults = {
   provider = "anthropic",
   openai = {
-    model = "4o"
+    model = "gpt-4o"
   },
   anthropic = {
     model = "claude-3-5-sonnet-20241022"
