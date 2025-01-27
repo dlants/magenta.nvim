@@ -53,22 +53,32 @@ local visual_commands = {
 
 M.command_complete = function(_, line)
   local commands = normal_commands
+  -- line is whatever the user has typed on the cmdline. Like  :Magenta start-inl
+  -- start splitting by whitespace
   local parts = vim.split(vim.trim(line), "%s+")
+  -- check if runnning command from visual mode
+  -- and remove command prefix from parts
   if vim.startswith("'<,'>Magenta", parts[1]) then
     commands = visual_commands
     table.remove(parts, 1)
   elseif vim.startswith("Magenta", parts[1]) then
     table.remove(parts, 1)
   end
+  -- this ensures #parts == 1 if the user has typed :Magenta<SPACE>
+  -- and #parts == 2 if the user has typed :Magenta command<SPACE>
   if line:sub(-1) == " " then
     parts[#parts + 1] = ""
   end
-  local prefix, args = table.remove(parts, 1) or "", parts
+  -- splits command and args
+  -- because of above, #parts >=1 as soon as user has entered<SPACE> after command
+  local command, args = table.remove(parts, 1) or "", parts
+  -- disable autocompletion if typing beyond command
   if #args > 0 then
     return nil
   end
+  -- filter commands by typed prefix
   return vim.tbl_filter(function(key)
-    return key:find(prefix, 1, true) == 1
+    return key:find(command, 1, true) == 1
   end, commands)
 end
 
