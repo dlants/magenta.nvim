@@ -26,6 +26,10 @@ M.log_job = function(log_level, is_stderr)
       table.insert(lines, data[i])
     end
     if eof then
+      -- don't log the init message
+      if #lines >=2 and lines[2]:match("magenta.nvim@.*start") then
+        return
+      end
       local prefix = is_stderr and "[ERROR]" or "[INFO]"
       vim.print("----------------")
       vim.print(string.format("%s job# %d:", prefix, job_id))

@@ -24,7 +24,7 @@
     }
   },
   "scripts": {
-    "start": "npx tsx node/index.ts"
+    "start": "npx tsx --no-deprecation node/index.ts"
   },
   "version": "0.0.0",
   "description": "an AI agent / LLM coding assistant for neovim",
