@@ -60,7 +60,8 @@ M.bridge = function(channelId)
     {
       nargs = "+",
       range = true,
-      desc = "Execute Magenta command"
+      desc = "Execute Magenta command",
+      complete = Utils.command_complete
     }
   )
 

@@ -37,4 +37,39 @@ M.log_job = function(log_level, is_stderr)
   end
 end
 
+local normal_commands = {
+  "abort",
+  "clear",
+  "context-files",
+  "provider",
+  "start-inline-edit",
+  "toggle",
+}
+
+local visual_commands = {
+  "start-inline-edit-selection",
+  "paste-selection",
+}
+
+M.command_complete = function(_, line)
+  local commands = normal_commands
+  local parts = vim.split(vim.trim(line), "%s+")
+  if vim.startswith("'<,'>Magenta", parts[1]) then
+    commands = visual_commands
+    table.remove(parts, 1)
+  elseif vim.startswith("Magenta", parts[1]) then
+    table.remove(parts, 1)
+  end
+  if line:sub(-1) == " " then
+    parts[#parts + 1] = ""
+  end
+  local prefix, args = table.remove(parts, 1) or "", parts
+  if #args > 0 then
+    return nil
+  end
+  return vim.tbl_filter(function(key)
+    return key:find(prefix, 1, true) == 1
+  end, commands)
+end
+
 return M
