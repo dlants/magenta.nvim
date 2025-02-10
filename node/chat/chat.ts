@@ -71,6 +71,15 @@ export type Msg =
       content?: string;
     }
   | {
+      type: "edit-message";
+      // delete will remove user message and all consecutive ones
+      // regenerate will regenerate assistant message based on closest previous user message
+      // TODO: edit will start editing and then regenerate assistant message with new changes
+      action: "delete" | "regenerate" | "edit";
+      role: Role;
+      id: number;
+    }
+  | {
       type: "stream-response";
       text: string;
     }
@@ -100,6 +109,17 @@ export type Msg =
       type: "show-message-debug-info";
     };
 
+// Returns the message ID of the last user message or falls back to the counter's last value
+function getLastUserMessageId(
+  lastUserMessage: Message.Model | undefined,
+  counter: Counter,
+): Message.MessageId {
+  if (lastUserMessage !== undefined) {
+    return lastUserMessage.id;
+  }
+  return counter.last() as Message.MessageId;
+}
+
 export function init({ nvim, lsp }: { nvim: Nvim; lsp: Lsp }) {
   const counter = new Counter();
   const partModel = Part.init({ nvim, lsp });
@@ -109,7 +129,7 @@ export function init({ nvim, lsp }: { nvim: Nvim; lsp: Lsp }) {
 
   function initModel(): Model {
     return {
-      lastUserMessageId: counter.last() as Message.MessageId,
+      lastUserMessageId: getLastUserMessageId(undefined, counter),
       providerSetting: {
         provider: "anthropic",
         model: "claude-3-5-sonnet-latest",
@@ -169,6 +189,60 @@ export function init({ nvim, lsp }: { nvim: Nvim; lsp: Lsp }) {
           model,
           wrapMessageThunk(model.messages.length - 1, messageThunk),
         ];
+      }
+
+      case "edit-message": {
+        if (model.conversation.state !== "stopped") return [model];
+        const messageIndex = model.messages.findIndex((m) => m.id === msg.id);
+        if (messageIndex === -1) {
+          return [model];
+        }
+
+        const { role, action } = msg;
+
+        switch (action) {
+          case "delete": {
+            model.messages = model.messages.slice(0, messageIndex);
+            const lastUserMessage = model.messages.findLast(
+              (m) => m.role === "user",
+            );
+            model.lastUserMessageId = getLastUserMessageId(
+              lastUserMessage,
+              counter,
+            );
+            return [model];
+          }
+          case "regenerate": {
+            const searchEndIndex = messageIndex + 1;
+            // if it's assistant message, then find last previous user message
+            const lastUserMessageIndex =
+              role === "user"
+                ? messageIndex
+                : model.messages.findLastIndex(
+                    (m, i) => m.role === "user" && i < searchEndIndex,
+                  );
+
+            if (lastUserMessageIndex === -1) {
+              nvim.logger?.error(
+                "Cannot regenerate message, no previous user message found",
+              );
+              return [model];
+            }
+
+            model.messages = model.messages.slice(0, lastUserMessageIndex + 1);
+            model.lastUserMessageId = model.messages[lastUserMessageIndex].id;
+            return [model, sendMessage(model)];
+          }
+
+          case "edit": {
+            // TODO: not implemented yet
+            return [model];
+          }
+
+          default:
+            assertUnreachable(action);
+        }
+        break;
       }
 
       case "conversation-state": {
@@ -259,7 +333,17 @@ export function init({ nvim, lsp }: { nvim: Nvim; lsp: Lsp }) {
               message: msg.msg.message,
             };
           }
-          return [model];
+        }
+
+        if (msg.msg.type === "edit-message") {
+          const message = msg.msg;
+          return [
+            model,
+            parallelThunks<Msg>(
+              wrapMessageThunk(msg.idx, messageThunk),
+              async (dispatch) => Promise.resolve(dispatch(message)),
+            ),
+          ];
         }
 
         return [model, wrapMessageThunk(msg.idx, messageThunk)];

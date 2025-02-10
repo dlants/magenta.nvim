@@ -60,6 +60,12 @@ export type Msg =
   | {
       type: "init-edit";
       filePath: string;
+    }
+  | {
+      type: "edit-message";
+      action: "delete" | "regenerate" | "edit";
+      role: Role;
+      id: number;
     };
 
 export function init({ nvim, lsp }: { nvim: Nvim; lsp: Lsp }) {
@@ -151,6 +157,11 @@ export function init({ nvim, lsp }: { nvim: Nvim; lsp: Lsp }) {
         return [model];
       }
 
+      case "edit-message": {
+        // NOTE: nothing to do, should be handled by parent (chat)
+        return [model];
+      }
+
       case "init-edit": {
         const edits = model.edits[msg.filePath];
         if (!edits) {
@@ -233,8 +244,10 @@ export function init({ nvim, lsp }: { nvim: Nvim; lsp: Lsp }) {
       );
     }
 
+    const role = createRoleHeader(model, dispatch);
+
     return d`\
-# ${model.role}:
+${role}
 ${model.parts.map(
   (part, partIdx) =>
     d`${partModel.view({
@@ -252,4 +265,26 @@ ${fileEdits}`
   };
 
   return { update, view };
+}
+
+function createRoleHeader(model: Model, dispatch: Dispatch<Msg>) {
+  const { role, id } = model;
+  const dispatchEdit =
+    (action: Extract<Msg, { type: "edit-message" }>["action"]) => () =>
+      dispatch({ type: "edit-message", action, role, id });
+  switch (role) {
+    case "user":
+      return withBindings(d`# ${role}:`, {
+        d: dispatchEdit("delete"),
+        r: dispatchEdit("regenerate"),
+        // e: dispatchEdit("edit") //not implemented yet
+      });
+    case "assistant":
+      return withBindings(d`# ${role}:`, {
+        r: dispatchEdit("regenerate"),
+        d: dispatchEdit("delete"),
+      });
+    default:
+      assertUnreachable(role);
+  }
 }
