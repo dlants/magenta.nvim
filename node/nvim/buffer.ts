@@ -128,6 +128,10 @@ export class NvimBuffer {
     return this.nvim.call("nvim_buf_set_name", [this.id, name]);
   }
 
+  getLineCount(): Promise<number> {
+    return this.nvim.call("nvim_buf_line_count", [this.id]);
+  }
+
   static async create(listed: boolean, scratch: boolean, nvim: Nvim) {
     const bufNr = (await nvim.call("nvim_create_buf", [
       listed,

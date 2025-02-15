@@ -277,7 +277,7 @@ function createRoleHeader(model: Model, dispatch: Dispatch<Msg>) {
       return withBindings(d`# ${role}:`, {
         d: dispatchEdit("delete"),
         r: dispatchEdit("regenerate"),
-        // e: dispatchEdit("edit") //not implemented yet
+        e: dispatchEdit("edit"),
       });
     case "assistant":
       return withBindings(d`# ${role}:`, {

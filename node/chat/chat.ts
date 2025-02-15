@@ -2,6 +2,7 @@ import * as Part from "./part.ts";
 import * as Message from "./message.ts";
 import * as ContextManager from "../context/context-manager.ts";
 import {
+  chainThunks,
   type Dispatch,
   parallelThunks,
   type Thunk,
@@ -74,10 +75,14 @@ export type Msg =
       type: "edit-message";
       // delete will remove user message and all consecutive ones
       // regenerate will regenerate assistant message based on closest previous user message
-      // TODO: edit will start editing and then regenerate assistant message with new changes
+      // edit will move message to the input buffer and remove all consecutive messages
       action: "delete" | "regenerate" | "edit";
       role: Role;
       id: number;
+    }
+  | {
+      type: "prepend-input-buffer";
+      text: string;
     }
   | {
       type: "stream-response";
@@ -235,8 +240,29 @@ export function init({ nvim, lsp }: { nvim: Nvim; lsp: Lsp }) {
           }
 
           case "edit": {
-            // TODO: not implemented yet
-            return [model];
+            const { role, id } = msg;
+            if (role !== "user") return [model];
+
+            const messageIndex = model.messages.findIndex((m) => m.id === id);
+            if (messageIndex === -1) return [model];
+            const message = model.messages[messageIndex];
+
+            const text = message.parts
+              .filter((p) => p.type == "text")
+              .map((p) => p.text)
+              .join("");
+
+            const dispatchPrepend: Thunk<Msg> = async (dispatch) =>
+              Promise.resolve(dispatch({ type: "prepend-input-buffer", text }));
+            const dispatchDeleteMsg: Thunk<Msg> = async (dispatch) =>
+              Promise.resolve(
+                dispatch({ type: "edit-message", role, id, action: "delete" }),
+              );
+
+            return [
+              model,
+              chainThunks<Msg>(dispatchPrepend, dispatchDeleteMsg),
+            ];
           }
 
           default:
@@ -505,6 +531,11 @@ ${msg.error.stack}`,
 
       case "show-message-debug-info": {
         return [model, () => showDebugInfo(model)];
+      }
+
+      case "prepend-input-buffer": {
+        //NOTE: this is handled by the parent component
+        return [model];
       }
 
       default:

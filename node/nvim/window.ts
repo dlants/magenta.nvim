@@ -116,6 +116,10 @@ export class NvimWindow {
     return this.nvim.call("nvim_win_set_cursor", [this.id, [pos.row, pos.col]]);
   }
 
+  async setWindowAsCurrent() {
+    return this.nvim.call("nvim_set_current_win", [this.id]);
+  }
+
   zt() {
     return this.nvim.call("nvim_exec2", [
       `call win_execute(${this.id}, 'normal! zt')`,
