@@ -108,15 +108,16 @@ local function process_edit(firstline_0idx, lastline_0idx_excl, new_lastline_0id
     end
   end
 
-  local noop_edit = false
+  local noop_edit = true
   if #previous_lines == #new_lines then
-    noop_edit = true
     for i = 1, #previous_lines do
       if previous_lines[i] ~= new_lines[i] then
         noop_edit = false
         break
       end
     end
+  else
+    noop_edit = false
   end
 
   if not noop_edit then
@@ -158,6 +159,19 @@ local function process_pending_edits()
   watcher.pending_edits = {}
 end
 
+local function get_relative_path(bufName)
+  -- Get the current working directory
+  local cwd = vim.fn.getcwd()
+
+  -- If path starts with cwd, make it relative
+  if vim.startswith(bufName, cwd) then
+    -- Remove cwd and leading slash from path
+    return bufName:sub(#cwd + 2)
+  end
+
+  return bufName
+end
+
 local function attach_to_buffer(bufnr)
   local bufName = vim.api.nvim_buf_get_name(bufnr)
 
@@ -169,7 +183,7 @@ local function attach_to_buffer(bufnr)
 
   watcher = {
     bufnr = bufnr,
-    bufName = bufName,
+    bufName = get_relative_path(bufName),
     prev = nil,
     pending_edits = {},
     debounce_timer = vim.loop.new_timer()
@@ -232,9 +246,10 @@ local function construct_prompt()
     "### User Edits:"
   }
 
-  for i, edit in ipairs(edits) do
+  for i = #edits, 1, -1 do
+    local edit = edits[i]
     table.insert(content, "")
-    table.insert(content, string.format("Edit #%d:", i))
+    table.insert(content, string.format("User edited file: \"%s\"", edit.bufName))
     table.insert(content, "```diff")
 
     -- Display the hunk header if available
@@ -264,10 +279,10 @@ local function construct_prompt()
     table.insert(content, "```")
   end
 
-  -- Get current buffer name
-  local bufname = vim.api.nvim_buf_get_name(watcher.bufnr)
+  local bufName = vim.api.nvim_buf_get_name(watcher.bufnr)
+  local relativePath = get_relative_path(bufName)
   table.insert(content, "### User Excerpt:")
-  table.insert(content, string.format("File: %s", bufname))
+  table.insert(content, string.format("File: \"%s\"", relativePath))
   table.insert(content, "```")
 
   -- Get visible contents of the active buffer (0-indexed)
