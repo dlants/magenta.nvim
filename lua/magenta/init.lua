@@ -1,14 +1,13 @@
 local Utils = require("magenta.utils")
 local Options = require("magenta.options")
 require("magenta.actions")
-local BufferSnapshots = require("magenta.buffer_snapshots")
 local M = {}
 
 M.setup = function(opts)
   Options.set_options(opts)
   M.start(true)
   require("magenta.keymaps").default_keymaps()
-  BufferSnapshots.setup()
+  require("magenta.buffer_snapshots").setup()
 end
 
 M.testSetup = function()
