@@ -8,6 +8,7 @@ local DEBOUNCE_MS = 200
 -- watcher: {
 --   bufnr = string,
 --   bufName = string,
+--   counter = number,  -- unique counter for each attachment
 --   prev = {
 --     start_line_0idx = number,
 --     lines = string[]
@@ -16,6 +17,9 @@ local DEBOUNCE_MS = 200
 --   debounce_timer = vim.loop timer
 --   }
 -- }
+
+-- Global counter that increments on each buffer attachment
+local attachment_counter = 0
 local watcher = nil
 
 -- edit: {
@@ -149,6 +153,7 @@ local function process_pending_edits()
     return
   end
 
+
   -- Combine all pending edits using rebase_pending_edits
   local combined = rebase_pending_edits(watcher.pending_edits)
 
@@ -173,7 +178,9 @@ local function get_relative_path(bufName)
 end
 
 local function attach_to_buffer(bufnr)
-  local bufName = vim.api.nvim_buf_get_name(bufnr)
+  -- Increment counter for this new attachment
+  attachment_counter = attachment_counter + 1
+  local current_counter = attachment_counter
 
   -- Clean up any existing timer
   if watcher and watcher.debounce_timer then
@@ -181,9 +188,11 @@ local function attach_to_buffer(bufnr)
     watcher.debounce_timer:close()
   end
 
+  local bufName = vim.api.nvim_buf_get_name(bufnr)
   watcher = {
     bufnr = bufnr,
     bufName = get_relative_path(bufName),
+    counter = current_counter,
     prev = nil,
     pending_edits = {},
     debounce_timer = vim.loop.new_timer()
@@ -194,7 +203,7 @@ local function attach_to_buffer(bufnr)
     -- on_lines is 0-indexed. Lastline is inclusive
     on_lines = function(_, _, _, firstline_0idx, lastline_0idx_excl, new_lastline_0idx_excl)
       -- All line numbers from nvim_buf_attach callback are 0-indexed
-      if not (watcher and watcher.bufnr == bufnr) then
+      if not (watcher and watcher.bufnr == bufnr and watcher.counter == current_counter) then
         return true -- returning true detaches this on_lines listener
       end
 
