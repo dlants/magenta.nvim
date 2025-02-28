@@ -294,8 +294,14 @@ local function construct_prompt()
   table.insert(content, string.format("File: \"%s\"", relativePath))
   table.insert(content, "```")
 
-  -- Get visible contents of the active buffer (0-indexed)
-  local start_line_0idx, end_line_0idx = get_visible_window_range(watcher.bufnr)
+  -- Get visible contents of the active buffer (0-indexed) with 5 lines of padding above and below
+  local visible_start_line_0idx, visible_end_line_0idx = get_visible_window_range(watcher.bufnr)
+
+  -- Add 5 lines of padding above and below
+  local start_line_0idx = math.max(0, visible_start_line_0idx - 5)
+  local end_line_0idx = visible_end_line_0idx + 5
+
+  -- Get the padded visible content
   local lines = vim.api.nvim_buf_get_lines(watcher.bufnr, start_line_0idx, end_line_0idx, false)
 
   -- Get cursor position (nvim_win_get_cursor returns {row, col} where row is 1-indexed and col is 0-indexed)
@@ -303,13 +309,24 @@ local function construct_prompt()
   local cursor_row_1idx = cursor_pos[1]
   local cursor_col_0idx = cursor_pos[2]
 
-  -- Convert cursor row to 0-indexed and relative to visible window
+  -- Convert cursor row to 0-indexed and adjust for the padded window start
   local cursor_row_0idx_relative = cursor_row_1idx - 1 - start_line_0idx
 
-  -- Insert lines with cursor marker
+  -- Calculate editable region boundaries (5 lines above, 20 lines below cursor)
+  local editable_start = math.max(0, cursor_row_0idx_relative - 5)
+  local editable_end = math.min(#lines, cursor_row_0idx_relative + 20)
+
+  -- Insert lines with cursor marker and editable region markers
   for i, line in ipairs(lines) do
     -- i is 1-indexed (Lua arrays start at 1)
-    if i-1 == cursor_row_0idx_relative then
+    local i_0idx = i - 1 -- Convert to 0-indexed for comparison
+
+    -- Add editable region start marker
+    if i_0idx == editable_start then
+      table.insert(content, "<|editable_region_start|>")
+    end
+
+    if i_0idx == cursor_row_0idx_relative then
       -- Insert cursor marker at the proper position
       -- cursor_col_0idx is 0-indexed, which matches the string.sub indexing
       local prefix = string.sub(line, 1, cursor_col_0idx)
@@ -317,6 +334,11 @@ local function construct_prompt()
       table.insert(content, prefix .. "<|user_cursor_is_here|>" .. suffix)
     else
       table.insert(content, line)
+    end
+
+    -- Add editable region end marker
+    if i_0idx == editable_end then
+      table.insert(content, "<|editable_region_end|>")
     end
   end
 
