@@ -14,7 +14,7 @@ import {
 import { getCurrentBuffer, getcwd, getpos, notifyErr } from "./nvim/nvim.ts";
 import path from "node:path";
 import type { BufNr, Line } from "./nvim/buffer.ts";
-import { pos1col1to0 } from "./nvim/window.ts";
+import { pos1col1to0, type Position1Indexed } from "./nvim/window.ts";
 import { getMarkdownExt } from "./utils/markdown.ts";
 import {
   DEFAULT_OPTIONS,
@@ -64,7 +64,15 @@ export class Magenta {
     this.chatApp = TEA.createApp({
       nvim: this.nvim,
       initialModel: this.chatModel.initModel(),
-      update: (msg, model) => this.chatModel.update(msg, model, { nvim }),
+      update: (msg, model) => {
+        if (msg.type === "prepend-input-buffer") {
+          const text = msg.text;
+          prependInputBufferHandler(text, this.sidebar, nvim).catch((err) => {
+            nvim.logger?.debug("error appending input buffer: ", err);
+          });
+        }
+        return this.chatModel.update(msg, model, { nvim });
+      },
       View: this.chatModel.view,
     });
 
@@ -357,4 +365,40 @@ ${lines.join("\n")}
     nvim.logger?.info(`Magenta initialized. ${JSON.stringify(opts)}`);
     return magenta;
   }
+}
+
+async function prependInputBufferHandler(
+  text: string,
+  sidebar: Sidebar,
+  nvim: Nvim,
+) {
+  const inputBuffer = sidebar.state.inputBuffer;
+  if (!inputBuffer) {
+    nvim.logger?.debug(`unable to init inputBuffer`);
+    return;
+  }
+  const lines = text.split("\n");
+  const lastLine = await inputBuffer.getLineCount();
+  const firstLineText = await inputBuffer.getLines({
+    start: lastLine - 1,
+    end: lastLine,
+  });
+
+  //Prepend the text to input bufer. If there is a content separate with a new line.
+  if (lastLine === 1 && firstLineText[0].trim() === "") {
+    await inputBuffer.setLines({ start: 0, end: -1, lines: lines as Line[] });
+  } else {
+    lines.push("");
+    await inputBuffer.setLines({ start: 0, end: 0, lines: lines as Line[] });
+  }
+
+  if (sidebar.state.state !== "visible") {
+    nvim.logger?.debug(`sidebar state is not in 'visible' state`);
+    return;
+  }
+  await sidebar.state.inputWindow.setWindowAsCurrent();
+  await sidebar.state.inputWindow.setCursor({
+    row: lastLine,
+    col: 0,
+  } as Position1Indexed);
 }
