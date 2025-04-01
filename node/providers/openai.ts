@@ -17,13 +17,15 @@ import * as InlineEdit from "../inline-edit/inline-edit-tool.ts";
 import * as ReplaceSelection from "../inline-edit/replace-selection-tool.ts";
 
 export type OpenAIOptions = {
-  model: "gpt-4o";
+  model: string;
+  omitParallelToolCalls?: boolean;
 };
 
 export class OpenAIProvider implements Provider {
   private client: OpenAI;
   private request: Stream<unknown> | undefined;
   private model: string;
+  private omitParallelToolCalls: boolean;
 
   abort() {
     if (this.request) {
@@ -32,7 +34,10 @@ export class OpenAIProvider implements Provider {
     }
   }
 
-  constructor(private nvim: Nvim) {
+  constructor(
+    private nvim: Nvim,
+    options?: OpenAIOptions,
+  ) {
     const apiKey = process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
@@ -44,11 +49,16 @@ export class OpenAIProvider implements Provider {
       baseURL: process.env.OPENAI_BASE_URL,
     });
 
-    this.model = "gpt-4o";
+    this.model = options?.model || "gpt-4o";
+    this.omitParallelToolCalls = options?.omitParallelToolCalls ?? false;
   }
 
   setModel(model: string): void {
     this.model = model;
+  }
+
+  setOmitParallelToolCalls(omit: boolean): void {
+    this.omitParallelToolCalls = omit;
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -173,13 +183,10 @@ export class OpenAIProvider implements Provider {
       }
     }
 
-    return {
+    const params: OpenAI.ChatCompletionCreateParamsStreaming = {
       model: this.model,
       stream: true,
       messages: openaiMessages,
-      // see https://platform.openai.com/docs/guides/function-calling#parallel-function-calling-and-structured-outputs
-      // this recommends disabling parallel tool calls when strict adherence to schema is needed
-      parallel_tool_calls: false,
       tools: ToolManager.TOOL_SPECS.map((s): OpenAI.ChatCompletionTool => {
         return {
           type: "function",
@@ -192,6 +199,14 @@ export class OpenAIProvider implements Provider {
         };
       }),
     };
+
+    // see https://platform.openai.com/docs/guides/function-calling#parallel-function-calling-and-structured-outputs
+    // this recommends disabling parallel tool calls when strict adherence to schema is needed
+    // However, some models (like o1) error out when `parallel_tool_calls` is passed.
+    if (!this.omitParallelToolCalls) {
+      params.parallel_tool_calls = false;
+    }
+    return params;
   }
 
   async inlineEdit(messages: Array<ProviderMessage>): Promise<{

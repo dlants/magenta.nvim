@@ -90,6 +90,29 @@ require('magenta').setup({
     model = "anthropic.claude-3-5-sonnet-20241022-v2:0",
     prompt_caching = false
   },
+  -- models available to choose from
+  models = {
+    openai = {
+      { model = "gpt-4o" },
+      {
+        model = "o1",
+        -- some openai models, like o1, error out when `parallel_tool_calls` param is provided
+        -- optionally omit it:
+        omit_parallel_tool_calls = true
+      },
+    },
+    anthropic = {
+      { model = "claude-3-7-sonnet-latest" },
+      { model = "claude-3-5-sonnet-latest" },
+    },
+    bedrock = {
+      {
+        model = "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        prompt_caching = false
+      },
+    },
+  },
+
   -- open chat sidebar on left or right side
   sidebar_position = "left",
   -- can be changed to "telescope"

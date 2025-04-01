@@ -7,7 +7,7 @@ import type { Result } from "../utils/result";
 export const PROVIDER_NAMES = ["anthropic", "openai", "bedrock"] as const;
 export type ProviderSetting =
   | { provider: "anthropic"; model: string }
-  | { provider: "openai"; model: string }
+  | { provider: "openai"; model: string; omitParallelToolCalls?: boolean }
   | { provider: "bedrock"; model: string; promptCaching: boolean };
 export type ProviderName = ProviderSetting["provider"];
 
@@ -61,6 +61,7 @@ export interface Provider {
   setModel(model: string): void;
   createStreamParameters(messages: Array<ProviderMessage>): unknown;
   countTokens(messages: Array<ProviderMessage>): Promise<number>;
+  setOmitParallelToolCalls?(omit: boolean): void;
 
   inlineEdit(messages: Array<ProviderMessage>): Promise<{
     inlineEdit: Result<InlineEditToolRequest, { rawRequest: unknown }>;

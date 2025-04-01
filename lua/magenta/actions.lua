@@ -59,16 +59,16 @@ M.pick_context_files = function()
 end
 
 M.pick_provider = function()
-  local items = {
-    'anthropic claude-3-7-sonnet-latest',
-    'anthropic claude-3-5-sonnet-latest',
-    'openai gpt-4o',
-    'openai o1',
-    'openai o1-mini'
-  }
-  vim.ui.select(items, { prompt = "Select Model", }, function (choice)
+  local items = Options.get_model_strings()
+  local display_items = {}
+  local command_map = {}
+  for _, item in ipairs(items) do
+    table.insert(display_items, item.display)
+    command_map[item.display] = item.command
+  end
+  vim.ui.select(display_items, { prompt = "Select Model", }, function (choice)
     if choice ~= nil then
-      vim.cmd("Magenta provider " .. choice )
+      vim.cmd("Magenta provider " .. command_map[choice])
     end
   end)
 end

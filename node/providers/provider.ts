@@ -24,7 +24,10 @@ export function getProvider(
         clients[providerSetting.provider] = new AnthropicProvider(nvim);
         break;
       case "openai":
-        clients[providerSetting.provider] = new OpenAIProvider(nvim);
+        clients[providerSetting.provider] = new OpenAIProvider(nvim, {
+          model: providerSetting.model,
+          omitParallelToolCalls: providerSetting.omitParallelToolCalls ?? false,
+        });
         break;
       case "bedrock":
         clients[providerSetting.provider] = new BedrockProvider(
@@ -39,6 +42,15 @@ export function getProvider(
 
   const provider = clients[providerSetting.provider]!;
   provider.setModel(providerSetting.model);
+
+  if (
+    providerSetting.provider === "openai" &&
+    "setOmitParallelToolCalls" in provider
+  ) {
+    provider.setOmitParallelToolCalls(
+      providerSetting.omitParallelToolCalls ?? false,
+    );
+  }
 
   return provider;
 }

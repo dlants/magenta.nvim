@@ -75,17 +75,31 @@ M.bridge = function(channelId)
       nargs = "+",
       range = true,
       desc = "Execute Magenta command",
-      complete = function(ArgLead, CmdLine)
-        local commands = CmdLine:match("^'<,'>") and visual_commands or normal_commands
+        complete = function(ArgLead, CmdLine)
+          local parts = vim.split(CmdLine, "%s+")
+          local commands = CmdLine:match("^'<,'>") and visual_commands or normal_commands
 
-        if ArgLead == '' then
-          return commands
+          if #parts <= 2 then
+            if ArgLead == '' then
+              return commands
+            end
+            return vim.tbl_filter(function(cmd)
+              return cmd:find('^' .. ArgLead)
+            end, commands)
+          end
+
+          if parts[2] == "provider" and parts[3] == "openai" and #parts > 3 then
+            local provider_options = {"omit_parallel_tool_calls"}
+            if ArgLead == '' then
+              return provider_options
+            end
+            return vim.tbl_filter(function(opt)
+              return opt:find('^' .. ArgLead)
+            end, provider_options)
+          end
+
+          return {}
         end
-        -- Filter based on ArgLead
-        return vim.tbl_filter(function(cmd)
-          return cmd:find('^' .. ArgLead)
-        end, commands)
-      end
     }
   )
 

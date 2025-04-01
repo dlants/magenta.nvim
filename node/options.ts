@@ -2,7 +2,7 @@ import { PROVIDER_NAMES, type ProviderName } from "./providers/provider";
 
 export type MagentaOptions = {
   provider: ProviderName;
-  openai: { model: string };
+  openai: { model: string; omitParallelToolCalls?: boolean };
   anthropic: { model: string };
   bedrock: { model: string; promptCaching: boolean };
   sidebarPosition: "left" | "right";
@@ -54,6 +54,10 @@ export function parseOptions(inputOptions: unknown): MagentaOptions {
       };
       if (typeof openaiOptions["model"] == "string") {
         options.openai.model = openaiOptions.model;
+      }
+      if (typeof openaiOptions["omitParallelToolCalls"] == "boolean") {
+        options.openai.omitParallelToolCalls =
+          openaiOptions.omitParallelToolCalls;
       }
     }
 

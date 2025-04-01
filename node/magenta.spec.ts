@@ -104,12 +104,15 @@ Awaiting response ⠁`);
         expect(state.model.providerSetting).toEqual({
           provider: "openai",
           model: "gpt-4o",
+          omitParallelToolCalls: false,
         });
         const winbar = await displayState.inputWindow.getOption("winbar");
         expect(winbar).toBe(`Magenta Input (openai gpt-4o)`);
       }
 
-      await driver.nvim.call("nvim_command", ["Magenta provider openai o1"]);
+      await driver.nvim.call("nvim_command", [
+        "Magenta provider openai o1 omit_parallel_tool_calls",
+      ]);
       {
         const state = driver.magenta.chatApp.getState();
         if (state.status != "running") {
@@ -119,6 +122,7 @@ Awaiting response ⠁`);
         expect(state.model.providerSetting).toEqual({
           provider: "openai",
           model: "o1",
+          omitParallelToolCalls: true,
         });
         const winbar = await displayState.inputWindow.getOption("winbar");
         expect(winbar).toBe(`Magenta Input (openai o1)`);
