@@ -3,7 +3,7 @@ import { withDriver } from "./test/preamble";
 
 describe("node/sidebar.spec.ts", () => {
   it("send command should scroll to last user message", async () => {
-    await withDriver(async (driver) => {
+    await withDriver({}, async (driver) => {
       await driver.showSidebar();
       await driver.inputMagentaText(`\n`.repeat(100));
       await driver.send();

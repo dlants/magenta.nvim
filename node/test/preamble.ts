@@ -8,6 +8,7 @@ import { pollUntil } from "../utils/async.ts";
 import { Magenta } from "../magenta.ts";
 import { withMockClient } from "../providers/mock.ts";
 import { NvimDriver } from "./driver.ts";
+import { type MagentaOptions } from "../options.ts";
 
 const SOCK = `/tmp/magenta-test.sock`;
 export async function withNvimProcess(fn: (sock: string) => Promise<void>) {
@@ -120,13 +121,31 @@ export async function withNvimClient(fn: (nvim: Nvim) => Promise<void>) {
   });
 }
 
-export async function withDriver(fn: (driver: NvimDriver) => Promise<void>) {
+export type TestOptions = Partial<MagentaOptions>;
+
+export async function withDriver(
+  driverOptions: {
+    options?: TestOptions;
+  },
+  fn: (driver: NvimDriver) => Promise<void>,
+) {
   return await withNvimProcess(async (sock) => {
     const nvim = await attach({
       socket: sock,
       client: { name: "test" },
       logging: { level: "debug" },
     });
+
+    // Set test options before Magenta starts
+    if (driverOptions.options) {
+      // Send JSON string to Lua and let it parse the string into a table
+      // Make sure we use the long string syntax [=[ ]=] to avoid escaping issues
+      const testOptionsJson = JSON.stringify(driverOptions.options);
+      await nvim.call("nvim_exec_lua", [
+        `setup_test_options([=[${testOptionsJson}]=])`,
+        [],
+      ]);
+    }
 
     await withMockClient(async (mockAnthropic) => {
       const magenta = await Magenta.start(nvim);

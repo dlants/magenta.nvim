@@ -1,4 +1,25 @@
 vim.opt.runtimepath:append(".")
+
+-- Set default restrictive options for tests
+_G.magenta_test_options = {
+  autoContext = {},
+}
+
+-- Setup function that tests can call to configure options before bridge is established
+_G.setup_test_options = function(options_json)
+  -- Parse JSON string into a Lua table
+  local options = vim.json.decode(options_json)
+
+  -- Merge the provided options with existing test options
+  -- All keys should be in camelCase to match TypeScript MagentaOptions
+  for k, v in pairs(options) do
+    _G.magenta_test_options[k] = v
+  end
+
+  -- Debug output to help troubleshoot option setting
+  vim.notify("Test options set: " .. vim.inspect(_G.magenta_test_options))
+end
+
 require("magenta")
 
 vim.api.nvim_create_autocmd(

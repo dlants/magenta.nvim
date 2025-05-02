@@ -5,7 +5,7 @@ import { pollUntil } from "../utils/async.ts";
 
 describe("node/tools/hover.spec.ts", () => {
   it("hover end-to-end", async () => {
-    await withDriver(async (driver) => {
+    await withDriver({}, async (driver) => {
       await driver.editFile("node/test/fixtures/test.ts");
       await driver.showSidebar();
 
@@ -22,7 +22,7 @@ describe("node/tools/hover.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId,
-              name: "hover",
+              toolName: "hover",
               input: {
                 filePath: "node/test/fixtures/test.ts",
                 symbol: "val.a.b.c",
@@ -34,24 +34,29 @@ describe("node/tools/hover.spec.ts", () => {
 
       const result = await pollUntil(
         () => {
-          const state = driver.magenta.chatApp.getState();
-          if (state.status != "running") {
-            throw new Error(`app crashed`);
+          const state = driver.magenta.chat.state;
+          if (state.state != "initialized") {
+            throw new Error(`thread not ready`);
+          }
+
+          const thread = state.thread;
+          if (!thread || !thread.state || typeof thread.state !== "object") {
+            throw new Error("Thread state is not valid");
           }
 
           const toolWrapper =
-            state.model.toolManager.toolWrappers[toolRequestId];
+            thread.toolManager.state.toolWrappers[toolRequestId];
           if (!toolWrapper) {
             throw new Error(
               `could not find toolWrapper with id ${toolRequestId}`,
             );
           }
 
-          if (toolWrapper.model.state.state != "done") {
+          if (toolWrapper.tool.state.state != "done") {
             throw new Error(`Request not done`);
           }
 
-          return toolWrapper.model.state.result;
+          return toolWrapper.tool.state.result;
         },
         { timeout: 5000 },
       );

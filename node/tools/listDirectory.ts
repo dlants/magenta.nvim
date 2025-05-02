@@ -1,9 +1,9 @@
 import fs from "fs";
 import path from "path";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import type { Thunk, Update } from "../tea/tea.ts";
-import { d, type VDOMNode } from "../tea/view.ts";
+import { d } from "../tea/view.ts";
 import type { Result } from "../utils/result.ts";
+import type { Dispatch, Thunk } from "../tea/tea.ts";
 import { getcwd } from "../nvim/nvim.ts";
 import type { Nvim } from "nvim-node";
 import { readGitignore } from "./util.ts";
@@ -13,44 +13,18 @@ import type {
   ProviderToolSpec,
 } from "../providers/provider.ts";
 
-export type Model = {
-  type: "list_directory";
-  autoRespond: boolean;
-  request: ToolRequest<"list_directory">;
-  state:
-    | {
-        state: "processing";
-      }
-    | {
-        state: "done";
-        result: ProviderToolResultContent;
-      };
-};
+export type State =
+  | {
+      state: "processing";
+    }
+  | {
+      state: "done";
+      result: ProviderToolResultContent;
+    };
 
 export type Msg = {
   type: "finish";
   result: Result<string>;
-};
-
-export const update: Update<Msg, Model> = (msg, model) => {
-  switch (msg.type) {
-    case "finish":
-      return [
-        {
-          ...model,
-          state: {
-            state: "done",
-            result: {
-              type: "tool_result",
-              id: model.request.id,
-              result: msg.result,
-            },
-          },
-        },
-      ];
-    default:
-      assertUnreachable(msg.type);
-  }
 };
 
 async function listDirectoryBFS(
@@ -98,25 +72,50 @@ async function listDirectoryBFS(
   return results;
 }
 
-export function initModel(
-  request: ToolRequest<"list_directory">,
-  context: { nvim: Nvim },
-): [Model, Thunk<Msg>] {
-  const model: Model = {
-    type: "list_directory",
-    autoRespond: true,
-    request,
-    state: {
-      state: "processing",
-    },
-  };
+export class ListDirectoryTool {
+  state: State;
+  toolName = "list_directory" as const;
+  autoRespond = true;
 
-  return [
-    model,
-    async (dispatch) => {
+  private constructor(
+    public request: Extract<ToolRequest, { toolName: "list_directory" }>,
+    public context: { nvim: Nvim },
+  ) {
+    this.state = {
+      state: "processing",
+    };
+  }
+
+  static create(
+    request: Extract<ToolRequest, { toolName: "list_directory" }>,
+    context: { nvim: Nvim },
+  ): [ListDirectoryTool, Thunk<Msg>] {
+    const tool = new ListDirectoryTool(request, context);
+    return [tool, tool.listDirectory()];
+  }
+
+  update(msg: Msg): Thunk<Msg> | undefined {
+    switch (msg.type) {
+      case "finish":
+        this.state = {
+          state: "done",
+          result: {
+            type: "tool_result",
+            id: this.request.id,
+            result: msg.result,
+          },
+        };
+        return;
+      default:
+        assertUnreachable(msg.type);
+    }
+  }
+
+  listDirectory(): Thunk<Msg> {
+    return async (dispatch: Dispatch<Msg>) => {
       try {
-        const cwd = await getcwd(context.nvim);
-        const dirPath = request.input.dirPath || ".";
+        const cwd = await getcwd(this.context.nvim);
+        const dirPath = this.request.input.dirPath || ".";
         const absolutePath = path.resolve(cwd, dirPath);
 
         if (!absolutePath.startsWith(cwd)) {
@@ -131,7 +130,7 @@ export function initModel(
         }
 
         const files = await listDirectoryBFS(absolutePath, cwd);
-        context.nvim.logger?.debug(`files: ${files.join("\n")}`);
+        this.context.nvim.logger?.debug(`files: ${files.join("\n")}`);
         dispatch({
           type: "finish",
           result: {
@@ -148,36 +147,42 @@ export function initModel(
           },
         });
       }
-    },
-  ];
-}
-
-export function view({ model }: { model: Model }): VDOMNode {
-  switch (model.state.state) {
-    case "processing":
-      return d`⚙️ Listing directory ${model.request.input.dirPath || "."}`;
-    case "done":
-      return d`✅ Finished listing directory ${model.request.input.dirPath || "."}`;
-    default:
-      assertUnreachable(model.state);
+    };
   }
-}
 
-export function getToolResult(model: Model): ProviderToolResultContent {
-  switch (model.state.state) {
-    case "processing":
-      return {
-        type: "tool_result",
-        id: model.request.id,
-        result: {
-          status: "ok",
-          value: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
-        },
-      };
-    case "done":
-      return model.state.result;
-    default:
-      assertUnreachable(model.state);
+  getToolResult(): ProviderToolResultContent {
+    switch (this.state.state) {
+      case "processing":
+        return {
+          type: "tool_result",
+          id: this.request.id,
+          result: {
+            status: "ok",
+            value: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
+          },
+        };
+      case "done":
+        return this.state.result;
+      default:
+        assertUnreachable(this.state);
+    }
+  }
+
+  view() {
+    switch (this.state.state) {
+      case "processing":
+        return d`⚙️ Listing directory ${this.request.input.dirPath || "."}`;
+      case "done":
+        return d`✅ Finished listing directory ${this.request.input.dirPath || "."}`;
+      default:
+        assertUnreachable(this.state);
+    }
+  }
+
+  displayInput() {
+    return `list_directory: {
+    dirPath: ${this.request.input.dirPath || "."}
+}`;
   }
 }
 
@@ -200,12 +205,6 @@ export const spec: ProviderToolSpec = {
 export type Input = {
   dirPath?: string;
 };
-
-export function displayInput(input: Input) {
-  return `list_directory: {
-    dirPath: ${input.dirPath || "."}
-}`;
-}
 
 export function validateInput(input: {
   [key: string]: unknown;

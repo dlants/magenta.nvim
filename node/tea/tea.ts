@@ -22,13 +22,7 @@ export type Update<Msg, Model, Context = undefined> = Context extends undefined
       context: Context,
     ) => [Model] | [Model, Thunk<Msg> | undefined];
 
-export type View<Msg, Model> = ({
-  model,
-  dispatch,
-}: {
-  model: Model;
-  dispatch: Dispatch<Msg>;
-}) => VDOMNode;
+export type View<Model> = ({ model }: { model: Model }) => VDOMNode;
 
 type AppState<Model> =
   | {
@@ -48,82 +42,30 @@ export type MountedApp = {
   waitForRender(): Promise<void>;
 };
 
-export type App<Msg, Model> = {
+export type App<Model> = {
   mount(mount: MountPoint): Promise<MountedApp>;
-  dispatch: Dispatch<Msg>;
   getState(): AppState<Model>;
   destroy(): void;
 };
 
-export function createApp<Model, Msg>({
+export function createApp<Model>({
   nvim,
   initialModel,
-  update,
   View,
-  suppressThunks,
-  onUpdate,
 }: {
   nvim: Nvim;
   initialModel: Model;
-  update: Update<Msg, Model>;
-  View: View<Msg, Model>;
-  onUpdate?: (msg: Msg, model: Model) => void;
-  /** During testing, we probably don't want thunks to run
-   */
-  suppressThunks?: boolean;
-}): App<Msg, Model> {
+  View: View<Model>;
+}): App<Model> {
   let currentState: AppState<Model> = {
     status: "running",
     model: initialModel,
   };
-  let root:
-    | MountedView<{ currentState: AppState<Model>; dispatch: Dispatch<Msg> }>
-    | undefined;
+  let root: MountedView<{ currentState: AppState<Model> }> | undefined;
 
   let renderDefer: Defer<void> | undefined;
   let renderPromise: Promise<void> | undefined;
   let reRender = false;
-
-  const dispatch = (msg: Msg) => {
-    nvim.logger?.debug(`dispatch msg: ${JSON.stringify(msg)}`);
-    if (currentState.status != "running") {
-      return;
-    }
-
-    try {
-      const [nextModel, thunk] = update(msg, currentState.model);
-
-      if (thunk) {
-        if (suppressThunks) {
-          nvim.logger?.debug(`thunk suppressed`);
-        } else {
-          nvim.logger?.debug(`starting thunk`);
-          thunk(dispatch).catch((err) => {
-            console.error(err);
-            const message =
-              err instanceof Error
-                ? `Error: ${err.message}\n${err.stack}`
-                : JSON.stringify(err);
-            nvim.logger?.error(`Thunk execution error: ${message}`);
-
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            notifyErr(nvim, err);
-          });
-        }
-      }
-
-      currentState = { status: "running", model: nextModel };
-
-      render();
-
-      if (onUpdate) {
-        onUpdate(msg, currentState.model);
-      }
-    } catch (e) {
-      nvim.logger?.error(e as Error);
-      currentState = { status: "error", error: (e as Error).message };
-    }
-  };
 
   function render() {
     if (renderPromise) {
@@ -135,7 +77,7 @@ export function createApp<Model, Msg>({
 
       if (root) {
         renderPromise = root
-          .render({ currentState, dispatch })
+          .render({ currentState })
           .catch((err) => {
             nvim.logger?.error(err as Error);
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
@@ -162,16 +104,10 @@ export function createApp<Model, Msg>({
     }
   }
 
-  function App({
-    currentState,
-    dispatch,
-  }: {
-    currentState: AppState<Model>;
-    dispatch: Dispatch<Msg>;
-  }) {
+  function App({ currentState }: { currentState: AppState<Model> }) {
     return d`${
       currentState.status == "running"
-        ? View({ model: currentState.model, dispatch })
+        ? View({ model: currentState.model })
         : d`Error: ${currentState.error}`
     }`;
   }
@@ -181,7 +117,7 @@ export function createApp<Model, Msg>({
       root = await mountView({
         view: App,
         mount,
-        props: { currentState, dispatch },
+        props: { currentState },
       });
 
       for (const vimKey of BINDING_KEYS) {
@@ -244,7 +180,6 @@ export function createApp<Model, Msg>({
         },
       };
     },
-    dispatch,
     getState() {
       return currentState;
     },

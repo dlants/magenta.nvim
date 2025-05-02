@@ -1,7 +1,7 @@
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import type { Thunk, Update } from "../tea/tea.ts";
-import { d, type VDOMNode } from "../tea/view.ts";
+import { d } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
+import type { Dispatch, Thunk } from "../tea/tea.ts";
 import type { Nvim } from "nvim-node";
 import { parseLsResponse } from "../utils/lsBuffers.ts";
 import type { ToolRequest } from "./toolManager.ts";
@@ -10,43 +10,18 @@ import type {
   ProviderToolSpec,
 } from "../providers/provider.ts";
 
-export type Model = {
-  type: "diagnostics";
-  request: ToolRequest<"diagnostics">;
-  state:
-    | {
-        state: "processing";
-      }
-    | {
-        state: "done";
-        result: ProviderToolResultContent;
-      };
-};
+export type State =
+  | {
+      state: "processing";
+    }
+  | {
+      state: "done";
+      result: ProviderToolResultContent;
+    };
 
 export type Msg = {
   type: "finish";
   result: Result<string>;
-};
-
-export const update: Update<Msg, Model> = (msg, model) => {
-  switch (msg.type) {
-    case "finish":
-      return [
-        {
-          ...model,
-          state: {
-            state: "done",
-            result: {
-              type: "tool_result",
-              id: model.request.id,
-              result: msg.result,
-            },
-          },
-        },
-      ];
-    default:
-      assertUnreachable(msg.type);
-  }
 };
 
 type DiagnosticsRes = {
@@ -81,31 +56,57 @@ type DiagnosticsRes = {
   severity: number;
 };
 
-export function initModel(
-  request: ToolRequest<"diagnostics">,
-  context: { nvim: Nvim },
-): [Model, Thunk<Msg>] {
-  const model: Model = {
-    type: "diagnostics",
-    request,
-    state: {
+export class DiagnosticsTool {
+  state: State;
+  toolName = "diagnostics" as const;
+
+  private constructor(
+    public request: Extract<ToolRequest, { toolName: "diagnostics" }>,
+    public context: { nvim: Nvim },
+  ) {
+    this.state = {
       state: "processing",
-    },
-  };
-  return [
-    model,
-    async (dispatch) => {
-      context.nvim.logger?.debug(`in diagnostics initModel`);
+    };
+  }
+
+  static create(
+    request: Extract<ToolRequest, { toolName: "diagnostics" }>,
+    context: { nvim: Nvim },
+  ): [DiagnosticsTool, Thunk<Msg>] {
+    const tool = new DiagnosticsTool(request, context);
+    return [tool, tool.getDiagnostics()];
+  }
+
+  update(msg: Msg): Thunk<Msg> | undefined {
+    switch (msg.type) {
+      case "finish":
+        this.state = {
+          state: "done",
+          result: {
+            type: "tool_result",
+            id: this.request.id,
+            result: msg.result,
+          },
+        };
+        return;
+      default:
+        assertUnreachable(msg.type);
+    }
+  }
+
+  getDiagnostics(): Thunk<Msg> {
+    return async (dispatch: Dispatch<Msg>) => {
+      this.context.nvim.logger?.debug(`in diagnostics initModel`);
       let diagnostics;
       try {
-        diagnostics = (await context.nvim.call("nvim_exec_lua", [
+        diagnostics = (await this.context.nvim.call("nvim_exec_lua", [
           `return vim.diagnostic.get(nil)`,
           [],
         ])) as DiagnosticsRes[];
       } catch (e) {
         throw new Error(`failed to nvim_exec_lua: ${JSON.stringify(e)}`);
       }
-      const lsResponse = await context.nvim.call("nvim_exec2", [
+      const lsResponse = await this.context.nvim.call("nvim_exec2", [
         "ls",
         { output: true },
       ]);
@@ -122,7 +123,7 @@ export function initModel(
             `file: ${bufMap[d.bufnr]} source: ${d.source}, severity: ${d.severity}, message: "${d.message}"`,
         )
         .join("\n");
-      context.nvim.logger?.debug(`got diagnostics content: ${content}`);
+      this.context.nvim.logger?.debug(`got diagnostics content: ${content}`);
 
       dispatch({
         type: "finish",
@@ -131,36 +132,40 @@ export function initModel(
           value: content,
         },
       });
-    },
-  ];
-}
-
-export function view({ model }: { model: Model }): VDOMNode {
-  switch (model.state.state) {
-    case "processing":
-      return d`⚙️ Getting diagnostics...`;
-    case "done":
-      return d`✅ Finished getting diagnostics.`;
-    default:
-      assertUnreachable(model.state);
+    };
   }
-}
 
-export function getToolResult(model: Model): ProviderToolResultContent {
-  switch (model.state.state) {
-    case "processing":
-      return {
-        type: "tool_result",
-        id: model.request.id,
-        result: {
-          status: "ok",
-          value: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
-        },
-      };
-    case "done":
-      return model.state.result;
-    default:
-      assertUnreachable(model.state);
+  getToolResult(): ProviderToolResultContent {
+    switch (this.state.state) {
+      case "processing":
+        return {
+          type: "tool_result",
+          id: this.request.id,
+          result: {
+            status: "ok",
+            value: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
+          },
+        };
+      case "done":
+        return this.state.result;
+      default:
+        assertUnreachable(this.state);
+    }
+  }
+
+  view() {
+    switch (this.state.state) {
+      case "processing":
+        return d`⚙️ Getting diagnostics...`;
+      case "done":
+        return d`✅ Finished getting diagnostics.`;
+      default:
+        assertUnreachable(this.state);
+    }
+  }
+
+  displayInput() {
+    return `diagnostics: {}`;
   }
 }
 
@@ -177,10 +182,6 @@ export const spec: ProviderToolSpec = {
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export type Input = {};
-
-export function displayInput() {
-  return `diagnostics: {}`;
-}
 
 export function validateInput(): Result<Input> {
   return {

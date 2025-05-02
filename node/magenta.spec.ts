@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { withDriver } from "./test/preamble";
 import { pollUntil } from "./utils/async";
 import type { Position0Indexed } from "./nvim/window";
-import { LOGO } from "./chat/chat";
+import { LOGO } from "./chat/thread";
 
 describe("node/magenta.spec.ts", () => {
   it("clear command should work", async () => {
-    await withDriver(async (driver) => {
+    await withDriver({}, async (driver) => {
       await driver.showSidebar();
       await driver.inputMagentaText(`hello`);
       await driver.send();
@@ -49,7 +49,7 @@ Stopped (end_turn)`);
   });
 
   it("abort command should work", async () => {
-    await withDriver(async (driver) => {
+    await withDriver({}, async (driver) => {
       await driver.showSidebar();
       await driver.inputMagentaText(`hello`);
       await driver.send();
@@ -73,61 +73,48 @@ Awaiting response ⠁`);
     });
   });
 
-  it("can set provider", async () => {
-    await withDriver(async (driver) => {
+  it("can switch profiles", async () => {
+    await withDriver({}, async (driver) => {
       {
-        const state = driver.magenta.chatApp.getState();
-        if (state.status != "running") {
-          throw new Error(`Expected state to be running`);
+        const state = driver.magenta.chat.state;
+        if (state.state != "initialized") {
+          throw new Error(`Expected thread to be initialized`);
         }
 
-        expect(state.model.providerSetting).toEqual({
+        expect(state.thread.state.profile).toEqual({
+          name: "claude-3-7",
           provider: "anthropic",
-          model: "claude-3-5-sonnet-latest",
+          model: "claude-3-7-sonnet-latest",
+          apiKeyEnvVar: "ANTHROPIC_API_KEY",
         });
       }
       await driver.showSidebar();
       const displayState = driver.getVisibleState();
       {
         const winbar = await displayState.inputWindow.getOption("winbar");
-        expect(winbar).toBe(
-          `Magenta Input (anthropic claude-3-5-sonnet-latest)`,
-        );
+        expect(winbar).toBe(`Magenta Input (claude-3-7)`);
       }
-      await driver.nvim.call("nvim_command", ["Magenta provider openai"]);
+      await driver.nvim.call("nvim_command", ["Magenta profile gpt-4o"]);
       {
-        const state = driver.magenta.chatApp.getState();
-        if (state.status != "running") {
+        const state = driver.magenta.chat.state;
+        if (state.state != "initialized") {
           throw new Error(`Expected state to be running`);
         }
 
-        expect(state.model.providerSetting).toEqual({
+        expect(state.thread.state.profile).toEqual({
+          name: "gpt-4o",
           provider: "openai",
           model: "gpt-4o",
+          apiKeyEnvVar: "OPENAI_API_KEY",
         });
         const winbar = await displayState.inputWindow.getOption("winbar");
-        expect(winbar).toBe(`Magenta Input (openai gpt-4o)`);
-      }
-
-      await driver.nvim.call("nvim_command", ["Magenta provider openai o1"]);
-      {
-        const state = driver.magenta.chatApp.getState();
-        if (state.status != "running") {
-          throw new Error(`Expected state to be running`);
-        }
-
-        expect(state.model.providerSetting).toEqual({
-          provider: "openai",
-          model: "o1",
-        });
-        const winbar = await displayState.inputWindow.getOption("winbar");
-        expect(winbar).toBe(`Magenta Input (openai o1)`);
+        expect(winbar).toBe(`Magenta Input (gpt-4o)`);
       }
     });
   });
 
   it("paste-selection command", async () => {
-    await withDriver(async (driver) => {
+    await withDriver({}, async (driver) => {
       await driver.editFile("node/test/fixtures/poem.txt");
       await driver.selectRange(
         { row: 0, col: 5 } as Position0Indexed,
@@ -143,171 +130,6 @@ Silver shadows dance with ease.
 Stars above
 \`\`\`
 `);
-    });
-  });
-
-  it("context-files end-to-end", async () => {
-    await withDriver(async (driver) => {
-      await driver.showSidebar();
-      await driver.nvim.call("nvim_command", [
-        "Magenta context-files './node/test/fixtures/poem.txt'",
-      ]);
-
-      await driver.assertDisplayBufferContains(`\
-# context:
-file: \`./node/test/fixtures/poem.txt\``);
-
-      await driver.inputMagentaText("check out this file");
-      await driver.send();
-      await pollUntil(() => {
-        if (driver.mockAnthropic.requests.length != 1) {
-          throw new Error(`Expected a message to be pending.`);
-        }
-      });
-      const request =
-        driver.mockAnthropic.requests[driver.mockAnthropic.requests.length - 1];
-      expect(request.messages).toEqual([
-        {
-          content: `\
-Here are the contents of file \`node/test/fixtures/poem.txt\`:
-\`\`\`
-Moonlight whispers through the trees,
-Silver shadows dance with ease.
-Stars above like diamonds bright,
-Paint their stories in the night.
-
-\`\`\``,
-          role: "user",
-        },
-        {
-          content: [
-            {
-              text: "check out this file",
-              type: "text",
-            },
-          ],
-          role: "user",
-        },
-      ]);
-    });
-  });
-
-  it("context-files multiple, weird path names", async () => {
-    await withDriver(async (driver) => {
-      await driver.showSidebar();
-      await driver.nvim.call("nvim_command", [
-        "Magenta context-files './node/test/fixtures/poem.txt' './node/test/fixtures/poem 3.txt'",
-      ]);
-
-      await driver.assertDisplayBufferContains(`\
-# context:
-file: \`./node/test/fixtures/poem.txt\`
-file: \`./node/test/fixtures/poem 3.txt\``);
-
-      await driver.inputMagentaText("check out this file");
-      await driver.send();
-      await pollUntil(() => {
-        if (driver.mockAnthropic.requests.length != 1) {
-          throw new Error(`Expected a message to be pending.`);
-        }
-      });
-      const request =
-        driver.mockAnthropic.requests[driver.mockAnthropic.requests.length - 1];
-      expect(request.messages).toEqual([
-        {
-          content: `\
-Here are the contents of file \`node/test/fixtures/poem 3.txt\`:
-\`\`\`
-poem3
-
-\`\`\``,
-          role: "user",
-        },
-        {
-          content: `\
-Here are the contents of file \`node/test/fixtures/poem.txt\`:
-\`\`\`
-Moonlight whispers through the trees,
-Silver shadows dance with ease.
-Stars above like diamonds bright,
-Paint their stories in the night.
-
-\`\`\``,
-          role: "user",
-        },
-        {
-          content: [
-            {
-              text: "check out this file",
-              type: "text",
-            },
-          ],
-          role: "user",
-        },
-      ]);
-    });
-  });
-
-  it("context message insert position", async () => {
-    await withDriver(async (driver) => {
-      await driver.showSidebar();
-      await driver.inputMagentaText(`hello`);
-      await driver.send();
-      await driver.mockAnthropic.respond({
-        stopReason: "end_turn",
-        text: "sup?",
-        toolRequests: [],
-      });
-
-      await driver.nvim.call("nvim_command", [
-        "Magenta context-files './node/test/fixtures/poem.txt'",
-      ]);
-
-      await driver.inputMagentaText("check out this file");
-      await driver.send();
-
-      const request = await driver.mockAnthropic.awaitPendingRequest();
-      expect(request.messages).toEqual([
-        {
-          content: [
-            {
-              text: "hello",
-              type: "text",
-            },
-          ],
-          role: "user",
-        },
-        {
-          content: [
-            {
-              text: "sup?",
-              type: "text",
-            },
-          ],
-          role: "assistant",
-        },
-        {
-          content: `\
-Here are the contents of file \`node/test/fixtures/poem.txt\`:
-\`\`\`
-Moonlight whispers through the trees,
-Silver shadows dance with ease.
-Stars above like diamonds bright,
-Paint their stories in the night.
-
-\`\`\``,
-          role: "user",
-        },
-        {
-          content: [
-            {
-              text: "check out this file",
-              type: "text",
-            },
-          ],
-          role: "user",
-        },
-      ]);
     });
   });
 });

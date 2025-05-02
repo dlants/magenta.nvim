@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { placeCacheBreakpoints } from "./anthropic.ts";
 import type { MessageParam } from "./anthropic.ts";
+import type {
+  TextBlockParam,
+  ToolUseBlockParam,
+} from "@anthropic-ai/sdk/resources/index.mjs";
 
 describe("anthropic.ts", () => {
   it("placeCacheBreakpoints should add cache markers at appropriate positions", () => {
@@ -26,11 +30,17 @@ describe("anthropic.ts", () => {
 
     placeCacheBreakpoints(messages);
 
-    expect(messages[0].content[0].cache_control).toBeUndefined();
+    expect(
+      (messages[0].content[0] as TextBlockParam).cache_control,
+    ).toBeUndefined();
 
-    expect(messages[0].content[1].cache_control).toEqual({ type: "ephemeral" });
+    expect((messages[0].content[1] as TextBlockParam).cache_control).toEqual({
+      type: "ephemeral",
+    });
 
-    expect(messages[0].content[2].cache_control).toEqual({ type: "ephemeral" });
+    expect((messages[0].content[2] as TextBlockParam).cache_control).toEqual({
+      type: "ephemeral",
+    });
   });
 
   it("placeCacheBreakpoints should handle mixed content types", () => {
@@ -54,8 +64,12 @@ describe("anthropic.ts", () => {
 
     placeCacheBreakpoints(messages);
 
-    expect(messages[0].content[0].cache_control).toBeUndefined();
-    expect(messages[0].content[1].cache_control).toEqual({ type: "ephemeral" });
+    expect(
+      (messages[0].content[0] as TextBlockParam).cache_control,
+    ).toBeUndefined();
+    expect((messages[0].content[1] as ToolUseBlockParam).cache_control).toEqual(
+      { type: "ephemeral" },
+    );
   });
 
   it("placeCacheBreakpoints should not add cache markers for small content", () => {
@@ -73,6 +87,8 @@ describe("anthropic.ts", () => {
 
     placeCacheBreakpoints(messages);
 
-    expect(messages[0].content[0].cache_control).toBeUndefined();
+    expect(
+      (messages[0].content[0] as TextBlockParam).cache_control,
+    ).toBeUndefined();
   });
 });

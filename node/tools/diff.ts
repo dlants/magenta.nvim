@@ -1,18 +1,16 @@
 import { WIDTH } from "../sidebar.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import type { Dispatch } from "../tea/tea.ts";
 import { diffthis, getAllWindows } from "../nvim/nvim.ts";
 import { NvimBuffer, type Line } from "../nvim/buffer.ts";
 import { type WindowId } from "../nvim/window.ts";
 import type { Nvim } from "nvim-node";
-import type { ToolRequest, ToolRequestId } from "./toolManager.ts";
-
-type Msg = {
-  type: "diff-error";
-  filePath: string;
-  requestId: ToolRequestId;
-  message: string;
-};
+import type {
+  ToolRequest,
+  ToolRequestId,
+  Msg as ToolManagerMsg,
+  ToolManager,
+  ToolMsg,
+} from "./toolManager.ts";
 
 /** Helper to bring up an editing interface for the given file path.
  */
@@ -21,6 +19,7 @@ export async function displayDiffs({
   diffId,
   edits,
   dispatch,
+  toolManager,
   context,
 }: {
   filePath: string;
@@ -29,14 +28,36 @@ export async function displayDiffs({
    * file.
    */
   diffId: string;
-  edits: (ToolRequest<"replace"> | ToolRequest<"insert">)[];
-  dispatch: Dispatch<Msg>;
+  edits: (
+    | Extract<ToolRequest, { toolName: "replace" }>
+    | Extract<ToolRequest, { toolName: "insert" }>
+  )[];
+  dispatch: (msg: ToolManagerMsg) => void;
+  toolManager: ToolManager;
   context: { nvim: Nvim };
 }) {
   const { nvim } = context;
   nvim.logger?.debug(
     `Attempting to displayDiff for edits ${JSON.stringify(edits, null, 2)}`,
   );
+
+  function dispatchError(requestId: ToolRequestId, error: string) {
+    const toolWrapper = toolManager.state.toolWrappers[requestId];
+    dispatch({
+      type: "tool-msg",
+      msg: {
+        id: requestId,
+        toolName: toolWrapper.tool.toolName,
+        msg: {
+          type: "finish",
+          result: {
+            status: "error",
+            error,
+          },
+        },
+      } as ToolMsg,
+    });
+  }
 
   // first, check to see if any windows *other than* the magenta plugin windows are open, and close them.
   const windows = await getAllWindows(context.nvim);
@@ -73,11 +94,23 @@ export async function displayDiffs({
   let content: string = lines.join("\n");
 
   for (const edit of edits) {
-    switch (edit.name) {
+    switch (edit.toolName) {
       case "insert": {
-        const insertLocation =
-          content.indexOf(edit.input.insertAfter) +
-          edit.input.insertAfter.length;
+        if (edit.input.insertAfter === "") {
+          content = edit.input.content + content;
+          break;
+        }
+
+        const insertIndex = content.indexOf(edit.input.insertAfter);
+        if (insertIndex === -1) {
+          dispatchError(
+            edit.id,
+            `Unable to find insert location "${edit.input.insertAfter}" in file \`${filePath}\``,
+          );
+          continue;
+        }
+
+        const insertLocation = insertIndex + edit.input.insertAfter.length;
         content =
           content.slice(0, insertLocation) +
           edit.input.content +
@@ -90,12 +123,10 @@ export async function displayDiffs({
         const replaceEnd = replaceStart + edit.input.find.length;
 
         if (replaceStart == -1) {
-          dispatch({
-            type: "diff-error",
-            filePath,
-            requestId: edit.id,
-            message: `Unable to find text "${edit.input.find}" in file \`${filePath}\``,
-          });
+          dispatchError(
+            edit.id,
+            `Unable to find text "${edit.input.find}" in file \`${filePath}\``,
+          );
           continue;
         }
 

@@ -47,27 +47,63 @@ local telescope_files = function()
   })
 end
 
+local snacks_files = function()
+  local snacks = require("snacks")
+
+  local completed = false
+  snacks.picker.pick({
+    source = "files",
+    title = "Select context files for Magenta",
+    confirm = function(picker)
+      if completed then return end
+      completed = true
+      local items = picker:selected({ fallback = true })
+
+      if #items > 0 then
+        local escaped_files = {}
+        for _, item in ipairs(items) do
+          table.insert(escaped_files, vim.fn.shellescape(item.file))
+        end
+        vim.cmd("Magenta context-files " .. table.concat(escaped_files, " "))
+      end
+
+      picker:close()
+    end,
+    on_close = function()
+      if completed then return end
+      completed = true
+    end,
+  })
+end
+
 
 M.pick_context_files = function()
   if Options.options.picker == "fzf-lua" then
     fzf_files()
   elseif Options.options.picker == "telescope" then
     telescope_files()
+  elseif Options.options.picker == "snacks" then
+    snacks_files()
   else
-    vim.notify("Neither fzf-lua nor telescope are installed!", vim.log.levels.ERROR)
+    vim.notify("No supported picker (fzf-lua, telescope, or snacks) installed!", vim.log.levels.ERROR)
   end
 end
 
-M.pick_provider = function()
-  local items = {
-    'openai gpt-4o',
-    'openai o1',
-    'openai o1-mini',
-    'anthropic claude-3-5-sonnet-latest'
-  }
-  vim.ui.select(items, { prompt = "Select Model", }, function (choice)
+M.pick_profile = function()
+  local items = {}
+  for _, profile in ipairs(Options.options.profiles) do
+    table.insert(items, {
+      display = profile.name .. " (" .. profile.provider .. " " .. profile.model .. ")",
+      profile = profile.name
+    })
+  end
+
+  vim.ui.select(items, {
+    prompt = "Select Profile",
+    format_item = function(item) return item.display end
+  }, function(choice)
     if choice ~= nil then
-      vim.cmd("Magenta provider " .. choice )
+      vim.cmd("Magenta profile " .. choice.profile)
     end
   end)
 end

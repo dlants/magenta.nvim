@@ -24,6 +24,7 @@ export type InlineEditState = {
   inputWindowId: WindowId;
   inputBufnr: BufNr;
   cursor: Position1Indexed;
+  inlineEdit: InlineEdit.InlineEdit;
   selection?:
     | {
         startPos: Position1IndexedCol1Indexed;
@@ -31,7 +32,8 @@ export type InlineEditState = {
         text: string;
       }
     | undefined;
-  app: TEA.App<InlineEdit.Msg, InlineEdit.Model>;
+  app: TEA.App<InlineEdit.InlineEdit>;
+  mountedApp?: TEA.MountedApp;
 };
 
 export class InlineEditManager {
@@ -121,6 +123,16 @@ export class InlineEditManager {
       };
     }
 
+    const dispatch = (msg: InlineEdit.Msg) => {
+      inlineEdit.update(msg);
+      const mountedApp = this.inlineEdits[targetBufnr].mountedApp;
+      if (mountedApp) {
+        mountedApp.render();
+      }
+    };
+
+    const inlineEdit = new InlineEdit.InlineEdit(dispatch);
+
     this.inlineEdits[targetBufnr] = {
       targetWindowId: targetWindow.id,
       targetBufnr,
@@ -128,13 +140,11 @@ export class InlineEditManager {
       inputBufnr: inputBuffer.id,
       cursor,
       selection: selectionWithText,
-      app: TEA.createApp<InlineEdit.Model, InlineEdit.Msg>({
+      inlineEdit,
+      app: TEA.createApp<InlineEdit.InlineEdit>({
         nvim: this.nvim,
-        initialModel: InlineEdit.initModel(),
-        update: (msg, model) => {
-          return InlineEdit.update(msg, model);
-        },
-        View: InlineEdit.view,
+        initialModel: inlineEdit,
+        View: () => inlineEdit.view(),
       }),
     };
   }
@@ -148,10 +158,15 @@ export class InlineEditManager {
       return;
     }
 
-    const { inputBufnr, selection, cursor, app } =
-      this.inlineEdits[targetBufnr];
+    const {
+      inputBufnr,
+      selection,
+      cursor,
+      app,
+      inlineEdit: inlineEditController,
+    } = this.inlineEdits[targetBufnr];
 
-    app.dispatch({
+    inlineEditController.dispatch({
       type: "update-model",
       next: {
         state: "response-pending",
@@ -205,19 +220,20 @@ ${inputLines.join("\n")}`,
     }
 
     await inputBuffer.setOption("modifiable", false);
-    await app.mount({
+    const mountedApp = await app.mount({
       nvim: this.nvim,
       buffer: inputBuffer,
       startPos: { row: 0, col: 0 } as Position0Indexed,
       endPos: { row: -1, col: -1 } as Position0Indexed,
     });
+    this.inlineEdits[targetBufnr].mountedApp = mountedApp;
 
     if (selection) {
       let result;
       try {
         result = await provider.replaceSelection(messages);
       } catch (e) {
-        app.dispatch({
+        inlineEditController.dispatch({
           type: "update-model",
           next: {
             state: "error",
@@ -228,7 +244,7 @@ ${inputLines.join("\n")}`,
       }
 
       const { replaceSelection, stopReason, usage } = result;
-      app.dispatch({
+      inlineEditController.dispatch({
         type: "update-model",
         next: {
           state: "tool-use",
@@ -245,13 +261,6 @@ ${inputLines.join("\n")}`,
       const input = replaceSelection.value.input;
 
       const targetBuffer = new NvimBuffer(targetBufnr, this.nvim);
-
-      const nextContent =
-        "\n>>>>>>> Suggested change\n" +
-        input.replace +
-        "\n=======\n" +
-        selection.text +
-        "\n<<<<<<< Current\n";
       const lines = await targetBuffer.getLines({ start: 0, end: -1 });
 
       // in visual mode, you can select past the end of the line, so we need to clamp the columns
@@ -271,14 +280,14 @@ ${inputLines.join("\n")}`,
       await targetBuffer.setText({
         startPos: clamp(pos1col1to0(selection.startPos)),
         endPos: clamp(pos1col1to0(selection.endPos)),
-        lines: nextContent.split("\n") as Line[],
+        lines: input.replace.split("\n") as Line[],
       });
     } else {
       let result;
       try {
         result = await provider.inlineEdit(messages);
       } catch (e) {
-        app.dispatch({
+        inlineEditController.dispatch({
           type: "update-model",
           next: {
             state: "error",
@@ -289,7 +298,7 @@ ${inputLines.join("\n")}`,
       }
 
       const { inlineEdit, stopReason, usage } = result;
-      app.dispatch({
+      inlineEditController.dispatch({
         type: "update-model",
         next: {
           state: "tool-use",
@@ -311,7 +320,7 @@ ${inputLines.join("\n")}`,
 
       const replaceStart = content.indexOf(input.find);
       if (replaceStart === -1) {
-        app.dispatch({
+        inlineEditController.dispatch({
           type: "update-model",
           next: {
             state: "error",
@@ -326,19 +335,37 @@ ${input.find}
       }
       const replaceEnd = replaceStart + input.find.length;
 
-      const nextContent =
-        content.slice(0, replaceStart) +
-        "\n>>>>>>> Suggested change\n" +
-        input.replace +
-        "\n=======\n" +
-        input.find +
-        "\n<<<<<<< Current\n" +
-        content.slice(replaceEnd);
+      // Calculate the row and column for start and end positions
+      let startRow = 0;
+      let startCol = 0;
+      let endRow = 0;
+      let endCol = 0;
+      let currentPos = 0;
 
-      await buffer.setLines({
-        start: 0,
-        end: -1,
-        lines: nextContent.split("\n") as Line[],
+      for (let i = 0; i < lines.length; i++) {
+        const lineLength = lines[i].length + 1; // +1 for newline
+
+        if (
+          currentPos <= replaceStart &&
+          replaceStart < currentPos + lineLength
+        ) {
+          startRow = i;
+          startCol = (replaceStart - currentPos) as ByteIdx;
+        }
+
+        if (currentPos <= replaceEnd && replaceEnd <= currentPos + lineLength) {
+          endRow = i;
+          endCol = (replaceEnd - currentPos) as ByteIdx;
+          break;
+        }
+
+        currentPos += lineLength;
+      }
+
+      await buffer.setText({
+        startPos: { row: startRow, col: startCol } as Position0Indexed,
+        endPos: { row: endRow, col: endCol } as Position0Indexed,
+        lines: input.replace.split("\n") as Line[],
       });
     }
   }

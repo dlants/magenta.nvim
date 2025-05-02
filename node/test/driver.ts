@@ -25,6 +25,14 @@ export class NvimDriver {
     public mockAnthropic: MockProvider,
   ) {}
 
+  async wait(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async triggerMagentaCommand(command: string) {
+    return this.nvim.call("nvim_command", [command]);
+  }
+
   async showSidebar() {
     if (this.magenta.sidebar.state.state == "hidden") {
       await this.magenta.command("toggle");
@@ -131,7 +139,7 @@ export class NvimDriver {
       const displayBuffer = this.getDisplayBuffer();
       const lines = await displayBuffer.getLines({ start: 0, end: -1 });
       const content = lines.slice(start).join("\n");
-      expect(content, (e as Error).message).toEqual(text);
+      expect(content, (e as Error).message).toContain(text);
       throw e;
     }
   }

@@ -41,10 +41,13 @@ Make sure you have [node](https://nodejs.org/en/download) installed, at least `v
 node --version
 ```
 
-The plugin will look for configuration for providers in the following env variables:
+The plugin uses profiles to configure provider access. Each profile specifies:
 
-- anthropic: ANTHROPIC_API_KEY
-- openai: OPENAI_API_KEY, OPENAI_BASE_URL
+- name: identifier for the profile
+- provider: "anthropic", "openai", "bedrock".
+- model: the specific model to use.
+- apiKeyEnvVar: environment variable containing the API key
+- baseUrl: (optional) custom API endpoint
 
 ## Using lazy.nvim
 
@@ -79,32 +82,35 @@ require('magenta').setup()
 
 ```lua
 require('magenta').setup({
-  provider = "anthropic",
-  openai = {
-    model = "gpt-4o"
-  },
-  anthropic = {
-    model = "claude-3-5-sonnet-latest"
-  },
-  bedrock = {
-    model = "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    prompt_caching = false
+  profiles = {
+    {
+      name = "claude-3-7",
+      provider = "anthropic",
+      model = "claude-3-7-sonnet-latest",
+      apiKeyEnvVar = "ANTHROPIC_API_KEY"
+    },
+    {
+      name = "gpt-4o",
+      provider = "openai",
+      model = "gpt-4o",
+      apiKeyEnvVar = "OPENAI_API_KEY"
+    }
   },
   -- open chat sidebar on left or right side
-  sidebar_position = "left",
-  -- can be changed to "telescope"
+  sidebarPosition = "left",
+  -- can be changed to "telescope" or "snacks"
   picker = "fzf-lua",
   -- enable default keymaps shown below
-  default_keymaps = true,
+  defaultKeymaps = true,
   -- keymaps for the sidebar input buffer
-  sidebar_keymaps = {
+  sidebarKeymaps = {
     normal = {
       ["<CR>"] = ":Magenta send<CR>",
     }
   },
   -- keymaps for the inline edit input buffer
-  -- if keymap is set to function, it accpets a target_bufnr param
-  inline_keymaps =  {
+  -- if keymap is set to function, it accepts a target_bufnr param
+  inlineKeymaps =  {
     normal = {
       ["<CR>"] = function(target_bufnr)
         vim.cmd("Magenta submit-inline-edit " .. target_bufnr)
@@ -228,20 +234,60 @@ Inline edit uses your chat history so far, so a great workflow is to build up co
 
 The display buffer is not modifiable, however you can interact with some parts of the display buffer by pressing `<CR>`. For example, you can expand the tool request and responses to see their details, and you can trigger a diff to appear on file edits.
 
-- hit enter on a [review] message to pull up the diff to try and edit init
-- hit enter on a tool to see the details of the request & result. Enter again on any part of the expanded view to collapse it.
-- hit enter on a piece of context to remove it
+- hit `enter` on a [review] message to pull up the diff to try and edit init
+- hit `enter` on a tool to see the details of the request & result. Enter again on any part of the expanded view to collapse it.
+- hit `enter` on a context file to open it
+- hit `d` on a context file to remove it
 
-### providers
+### profiles
 
-The command `:Magenta provider <provider>` will set the current provider. Currently supported values are `openai` (defaults to ChatGPT 4o) and `anthropic` (defaults to Claude Sonnet 3.5). You can also provide configuration to setup that will choose the default provider and model. [code](https://github.com/dlants/magenta.nvim/blob/main/lua/magenta/init.lua#L5)
+The first profile in your `profiles` list is used as the default when the plugin starts. You can switch between profiles using `:Magenta pick-provider` (bound to `<leader>mp` by default).
 
-Any provider that has a node sdk and supports tool use should be easy to add. Contributions are welcome.
+For example, you can set up multiple profiles for different providers or API endpoints:
+
+```lua
+profiles = {
+  {
+    name = "claude-3-7",
+    provider = "anthropic",
+    model = "claude-3-7-sonnet-latest",
+    apiKeyEnvVar = "ANTHROPIC_API_KEY"
+  },
+  {
+    name = "custom",
+    provider = "anthropic",
+    model = "claude-3-7-sonnet-latest",
+    apiKeyEnvVar = "CUSTOM_API_KEY_ENV_VAR",
+    baseUrl = "custom anthropic endpoint"
+  }
+}
+```
+
+Currently supported providers are `openai`, `anthropic`, and `bedrock`. The `model` parameter must be compatible with the SDK used for each provider:
+
+- For `anthropic`: [Anthropic Node SDK](https://github.com/anthropics/anthropic-sdk-typescript) - supports models like `claude-3-7-sonnet-latest`, `claude-3-5-sonnet-20240620`
+- For `openai`: [OpenAI Node SDK](https://github.com/openai/openai-node) - supports models like `gpt-4o`, `o1`
+- For `bedrock`: [AWS SDK for Bedrock Runtime](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-bedrock-runtime/) - supports models like `anthropic.claude-3-5-sonnet-20241022-v2:0`
+
+Any provider that has a node SDK and supports tool use should be easy to add. Contributions are welcome.
+
+### command allowlist
+
+Magenta includes a security feature for the bash_command tool that requires user approval before running shell commands. To improve the workflow, you can configure a list of regex patterns that define which commands are pre-approved to run without confirmation.
+
+The `commandAllowlist` option takes an array of regex patterns. When the LLM tries to execute a shell command, it's checked against these patterns. If any pattern matches, the command runs without approval. Otherwise, you'll be prompted to allow or deny it.
+
+Regex patterns should be carefully designed to avoid security risks. You can find the default allowlist patterns in [lua/magenta/options.lua](lua/magenta/options.lua).
+
+#### terminating running commands
+
+When a bash command is running, you can press the `t` key in the display buffer while your cursor is over the executing command to terminate it immediately. This is useful for long-running commands or commands that have entered an undesired state. When terminated, the command will display a message indicating it was terminated by user with SIGTERM.
 
 ## tools available to the LLM
 
 See the most up-to-date list of implemented tools [here](https://github.com/dlants/magenta.nvim/tree/main/node/tools).
 
+- [x] run bash command
 - [x] list a directory (only in cwd, excluding hidden and gitignored files)
 - [x] list current buffers (only buffers in cwd, excluding hidden and gitignored files)
 - [x] get the contents of a file (requires user approval if not in cwd or hidden/gitignored)

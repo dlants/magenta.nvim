@@ -1,8 +1,8 @@
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import type { Thunk, Update } from "../tea/tea.ts";
-import { d, type VDOMNode } from "../tea/view.ts";
+import { d } from "../tea/view.ts";
 import { type ToolRequest } from "./toolManager.ts";
 import { type Result } from "../utils/result.ts";
+import type { Dispatch, Thunk } from "../tea/tea.ts";
 import type { Nvim } from "nvim-node";
 import { parseLsResponse } from "../utils/lsBuffers.ts";
 import type {
@@ -10,60 +10,60 @@ import type {
   ProviderToolSpec,
 } from "../providers/provider.ts";
 
-export type Model = {
-  type: "list_buffers";
-  request: ToolRequest<"list_buffers">;
-  state:
-    | {
-        state: "processing";
-      }
-    | {
-        state: "done";
-        result: ProviderToolResultContent;
-      };
-};
+export type State =
+  | {
+      state: "processing";
+    }
+  | {
+      state: "done";
+      result: ProviderToolResultContent;
+    };
 
 export type Msg = {
   type: "finish";
   result: Result<string>;
 };
 
-export const update: Update<Msg, Model> = (msg, model) => {
-  switch (msg.type) {
-    case "finish":
-      return [
-        {
-          ...model,
-          state: {
-            state: "done",
-            result: {
-              type: "tool_result",
-              id: model.request.id,
-              result: msg.result,
-            },
-          },
-        },
-      ];
-    default:
-      assertUnreachable(msg.type);
-  }
-};
+export class ListBuffersTool {
+  state: State;
+  toolName = "list_buffers" as const;
 
-export function initModel(
-  request: ToolRequest<"list_buffers">,
-  context: { nvim: Nvim },
-): [Model, Thunk<Msg>] {
-  const model: Model = {
-    type: "list_buffers",
-    request,
-    state: {
+  constructor(
+    public request: Extract<ToolRequest, { toolName: "list_buffers" }>,
+    public context: { nvim: Nvim },
+  ) {
+    this.state = {
       state: "processing",
-    },
-  };
-  return [
-    model,
-    async (dispatch) => {
-      const lsResponse = await context.nvim.call("nvim_exec2", [
+    };
+  }
+  static create(
+    request: Extract<ToolRequest, { toolName: "list_buffers" }>,
+    context: { nvim: Nvim },
+  ): [ListBuffersTool, Thunk<Msg>] {
+    const tool = new ListBuffersTool(request, context);
+    return [tool, tool.fetchBuffers()];
+  }
+
+  update(msg: Msg): Thunk<Msg> | undefined {
+    switch (msg.type) {
+      case "finish":
+        this.state = {
+          state: "done",
+          result: {
+            type: "tool_result",
+            id: this.request.id,
+            result: msg.result,
+          },
+        };
+        return;
+      default:
+        assertUnreachable(msg.type);
+    }
+  }
+
+  fetchBuffers(): Thunk<Msg> {
+    return async (dispatch: Dispatch<Msg>) => {
+      const lsResponse = await this.context.nvim.call("nvim_exec2", [
         "ls",
         { output: true },
       ]);
@@ -93,36 +93,40 @@ export function initModel(
           value: content,
         },
       });
-    },
-  ];
-}
-
-export function view({ model }: { model: Model }): VDOMNode {
-  switch (model.state.state) {
-    case "processing":
-      return d`⚙️ Grabbing buffers...`;
-    case "done":
-      return d`✅ Finished getting buffers.`;
-    default:
-      assertUnreachable(model.state);
+    };
   }
-}
 
-export function getToolResult(model: Model): ProviderToolResultContent {
-  switch (model.state.state) {
-    case "processing":
-      return {
-        type: "tool_result",
-        id: model.request.id,
-        result: {
-          status: "ok",
-          value: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
-        },
-      };
-    case "done":
-      return model.state.result;
-    default:
-      assertUnreachable(model.state);
+  getToolResult(): ProviderToolResultContent {
+    switch (this.state.state) {
+      case "processing":
+        return {
+          type: "tool_result",
+          id: this.request.id,
+          result: {
+            status: "ok",
+            value: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
+          },
+        };
+      case "done":
+        return this.state.result;
+      default:
+        assertUnreachable(this.state);
+    }
+  }
+
+  view() {
+    switch (this.state.state) {
+      case "processing":
+        return d`⚙️ Grabbing buffers...`;
+      case "done":
+        return d`✅ Finished getting buffers.`;
+      default:
+        assertUnreachable(this.state);
+    }
+  }
+
+  displayInput() {
+    return `list_buffers: {}`;
   }
 }
 
@@ -141,10 +145,6 @@ This can be useful to understand the context of what the user is trying to do.`,
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export type Input = {};
-
-export function displayInput() {
-  return `list_buffers: {}`;
-}
 
 export function validateInput(): Result<Input> {
   return {

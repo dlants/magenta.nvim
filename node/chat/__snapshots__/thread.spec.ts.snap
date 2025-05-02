@@ -1,0 +1,496 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`tea/chat.spec.ts > chat render and a few updates 1`] = `
+{
+  "children": [
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "content": "# ",
+                      "endPos": {
+                        "col": 2,
+                        "row": 0,
+                      },
+                      "startPos": {
+                        "col": 0,
+                        "row": 0,
+                      },
+                      "type": "string",
+                    },
+                    {
+                      "content": "user",
+                      "endPos": {
+                        "col": 6,
+                        "row": 0,
+                      },
+                      "startPos": {
+                        "col": 2,
+                        "row": 0,
+                      },
+                      "type": "string",
+                    },
+                    {
+                      "content": ":
+",
+                      "endPos": {
+                        "col": 0,
+                        "row": 1,
+                      },
+                      "startPos": {
+                        "col": 6,
+                        "row": 0,
+                      },
+                      "type": "string",
+                    },
+                    {
+                      "children": [
+                        {
+                          "children": [
+                            {
+                              "children": [
+                                {
+                                  "content": "Can you look at my list of buffers?",
+                                  "endPos": {
+                                    "col": 35,
+                                    "row": 1,
+                                  },
+                                  "startPos": {
+                                    "col": 0,
+                                    "row": 1,
+                                  },
+                                  "type": "string",
+                                },
+                              ],
+                              "endPos": {
+                                "col": 35,
+                                "row": 1,
+                              },
+                              "startPos": {
+                                "col": 0,
+                                "row": 1,
+                              },
+                              "type": "node",
+                            },
+                            {
+                              "content": "
+",
+                              "endPos": {
+                                "col": 0,
+                                "row": 2,
+                              },
+                              "startPos": {
+                                "col": 35,
+                                "row": 1,
+                              },
+                              "type": "string",
+                            },
+                          ],
+                          "endPos": {
+                            "col": 0,
+                            "row": 2,
+                          },
+                          "startPos": {
+                            "col": 0,
+                            "row": 1,
+                          },
+                          "type": "node",
+                        },
+                      ],
+                      "endPos": {
+                        "col": 0,
+                        "row": 2,
+                      },
+                      "startPos": {
+                        "col": 0,
+                        "row": 1,
+                      },
+                      "type": "array",
+                    },
+                    {
+                      "content": "",
+                      "endPos": {
+                        "col": 0,
+                        "row": 2,
+                      },
+                      "startPos": {
+                        "col": 0,
+                        "row": 2,
+                      },
+                      "type": "string",
+                    },
+                  ],
+                  "endPos": {
+                    "col": 0,
+                    "row": 2,
+                  },
+                  "startPos": {
+                    "col": 0,
+                    "row": 0,
+                  },
+                  "type": "node",
+                },
+                {
+                  "content": "
+",
+                  "endPos": {
+                    "col": 0,
+                    "row": 3,
+                  },
+                  "startPos": {
+                    "col": 0,
+                    "row": 2,
+                  },
+                  "type": "string",
+                },
+              ],
+              "endPos": {
+                "col": 0,
+                "row": 3,
+              },
+              "startPos": {
+                "col": 0,
+                "row": 0,
+              },
+              "type": "node",
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "content": "# ",
+                      "endPos": {
+                        "col": 2,
+                        "row": 3,
+                      },
+                      "startPos": {
+                        "col": 0,
+                        "row": 3,
+                      },
+                      "type": "string",
+                    },
+                    {
+                      "content": "assistant",
+                      "endPos": {
+                        "col": 11,
+                        "row": 3,
+                      },
+                      "startPos": {
+                        "col": 2,
+                        "row": 3,
+                      },
+                      "type": "string",
+                    },
+                    {
+                      "content": ":
+",
+                      "endPos": {
+                        "col": 0,
+                        "row": 4,
+                      },
+                      "startPos": {
+                        "col": 11,
+                        "row": 3,
+                      },
+                      "type": "string",
+                    },
+                    {
+                      "children": [
+                        {
+                          "children": [
+                            {
+                              "children": [
+                                {
+                                  "content": "Sure, let me use the list_buffers tool.",
+                                  "endPos": {
+                                    "col": 39,
+                                    "row": 4,
+                                  },
+                                  "startPos": {
+                                    "col": 0,
+                                    "row": 4,
+                                  },
+                                  "type": "string",
+                                },
+                              ],
+                              "endPos": {
+                                "col": 39,
+                                "row": 4,
+                              },
+                              "startPos": {
+                                "col": 0,
+                                "row": 4,
+                              },
+                              "type": "node",
+                            },
+                            {
+                              "content": "
+",
+                              "endPos": {
+                                "col": 0,
+                                "row": 5,
+                              },
+                              "startPos": {
+                                "col": 39,
+                                "row": 4,
+                              },
+                              "type": "string",
+                            },
+                          ],
+                          "endPos": {
+                            "col": 0,
+                            "row": 5,
+                          },
+                          "startPos": {
+                            "col": 0,
+                            "row": 4,
+                          },
+                          "type": "node",
+                        },
+                        {
+                          "children": [
+                            {
+                              "children": [
+                                {
+                                  "children": [
+                                    {
+                                      "content": "⚙️ Grabbing buffers...",
+                                      "endPos": {
+                                        "col": 26,
+                                        "row": 5,
+                                      },
+                                      "startPos": {
+                                        "col": 0,
+                                        "row": 5,
+                                      },
+                                      "type": "string",
+                                    },
+                                  ],
+                                  "endPos": {
+                                    "col": 26,
+                                    "row": 5,
+                                  },
+                                  "startPos": {
+                                    "col": 0,
+                                    "row": 5,
+                                  },
+                                  "type": "node",
+                                },
+                                {
+                                  "content": "",
+                                  "endPos": {
+                                    "col": 26,
+                                    "row": 5,
+                                  },
+                                  "startPos": {
+                                    "col": 26,
+                                    "row": 5,
+                                  },
+                                  "type": "string",
+                                },
+                                {
+                                  "content": "",
+                                  "endPos": {
+                                    "col": 26,
+                                    "row": 5,
+                                  },
+                                  "startPos": {
+                                    "col": 26,
+                                    "row": 5,
+                                  },
+                                  "type": "string",
+                                },
+                              ],
+                              "endPos": {
+                                "col": 26,
+                                "row": 5,
+                              },
+                              "startPos": {
+                                "col": 0,
+                                "row": 5,
+                              },
+                              "type": "node",
+                            },
+                            {
+                              "content": "
+",
+                              "endPos": {
+                                "col": 0,
+                                "row": 6,
+                              },
+                              "startPos": {
+                                "col": 26,
+                                "row": 5,
+                              },
+                              "type": "string",
+                            },
+                          ],
+                          "endPos": {
+                            "col": 0,
+                            "row": 6,
+                          },
+                          "startPos": {
+                            "col": 0,
+                            "row": 5,
+                          },
+                          "type": "node",
+                        },
+                      ],
+                      "endPos": {
+                        "col": 0,
+                        "row": 6,
+                      },
+                      "startPos": {
+                        "col": 0,
+                        "row": 4,
+                      },
+                      "type": "array",
+                    },
+                    {
+                      "content": "",
+                      "endPos": {
+                        "col": 0,
+                        "row": 6,
+                      },
+                      "startPos": {
+                        "col": 0,
+                        "row": 6,
+                      },
+                      "type": "string",
+                    },
+                  ],
+                  "endPos": {
+                    "col": 0,
+                    "row": 6,
+                  },
+                  "startPos": {
+                    "col": 0,
+                    "row": 3,
+                  },
+                  "type": "node",
+                },
+                {
+                  "content": "
+",
+                  "endPos": {
+                    "col": 0,
+                    "row": 7,
+                  },
+                  "startPos": {
+                    "col": 0,
+                    "row": 6,
+                  },
+                  "type": "string",
+                },
+              ],
+              "endPos": {
+                "col": 0,
+                "row": 7,
+              },
+              "startPos": {
+                "col": 0,
+                "row": 3,
+              },
+              "type": "node",
+            },
+          ],
+          "endPos": {
+            "col": 0,
+            "row": 7,
+          },
+          "startPos": {
+            "col": 0,
+            "row": 0,
+          },
+          "type": "array",
+        },
+        {
+          "children": [
+            {
+              "content": "Stopped (",
+              "endPos": {
+                "col": 9,
+                "row": 7,
+              },
+              "startPos": {
+                "col": 0,
+                "row": 7,
+              },
+              "type": "string",
+            },
+            {
+              "content": "end_turn",
+              "endPos": {
+                "col": 17,
+                "row": 7,
+              },
+              "startPos": {
+                "col": 9,
+                "row": 7,
+              },
+              "type": "string",
+            },
+            {
+              "content": ")",
+              "endPos": {
+                "col": 18,
+                "row": 7,
+              },
+              "startPos": {
+                "col": 17,
+                "row": 7,
+              },
+              "type": "string",
+            },
+          ],
+          "endPos": {
+            "col": 18,
+            "row": 7,
+          },
+          "startPos": {
+            "col": 0,
+            "row": 7,
+          },
+          "type": "node",
+        },
+        {
+          "content": "",
+          "endPos": {
+            "col": 18,
+            "row": 7,
+          },
+          "startPos": {
+            "col": 18,
+            "row": 7,
+          },
+          "type": "string",
+        },
+      ],
+      "endPos": {
+        "col": 18,
+        "row": 7,
+      },
+      "startPos": {
+        "col": 0,
+        "row": 0,
+      },
+      "type": "node",
+    },
+  ],
+  "endPos": {
+    "col": 18,
+    "row": 7,
+  },
+  "startPos": {
+    "col": 0,
+    "row": 0,
+  },
+  "type": "node",
+}
+`;

@@ -55,7 +55,7 @@ local normal_commands = {
   "abort",
   "clear",
   "context-files",
-  "provider",
+  "profile",
   "start-inline-edit",
   "toggle",
 }
@@ -115,12 +115,19 @@ M.bridge = function(channelId)
   end
 
   local opts = Options.options
+
+  if _G.magenta_test_options then
+    for k, v in pairs(_G.magenta_test_options) do
+      opts[k] = v
+    end
+  end
+
+  -- Return options using camelCase keys to match TypeScript MagentaOptions
   return {
-    provider = opts.provider,
-    anthropic = opts.anthropic,
-    openai = opts.openai,
-    bedrock = opts.bedrock,
-    sidebar_position = opts.sidebar_position
+    profiles = opts.profiles,
+    commandAllowlist = opts.commandAllowlist,
+    sidebarPosition = opts.sidebarPosition,
+    autoContext = opts.autoContext,
   }
 end
 

@@ -6,60 +6,15 @@ import * as ListDirectory from "./listDirectory.ts";
 import * as Hover from "./hover.ts";
 import * as FindReferences from "./findReferences.ts";
 import * as Diagnostics from "./diagnostics.ts";
+import * as BashCommand from "./bashCommand.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { type Result } from "../utils/result.ts";
 import { d, withBindings } from "../tea/view.ts";
-import { type Dispatch, type Update } from "../tea/tea.ts";
+import { type Dispatch, type Thunk } from "../tea/tea.ts";
 import type { Nvim } from "nvim-node";
 import type { Lsp } from "../lsp.ts";
-import type { ProviderToolResultContent } from "../providers/provider.ts";
-
-type ToolMap = {
-  get_file: {
-    input: GetFile.Input;
-  };
-  insert: {
-    input: Insert.Input;
-  };
-  replace: {
-    input: Replace.Input;
-  };
-  list_buffers: {
-    input: ListBuffers.Input;
-  };
-  list_directory: {
-    input: ListDirectory.Input;
-  };
-  hover: {
-    input: Hover.Input;
-  };
-  find_references: {
-    input: FindReferences.Input;
-  };
-  diagnostics: {
-    input: Diagnostics.Input;
-  };
-};
-
-export type ToolName = keyof ToolMap;
-
-export type ToolRequest<Name extends ToolName = ToolName> = {
-  id: ToolRequestId;
-  name: Name;
-  input: ToolMap[Name]["input"];
-};
-
-export type ToolModel =
-  | GetFile.Model
-  | Insert.Model
-  | Replace.Model
-  | ListBuffers.Model
-  | ListDirectory.Model
-  | Hover.Model
-  | FindReferences.Model
-  | Diagnostics.Model;
-
-export type ToolRequestId = string & { __toolRequestId: true };
+import type { MagentaOptions } from "../options.ts";
+import type { RootMsg } from "../root-msg.ts";
 
 export const TOOL_SPECS = [
   GetFile.spec,
@@ -70,24 +25,91 @@ export const TOOL_SPECS = [
   Hover.spec,
   FindReferences.spec,
   Diagnostics.spec,
+  BashCommand.spec,
 ];
 
-export type ToolModelWrapper = {
-  model: ToolModel;
-  showRequest: boolean;
-  showResult: boolean;
+export type ToolRequestId = string & { __toolRequestId: true };
+
+export type ToolMap = {
+  get_file: {
+    controller: GetFile.GetFileTool;
+    input: GetFile.Input;
+    msg: GetFile.Msg;
+  };
+  insert: {
+    controller: Insert.InsertTool;
+    input: Insert.Input;
+    msg: Insert.Msg;
+  };
+  replace: {
+    controller: Replace.ReplaceTool;
+    input: Replace.Input;
+    msg: Replace.Msg;
+  };
+  list_buffers: {
+    controller: ListBuffers.ListBuffersTool;
+    input: ListBuffers.Input;
+    msg: ListBuffers.Msg;
+  };
+  list_directory: {
+    controller: ListDirectory.ListDirectoryTool;
+    input: ListDirectory.Input;
+    msg: ListDirectory.Msg;
+  };
+  hover: {
+    controller: Hover.HoverTool;
+    input: Hover.Input;
+    msg: Hover.Msg;
+  };
+  find_references: {
+    controller: FindReferences.FindReferencesTool;
+    input: FindReferences.Input;
+    msg: FindReferences.Msg;
+  };
+  diagnostics: {
+    controller: Diagnostics.DiagnosticsTool;
+    input: Diagnostics.Input;
+    msg: Diagnostics.Msg;
+  };
+  bash_command: {
+    controller: BashCommand.BashCommandTool;
+    input: BashCommand.Input;
+    msg: BashCommand.Msg;
+  };
 };
 
-export type Model = {
-  toolWrappers: {
-    [id: ToolRequestId]: ToolModelWrapper;
+export type ToolRequest = {
+  [K in keyof ToolMap]: {
+    id: ToolRequestId;
+    toolName: K;
+    input: ToolMap[K]["input"];
   };
+}[keyof ToolMap];
+
+export type ToolName = keyof ToolMap;
+
+export type ToolMsg = {
+  [K in keyof ToolMap]: {
+    id: ToolRequestId;
+    toolName: K;
+    msg: ToolMap[K]["msg"];
+  };
+}[keyof ToolMap];
+
+type Tool = {
+  [K in keyof ToolMap]: ToolMap[K]["controller"];
+}[keyof ToolMap];
+
+export type ToolModelWrapper = {
+  tool: Tool;
+  showRequest: boolean;
+  showResult: boolean;
 };
 
 export type Msg =
   | {
       type: "init-tool-use";
-      request: ToolRequest<ToolName>;
+      request: ToolRequest;
     }
   | {
       type: "toggle-display";
@@ -97,41 +119,13 @@ export type Msg =
     }
   | {
       type: "tool-msg";
-      id: ToolRequestId;
-      msg:
-        | {
-            type: "get_file";
-            msg: GetFile.Msg;
-          }
-        | {
-            type: "list_buffers";
-            msg: ListBuffers.Msg;
-          }
-        | {
-            type: "list_directory";
-            msg: ListDirectory.Msg;
-          }
-        | {
-            type: "insert";
-            msg: Insert.Msg;
-          }
-        | {
-            type: "replace";
-            msg: Replace.Msg;
-          }
-        | {
-            type: "hover";
-            msg: Hover.Msg;
-          }
-        | {
-            type: "find_references";
-            msg: FindReferences.Msg;
-          }
-        | {
-            type: "diagnostics";
-            msg: Diagnostics.Msg;
-          };
+      msg: ToolMsg;
     };
+
+export type ToolManagerMsg = {
+  type: "tool-manager-msg";
+  msg: Msg;
+};
 
 export function validateToolInput(
   type: unknown,
@@ -154,6 +148,8 @@ export function validateToolInput(
       return FindReferences.validateInput(args);
     case "diagnostics":
       return Diagnostics.validateInput();
+    case "bash_command":
+      return BashCommand.validateInput(args);
     default:
       return {
         status: "error",
@@ -162,162 +158,81 @@ export function validateToolInput(
   }
 }
 
-export function init({ nvim, lsp }: { nvim: Nvim; lsp: Lsp }) {
-  function getToolResult(model: ToolModel): ProviderToolResultContent {
-    switch (model.type) {
-      case "get_file":
-        return GetFile.getToolResult(model);
-      case "insert":
-        return Insert.getToolResult(model);
-      case "replace":
-        return Replace.getToolResult(model);
-      case "list_buffers":
-        return ListBuffers.getToolResult(model);
-      case "list_directory":
-        return ListDirectory.getToolResult(model);
-      case "hover":
-        return Hover.getToolResult(model);
-      case "find_references":
-        return FindReferences.getToolResult(model);
-      case "diagnostics":
-        return Diagnostics.getToolResult(model);
-      default:
-        return assertUnreachable(model);
-    }
+type State = {
+  toolWrappers: {
+    [id: ToolRequestId]: ToolModelWrapper;
+  };
+  rememberedCommands: Set<string>;
+};
+
+export class ToolManager {
+  state: State;
+  myDispatch: Dispatch<Msg>;
+
+  constructor(
+    private context: {
+      dispatch: Dispatch<RootMsg>;
+      nvim: Nvim;
+      lsp: Lsp;
+      options: MagentaOptions;
+    },
+  ) {
+    this.state = {
+      toolWrappers: {},
+      rememberedCommands: new Set(),
+    };
+    this.myDispatch = (msg) =>
+      this.context.dispatch({
+        type: "tool-manager-msg",
+        msg,
+      });
   }
 
-  function displayRequestInput(model: ToolModel): string {
-    switch (model.type) {
-      case "get_file":
-        return GetFile.displayInput(model.request.input);
-      case "insert":
-        return Insert.displayInput(model.request.input);
-      case "replace":
-        return Replace.displayInput(model.request.input);
-      case "list_buffers":
-        return ListBuffers.displayInput();
-      case "list_directory":
-        return ListDirectory.displayInput(model.request.input);
-      case "hover":
-        return Hover.displayInput(model.request.input);
-      case "find_references":
-        return FindReferences.displayInput(model.request.input);
-      case "diagnostics":
-        return Diagnostics.displayInput();
-      default:
-        return assertUnreachable(model);
-    }
-  }
-
-  function displayResult(model: ToolModel) {
-    if (model.state.state == "done") {
+  displayResult(model: Tool) {
+    if (model.state.state === "done") {
       const result = model.state.result;
-      if (result.result.status == "error") {
+      if (result.result.status === "error") {
         return `\nError: ${result.result.error}`;
       } else {
-        return `\nResult:
-\`\`\`
-${result.result.value}
-\`\`\``;
+        return `\nResult:\n\`\`\`\n${result.result.value}\n\`\`\``;
       }
     } else {
       return "";
     }
   }
 
-  function renderTool(
-    model: Model["toolWrappers"][ToolRequestId],
-    dispatch: Dispatch<Msg>,
-  ) {
+  renderTool(toolWrapper: State["toolWrappers"][ToolRequestId]) {
     return withBindings(
-      d`${renderToolContents(model.model, dispatch)}${
-        model.showRequest
-          ? d`\nid: ${model.model.request.id}\n${displayRequestInput(model.model)}`
+      d`${toolWrapper.tool.view((msg) =>
+        this.myDispatch({
+          type: "tool-msg",
+          msg: {
+            id: toolWrapper.tool.request.id,
+            toolName: toolWrapper.tool.toolName,
+            msg: msg,
+          } as ToolMsg,
+        }),
+      )}${
+        toolWrapper.showRequest
+          ? d`\nid: ${toolWrapper.tool.request.id}\n${toolWrapper.tool.displayInput()}`
           : ""
-      }${model.showResult ? displayResult(model.model) : ""}`,
+      }${toolWrapper.showResult ? this.displayResult(toolWrapper.tool) : ""}`,
       {
         "<CR>": () =>
-          dispatch({
+          this.myDispatch({
             type: "toggle-display",
-            id: model.model.request.id,
-            showRequest: !model.showRequest,
-            showResult: !model.showResult,
+            id: toolWrapper.tool.request.id,
+            showRequest: !toolWrapper.showRequest,
+            showResult: !toolWrapper.showResult,
           }),
       },
     );
   }
 
-  function renderToolContents(model: ToolModel, dispatch: Dispatch<Msg>) {
-    switch (model.type) {
-      case "get_file":
-        return GetFile.view({
-          model,
-          dispatch: (msg) =>
-            dispatch({
-              type: "tool-msg",
-              id: model.request.id,
-              msg: { type: "get_file", msg },
-            }),
-        });
-
-      case "list_buffers":
-        return ListBuffers.view({ model });
-
-      case "list_directory":
-        return ListDirectory.view({ model });
-
-      case "insert":
-        return Insert.view({
-          model,
-          dispatch: (msg) =>
-            dispatch({
-              type: "tool-msg",
-              id: model.request.id,
-              msg: { type: "insert", msg },
-            }),
-        });
-
-      case "replace":
-        return Replace.view({
-          model,
-          dispatch: (msg) =>
-            dispatch({
-              type: "tool-msg",
-              id: model.request.id,
-              msg: { type: "replace", msg },
-            }),
-        });
-
-      case "hover":
-        return Hover.view({
-          model,
-        });
-
-      case "find_references":
-        return FindReferences.view({
-          model,
-        });
-
-      case "diagnostics":
-        return Diagnostics.view({
-          model,
-        });
-
-      default:
-        assertUnreachable(model);
-    }
-  }
-
-  function initModel(): Model {
-    return {
-      toolWrappers: {},
-    };
-  }
-
-  const update: Update<Msg, Model, { nvim: Nvim }> = (msg, model, context) => {
+  update(msg: Msg): void {
     switch (msg.type) {
       case "toggle-display": {
-        const toolWrapper = model.toolWrappers[msg.id];
+        const toolWrapper = this.state.toolWrappers[msg.id];
         if (!toolWrapper) {
           throw new Error(`Could not find tool use with request id ${msg.id}`);
         }
@@ -325,426 +240,192 @@ ${result.result.value}
         toolWrapper.showRequest = msg.showRequest;
         toolWrapper.showResult = msg.showResult;
 
-        return [model];
+        return undefined;
       }
 
       case "init-tool-use": {
         const request = msg.request;
 
-        switch (request.name) {
+        switch (request.toolName) {
           case "get_file": {
-            const [getFileModel, thunk] = GetFile.initModel(
-              request as ToolRequest<"get_file">,
-              { nvim },
-            );
-            model.toolWrappers[request.id] = {
-              model: getFileModel,
+            const [getFileTool, thunk] = GetFile.GetFileTool.create(request, {
+              nvim: this.context.nvim,
+            });
+
+            this.state.toolWrappers[request.id] = {
+              tool: getFileTool,
               showRequest: false,
               showResult: false,
             };
-            return [
-              model,
-              (dispatch) =>
-                thunk((msg) =>
-                  dispatch({
-                    type: "tool-msg",
-                    id: request.id,
-                    msg: {
-                      type: "get_file",
-                      msg,
-                    },
-                  }),
-                ),
-            ];
+
+            return this.acceptThunk(getFileTool, thunk);
           }
 
           case "list_buffers": {
-            const [listBuffersModel, thunk] = ListBuffers.initModel(
-              request as ToolRequest<"list_buffers">,
-              {
-                nvim,
-              },
+            const [listBuffersTool, thunk] = ListBuffers.ListBuffersTool.create(
+              request,
+              { nvim: this.context.nvim },
             );
-            model.toolWrappers[request.id] = {
-              model: listBuffersModel,
+
+            this.state.toolWrappers[request.id] = {
+              tool: listBuffersTool,
               showRequest: false,
               showResult: false,
             };
-            return [
-              model,
-              (dispatch) =>
-                thunk((msg) =>
-                  dispatch({
-                    type: "tool-msg",
-                    id: request.id,
-                    msg: {
-                      type: "list_buffers",
-                      msg,
-                    },
-                  }),
-                ),
-            ];
+
+            return this.acceptThunk(listBuffersTool, thunk);
           }
 
           case "insert": {
-            const [insertModel] = Insert.initModel(
-              request as ToolRequest<"insert">,
-            );
-            model.toolWrappers[request.id] = {
-              model: insertModel,
+            const insertTool = new Insert.InsertTool(request);
+
+            this.state.toolWrappers[request.id] = {
+              tool: insertTool,
               showRequest: false,
               showResult: false,
             };
-            return [model];
+
+            return;
           }
 
           case "replace": {
-            const [replaceModel] = Replace.initModel(
-              request as ToolRequest<"replace">,
-            );
-            model.toolWrappers[request.id] = {
-              model: replaceModel,
+            const replaceTool = new Replace.ReplaceTool(request);
+
+            this.state.toolWrappers[request.id] = {
+              tool: replaceTool,
               showRequest: false,
               showResult: false,
             };
-            return [model];
+
+            return;
           }
 
           case "list_directory": {
-            const [listDirModel, thunk] = ListDirectory.initModel(
-              request as ToolRequest<"list_directory">,
-              {
-                nvim,
-              },
+            const [listDirTool, thunk] = ListDirectory.ListDirectoryTool.create(
+              request,
+              { nvim: this.context.nvim },
             );
-            model.toolWrappers[request.id] = {
-              model: listDirModel,
+
+            this.state.toolWrappers[request.id] = {
+              tool: listDirTool,
               showRequest: false,
               showResult: false,
             };
-            return [
-              model,
-              (dispatch) =>
-                thunk((msg) =>
-                  dispatch({
-                    type: "tool-msg",
-                    id: request.id,
-                    msg: {
-                      type: "list_directory",
-                      msg,
-                    },
-                  }),
-                ),
-            ];
+
+            return this.acceptThunk(listDirTool, thunk);
           }
 
           case "hover": {
-            const [hoverModel, thunk] = Hover.initModel(
-              request as ToolRequest<"hover">,
-              { nvim, lsp },
-            );
-            model.toolWrappers[request.id] = {
-              model: hoverModel,
+            const [hoverTool, thunk] = Hover.HoverTool.create(request, {
+              nvim: this.context.nvim,
+              lsp: this.context.lsp,
+            });
+
+            this.state.toolWrappers[request.id] = {
+              tool: hoverTool,
               showRequest: false,
               showResult: false,
             };
-            return [
-              model,
-              (dispatch) =>
-                thunk((msg) =>
-                  dispatch({
-                    type: "tool-msg",
-                    id: request.id,
-                    msg: {
-                      type: "hover",
-                      msg,
-                    },
-                  }),
-                ),
-            ];
+
+            return this.acceptThunk(hoverTool, thunk);
           }
 
           case "find_references": {
-            const [findReferencesModel, thunk] = FindReferences.initModel(
-              request as ToolRequest<"find_references">,
-              { nvim, lsp },
-            );
-            model.toolWrappers[request.id] = {
-              model: findReferencesModel,
+            const [findReferencesTool, thunk] =
+              FindReferences.FindReferencesTool.create(request, {
+                nvim: this.context.nvim,
+                lsp: this.context.lsp,
+              });
+
+            this.state.toolWrappers[request.id] = {
+              tool: findReferencesTool,
               showRequest: false,
               showResult: false,
             };
-            return [
-              model,
-              (dispatch) =>
-                thunk((msg) =>
-                  dispatch({
-                    type: "tool-msg",
-                    id: request.id,
-                    msg: {
-                      type: "find_references",
-                      msg,
-                    },
-                  }),
-                ),
-            ];
+
+            return this.acceptThunk(findReferencesTool, thunk);
           }
 
           case "diagnostics": {
-            const [diagnosticsModel, thunk] = Diagnostics.initModel(
-              request as ToolRequest<"diagnostics">,
-              {
-                nvim,
-              },
+            const [diagnosticsTool, thunk] = Diagnostics.DiagnosticsTool.create(
+              request,
+              { nvim: this.context.nvim },
             );
-            model.toolWrappers[request.id] = {
-              model: diagnosticsModel,
+
+            this.state.toolWrappers[request.id] = {
+              tool: diagnosticsTool,
               showRequest: false,
               showResult: false,
             };
-            return [
-              model,
-              (dispatch) =>
-                thunk((msg) =>
-                  dispatch({
-                    type: "tool-msg",
-                    id: request.id,
-                    msg: {
-                      type: "diagnostics",
-                      msg,
-                    },
-                  }),
-                ),
-            ];
+
+            return this.acceptThunk(diagnosticsTool, thunk);
+          }
+
+          case "bash_command": {
+            const [bashCommandTool, thunk] = BashCommand.BashCommandTool.create(
+              request,
+              {
+                nvim: this.context.nvim,
+                options: this.context.options,
+                rememberedCommands: this.state.rememberedCommands,
+              },
+            );
+
+            this.state.toolWrappers[request.id] = {
+              tool: bashCommandTool,
+              showRequest: false,
+              showResult: false,
+            };
+
+            return this.acceptThunk(bashCommandTool, thunk);
           }
 
           default:
-            return assertUnreachable(request.name);
+            return assertUnreachable(request);
         }
       }
 
       case "tool-msg": {
-        const toolWrapper = model.toolWrappers[msg.id];
-        if (!toolWrapper) {
-          throw new Error(`Expected to find tool with id ${msg.id}`);
-        }
-
-        switch (msg.msg.type) {
-          case "get_file": {
-            const [nextToolModel, thunk] = GetFile.update(
-              msg.msg.msg,
-              toolWrapper.model as GetFile.Model,
-              context,
-            );
-            toolWrapper.model = nextToolModel;
-
-            return [
-              model,
-              thunk
-                ? (dispatch) =>
-                    thunk((innerMsg) =>
-                      dispatch({
-                        type: "tool-msg",
-                        id: msg.id,
-                        msg: {
-                          type: "get_file",
-                          msg: innerMsg,
-                        },
-                      }),
-                    )
-                : undefined,
-            ];
-          }
-
-          case "list_buffers": {
-            const [nextToolModel, thunk] = ListBuffers.update(
-              msg.msg.msg,
-              toolWrapper.model as ListBuffers.Model,
-            );
-            toolWrapper.model = nextToolModel;
-
-            return [
-              model,
-              thunk
-                ? (dispatch) =>
-                    thunk((innerMsg) =>
-                      dispatch({
-                        type: "tool-msg",
-                        id: msg.id,
-                        msg: {
-                          type: "list_buffers",
-                          msg: innerMsg,
-                        },
-                      }),
-                    )
-                : undefined,
-            ];
-          }
-
-          case "list_directory": {
-            const [nextToolModel, thunk] = ListDirectory.update(
-              msg.msg.msg,
-              toolWrapper.model as ListDirectory.Model,
-            );
-            toolWrapper.model = nextToolModel;
-
-            return [
-              model,
-              thunk
-                ? (dispatch) =>
-                    thunk((innerMsg) =>
-                      dispatch({
-                        type: "tool-msg",
-                        id: msg.id,
-                        msg: {
-                          type: "list_directory",
-                          msg: innerMsg,
-                        },
-                      }),
-                    )
-                : undefined,
-            ];
-          }
-
-          case "insert": {
-            const [nextToolModel, thunk] = Insert.update(
-              msg.msg.msg,
-              toolWrapper.model as Insert.Model,
-            );
-            toolWrapper.model = nextToolModel;
-
-            return [
-              model,
-              thunk
-                ? (dispatch) =>
-                    thunk((innerMsg) =>
-                      dispatch({
-                        type: "tool-msg",
-                        id: msg.id,
-                        msg: {
-                          type: "insert",
-                          msg: innerMsg,
-                        },
-                      }),
-                    )
-                : undefined,
-            ];
-          }
-
-          case "replace": {
-            const [nextToolModel, thunk] = Replace.update(
-              msg.msg.msg,
-              toolWrapper.model as Replace.Model,
-            );
-            toolWrapper.model = nextToolModel;
-
-            return [
-              model,
-              thunk
-                ? (dispatch) =>
-                    thunk((innerMsg) =>
-                      dispatch({
-                        type: "tool-msg",
-                        id: msg.id,
-                        msg: {
-                          type: "replace",
-                          msg: innerMsg,
-                        },
-                      }),
-                    )
-                : undefined,
-            ];
-          }
-
-          case "hover": {
-            const [nextToolModel, thunk] = Hover.update(
-              msg.msg.msg,
-              toolWrapper.model as Hover.Model,
-            );
-            toolWrapper.model = nextToolModel;
-
-            return [
-              model,
-              thunk
-                ? (dispatch) =>
-                    thunk((innerMsg) =>
-                      dispatch({
-                        type: "tool-msg",
-                        id: msg.id,
-                        msg: {
-                          type: "hover",
-                          msg: innerMsg,
-                        },
-                      }),
-                    )
-                : undefined,
-            ];
-          }
-
-          case "find_references": {
-            const [nextToolModel, thunk] = FindReferences.update(
-              msg.msg.msg,
-              toolWrapper.model as FindReferences.Model,
-            );
-            toolWrapper.model = nextToolModel;
-
-            return [
-              model,
-              thunk
-                ? (dispatch) =>
-                    thunk((innerMsg) =>
-                      dispatch({
-                        type: "tool-msg",
-                        id: msg.id,
-                        msg: {
-                          type: "find_references",
-                          msg: innerMsg,
-                        },
-                      }),
-                    )
-                : undefined,
-            ];
-          }
-
-          case "diagnostics": {
-            const [nextToolModel, thunk] = Diagnostics.update(
-              msg.msg.msg,
-              toolWrapper.model as Diagnostics.Model,
-            );
-            toolWrapper.model = nextToolModel;
-
-            return [
-              model,
-              thunk
-                ? (dispatch) =>
-                    thunk((innerMsg) =>
-                      dispatch({
-                        type: "tool-msg",
-                        id: msg.id,
-                        msg: {
-                          type: "diagnostics",
-                          msg: innerMsg,
-                        },
-                      }),
-                    )
-                : undefined,
-            ];
-          }
-
-          default:
-            return assertUnreachable(msg.msg);
-        }
+        const toolWrapper = this.state.toolWrappers[msg.msg.id];
+        // any is safe here since we have correspondence between tool & msg type
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+        const thunk = toolWrapper.tool.update(msg.msg.msg as any);
+        return thunk ? this.acceptThunk(toolWrapper.tool, thunk) : undefined;
       }
 
       default:
-        assertUnreachable(msg);
+        return assertUnreachable(msg);
     }
-  };
+  }
 
-  return {
-    getToolResult,
-    update,
-    initModel,
-    renderTool,
-  };
+  /** Placeholder while I refactor the architecture. I'd like to stop passing thunks around, as I think it will make
+   * things simpler to understand.
+   */
+  acceptThunk(tool: Tool, thunk: Thunk<ToolMsg["msg"]>): void {
+    thunk((msg) =>
+      this.myDispatch({
+        type: "tool-msg",
+        msg: {
+          id: tool.request.id,
+          toolName: tool.toolName,
+          msg,
+        } as ToolMsg,
+      }),
+    ).catch((e: Error) =>
+      this.myDispatch({
+        type: "tool-msg",
+        msg: {
+          id: tool.request.id,
+          toolName: tool.toolName,
+          msg: {
+            type: "finish",
+            result: {
+              status: "error",
+              error: e.message,
+            },
+          },
+        } as ToolMsg,
+      }),
+    );
+  }
 }

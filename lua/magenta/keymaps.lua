@@ -41,8 +41,8 @@ M.default_keymaps = function()
 
   vim.keymap.set(
     "v",
-    "{leader}mp",
-    ":Magenta paste-selection{CR}",
+    "<leader>mp",
+    ":Magenta paste-selection<CR>",
     {silent = true, noremap = true, desc = "Send selection to Magenta"}
   )
 
@@ -63,8 +63,8 @@ M.default_keymaps = function()
   vim.keymap.set(
     "n",
     "<leader>mp",
-    Actions.pick_provider,
-    {silent = true, noremap = true, desc = "Select provider and model"}
+    Actions.pick_profile,
+    {silent = true, noremap = true, desc = "Select profile"}
   )
 end
 
@@ -76,7 +76,7 @@ local mode_to_keymap = {
 }
 
 M.set_inline_buffer_keymaps = function(bufnr, target_bufnr)
-  for mode, values in pairs(Options.options.inline_keymaps) do
+  for mode, values in pairs(Options.options.inlineKeymaps) do
     for key, _action in pairs(values) do
       local action = _action
       if type(_action) == "function" then
@@ -96,7 +96,7 @@ end
 
 
 M.set_sidebar_buffer_keymaps = function(bufnr)
-  for mode, values in pairs(Options.options.sidebar_keymaps) do
+  for mode, values in pairs(Options.options.sidebarKeymaps) do
     for key, action in pairs(values) do
       vim.keymap.set(
         mode_to_keymap[mode],

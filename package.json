@@ -8,15 +8,17 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.36.2",
     "@anthropic-ai/bedrock-sdk": "^0.12.4",
+    "@anthropic-ai/sdk": "^0.37.0",
     "eslint": "^9.17.0",
+    "glob": "^10.3.10",
     "ignore": "^7.0.0",
     "nvim-node": "0.0.2",
     "openai": "^4.77.0",
     "tiktoken": "^1.0.18",
     "tsx": "^4.19.2",
-    "typescript-eslint": "^8.19.0"
+    "typescript-eslint": "^8.19.0",
+    "zx": "^7.2.3"
   },
   "overrides": {
     "@anthropic-ai/bedrock-sdk": {

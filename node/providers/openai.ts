@@ -8,7 +8,7 @@ import type {
   Usage,
 } from "./provider-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import type { ToolName, ToolRequestId } from "../tools/toolManager.ts";
+import type { ToolRequestId } from "../tools/toolManager.ts";
 import type { Nvim } from "nvim-node";
 import type { Stream } from "openai/streaming.mjs";
 import { DEFAULT_SYSTEM_PROMPT } from "./constants.ts";
@@ -32,16 +32,23 @@ export class OpenAIProvider implements Provider {
     }
   }
 
-  constructor(private nvim: Nvim) {
-    const apiKey = process.env.OPENAI_API_KEY;
+  constructor(
+    private nvim: Nvim,
+    options?: {
+      baseUrl?: string | undefined;
+      apiKeyEnvVar?: string | undefined;
+    },
+  ) {
+    const apiKeyEnvVar = options?.apiKeyEnvVar || "OPENAI_API_KEY";
+    const apiKey = process.env[apiKeyEnvVar];
 
     if (!apiKey) {
-      throw new Error("OPENAI_API_KEY key not found in environment");
+      throw new Error(`${apiKeyEnvVar} not found in environment`);
     }
 
     this.client = new OpenAI({
       apiKey,
-      baseURL: process.env.OPENAI_BASE_URL,
+      baseURL: options?.baseUrl || process.env.OPENAI_BASE_URL,
     });
 
     this.model = "gpt-4o";
@@ -69,7 +76,7 @@ export class OpenAIProvider implements Provider {
               totalTokens += enc.encode(content.text).length;
               break;
             case "tool_use":
-              totalTokens += enc.encode(content.request.name).length;
+              totalTokens += enc.encode(content.request.toolName).length;
               totalTokens += enc.encode(
                 JSON.stringify(content.request.input),
               ).length;
@@ -127,7 +134,7 @@ export class OpenAIProvider implements Provider {
                 type: "function",
                 id: content.request.id,
                 function: {
-                  name: content.request.name,
+                  name: content.request.toolName,
                   arguments: JSON.stringify(content.request.input),
                 },
               });
@@ -485,7 +492,6 @@ export class OpenAIProvider implements Provider {
   async sendMessage(
     messages: Array<ProviderMessage>,
     onText: (text: string) => void,
-    _onError: (error: Error) => void,
   ): Promise<{
     toolRequests: Result<ToolManager.ToolRequest, { rawRequest: unknown }>[];
     stopReason: StopReason;
@@ -568,10 +574,10 @@ export class OpenAIProvider implements Provider {
                 return {
                   status: "ok",
                   value: {
-                    name: name as ToolName,
-                    id: req.id as unknown as ToolRequestId,
+                    toolName: name,
+                    id: req.id,
                     input: input.value,
-                  },
+                  } as ToolManager.ToolRequest,
                 };
               } else {
                 return input;

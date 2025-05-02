@@ -67,7 +67,7 @@ The entrypoint for the node process is [index.ts](https://github.com/dlants/mage
 
 The start function in [magenta.ts](https://github.com/dlants/magenta.nvim/blob/main/node/magenta.ts) sets up the notification listeners and calls the `require('magenta').bridge` method from `init.lua`. This passes the `channelId` back to the lua side, so that it can finish initializing the magenta lua module, which we can then invoke to communicate back to the plugin.
 
-Most commands are defined in `init.lua`, though some are defined on the node side, like [sidebar.ts](https://github.com/dlants/magenta.nvim/blob/main/node/sidebar.ts#L93)
+Most commands are defined in `init.lua`, though some are defined on the node side, like [sidebar.ts](https://github.com/dlants/magenta.nvim/blob/main/node/sidebar.ts).
 
 ## testing setup
 
@@ -77,32 +77,42 @@ Each test gets a fresh neovim instance. Convenience methods for interacting with
 
 ## architecture
 
-The project is organized according to the elm architecture, or [TEA](https://guide.elm-lang.org/architecture/).
+The project is inspired by the elm architecture, or [TEA](https://guide.elm-lang.org/architecture/), but uses a more flexible approach with controllers and a central dispatcher.
 
-Each component consists of:
+The core architectural components include:
 
-- `Model` - the current state of the component. This should be a serializable object. Usually initialized via the `initModel` function.
-- `Msg` - something that should trigger the state to change. This should be a serializable object.
-- `update` - something that takes a model and a message, and returns the next model. This should be a pure function. It can optionally also return a thunk, which is where all side effects, like asynchronous code, should go.
-- `view` - a function that takes a model and returns what the display buffer should look like. This is done in a declarative way using the `d` template literal (I don't remember why I chose "d"... dynamic text maybe?). You can attach bindings to different parts of the text via `withBindings`.
+- `Controllers` - Classes that manage specific parts of the application. Each controller maintains its own state and handles messages that are relevant to it.
+- `Msg/RootMsg` - Messages that trigger state changes. There's a root message type that can be directed to specific controllers.
+- `Dispatch/RootDispatch` - A function passed to controllers that allows them to send messages through the system. Each controller receives a root dispatcher that it can use to communicate with other parts of the system.
+- `State` - The current state of a controller. Controllers manage their own internal state rather than returning new state from pure functions.
+- `view` - A function that renders the current state as text. This is done in a declarative way using the `d` template literal. You can attach bindings to different parts of the text via `withBindings`.
 
-So the general flow is:
+The general flow is:
 
-- you have your model. You render it with a view, and some bindings.
-- the user takes some action on the view. This triggers a command or a binding, which dispatches a message.
-- the message is combined with the current model via the update function, which creates a next model, and potentially a thunk.
-- the next model is rendered, and the thunk is executed, potentially resulting in more dispatches.
-- rinse and repeat.
+- Controllers initialize with their own state and receive a root dispatcher.
+- When a user action occurs, it triggers a command or binding that dispatches a message.
+- The message flows to the appropriate controller via the root dispatcher.
+- The controller updates its internal state and may dispatch additional messages to other controllers.
+- The view is rendered based on the updated state.
 
-The key files are:
+One key principle: **If you create a class, you're responsible for passing actions or messages to that class.**
 
-- [tea.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tea/tea.ts) - sets up the render - dispatch - update cycle
-- [view.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tea/view.ts) - implements the VDOM-like declarative rendering template
+The main architectural files are:
+
+- [root-msg.ts](https://github.com/dlants/magenta.nvim/blob/main/node/root-msg.ts) - Defines the root message type that flows through the system
+- [magenta.ts](https://github.com/dlants/magenta.nvim/blob/main/node/magenta.ts#L21) - Contains the central dispatching loop in the `dispatch` method of the Magenta class
+- [tea/tea.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tea/tea.ts) - Manages the rendering cycle
+- [view.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tea/view.ts) - Implements the VDOM-like declarative rendering template
 
 ## code organization
 
 - [magenta.ts](https://github.com/dlants/magenta.nvim/blob/main/node/magenta.ts) - the entrypoint. Sets up the communication with the neovim process, initializes the app, receives commands from the neovim process.
 - [sidebar.ts](https://github.com/dlants/magenta.nvim/blob/main/node/sidebar.ts) - manages the chat sidebar state. Mostly just for showing/hiding it, managing the keybindings, etc...
-- [toolManager.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tools/toolManager.ts) - manages the tool executions and rendering. Each tool execution has an id, and this contains the state mapping that id to the execution state. Also provides tools for dealing with generic "tools".
-- [provider.ts](https://github.com/dlants/magenta.nvim/blob/main/node/providers/provider.ts) - abstraction around an LLM provider. Creates general ways of declaring tools, messages and other interactions with various providers.
-- [chat.ts](https://github.com/dlants/magenta.nvim/blob/main/node/chat/chat.ts) - the top-level of the TEA app. Contains messages, context, etc... this is what is displayed in the chat display buffer.
+- [chat/chat.ts](https://github.com/dlants/magenta.nvim/blob/main/node/chat/chat.ts) - the top-level chat component that manages the overall chat state and initializes threads.
+- [chat/thread.ts](https://github.com/dlants/magenta.nvim/blob/main/node/chat/thread.ts) - manages the message thread, handling sending messages, displaying responses, and coordinating with tool usage.
+- [chat/message.ts](https://github.com/dlants/magenta.nvim/blob/main/node/chat/message.ts) - represents individual chat messages and manages their parts.
+- [chat/part.ts](https://github.com/dlants/magenta.nvim/blob/main/node/chat/part.ts) - represents different parts of a message (text, tool requests, etc.).
+- [context/context-manager.ts](https://github.com/dlants/magenta.nvim/blob/main/node/context/context-manager.ts) - manages file context that can be added to conversations.
+- [tools/toolManager.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tools/toolManager.ts) - manages tool executions and rendering. Each tool execution has an id, and this contains the state mapping that id to the execution state.
+- [providers/provider.ts](https://github.com/dlants/magenta.nvim/blob/main/node/providers/provider.ts) - abstraction around an LLM provider. Creates general ways of declaring tools, messages and other interactions with various providers.
+- [inline-edit/inline-edit-manager.ts](https://github.com/dlants/magenta.nvim/blob/main/node/inline-edit/inline-edit-manager.ts) - manages inline editing functionality for making code changes directly in buffers.

@@ -123,6 +123,14 @@ export class NvimWindow {
     ]);
   }
 
+  /**
+   * Get the window position (row, column) in the grid
+   * @returns Promise<[row, col]> where (0,0) is top-left
+   */
+  async getPosition(): Promise<[number, number]> {
+    return await this.nvim.call("nvim_win_get_position", [this.id]);
+  }
+
   async topLine(): Promise<number> {
     const res = await this.nvim.call("nvim_exec2", [
       `echo line('w0', "${this.id}")`,

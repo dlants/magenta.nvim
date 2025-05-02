@@ -5,7 +5,7 @@ import { REVIEW_PROMPT } from "../tools/diff";
 
 describe("node/chat/message.spec.ts", () => {
   it("display multiple edits to the same file, and edit details", async () => {
-    await withDriver(async (driver) => {
+    await withDriver({}, async (driver) => {
       await driver.showSidebar();
       await driver.inputMagentaText(
         `Update the poem in the file node/test/fixtures/poem.txt`,
@@ -20,7 +20,7 @@ describe("node/chat/message.spec.ts", () => {
             status: "ok",
             value: {
               id: "id1" as ToolRequestId,
-              name: "replace",
+              toolName: "replace",
               input: {
                 filePath: "node/test/fixtures/poem.txt",
                 find: `Moonlight whispers through the trees,\nSilver shadows dance with ease.`,
@@ -32,7 +32,7 @@ describe("node/chat/message.spec.ts", () => {
             status: "ok",
             value: {
               id: "id2" as ToolRequestId,
-              name: "replace",
+              toolName: "replace",
               input: {
                 filePath: "node/test/fixtures/poem.txt",
                 find: `Stars above like diamonds bright,\nPaint their stories in the night.`,

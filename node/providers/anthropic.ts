@@ -40,21 +40,32 @@ export class AnthropicProvider implements Provider {
 
   constructor(
     protected nvim: Nvim,
-    private promptCaching = true,
-    private disableParallelToolUseFlag = true,
-    apiKeyRequired = true,
+    options?: {
+      baseUrl?: string | undefined;
+      apiKeyEnvVar?: string | undefined;
+      awsAPIKey?: boolean | undefined;
+      promptCaching?: boolean | undefined;
+      disableParallelToolUseFlag?: boolean;
+    },
   ) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    this.model = "claude-3-5-sonnet-latest";
+    const apiKeyEnvVar = options?.apiKeyEnvVar || "ANTHROPIC_API_KEY";
+    const apiKey = process.env[apiKeyEnvVar];
+    this.model = "claude-3-7-sonnet-latest";
 
-    if (apiKeyRequired && !apiKey) {
-      throw new Error("Anthropic API key not found in config or environment");
+    if (!options?.awsAPIKey && !apiKey) {
+      throw new Error(
+        `Anthropic API key ${apiKeyEnvVar} not found in environment`,
+      );
     }
 
     this.client = new Anthropic({
       apiKey,
+      baseURL: options?.baseUrl,
     });
   }
+
+  private promptCaching = true;
+  private disableParallelToolUseFlag = true;
 
   setModel(model: string): void {
     this.model = model;
@@ -81,12 +92,16 @@ export class AnthropicProvider implements Provider {
         content = m.content.map((c): Anthropic.ContentBlockParam => {
           switch (c.type) {
             case "text":
-              return c;
+              // important to create a new object here so when we attach ephemeral
+              // cache_control markers we won't mutate the content.
+              return {
+                ...c,
+              };
             case "tool_use":
               return {
                 id: c.request.id,
                 input: c.request.input,
-                name: c.request.name,
+                name: c.request.toolName,
                 type: "tool_use",
               };
             case "tool_result":
@@ -123,12 +138,12 @@ export class AnthropicProvider implements Provider {
       },
     );
 
+    this.nvim.logger?.error(`anthropic model: ${this.model}`);
     return {
       messages: anthropicMessages,
       model: this.model,
-      max_tokens: 4096,
+      max_tokens: 64000,
       system: [
-        // @ts-expect-error setting cache_control to undefined
         {
           type: "text",
           text: DEFAULT_SYSTEM_PROMPT,
@@ -141,7 +156,7 @@ export class AnthropicProvider implements Provider {
             ? cacheControlItemsPlaced < 4
               ? { type: "ephemeral" }
               : null
-            : undefined,
+            : null,
         },
       ],
       tool_choice: {
@@ -193,7 +208,6 @@ export class AnthropicProvider implements Provider {
         },
       } as Anthropic.Messages.MessageStreamParams);
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const response: Anthropic.Message = await this.request.finalMessage();
 
       if (response.stop_reason === "max_tokens") {
@@ -324,7 +338,6 @@ export class AnthropicProvider implements Provider {
         },
       } as Anthropic.Messages.MessageStreamParams);
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const response: Anthropic.Message = await this.request.finalMessage();
 
       if (response.stop_reason === "max_tokens") {
@@ -432,7 +445,6 @@ export class AnthropicProvider implements Provider {
   async sendMessage(
     messages: Array<ProviderMessage>,
     onText: (text: string) => void,
-    onError: (error: Error) => void,
   ): Promise<{
     toolRequests: Result<ToolManager.ToolRequest, { rawRequest: unknown }>[];
     stopReason: StopReason;
@@ -457,6 +469,7 @@ export class AnthropicProvider implements Provider {
       }
     };
 
+    let requestActive = true;
     try {
       this.request = this.client.messages
         .stream(
@@ -465,21 +478,25 @@ export class AnthropicProvider implements Provider {
           ) as Anthropic.Messages.MessageStreamParams,
         )
         .on("text", (text: string) => {
+          if (!requestActive) {
+            return;
+          }
           buf.push(text);
           flushBuffer();
         })
-        .on("error", onError)
         .on("inputJson", (_delta, snapshot) => {
+          if (!requestActive) {
+            return;
+          }
           this.nvim.logger?.debug(
             `anthropic stream inputJson: ${JSON.stringify(snapshot)}`,
           );
         });
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const response: Anthropic.Message = await this.request.finalMessage();
 
       if (response.stop_reason === "max_tokens") {
-        onError(new Error("Response exceeded max_tokens limit"));
+        throw new Error("Response exceeded max_tokens limit");
       }
 
       const toolRequests: Result<
@@ -536,10 +553,10 @@ export class AnthropicProvider implements Provider {
               return {
                 status: "ok",
                 value: {
-                  name: name as ToolManager.ToolRequest["name"],
-                  id: req2.id as unknown as ToolRequestId,
+                  toolName: name,
+                  id: req2.id,
                   input: input.value,
-                },
+                } as ToolManager.ToolRequest,
               };
             } else {
               return input;
@@ -560,12 +577,20 @@ export class AnthropicProvider implements Provider {
         usage.cacheMisses = response.usage.cache_creation_input_tokens;
       }
 
+      if (!requestActive) {
+        throw new Error(`request no longer active`);
+      }
+
       return {
         toolRequests,
         stopReason: response.stop_reason || "end_turn",
         usage,
       };
     } finally {
+      requestActive = false;
+      if (this.request) {
+        this.request.abort();
+      }
       this.request = undefined;
     }
   }
@@ -630,15 +655,17 @@ export function placeCacheBreakpoints(messages: MessageParam[]): number {
   // however, since we are not accounting for tools or the system prompt, and generally code and technical writing
   // tend to have a lower coefficient of string length to tokens (about 3.5 average sting length per token), this means
   // that the first cache control should be past the 1024 mark and should be cached.
-  const powers = highestPowersOfTwo(tokens, 3).filter((n) => n >= 1024);
-  if (powers.length) {
-    for (const power of powers) {
-      const targetLength = power * STR_CHARS_PER_TOKEN; // power is in tokens, but we want string chars instead
-      // find the first block where we are past the target power
-      const blockEntry = blocks.find((b) => b.acc > targetLength);
-      if (blockEntry) {
-        blockEntry.block.cache_control = { type: "ephemeral" };
-      }
+  const powers = highestPowersOfTwo(tokens, 4).filter((n) => n >= 1024);
+  for (const power of powers) {
+    const targetLength = power * STR_CHARS_PER_TOKEN; // power is in tokens, but we want string chars instead
+    // find the first block where we are past the target power
+    const blockEntry = blocks.find((b) => b.acc > targetLength);
+    if (
+      blockEntry &&
+      blockEntry.block.type !== "thinking" &&
+      blockEntry.block.type !== "redacted_thinking"
+    ) {
+      blockEntry.block.cache_control = { type: "ephemeral" };
     }
   }
 

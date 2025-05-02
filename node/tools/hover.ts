@@ -1,6 +1,6 @@
-import { type Thunk, type Update } from "../tea/tea.ts";
-import { d, type VDOMNode } from "../tea/view.ts";
+import { d } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
+import type { Dispatch, Thunk } from "../tea/tea.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { getOrOpenBuffer } from "../utils/buffers.ts";
 import type { NvimBuffer } from "../nvim/buffer.ts";
@@ -14,67 +14,65 @@ import type {
   ProviderToolSpec,
 } from "../providers/provider.ts";
 
-export type Model = {
-  type: "hover";
-  request: ToolRequest<"hover">;
-  state:
-    | {
-        state: "processing";
-      }
-    | {
-        state: "done";
-        result: ProviderToolResultContent;
-      };
-};
+export type State =
+  | {
+      state: "processing";
+    }
+  | {
+      state: "done";
+      result: ProviderToolResultContent;
+    };
 
 export type Msg = {
   type: "finish";
   result: Result<string>;
 };
 
-export const update: Update<Msg, Model> = (msg, model) => {
-  switch (msg.type) {
-    case "finish":
-      return [
-        {
-          ...model,
-          state: {
-            state: "done",
-            result: {
-              type: "tool_result",
-              id: model.request.id,
-              result: msg.result,
-            },
-          },
-        },
-      ];
-    default:
-      assertUnreachable(msg.type);
-  }
-};
+export class HoverTool {
+  state: State;
+  toolName = "hover" as const;
 
-export function initModel(
-  request: ToolRequest<"hover">,
-  context: {
-    nvim: Nvim;
-    lsp: Lsp;
-  },
-): [Model, Thunk<Msg>] {
-  const model: Model = {
-    type: "hover",
-    request,
-    state: {
+  private constructor(
+    public request: Extract<ToolRequest, { toolName: "hover" }>,
+    public context: { nvim: Nvim; lsp: Lsp },
+  ) {
+    this.state = {
       state: "processing",
-    },
-  };
-  return [
-    model,
-    async (dispatch) => {
-      const { lsp } = context;
-      const filePath = model.request.input.filePath;
+    };
+  }
+
+  static create(
+    request: Extract<ToolRequest, { toolName: "hover" }>,
+    context: { nvim: Nvim; lsp: Lsp },
+  ): [HoverTool, Thunk<Msg>] {
+    const tool = new HoverTool(request, context);
+    return [tool, tool.requestHover()];
+  }
+
+  update(msg: Msg): Thunk<Msg> | undefined {
+    switch (msg.type) {
+      case "finish":
+        this.state = {
+          state: "done",
+          result: {
+            type: "tool_result",
+            id: this.request.id,
+            result: msg.result,
+          },
+        };
+        return;
+      default:
+        assertUnreachable(msg.type);
+    }
+  }
+
+  requestHover(): Thunk<Msg> {
+    return async (dispatch: Dispatch<Msg>) => {
+      const { lsp } = this.context;
+      const filePath = this.request.input.filePath;
       const bufferResult = await getOrOpenBuffer({
         relativePath: filePath,
-        context,
+        context: this.context,
       });
 
       let buffer: NvimBuffer;
@@ -96,14 +94,14 @@ export function initModel(
       }
 
       const symbolStart = bufferContent.indexOf(
-        model.request.input.symbol,
+        this.request.input.symbol,
       ) as StringIdx;
       if (symbolStart === -1) {
         dispatch({
           type: "finish",
           result: {
             status: "error",
-            error: `Symbol "${model.request.input.symbol}" not found in file.`,
+            error: `Symbol "${this.request.input.symbol}" not found in file.`,
           },
         });
         return;
@@ -112,7 +110,7 @@ export function initModel(
       const symbolPos = calculateStringPosition(
         { row: 0, col: 0 } as PositionString,
         bufferContent,
-        (symbolStart + model.request.input.symbol.length - 1) as StringIdx,
+        (symbolStart + this.request.input.symbol.length - 1) as StringIdx,
       );
 
       try {
@@ -143,36 +141,43 @@ ${lspResult.result.contents.value}
           },
         });
       }
-    },
-  ];
-}
-
-export function view({ model }: { model: Model }): VDOMNode {
-  switch (model.state.state) {
-    case "processing":
-      return d`⚙️ Requesting hover info...`;
-    case "done":
-      return d`✅ Hover request complete.`;
-    default:
-      assertUnreachable(model.state);
+    };
   }
-}
 
-export function getToolResult(model: Model): ProviderToolResultContent {
-  switch (model.state.state) {
-    case "processing":
-      return {
-        type: "tool_result",
-        id: model.request.id,
-        result: {
-          status: "ok",
-          value: `This tool use is being processed.`,
-        },
-      };
-    case "done":
-      return model.state.result;
-    default:
-      assertUnreachable(model.state);
+  getToolResult(): ProviderToolResultContent {
+    switch (this.state.state) {
+      case "processing":
+        return {
+          type: "tool_result",
+          id: this.request.id,
+          result: {
+            status: "ok",
+            value: `This tool use is being processed.`,
+          },
+        };
+      case "done":
+        return this.state.result;
+      default:
+        assertUnreachable(this.state);
+    }
+  }
+
+  view() {
+    switch (this.state.state) {
+      case "processing":
+        return d`⚙️ Requesting hover info...`;
+      case "done":
+        return d`✅ Hover request complete.`;
+      default:
+        assertUnreachable(this.state);
+    }
+  }
+
+  displayInput() {
+    return `hover: {
+  filePath: "${this.request.input.filePath}",
+  symbol: "${this.request.input.symbol}"
+}`;
   }
 }
 
@@ -203,10 +208,6 @@ export type Input = {
   filePath: string;
   symbol: string;
 };
-
-export function displayInput(input: Input) {
-  return `hover: { filePath: "${input.filePath}", symbol: "${input.symbol}" }`;
-}
 
 export function validateInput(input: {
   [key: string]: unknown;

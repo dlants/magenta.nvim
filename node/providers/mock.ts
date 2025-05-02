@@ -14,7 +14,6 @@ import type { ReplaceSelectionToolRequest } from "../inline-edit/replace-selecti
 type MockRequest = {
   messages: Array<ProviderMessage>;
   onText: (text: string) => void;
-  onError: (error: Error) => void;
   defer: Defer<{
     toolRequests: Result<ToolRequest, { rawRequest: unknown }>[];
     stopReason: StopReason;
@@ -143,7 +142,6 @@ export class MockProvider implements Provider {
   async sendMessage(
     messages: Array<ProviderMessage>,
     onText: (text: string) => void,
-    onError: (error: Error) => void,
   ): Promise<{
     toolRequests: Result<ToolRequest, { rawRequest: unknown }>[];
     stopReason: StopReason;
@@ -152,7 +150,6 @@ export class MockProvider implements Provider {
     const request: MockRequest = {
       messages,
       onText,
-      onError,
       defer: new Defer(),
     };
     this.requests.push(request);
@@ -212,6 +209,11 @@ export class MockProvider implements Provider {
         outputTokens: 0,
       },
     });
+  }
+
+  async respondWithError(error: Error) {
+    const lastRequest = await this.awaitPendingRequest();
+    lastRequest.defer.reject(error);
   }
 
   async respondInline({

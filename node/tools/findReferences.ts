@@ -1,6 +1,6 @@
-import { type Thunk, type Update } from "../tea/tea.ts";
-import { d, type VDOMNode } from "../tea/view.ts";
+import { d } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
+import type { Dispatch, Thunk } from "../tea/tea.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { getOrOpenBuffer } from "../utils/buffers.ts";
 import type { NvimBuffer } from "../nvim/buffer.ts";
@@ -16,61 +16,62 @@ import type {
   ProviderToolSpec,
 } from "../providers/provider.ts";
 
-export type Model = {
-  type: "find_references";
-  request: ToolRequest<"find_references">;
-  state:
-    | {
-        state: "processing";
-      }
-    | {
-        state: "done";
-        result: ProviderToolResultContent;
-      };
-};
+export type State =
+  | {
+      state: "processing";
+    }
+  | {
+      state: "done";
+      result: ProviderToolResultContent;
+    };
 
 export type Msg = {
   type: "finish";
   result: Result<string>;
 };
 
-export const update: Update<Msg, Model> = (msg, model) => {
-  switch (msg.type) {
-    case "finish":
-      return [
-        {
-          ...model,
-          state: {
-            state: "done",
-            result: {
-              type: "tool_result",
-              id: model.request.id,
-              result: msg.result,
-            },
-          },
-        },
-      ];
-    default:
-      assertUnreachable(msg.type);
-  }
-};
+export class FindReferencesTool {
+  state: State;
+  toolName = "find_references" as const;
 
-export function initModel(
-  request: ToolRequest<"find_references">,
-  context: { nvim: Nvim; lsp: Lsp },
-): [Model, Thunk<Msg>] {
-  const model: Model = {
-    type: "find_references",
-    request,
-    state: {
+  private constructor(
+    public request: Extract<ToolRequest, { toolName: "find_references" }>,
+    public context: { nvim: Nvim; lsp: Lsp },
+  ) {
+    this.state = {
       state: "processing",
-    },
-  };
-  return [
-    model,
-    async (dispatch) => {
-      const { lsp, nvim } = context;
-      const filePath = model.request.input.filePath;
+    };
+  }
+
+  static create(
+    request: Extract<ToolRequest, { toolName: "find_references" }>,
+    context: { nvim: Nvim; lsp: Lsp },
+  ): [FindReferencesTool, Thunk<Msg>] {
+    const tool = new FindReferencesTool(request, context);
+    return [tool, tool.findReferences()];
+  }
+
+  update(msg: Msg): Thunk<Msg> | undefined {
+    switch (msg.type) {
+      case "finish":
+        this.state = {
+          state: "done",
+          result: {
+            type: "tool_result",
+            id: this.request.id,
+            result: msg.result,
+          },
+        };
+        return;
+      default:
+        assertUnreachable(msg.type);
+    }
+  }
+
+  findReferences(): Thunk<Msg> {
+    return async (dispatch: Dispatch<Msg>) => {
+      const { lsp, nvim } = this.context;
+      const filePath = this.request.input.filePath;
       const bufferResult = await getOrOpenBuffer({
         relativePath: filePath,
         context: { nvim },
@@ -94,7 +95,7 @@ export function initModel(
         return;
       }
       const symbolStart = bufferContent.indexOf(
-        model.request.input.symbol,
+        this.request.input.symbol,
       ) as StringIdx;
 
       if (symbolStart === -1) {
@@ -102,7 +103,7 @@ export function initModel(
           type: "finish",
           result: {
             status: "error",
-            error: `Symbol "${model.request.input.symbol}" not found in file.`,
+            error: `Symbol "${this.request.input.symbol}" not found in file.`,
           },
         });
         return;
@@ -111,7 +112,7 @@ export function initModel(
       const symbolPos = calculateStringPosition(
         { row: 0, col: 0 } as PositionString,
         bufferContent,
-        (symbolStart + model.request.input.symbol.length - 1) as StringIdx,
+        (symbolStart + this.request.input.symbol.length - 1) as StringIdx,
       );
 
       try {
@@ -146,36 +147,43 @@ export function initModel(
           },
         });
       }
-    },
-  ];
-}
-
-export function view({ model }: { model: Model }): VDOMNode {
-  switch (model.state.state) {
-    case "processing":
-      return d`⚙️ Finding references...`;
-    case "done":
-      return d`✅ References request complete.`;
-    default:
-      assertUnreachable(model.state);
+    };
   }
-}
 
-export function getToolResult(model: Model): ProviderToolResultContent {
-  switch (model.state.state) {
-    case "processing":
-      return {
-        type: "tool_result",
-        id: model.request.id,
-        result: {
-          status: "ok",
-          value: `This tool use is being processed.`,
-        },
-      };
-    case "done":
-      return model.state.result;
-    default:
-      assertUnreachable(model.state);
+  getToolResult(): ProviderToolResultContent {
+    switch (this.state.state) {
+      case "processing":
+        return {
+          type: "tool_result",
+          id: this.request.id,
+          result: {
+            status: "ok",
+            value: `This tool use is being processed.`,
+          },
+        };
+      case "done":
+        return this.state.result;
+      default:
+        assertUnreachable(this.state);
+    }
+  }
+
+  view() {
+    switch (this.state.state) {
+      case "processing":
+        return d`u2699ufe0f Finding references...`;
+      case "done":
+        return d`u2705 References request complete.`;
+      default:
+        assertUnreachable(this.state);
+    }
+  }
+
+  displayInput() {
+    return `find_references: {
+    filePath: "${this.request.input.filePath}",
+    symbol: "${this.request.input.symbol}"
+}`;
   }
 }
 
@@ -205,10 +213,6 @@ export type Input = {
   filePath: string;
   symbol: string;
 };
-
-export function displayInput(input: Input) {
-  return `find_references: { filePath: "${input.filePath}", symbol: "${input.symbol}" }`;
-}
 
 export function validateInput(input: {
   [key: string]: unknown;
