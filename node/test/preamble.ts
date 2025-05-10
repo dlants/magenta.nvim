@@ -63,7 +63,7 @@ export async function withNvimProcess(fn: (sock: string) => Promise<void>) {
     });
 
     nvimProcess.on("exit", (code, signal) => {
-      if (code !== 1) {
+      if (code !== 1 && signal !== "SIGTERM") {
         throw new Error(
           `Nvim process exited with code ${code} and signal ${signal}`,
         );
@@ -230,5 +230,8 @@ export function extractMountTree(mounted: MountedVDOM): unknown {
 
 process.on("uncaughtException", (err) => {
   console.error(err);
-  process.exit(1);
+  // Give time for error to be printed.
+  setTimeout(() => {
+    process.exit(1);
+  }, 50);
 });
