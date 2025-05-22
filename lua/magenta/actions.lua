@@ -76,6 +76,21 @@ local snacks_files = function()
   })
 end
 
+local mini_pick = function()
+	local mini_pick = require("mini.pick")
+
+	mini_pick.builtin.files({}, {
+		source = {
+			name = "Select context files for Magenta",
+			choose = function(item)
+				vim.cmd("Magenta context-files " .. item)
+			end,
+			choose_marked = function(items)
+				vim.cmd("Magenta context-files " .. table.concat(items, " "))
+			end,
+		},
+	})
+end
 
 M.pick_context_files = function()
   if Options.options.picker == "fzf-lua" then
@@ -84,6 +99,8 @@ M.pick_context_files = function()
     telescope_files()
   elseif Options.options.picker == "snacks" then
     snacks_files()
+  elseif Options.options.picker == "mini" then
+		mini_pick()
   else
     vim.notify("No supported picker (fzf-lua, telescope, or snacks) installed!", vim.log.levels.ERROR)
   end
