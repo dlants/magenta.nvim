@@ -71,7 +71,10 @@ export class AnthropicProvider implements Provider {
     this.model = model;
   }
 
-  createStreamParameters(messages: ProviderMessage[]): MessageStreamParams {
+  createStreamParameters(
+    messages: ProviderMessage[],
+    options?: { disableCaching?: boolean },
+  ): MessageStreamParams {
     const anthropicMessages = messages.map((m): MessageParam => {
       let content: Anthropic.Messages.ContentBlockParam[];
       if (typeof m.content == "string") {
@@ -144,8 +147,11 @@ export class AnthropicProvider implements Provider {
       };
     });
 
+    // Use the promptCaching class property but allow it to be overridden by options parameter
+    const useCaching = options?.disableCaching !== true && this.promptCaching;
+
     let cacheControlItemsPlaced = 0;
-    if (this.promptCaching) {
+    if (useCaching) {
       cacheControlItemsPlaced = placeCacheBreakpoints(anthropicMessages);
     }
 
@@ -171,7 +177,7 @@ export class AnthropicProvider implements Provider {
           // system
           // messages
           // This ensures the tools + system prompt (which is approx 1400 tokens) is cached.
-          cache_control: this.promptCaching
+          cache_control: useCaching
             ? cacheControlItemsPlaced < 4
               ? { type: "ephemeral" }
               : null
@@ -213,7 +219,7 @@ export class AnthropicProvider implements Provider {
     spec: ProviderToolSpec,
   ): ProviderToolUseRequest {
     const request = this.client.messages.stream({
-      ...this.createStreamParameters(messages),
+      ...this.createStreamParameters(messages, { disableCaching: true }),
       tools: [
         {
           ...spec,
@@ -348,6 +354,7 @@ export class AnthropicProvider implements Provider {
       .stream(
         this.createStreamParameters(
           messages,
+          // Use default caching behavior for regular messages
         ) as Anthropic.Messages.MessageStreamParams,
       )
       .on("streamEvent", (e) => {

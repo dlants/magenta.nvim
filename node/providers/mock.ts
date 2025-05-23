@@ -90,13 +90,13 @@ export class MockProvider implements Provider {
     };
   }
 
-  async awaitPendingRequest() {
+  async awaitPendingRequest(message?: string) {
     return pollUntil(() => {
       const lastRequest = this.requests[this.requests.length - 1];
       if (lastRequest && !lastRequest.defer.resolved) {
         return lastRequest;
       }
-      throw new Error(`no pending requests`);
+      throw new Error(`no pending requests: ${message}`);
     });
   }
 
@@ -124,14 +124,14 @@ export class MockProvider implements Provider {
     });
   }
 
-  async awaitPendingForceToolUseRequest() {
+  async awaitPendingForceToolUseRequest(message?: string) {
     return pollUntil(() => {
       const lastRequest =
         this.forceToolUseRequests[this.forceToolUseRequests.length - 1];
       if (lastRequest && !lastRequest.defer.resolved) {
         return lastRequest;
       }
-      throw new Error(`no pending force tool use requests`);
+      throw new Error(`no pending force tool use requests: ${message}`);
     });
   }
 

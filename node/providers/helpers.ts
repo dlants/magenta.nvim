@@ -1,5 +1,7 @@
+import type { WebSearchResultBlock } from "@anthropic-ai/sdk/resources.mjs";
 import { validateInput } from "../tools/helpers";
 import type {
+  ToolManager,
   ToolName,
   ToolRequest,
   ToolRequestId,
@@ -48,6 +50,70 @@ export function applyDelta(
       throw new Error("NOT IMPLEMENTED");
     default:
       assertUnreachable(event.delta);
+  }
+}
+
+export function stringifyContent(
+  content: ProviderMessageContent,
+  toolManager: ToolManager,
+): string {
+  switch (content.type) {
+    case "text": {
+      let textContent = content.text;
+
+      // Include citations if they exist
+      if (content.citations && content.citations.length > 0) {
+        textContent += "\n\nCitations:";
+        content.citations.forEach((citation) => {
+          textContent += `\n- [${citation.title}](${citation.url})`;
+          if (citation.cited_text) {
+            textContent += `\n  "${citation.cited_text}"`;
+          }
+        });
+      }
+      return textContent;
+    }
+
+    case "tool_use":
+      return `Tool use for tool ${content.name}: ${JSON.stringify(content.request.status === "ok" ? content.request.value.input : content.request.rawRequest, null, 2)}`;
+
+    case "server_tool_use":
+      switch (content.name) {
+        case "web_search":
+          return `Search : ${content.input.query}`;
+        default:
+          return assertUnreachable(content);
+      }
+
+    case "web_search_tool_result":
+      if (
+        "type" in content.content &&
+        content.content.type === "web_search_tool_result_error"
+      ) {
+        return `Web search error: ${content.content.error_code}`;
+      } else {
+        const results = content.content as Array<WebSearchResultBlock>;
+        return `Web search results:\n${results
+          .map((result) => `- [${result.title || "No Title"}](${result.url})`)
+          .join("\n")}`;
+      }
+
+    case "tool_result": {
+      if (content.result.status == "ok") {
+        const result = content.result.value;
+        const toolWrapper = toolManager.state.toolWrappers[content.id];
+        if (!toolWrapper) {
+          return `Tool result:\n${result}`;
+        }
+
+        return `Tool result for tool ${toolWrapper.tool.toolName}:\n${result}`;
+      } else {
+        return `Tool result error: ${content.result.error}`;
+      }
+    }
+
+    default:
+      assertUnreachable(content);
   }
 }
 
@@ -100,7 +166,7 @@ export function finalizeStreamingBlock(
       return {
         type: "tool_use",
         id: block.id as ToolRequestId,
-        name: block.name,
+        name: block.name as ToolName,
         request:
           inputParseResult.status == "ok"
             ? {

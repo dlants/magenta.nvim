@@ -53,7 +53,7 @@ export type ProviderTextContent = {
 export type ProviderToolUseContent = {
   type: "tool_use";
   id: ToolManager.ToolRequestId;
-  name: string;
+  name: ToolManager.ToolName;
   request: Result<ToolManager.ToolRequest, { rawRequest: unknown }>;
 };
 

@@ -1,5 +1,6 @@
-import type { ThreadMsg } from "./chat/thread";
+import type { ThreadId, ThreadMsg } from "./chat/thread";
 import type { ChatMsg } from "./chat/chat";
+import type { Input as CompactThreadInput } from "./tools/compact-thread";
 
 export type RootMsg =
   | ThreadMsg
@@ -7,4 +8,9 @@ export type RootMsg =
   | {
       type: "sidebar-setup-resubmit";
       lastUserMessage: string;
+    }
+  | {
+      type: "compact-thread";
+      threadId: ThreadId;
+      compactRequest: CompactThreadInput;
     };

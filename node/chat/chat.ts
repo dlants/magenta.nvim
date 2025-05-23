@@ -9,6 +9,13 @@ import { d, withBindings } from "../tea/view";
 import { Counter } from "../utils/uniqueId.ts";
 import { ContextManager } from "../context/context-manager.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
+import {
+  relativePath,
+  resolveFilePath,
+  type UnresolvedFilePath,
+} from "../utils/files.ts";
+import { getcwd } from "../nvim/nvim.ts";
+import type { MessageId } from "./message.ts";
 
 type ThreadWrapper =
   | {
@@ -45,6 +52,12 @@ export type Msg =
     }
   | {
       type: "new-thread";
+    }
+  | {
+      type: "compact-thread";
+      threadId: ThreadId;
+      contextFilePaths: UnresolvedFilePath[];
+      initialMessage: string;
     }
   | {
       type: "select-thread";
@@ -157,6 +170,16 @@ export class Chat {
           activeThreadId: this.state.activeThreadId,
         };
         return;
+
+      case "compact-thread": {
+        this.handleCompactThread(msg).catch((e: Error) => {
+          this.context.nvim.logger?.error(
+            "Failed to handle thread compaction:",
+            e,
+          );
+        });
+        return;
+      }
 
       default:
         assertUnreachable(msg);
@@ -274,6 +297,92 @@ ${threadViews.length ? threadViews : "No threads yet"}`;
       );
     }
     return threadWrapper.thread;
+  }
+
+  async handleCompactThread({
+    threadId,
+    contextFilePaths,
+    initialMessage,
+  }: {
+    threadId: ThreadId;
+    contextFilePaths: UnresolvedFilePath[];
+    initialMessage: string;
+  }) {
+    const sourceThreadWrapper = this.threadWrappers.get(threadId);
+    if (!sourceThreadWrapper || sourceThreadWrapper.state !== "initialized") {
+      throw new Error(`Thread ${threadId} not available for compaction`);
+    }
+
+    const sourceThread = sourceThreadWrapper.thread;
+
+    const newThreadId = this.threadCounter.get() as ThreadId;
+    this.threadWrappers.set(newThreadId, { state: "pending" });
+
+    try {
+      // Create a new context manager for the compacted thread
+      const contextManager = await ContextManager.create(
+        (msg) =>
+          this.context.dispatch({
+            type: "thread-msg",
+            id: newThreadId,
+            msg: {
+              type: "context-manager-msg",
+              msg,
+            },
+          }),
+        {
+          dispatch: this.context.dispatch,
+          bufferTracker: this.context.bufferTracker,
+          nvim: this.context.nvim,
+          options: this.context.options,
+        },
+      );
+
+      for (const filePath of contextFilePaths) {
+        const cwd = await getcwd(this.context.nvim);
+        const absFilePath = resolveFilePath(cwd, filePath);
+        const relFilePath = relativePath(cwd, absFilePath);
+        contextManager.update({
+          type: "add-file-context",
+          absFilePath,
+          relFilePath,
+          messageId: 0 as MessageId,
+        });
+      }
+
+      const newThread = new Thread(newThreadId, {
+        ...this.context,
+        contextManager,
+        profile: sourceThread.state.profile, // Use the same profile as the source thread
+      });
+
+      // Switch to the new thread
+      this.context.dispatch({
+        type: "chat-msg",
+        msg: {
+          type: "thread-initialized",
+          thread: newThread,
+        },
+      });
+
+      this.context.dispatch({
+        type: "thread-msg",
+        id: newThreadId,
+        msg: {
+          type: "send-message",
+          content: initialMessage,
+        },
+      });
+    } catch (e) {
+      this.context.dispatch({
+        type: "chat-msg",
+        msg: {
+          type: "thread-error",
+          id: newThreadId,
+          error: e as Error,
+        },
+      });
+    }
   }
 
   renderActiveThread() {

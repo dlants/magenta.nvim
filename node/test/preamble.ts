@@ -167,6 +167,7 @@ export type TestOptions = Partial<MagentaOptions>;
 export async function withDriver(
   driverOptions: {
     options?: TestOptions;
+    doNotOverrideLogger?: boolean;
   },
   fn: (driver: NvimDriver) => Promise<void>,
 ) {
@@ -205,6 +206,18 @@ end
 `,
         [],
       ]);
+      if (!driverOptions.doNotOverrideLogger) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        magenta.nvim.logger = {
+          error: (msg: string) => console.error(msg),
+          warn: (msg: string) => console.warn(msg),
+          info: (msg: string) => console.info(msg),
+          debug: (msg: string) =>
+            process.env.LOG_LEVEL == "debug" && console.debug(msg),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any;
+      }
+
       try {
         await fn(new NvimDriver(nvim, magenta, mockAnthropic));
       } finally {

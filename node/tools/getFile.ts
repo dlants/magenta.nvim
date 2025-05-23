@@ -100,6 +100,11 @@ export class GetFileTool implements ToolInterface {
     switch (msg.type) {
       case "finish":
         if (this.state.state == "processing") {
+          if (msg.result.status == "error") {
+            this.context.nvim.logger?.error(
+              "Error executing get_file tool: " + msg.result.error,
+            );
+          }
           this.state = {
             state: "done",
             result: {

@@ -10,6 +10,7 @@ import { d, type View } from "../tea/view.ts";
 import {
   ToolManager,
   type Msg as ToolManagerMsg,
+  type ToolRequest,
   type ToolRequestId,
 } from "../tools/toolManager.ts";
 import { Counter } from "../utils/uniqueId.ts";
@@ -22,9 +23,11 @@ import {
   type ProviderMessageContent,
   type ProviderStreamEvent,
   type ProviderStreamRequest,
+  type ProviderToolUseRequest,
   type StopReason,
   type Usage,
 } from "../providers/provider.ts";
+import { spec as compactThreadSpec } from "../tools/compact-thread.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { type MagentaOptions, type Profile } from "../options.ts";
 import type { RootMsg } from "../root-msg.ts";
@@ -42,6 +45,19 @@ export type ConversationState =
       state: "message-in-flight";
       sendDate: Date;
       request: ProviderStreamRequest;
+    }
+  | {
+      state: "compacting";
+      sendDate: Date;
+      request: ProviderToolUseRequest;
+    }
+  | {
+      state: "compacted";
+      usage: Usage;
+    }
+  | {
+      state: "compaction-complete";
+      usage: Usage;
     }
   | {
       state: "stopped";
@@ -119,7 +135,7 @@ export class Thread {
   public toolManager: ToolManager;
   private counter: Counter;
   public fileSnapshots: FileSnapshots;
-  private contextManager: ContextManager;
+  public contextManager: ContextManager;
 
   constructor(
     public id: ThreadId,
@@ -236,6 +252,9 @@ export class Thread {
           }
 
           case "message-in-flight":
+          case "compacting":
+          case "compacted":
+          case "compaction-complete":
             break;
 
           default:
@@ -245,7 +264,13 @@ export class Thread {
       }
 
       case "send-message": {
-        // wrap in setTimeout to force a new eventloop frame, to avoid dispatch-in-dispatch
+        if (msg.content?.startsWith("@compact")) {
+          this.compactThread(msg.content.slice("@compact".length + 1)).catch(
+            this.handleSendMessageError.bind(this),
+          );
+          return;
+        }
+
         setTimeout(() => {
           this.sendMessage(msg.content).catch(
             this.handleSendMessageError.bind(this),
@@ -350,7 +375,10 @@ export class Thread {
         return;
       }
       case "abort": {
-        if (this.state.conversation.state == "message-in-flight") {
+        if (
+          this.state.conversation.state == "message-in-flight" ||
+          this.state.conversation.state == "compacting"
+        ) {
           this.state.conversation.request.abort();
         }
 
@@ -436,6 +464,7 @@ export class Thread {
   }
 
   private handleSendMessageError = (error: Error): void => {
+    this.context.nvim.logger?.error(error);
     if (this.state.conversation.state == "message-in-flight") {
       this.myDispatch({
         type: "conversation-state",
@@ -447,7 +476,9 @@ export class Thread {
     }
   };
 
-  async sendMessage(content?: string): Promise<void> {
+  private async prepareUserMessage(
+    content?: string,
+  ): Promise<{ messageId: MessageId; addedMessage: boolean }> {
     const messageId = this.counter.get() as MessageId;
     const contextUpdates = await this.contextManager.getContextUpdate();
 
@@ -491,8 +522,14 @@ export class Thread {
 
       this.state.messages.push(message);
       this.state.lastUserMessageId = message.state.id;
+      return { messageId, addedMessage: true };
     }
 
+    return { messageId, addedMessage: false };
+  }
+
+  async sendMessage(content?: string): Promise<void> {
+    await this.prepareUserMessage(content);
     const messages = this.getMessages();
     const request = getProvider(
       this.context.nvim,
@@ -522,6 +559,94 @@ export class Thread {
         usage: res?.usage || { inputTokens: 0, outputTokens: 0 },
       },
     });
+  }
+
+  async compactThread(content: string): Promise<void> {
+    const request = getProvider(
+      this.context.nvim,
+      this.state.profile,
+    ).forceToolUse(
+      [
+        ...this.getMessages(),
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `\
+Use the compact_thread tool to analyze my next prompt and extract only the relevant parts of our conversation history.
+
+My next prompt will be:
+${content}\n`,
+            },
+          ],
+        },
+      ],
+      compactThreadSpec,
+    );
+
+    this.myDispatch({
+      type: "conversation-state",
+      conversation: {
+        state: "compacting",
+        sendDate: new Date(),
+        request,
+      },
+    });
+
+    const result = await request.promise;
+
+    if (result.toolRequest.status === "ok") {
+      const compactRequest = result.toolRequest.value as Extract<
+        ToolRequest,
+        { toolName: "compact_thread" }
+      >;
+
+      this.context.dispatch({
+        type: "chat-msg",
+        msg: {
+          type: "compact-thread",
+          threadId: this.id,
+          contextFilePaths: compactRequest.input.contextFiles,
+          initialMessage: `\
+# Previous thread summary:
+${compactRequest.input.summary}
+
+# The user would like you to address this prompt next:
+${content}`,
+        },
+      });
+
+      // Update the conversation state to show successful compaction
+      this.myDispatch({
+        type: "conversation-state",
+        conversation: {
+          state: "compacted",
+          usage: result.usage || { inputTokens: 0, outputTokens: 0 },
+        },
+      });
+
+      // Set the final state to compaction-complete after the compaction is done
+      setTimeout(() => {
+        this.myDispatch({
+          type: "conversation-state",
+          conversation: {
+            state: "compaction-complete",
+            usage: result.usage || { inputTokens: 0, outputTokens: 0 },
+          },
+        });
+      }, 2000); // Show the "compacted" state for 2 seconds before transitioning
+    } else {
+      this.myDispatch({
+        type: "conversation-state",
+        conversation: {
+          state: "error",
+          error: new Error(
+            `Failed to compact thread: ${JSON.stringify(result.toolRequest.error)}`,
+          ),
+        },
+      });
+    }
   }
 
   getMessages(): ProviderMessage[] {
@@ -617,6 +742,17 @@ Come up with a succinct thread title for this prompt. It should be less than 80 
   }
 }
 
+/**
+ * Helper function to render the animation frame for in-progress operations
+ */
+const getAnimationFrame = (sendDate: Date): string => {
+  const frameIndex =
+    Math.floor((new Date().getTime() - sendDate.getTime()) / 333) %
+    MESSAGE_ANIMATION.length;
+
+  return MESSAGE_ANIMATION[frameIndex];
+};
+
 export const view: View<{
   thread: Thread;
   dispatch: Dispatch<Msg>;
@@ -634,25 +770,24 @@ export const view: View<{
 
   return d`${titleView}\n${thread.state.messages.map((m) => d`${m.view()}\n`)}${
     thread.state.conversation.state == "message-in-flight"
-      ? d`Awaiting response ${
-          MESSAGE_ANIMATION[
-            Math.floor(
-              (new Date().getTime() -
-                thread.state.conversation.sendDate.getTime()) /
-                333,
-            ) % MESSAGE_ANIMATION.length
-          ]
-        }`
-      : thread.state.conversation.state == "stopped"
-        ? ""
-        : d`Error ${thread.state.conversation.error.message}${thread.state.conversation.error.stack ? "\n" + thread.state.conversation.error.stack : ""}${
-            thread.state.conversation.lastAssistantMessage
-              ? "\n\nLast assistant message:\n" +
-                thread.state.conversation.lastAssistantMessage.toString()
-              : ""
-          }`
+      ? d`Awaiting response ${getAnimationFrame(thread.state.conversation.sendDate)}`
+      : thread.state.conversation.state == "compacting"
+        ? d`Compacting thread ${getAnimationFrame(thread.state.conversation.sendDate)}`
+        : thread.state.conversation.state == "compacted"
+          ? d`Thread successfully compacted`
+          : thread.state.conversation.state == "compaction-complete"
+            ? d`Thread compaction complete. The thread has been successfully compacted.`
+            : thread.state.conversation.state == "stopped"
+              ? ""
+              : d`Error ${thread.state.conversation.error.message}${thread.state.conversation.error.stack ? "\n" + thread.state.conversation.error.stack : ""}${
+                  thread.state.conversation.lastAssistantMessage
+                    ? "\n\nLast assistant message:\n" +
+                      thread.state.conversation.lastAssistantMessage.toString()
+                    : ""
+                }`
   }${
     thread.state.conversation.state != "message-in-flight" &&
+    thread.state.conversation.state != "compacting" &&
     !thread.context.contextManager.isContextEmpty()
       ? d`\n${thread.context.contextManager.view()}`
       : ""

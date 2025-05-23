@@ -10,6 +10,7 @@ import * as BashCommand from "./bashCommand";
 import * as ReplaceSelection from "./replace-selection-tool";
 import * as InlineEdit from "./inline-edit-tool";
 import * as ThreadTitle from "./thread-title";
+import * as CompactThread from "./compact-thread";
 import type { StreamingBlock } from "../providers/helpers";
 import { d, type VDOMNode } from "../tea/view";
 
@@ -42,6 +43,8 @@ export function validateInput(
       return ReplaceSelection.validateInput(input);
     case "thread_title":
       return ThreadTitle.validateInput(input);
+    case "compact_thread":
+      return CompactThread.validateInput(input);
     default:
       throw new Error(`Unexpected toolName: ${toolName as string}`);
   }
