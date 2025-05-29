@@ -2,7 +2,6 @@ import type { WebSearchResultBlock } from "@anthropic-ai/sdk/resources.mjs";
 import { validateInput } from "../tools/helpers";
 import type {
   ToolManager,
-  ToolName,
   ToolRequest,
   ToolRequestId,
 } from "../tools/toolManager";
@@ -166,14 +165,14 @@ export function finalizeStreamingBlock(
       return {
         type: "tool_use",
         id: block.id as ToolRequestId,
-        name: block.name as ToolName,
+        name: block.name,
         request:
           inputParseResult.status == "ok"
             ? {
                 status: "ok",
                 value: {
                   id: block.id as ToolRequestId,
-                  toolName: block.name as ToolName,
+                  toolName: block.name,
                   input: inputParseResult.value,
                 } as ToolRequest,
               }

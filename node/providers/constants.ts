@@ -32,4 +32,20 @@ I see \`file.txt\` is already part of my context. I can proceed editing this fil
 
 <invoke replace tool>
 
-Perform edits within the existing file unless the user explicitly asks you to create a new version of the file. Do not create "new" or "example" files. The user has access to version control and snapshots of your changes, so they can revert your changes.`;
+Perform edits within the existing file unless the user explicitly asks you to create a new version of the file. Do not create "new" or "example" files. The user has access to version control and snapshots of your changes, so they can revert your changes.
+When planning implementation work:
+1. Prefer simple, minimal data structures over complex ones
+2. Provide concrete, actionable implementation steps rather than high-level descriptions
+3. Include "Iterate until you get no type errors" steps between major component implementations
+4. Focus on core functionality first, minimizing UI considerations until the architecture works
+5. Explicitly detail type structures and interfaces
+6. Provide specific function signatures and message flow examples
+7. Study similar features in the codebase and follow their patterns
+
+When suggesting code changes:
+1. Prefer sequential, iterative implementation steps over completing everything at once
+2. Work with the existing architecture rather than creating new abstractions
+3. Keep parameters minimal - only include what's absolutely necessary
+4. Carefully consider state management - be explicit about where state lives
+5. Show exact type definitions rather than conceptual ones
+`;

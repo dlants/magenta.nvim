@@ -3,6 +3,7 @@ import type { MagentaOptions, Profile } from "../options";
 import type { RootMsg } from "../root-msg";
 import type { Dispatch } from "../tea/tea";
 import { Thread, view as threadView, type ThreadId } from "./thread";
+import { CHAT_TOOL_NAMES } from "../tools/tool-registry.ts";
 import type { Lsp } from "../lsp";
 import { assertUnreachable } from "../utils/assertUnreachable";
 import { d, withBindings } from "../tea/view";
@@ -224,14 +225,18 @@ export class Chat {
         },
       );
 
-      const thread = new Thread(id, {
-        ...this.context,
-        contextManager,
-        profile: getActiveProfile(
-          this.context.options.profiles,
-          this.context.options.activeProfile,
-        ),
-      });
+      const thread = new Thread(
+        id,
+        {
+          ...this.context,
+          contextManager,
+          profile: getActiveProfile(
+            this.context.options.profiles,
+            this.context.options.activeProfile,
+          ),
+        },
+        CHAT_TOOL_NAMES,
+      );
 
       this.context.dispatch({
         type: "chat-msg",
@@ -350,11 +355,15 @@ ${threadViews.length ? threadViews : "No threads yet"}`;
         });
       }
 
-      const newThread = new Thread(newThreadId, {
-        ...this.context,
-        contextManager,
-        profile: sourceThread.state.profile, // Use the same profile as the source thread
-      });
+      const newThread = new Thread(
+        newThreadId,
+        {
+          ...this.context,
+          contextManager,
+          profile: sourceThread.state.profile, // Use the same profile as the source thread
+        },
+        CHAT_TOOL_NAMES,
+      );
 
       // Switch to the new thread
       this.context.dispatch({

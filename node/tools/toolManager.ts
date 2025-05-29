@@ -23,18 +23,6 @@ import type { MessageId } from "../chat/message.ts";
 import type { ThreadId } from "../chat/thread.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 
-export const CHAT_TOOL_SPECS = [
-  GetFile.spec,
-  Insert.spec,
-  Replace.spec,
-  ListBuffers.spec,
-  ListDirectory.spec,
-  Hover.spec,
-  FindReferences.spec,
-  Diagnostics.spec,
-  BashCommand.spec,
-];
-
 export type ToolRequestId = string & { __toolRequestId: true };
 
 export type ToolMap = {
@@ -112,8 +100,6 @@ export type ToolRequest = {
     input: ToolMap[K]["input"];
   };
 }[keyof ToolMap];
-
-export type ToolName = keyof ToolMap;
 
 export type ToolMsg = {
   [K in keyof ToolMap]: {

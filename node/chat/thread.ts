@@ -12,8 +12,8 @@ import {
   type Msg as ToolManagerMsg,
   type ToolRequest,
   type ToolRequestId,
-  CHAT_TOOL_SPECS,
 } from "../tools/toolManager.ts";
+import { getToolSpecs, type ToolName } from "../tools/tool-registry.ts";
 import { Counter } from "../utils/uniqueId.ts";
 import { FileSnapshots } from "../tools/file-snapshots.ts";
 import type { Nvim } from "../nvim/nvim-node";
@@ -123,6 +123,13 @@ export class Thread {
     profile: Profile;
     conversation: ConversationState;
     messages: Message[];
+    allowedTools: ToolName[];
+    parent:
+      | {
+          threadId: ThreadId;
+          toolRequestId: ToolRequestId;
+        }
+      | undefined;
   };
 
   private myDispatch: Dispatch<Msg>;
@@ -141,6 +148,11 @@ export class Thread {
       lsp: Lsp;
       contextManager: ContextManager;
       options: MagentaOptions;
+    },
+    allowedTools: ToolName[],
+    parent?: {
+      threadId: ThreadId;
+      toolRequestId: ToolRequestId;
     },
   ) {
     this.myDispatch = (msg) =>
@@ -179,6 +191,8 @@ export class Thread {
         usage: { inputTokens: 0, outputTokens: 0 },
       },
       messages: [],
+      allowedTools,
+      parent: parent,
     };
 
     this.updateTokenCount();
@@ -343,6 +357,8 @@ export class Thread {
             usage: { inputTokens: 0, outputTokens: 0 },
           },
           messages: [],
+          allowedTools: this.state.allowedTools, // Preserve allowed tools during clear
+          parent: this.state.parent, // Preserve parent relationship during clear
         };
         this.contextManager.reset();
 
@@ -564,7 +580,7 @@ export class Thread {
           event,
         });
       },
-      CHAT_TOOL_SPECS,
+      getToolSpecs(this.state.allowedTools),
     );
 
     this.myDispatch({
@@ -774,7 +790,7 @@ Come up with a succinct thread title for this prompt. It should be less than 80 
     const tokenCount = getProvider(
       this.context.nvim,
       this.state.profile,
-    ).countTokens(messages, CHAT_TOOL_SPECS);
+    ).countTokens(messages, getToolSpecs(this.state.allowedTools));
 
     // setTimeout to avoid dispatch-in-dispatch
     setTimeout(() =>
