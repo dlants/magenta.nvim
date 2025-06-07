@@ -15,7 +15,7 @@ import type {
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import type { Stream } from "openai/streaming.mjs";
-import { DEFAULT_SYSTEM_PROMPT } from "./constants.ts";
+import { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.ts";
 import { validateInput } from "../tools/helpers.ts";
 
 export type OpenAIOptions = {

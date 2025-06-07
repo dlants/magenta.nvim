@@ -2,7 +2,6 @@ import type { WebSearchResultBlock } from "@anthropic-ai/sdk/resources.mjs";
 import { validateInput } from "../tools/helpers";
 import type {
   ToolManager,
-  ToolName,
   ToolRequest,
   ToolRequestId,
 } from "../tools/toolManager";
@@ -13,6 +12,7 @@ import type {
   ProviderServerToolUseContent,
   ProviderStreamEvent,
 } from "./provider";
+import type { ToolName } from "../tools/tool-registry";
 
 export type StreamingBlock = ProviderBlockStartEvent["content_block"] & {
   streamed: string;
@@ -173,7 +173,7 @@ export function finalizeStreamingBlock(
                 status: "ok",
                 value: {
                   id: block.id as ToolRequestId,
-                  toolName: block.name as ToolName,
+                  toolName: block.name,
                   input: inputParseResult.value,
                 } as ToolRequest,
               }

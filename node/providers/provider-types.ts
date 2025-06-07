@@ -1,5 +1,6 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import * as ToolManager from "../tools/toolManager.ts";
+import type { ToolName } from "../tools/tool-registry.ts";
 import type { Result } from "../utils/result";
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -58,7 +59,7 @@ export type ProviderTextContent = {
 export type ProviderToolUseContent = {
   type: "tool_use";
   id: ToolManager.ToolRequestId;
-  name: ToolManager.ToolName;
+  name: ToolName;
   request: Result<ToolManager.ToolRequest, { rawRequest: unknown }>;
 };
 
@@ -84,7 +85,7 @@ export type ProviderToolResultContent = {
 };
 
 export type ProviderToolSpec = {
-  name: ToolManager.ToolName;
+  name: ToolName;
   description: string;
   input_schema: JSONSchemaType;
 };

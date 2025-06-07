@@ -12,7 +12,7 @@ import {
   type ProviderStreamEvent,
 } from "./provider-types.ts";
 import { setClient } from "./provider.ts";
-import { DEFAULT_SYSTEM_PROMPT } from "./constants.ts";
+import { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.ts";
 
 type MockRequest = {
   messages: Array<ProviderMessage>;

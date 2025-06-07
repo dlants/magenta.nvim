@@ -11,6 +11,8 @@ import * as InlineEdit from "./inline-edit-tool.ts";
 import * as ReplaceSelection from "./replace-selection-tool.ts";
 import * as ThreadTitle from "./thread-title.ts";
 import * as CompactThread from "./compact-thread.ts";
+import * as SpawnSubagent from "./spawn-subagent.ts";
+import * as YieldToParent from "./yield-to-parent.ts";
 
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d, withBindings } from "../tea/view.ts";
@@ -22,18 +24,6 @@ import type { RootMsg } from "../root-msg.ts";
 import type { MessageId } from "../chat/message.ts";
 import type { ThreadId } from "../chat/thread.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
-
-export const CHAT_TOOL_SPECS = [
-  GetFile.spec,
-  Insert.spec,
-  Replace.spec,
-  ListBuffers.spec,
-  ListDirectory.spec,
-  Hover.spec,
-  FindReferences.spec,
-  Diagnostics.spec,
-  BashCommand.spec,
-];
 
 export type ToolRequestId = string & { __toolRequestId: true };
 
@@ -103,6 +93,16 @@ export type ToolMap = {
     input: CompactThread.Input;
     msg: never;
   };
+  spawn_subagent: {
+    controller: SpawnSubagent.SpawnSubagentTool;
+    input: SpawnSubagent.Input;
+    msg: SpawnSubagent.Msg;
+  };
+  yield_to_parent: {
+    controller: YieldToParent.YieldToParentTool;
+    input: YieldToParent.Input;
+    msg: YieldToParent.Msg;
+  };
 };
 
 export type ToolRequest = {
@@ -112,8 +112,6 @@ export type ToolRequest = {
     input: ToolMap[K]["input"];
   };
 }[keyof ToolMap];
-
-export type ToolName = keyof ToolMap;
 
 export type ToolMsg = {
   [K in keyof ToolMap]: {
@@ -147,10 +145,6 @@ export type Msg =
   | {
       type: "tool-msg";
       msg: ToolMsg;
-    }
-  | {
-      type: "abort-tool-use";
-      requestId: ToolRequestId;
     };
 
 type State = {
@@ -172,6 +166,10 @@ export class ToolManager {
       nvim: Nvim;
       lsp: Lsp;
       options: MagentaOptions;
+      parent?: {
+        threadId: ThreadId;
+        toolRequestId: ToolRequestId;
+      };
     },
   ) {
     this.state = {
@@ -458,6 +456,59 @@ export class ToolManager {
             return;
           }
 
+          case "spawn_subagent": {
+            const spawnSubagentTool = new SpawnSubagent.SpawnSubagentTool(
+              request,
+              {
+                nvim: this.context.nvim,
+                dispatch: this.context.dispatch,
+                threadId: this.context.threadId,
+                myDispatch: (msg) =>
+                  this.myDispatch({
+                    type: "tool-msg",
+                    msg: {
+                      id: request.id,
+                      toolName: "spawn_subagent",
+                      msg,
+                    },
+                  }),
+              },
+            );
+
+            this.state.toolWrappers[request.id] = {
+              tool: spawnSubagentTool,
+              showDetails: false,
+            };
+            return;
+          }
+
+          case "yield_to_parent": {
+            const yieldToParentTool = new YieldToParent.YieldToParentTool(
+              request,
+              {
+                nvim: this.context.nvim,
+                dispatch: this.context.dispatch,
+                threadId: this.context.threadId,
+                myDispatch: (msg) =>
+                  this.myDispatch({
+                    type: "tool-msg",
+                    msg: {
+                      id: request.id,
+                      toolName: "yield_to_parent",
+                      msg,
+                    },
+                  }),
+                ...(this.context.parent && { parent: this.context.parent }),
+              },
+            );
+
+            this.state.toolWrappers[request.id] = {
+              tool: yieldToParentTool,
+              showDetails: false,
+            };
+            return;
+          }
+
           default:
             return assertUnreachable(request);
         }
@@ -483,14 +534,6 @@ export class ToolManager {
           }
         }
         return thunk ? this.acceptThunk(toolWrapper.tool, thunk) : undefined;
-      }
-
-      case "abort-tool-use": {
-        const toolWrapper = this.state.toolWrappers[msg.requestId];
-        if (toolWrapper && toolWrapper.tool.state.state !== "done") {
-          toolWrapper.tool.abort();
-        }
-        return;
       }
 
       default:

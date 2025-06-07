@@ -12,7 +12,7 @@ import {
   type ProviderStreamEvent,
 } from "./provider-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { DEFAULT_SYSTEM_PROMPT } from "./constants.ts";
+import { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.ts";
 import { validateInput } from "../tools/helpers.ts";
 
 export type MessageParam = Omit<Anthropic.MessageParam, "content"> & {

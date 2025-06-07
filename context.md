@@ -171,3 +171,5 @@ when doing integration-level testing, like user flows, use the `withDriver` help
 To avoid complexity, keep variable names on the lua side camelCase, to match the variables defined in typescript.
 
 We only want to use a single bottom value, so use undefined whenever you can and avoid null. When external libraries use null, only use null at the boundary, and convert to undefined as early as possible, so the internals of the plugin only use undefined.
+
+You must **NEVER** introduce new `any` types. Always check with the user if you're thinking about doing so.

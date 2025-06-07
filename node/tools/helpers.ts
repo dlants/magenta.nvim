@@ -11,14 +11,18 @@ import * as ReplaceSelection from "./replace-selection-tool";
 import * as InlineEdit from "./inline-edit-tool";
 import * as ThreadTitle from "./thread-title";
 import * as CompactThread from "./compact-thread";
+import * as SpawnSubagent from "./spawn-subagent";
+import * as YieldToParent from "./yield-to-parent";
 import type { StreamingBlock } from "../providers/helpers";
 import { d, type VDOMNode } from "../tea/view";
+import type { ToolName } from "./tool-registry";
+import { assertUnreachable } from "../utils/assertUnreachable";
 
 export function validateInput(
   toolName: unknown,
   input: { [key: string]: unknown },
 ) {
-  switch (toolName) {
+  switch (toolName as ToolName) {
     case "get_file":
       return GetFile.validateInput(input);
     case "insert":
@@ -45,6 +49,10 @@ export function validateInput(
       return ThreadTitle.validateInput(input);
     case "compact_thread":
       return CompactThread.validateInput(input);
+    case "spawn_subagent":
+      return SpawnSubagent.validateInput(input);
+    case "yield_to_parent":
+      return YieldToParent.validateInput(input);
     default:
       throw new Error(`Unexpected toolName: ${toolName as string}`);
   }
@@ -53,7 +61,8 @@ export function validateInput(
 export function renderStreamdedTool(
   streamingBlock: Extract<StreamingBlock, { type: "tool_use" }>,
 ): string | VDOMNode {
-  switch (streamingBlock.name) {
+  const name = streamingBlock.name as ToolName;
+  switch (name) {
     case "get_file":
       break;
     case "insert":
@@ -61,21 +70,20 @@ export function renderStreamdedTool(
     case "replace":
       return Replace.renderStreamedBlock(streamingBlock.streamed);
     case "list_buffers":
-      break;
     case "list_directory":
-      break;
     case "hover":
-      break;
     case "find_references":
-      break;
     case "diagnostics":
-      break;
     case "bash_command":
-      break;
     case "inline_edit":
-      break;
     case "replace_selection":
+    case "thread_title":
+    case "compact_thread":
+    case "spawn_subagent":
+    case "yield_to_parent":
       break;
+    default:
+      assertUnreachable(name);
   }
 
   return d`Invoking tool ${streamingBlock.name}`;

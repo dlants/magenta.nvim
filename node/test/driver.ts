@@ -200,12 +200,13 @@ export class NvimDriver {
     desiredState:
       | { state: "thread-overview" }
       | { state: "thread-selected"; id: ThreadId },
+    message?: string,
   ) {
     return pollUntil(() => {
       const state = this.magenta.chat.state;
       if (state.state !== desiredState.state) {
         throw new Error(
-          `Unexpected chat state. Desired: ${JSON.stringify(desiredState)} actual:${state.state}`,
+          `Unexpected chat state. Desired: ${JSON.stringify(desiredState)} actual:${state.state} ${message}`,
         );
       }
 
@@ -214,7 +215,7 @@ export class NvimDriver {
         desiredState.id != state.activeThreadId
       ) {
         throw new Error(
-          `Unexpected chat state. Desired: ${JSON.stringify(desiredState)} actual: ${state.activeThreadId}`,
+          `Unexpected chat state. Desired: ${JSON.stringify(desiredState)} actual: ${JSON.stringify(state)}`,
         );
       }
 

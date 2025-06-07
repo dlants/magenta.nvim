@@ -3,7 +3,7 @@ import { type Role, type ThreadId } from "./thread.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d, withBindings } from "../tea/view.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import { type Dispatch, type Thunk } from "../tea/tea.ts";
+import { type Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
 import type { MagentaOptions } from "../options.ts";
@@ -125,7 +125,7 @@ export class Message {
     }
   }
 
-  update(msg: Msg): Thunk<Msg> | undefined {
+  update(msg: Msg) {
     switch (msg.type) {
       case "stream-event": {
         switch (msg.event.type) {
@@ -142,6 +142,7 @@ export class Message {
             };
             return;
           }
+
           case "content_block_delta":
             if (!this.state.streamingBlock) {
               throw new Error(
@@ -150,6 +151,7 @@ export class Message {
             }
             applyDelta(this.state.streamingBlock, msg.event);
             return;
+
           case "content_block_stop": {
             if (!this.state.streamingBlock) {
               throw new Error(
@@ -199,6 +201,7 @@ export class Message {
             this.state.estimatedTokenCount += Math.ceil(contentStr.length / 4);
             return;
           }
+
           default:
             return assertUnreachable(msg.event);
         }
