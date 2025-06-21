@@ -3,16 +3,17 @@ import path from "path";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d } from "../tea/view.ts";
 import type { Result } from "../utils/result.ts";
-import type { Dispatch, Thunk } from "../tea/tea.ts";
+
 import { getcwd } from "../nvim/nvim.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import { readGitignore } from "./util.ts";
-import type { ToolRequest } from "./toolManager.ts";
+import type { StaticToolRequest } from "./toolManager.ts";
 import type {
+  ProviderToolResult,
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
-import type { ToolInterface } from "./types.ts";
+import type { StaticTool, ToolName } from "./types.ts";
 
 export type State =
   | {
@@ -20,12 +21,12 @@ export type State =
     }
   | {
       state: "done";
-      result: ProviderToolResultContent;
+      result: ProviderToolResult;
     };
 
 export type Msg = {
   type: "finish";
-  result: Result<string>;
+  result: Result<ProviderToolResultContent[]>;
 };
 
 async function listDirectoryBFS(
@@ -73,26 +74,27 @@ async function listDirectoryBFS(
   return results;
 }
 
-export class ListDirectoryTool implements ToolInterface {
+export class ListDirectoryTool implements StaticTool {
   state: State;
   toolName = "list_directory" as const;
   autoRespond = true;
 
-  private constructor(
-    public request: Extract<ToolRequest, { toolName: "list_directory" }>,
-    public context: { nvim: Nvim },
+  constructor(
+    public request: Extract<StaticToolRequest, { toolName: "list_directory" }>,
+    public context: { nvim: Nvim; myDispatch: (msg: Msg) => void },
   ) {
     this.state = {
       state: "processing",
     };
+    this.listDirectory().catch((error) => {
+      this.context.nvim.logger?.error(
+        `Error listing directory: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
   }
 
-  static create(
-    request: Extract<ToolRequest, { toolName: "list_directory" }>,
-    context: { nvim: Nvim },
-  ): [ListDirectoryTool, Thunk<Msg>] {
-    const tool = new ListDirectoryTool(request, context);
-    return [tool, tool.listDirectory()];
+  isDone(): boolean {
+    return this.state.state === "done";
   }
 
   abort() {
@@ -109,7 +111,7 @@ export class ListDirectoryTool implements ToolInterface {
     };
   }
 
-  update(msg: Msg): Thunk<Msg> | undefined {
+  update(msg: Msg) {
     switch (msg.type) {
       case "finish":
         if (this.state.state == "processing") {
@@ -128,46 +130,44 @@ export class ListDirectoryTool implements ToolInterface {
     }
   }
 
-  listDirectory(): Thunk<Msg> {
-    return async (dispatch: Dispatch<Msg>) => {
-      try {
-        const cwd = await getcwd(this.context.nvim);
-        const dirPath = this.request.input.dirPath || ".";
-        const absolutePath = path.resolve(cwd, dirPath);
+  async listDirectory() {
+    try {
+      const cwd = await getcwd(this.context.nvim);
+      const dirPath = this.request.input.dirPath || ".";
+      const absolutePath = path.resolve(cwd, dirPath);
 
-        if (!absolutePath.startsWith(cwd)) {
-          dispatch({
-            type: "finish",
-            result: {
-              status: "error",
-              error: `The path \`${absolutePath}\` must be inside of neovim cwd \`${cwd}\``,
-            },
-          });
-          return;
-        }
-
-        const files = await listDirectoryBFS(absolutePath, cwd);
-        this.context.nvim.logger?.debug(`files: ${files.join("\n")}`);
-        dispatch({
-          type: "finish",
-          result: {
-            status: "ok",
-            value: files.join("\n"),
-          },
-        });
-      } catch (error) {
-        dispatch({
+      if (!absolutePath.startsWith(cwd)) {
+        this.context.myDispatch({
           type: "finish",
           result: {
             status: "error",
-            error: `Failed to list directory: ${(error as Error).message}`,
+            error: `The path \`${absolutePath}\` must be inside of neovim cwd \`${cwd}\``,
           },
         });
+        return;
       }
-    };
+
+      const files = await listDirectoryBFS(absolutePath, cwd);
+      this.context.nvim.logger?.debug(`files: ${files.join("\n")}`);
+      this.context.myDispatch({
+        type: "finish",
+        result: {
+          status: "ok",
+          value: [{ type: "text", text: files.join("\n") }],
+        },
+      });
+    } catch (error) {
+      this.context.myDispatch({
+        type: "finish",
+        result: {
+          status: "error",
+          error: `Failed to list directory: ${(error as Error).message}`,
+        },
+      });
+    }
   }
 
-  getToolResult(): ProviderToolResultContent {
+  getToolResult(): ProviderToolResult {
     switch (this.state.state) {
       case "processing":
         return {
@@ -175,7 +175,12 @@ export class ListDirectoryTool implements ToolInterface {
           id: this.request.id,
           result: {
             status: "ok",
-            value: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
+            value: [
+              {
+                type: "text",
+                text: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
+              },
+            ],
           },
         };
       case "done":
@@ -204,7 +209,7 @@ export class ListDirectoryTool implements ToolInterface {
 }
 
 export const spec: ProviderToolSpec = {
-  name: "list_directory",
+  name: "list_directory" as ToolName,
   description: `List up to 100 files in a directory using breadth-first search, respecting .gitignore and hidden files.`,
   input_schema: {
     type: "object",

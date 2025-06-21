@@ -1,14 +1,15 @@
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { ToolRequest } from "./toolManager.ts";
+import type { StaticToolRequest } from "./toolManager.ts";
 import type {
+  ProviderToolResult,
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { ToolInterface } from "./types.ts";
+import type { StaticTool, ToolName } from "./types.ts";
 import { NvimBuffer, type BufNr, type Line } from "../nvim/buffer.ts";
 import type {
   ByteIdx,
@@ -23,12 +24,12 @@ export type State =
     }
   | {
       state: "done";
-      result: ProviderToolResultContent;
+      result: ProviderToolResult;
     };
 
 export type Msg = {
   type: "finish";
-  result: Result<string>;
+  result: Result<ProviderToolResultContent[]>;
 };
 
 export type NvimSelection = {
@@ -37,12 +38,15 @@ export type NvimSelection = {
   text: string;
 };
 
-export class ReplaceSelectionTool implements ToolInterface {
+export class ReplaceSelectionTool implements StaticTool {
   state: State;
   toolName = "replace_selection" as const;
 
   constructor(
-    public request: Extract<ToolRequest, { toolName: "replace_selection" }>,
+    public request: Extract<
+      StaticToolRequest,
+      { toolName: "replace_selection" }
+    >,
     public selection: NvimSelection,
     public context: { bufnr: BufNr; nvim: Nvim; myDispatch: Dispatch<Msg> },
   ) {
@@ -62,6 +66,10 @@ export class ReplaceSelectionTool implements ToolInterface {
         }),
       );
     });
+  }
+
+  isDone(): boolean {
+    return this.state.state === "done";
   }
 
   /** this is expected to be invoked as part of a dispatch, so we don't need to dispatch here to update the view
@@ -94,7 +102,7 @@ export class ReplaceSelectionTool implements ToolInterface {
     }
   }
 
-  getToolResult(): ProviderToolResultContent {
+  getToolResult(): ProviderToolResult {
     if (this.state.state == "done") {
       return this.state.result;
     }
@@ -104,7 +112,7 @@ export class ReplaceSelectionTool implements ToolInterface {
       id: this.request.id,
       result: {
         status: "ok",
-        value: "Tool is being applied...",
+        value: [{ type: "text", text: "Tool is being applied..." }],
       },
     };
   }
@@ -146,7 +154,7 @@ export class ReplaceSelectionTool implements ToolInterface {
       type: "finish",
       result: {
         status: "ok",
-        value: "Successfully replaced selection",
+        value: [{ type: "text", text: "Successfully replaced selection" }],
       },
     });
   }
@@ -174,7 +182,7 @@ ${this.request.input.replace}
 }
 
 export const spec: ProviderToolSpec = {
-  name: "replace_selection",
+  name: "replace_selection" as ToolName,
   description: `Replace the selected text.`,
   input_schema: {
     type: "object",

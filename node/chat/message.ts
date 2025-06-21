@@ -1,8 +1,4 @@
-import {
-  ToolManager,
-  type ToolRequestId,
-  type ToolMsg,
-} from "../tools/toolManager.ts";
+import { ToolManager, type ToolRequestId } from "../tools/toolManager.ts";
 import { type Role, type ThreadId } from "./thread.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d, withBindings } from "../tea/view.ts";
@@ -30,6 +26,8 @@ import { renderStreamdedTool } from "../tools/helpers.ts";
 import type { WebSearchResultBlock } from "@anthropic-ai/sdk/resources.mjs";
 import type { FileUpdates } from "../context/context-manager.ts";
 export type MessageId = number & { __messageId: true };
+import type { Input as GetFileInput } from "../tools/getFile.ts";
+import type { Input as ReplaceInput } from "../tools/replace.ts";
 
 type State = {
   id: MessageId;
@@ -183,7 +181,8 @@ export class Message {
               }
 
               if (tool.toolName == "insert" || tool.toolName == "replace") {
-                const filePath = tool.request.input.filePath;
+                const input = tool.request.input as GetFileInput | ReplaceInput;
+                const filePath = input.filePath;
 
                 if (!this.state.edits[filePath]) {
                   this.state.edits[filePath] = {
@@ -260,16 +259,7 @@ export class Message {
       this.state.toolDetailsExpanded[tool.request.id] || false;
 
     return withBindings(
-      d`${tool.view((msg) =>
-        this.context.toolManager.myDispatch({
-          type: "tool-msg",
-          msg: {
-            id: tool.request.id,
-            toolName: tool.toolName,
-            msg: msg,
-          } as ToolMsg,
-        }),
-      )}${
+      d`${tool.view()}${
         showDetails
           ? d`\nid: ${tool.request.id}\n${tool.displayInput()}\n${this.context.toolManager.renderToolResult(tool.request.id)}`
           : ""

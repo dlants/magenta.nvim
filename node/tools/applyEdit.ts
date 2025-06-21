@@ -1,6 +1,6 @@
 import { NvimBuffer, type Line } from "../nvim/buffer.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { ToolRequest } from "./toolManager.ts";
+import type { StaticToolRequest } from "./toolManager.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import path from "node:path";
 import fs from "node:fs";
@@ -17,13 +17,14 @@ import {
 import { getcwd } from "../nvim/nvim.ts";
 import { applyInsert, applyReplace } from "../utils/contentEdits.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
+import type { ProviderToolResultContent } from "../providers/provider-types.ts";
 
-type InsertRequest = Extract<ToolRequest, { toolName: "insert" }>;
-type ReplaceRequest = Extract<ToolRequest, { toolName: "replace" }>;
+type InsertRequest = Extract<StaticToolRequest, { toolName: "insert" }>;
+type ReplaceRequest = Extract<StaticToolRequest, { toolName: "replace" }>;
 type EditRequest = InsertRequest | ReplaceRequest;
 type Msg = {
   type: "finish";
-  result: Result<string>;
+  result: Result<ProviderToolResultContent[]>;
 };
 
 type EditContext = {
@@ -160,7 +161,7 @@ async function handleBufferEdit(
     type: "finish",
     result: {
       status: "ok",
-      value: `Successfully applied edits.`,
+      value: [{ type: "text", text: `Successfully applied edits.` }],
     },
   });
 }
@@ -204,7 +205,7 @@ async function handleFileEdit(
         type: "finish",
         result: {
           status: "ok",
-          value: `Successfully applied edits.`,
+          value: [{ type: "text", text: `Successfully applied edits.` }],
         },
       });
       return;
@@ -292,7 +293,7 @@ async function handleFileEdit(
       type: "finish",
       result: {
         status: "ok",
-        value: `Successfully applied edits.`,
+        value: [{ type: "text", text: `Successfully applied edits.` }],
       },
     });
   } catch (error) {

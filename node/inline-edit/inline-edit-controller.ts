@@ -6,7 +6,7 @@ import type {
 } from "../providers/provider";
 import { d } from "../tea/view";
 import type { Dispatch } from "../tea/tea";
-import type { ToolRequest } from "../tools/toolManager";
+import type { StaticToolRequest } from "../tools/toolManager";
 import {
   InlineEditTool,
   type Msg as InlineEditMsg,
@@ -19,9 +19,12 @@ import {
 import type { Nvim } from "../nvim/nvim-node";
 import type { BufNr } from "../nvim/buffer";
 
-type InlineEditToolRequest = Extract<ToolRequest, { toolName: "inline_edit" }>;
+type InlineEditToolRequest = Extract<
+  StaticToolRequest,
+  { toolName: "inline_edit" }
+>;
 type ReplaceSelectionToolRequest = Extract<
-  ToolRequest,
+  StaticToolRequest,
   { toolName: "replace_selection" }
 >;
 

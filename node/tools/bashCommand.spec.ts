@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 import type { CommandAllowlist } from "../options";
 import { isCommandAllowed } from "./bashCommand";
 import fs from "node:fs";
+import type { ToolName } from "./types";
 
 describe("node/tools/bashCommand.spec.ts", () => {
   it("executes a simple echo command without requiring approval (allowlisted)", async () => {
@@ -25,7 +26,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: "echo 'Hello from Magenta!'",
               },
@@ -66,7 +67,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: "nonexistentcommand",
               },
@@ -105,7 +106,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: 'true && echo "hello, world"',
               },
@@ -153,7 +154,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: "true && ls -la",
               },
@@ -192,7 +193,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: "sleep 30",
               },
@@ -241,7 +242,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId1,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: `true && echo 'tada'`,
               },
@@ -271,7 +272,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId2,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: `true && echo 'tada'`,
               },
@@ -325,7 +326,7 @@ Exit code: 0`);
             status: "ok",
             value: {
               id: toolRequestId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: appendCmd,
               },

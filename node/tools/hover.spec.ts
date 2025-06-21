@@ -3,6 +3,8 @@ import { describe, it, expect } from "vitest";
 import { withDriver } from "../test/preamble";
 import { pollUntil } from "../utils/async.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
+import type { HoverTool } from "./hover.ts";
+import type { ToolName } from "./types.ts";
 
 describe("node/tools/hover.spec.ts", () => {
   it("hover end-to-end", async () => {
@@ -24,7 +26,7 @@ describe("node/tools/hover.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId,
-              toolName: "hover",
+              toolName: "hover" as ToolName,
               input: {
                 filePath: "node/test/fixtures/test.ts" as UnresolvedFilePath,
                 symbol: "val.a.b.c",
@@ -41,16 +43,17 @@ describe("node/tools/hover.spec.ts", () => {
             throw new Error("Thread state is not valid");
           }
 
-          const tool = thread.toolManager.tools[toolRequestId];
-          if (!tool) {
+          const tool = thread.toolManager.getTool(toolRequestId);
+          if (!(tool && tool.toolName == "hover")) {
             throw new Error(`could not find tool with id ${toolRequestId}`);
           }
 
-          if (tool.state.state != "done") {
+          const hoverTool = tool as unknown as HoverTool;
+          if (hoverTool.state.state != "done") {
             throw new Error(`Request not done`);
           }
 
-          return tool.state.result;
+          return hoverTool.state.result;
         },
         { timeout: 5000 },
       );
@@ -60,7 +63,12 @@ describe("node/tools/hover.spec.ts", () => {
         id: toolRequestId,
         result: {
           status: "ok",
-          value: `(markdown):\n\n\`\`\`typescript\n(property) c: "test"\n\`\`\`\n\n`,
+          value: [
+            {
+              type: "text",
+              text: `(markdown):\n\n\`\`\`typescript\n(property) c: "test"\n\`\`\`\n\n`,
+            },
+          ],
         },
       });
     });

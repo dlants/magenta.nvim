@@ -1,14 +1,15 @@
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { ToolRequest } from "./toolManager.ts";
+import type { StaticToolRequest } from "./toolManager.ts";
 import type {
+  ProviderToolResult,
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { ToolInterface } from "./types.ts";
+import type { StaticTool, ToolName } from "./types.ts";
 import { NvimBuffer, type BufNr, type Line } from "../nvim/buffer.ts";
 import type { ByteIdx, Position0Indexed } from "../nvim/window.ts";
 
@@ -18,20 +19,20 @@ export type State =
     }
   | {
       state: "done";
-      result: ProviderToolResultContent;
+      result: ProviderToolResult;
     };
 
 export type Msg = {
   type: "finish";
-  result: Result<string>;
+  result: Result<ProviderToolResultContent[]>;
 };
 
-export class InlineEditTool implements ToolInterface {
+export class InlineEditTool implements StaticTool {
   state: State;
   toolName = "inline_edit" as const;
 
   constructor(
-    public request: Extract<ToolRequest, { toolName: "inline_edit" }>,
+    public request: Extract<StaticToolRequest, { toolName: "inline_edit" }>,
     public context: { bufnr: BufNr; nvim: Nvim; myDispatch: Dispatch<Msg> },
   ) {
     this.state = {
@@ -50,6 +51,10 @@ export class InlineEditTool implements ToolInterface {
         }),
       );
     });
+  }
+
+  isDone(): boolean {
+    return this.state.state === "done";
   }
 
   /** this is expected to be invoked as part of a dispatch, so we don't need to dispatch here to update the view
@@ -82,7 +87,7 @@ export class InlineEditTool implements ToolInterface {
     }
   }
 
-  getToolResult(): ProviderToolResultContent {
+  getToolResult(): ProviderToolResult {
     if (this.state.state == "done") {
       return this.state.result;
     }
@@ -92,7 +97,7 @@ export class InlineEditTool implements ToolInterface {
       id: this.request.id,
       result: {
         status: "ok",
-        value: "Tool is being applied...",
+        value: [{ type: "text", text: "Tool is being applied..." }],
       },
     };
   }
@@ -170,7 +175,7 @@ ${input.find}
       type: "finish",
       result: {
         status: "ok",
-        value: "Applied edit",
+        value: [{ type: "text", text: "Applied edit" }],
       },
     });
   }
@@ -190,7 +195,7 @@ ${this.request.input.replace}
 }
 
 export const spec: ProviderToolSpec = {
-  name: "inline_edit",
+  name: "inline_edit" as ToolName,
   description: `Replace text. You will only get one shot so do the whole edit in a single tool invocation.`,
   input_schema: {
     type: "object",

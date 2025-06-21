@@ -1,7 +1,8 @@
 import type { ToolRequestId } from "./toolManager.ts";
 import { expect, it } from "vitest";
-import { withDriver } from "../test/preamble.ts";
+import { withDriver, assertToolResultContainsText } from "../test/preamble.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
+import type { ToolName } from "./types.ts";
 
 it("render the getFile tool.", async () => {
   await withDriver({}, async (driver) => {
@@ -20,7 +21,7 @@ it("render the getFile tool.", async () => {
           status: "ok",
           value: {
             id: "request_id" as ToolRequestId,
-            toolName: "get_file",
+            toolName: "get_file" as ToolName,
             input: {
               filePath: "./node/test/fixtures/poem.txt" as UnresolvedFilePath,
             },
@@ -52,7 +53,7 @@ it("getFile rejection", async () => {
           status: "ok",
           value: {
             id: "id" as ToolRequestId,
-            toolName: "get_file",
+            toolName: "get_file" as ToolName,
             input: {
               filePath: "node/test/fixtures/.secret" as UnresolvedFilePath,
             },
@@ -89,7 +90,7 @@ it("getFile approval", async () => {
           status: "ok",
           value: {
             id: "id" as ToolRequestId,
-            toolName: "get_file",
+            toolName: "get_file" as ToolName,
             input: {
               filePath: "node/test/fixtures/.secret" as UnresolvedFilePath,
             },
@@ -123,7 +124,7 @@ it("getFile requests approval for gitignored file", async () => {
           status: "ok",
           value: {
             id: "id" as ToolRequestId,
-            toolName: "get_file",
+            toolName: "get_file" as ToolName,
             input: {
               filePath: "node_modules/test" as UnresolvedFilePath,
             },
@@ -152,7 +153,7 @@ it("getFile requests approval for file outside cwd", async () => {
           status: "ok",
           value: {
             id: "id" as ToolRequestId,
-            toolName: "get_file",
+            toolName: "get_file" as ToolName,
             input: {
               filePath: "/tmp/file" as UnresolvedFilePath,
             },
@@ -192,7 +193,7 @@ it("getFile returns early when file is already in context", async () => {
           status: "ok",
           value: {
             id: "request_id" as ToolRequestId,
-            toolName: "get_file",
+            toolName: "get_file" as ToolName,
             input: {
               filePath: "./node/test/fixtures/poem.txt" as UnresolvedFilePath,
             },
@@ -217,15 +218,10 @@ it("getFile returns early when file is already in context", async () => {
     ) {
       const toolResult = toolResultMessage.content[0];
       if (toolResult.type === "tool_result") {
-        expect(toolResult.result.status).toBe("ok");
-        if (toolResult.result.status === "ok") {
-          const value = toolResult.result.value;
-          if (typeof value === "string") {
-            expect(value).toContain("already part of the thread context");
-          } else if (value.type === "text") {
-            expect(value.text).toContain("already part of the thread context");
-          }
-        }
+        assertToolResultContainsText(
+          toolResult,
+          "already part of the thread context",
+        );
       }
     }
   });
@@ -256,7 +252,7 @@ it("getFile reads file when force is true even if already in context", async () 
           status: "ok",
           value: {
             id: "request_id" as ToolRequestId,
-            toolName: "get_file",
+            toolName: "get_file" as ToolName,
             input: {
               filePath: "./node/test/fixtures/poem.txt" as UnresolvedFilePath,
               force: true,
@@ -280,20 +276,21 @@ it("getFile reads file when force is true even if already in context", async () 
     ) {
       const toolResult = toolResultMessage.content[0];
       if (toolResult.type === "tool_result") {
-        expect(toolResult.result.status).toBe("ok");
-        if (toolResult.result.status === "ok") {
-          const value = toolResult.result.value;
-          if (typeof value === "string") {
-            expect(value).toContain("Moonlight whispers through the trees");
-            expect(value).not.toContain("already part of the thread context");
-          } else if (value.type === "text") {
-            expect(value.text).toContain(
-              "Moonlight whispers through the trees",
-            );
-            expect(value.text).not.toContain(
-              "already part of the thread context",
-            );
-          }
+        assertToolResultContainsText(
+          toolResult,
+          "Moonlight whispers through the trees",
+        );
+
+        // Verify that the "already part of the thread context" message is NOT present
+        const result = toolResult.result;
+        if (result.status === "ok") {
+          const hasContextText = result.value.some((item) => {
+            if (typeof item === "object" && item.type === "text") {
+              return item.text.includes("already part of the thread context");
+            }
+            return false;
+          });
+          expect(hasContextText).toBe(false);
         }
       }
     }
@@ -324,7 +321,7 @@ it("getFile adds file to context after reading", async () => {
           status: "ok",
           value: {
             id: "request_id" as ToolRequestId,
-            toolName: "get_file",
+            toolName: "get_file" as ToolName,
             input: {
               filePath: "./node/test/fixtures/poem.txt" as UnresolvedFilePath,
             },

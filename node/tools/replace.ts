@@ -2,8 +2,9 @@ import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
 import type { Dispatch } from "../tea/tea.ts";
-import type { ToolRequest } from "./toolManager.ts";
+import type { StaticToolRequest } from "./toolManager.ts";
 import type {
+  ProviderToolResult,
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
@@ -13,7 +14,7 @@ import type { RootMsg } from "../root-msg.ts";
 import type { MessageId } from "../chat/message.ts";
 import * as diff from "diff";
 import type { ThreadId } from "../chat/thread.ts";
-import type { ToolInterface } from "./types.ts";
+import type { StaticTool, ToolName } from "./types.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 export type State =
@@ -22,20 +23,20 @@ export type State =
     }
   | {
       state: "done";
-      result: ProviderToolResultContent;
+      result: ProviderToolResult;
     };
 
 export type Msg = {
   type: "finish";
-  result: Result<string>;
+  result: Result<ProviderToolResultContent[]>;
 };
 
-export class ReplaceTool implements ToolInterface {
+export class ReplaceTool implements StaticTool {
   state: State;
   toolName = "replace" as const;
 
   constructor(
-    public request: Extract<ToolRequest, { toolName: "replace" }>,
+    public request: Extract<StaticToolRequest, { toolName: "replace" }>,
     public threadId: ThreadId,
     public messageId: MessageId,
     private context: {
@@ -64,6 +65,10 @@ export class ReplaceTool implements ToolInterface {
         }),
       );
     });
+  }
+
+  isDone(): boolean {
+    return this.state.state === "done";
   }
 
   abort(): void {
@@ -182,7 +187,7 @@ ${this.getReplacePreview()}
     return result;
   }
 
-  getToolResult(): ProviderToolResultContent {
+  getToolResult(): ProviderToolResult {
     switch (this.state.state) {
       case "done":
         return this.state.result;
@@ -192,7 +197,9 @@ ${this.getReplacePreview()}
           id: this.request.id,
           result: {
             status: "ok",
-            value: `This tool use is being processed.`,
+            value: [
+              { type: "text", text: `This tool use is being processed.` },
+            ],
           },
         };
       default:
@@ -216,7 +223,7 @@ ${this.request.input.replace}
 }
 
 export const spec: ProviderToolSpec = {
-  name: "replace",
+  name: "replace" as ToolName,
   description: `This is a tool for replacing text in a file.
 
 Break up large replace calls into multiple, small replace calls. Ideally each replace is less than 20 lines of code.

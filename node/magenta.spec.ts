@@ -7,6 +7,7 @@ import type { ToolRequestId } from "./tools/toolManager";
 import type { UnresolvedFilePath } from "./utils/files";
 import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import type { ToolName } from "./tools/types";
 
 it("clear command should work", async () => {
   await withDriver({}, async (driver) => {
@@ -131,7 +132,7 @@ it("abort command should stop pending tool use", async () => {
           status: "ok",
           value: {
             id: "request_id" as ToolRequestId,
-            toolName: "get_file",
+            toolName: "get_file" as ToolName,
             input: {
               // secret file should trigger user permission check
               filePath: ".secret" as UnresolvedFilePath,
@@ -244,7 +245,7 @@ it("should use project settings to allow bash commands without permission", asyn
             status: "ok",
             value: {
               id: "bash_cmd_1" as ToolRequestId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: "echo 'hello world'",
               },

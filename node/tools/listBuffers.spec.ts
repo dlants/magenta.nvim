@@ -2,6 +2,8 @@ import { type ToolRequestId } from "./toolManager.ts";
 import { describe, it, expect } from "vitest";
 import { withDriver } from "../test/preamble";
 import { pollUntil } from "../utils/async.ts";
+import type { ToolName } from "./types.ts";
+import type { ListBuffersTool } from "./listBuffers.ts";
 
 describe("node/tools/listBuffers.spec.ts", () => {
   it("listBuffers end-to-end", async () => {
@@ -25,7 +27,7 @@ describe("node/tools/listBuffers.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId,
-              toolName: "list_buffers",
+              toolName: "list_buffers" as ToolName,
               input: {},
             },
           },
@@ -42,16 +44,17 @@ describe("node/tools/listBuffers.spec.ts", () => {
           throw new Error("Thread state does not have toolManager");
         }
 
-        const tool = thread.toolManager.tools[toolRequestId];
-        if (!tool) {
+        const tool = thread.toolManager.getTool(toolRequestId);
+        if (!(tool && tool.toolName == "list_buffers")) {
           throw new Error(`could not find tool with id ${toolRequestId}`);
         }
+        const listBuffersTool = tool as unknown as ListBuffersTool;
 
-        if (tool.state.state != "done") {
+        if (listBuffersTool.state.state != "done") {
           throw new Error(`Request not done`);
         }
 
-        return tool.state.result;
+        return listBuffersTool.state.result;
       });
 
       expect(result).toEqual({
@@ -59,7 +62,12 @@ describe("node/tools/listBuffers.spec.ts", () => {
         type: "tool_result",
         result: {
           status: "ok",
-          value: `node/test/fixtures/poem.txt\nactive node/test/fixtures/poem2.txt`,
+          value: [
+            {
+              type: "text",
+              text: `node/test/fixtures/poem.txt\nactive node/test/fixtures/poem2.txt`,
+            },
+          ],
         },
       });
     });

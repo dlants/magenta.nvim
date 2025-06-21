@@ -40,6 +40,23 @@ export class NvimDriver {
     }
   }
 
+  async waitForChatReady() {
+    return await pollUntil(
+      () => {
+        try {
+          this.magenta.chat.getActiveThread();
+          return true;
+        } catch (e) {
+          if ((e as Error).message.includes("Chat is not initialized yet")) {
+            throw new Error("Chat is not ready yet");
+          }
+          throw e;
+        }
+      },
+      { timeout: 1000 },
+    );
+  }
+
   async inputMagentaText(text: string) {
     const inputBuffer = this.magenta.sidebar.state.inputBuffer;
     if (!inputBuffer) {

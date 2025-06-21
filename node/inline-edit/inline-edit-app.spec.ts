@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { withDriver } from "../test/preamble";
 import type { ToolRequestId } from "../tools/toolManager";
+import type { ToolName } from "../tools/types";
 import { getCurrentBuffer, getCurrentWindow } from "../nvim/nvim";
 import type { Line } from "../nvim/buffer";
 import type { Position0Indexed } from "../nvim/window";
@@ -46,7 +47,7 @@ describe("node/inline-edit/inline-edit-app.spec.ts", () => {
           status: "ok",
           value: {
             id: "id" as ToolRequestId,
-            toolName: "inline_edit",
+            toolName: "inline_edit" as ToolName,
             input: {
               find: "Silver shadows dance with ease.",
               replace: "Golden shadows dance with ease.",
@@ -161,7 +162,7 @@ Golden shadows dance with ease.`,
           status: "ok",
           value: {
             id: "id" as ToolRequestId,
-            toolName: "replace_selection",
+            toolName: "replace_selection" as ToolName,
             input: {
               replace:
                 "Golden shadows dance with ease.\nStars above like diamonds bright,",
@@ -218,7 +219,7 @@ Paint their stories in the night.`,
           status: "ok",
           value: {
             id: "id" as ToolRequestId,
-            toolName: "replace_selection",
+            toolName: "replace_selection" as ToolName,
             input: {
               replace: "ghosts dance with ease.\nStars",
             },

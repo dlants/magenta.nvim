@@ -1,21 +1,21 @@
 import type { Result } from "../utils/result.ts";
-import type { Dispatch, Thunk } from "../tea/tea.ts";
+import type { Dispatch } from "../tea/tea.ts";
 import type {
-  ProviderToolResultContent,
+  ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import { d, withBindings } from "../tea/view.ts";
-import type { ToolRequest } from "./toolManager.ts";
+import type { StaticToolRequest } from "./toolManager.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import { spawn } from "child_process";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { CommandAllowlist, MagentaOptions } from "../options.ts";
 import { getcwd } from "../nvim/nvim.ts";
 import { withTimeout } from "../utils/async.ts";
-import type { ToolInterface } from "./types.ts";
+import type { StaticTool, ToolName } from "./types.ts";
 
 export const spec: ProviderToolSpec = {
-  name: "bash_command",
+  name: "bash_command" as ToolName,
   description: `Run a command in a bash shell.
 You will get the stdout and stderr of the command, as well as the exit code.
 For example, you can run \`ls\`, \`echo 'Hello, World!'\`, or \`git status\`.
@@ -61,7 +61,7 @@ type State =
       state: "done";
       output: OutputLine[];
       exitCode: number | undefined;
-      result: ProviderToolResultContent;
+      result: ProviderToolResult;
     }
   | {
       state: "error";
@@ -128,12 +128,12 @@ export function isCommandAllowed(
   return false;
 }
 
-export class BashCommandTool implements ToolInterface {
+export class BashCommandTool implements StaticTool {
   state: State;
   toolName = "bash_command" as const;
 
   constructor(
-    public request: Extract<ToolRequest, { toolName: "bash_command" }>,
+    public request: Extract<StaticToolRequest, { toolName: "bash_command" }>,
     public context: {
       nvim: Nvim;
       options: MagentaOptions;
@@ -173,7 +173,7 @@ export class BashCommandTool implements ToolInterface {
     }
   }
 
-  update(msg: Msg): Thunk<Msg> | undefined {
+  update(msg: Msg) {
     if (this.state.state === "done" || this.state.state === "error") {
       return;
     }
@@ -292,7 +292,7 @@ export class BashCommandTool implements ToolInterface {
             id: this.request.id,
             result: {
               status: "ok",
-              value: formattedOutput,
+              value: [{ type: "text", text: formattedOutput }],
             },
           },
         };
@@ -396,6 +396,10 @@ export class BashCommandTool implements ToolInterface {
     }
   }
 
+  isDone(): boolean {
+    return this.state.state === "done" || this.state.state === "error";
+  }
+
   /** It is the expectation that this is happening as part of a dispatch, so it should not trigger
    * new dispatches...
    */
@@ -436,7 +440,7 @@ export class BashCommandTool implements ToolInterface {
     return formattedOutput;
   }
 
-  getToolResult(): ProviderToolResultContent {
+  getToolResult(): ProviderToolResult {
     const { state } = this;
 
     switch (state.state) {
@@ -460,7 +464,12 @@ export class BashCommandTool implements ToolInterface {
           id: this.request.id,
           result: {
             status: "ok",
-            value: `Waiting for user approval to run this command.`,
+            value: [
+              {
+                type: "text",
+                text: `Waiting for user approval to run this command.`,
+              },
+            ],
           },
         };
 
@@ -470,7 +479,7 @@ export class BashCommandTool implements ToolInterface {
           id: this.request.id,
           result: {
             status: "ok",
-            value: "Command still running",
+            value: [{ type: "text", text: "Command still running" }],
           },
         };
 
@@ -479,18 +488,24 @@ export class BashCommandTool implements ToolInterface {
     }
   }
 
-  view(dispatch: Dispatch<Msg>) {
+  view() {
     const { state } = this;
 
     if (state.state === "pending-user-action") {
       return d`⏳ May I run this command? \`${this.request.input.command}\`
 ${withBindings(d`**[ NO ]**`, {
-  "<CR>": () => dispatch({ type: "user-approval", approved: false }),
+  "<CR>": () =>
+    this.context.myDispatch({ type: "user-approval", approved: false }),
 })} ${withBindings(d`**[ YES ]**`, {
-        "<CR>": () => dispatch({ type: "user-approval", approved: true }),
+        "<CR>": () =>
+          this.context.myDispatch({ type: "user-approval", approved: true }),
       })} ${withBindings(d`**[ ALWAYS ]**`, {
         "<CR>": () =>
-          dispatch({ type: "user-approval", approved: true, remember: true }),
+          this.context.myDispatch({
+            type: "user-approval",
+            approved: true,
+            remember: true,
+          }),
       })}`;
     }
 
@@ -504,7 +519,7 @@ ${formattedOutput}
 \`\`\``;
 
       return withBindings(content, {
-        t: () => dispatch({ type: "terminate" }),
+        t: () => this.context.myDispatch({ type: "terminate" }),
       });
     }
 

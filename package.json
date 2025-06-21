@@ -17,6 +17,7 @@
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.12.4",
     "@anthropic-ai/sdk": "^0.52.0",
+    "@modelcontextprotocol/sdk": "^1.13.0",
     "@types/diff": "^7.0.2",
     "commander": "^12.1.0",
     "diff": "^7.0.0",

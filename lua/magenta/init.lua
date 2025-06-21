@@ -15,7 +15,7 @@ M.testSetup = function()
     "n",
     "<leader>m",
     ":Magenta toggle<CR>",
-    {silent = true, noremap = true, desc = "Toggle Magenta window"}
+    { silent = true, noremap = true, desc = "Toggle Magenta window" }
   )
 end
 
@@ -33,17 +33,17 @@ M.start = function(silent)
   }
 
   local job_id =
-    vim.fn.jobstart(
-    "npm run start -s",
-    {
-      cwd = plugin_root,
-      stdin = "null",
-      on_exit = Utils.log_exit(env.LOG_LEVEL),
-      on_stdout = Utils.log_job(env.LOG_LEVEL, false),
-      on_stderr = Utils.log_job(env.LOG_LEVEL, true),
-      env = env
-    }
-  )
+      vim.fn.jobstart(
+        "npm run start -s",
+        {
+          cwd = plugin_root,
+          stdin = "null",
+          on_exit = Utils.log_exit(env.LOG_LEVEL),
+          on_stdout = Utils.log_job(env.LOG_LEVEL, false),
+          on_stderr = Utils.log_job(env.LOG_LEVEL, true),
+          env = env
+        }
+      )
 
   if job_id <= 0 then
     vim.api.nvim_err_writeln("Failed to start magenta server. Error code: " .. job_id)
@@ -200,12 +200,12 @@ M.bridge = function(channelId)
       function()
         vim.rpcnotify(channelId, "magentaKey", vimKey)
       end,
-      {buffer = bufnr, noremap = true, silent = true}
+      { buffer = bufnr, noremap = true, silent = true }
     )
   end
 
   M.lsp_response = function(requestId, response)
-    vim.rpcnotify(channelId, "magentaLspResponse", {requestId, response})
+    vim.rpcnotify(channelId, "magentaLspResponse", { requestId, response })
   end
 
   local opts = Options.options
@@ -216,13 +216,20 @@ M.bridge = function(channelId)
     end
   end
 
-  -- Return options using camelCase keys to match TypeScript MagentaOptions
-  return {
-    profiles = opts.profiles,
-    commandAllowlist = opts.commandAllowlist,
-    sidebarPosition = opts.sidebarPosition,
-    autoContext = opts.autoContext,
-  }
+  -- Filter out functions for RPC serialization
+  local function serialize_table(tbl)
+    local result = {}
+    for k, v in pairs(tbl) do
+      if type(v) == "table" then
+        result[k] = serialize_table(v)
+      elseif type(v) ~= "function" then
+        result[k] = v
+      end
+    end
+    return result
+  end
+
+  return serialize_table(opts)
 end
 
 M.wait_for_lsp_attach = function(bufnr, capability, timeout_ms)
@@ -232,7 +239,7 @@ M.wait_for_lsp_attach = function(bufnr, capability, timeout_ms)
   return vim.wait(
     timeout_ms,
     function()
-      local clients = vim.lsp.get_active_clients({bufnr = bufnr})
+      local clients = vim.lsp.get_active_clients({ bufnr = bufnr })
       for _, client in ipairs(clients) do
         if client.server_capabilities[capability] then
           return true

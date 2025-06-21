@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { withDriver } from "../test/preamble";
 import type { ToolRequestId } from "./toolManager";
+import type { ToolName } from "./types";
 
 describe("node/tools/thread-title.spec.ts", () => {
   it("sets thread title after user message", async () => {
@@ -42,7 +43,7 @@ describe("node/tools/thread-title.spec.ts", () => {
           status: "ok",
           value: {
             id: "id" as ToolRequestId,
-            toolName: "thread_title",
+            toolName: "thread_title" as ToolName,
             input: {
               title,
             },

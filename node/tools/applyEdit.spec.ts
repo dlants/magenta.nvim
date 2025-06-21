@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { TMP_DIR, withDriver } from "../test/preamble";
 import type { ToolRequestId } from "./toolManager";
+import type { ToolName } from "./types";
 import * as path from "path";
 import { getCurrentBuffer, getcwd } from "../nvim/nvim";
 import * as fs from "node:fs";
@@ -33,7 +34,7 @@ describe("node/tools/applyEdit.spec.ts", () => {
             status: "ok",
             value: {
               id: "id" as ToolRequestId,
-              toolName: "insert",
+              toolName: "insert" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/new.txt` as UnresolvedFilePath,
                 insertAfter: "",
@@ -73,7 +74,7 @@ describe("node/tools/applyEdit.spec.ts", () => {
             status: "ok",
             value: {
               id: "id" as ToolRequestId,
-              toolName: "insert",
+              toolName: "insert" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/toolManager.ts` as UnresolvedFilePath,
                 insertAfter: "",
@@ -119,7 +120,7 @@ describe("node/tools/applyEdit.spec.ts", () => {
             status: "ok",
             value: {
               id: "id" as ToolRequestId,
-              toolName: "replace",
+              toolName: "replace" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/poem.txt` as UnresolvedFilePath,
                 find: `\
@@ -172,7 +173,7 @@ Paints its colors stories in the night.
             status: "ok",
             value: {
               id: "id" as ToolRequestId,
-              toolName: "insert",
+              toolName: "insert" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/multiple.txt` as UnresolvedFilePath,
                 insertAfter: "",
@@ -206,7 +207,7 @@ Paints its colors stories in the night.
             status: "ok",
             value: {
               id: "id" as ToolRequestId,
-              toolName: "insert",
+              toolName: "insert" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/multiple.txt` as UnresolvedFilePath,
                 insertAfter: "a poem",
@@ -238,7 +239,7 @@ Paints its colors stories in the night.
             status: "ok",
             value: {
               id: "id" as ToolRequestId,
-              toolName: "replace",
+              toolName: "replace" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/poem.txt` as UnresolvedFilePath,
                 find: "Silver shadows dance with ease.",
@@ -284,7 +285,7 @@ Paint their stories in the night.
             status: "ok",
             value: {
               id: "id" as ToolRequestId,
-              toolName: "replace",
+              toolName: "replace" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/poem.txt` as UnresolvedFilePath,
                 find: "",
@@ -339,7 +340,7 @@ Paint their stories in the night.
             status: "ok",
             value: {
               id: "id1" as ToolRequestId,
-              toolName: "replace",
+              toolName: "replace" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/poem.txt` as UnresolvedFilePath,
                 find: `bogus 1 / bogus 2...`,
@@ -351,7 +352,7 @@ Paint their stories in the night.
             status: "ok",
             value: {
               id: "id2" as ToolRequestId,
-              toolName: "insert",
+              toolName: "insert" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/poem.txt` as UnresolvedFilePath,
                 insertAfter: `Paint their stories in the night.\n`, // note newline at the end of file does not match
@@ -363,7 +364,7 @@ Paint their stories in the night.
             status: "ok",
             value: {
               id: "id3" as ToolRequestId,
-              toolName: "replace",
+              toolName: "replace" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/poem.txt` as UnresolvedFilePath,
                 find: `Moonlight whispers through the trees,`,
@@ -443,7 +444,7 @@ Paint their stories in the night.
             status: "ok",
             value: {
               id: "id" as ToolRequestId,
-              toolName: "insert",
+              toolName: "insert" as ToolName,
               input: {
                 filePath: poemFile as UnresolvedFilePath,
                 insertAfter: "Original content here",
@@ -521,7 +522,12 @@ Paint their stories in the night.
       expect(myDispatch).toHaveBeenLastCalledWith({
         result: {
           status: "ok",
-          value: "Successfully applied edits.",
+          value: [
+            {
+              type: "text",
+              text: "Successfully applied edits.",
+            },
+          ],
         },
         type: "finish",
       });
@@ -580,7 +586,12 @@ Paint their stories in the night.
       expect(myDispatch).toHaveBeenLastCalledWith({
         result: {
           status: "ok",
-          value: "Successfully applied edits.",
+          value: [
+            {
+              type: "text",
+              text: "Successfully applied edits.",
+            },
+          ],
         },
         type: "finish",
       });
@@ -613,7 +624,7 @@ Paint their stories in the night.
             status: "ok",
             value: {
               id: "id" as ToolRequestId,
-              toolName: "insert",
+              toolName: "insert" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/poem.txt` as UnresolvedFilePath,
                 insertAfter: "Text that doesn't exist in the file",
@@ -679,7 +690,7 @@ Paint their stories in the night.
             status: "ok",
             value: {
               id: "id" as ToolRequestId,
-              toolName: "insert",
+              toolName: "insert" as ToolName,
               input: {
                 filePath: poemFile,
                 insertAfter: "Second line",

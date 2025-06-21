@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { extendError, type Result } from "../utils/result.ts";
-import type { ToolRequest, ToolRequestId } from "../tools/toolManager.ts";
+import type { ToolRequestId } from "../tools/toolManager.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import {
   type Provider,
@@ -19,6 +19,7 @@ import {
   getSubagentSystemPrompt,
 } from "./system-prompt.ts";
 import { validateInput } from "../tools/helpers.ts";
+import type { ToolRequest } from "../tools/types.ts";
 
 function mapProviderTextToAnthropicText(
   providerText: ProviderTextContent,
@@ -151,21 +152,14 @@ export class AnthropicProvider implements Provider {
 
             case "tool_result":
               if (c.result.status == "ok") {
-                if (typeof c.result.value === "string") {
-                  content.push({
-                    tool_use_id: c.id,
-                    type: "tool_result",
-                    content: c.result.value,
-                    is_error: false,
-                  });
-                } else {
-                  switch (c.result.value.type) {
+                for (const resultContent of c.result.value) {
+                  switch (resultContent.type) {
                     case "text":
                       content.push({
                         tool_use_id: c.id,
                         type: "tool_result",
                         content: [
-                          mapProviderTextToAnthropicText(c.result.value),
+                          mapProviderTextToAnthropicText(resultContent),
                         ],
                         is_error: false,
                       });
@@ -174,7 +168,7 @@ export class AnthropicProvider implements Provider {
                       content.push({
                         tool_use_id: c.id,
                         type: "tool_result",
-                        content: [c.result.value],
+                        content: [resultContent],
                         is_error: false,
                       });
                       break;
@@ -187,12 +181,12 @@ export class AnthropicProvider implements Provider {
                       });
                       content.push({
                         type: "document",
-                        source: c.result.value.source,
-                        title: c.result.value.title || null,
+                        source: resultContent.source,
+                        title: resultContent.title || null,
                       });
                       break;
                     default:
-                      assertUnreachable(c.result.value);
+                      assertUnreachable(resultContent);
                   }
                 }
               } else {

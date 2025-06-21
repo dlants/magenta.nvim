@@ -1,14 +1,15 @@
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { ToolRequest } from "./toolManager.ts";
+import type { StaticToolRequest } from "./toolManager.ts";
 import type {
+  ProviderToolResult,
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { ToolInterface } from "./types.ts";
+import type { StaticTool, ToolName } from "./types.ts";
 
 export type State =
   | {
@@ -16,20 +17,20 @@ export type State =
     }
   | {
       state: "done";
-      result: ProviderToolResultContent;
+      result: ProviderToolResult;
     };
 
 export type Msg = {
   type: "finish";
-  result: Result<string>;
+  result: Result<ProviderToolResultContent[]>;
 };
 
-export class ThreadTitleTool implements ToolInterface {
+export class ThreadTitleTool implements StaticTool {
   state: State;
   toolName = "thread_title" as const;
 
   constructor(
-    public request: Extract<ToolRequest, { toolName: "thread_title" }>,
+    public request: Extract<StaticToolRequest, { toolName: "thread_title" }>,
     public context: { nvim: Nvim; myDispatch: Dispatch<Msg> },
   ) {
     this.state = {
@@ -47,6 +48,10 @@ export class ThreadTitleTool implements ToolInterface {
         }),
       );
     });
+  }
+
+  isDone(): boolean {
+    return this.state.state === "done";
   }
 
   abort() {
@@ -77,7 +82,7 @@ export class ThreadTitleTool implements ToolInterface {
     }
   }
 
-  getToolResult(): ProviderToolResultContent {
+  getToolResult(): ProviderToolResult {
     if (this.state.state == "done") {
       return this.state.result;
     }
@@ -87,7 +92,7 @@ export class ThreadTitleTool implements ToolInterface {
       id: this.request.id,
       result: {
         status: "ok",
-        value: "Processing thread title...",
+        value: [{ type: "text", text: "Processing thread title..." }],
       },
     };
   }
@@ -115,7 +120,7 @@ export class ThreadTitleTool implements ToolInterface {
       type: "finish",
       result: {
         status: "ok",
-        value: this.request.input.title,
+        value: [{ type: "text", text: this.request.input.title }],
       },
     });
   }
@@ -128,7 +133,7 @@ export class ThreadTitleTool implements ToolInterface {
 }
 
 export const spec: ProviderToolSpec = {
-  name: "thread_title",
+  name: "thread_title" as ToolName,
   description: `Set a title for the current conversation thread based on the user's message.`,
   input_schema: {
     type: "object",

@@ -28,8 +28,9 @@ import {
 } from "./system-prompt.ts";
 import { validateInput } from "../tools/helpers.ts";
 import type { Result } from "../utils/result.ts";
-import type { ToolRequest, ToolRequestId } from "../tools/toolManager.ts";
+import type { ToolRequestId } from "../tools/toolManager.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
+import type { ToolRequest } from "../tools/types.ts";
 
 export type OllamaOptions = {
   model: string;
@@ -102,7 +103,7 @@ export class OllamaProvider implements Provider {
           case "tool_use": {
             let args: Record<string, unknown>;
             if (content.request.status === "ok") {
-              args = content.request.value.input;
+              args = content.request.value.input as Record<string, unknown>;
             } else {
               args = content.request.rawRequest as Record<string, unknown>;
             }

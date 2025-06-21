@@ -1,4 +1,4 @@
-export const ALL_TOOL_NAMES = [
+export const STATIC_TOOL_NAMES = [
   "get_file",
   "insert",
   "replace",
@@ -17,9 +17,9 @@ export const ALL_TOOL_NAMES = [
   "yield_to_parent",
 ] as const;
 
-export type ToolName = (typeof ALL_TOOL_NAMES)[number];
+export type StaticToolName = (typeof STATIC_TOOL_NAMES)[number];
 
-export const CHAT_TOOL_NAMES: ToolName[] = [
+export const CHAT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "get_file",
   "insert",
   "replace",
@@ -33,7 +33,7 @@ export const CHAT_TOOL_NAMES: ToolName[] = [
   "wait_for_subagents",
 ];
 
-export const SUBAGENT_TOOL_NAMES: ToolName[] = [
+export const SUBAGENT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "get_file",
   "insert",
   "replace",

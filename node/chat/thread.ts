@@ -10,9 +10,10 @@ import { d, type View, type VDOMNode } from "../tea/view.ts";
 import {
   ToolManager,
   type Msg as ToolManagerMsg,
-  type ToolRequest,
+  type StaticToolRequest,
 } from "../tools/toolManager.ts";
-import { type ToolName } from "../tools/tool-registry.ts";
+import { MCPToolManager } from "../tools/mcp/manager.ts";
+import type { ToolName } from "../tools/types.ts";
 import { Counter } from "../utils/uniqueId.ts";
 import { FileSnapshots } from "../tools/file-snapshots.ts";
 import type { Nvim } from "../nvim/nvim-node";
@@ -37,7 +38,7 @@ import {
   type Input as ThreadTitleInput,
   spec as threadTitleToolSpec,
 } from "../tools/thread-title.ts";
-import { getToolSpecs } from "../tools/tool-specs.ts";
+
 import type { Chat } from "./chat.ts";
 import {
   DEFAULT_SYSTEM_PROMPT,
@@ -134,7 +135,7 @@ export class Thread {
     profile: Profile;
     conversation: ConversationState;
     messages: Message[];
-    allowedTools: ToolName[];
+    toolNames: ToolName[];
     systemPrompt?: SubagentSystemPrompt | undefined;
   };
 
@@ -150,11 +151,12 @@ export class Thread {
     public id: ThreadId,
     options: {
       systemPrompt?: SubagentSystemPrompt | undefined;
-      allowedTools: ToolName[];
+      toolNames: ToolName[];
     },
     public context: {
       dispatch: Dispatch<RootMsg>;
       chat: Chat;
+      mcpToolManager: MCPToolManager;
       bufferTracker: BufferTracker;
       profile: Profile;
       nvim: Nvim;
@@ -181,6 +183,7 @@ export class Thread {
         dispatch: this.context.dispatch,
         threadId: this.id,
         bufferTracker: this.context.bufferTracker,
+        mcpToolManager: this.context.mcpToolManager,
         chat: this.context.chat,
         nvim: this.context.nvim,
         lsp: this.context.lsp,
@@ -200,7 +203,7 @@ export class Thread {
         usage: { inputTokens: 0, outputTokens: 0 },
       },
       messages: [],
-      allowedTools: options.allowedTools,
+      toolNames: options.toolNames,
       systemPrompt: options.systemPrompt,
     };
 
@@ -365,7 +368,7 @@ export class Thread {
             usage: { inputTokens: 0, outputTokens: 0 },
           },
           messages: [],
-          allowedTools: this.state.allowedTools,
+          toolNames: this.state.toolNames,
           systemPrompt: this.state.systemPrompt,
         };
         this.contextManager.reset();
@@ -448,11 +451,15 @@ export class Thread {
       ) {
         const request = lastContentBlock.request.value;
         if (request.toolName == "yield_to_parent") {
+          const yieldRequest = request as Extract<
+            StaticToolRequest,
+            { toolName: "yield_to_parent" }
+          >;
           this.myUpdate({
             type: "conversation-state",
             conversation: {
               state: "yielded",
-              response: request.input.result,
+              response: yieldRequest.input.result,
             },
           });
           return;
@@ -477,8 +484,8 @@ export class Thread {
     if (lastMessage) {
       for (const content of lastMessage.state.content) {
         if (content.type === "tool_use") {
-          const tool = this.toolManager.tools[content.id];
-          if (tool && tool.state.state !== "done") {
+          const tool = this.toolManager.getTool(content.id);
+          if (!tool.isDone()) {
             tool.abort();
           }
         }
@@ -496,12 +503,9 @@ export class Thread {
         for (const content of lastMessage.state.content) {
           if (content.type == "tool_use" && content.request.status == "ok") {
             const request = content.request.value;
-            const tool = this.toolManager.tools[request.id];
+            const tool = this.toolManager.getTool(request.id);
 
-            if (
-              tool.request.toolName == "yield_to_parent" ||
-              tool.state.state != "done"
-            ) {
+            if (tool.request.toolName == "yield_to_parent" || !tool.isDone()) {
               // terminate early if we have a blocking tool use. This will not send a reply message
               return;
             }
@@ -592,7 +596,7 @@ export class Thread {
           event,
         });
       },
-      getToolSpecs(this.state.allowedTools),
+      this.toolManager.getToolSpecs(this.state.toolNames),
       { systemPrompt: this.state.systemPrompt },
     );
 
@@ -659,7 +663,7 @@ ${content}`;
 
     if (result.toolRequest.status === "ok") {
       const compactRequest = result.toolRequest.value as Extract<
-        ToolRequest,
+        StaticToolRequest,
         { toolName: "compact_thread" }
       >;
 
@@ -737,7 +741,7 @@ ${content}`,
         if (contentBlock.type == "tool_use") {
           if (contentBlock.request.status == "ok") {
             const request = contentBlock.request.value;
-            const tool = this.toolManager.tools[request.id];
+            const tool = this.toolManager.getTool(request.id);
             pushResponseMessage(tool.getToolResult());
           } else {
             pushResponseMessage({
@@ -805,7 +809,7 @@ Come up with a succinct thread title for this prompt. It should be less than 80 
     this.tokenCountUpdatePending = true;
     // OK to do this async, so it doesn't slow down the rest of the plugin
     setTimeout(() => {
-      const toolSpecs = getToolSpecs(this.state.allowedTools);
+      const toolSpecs = this.toolManager.getToolSpecs(this.state.toolNames);
       const toolSpecLength = toolSpecs.reduce(
         (sum, spec) => sum + JSON.stringify(spec).length,
         0,

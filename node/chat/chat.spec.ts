@@ -2,6 +2,7 @@ import { withDriver } from "../test/preamble.ts";
 import { describe, it } from "vitest";
 import { LOGO, type ThreadId } from "./thread.ts";
 import type { ToolRequestId } from "../tools/toolManager.ts";
+import type { ToolName } from "../tools/types.ts";
 
 describe("node/chat/chat.spec.ts", () => {
   it("resets view when switching to a new thread", async () => {
@@ -83,7 +84,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "test-spawn-subagent" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt:
                   "Echo the text 'Hello from subagent' using the bash_command tool, then yield that result back to the parent using yield_to_parent.",
@@ -109,7 +110,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "test-wait-for-subagents" as ToolRequestId,
-              toolName: "wait_for_subagents",
+              toolName: "wait_for_subagents" as ToolName,
               input: {
                 threadIds: [2 as ThreadId],
               },
@@ -145,7 +146,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "test-bash-command" as ToolRequestId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: "echo 'Hello from subagent'",
               },
@@ -164,7 +165,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "test-yield-to-parent" as ToolRequestId,
-              toolName: "yield_to_parent",
+              toolName: "yield_to_parent" as ToolName,
               input: {
                 result: "Successfully echoed: Hello from subagent",
               },
@@ -207,7 +208,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "wait-missing" as ToolRequestId,
-              toolName: "wait_for_subagents",
+              toolName: "wait_for_subagents" as ToolName,
               input: {
                 threadIds: [999 as ThreadId], // Non-existent thread ID
               },
@@ -247,7 +248,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "spawn-1" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt: "Echo 'Hello from subagent 1' and yield the result.",
               },
@@ -271,7 +272,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "spawn-2" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt: "Echo 'Hello from subagent 2' and yield the result.",
               },
@@ -296,7 +297,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "wait-both" as ToolRequestId,
-              toolName: "wait_for_subagents",
+              toolName: "wait_for_subagents" as ToolName,
               input: {
                 threadIds: [2 as ThreadId, 3 as ThreadId],
               },
@@ -329,7 +330,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "yield-1" as ToolRequestId,
-              toolName: "yield_to_parent",
+              toolName: "yield_to_parent" as ToolName,
               input: {
                 result: "Hello from subagent 1",
               },
@@ -360,7 +361,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "yield-2" as ToolRequestId,
-              toolName: "yield_to_parent",
+              toolName: "yield_to_parent" as ToolName,
               input: {
                 result: "Hello from subagent 2",
               },
@@ -394,7 +395,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "spawn-1" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt: "Just say something and stop without yielding.",
               },
@@ -418,7 +419,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "spawn-2" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt: "Echo 'Success!' and yield the result.",
               },
@@ -443,7 +444,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "wait-both" as ToolRequestId,
-              toolName: "wait_for_subagents",
+              toolName: "wait_for_subagents" as ToolName,
               input: {
                 threadIds: [2 as ThreadId, 3 as ThreadId],
               },
@@ -486,7 +487,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "success-command" as ToolRequestId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: "echo 'Success!'",
               },
@@ -505,7 +506,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "yield-success" as ToolRequestId,
-              toolName: "yield_to_parent",
+              toolName: "yield_to_parent" as ToolName,
               input: {
                 result: "Success!",
               },
@@ -551,7 +552,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "spawn-test" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt: "Echo 'Test message' and yield the result.",
               },
@@ -576,7 +577,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "wait-test" as ToolRequestId,
-              toolName: "wait_for_subagents",
+              toolName: "wait_for_subagents" as ToolName,
               input: {
                 threadIds: [2 as ThreadId],
               },
@@ -650,7 +651,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "spawn-child" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt: "This is a child thread task",
               },
@@ -685,7 +686,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "spawn-child2" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt: "This is another child thread task",
               },
@@ -736,7 +737,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "spawn-yielder" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt: "Yield a result back to parent",
               },
@@ -758,7 +759,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "yield-result" as ToolRequestId,
-              toolName: "yield_to_parent",
+              toolName: "yield_to_parent" as ToolName,
               input: {
                 result:
                   "This is a very long result message that should be truncated in the thread overview display",
@@ -785,7 +786,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "spawn-stopper" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt: "Just stop without yielding",
               },
@@ -844,7 +845,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "spawn-test-child" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt: "Child thread task",
               },
@@ -916,7 +917,7 @@ describe("node/chat/chat.spec.ts", () => {
             status: "ok",
             value: {
               id: "spawn-for-status" as ToolRequestId,
-              toolName: "spawn_subagent",
+              toolName: "spawn_subagent" as ToolName,
               input: {
                 prompt: "Child task",
               },

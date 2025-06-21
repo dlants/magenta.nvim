@@ -3,6 +3,7 @@ import { TMP_DIR, withDriver } from "../test/preamble";
 import type { ToolRequestId } from "../tools/toolManager";
 import type { UnresolvedFilePath } from "../utils/files";
 import type { WebSearchResultBlock } from "@anthropic-ai/sdk/resources.mjs";
+import type { ToolName } from "../tools/types";
 
 describe("node/chat/message.spec.ts", () => {
   it("display multiple edits to the same file, and edit details", async () => {
@@ -22,7 +23,7 @@ describe("node/chat/message.spec.ts", () => {
             status: "ok",
             value: {
               id: "id1" as ToolRequestId,
-              toolName: "replace",
+              toolName: "replace" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/poem.txt` as UnresolvedFilePath,
                 find: `Moonlight whispers through the trees,\nSilver shadows dance with ease.`,
@@ -34,7 +35,7 @@ describe("node/chat/message.spec.ts", () => {
             status: "ok",
             value: {
               id: "id2" as ToolRequestId,
-              toolName: "replace",
+              toolName: "replace" as ToolName,
               input: {
                 filePath: `${TMP_DIR}/poem.txt` as UnresolvedFilePath,
                 find: `Stars above like diamonds bright,\nPaint their stories in the night.`,

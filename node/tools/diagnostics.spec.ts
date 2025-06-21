@@ -2,6 +2,8 @@ import { type ToolRequestId } from "./toolManager.ts";
 import { describe, it, expect } from "vitest";
 import { withDriver } from "../test/preamble";
 import { pollUntil } from "../utils/async.ts";
+import type { ToolName } from "./types.ts";
+import type { DiagnosticsTool } from "./diagnostics.ts";
 
 describe("node/tools/diagnostics.spec.ts", () => {
   it("diagnostics end-to-end", { timeout: 10000 }, async () => {
@@ -41,7 +43,7 @@ describe("node/tools/diagnostics.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId,
-              toolName: "diagnostics",
+              toolName: "diagnostics" as ToolName,
               input: {},
             },
           },
@@ -52,16 +54,17 @@ describe("node/tools/diagnostics.spec.ts", () => {
         () => {
           const thread = driver.magenta.chat.getActiveThread();
 
-          const tool = thread.toolManager.tools[toolRequestId];
-          if (!tool) {
+          const tool = thread.toolManager.getTool(toolRequestId);
+          if (!(tool && tool.toolName == "diagnostics")) {
             throw new Error(`could not find tool with id ${toolRequestId}`);
           }
 
-          if (tool.state.state != "done") {
+          const diagnosticsTool = tool as unknown as DiagnosticsTool;
+          if (diagnosticsTool.state.state != "done") {
             throw new Error(`Request not done`);
           }
 
-          return tool.state.result;
+          return diagnosticsTool.state.result;
         },
         { timeout: 5000 },
       );
@@ -71,7 +74,12 @@ describe("node/tools/diagnostics.spec.ts", () => {
         id: toolRequestId,
         result: {
           status: "ok",
-          value: `file: node/test/fixtures/test.ts source: typescript, severity: 1, message: "Property 'd' does not exist on type '{ c: "test"; }'."`,
+          value: [
+            {
+              type: "text",
+              text: `file: node/test/fixtures/test.ts source: typescript, severity: 1, message: "Property 'd' does not exist on type '{ c: "test"; }'."`,
+            },
+          ],
         },
       });
     });

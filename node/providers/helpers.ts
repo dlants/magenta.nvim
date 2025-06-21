@@ -1,10 +1,6 @@
 import type { WebSearchResultBlock } from "@anthropic-ai/sdk/resources.mjs";
 import { validateInput } from "../tools/helpers";
-import type {
-  ToolManager,
-  ToolRequest,
-  ToolRequestId,
-} from "../tools/toolManager";
+import type { ToolManager, ToolRequestId } from "../tools/toolManager";
 import { assertUnreachable } from "../utils/assertUnreachable";
 import type {
   ProviderBlockStartEvent,
@@ -15,7 +11,7 @@ import type {
   ProviderImageContent,
   ProviderDocumentContent,
 } from "./provider";
-import type { ToolName } from "../tools/tool-registry";
+import type { ToolName } from "../tools/types";
 
 export function renderContentValue(
   value:
@@ -127,14 +123,12 @@ export function stringifyContent(
     case "tool_result": {
       if (content.result.status == "ok") {
         const result = content.result.value;
-        const tool = toolManager.tools[content.id];
+        const tool = toolManager.getTool(content.id);
 
-        const formatResult = (r: typeof result): string => {
-          if (typeof r === "string") {
-            return r;
-          }
-          // Handle other content types by recursively calling stringifyContent
-          return stringifyContent(r, toolManager);
+        const formatResult = (contents: typeof result): string => {
+          return contents
+            .map((r) => stringifyContent(r, toolManager))
+            .join("\n");
         };
 
         if (!tool) {
@@ -214,9 +208,9 @@ export function finalizeStreamingBlock(
                 status: "ok",
                 value: {
                   id: block.id as ToolRequestId,
-                  toolName: block.name,
+                  toolName: block.name as ToolName,
                   input: inputParseResult.value,
-                } as ToolRequest,
+                },
               }
             : {
                 ...inputParseResult,

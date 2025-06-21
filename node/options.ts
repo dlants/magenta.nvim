@@ -1,6 +1,7 @@
 import { PROVIDER_NAMES, type ProviderName } from "./providers/provider";
 import * as fs from "fs";
 import * as path from "path";
+import type { ServerName } from "./tools/mcp/types";
 
 export type Profile = {
   name: string;
@@ -13,12 +14,33 @@ export type Profile = {
 
 export type CommandAllowlist = string[];
 
+export type MCPMockToolSchemaType = "string" | "number" | "boolean";
+
+export type MCPMockToolConfig = {
+  name: string;
+  description: string;
+  inputSchema: { [param: string]: MCPMockToolSchemaType };
+};
+
+export type MCPServerConfig =
+  | {
+      type: "command";
+      command: string;
+      args: string[];
+      env?: Record<string, string>;
+    }
+  | {
+      type: "mock";
+      tools?: MCPMockToolConfig[];
+    };
+
 export type MagentaOptions = {
   profiles: Profile[];
   activeProfile: string;
   sidebarPosition: "left" | "right";
   commandAllowlist: CommandAllowlist;
   autoContext: string[];
+  mcpServers: { [serverName: ServerName]: MCPServerConfig };
 };
 
 // Reusable parsing helpers
@@ -125,6 +147,113 @@ function parseStringArray(
   }) as string[];
 }
 
+function parseMCPServers(
+  input: unknown,
+  logger?: { warn: (msg: string) => void },
+): Record<string, MCPServerConfig> {
+  if (!input) {
+    return {};
+  }
+
+  if (typeof input !== "object") {
+    logger?.warn("mcpServers must be an object");
+    return {};
+  }
+
+  const servers: Record<string, MCPServerConfig> = {};
+  const inputObj = input as Record<string, unknown>;
+
+  for (const [serverName, serverConfig] of Object.entries(inputObj)) {
+    try {
+      if (typeof serverConfig !== "object" || serverConfig === null) {
+        logger?.warn(
+          `Skipping invalid MCP server config for ${serverName}: must be an object`,
+        );
+        continue;
+      }
+
+      const config = serverConfig as Record<string, unknown>;
+
+      if (config["type"] == "mock") {
+        const mockConfig: MCPServerConfig = { type: "mock" };
+        if (config.tools && Array.isArray(config.tools)) {
+          mockConfig.tools = config.tools as MCPMockToolConfig[];
+        }
+        servers[serverName] = mockConfig;
+        continue;
+      }
+
+      if (typeof config.command !== "string") {
+        logger?.warn(
+          `Skipping MCP server ${serverName}: command must be a string`,
+        );
+        continue;
+      }
+
+      if (!Array.isArray(config.args)) {
+        logger?.warn(
+          `Skipping MCP server ${serverName}: args must be an array`,
+        );
+        continue;
+      }
+
+      const args = config.args.filter((arg) => {
+        if (typeof arg === "string") {
+          return true;
+        } else {
+          logger?.warn(
+            `Skipping non-string arg in MCP server ${serverName}: ${JSON.stringify(arg)}`,
+          );
+          return false;
+        }
+      }) as string[];
+
+      const serverConfigOut: MCPServerConfig = {
+        type: "command",
+        command: config.command,
+        args,
+      };
+
+      if (config.env !== undefined) {
+        if (
+          typeof config.env === "object" &&
+          config.env !== null &&
+          !Array.isArray(config.env)
+        ) {
+          const env: Record<string, string> = {};
+          const envObj = config.env as Record<string, unknown>;
+
+          for (const [envKey, envValue] of Object.entries(envObj)) {
+            if (typeof envValue === "string") {
+              env[envKey] = envValue;
+            } else {
+              logger?.warn(
+                `Skipping non-string env value in MCP server ${serverName}: ${envKey}=${JSON.stringify(envValue)}`,
+              );
+            }
+          }
+
+          if (Object.keys(env).length > 0) {
+            serverConfigOut.env = env;
+          }
+        } else {
+          logger?.warn(
+            `Invalid env in MCP server ${serverName}: must be an object`,
+          );
+        }
+      }
+
+      servers[serverName] = serverConfigOut;
+    } catch (error) {
+      logger?.warn(
+        `Error parsing MCP server ${serverName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  return servers;
+}
+
 function parseSidebarPosition(
   input: unknown,
   logger?: { warn: (msg: string) => void },
@@ -139,13 +268,17 @@ function parseSidebarPosition(
   return undefined;
 }
 
-export function parseOptions(inputOptions: unknown): MagentaOptions {
+export function parseOptions(
+  inputOptions: unknown,
+  logger: { warn: (msg: string) => void },
+): MagentaOptions {
   const options: MagentaOptions = {
     profiles: [],
     activeProfile: "",
     sidebarPosition: "left",
     commandAllowlist: [],
     autoContext: [],
+    mcpServers: {},
   };
 
   if (typeof inputOptions == "object" && inputOptions != null) {
@@ -166,11 +299,7 @@ export function parseOptions(inputOptions: unknown): MagentaOptions {
     );
 
     // Parse profiles (throw errors for invalid profiles in main config)
-    options.profiles = parseProfiles(inputOptionsObj["profiles"], {
-      warn: (msg) => {
-        throw new Error(msg);
-      },
-    });
+    options.profiles = parseProfiles(inputOptionsObj["profiles"], logger);
 
     if (options.profiles.length == 0) {
       throw new Error(`Invalid profiles provided`);
@@ -182,6 +311,9 @@ export function parseOptions(inputOptions: unknown): MagentaOptions {
       inputOptionsObj["autoContext"],
       "autoContext",
     );
+
+    // Parse MCP servers (throw errors for invalid MCP servers in main config)
+    options.mcpServers = parseMCPServers(inputOptionsObj["mcpServers"], logger);
   }
 
   return options;
@@ -248,6 +380,11 @@ export function parseProjectOptions(
     );
   }
 
+  // Parse MCP servers
+  if ("mcpServers" in inputOptionsObj) {
+    options.mcpServers = parseMCPServers(inputOptionsObj["mcpServers"], logger);
+  }
+
   return options;
 }
 
@@ -300,6 +437,13 @@ export function mergeOptions(
 
   if (projectSettings.sidebarPosition !== undefined) {
     merged.sidebarPosition = projectSettings.sidebarPosition;
+  }
+
+  if (projectSettings.mcpServers) {
+    merged.mcpServers = {
+      ...baseOptions.mcpServers,
+      ...projectSettings.mcpServers,
+    };
   }
 
   return merged;

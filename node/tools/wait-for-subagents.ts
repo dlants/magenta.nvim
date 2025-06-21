@@ -1,12 +1,12 @@
 import { d, withBindings, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { ToolRequest } from "./toolManager.ts";
+import type { StaticToolRequest } from "./toolManager.ts";
 import type {
-  ProviderToolResultContent,
+  ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { ToolInterface } from "./types.ts";
+import type { StaticTool, ToolName } from "./types.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { ThreadId } from "../chat/thread.ts";
@@ -23,15 +23,18 @@ export type State =
     }
   | {
       state: "done";
-      result: ProviderToolResultContent;
+      result: ProviderToolResult;
     };
 
-export class WaitForSubagentsTool implements ToolInterface {
+export class WaitForSubagentsTool implements StaticTool {
   toolName = "wait_for_subagents" as const;
   public state: State;
 
   constructor(
-    public request: Extract<ToolRequest, { toolName: "wait_for_subagents" }>,
+    public request: Extract<
+      StaticToolRequest,
+      { toolName: "wait_for_subagents" }
+    >,
     public context: {
       nvim: Nvim;
       dispatch: Dispatch<RootMsg>;
@@ -79,7 +82,10 @@ export class WaitForSubagentsTool implements ToolInterface {
         id: this.request.id,
         result: {
           status: "ok",
-          value: `\
+          value: [
+            {
+              type: "text",
+              text: `\
 All subagents completed:
 ${results
   .map(({ threadId, result }) => {
@@ -93,9 +99,15 @@ ${results
     }
   })
   .join("\n")}`,
+            },
+          ],
         },
       },
     };
+  }
+
+  isDone(): boolean {
+    return this.state.state === "done";
   }
 
   abort() {
@@ -125,14 +137,19 @@ ${results
     }
   }
 
-  getToolResult(): ProviderToolResultContent {
+  getToolResult(): ProviderToolResult {
     if (this.state.state !== "done") {
       return {
         type: "tool_result",
         id: this.request.id,
         result: {
           status: "ok",
-          value: `Waiting for ${this.request.input.threadIds.length} subagent(s) to complete...`,
+          value: [
+            {
+              type: "text",
+              text: `Waiting for ${this.request.input.threadIds.length} subagent(s) to complete...`,
+            },
+          ],
         },
       };
     }
@@ -233,7 +250,7 @@ ${threadStatusLines}`;
 }
 
 export const spec: ProviderToolSpec = {
-  name: "wait_for_subagents",
+  name: "wait_for_subagents" as ToolName,
   description: `Wait for one or more subagents to complete execution. This tool blocks until all specified subagents have finished running and returned their results.`,
   input_schema: {
     type: "object",

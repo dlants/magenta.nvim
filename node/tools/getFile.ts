@@ -3,16 +3,16 @@ import fs from "fs";
 import path from "path";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d, withBindings } from "../tea/view.ts";
-import { type ToolRequest } from "./toolManager.ts";
+import { type StaticToolRequest } from "./toolManager.ts";
 import { type Result } from "../utils/result.ts";
 import { getcwd } from "../nvim/nvim.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import { readGitignore } from "./util.ts";
 import type {
-  ProviderToolResultContent,
+  ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
-import type { Dispatch, Thunk } from "../tea/tea.ts";
+import type { Dispatch } from "../tea/tea.ts";
 import {
   relativePath,
   resolveFilePath,
@@ -22,7 +22,7 @@ import {
   FileCategory,
   type FileTypeInfo,
 } from "../utils/files.ts";
-import type { ToolInterface } from "./types.ts";
+import type { StaticTool, ToolName } from "./types.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
 import type { ContextManager } from "../context/context-manager.ts";
 import type {
@@ -44,14 +44,14 @@ export type State =
     }
   | {
       state: "done";
-      result: ProviderToolResultContent;
+      result: ProviderToolResult;
     };
 
 export type Msg =
   | {
       type: "finish";
       result: Result<
-        ProviderTextContent | ProviderImageContent | ProviderDocumentContent
+        (ProviderTextContent | ProviderImageContent | ProviderDocumentContent)[]
       >;
     }
   | {
@@ -65,12 +65,12 @@ export type Msg =
       approved: boolean;
     };
 
-export class GetFileTool implements ToolInterface {
+export class GetFileTool implements StaticTool {
   state: State;
   toolName = "get_file" as const;
 
   constructor(
-    public request: Extract<ToolRequest, { toolName: "get_file" }>,
+    public request: Extract<StaticToolRequest, { toolName: "get_file" }>,
     public context: {
       nvim: Nvim;
       contextManager: ContextManager;
@@ -96,6 +96,10 @@ export class GetFileTool implements ToolInterface {
     });
   }
 
+  isDone(): boolean {
+    return this.state.state === "done";
+  }
+
   /** this is expected to be invoked as part of a dispatch, so we don't need to dispatch here to update the view
    */
   abort() {
@@ -109,7 +113,7 @@ export class GetFileTool implements ToolInterface {
     };
   }
 
-  update(msg: Msg): Thunk<Msg> | undefined {
+  update(msg: Msg) {
     switch (msg.type) {
       case "finish":
         this.state = {
@@ -208,11 +212,13 @@ export class GetFileTool implements ToolInterface {
         type: "finish",
         result: {
           status: "ok",
-          value: {
-            type: "text",
-            text: `This file is already part of the thread context. \
+          value: [
+            {
+              type: "text",
+              text: `This file is already part of the thread context. \
 You already have the most up-to-date information about the contents of this file.`,
-          },
+            },
+          ],
         },
       });
       return;
@@ -388,14 +394,14 @@ You already have the most up-to-date information about the contents of this file
       type: "finish",
       result: {
         status: "ok",
-        value: result,
+        value: [result],
       },
     });
 
     return;
   }
 
-  getToolResult(): ProviderToolResultContent {
+  getToolResult(): ProviderToolResult {
     switch (this.state.state) {
       case "pending":
       case "processing":
@@ -404,7 +410,12 @@ You already have the most up-to-date information about the contents of this file
           id: this.request.id,
           result: {
             status: "ok",
-            value: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
+            value: [
+              {
+                type: "text",
+                text: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
+              },
+            ],
           },
         };
       case "pending-user-action":
@@ -413,7 +424,12 @@ You already have the most up-to-date information about the contents of this file
           id: this.request.id,
           result: {
             status: "ok",
-            value: `Waiting for user approval to finish processing this tool use.`,
+            value: [
+              {
+                type: "text",
+                text: `Waiting for user approval to finish processing this tool use.`,
+              },
+            ],
           },
         };
       case "done":
@@ -423,7 +439,7 @@ You already have the most up-to-date information about the contents of this file
     }
   }
 
-  view(dispatch: Dispatch<Msg>) {
+  view() {
     switch (this.state.state) {
       case "pending":
       case "processing":
@@ -432,10 +448,15 @@ You already have the most up-to-date information about the contents of this file
         return d`⏳ May I read file \`${this.request.input.filePath}\`? ${withBindings(
           d`**[ NO ]**`,
           {
-            "<CR>": () => dispatch({ type: "user-approval", approved: false }),
+            "<CR>": () =>
+              this.context.myDispatch({
+                type: "user-approval",
+                approved: false,
+              }),
           },
         )} ${withBindings(d`**[ OK ]**`, {
-          "<CR>": () => dispatch({ type: "user-approval", approved: true }),
+          "<CR>": () =>
+            this.context.myDispatch({ type: "user-approval", approved: true }),
         })}`;
       case "done":
         if (this.state.result.result.status == "error") {
@@ -456,7 +477,7 @@ You already have the most up-to-date information about the contents of this file
 }
 
 export const spec: ProviderToolSpec = {
-  name: "get_file",
+  name: "get_file" as ToolName,
   description: `Get the full contents of a given file. The file will be added to the thread context.
 If a file is part of your context, avoid using get_file on it again, since you will get notified about any future changes about the file.
 

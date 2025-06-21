@@ -518,7 +518,7 @@ ${lines.join("\n")}
     ]);
 
     // Parse base options from Lua
-    const baseOptions = parseOptions(opts);
+    const baseOptions = parseOptions(opts, nvim.logger!);
 
     // Load and parse project settings
     const cwd = await getcwd(nvim);

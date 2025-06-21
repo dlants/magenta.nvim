@@ -1,7 +1,13 @@
 import type { ToolRequestId } from "./toolManager.ts";
 import { expect, it, describe } from "vitest";
-import { withDriver, TMP_DIR } from "../test/preamble.ts";
+import {
+  withDriver,
+  TMP_DIR,
+  assertToolResultHasImageSource,
+  assertToolResultHasDocumentSource,
+} from "../test/preamble.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
+import type { ToolName } from "./types.ts";
 
 describe("getFile rich content integration tests", () => {
   it("should process image files end-to-end", async () => {
@@ -23,7 +29,7 @@ describe("getFile rich content integration tests", () => {
             status: "ok",
             value: {
               id: "img_request" as ToolRequestId,
-              toolName: "get_file",
+              toolName: "get_file" as ToolName,
               input: {
                 filePath: "./node/test/fixtures/test.jpg" as UnresolvedFilePath,
               },
@@ -53,24 +59,7 @@ describe("getFile rich content integration tests", () => {
 
           // The result should be image content, not text
           if (toolResult.result.status === "ok") {
-            const content = toolResult.result.value;
-            if (
-              typeof content === "object" &&
-              content !== null &&
-              "type" in content &&
-              content.type === "image"
-            ) {
-              expect(content).toHaveProperty("source");
-              expect(content.source).toHaveProperty("type", "base64");
-              expect(content.source).toHaveProperty("media_type", "image/jpeg");
-              expect(content.source).toHaveProperty("data");
-              expect(typeof content.source.data).toBe("string");
-              expect(content.source.data.length).toBeGreaterThan(0);
-            } else {
-              throw new Error(
-                `Expected image content but got: ${typeof content}`,
-              );
-            }
+            assertToolResultHasImageSource(toolResult, "image/jpeg");
           }
         }
       }
@@ -103,7 +92,7 @@ describe("getFile rich content integration tests", () => {
             status: "ok",
             value: {
               id: "pdf_request" as ToolRequestId,
-              toolName: "get_file",
+              toolName: "get_file" as ToolName,
               input: {
                 filePath: "./node/test/fixtures/test.pdf" as UnresolvedFilePath,
               },
@@ -133,27 +122,7 @@ describe("getFile rich content integration tests", () => {
 
           // The result should be document content, not text
           if (toolResult.result.status === "ok") {
-            const content = toolResult.result.value;
-            if (
-              typeof content === "object" &&
-              content !== null &&
-              "type" in content &&
-              content.type === "document"
-            ) {
-              expect(content).toHaveProperty("source");
-              expect(content.source).toHaveProperty("type", "base64");
-              expect(content.source).toHaveProperty(
-                "media_type",
-                "application/pdf",
-              );
-              expect(content.source).toHaveProperty("data");
-              expect(typeof content.source.data).toBe("string");
-              expect(content.source.data.length).toBeGreaterThan(0);
-            } else {
-              throw new Error(
-                `Expected document content but got: ${typeof content}`,
-              );
-            }
+            assertToolResultHasDocumentSource(toolResult, "application/pdf");
           }
         }
       }
@@ -186,7 +155,7 @@ describe("getFile rich content integration tests", () => {
             status: "ok",
             value: {
               id: "bin_request" as ToolRequestId,
-              toolName: "get_file",
+              toolName: "get_file" as ToolName,
               input: {
                 filePath: "./node/test/fixtures/test.bin" as UnresolvedFilePath,
               },
@@ -246,7 +215,7 @@ describe("getFile rich content integration tests", () => {
             status: "ok",
             value: {
               id: "img_request" as ToolRequestId,
-              toolName: "get_file",
+              toolName: "get_file" as ToolName,
               input: {
                 filePath: "./node/test/fixtures/test.jpg" as UnresolvedFilePath,
               },
@@ -301,7 +270,7 @@ describe("getFile rich content integration tests", () => {
             status: "ok",
             value: {
               id: "pdf_request" as ToolRequestId,
-              toolName: "get_file",
+              toolName: "get_file" as ToolName,
               input: {
                 filePath: "./node/test/fixtures/test.pdf" as UnresolvedFilePath,
               },
@@ -351,7 +320,7 @@ describe("getFile rich content integration tests", () => {
             status: "ok",
             value: {
               id: "text_request" as ToolRequestId,
-              toolName: "get_file",
+              toolName: "get_file" as ToolName,
               input: {
                 filePath: "./node/test/fixtures/poem.txt" as UnresolvedFilePath,
               },
@@ -405,7 +374,7 @@ describe("getFile rich content integration tests", () => {
             status: "ok",
             value: {
               id: "text_request" as ToolRequestId,
-              toolName: "get_file",
+              toolName: "get_file" as ToolName,
               input: {
                 filePath: "./node/test/fixtures/poem.txt" as UnresolvedFilePath,
               },
@@ -440,7 +409,7 @@ describe("getFile rich content integration tests", () => {
             status: "ok",
             value: {
               id: "img_request" as ToolRequestId,
-              toolName: "get_file",
+              toolName: "get_file" as ToolName,
               input: {
                 filePath: "./node/test/fixtures/test.jpg" as UnresolvedFilePath,
               },
@@ -477,7 +446,7 @@ describe("getFile rich content integration tests", () => {
             status: "ok",
             value: {
               id: "pdf_request" as ToolRequestId,
-              toolName: "get_file",
+              toolName: "get_file" as ToolName,
               input: {
                 filePath: "./node/test/fixtures/test.pdf" as UnresolvedFilePath,
               },
@@ -548,7 +517,7 @@ describe("getFile rich content integration tests", () => {
               status: "ok",
               value: {
                 id: "large_img_request" as ToolRequestId,
-                toolName: "get_file",
+                toolName: "get_file" as ToolName,
                 input: {
                   filePath:
                     "./node/test/fixtures/large-image.jpg" as UnresolvedFilePath,

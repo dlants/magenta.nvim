@@ -4,6 +4,7 @@ import { type ToolRequestId } from "../tools/toolManager.ts";
 import { describe, expect, it } from "vitest";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import { type Input as CompactThreadInput } from "../tools/compact-thread";
+import type { ToolName } from "../tools/types.ts";
 
 describe("node/chat/thread.spec.ts", () => {
   it("chat render and a few updates", async () => {
@@ -23,7 +24,7 @@ describe("node/chat/thread.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: { command: "echo 'Hello from bash!'" },
             },
           },
@@ -90,7 +91,7 @@ describe("node/chat/thread.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId1,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: { command: "echo 'Project files summary'" },
             },
           },
@@ -108,7 +109,7 @@ describe("node/chat/thread.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId2,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: { command: "echo 'Project structure summary'" },
             },
           },
@@ -214,7 +215,7 @@ describe("node/chat/thread.spec.ts", () => {
             status: "ok",
             value: {
               id: firstBashToolId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: { command: "echo 'Information about Germany'" },
             },
           },
@@ -233,7 +234,7 @@ describe("node/chat/thread.spec.ts", () => {
             status: "ok",
             value: {
               id: secondBashToolId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: { command: "echo 'European countries information'" },
             },
           },
@@ -252,7 +253,7 @@ describe("node/chat/thread.spec.ts", () => {
             status: "ok",
             value: {
               id: bashToolId,
-              toolName: "bash_command",
+              toolName: "bash_command" as ToolName,
               input: {
                 command: "echo test",
               },
@@ -300,7 +301,7 @@ describe("node/chat/thread.spec.ts", () => {
           status: "ok",
           value: {
             id: toolRequestId,
-            toolName: "compact_thread",
+            toolName: "compact_thread" as ToolName,
             input: compactInput,
           },
         },

@@ -1,12 +1,12 @@
 import { d } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { ToolRequest } from "./toolManager.ts";
+import type { StaticToolRequest } from "./toolManager.ts";
 import type {
-  ProviderToolResultContent,
+  ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { ToolInterface } from "./types.ts";
+import type { StaticTool, ToolName } from "./types.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { ThreadId } from "../chat/thread.ts";
@@ -18,15 +18,15 @@ export type Msg = {
 
 export type State = {
   state: "done";
-  result: ProviderToolResultContent;
+  result: ProviderToolResult;
 };
 
-export class YieldToParentTool implements ToolInterface {
+export class YieldToParentTool implements StaticTool {
   toolName = "yield_to_parent" as const;
   public state: State;
 
   constructor(
-    public request: Extract<ToolRequest, { toolName: "yield_to_parent" }>,
+    public request: Extract<StaticToolRequest, { toolName: "yield_to_parent" }>,
     public context: {
       nvim: Nvim;
       dispatch: Dispatch<RootMsg>;
@@ -41,10 +41,14 @@ export class YieldToParentTool implements ToolInterface {
         id: this.request.id,
         result: {
           status: "ok",
-          value: request.input.result,
+          value: [{ type: "text", text: request.input.result }],
         },
       },
     };
+  }
+
+  isDone(): boolean {
+    return this.state.state === "done";
   }
 
   abort() {}
@@ -75,7 +79,7 @@ export class YieldToParentTool implements ToolInterface {
     }
   }
 
-  getToolResult(): ProviderToolResultContent {
+  getToolResult(): ProviderToolResult {
     if (this.state.state !== "done") {
       throw new Error("Cannot get tool result before tool is done");
     }
@@ -104,7 +108,7 @@ export class YieldToParentTool implements ToolInterface {
 }
 
 export const spec: ProviderToolSpec = {
-  name: "yield_to_parent",
+  name: "yield_to_parent" as ToolName,
   description: `\
 Yield results to the parent agent.
 

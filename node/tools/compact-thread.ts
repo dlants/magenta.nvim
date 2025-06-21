@@ -1,25 +1,25 @@
 import { d } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { ToolRequest } from "./toolManager.ts";
+import type { StaticToolRequest } from "./toolManager.ts";
 import type {
-  ProviderToolResultContent,
+  ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { ToolInterface } from "./types.ts";
+import type { StaticTool, ToolName } from "./types.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 
 export type State = {
   state: "done";
-  result: ProviderToolResultContent;
+  result: ProviderToolResult;
 };
 
-export class CompactThreadTool implements ToolInterface {
+export class CompactThreadTool implements StaticTool {
   toolName = "compact_thread" as const;
   public state: State;
 
   constructor(
-    public request: Extract<ToolRequest, { toolName: "compact_thread" }>,
+    public request: Extract<StaticToolRequest, { toolName: "compact_thread" }>,
     public context: { nvim: Nvim },
   ) {
     this.state = {
@@ -29,17 +29,21 @@ export class CompactThreadTool implements ToolInterface {
         id: this.request.id,
         result: {
           status: "ok",
-          value: "", // this should never need to be sent to the agent
+          value: [{ type: "text", text: "" }], // this should never need to be sent to the agent
         },
       },
     };
+  }
+
+  isDone(): boolean {
+    return this.state.state === "done";
   }
 
   abort() {}
 
   update(): void {}
 
-  getToolResult(): ProviderToolResultContent {
+  getToolResult(): ProviderToolResult {
     return this.state.result;
   }
 
@@ -56,7 +60,7 @@ export class CompactThreadTool implements ToolInterface {
 }
 
 export const spec: ProviderToolSpec = {
-  name: "compact_thread",
+  name: "compact_thread" as ToolName,
   description: `\
 This tool extracts specific portions of the conversation history that are directly relevant to the user's next prompt.
 

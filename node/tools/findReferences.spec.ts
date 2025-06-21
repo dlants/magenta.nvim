@@ -3,6 +3,8 @@ import { describe, it, expect } from "vitest";
 import { withDriver } from "../test/preamble";
 import { pollUntil } from "../utils/async.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
+import type { FindReferencesTool } from "./findReferences.ts";
+import type { ToolName } from "./types.ts";
 
 describe("node/tools/findReferences.spec.ts", () => {
   it("findReferences end-to-end", async () => {
@@ -23,7 +25,7 @@ describe("node/tools/findReferences.spec.ts", () => {
             status: "ok",
             value: {
               id: toolRequestId,
-              toolName: "find_references",
+              toolName: "find_references" as ToolName,
               input: {
                 filePath: "node/test/fixtures/test.ts" as UnresolvedFilePath,
                 symbol: "val.a.b.c",
@@ -40,16 +42,17 @@ describe("node/tools/findReferences.spec.ts", () => {
             throw new Error("Thread state is not valid");
           }
 
-          const tool = thread.toolManager.tools[toolRequestId];
-          if (!tool) {
+          const tool = thread.toolManager.getTool(toolRequestId);
+          if (!(tool && tool.toolName == "find_references")) {
             throw new Error(`could not find tool with id ${toolRequestId}`);
           }
 
-          if (tool.state.state != "done") {
+          const findReferencesTool = tool as unknown as FindReferencesTool;
+          if (findReferencesTool.state.state != "done") {
             throw new Error(`Request not done`);
           }
 
-          return tool.state.result;
+          return findReferencesTool.state.result;
         },
         { timeout: 3000 },
       );
@@ -59,7 +62,12 @@ describe("node/tools/findReferences.spec.ts", () => {
         id: toolRequestId,
         result: {
           status: "ok",
-          value: `node/test/fixtures/test.ts:4:6\nnode/test/fixtures/test.ts:12:6\nnode/test/fixtures/test.ts:17:20\n`,
+          value: [
+            {
+              type: "text",
+              text: `node/test/fixtures/test.ts:4:6\nnode/test/fixtures/test.ts:12:6\nnode/test/fixtures/test.ts:17:20\n`,
+            },
+          ],
         },
       });
     });

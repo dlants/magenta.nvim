@@ -110,10 +110,15 @@ exports[`node/chat/thread.spec.ts > compacts a thread with multiple messages int
         "id": "first-bash-tool",
         "result": {
           "status": "ok",
-          "value": "stdout:
+          "value": [
+            {
+              "text": "stdout:
 Information about Germany
 exit code 0
 ",
+              "type": "text",
+            },
+          ],
         },
         "type": "tool_result",
       },
@@ -151,10 +156,15 @@ exit code 0
         "id": "second-bash-tool",
         "result": {
           "status": "ok",
-          "value": "stdout:
+          "value": [
+            {
+              "text": "stdout:
 European countries information
 exit code 0
 ",
+              "type": "text",
+            },
+          ],
         },
         "type": "tool_result",
       },
@@ -192,10 +202,15 @@ exit code 0
         "id": "bash-tool",
         "result": {
           "status": "ok",
-          "value": "stdout:
+          "value": [
+            {
+              "text": "stdout:
 test
 exit code 0
 ",
+              "type": "text",
+            },
+          ],
         },
         "type": "tool_result",
       },
