@@ -107,12 +107,12 @@ local vim = vim
 local Plug = vim.fn['plug#']
 
 vim.call('plug#begin')
-Plug('dlants/magenta.vim', {
+Plug('dlants/magenta.nvim', {
   ['do'] = 'npm install --frozen-lockfile',
 })
 vim.call('plug#end')
 
-require('magenta').setup()
+require('magenta').setup {}
 ```
 
 # Config
