@@ -189,20 +189,20 @@ export class MCPTool implements Tool {
     }
   }
 
-  view() {
+  renderSummary() {
     const { state } = this;
 
     if (state.state === "processing") {
       const runningTime = Math.floor((Date.now() - state.startTime) / 1000);
-      return d`🔨⏳ (${String(runningTime)}s) MCP tool \`${this.toolName}\` running...`;
+      return d`🔨⚙️ (${String(runningTime)}s) MCP tool \`${this.toolName}\``;
     }
 
     if (state.state === "done") {
-      return d`🔨✅ MCP tool \`${this.toolName}\` completed`;
+      return d`🔨✅ MCP tool \`${this.toolName}\``;
     }
 
     if (state.state === "error") {
-      return d`🔨❌ MCP tool \`${this.toolName}\` error: ${state.error}`;
+      return d`🔨❌ MCP tool \`${this.toolName}\``;
     }
 
     return d``;

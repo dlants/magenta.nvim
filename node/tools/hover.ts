@@ -181,12 +181,16 @@ ${lspResult.result.contents.value}
     }
   }
 
-  view() {
+  renderSummary() {
     switch (this.state.state) {
       case "processing":
-        return d`⚙️ Requesting hover info...`;
+        return d`ℹ️⚙️ \`${this.request.input.symbol}\` in \`${this.request.input.filePath}\``;
       case "done":
-        return d`✅ Hover request complete.`;
+        if (this.state.result.result.status === "error") {
+          return d`ℹ️❌ \`${this.request.input.symbol}\` in \`${this.request.input.filePath}\``;
+        } else {
+          return d`ℹ️✅ \`${this.request.input.symbol}\` in \`${this.request.input.filePath}\``;
+        }
       default:
         assertUnreachable(this.state);
     }

@@ -22,7 +22,8 @@ export interface Tool {
   getToolResult(): ProviderToolResult;
   request: ToolRequest;
   abort(): void;
-  view(): VDOMNode;
+  renderSummary(): VDOMNode;
+  renderPreview?(): VDOMNode;
   displayInput(): string | VDOMNode;
 }
 
@@ -32,7 +33,8 @@ export interface StaticTool {
   getToolResult(): ProviderToolResult;
   request: StaticToolRequest;
   abort(): void;
-  view(): VDOMNode;
+  renderSummary(): VDOMNode;
+  renderPreview?(): VDOMNode;
   displayInput(): string | VDOMNode;
 }
 

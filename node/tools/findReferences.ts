@@ -189,12 +189,16 @@ export class FindReferencesTool implements StaticTool {
     }
   }
 
-  view() {
+  renderSummary() {
     switch (this.state.state) {
       case "processing":
-        return d`⚙️ Finding references...`;
+        return d`🔍⚙️ \`${this.request.input.symbol}\` in \`${this.request.input.filePath}\``;
       case "done":
-        return d`✅ References request complete.`;
+        if (this.state.result.result.status === "error") {
+          return d`🔍❌ \`${this.request.input.symbol}\` in \`${this.request.input.filePath}\``;
+        } else {
+          return d`🔍✅ \`${this.request.input.symbol}\` in \`${this.request.input.filePath}\``;
+        }
       default:
         assertUnreachable(this.state);
     }

@@ -104,42 +104,40 @@ export class ReplaceTool implements StaticTool {
     }
   }
 
-  view(): VDOMNode {
-    return d`${this.toolStatusIcon()} Replace [[ -${this.countLines(this.request.input.find).toString()} / +${this.countLines(
-      this.request.input.replace,
-    ).toString()} ]] in \`${this.request.input.filePath}\` ${this.toolStatusView()}`;
-  }
+  renderSummary(): VDOMNode {
+    const findLines = this.countLines(this.request.input.find);
+    const replaceLines = this.countLines(this.request.input.replace);
 
-  countLines(str: string) {
-    return (str.match(/\n/g) || []).length + 1;
-  }
-  toolStatusIcon(): string {
     switch (this.state.state) {
       case "processing":
-        return "⏳";
+        return d`✏️⚙️ Replace [[ -${findLines.toString()} / +${replaceLines.toString()} ]] in \`${this.request.input.filePath}\``;
       case "done":
-        if (this.state.result.result.status == "error") {
-          return "⚠️";
-        } else {
-          return "✏️";
-        }
+        return d`✏️ Replace [[ -${findLines.toString()} / +${replaceLines.toString()} ]] in \`${this.request.input.filePath}\``;
+      default:
+        assertUnreachable(this.state);
     }
   }
 
-  toolStatusView(): VDOMNode {
+  renderPreview(): VDOMNode {
     switch (this.state.state) {
       case "processing":
-        return d`Processing replace...`;
+        return d``;
       case "done":
-        if (this.state.result.result.status == "error") {
-          return d`Error: ${this.state.result.result.error}`;
+        if (this.state.result.result.status === "error") {
+          return d`❌ ${this.state.result.result.error}`;
         } else {
-          return d`Success!
+          return d`✅ Replace applied
 \`\`\`diff
 ${this.getReplacePreview()}
 \`\`\``;
         }
+      default:
+        assertUnreachable(this.state);
     }
+  }
+
+  countLines(str: string) {
+    return (str.match(/\n/g) || []).length + 1;
   }
 
   getReplacePreview(): string {

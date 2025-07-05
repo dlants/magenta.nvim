@@ -57,8 +57,14 @@ type State = {
           };
     };
   };
-  toolDetailsExpanded: {
-    [requestId: ToolRequestId]: boolean;
+  toolMeta: {
+    [requestId: ToolRequestId]: {
+      details: boolean;
+      stop?: {
+        stopReason: StopReason;
+        usage: Usage;
+      };
+    };
   };
 };
 
@@ -121,7 +127,7 @@ export class Message {
       content: [],
       stops: {},
       edits: {},
-      toolDetailsExpanded: {},
+      toolMeta: {},
       ...initialState,
     };
   }
@@ -228,16 +234,36 @@ export class Message {
       }
 
       case "toggle-tool-details": {
-        this.state.toolDetailsExpanded[msg.requestId] =
-          !this.state.toolDetailsExpanded[msg.requestId];
+        if (!this.state.toolMeta[msg.requestId]) {
+          this.state.toolMeta[msg.requestId] = { details: false };
+        }
+        this.state.toolMeta[msg.requestId].details =
+          !this.state.toolMeta[msg.requestId].details;
         return;
       }
 
       case "stop": {
-        this.state.stops[this.state.content.length - 1] = {
-          stopReason: msg.stopReason,
-          usage: msg.usage,
-        };
+        // Check if this stop corresponds to a tool request
+        const lastContent = this.state.content[this.state.content.length - 1];
+        if (
+          lastContent &&
+          lastContent.type === "tool_use" &&
+          lastContent.request.status === "ok"
+        ) {
+          const toolRequestId = lastContent.request.value.id;
+          if (!this.state.toolMeta[toolRequestId]) {
+            this.state.toolMeta[toolRequestId] = { details: false };
+          }
+          this.state.toolMeta[toolRequestId].stop = {
+            stopReason: msg.stopReason,
+            usage: msg.usage,
+          };
+        } else {
+          this.state.stops[this.state.content.length - 1] = {
+            stopReason: msg.stopReason,
+            usage: msg.usage,
+          };
+        }
         return;
       }
 
@@ -250,18 +276,40 @@ export class Message {
     this.state.contextUpdates = updates;
   }
 
+  renderToolResult(id: ToolRequestId) {
+    const tool = this.context.toolManager.getTool(id);
+    if (!tool) {
+      return "";
+    }
+
+    if (tool.isDone()) {
+      const result = tool.getToolResult();
+      if (result.result.status === "error") {
+        return `\nerror: ${result.result.error}`;
+      } else {
+        return `\nresult:\n${result.result.value.map(renderContentValue).join("\n")}\n`;
+      }
+    } else {
+      return "";
+    }
+  }
+
   renderTool(tool: ReturnType<ToolManager["getTool"]>) {
     if (!tool) {
       return "";
     }
 
-    const showDetails =
-      this.state.toolDetailsExpanded[tool.request.id] || false;
+    const toolMeta = this.state.toolMeta[tool.request.id];
+    const showDetails = toolMeta?.details || false;
 
     return withBindings(
-      d`${tool.view()}${
+      d`${tool.renderSummary()}${tool.renderPreview ? d`\n${tool.renderPreview()}` : ""}${
         showDetails
-          ? d`\nid: ${tool.request.id}\n${tool.displayInput()}\n${this.context.toolManager.renderToolResult(tool.request.id)}`
+          ? d`\n${tool.toolName}: ${JSON.stringify(tool.request.input, null, 2)}${
+              toolMeta?.stop
+                ? d`\n${this.renderStopInfo(toolMeta.stop.stopReason, toolMeta.stop.usage)}`
+                : ""
+            }\n${this.renderToolResult(tool.request.id)}`
           : ""
       }`,
       {
@@ -321,15 +369,8 @@ export class Message {
 ${this.renderContextUpdate()}${this.state.content.map(renderContentWithStop)}${this.renderStreamingBlock()}${this.renderEdits()}`;
   }
 
-  renderStop(contentIdx: number) {
-    const stop = this.state.stops[contentIdx];
-    if (!stop) {
-      return "";
-    }
-
-    const { stopReason, usage } = stop;
-
-    return d`\nStopped (${stopReason}) [input: ${usage.inputTokens.toString()}, output: ${usage.outputTokens.toString()}${
+  renderStopInfo(stopReason: StopReason, usage: Usage) {
+    return d`Stopped (${stopReason}) [input: ${usage.inputTokens.toString()}, output: ${usage.outputTokens.toString()}${
       usage.cacheHits !== undefined
         ? d`, cache hits: ${usage.cacheHits.toString()}`
         : ""
@@ -337,7 +378,16 @@ ${this.renderContextUpdate()}${this.state.content.map(renderContentWithStop)}${t
       usage.cacheMisses !== undefined
         ? d`, cache misses: ${usage.cacheMisses.toString()}`
         : ""
-    }]\n`;
+    }]`;
+  }
+
+  renderStop(contentIdx: number) {
+    const stop = this.state.stops[contentIdx];
+    if (!stop) {
+      return "";
+    }
+
+    return d`\n${this.renderStopInfo(stop.stopReason, stop.usage)}\n`;
   }
 
   renderContextUpdate() {

@@ -190,12 +190,18 @@ export class ListDirectoryTool implements StaticTool {
     }
   }
 
-  view() {
+  renderSummary() {
     switch (this.state.state) {
       case "processing":
-        return d`⚙️ Listing directory ${this.request.input.dirPath || "."}`;
-      case "done":
-        return d`✅ Finished listing directory ${this.request.input.dirPath || "."}`;
+        return d`📁⚙️ list_directory ${this.request.input.dirPath || "."}`;
+      case "done": {
+        const result = this.state.result.result;
+        if (result.status === "error") {
+          return d`📁❌ list_directory ${this.request.input.dirPath || "."}`;
+        } else {
+          return d`📁✅ list_directory ${this.request.input.dirPath || "."}`;
+        }
+      }
       default:
         assertUnreachable(this.state);
     }

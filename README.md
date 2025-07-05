@@ -19,13 +19,12 @@ Magenta is for agents.
 
 # Roadmap
 
-- openai provider improvements (web search, reasoning, etc...)
+- openai provider reasoning, to allow use of the o models, ability to configure reasoning for claude models
 - findDefinition tool / improved discovery of project types and docs
 - gemini 2.5 pro provider
 - @quickfix command to place quickfix into input buffer
 - fast/cheap provider configuration
 - foreach tool to spawn multiple (fast) subagents (like to do the same operation to many files)
-- system context for system prompt
 - @file completion for input buffer
 - local code embedding & indexing via chroma db, to support a semantic code search tool
 

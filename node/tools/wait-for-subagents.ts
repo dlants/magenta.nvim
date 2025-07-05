@@ -157,16 +157,16 @@ ${results
     return this.state.result;
   }
 
-  view() {
+  renderSummary() {
     switch (this.state.state) {
       case "waiting":
         return this.renderWaitingView();
       case "done": {
         const result = this.state.result.result;
         if (result.status === "error") {
-          return d`⏸️❌ ${result.error}`;
+          return d`⏸️❌ Waiting for ${this.request.input.threadIds.length.toString()} subagent(s)`;
         } else {
-          return d`⏸️✅ All subagents completed.`;
+          return d`⏸️✅ Waiting for ${this.request.input.threadIds.length.toString()} subagent(s)`;
         }
       }
     }
@@ -178,7 +178,7 @@ ${results
       this.renderThreadStatus(threadId),
     );
 
-    return d`⏸️⏳ Waiting for ${threadIds.length.toString()} subagent(s):
+    return d`⏳ Waiting for ${threadIds.length.toString()} subagent(s):
 ${threadStatusLines}`;
   }
 

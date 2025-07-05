@@ -14,7 +14,6 @@ import {
   SUBAGENT_SYSTEM_PROMPTS,
   type SubagentSystemPrompt,
 } from "../providers/system-prompt.ts";
-import { renderContentValue } from "../providers/helpers.ts";
 import type { ThreadId, ThreadType } from "../chat/types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 
@@ -172,17 +171,21 @@ export class SpawnSubagentTool implements StaticTool {
     return this.state.result;
   }
 
-  view() {
+  renderSummary() {
+    const systemPromptText = this.request.input.systemPrompt
+      ? ` (${this.request.input.systemPrompt})`
+      : "";
+
     switch (this.state.state) {
       case "preparing":
-        return d`🤖⏳ Preparing to spawn sub-agent...`;
+        return d`🤖⚙️ Spawning subagent${systemPromptText}`;
       case "done": {
         const threadId = this.state.threadId;
         const result = this.state.result.result;
         if (result.status === "error") {
-          return d`🤖❌ Error spawning sub-agent: ${result.error}`;
+          return d`🤖❌ Spawning subagent${systemPromptText}`;
         } else {
-          return withBindings(d`🤖✅ ${renderContentValue(result.value[0])}`, {
+          return withBindings(d`🤖✅ Spawning subagent${systemPromptText}`, {
             "<CR>": () => {
               if (threadId) {
                 this.context.dispatch({

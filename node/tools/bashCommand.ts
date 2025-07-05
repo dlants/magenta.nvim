@@ -488,58 +488,71 @@ export class BashCommandTool implements StaticTool {
     }
   }
 
-  view() {
-    const { state } = this;
-
-    if (state.state === "pending-user-action") {
-      return d`⏳ May I run this command? \`${this.request.input.command}\`
+  renderSummary() {
+    switch (this.state.state) {
+      case "pending-user-action":
+        return d`⚡⏳ May I run command \`${this.request.input.command}\`?
 ${withBindings(d`**[ NO ]**`, {
   "<CR>": () =>
     this.context.myDispatch({ type: "user-approval", approved: false }),
 })} ${withBindings(d`**[ YES ]**`, {
-        "<CR>": () =>
-          this.context.myDispatch({ type: "user-approval", approved: true }),
-      })} ${withBindings(d`**[ ALWAYS ]**`, {
-        "<CR>": () =>
-          this.context.myDispatch({
-            type: "user-approval",
-            approved: true,
-            remember: true,
-          }),
-      })}`;
+          "<CR>": () =>
+            this.context.myDispatch({ type: "user-approval", approved: true }),
+        })} ${withBindings(d`**[ ALWAYS ]**`, {
+          "<CR>": () =>
+            this.context.myDispatch({
+              type: "user-approval",
+              approved: true,
+              remember: true,
+            }),
+        })}`;
+      case "processing": {
+        const runningTime = Math.floor(
+          (Date.now() - this.state.startTime) / 1000,
+        );
+        const content = d`⚡⚙️ (${String(runningTime)}s / 300s) \`${this.request.input.command}\``;
+        return withBindings(content, {
+          t: () => this.context.myDispatch({ type: "terminate" }),
+        });
+      }
+      case "done": {
+        if (this.state.exitCode === 0) {
+          return d`⚡✅ \`${this.request.input.command}\``;
+        } else {
+          return d`⚡❌ \`${this.request.input.command}\` - Exit code: ${this.state.exitCode !== undefined ? this.state.exitCode.toString() : "undefined"} `;
+        }
+      }
+      case "error":
+        return d`⚡❌ \`${this.request.input.command}\` - ${this.state.error}`;
+      default:
+        assertUnreachable(this.state);
     }
+  }
 
-    if (state.state === "processing") {
-      const runningTime = Math.floor((Date.now() - state.startTime) / 1000);
-      const formattedOutput = this.formatOutputPreview(state.output);
-
-      const content = d`⚡ (${String(runningTime)}s / 300s) \`${this.request.input.command}\`
+  renderPreview() {
+    switch (this.state.state) {
+      case "pending-user-action":
+      case "processing":
+        return d``;
+      case "done": {
+        const formattedOutput = this.formatOutputPreview(this.state.output);
+        if (this.state.exitCode === 0) {
+          return d`\
 \`\`\`
 ${formattedOutput}
 \`\`\``;
-
-      return withBindings(content, {
-        t: () => this.context.myDispatch({ type: "terminate" }),
-      });
-    }
-
-    if (state.state === "done") {
-      // Use the same formatting as in getToolResult
-      const formattedOutput = this.formatOutputPreview(state.output);
-
-      return d`⚡ \`${this.request.input.command}\`
+        } else {
+          return d`❌ Exit code: ${this.state.exitCode !== undefined ? this.state.exitCode.toString() : "undefined"}
 \`\`\`
 ${formattedOutput}
-\`\`\`
-
-Exit code: ${state.exitCode !== undefined ? state.exitCode.toString() : "undefined"}`;
+\`\`\``;
+        }
+      }
+      case "error":
+        return d`❌ ${this.state.error}`;
+      default:
+        assertUnreachable(this.state);
     }
-
-    if (state.state === "error") {
-      return d`Error running command: ${state.error}`;
-    }
-
-    return d``;
   }
 
   displayInput(): string {

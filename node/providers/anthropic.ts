@@ -225,9 +225,8 @@ export class AnthropicProvider implements Provider {
     // Use the promptCaching class property but allow it to be overridden by options parameter
     const useCaching = options?.disableCaching !== true && this.promptCaching;
 
-    let cacheControlItemsPlaced = 0;
     if (useCaching) {
-      cacheControlItemsPlaced = placeCacheBreakpoints(anthropicMessages);
+      placeCacheBreakpoints(anthropicMessages);
     }
 
     const anthropicTools: Anthropic.Tool[] = tools.map((t): Anthropic.Tool => {
@@ -252,11 +251,7 @@ export class AnthropicProvider implements Provider {
           // system
           // messages
           // This ensures the tools + system prompt (which is approx 1400 tokens) is cached.
-          cache_control: useCaching
-            ? cacheControlItemsPlaced < 4
-              ? { type: "ephemeral" }
-              : null
-            : null,
+          cache_control: useCaching ? { type: "ephemeral" } : null,
         },
       ],
       tool_choice: {
@@ -483,150 +478,39 @@ export class AnthropicProvider implements Provider {
   }
 }
 
-export function placeCacheBreakpoints(messages: MessageParam[]): number {
-  // when we scan the messages, keep track of where each part ends.
-  const blocks: { block: Anthropic.Messages.ContentBlockParam; acc: number }[] =
-    [];
-
-  let lengthAcc = 0;
-  for (const message of messages) {
-    for (const block of message.content) {
-      switch (block.type) {
-        case "text":
-          lengthAcc += block.text.length;
-          for (const citation of block.citations || []) {
-            lengthAcc += citation.cited_text.length;
-            switch (citation.type) {
-              case "char_location":
-              case "page_location":
-              case "content_block_location":
-                continue;
-              case "web_search_result_location": {
-                lengthAcc +=
-                  citation.url.length +
-                  (citation.title ? citation.title.length : 0) +
-                  citation.encrypted_index.length;
-              }
-            }
-          }
-          break;
-        case "image": {
-          const source = block.source;
-          lengthAcc +=
-            source.type == "base64" ? source.data.length : source.url.length;
-          break;
-        }
-        case "tool_use":
-          lengthAcc += JSON.stringify(block.input).length;
-          break;
-        case "tool_result":
-          if (block.content) {
-            if (typeof block.content == "string") {
-              lengthAcc += block.content.length;
-            } else {
-              let blockLength = 0;
-              for (const blockContent of block.content) {
-                switch (blockContent.type) {
-                  case "text":
-                    blockLength += blockContent.text.length;
-                    break;
-                  case "image": {
-                    const source = blockContent.source;
-                    blockLength +=
-                      source.type == "base64"
-                        ? source.data.length
-                        : source.url.length;
-                    break;
-                  }
-                }
-              }
-
-              lengthAcc += blockLength;
-            }
-          }
-          break;
-
-        case "document": {
-          if ("data" in block.source) {
-            lengthAcc += block.source.data.length;
-          }
-          break;
-        }
-
-        case "server_tool_use":
-          {
-            lengthAcc += JSON.stringify(
-              block.input as { [key: string]: string },
-            ).length;
-          }
-          break;
-        case "web_search_tool_result":
-          {
-            if (Array.isArray(block.content)) {
-              lengthAcc += block.content.reduce((acc, el) => {
-                return (
-                  acc +
-                  el.url.length +
-                  el.title.length +
-                  el.encrypted_content.length
-                );
-              }, 0);
-            }
-          }
-          break;
-
-        case "thinking":
-        case "redacted_thinking":
-          // not supported yet
-          break;
-
-        default:
-          assertUnreachable(block);
-      }
-
-      blocks.push({ block, acc: lengthAcc });
-    }
+/** We only ever need to place a cache header on the last block, since anthropic now can compute the longest reusable
+ * prefix.
+ * https://www.anthropic.com/news/token-saving-updates
+ */
+export function placeCacheBreakpoints(messages: MessageParam[]): void {
+  if (messages.length === 0) {
+    return;
   }
 
-  // estimating 4 characters per token.
-  const tokens = Math.floor(lengthAcc / STR_CHARS_PER_TOKEN);
+  // Find the last eligible block by searching backwards through messages
+  for (
+    let messageIndex = messages.length - 1;
+    messageIndex >= 0;
+    messageIndex--
+  ) {
+    const message = messages[messageIndex];
 
-  // Anthropic allows for placing up to 4 cache control markers.
-  // It will not cache anything less than 1024 tokens for sonnet 3.5
-  // https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
-  // this is pretty rough estimate, due to the conversion between string length and tokens.
-  // however, since we are not accounting for tools or the system prompt, and generally code and technical writing
-  // tend to have a lower coefficient of string length to tokens (about 3.5 average sting length per token), this means
-  // that the first cache control should be past the 1024 mark and should be cached.
-  const powers = highestPowersOfTwo(tokens, 4).filter((n) => n >= 1024);
-  for (const power of powers) {
-    const targetLength = power * STR_CHARS_PER_TOKEN; // power is in tokens, but we want string chars instead
-    // find the first block where we are past the target power
-    const blockEntry = blocks.find((b) => b.acc > targetLength);
-    if (
-      blockEntry &&
-      blockEntry.block.type !== "thinking" &&
-      blockEntry.block.type !== "redacted_thinking"
+    for (
+      let blockIndex = message.content.length - 1;
+      blockIndex >= 0;
+      blockIndex--
     ) {
-      blockEntry.block.cache_control = { type: "ephemeral" };
+      const block = message.content[blockIndex];
+
+      // Check if this block is eligible for caching
+      if (
+        block &&
+        block.type !== "thinking" &&
+        block.type !== "redacted_thinking"
+      ) {
+        block.cache_control = { type: "ephemeral" };
+        return;
+      }
     }
   }
-
-  return powers.length;
-}
-
-const STR_CHARS_PER_TOKEN = 4;
-
-export function highestPowersOfTwo(n: number, len: number): number[] {
-  const result: number[] = [];
-  let currentPower = Math.floor(Math.log2(n));
-
-  while (result.length < len && currentPower >= 0) {
-    const value = Math.pow(2, currentPower);
-    if (value <= n) {
-      result.push(value);
-    }
-    currentPower--;
-  }
-  return result;
 }

@@ -97,15 +97,20 @@ export class ThreadTitleTool implements StaticTool {
     };
   }
 
-  view() {
-    if (this.state.state == "processing") {
-      return d`Setting thread title...`;
-    }
-
-    if (this.state.result.result.status === "error") {
-      return d`❌ Error setting thread title: ${this.state.result.result.error}`;
-    } else {
-      return d`✅ Thread title set to: "${this.request.input.title}"`;
+  renderSummary() {
+    switch (this.state.state) {
+      case "processing":
+        return d`📝⚙️ Setting thread title: "${this.request.input.title}"`;
+      case "done": {
+        const result = this.state.result.result;
+        if (result.status === "error") {
+          return d`📝❌ Setting thread title: "${this.request.input.title}"`;
+        } else {
+          return d`📝✅ Setting thread title: "${this.request.input.title}"`;
+        }
+      }
+      default:
+        assertUnreachable(this.state);
     }
   }
 

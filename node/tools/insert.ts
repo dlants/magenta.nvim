@@ -104,38 +104,35 @@ export class InsertTool implements StaticTool {
     }
   }
 
-  view(): VDOMNode {
-    return d`${this.toolStatusIcon()} Insert [[ +${(
-      (this.request.input.content.match(/\n/g) || []).length + 1
-    ).toString()} ]] in \`${this.request.input.filePath}\` ${this.toolStatusView()}`;
-  }
+  renderSummary(): VDOMNode {
+    const lineCount =
+      (this.request.input.content.match(/\n/g) || []).length + 1;
 
-  toolStatusIcon(): string {
     switch (this.state.state) {
       case "processing":
-        return "⏳";
+        return d`✏️⚙️ Insert [[ +${lineCount.toString()} ]] in \`${this.request.input.filePath}\``;
       case "done":
-        if (this.state.result.result.status == "error") {
-          return "⚠️";
-        } else {
-          return "✏️";
-        }
+        return d`✏️ Insert [[ +${lineCount.toString()} ]] in \`${this.request.input.filePath}\``;
+      default:
+        assertUnreachable(this.state);
     }
   }
 
-  toolStatusView(): VDOMNode {
+  renderPreview(): VDOMNode {
     switch (this.state.state) {
       case "processing":
-        return d`Processing insert...`;
+        return d``;
       case "done":
-        if (this.state.result.result.status == "error") {
-          return d`Error: ${this.state.result.result.error}`;
+        if (this.state.result.result.status === "error") {
+          return d`❌ ${this.state.result.result.error}`;
         } else {
-          return d`Success!
+          return d`✅ Insert applied
 \`\`\`diff
 ${this.getInsertPreview()}
 \`\`\``;
         }
+      default:
+        assertUnreachable(this.state);
     }
   }
 

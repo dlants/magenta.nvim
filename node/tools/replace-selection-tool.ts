@@ -159,15 +159,24 @@ export class ReplaceSelectionTool implements StaticTool {
     });
   }
 
-  view() {
-    if (this.state.state == "processing") {
-      return d`Applying edit...`;
-    }
+  renderSummary() {
+    return d`✏️ Replacing selected text`;
+  }
 
-    if (this.state.result.result.status === "error") {
-      return d`❌ Error replacing selection: ${this.state.result.result.error}`;
-    } else {
-      return d`✅ Successfully replaced selection`;
+  renderPreview() {
+    switch (this.state.state) {
+      case "processing":
+        return d`⚙️ Applying edit...`;
+      case "done": {
+        const result = this.state.result.result;
+        if (result.status === "error") {
+          return d`❌ ${result.error}`;
+        } else {
+          return d`✅ Successfully replaced selection`;
+        }
+      }
+      default:
+        assertUnreachable(this.state);
     }
   }
 
