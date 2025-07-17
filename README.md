@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/dlants-magenta-nvim-badge.png)](https://mseep.ai/app/dlants-magenta-nvim)
+
 # magenta.nvim
 
 ```
