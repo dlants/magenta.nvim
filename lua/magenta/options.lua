@@ -34,6 +34,27 @@ local defaults = {
   },
   picker = "fzf-lua",
   sidebarPosition = "left",
+  sidebarPositionOpts = {
+    above = {
+      displayHeightPercentage = 0.3,
+      inputHeightPercentage = 0.1,
+    },
+    below = {
+      displayHeightPercentage = 0.3,
+      inputHeightPercentage = 0.1,
+    },
+    tab = {
+      displayHeightPercentage = 0.8,
+    },
+    left = {
+      widthPercentage = 0.3,
+      displayHeightPercentage = 0.8,
+    },
+    right = {
+      widthPercentage = 0.3,
+      displayHeightPercentage = 0.8,
+    }
+  },
   defaultKeymaps = true,
   sidebarKeymaps = {
     normal = {
