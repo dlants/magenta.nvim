@@ -27,7 +27,9 @@ function resolveResponsivePosition(
   }
 
   // Determine if terminal is in landscape (wider than tall) or portrait mode
-  const isLandscape = totalWidth > totalHeight;
+  // Characters are typically ~2x taller than wide, so we need to adjust the comparison
+  const COLUMNS_PER_LINE_VISUAL_EQUIVALENT = 2;
+  const isLandscape = totalWidth > (totalHeight * COLUMNS_PER_LINE_VISUAL_EQUIVALENT);
 
   switch (position) {
     case "leftbelow":
@@ -55,6 +57,7 @@ export class Sidebar {
     inputWidth: number;
     displayHeight: number;
     displayWidth: number;
+    resolvedPosition: string;
   }> {
     const totalHeight = (await getOption("lines", nvim)) as number;
     const cmdHeight = (await getOption("cmdheight", nvim)) as number;
@@ -127,7 +130,7 @@ export class Sidebar {
         throw new Error(`Unexpected resolved position: ${resolvedPosition}`);
     }
 
-    return { inputHeight, inputWidth, displayHeight, displayWidth };
+    return { inputHeight, inputWidth, displayHeight, displayWidth, resolvedPosition };
   }
 
   public state:
@@ -230,21 +233,12 @@ export class Sidebar {
       await displayBuffer.setDisplayKeymaps();
     }
 
-    const { inputHeight, inputWidth, displayHeight, displayWidth } =
+    const { inputHeight, inputWidth, displayHeight, displayWidth, resolvedPosition} =
       await Sidebar.calculateWindowDimensions(
         sidebarPosition,
         sidebarPositionOpts,
         this.nvim,
       );
-
-    // Get terminal dimensions for resolving responsive positions
-    const totalHeight = (await getOption("lines", this.nvim)) as number;
-    const totalWidth = (await getOption("columns", this.nvim)) as number;
-    const resolvedPosition = resolveResponsivePosition(
-      sidebarPosition,
-      totalWidth,
-      totalHeight,
-    );
 
     let displayWindowId: WindowId;
 
