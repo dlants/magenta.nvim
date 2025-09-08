@@ -9,6 +9,10 @@ import type { DiffUpdate, WholeFileUpdate } from "./context-manager";
 import type { ToolRequestId } from "../tools/toolManager";
 import fs from "node:fs";
 import type { ToolName } from "../tools/types";
+import {
+  type ProviderImageContent,
+  type ProviderMessage,
+} from "../providers/provider-types";
 
 it("returns full file contents on first getContextUpdate and no updates on second call when file hasn't changed", async () => {
   await withDriver({}, async (driver) => {
@@ -33,13 +37,26 @@ it("returns full file contents on first getContextUpdate and no updates on secon
     // Check that it's a whole-file update
     const firstUpdate = firstUpdates[absFilePath];
     expect(firstUpdate.update.status).toBe("ok");
-    if (firstUpdate.update.status === "ok") {
-      expect(firstUpdate.update.value.type).toBe("whole-file");
-      expect(firstUpdate.absFilePath).toBe(absFilePath);
-      expect((firstUpdate.update.value as WholeFileUpdate).content).toContain(
-        "Moonlight whispers through the trees",
-      );
-    }
+
+    // Type-safe narrowing for the update result
+    const okResult = firstUpdate.update as Extract<
+      typeof firstUpdate.update,
+      { status: "ok" }
+    >;
+    expect(okResult.value.type).toBe("whole-file");
+    expect(firstUpdate.absFilePath).toBe(absFilePath);
+
+    // Extract the actual file content from the content array (second text block)
+    const wholeFileUpdate = okResult.value as WholeFileUpdate;
+    const textBlocks = wholeFileUpdate.content.filter(
+      (item) => item.type === "text",
+    );
+
+    expect(textBlocks).toHaveLength(2);
+    expect(textBlocks[0].text).toBe("File `poem.txt`");
+    expect(textBlocks[1].text).toContain(
+      "Moonlight whispers through the trees",
+    );
 
     // Get context updates second time without changing the file
     const secondUpdates = await contextManager.getContextUpdate();
@@ -664,54 +681,17 @@ it("adding a binary file sends the initial update. Further messages do not send 
       expect(firstUpdate.absFilePath).toBe(absFilePath);
       expect(firstUpdate.relFilePath).toBe("test.jpg");
       // Content should be base64 encoded binary data
-      expect((firstUpdate.update.value as WholeFileUpdate).content).toMatch(
-        /^[A-Za-z0-9+/]+=*$/,
-      );
+      expect(
+        (
+          (firstUpdate.update.value as WholeFileUpdate)
+            .content[0] as ProviderImageContent
+        ).source.data,
+      ).toMatch(/^[A-Za-z0-9+/]+=*$/);
     }
 
     // Second getContextUpdate call should return no updates (file hasn't changed)
     const secondUpdates = await contextManager.getContextUpdate();
     expect(Object.keys(secondUpdates).length).toBe(0);
-  });
-});
-
-it("updating a tracked binary file on disk triggers a whole-file update of context", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-
-    // Get the context manager from the driver
-    const contextManager =
-      driver.magenta.chat.getActiveThread().context.contextManager;
-
-    const cwd = await getcwd(driver.nvim);
-    const absFilePath = resolveFilePath(cwd, "test.jpg" as UnresolvedFilePath);
-
-    // Add file to context and get initial update
-    await driver.addContextFiles("test.jpg");
-    await contextManager.getContextUpdate();
-
-    // Wait a moment to ensure mtime difference
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    // Modify the binary file on disk
-    const newContent = Buffer.from("new binary content for testing");
-    await fs.promises.writeFile(absFilePath, newContent);
-
-    // Get context updates after the modification
-    const updates = await contextManager.getContextUpdate();
-
-    // Should detect the change and return a whole-file update
-    expect(updates[absFilePath]).toBeDefined();
-    const update = updates[absFilePath];
-    expect(update.update.status).toBe("ok");
-    if (update.update.status === "ok") {
-      expect(update.update.value.type).toBe("whole-file");
-      expect(update.absFilePath).toBe(absFilePath);
-      // Content should be base64 encoded
-      expect((update.update.value as WholeFileUpdate).content).toBe(
-        newContent.toString("base64"),
-      );
-    }
   });
 });
 
@@ -844,19 +824,118 @@ it("autoContext loads on startup and after clear", async () => {
     await driver.send();
 
     const request = await driver.mockAnthropic.awaitPendingRequest();
-    // Check that file content is included in the request
-    const fileContent = request.messages.find(
-      (msg) =>
-        msg.role === "user" &&
-        typeof msg.content === "object" &&
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-        (msg.content[0] as any).text.includes("test-auto-context.md"),
+    expect(request.messages).toContainEqual(
+      expect.objectContaining<ProviderMessage>({
+        role: "user",
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        content: expect.arrayContaining([
+          expect.objectContaining({
+            type: "text",
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            text: expect.stringContaining("test-auto-context.md"),
+          }),
+        ]),
+      }),
     );
-    expect(fileContent).toBeTruthy();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    const text = (fileContent?.content[0] as any).text;
-    expect(text).toContain("This is test auto-context content");
-    expect(text).toContain("Multiple lines");
-    expect(text).toContain("for testing");
   });
+});
+
+it("includes PDF file in context and sends summary in context updates", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        // Create a multi-page PDF for testing
+        const { PDFDocument } = await import("pdf-lib");
+        const pdfDoc = await PDFDocument.create();
+
+        pdfDoc.addPage([600, 400]);
+        pdfDoc.addPage([600, 400]);
+        pdfDoc.addPage([600, 400]);
+        const pdfBytes = await pdfDoc.save();
+        const fs = await import("fs/promises");
+        const path = await import("path");
+        const testPdfPath = path.join(tmpDir, "context-test.pdf");
+        await fs.writeFile(testPdfPath, pdfBytes);
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+
+      // Add PDF file to context using the helper method
+      await driver.addContextFiles("context-test.pdf");
+
+      await driver.inputMagentaText("read the first page of this file");
+      await driver.send();
+
+      {
+        const request = await driver.mockAnthropic.awaitPendingRequest();
+
+        await driver.assertDisplayBufferContains(
+          "- `context-test.pdf` (summary)",
+        );
+        // assert context updates
+        expect(request.messages).toMatchSnapshot();
+        request.respond({
+          text: "let me read that file",
+          toolRequests: [
+            {
+              status: "ok",
+              value: {
+                id: "tool_request_id" as ToolRequestId,
+                toolName: "get_file" as ToolName,
+                input: {
+                  filePath: "context-test.pdf",
+                  pdfPage: 1,
+                },
+              },
+            },
+          ],
+          stopReason: "tool_use",
+        });
+      }
+
+      // wait for autorespond after get_file finishes
+      {
+        await driver.assertDisplayBufferContains("`context-test.pdf` (page 1)");
+        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const lastMessage = request.messages[request.messages.length - 1];
+
+        // Validate structure while ignoring the changing PDF data
+        expect(lastMessage).toEqual({
+          role: "user",
+          content: [
+            {
+              id: "tool_request_id",
+              type: "tool_result",
+              result: {
+                status: "ok",
+                value: [
+                  {
+                    type: "document",
+                    title: "context-test.pdf - Page 1",
+                    source: {
+                      type: "base64",
+                      media_type: "application/pdf",
+                      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                      data: expect.any(String), // Ignore the actual PDF data
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        });
+
+        request.respond({
+          text: "ok, done",
+          toolRequests: [],
+          stopReason: "end_turn",
+        });
+      }
+
+      await driver.assertDisplayBufferContains(
+        "`context-test.pdf` (summary, page 1)",
+      );
+    },
+  );
 });

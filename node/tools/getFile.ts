@@ -25,11 +25,11 @@ import {
 import type { StaticTool, ToolName } from "./types.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
 import type { ContextManager } from "../context/context-manager.ts";
-import type {
-  ProviderTextContent,
-  ProviderImageContent,
-} from "../providers/provider-types.ts";
-import { extractPdfText } from "../utils/pdf.ts";
+import type { ProviderToolResultContent } from "../providers/provider-types.ts";
+import {
+  extractPDFPage,
+  getSummaryAsProviderContent,
+} from "../utils/pdf-pages.ts";
 import type { MagentaOptions } from "../options.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
 
@@ -52,7 +52,7 @@ export type State =
 export type Msg =
   | {
       type: "finish";
-      result: Result<(ProviderTextContent | ProviderImageContent)[]>;
+      result: Result<ProviderToolResultContent[]>;
     }
   | {
       type: "automatic-approval";
@@ -211,7 +211,8 @@ export class GetFileTool implements StaticTool {
 
     if (
       this.context.contextManager.files[absFilePath] &&
-      !this.request.input.force
+      !this.request.input.force &&
+      this.request.input.pdfPage === undefined
     ) {
       this.context.myDispatch({
         type: "finish",
@@ -292,6 +293,7 @@ You already have the most up-to-date information about the contents of this file
   async readFile() {
     const filePath = this.request.input.filePath;
     const absFilePath = resolveFilePath(this.context.cwd, filePath);
+    const relFilePath = relativePath(this.context.cwd, absFilePath);
 
     const fileTypeInfo = await detectFileType(absFilePath);
     if (!fileTypeInfo) {
@@ -333,7 +335,7 @@ You already have the most up-to-date information about the contents of this file
       return;
     }
 
-    let result: ProviderTextContent | ProviderImageContent;
+    let result: ProviderToolResultContent[];
 
     if (fileTypeInfo.category === FileCategory.TEXT) {
       const bufferContents = await getBufferIfOpen({
@@ -375,41 +377,134 @@ You already have the most up-to-date information about the contents of this file
         },
       });
 
-      result = {
-        type: "text",
-        text: textContent,
-      };
+      result = [
+        {
+          type: "text",
+          text: textContent,
+        },
+      ];
     } else if (fileTypeInfo.category === FileCategory.PDF) {
-      // Extract text from PDF
-      const pdfTextResult = await extractPdfText(absFilePath);
-      if (pdfTextResult.status === "error") {
-        this.context.myDispatch({
-          type: "finish",
-          result: {
-            status: "error",
-            error: pdfTextResult.error,
+      // Check if we've already provided this PDF content to avoid redundant operations
+      const existingFileInfo = this.context.contextManager.files[absFilePath];
+      const agentView = existingFileInfo?.agentView;
+
+      if (this.request.input.pdfPage !== undefined) {
+        // Check if we've already sent this specific page
+        if (
+          agentView?.type === "pdf" &&
+          agentView.pages.includes(this.request.input.pdfPage)
+        ) {
+          this.context.myDispatch({
+            type: "finish",
+            result: {
+              status: "ok",
+              value: [
+                {
+                  type: "text",
+                  text: `Page ${this.request.input.pdfPage} of ${filePath} has already been provided to you in this conversation.`,
+                },
+              ],
+            },
+          });
+          return;
+        }
+
+        // Extract specific page as binary PDF content
+        const pageResult = await extractPDFPage(
+          absFilePath,
+          this.request.input.pdfPage,
+        );
+        if (pageResult.status === "error") {
+          this.context.myDispatch({
+            type: "finish",
+            result: {
+              status: "error",
+              error: pageResult.error,
+            },
+          });
+          return;
+        }
+
+        // For PDF pages, we use document content type
+        result = [
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: Buffer.from(pageResult.value).toString("base64"),
+            },
+            title: `${filePath} - Page ${this.request.input.pdfPage}`,
+          },
+        ];
+
+        // Notify context manager about the PDF page extraction
+        this.context.threadDispatch({
+          type: "context-manager-msg",
+          msg: {
+            type: "tool-applied",
+            absFilePath,
+            tool: {
+              type: "get-file-pdf",
+              content: {
+                type: "page",
+                pdfPage: this.request.input.pdfPage,
+              },
+            },
+            fileTypeInfo,
           },
         });
-        return;
-      }
+      } else {
+        // Check if we've already sent the PDF summary
+        if (agentView?.type === "pdf" && agentView.summary) {
+          this.context.myDispatch({
+            type: "finish",
+            result: {
+              status: "ok",
+              value: [
+                {
+                  type: "text",
+                  text: `The summary information for ${filePath} has already been provided to you in this conversation.`,
+                },
+              ],
+            },
+          });
+          return;
+        }
 
-      this.context.threadDispatch({
-        type: "context-manager-msg",
-        msg: {
-          type: "tool-applied",
+        // Get basic PDF info without pdfPage parameter
+        const pageCountResult = await getSummaryAsProviderContent(
           absFilePath,
-          tool: {
-            type: "get-file",
-            content: pdfTextResult.value,
-          },
-          fileTypeInfo,
-        },
-      });
+          relFilePath,
+        );
+        if (pageCountResult.status === "error") {
+          this.context.myDispatch({
+            type: "finish",
+            result: {
+              status: "error",
+              error: pageCountResult.error,
+            },
+          });
+          return;
+        }
 
-      result = {
-        type: "text",
-        text: pdfTextResult.value,
-      };
+        this.context.threadDispatch({
+          type: "context-manager-msg",
+          msg: {
+            type: "tool-applied",
+            absFilePath,
+            tool: {
+              type: "get-file-pdf",
+              content: {
+                type: "summary",
+              },
+            },
+            fileTypeInfo,
+          },
+        });
+
+        result = pageCountResult.value;
+      }
     } else {
       // Handle other binary files (images)
       const buffer = await fs.promises.readFile(absFilePath);
@@ -435,18 +530,20 @@ You already have the most up-to-date information about the contents of this file
 
       switch (fileTypeInfo.category) {
         case FileCategory.IMAGE:
-          result = {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: fileTypeInfo.mimeType as
-                | "image/jpeg"
-                | "image/png"
-                | "image/gif"
-                | "image/webp",
-              data: base64Data,
+          result = [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: fileTypeInfo.mimeType as
+                  | "image/jpeg"
+                  | "image/png"
+                  | "image/gif"
+                  | "image/webp",
+                data: base64Data,
+              },
             },
-          };
+          ];
           break;
         default:
           assertUnreachable(fileTypeInfo.category);
@@ -457,7 +554,7 @@ You already have the most up-to-date information about the contents of this file
       type: "finish",
       result: {
         status: "ok",
-        value: [result],
+        value: result,
       },
     });
 
@@ -502,13 +599,22 @@ You already have the most up-to-date information about the contents of this file
     }
   }
 
+  private formatFileDisplay() {
+    const filePath = this.request.input.filePath;
+    const pageInfo =
+      this.request.input.pdfPage !== undefined
+        ? ` (page ${this.request.input.pdfPage})`
+        : "";
+    return withInlineCode(d`\`${filePath}\`${pageInfo}`);
+  }
+
   renderSummary() {
     switch (this.state.state) {
       case "pending":
       case "processing":
-        return d`👀⚙️ ${withInlineCode(d`\`${this.request.input.filePath}\``)}`;
+        return d`👀⚙️ ${this.formatFileDisplay()}`;
       case "pending-user-action":
-        return d`👀⏳ May I read file ${withInlineCode(d`\`${this.request.input.filePath}\``)}?
+        return d`👀⏳ May I read file ${this.formatFileDisplay()}?
 
 ┌────────────────┐
 │ ${withBindings(
@@ -537,7 +643,7 @@ You already have the most up-to-date information about the contents of this file
 └────────────────┘`;
       case "done":
         if (this.state.result.result.status == "error") {
-          return d`👀❌ ${withInlineCode(d`\`${this.request.input.filePath}\``)}`;
+          return d`👀❌ ${this.formatFileDisplay()}`;
         } else {
           // Count lines in the result
           let lineCount = 0;
@@ -551,7 +657,7 @@ You already have the most up-to-date information about the contents of this file
             }
           }
           const lineCountStr = lineCount > 0 ? ` [+ ${lineCount}]` : "";
-          return d`👀✅ ${withInlineCode(d`\`${this.request.input.filePath}\``)}${lineCountStr}`;
+          return d`👀✅ ${this.formatFileDisplay()}${lineCountStr}`;
         }
       default:
         assertUnreachable(this.state);
@@ -582,6 +688,12 @@ File size limits: 1MB for text files, 10MB for images, 32MB for PDFs.`,
         description:
           "If true, get the full file contents even if the file is already part of the context.",
       },
+      pdfPage: {
+        type: "number",
+        description: `\
+For PDF files, you can use this 1-indexed parameter to fetch the given page of the file.
+Omitting this parameter for pdf files returns just the summary of the pdf.`,
+      },
     },
     required: ["filePath"],
   },
@@ -590,6 +702,7 @@ File size limits: 1MB for text files, 10MB for images, 32MB for PDFs.`,
 export type Input = {
   filePath: UnresolvedFilePath;
   force?: boolean;
+  pdfPage?: number;
 };
 
 export function validateInput(input: {
@@ -606,6 +719,24 @@ export function validateInput(input: {
     return {
       status: "error",
       error: "expected req.input.force to be a boolean",
+    };
+  }
+
+  if (input.pdfPage !== undefined && typeof input.pdfPage !== "number") {
+    return {
+      status: "error",
+      error: "expected req.input.pdfPage to be a number",
+    };
+  }
+
+  if (
+    input.pdfPage !== undefined &&
+    (input.pdfPage < 1 || !Number.isInteger(input.pdfPage))
+  ) {
+    return {
+      status: "error",
+      error:
+        "expected req.input.pdfPage to be a positive integer (1-indexed page number)",
     };
   }
 

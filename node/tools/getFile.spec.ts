@@ -37,6 +37,501 @@ it("render the getFile tool.", async () => {
   });
 });
 
+it("should extract PDF page as binary document when pdfPage parameter is provided", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        // Create a multi-page PDF for testing
+        const { PDFDocument } = await import("pdf-lib");
+        const pdfDoc = await PDFDocument.create();
+
+        const page1 = pdfDoc.addPage([600, 400]);
+        page1.drawText("First Page Content", { x: 50, y: 350 });
+
+        const page2 = pdfDoc.addPage([600, 400]);
+        page2.drawText("Second Page Content", { x: 50, y: 350 });
+
+        const pdfBytes = await pdfDoc.save();
+        const fs = await import("fs/promises");
+        const path = await import("path");
+        const testPdfPath = path.join(tmpDir, "multipage.pdf");
+        await fs.writeFile(testPdfPath, pdfBytes);
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+
+      // Request to extract a specific page from PDF
+      await driver.inputMagentaText(`Please read page 2 of multipage.pdf`);
+      await driver.send();
+
+      const request = await driver.mockAnthropic.awaitPendingRequest();
+      request.respond({
+        stopReason: "tool_use",
+        text: "I'll extract the specific page from the PDF",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "pdf_page_request" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: {
+                filePath: "multipage.pdf" as UnresolvedFilePath,
+                pdfPage: 2,
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(`👀✅ \`multipage.pdf`);
+
+      // Verify the tool result contains document content
+      const toolResultRequest =
+        await driver.mockAnthropic.awaitPendingRequest();
+      const toolResultMessage =
+        toolResultRequest.messages[toolResultRequest.messages.length - 2];
+
+      expect(toolResultMessage.role).toBe("user");
+      expect(Array.isArray(toolResultMessage.content)).toBe(true);
+
+      const toolResult = toolResultMessage.content[0] as Extract<
+        (typeof toolResultMessage.content)[0],
+        { type: "tool_result" }
+      >;
+      expect(toolResult.type).toBe("tool_result");
+      expect(toolResult.result.status).toBe("ok");
+
+      const toolResultResult = toolResult.result as Extract<
+        typeof toolResult.result,
+        { status: "ok" }
+      >;
+
+      const documentContent = toolResultResult.value.find(
+        (item) => item.type === "document",
+      ) as Extract<(typeof toolResultResult.value)[0], { type: "document" }>;
+      expect(documentContent).toBeDefined();
+
+      expect(documentContent.source.type).toBe("base64");
+      expect(documentContent.source.media_type).toBe("application/pdf");
+      expect(documentContent.source.data).toBeTruthy();
+      expect(documentContent.title).toContain("multipage.pdf - Page 2");
+
+      // Complete the conversation to ensure context is updated
+      toolResultRequest.respond({
+        stopReason: "end_turn",
+        toolRequests: [],
+        text: "I've extracted the PDF page successfully.",
+      });
+
+      // Verify the PDF appears in context with page information
+      await driver.assertDisplayBufferContains("# context:");
+      await driver.assertDisplayBufferContains(
+        "- `multipage.pdf` (summary, page 2)",
+      );
+
+      // Verify the context manager has the correct PDF page information
+      const contextManager =
+        driver.magenta.chat.getActiveThread().context.contextManager;
+      const contextFiles = contextManager.files;
+      expect(Object.keys(contextFiles)).toHaveLength(1);
+
+      const fileEntry = Object.values(contextFiles)[0];
+      expect(fileEntry.relFilePath).toBe("multipage.pdf");
+      expect(fileEntry.fileTypeInfo.category).toBe("pdf");
+      expect(fileEntry.agentView?.type).toBe("pdf");
+      if (fileEntry.agentView?.type === "pdf") {
+        expect(fileEntry.agentView.pages).toEqual([2]);
+        expect(fileEntry.agentView.summary).toBe(true);
+      }
+    },
+  );
+});
+
+it("should handle multiple PDF pages and show correct context summary", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        // Create a multi-page PDF for testing
+        const { PDFDocument } = await import("pdf-lib");
+        const pdfDoc = await PDFDocument.create();
+
+        // Add 5 pages to test page ranges
+        for (let i = 1; i <= 5; i++) {
+          const page = pdfDoc.addPage([600, 400]);
+          page.drawText(`Page ${i} Content`, { x: 50, y: 350 });
+        }
+
+        const pdfBytes = await pdfDoc.save();
+        const fs = await import("fs/promises");
+        const path = await import("path");
+        const testPdfPath = path.join(tmpDir, "multipage-test.pdf");
+        await fs.writeFile(testPdfPath, pdfBytes);
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+
+      // First, get the summary
+      await driver.inputMagentaText(`Please read multipage-test.pdf`);
+      await driver.send();
+
+      const summaryRequest = await driver.mockAnthropic.awaitPendingRequest();
+      summaryRequest.respond({
+        stopReason: "tool_use",
+        text: "I'll read the PDF summary",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "pdf_summary_request" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: {
+                filePath: "multipage-test.pdf" as UnresolvedFilePath,
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(`👀✅ \`multipage-test.pdf\``);
+
+      const summaryToolResult =
+        await driver.mockAnthropic.awaitPendingRequest();
+      summaryToolResult.respond({
+        stopReason: "end_turn",
+        toolRequests: [],
+        text: "I've read the PDF summary. Now let me get specific pages.",
+      });
+
+      // Verify context shows summary
+      await driver.assertDisplayBufferContains(
+        "- `multipage-test.pdf` (summary)",
+      );
+
+      // Now request page 1
+      await driver.inputMagentaText(`Please read page 1 of multipage-test.pdf`);
+      await driver.send();
+
+      const page1Request = await driver.mockAnthropic.awaitPendingRequest();
+      page1Request.respond({
+        stopReason: "tool_use",
+        text: "I'll extract page 1",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "pdf_page1_request" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: {
+                filePath: "multipage-test.pdf" as UnresolvedFilePath,
+                pdfPage: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(`👀✅ \`multipage-test.pdf`);
+
+      const page1ToolResult = await driver.mockAnthropic.awaitPendingRequest();
+      page1ToolResult.respond({
+        stopReason: "end_turn",
+        toolRequests: [],
+        text: "Got page 1. Now getting page 3.",
+      });
+
+      // Verify context shows summary + page 1
+      await driver.assertDisplayBufferContains(
+        "- `multipage-test.pdf` (summary, page 1)",
+      );
+
+      // Now request page 3 (non-contiguous)
+      await driver.inputMagentaText(`Please read page 3 of multipage-test.pdf`);
+      await driver.send();
+
+      const page3Request = await driver.mockAnthropic.awaitPendingRequest();
+      page3Request.respond({
+        stopReason: "tool_use",
+        text: "I'll extract page 3",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "pdf_page3_request" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: {
+                filePath: "multipage-test.pdf" as UnresolvedFilePath,
+                pdfPage: 3,
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(`👀✅ \`multipage-test.pdf`);
+
+      const page3ToolResult = await driver.mockAnthropic.awaitPendingRequest();
+      page3ToolResult.respond({
+        stopReason: "end_turn",
+        toolRequests: [],
+        text: "Got page 3. Now getting page 2.",
+      });
+
+      // Verify context shows summary + pages 1, 3
+      await driver.assertDisplayBufferContains(
+        "- `multipage-test.pdf` (summary, pages 1, 3)",
+      );
+
+      // Now request page 2 (to create a contiguous range 1-3)
+      await driver.inputMagentaText(`Please read page 2 of multipage-test.pdf`);
+      await driver.send();
+
+      const page2Request = await driver.mockAnthropic.awaitPendingRequest();
+      page2Request.respond({
+        stopReason: "tool_use",
+        text: "I'll extract page 2",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "pdf_page2_request" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: {
+                filePath: "multipage-test.pdf" as UnresolvedFilePath,
+                pdfPage: 2,
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(`👀✅ \`multipage-test.pdf`);
+
+      const page2ToolResult = await driver.mockAnthropic.awaitPendingRequest();
+      page2ToolResult.respond({
+        stopReason: "end_turn",
+        toolRequests: [],
+        text: "Got page 2. Now getting page 5.",
+      });
+
+      // Verify context shows summary + pages 1-3 (as a range)
+      await driver.assertDisplayBufferContains(
+        "- `multipage-test.pdf` (summary, pages 1-3)",
+      );
+
+      // Finally request page 5 (non-contiguous again)
+      await driver.inputMagentaText(`Please read page 5 of multipage-test.pdf`);
+      await driver.send();
+
+      const page5Request = await driver.mockAnthropic.awaitPendingRequest();
+      page5Request.respond({
+        stopReason: "tool_use",
+        text: "I'll extract page 5",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "pdf_page5_request" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: {
+                filePath: "multipage-test.pdf" as UnresolvedFilePath,
+                pdfPage: 5,
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(`👀✅ \`multipage-test.pdf`);
+
+      const page5ToolResult = await driver.mockAnthropic.awaitPendingRequest();
+      page5ToolResult.respond({
+        stopReason: "end_turn",
+        toolRequests: [],
+        text: "Got all the pages I need.",
+      });
+
+      // Verify final context shows summary + pages 1-3, 5
+      await driver.assertDisplayBufferContains(
+        "- `multipage-test.pdf` (summary, pages 1-3, 5)",
+      );
+
+      // Verify the context manager internal state
+      const contextManager =
+        driver.magenta.chat.getActiveThread().context.contextManager;
+      const contextFiles = contextManager.files;
+      expect(Object.keys(contextFiles)).toHaveLength(1);
+
+      const fileEntry = Object.values(contextFiles)[0];
+      expect(fileEntry.relFilePath).toBe("multipage-test.pdf");
+      expect(fileEntry.fileTypeInfo.category).toBe("pdf");
+      expect(fileEntry.agentView?.type).toBe("pdf");
+      if (fileEntry.agentView?.type === "pdf") {
+        expect(fileEntry.agentView.pages).toEqual([1, 2, 3, 5]); // Should be sorted
+        expect(fileEntry.agentView.summary).toBe(true);
+      }
+    },
+  );
+});
+
+it("should return PDF basic info when pdfPage parameter is not provided", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        // Create a multi-page PDF for testing
+        const { PDFDocument } = await import("pdf-lib");
+        const pdfDoc = await PDFDocument.create();
+
+        const page1 = pdfDoc.addPage([600, 400]);
+        page1.drawText("First Page Content", { x: 50, y: 350 });
+
+        const page2 = pdfDoc.addPage([600, 400]);
+        page2.drawText("Second Page Content", { x: 50, y: 350 });
+
+        const page3 = pdfDoc.addPage([600, 400]);
+        page3.drawText("Third Page Content", { x: 50, y: 350 });
+
+        const pdfBytes = await pdfDoc.save();
+        const fs = await import("fs/promises");
+        const path = await import("path");
+        const testPdfPath = path.join(tmpDir, "multipage.pdf");
+        await fs.writeFile(testPdfPath, pdfBytes);
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+
+      // Request to read PDF without pdfPage parameter
+      await driver.inputMagentaText(`Please read multipage.pdf`);
+      await driver.send();
+
+      const request = await driver.mockAnthropic.awaitPendingRequest();
+      request.respond({
+        stopReason: "tool_use",
+        text: "I'll read the PDF document",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "pdf_basic_request" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: {
+                filePath: "multipage.pdf" as UnresolvedFilePath,
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(`👀✅ \`multipage.pdf`);
+
+      // Verify the tool result contains basic PDF info
+      const toolResultRequest =
+        await driver.mockAnthropic.awaitPendingRequest();
+      const toolResultMessage =
+        toolResultRequest.messages[toolResultRequest.messages.length - 1];
+
+      expect(toolResultMessage.role).toBe("user");
+      expect(Array.isArray(toolResultMessage.content)).toBe(true);
+
+      const toolResult = toolResultMessage.content[0] as Extract<
+        (typeof toolResultMessage.content)[0],
+        { type: "tool_result" }
+      >;
+      expect(toolResult.type).toBe("tool_result");
+      expect(toolResult.result.status).toBe("ok");
+
+      const toolResultResult = toolResult.result as Extract<
+        typeof toolResult.result,
+        { status: "ok" }
+      >;
+
+      const textContent = toolResultResult.value.find(
+        (item) => item.type === "text",
+      ) as Extract<(typeof toolResultResult.value)[0], { type: "text" }>;
+      expect(textContent).toBeDefined();
+      expect(textContent.text).toContain("PDF Document: multipage.pdf");
+      expect(textContent.text).toContain("Pages: 3");
+      expect(textContent.text).toContain(
+        "Use get-file tool with a pdfPage parameter to access specific pages",
+      );
+    },
+  );
+});
+
+it("should handle invalid PDF page index", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        // Create a single-page PDF for testing
+        const { PDFDocument } = await import("pdf-lib");
+        const pdfDoc = await PDFDocument.create();
+
+        const page1 = pdfDoc.addPage([600, 400]);
+        page1.drawText("Only Page Content", { x: 50, y: 350 });
+
+        const pdfBytes = await pdfDoc.save();
+        const fs = await import("fs/promises");
+        const path = await import("path");
+        const testPdfPath = path.join(tmpDir, "singlepage.pdf");
+        await fs.writeFile(testPdfPath, pdfBytes);
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+
+      // Request to extract an invalid page from PDF
+      await driver.inputMagentaText(`Please read page 5 of singlepage.pdf`);
+      await driver.send();
+
+      const request = await driver.mockAnthropic.awaitPendingRequest();
+      request.respond({
+        stopReason: "tool_use",
+        text: "I'll try to extract page 5 from the PDF",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "pdf_invalid_page_request" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: {
+                filePath: "singlepage.pdf" as UnresolvedFilePath,
+                pdfPage: 5,
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(`👀❌ \`singlepage.pdf`);
+
+      // Verify the tool result contains error
+      const toolResultRequest =
+        await driver.mockAnthropic.awaitPendingRequest();
+      const toolResultMessage =
+        toolResultRequest.messages[toolResultRequest.messages.length - 1];
+
+      expect(toolResultMessage.role).toBe("user");
+      expect(Array.isArray(toolResultMessage.content)).toBe(true);
+
+      const toolResult = toolResultMessage.content[0] as Extract<
+        (typeof toolResultMessage.content)[0],
+        { type: "tool_result" }
+      >;
+      expect(toolResult.type).toBe("tool_result");
+      expect(toolResult.result.status).toBe("error");
+
+      const toolResultError = toolResult.result as Extract<
+        typeof toolResult.result,
+        { status: "error" }
+      >;
+      expect(toolResultError.error).toContain("Page index 5 is out of range");
+      expect(toolResultError.error).toContain("Document has 1 pages");
+    },
+  );
+});
+
 it("getFile automatically allows files matching getFileAutoAllowGlobs", async () => {
   await withDriver(
     {
@@ -406,20 +901,20 @@ it("getFile returns early when file is already in context", async () => {
     const toolResultMessage =
       toolResultRequest.messages[toolResultRequest.messages.length - 1];
 
-    if (
-      toolResultMessage.role === "user" &&
-      Array.isArray(toolResultMessage.content)
-    ) {
-      const toolResult = toolResultMessage.content.find(
-        (item) => item.type === "tool_result",
-      );
-      if (toolResult && toolResult.type === "tool_result") {
-        assertToolResultContainsText(
-          toolResult,
-          "already part of the thread context",
-        );
-      }
-    }
+    expect(toolResultMessage.role).toBe("user");
+    expect(Array.isArray(toolResultMessage.content)).toBe(true);
+
+    const toolResult = toolResultMessage.content.find(
+      (item) => item.type === "tool_result",
+    ) as Extract<
+      (typeof toolResultMessage.content)[0],
+      { type: "tool_result" }
+    >;
+    expect(toolResult).toBeDefined();
+    assertToolResultContainsText(
+      toolResult,
+      "already part of the thread context",
+    );
   });
 });
 
@@ -458,32 +953,34 @@ it("getFile reads file when force is true even if already in context", async () 
     const toolResultMessage =
       toolResultRequest.messages[toolResultRequest.messages.length - 1];
 
-    if (
-      toolResultMessage.role === "user" &&
-      Array.isArray(toolResultMessage.content)
-    ) {
-      const toolResult = toolResultMessage.content.find(
-        (item) => item.type === "tool_result",
-      );
-      if (toolResult && toolResult.type === "tool_result") {
-        assertToolResultContainsText(
-          toolResult,
-          "Moonlight whispers through the trees",
-        );
+    expect(toolResultMessage.role).toBe("user");
+    expect(Array.isArray(toolResultMessage.content)).toBe(true);
 
-        // Verify that the "already part of the thread context" message is NOT present
-        const result = toolResult.result;
-        if (result.status === "ok") {
-          const hasContextText = result.value.some((item) => {
-            if (typeof item === "object" && item.type === "text") {
-              return item.text.includes("already part of the thread context");
-            }
-            return false;
-          });
-          expect(hasContextText).toBe(false);
-        }
+    const toolResult = toolResultMessage.content.find(
+      (item) => item.type === "tool_result",
+    ) as Extract<
+      (typeof toolResultMessage.content)[0],
+      { type: "tool_result" }
+    >;
+    expect(toolResult).toBeDefined();
+    assertToolResultContainsText(
+      toolResult,
+      "Moonlight whispers through the trees",
+    );
+
+    // Verify that the "already part of the thread context" message is NOT present
+    const result = toolResult.result as Extract<
+      typeof toolResult.result,
+      { status: "ok" }
+    >;
+    expect(result.status).toBe("ok");
+    const hasContextText = result.value.some((item) => {
+      if (typeof item === "object" && item.type === "text") {
+        return item.text.includes("already part of the thread context");
       }
-    }
+      return false;
+    });
+    expect(hasContextText).toBe(false);
   });
 });
 
@@ -601,11 +1098,11 @@ it("getFile reads unloaded buffer", async () => {
 
     const toolResult = toolResultMessage.content.find(
       (item) => item.type === "tool_result",
-    );
+    ) as Extract<
+      (typeof toolResultMessage.content)[0],
+      { type: "tool_result" }
+    >;
     expect(toolResult).toBeDefined();
-    if (!toolResult || toolResult.type !== "tool_result") {
-      throw new Error("Expected tool result");
-    }
 
     assertToolResultContainsText(
       toolResult,
@@ -613,18 +1110,17 @@ it("getFile reads unloaded buffer", async () => {
     );
 
     // Verify the full content is returned, not empty content
-    const result = toolResult.result;
-    expect(result.status).toBe("ok");
+    expect(toolResult.result.status).toBe("ok");
 
-    if (result.status !== "ok") {
-      throw new Error("Expected ok status");
-    }
+    const result = toolResult.result as Extract<
+      typeof toolResult.result,
+      { status: "ok" }
+    >;
 
-    const content = result.value.find((item) => item.type === "text");
+    const content = result.value.find(
+      (item) => item.type === "text",
+    ) as Extract<(typeof result.value)[0], { type: "text" }>;
     expect(content).toBeDefined();
-    if (!content || content.type !== "text") {
-      throw new Error("Expected text content");
-    }
 
     // Should contain the full poem, not be empty
     expect(content.text.trim()).not.toBe("");
@@ -674,20 +1170,18 @@ it("should process image files end-to-end", async () => {
     const toolResultMessage =
       toolResultRequest.messages[toolResultRequest.messages.length - 1];
 
-    if (
-      toolResultMessage.role === "user" &&
-      Array.isArray(toolResultMessage.content)
-    ) {
-      const toolResult = toolResultMessage.content[0];
-      if (toolResult.type === "tool_result") {
-        expect(toolResult.result.status).toBe("ok");
+    expect(toolResultMessage.role).toBe("user");
+    expect(Array.isArray(toolResultMessage.content)).toBe(true);
 
-        // The result should be image content, not text
-        if (toolResult.result.status === "ok") {
-          assertToolResultHasImageSource(toolResult, "image/jpeg");
-        }
-      }
-    }
+    const toolResult = toolResultMessage.content[0] as Extract<
+      (typeof toolResultMessage.content)[0],
+      { type: "tool_result" }
+    >;
+    expect(toolResult.type).toBe("tool_result");
+    expect(toolResult.result.status).toBe("ok");
+
+    // The result should be image content, not text
+    assertToolResultHasImageSource(toolResult, "image/jpeg");
 
     // Complete the conversation
     toolResultRequest.respond({
@@ -698,7 +1192,7 @@ it("should process image files end-to-end", async () => {
   });
 });
 
-it("getFile extracts text from PDF files", async () => {
+it("getFile provides PDF summary info when no pdfPage parameter is given", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
     await driver.inputMagentaText(`Try reading the PDF file sample2.pdf`);
@@ -724,46 +1218,45 @@ it("getFile extracts text from PDF files", async () => {
 
     await driver.assertDisplayBufferContains(`👀✅ \`sample2.pdf\``);
 
-    // Check that the PDF text content is properly extracted and returned
+    // Check that the PDF summary is returned
     const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
     const toolResultMessage =
       toolResultRequest.messages[toolResultRequest.messages.length - 1];
 
-    if (
-      toolResultMessage.role === "user" &&
-      Array.isArray(toolResultMessage.content)
-    ) {
-      const toolResult = toolResultMessage.content.find(
-        (item) => item.type === "tool_result",
-      );
-      if (toolResult && toolResult.type === "tool_result") {
-        const result = toolResult.result;
-        expect(result.status).toBe("ok");
+    expect(toolResultMessage.role).toBe("user");
+    expect(Array.isArray(toolResultMessage.content)).toBe(true);
 
-        if (result.status === "ok") {
-          const textContent = result.value.find((item) => item.type === "text");
-          expect(textContent).toBeDefined();
+    const toolResult = toolResultMessage.content.find(
+      (item) => item.type === "tool_result",
+    ) as Extract<
+      (typeof toolResultMessage.content)[0],
+      { type: "tool_result" }
+    >;
+    expect(toolResult).toBeDefined();
+    expect(toolResult.result.status).toBe("ok");
 
-          if (textContent && textContent.type === "text") {
-            // Verify that we get text content, not base64 binary data
-            expect(textContent.text).not.toMatch(/^[A-Za-z0-9+/=]+$/); // Not base64
-            expect(textContent.text.length).toBeGreaterThan(0);
+    const result = toolResult.result as Extract<
+      typeof toolResult.result,
+      { status: "ok" }
+    >;
 
-            // Should contain page markers that we add during extraction
-            expect(textContent.text).toMatch(/--- Page \d+ ---/);
+    const textContent = result.value.find(
+      (item) => item.type === "text",
+    ) as Extract<(typeof result.value)[0], { type: "text" }>;
+    expect(textContent).toBeDefined();
 
-            // Should contain the actual PDF text content
-            expect(textContent.text).toContain("Test Page");
-          }
-        }
-      }
-    }
+    // Should contain PDF summary information
+    expect(textContent.text).toContain("PDF Document: sample2.pdf");
+    expect(textContent.text).toContain("Pages:");
+    expect(textContent.text).toContain(
+      "Use get-file tool with a pdfPage parameter to access specific pages",
+    );
 
     // Handle the auto-respond message
     toolResultRequest.respond({
       stopReason: "end_turn",
       toolRequests: [],
-      text: "I've successfully extracted text from the PDF.",
+      text: "I've successfully read the PDF summary.",
     });
   });
 });
@@ -802,19 +1295,21 @@ it("should reject binary files that are not supported", async () => {
     const toolResultMessage =
       toolResultRequest.messages[toolResultRequest.messages.length - 1];
 
-    if (
-      toolResultMessage.role === "user" &&
-      Array.isArray(toolResultMessage.content)
-    ) {
-      const toolResult = toolResultMessage.content[0];
-      if (toolResult.type === "tool_result") {
-        expect(toolResult.result.status).toBe("error");
+    expect(toolResultMessage.role).toBe("user");
+    expect(Array.isArray(toolResultMessage.content)).toBe(true);
 
-        if (toolResult.result.status === "error") {
-          expect(toolResult.result.error).toContain("Unsupported file type");
-        }
-      }
-    }
+    const toolResult = toolResultMessage.content[0] as Extract<
+      (typeof toolResultMessage.content)[0],
+      { type: "tool_result" }
+    >;
+    expect(toolResult.type).toBe("tool_result");
+    expect(toolResult.result.status).toBe("error");
+
+    const toolResultError = toolResult.result as Extract<
+      typeof toolResult.result,
+      { status: "error" }
+    >;
+    expect(toolResultError.error).toContain("Unsupported file type");
   });
 });
 
@@ -1144,19 +1639,21 @@ it("should handle file size limits appropriately", async () => {
       const toolResultMessage =
         toolResultRequest.messages[toolResultRequest.messages.length - 1];
 
-      if (
-        toolResultMessage.role === "user" &&
-        Array.isArray(toolResultMessage.content)
-      ) {
-        const toolResult = toolResultMessage.content[0];
-        if (toolResult.type === "tool_result") {
-          expect(toolResult.result.status).toBe("error");
+      expect(toolResultMessage.role).toBe("user");
+      expect(Array.isArray(toolResultMessage.content)).toBe(true);
 
-          if (toolResult.result.status === "error") {
-            expect(toolResult.result.error).toContain("File too large");
-          }
-        }
-      }
+      const toolResult = toolResultMessage.content[0] as Extract<
+        (typeof toolResultMessage.content)[0],
+        { type: "tool_result" }
+      >;
+      expect(toolResult.type).toBe("tool_result");
+      expect(toolResult.result.status).toBe("error");
+
+      const toolResultError = toolResult.result as Extract<
+        typeof toolResult.result,
+        { status: "error" }
+      >;
+      expect(toolResultError.error).toContain("File too large");
 
       // No cleanup needed since the file is in the temporary test directory
     },

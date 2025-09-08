@@ -6,15 +6,19 @@ exports[`context-files end-to-end 1`] = `
     "content": [
       {
         "text": "These files are part of your context. This is the latest information about the content of each file.
-From now on, whenever any of these files are updated by the user, you will get a message letting you know.
-- \`poem.txt\`
-\`\`\`
-Moonlight whispers through the trees,
+From now on, whenever any of these files are updated by the user, you will get a message letting you know.",
+        "type": "text",
+      },
+      {
+        "text": "File \`poem.txt\`",
+        "type": "text",
+      },
+      {
+        "text": "Moonlight whispers through the trees,
 Silver shadows dance with ease.
 Stars above like diamonds bright,
 Paint their stories in the night.
-
-\`\`\`",
+",
         "type": "text",
       },
       {
@@ -33,20 +37,28 @@ exports[`context-files multiple, weird path names 1`] = `
     "content": [
       {
         "text": "These files are part of your context. This is the latest information about the content of each file.
-From now on, whenever any of these files are updated by the user, you will get a message letting you know.
-- \`poem.txt\`
-\`\`\`
-Moonlight whispers through the trees,
+From now on, whenever any of these files are updated by the user, you will get a message letting you know.",
+        "type": "text",
+      },
+      {
+        "text": "File \`poem.txt\`",
+        "type": "text",
+      },
+      {
+        "text": "Moonlight whispers through the trees,
 Silver shadows dance with ease.
 Stars above like diamonds bright,
 Paint their stories in the night.
-
-\`\`\`
-- \`poem 3.txt\`
-\`\`\`
-poem3
-
-\`\`\`",
+",
+        "type": "text",
+      },
+      {
+        "text": "File \`poem 3.txt\`",
+        "type": "text",
+      },
+      {
+        "text": "poem3
+",
         "type": "text",
       },
       {
@@ -59,13 +71,68 @@ poem3
 ]
 `;
 
+exports[`includes PDF file in context and sends summary in context updates 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "These files are part of your context. This is the latest information about the content of each file.
+From now on, whenever any of these files are updated by the user, you will get a message letting you know.",
+        "type": "text",
+      },
+      {
+        "text": "PDF Document: context-test.pdf
+Pages: 3
+
+Use get-file tool with a pdfPage parameter to access specific pages.",
+        "type": "text",
+      },
+      {
+        "text": "read the first page of this file",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+]
+`;
+
+exports[`includes PDF file in context and sends summary in context updates 2`] = `
+{
+  "content": [
+    {
+      "id": "tool_request_id",
+      "result": {
+        "status": "ok",
+        "value": [
+          {
+            "source": {
+              "data": "JVBERi0xLjcKJYGBgYEKCjUgMCBvYmoKPDwKL0ZpbHRlciAvRmxhdGVEZWNvZGUKL1R5cGUgL09ialN0bQovTiA0Ci9GaXJzdCAyMAovTGVuZ3RoIDI2MAo+PgpzdHJlYW0KeJzVUk1LxDAQvedXzNE9ZZqmTVdKwe3HRYSyeFI8hG1YCrKRfoD+e182u4oH8SzhkUzem8xMZhJiUqQ1pWQK0pSlispSyMePN0eyt0c3C3k/DjM9g2Xa04uQtV9PCyWiqsS3traLffVHEZ0oCeKrop/8sB7cRGXXdh2zYeZcAzmzarDXwBZQsMGpAmfA6AtwZ1Lm9A5cF5Gb6BP4sza7+LfYoc2DpolaXUT7K26I1cY31F/5bCshH/zQ2MXRTXOrWGVcKA0y0cXTBt8xObv4/1vcOf/Rn36t8EefQ3uF3LvZr9MBjQZThR9yw2h3/h1zwliIRYgZpqW3kwvjch2IT0Oajd4KZW5kc3RyZWFtCmVuZG9iagoKNiAwIG9iago8PAovU2l6ZSA3Ci9Sb290IDIgMCBSCi9JbmZvIDMgMCBSCi9GaWx0ZXIgL0ZsYXRlRGVjb2RlCi9UeXBlIC9YUmVmCi9MZW5ndGggMzQKL1cgWyAxIDIgMiBdCi9JbmRleCBbIDAgNyBdCj4+CnN0cmVhbQp4nBXEMQ4AIAgEsB7G3ff6eQgdiu5y2bLVduKRfAZDiQKuCmVuZHN0cmVhbQplbmRvYmoKCnN0YXJ0eHJlZgozNzgKJSVFT0Y=",
+              "media_type": "application/pdf",
+              "type": "base64",
+            },
+            "title": "context-test.pdf - Page 1",
+            "type": "document",
+          },
+        ],
+      },
+      "type": "tool_result",
+    },
+  ],
+  "role": "user",
+}
+`;
+
 exports[`sends update if the file was edited pre-insert 1`] = `
 {
   "content": [
     {
       "text": "These files are part of your context. This is the latest information about the content of each file.
-From now on, whenever any of these files are updated by the user, you will get a message letting you know.
-- \`poem.txt\`
+From now on, whenever any of these files are updated by the user, you will get a message letting you know.",
+      "type": "text",
+    },
+    {
+      "text": "- \`poem.txt\`
 \`\`\`diff
 Index: poem.txt
 ===================================================================

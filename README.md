@@ -28,13 +28,14 @@ I sometimes write about AI, neovim and magenta specifically:
 
 # Roadmap
 
-- use claude code auth / api (copy from opencode)
 - gemini 2.5 pro provider
 - local code embedding & indexing via chroma db, to support a semantic code search tool
 
 # Updates
 
 ## August 2025
+
+**PDF updates** - Large PDFs are too big to put into the agent in binary format. I initially worked around this by converting pdfs into text, however I was finding that quite limited as it caused a lot of relevant info - diagrams, images and typeset math - to be lost or risk corruption in the translation process. One of the ways that I use magenta is as a research/writing assistant, so this wasn't really working for me. So I updated the getFile tool to read PDFs one page at a time. When the file is added, we just get a summary of how many pages there are. When the agent reads a page, that page is sent to the agent in binary format.
 
 **Claude Max Authentication** - Added full support for Anthropic's Claude Max OAuth2 authentication flow. You can now use your Anthropic account directly without needing an API key. Set `authType = "max"` in your profile configuration and Magenta will automatically handle the OAuth flow, including opening your browser for authentication and securely storing refresh tokens. This enables access to Claude models through your Anthropic account subscription rather than pay-per-token API usage. (h/t [opencode](https://github.com/sst/opencode) who actually reverse engineered the claude code API to make this possible)
 

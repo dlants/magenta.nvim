@@ -957,8 +957,7 @@ describe("node/chat/thread.spec.ts", () => {
         (content) =>
           content.type === "text" &&
           (content.text.includes("poem.txt") ||
-            content.text.includes("poem2.txt")) &&
-          content.text.includes("```"), // Context updates are formatted as code blocks
+            content.text.includes("poem2.txt")),
       );
       expect(contextContent).toBeDefined();
 

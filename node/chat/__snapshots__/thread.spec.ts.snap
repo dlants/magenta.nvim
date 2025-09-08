@@ -402,23 +402,31 @@ exports[`node/chat/thread.spec.ts > forks a thread with multiple messages into a
     "content": [
       {
         "text": "These files are part of your context. This is the latest information about the content of each file.
-From now on, whenever any of these files are updated by the user, you will get a message letting you know.
-- \`poem.txt\`
-\`\`\`
-Moonlight whispers through the trees,
+From now on, whenever any of these files are updated by the user, you will get a message letting you know.",
+        "type": "text",
+      },
+      {
+        "text": "File \`poem2.txt\`",
+        "type": "text",
+      },
+      {
+        "text": "Moonlight whispers through the trees,
 Silver shadows dance with ease.
 Stars above like diamonds bright,
 Paint their stories in the night.
-
-\`\`\`
-- \`poem2.txt\`
-\`\`\`
-Moonlight whispers through the trees,
+",
+        "type": "text",
+      },
+      {
+        "text": "File \`poem.txt\`",
+        "type": "text",
+      },
+      {
+        "text": "Moonlight whispers through the trees,
 Silver shadows dance with ease.
 Stars above like diamonds bright,
 Paint their stories in the night.
-
-\`\`\`",
+",
         "type": "text",
       },
       {

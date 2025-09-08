@@ -33,45 +33,16 @@ The main architectural files are:
 - [tea/tea.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tea/tea.ts) - Manages the rendering cycle
 - [view.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tea/view.ts) - Implements the VDOM-like declarative rendering template
 
-# View code
+# View System
 
-**THIS IS NOT REACT**. **DO NOT USE REACT VIEWS OR DOM** This uses a templating library for a TUI running inside a neovim buffer.
+For detailed view system documentation and templating patterns, see the dedicated view context file. When working on views, use `get_file` to access `node/tea/context.md` for comprehensive guidelines including:
 
-Views in magenta.nvim are built using a declarative templating approach:
+- Template literal syntax and composition patterns
+- Interactive bindings with `withBindings`
+- Declarative rendering approaches
+- TUI-specific considerations
 
-## Template Literal and Composition
-
-The `d` tag function is used for templates, similar to JSX but with template literals:
-
-```typescript
-// Basic text rendering
-d`This is some text`;
-
-// Dynamic content interpolation
-d`User: ${username}`;
-
-// Conditional rendering
-d`${isLoading ? d`Loading...` : d`Content loaded!`}`;
-
-// Rendering lists
-d`${items.map((item) => d`- ${item.name}\n`)}`;
-
-// Component composition
-d`Header: ${headerView({ title })}\nBody: ${bodyView({ content })}`;
-```
-
-## Adding Interactivity
-
-You can attach keybindings to sections of text with `withBindings`:
-
-```typescript
-withBindings(d`Press Enter to continue`, {
-  "<CR>": () => dispatch({ type: "continue" }),
-  q: () => dispatch({ type: "quit" }),
-});
-```
-
-Views render to a neovim buffer and update on every dispatch.
+**Important**: This is NOT React - it's a TUI templating system for neovim buffers.
 
 # Putting it all together
 
@@ -161,82 +132,20 @@ ${withBindings(d`[Toggle]`, {
 
 # Testing
 
-to run the full test suite, use `npx vitest run` from the project root. You do not need to cd.
-to run a specific test file, use `npx vitest run <file>`. **Important** You do not need to cd.
-tests should make use of the `node/test/preamble.ts` helpers.
-when doing integration-level testing, like user flows, use the `withDriver` helper and the interactions in `node/test/driver.ts`. When performing generic user actions that may be reusable between tests, put them into the NvimDriver class as helpers.
+For detailed testing documentation, patterns, and best practices, see the dedicated testing context file. When working on tests, use `get_file` to access `node/test/context.md` for comprehensive testing guidelines including:
 
-As of July 2025, tests are now run in parallel for improved performance. The test infrastructure has been updated to support concurrent test execution.
+- Test environment setup and fixture handling
+- Mock provider usage patterns
+- Driver interactions and assertions
+- Type-safe testing patterns
+- Common testing anti-patterns to avoid
 
-## Test Environment Setup
+Quick reference:
 
-**Fixture Files & Directory Structure:**
-
-- Each test gets a fresh temporary directory in `/tmp/magenta-test/{testId}/`
-- Files from `node/test/fixtures/` are copied into this temp directory for each test
-- Available fixture files include `poem.txt` and others
-- Nvim runs in this temporary directory, so files can be safely mutated during tests
-- The temp directory is automatically cleaned up after each test
-
-**Test Pattern:**
-
-```typescript
-import { withDriver } from "../test/preamble";
-
-test("my test", async () => {
-  await withDriver({}, async (driver) => {
-    // Test code here - nvim runs in temp dir with fixture files
-  });
-});
-```
-
-## Available Mocks & Test Interactions
-
-**Mock Provider:**
-
-- `driver.mockAnthropic` - Pre-configured mock provider that captures all requests
-- `await driver.mockAnthropic.awaitPendingForceToolUseRequest()` - Wait for and capture forced tool use requests
-- `await driver.mockAnthropic.awaitPendingRequest()` - Wait for regular message requests
-- `await driver.mockAnthropic.respondToForceToolUse({...})` - Send mock responses
-- No need to manually mock providers - they're already set up in the test infrastructure
-
-**Driver Interactions (prefer these over internal API access):**
-
-- `await driver.editFile("poem.txt")` - Open fixture files
-- `await driver.command("normal! gg")` - Execute vim commands
-- `await driver.magenta.command("predict-edit")` - Execute magenta commands
-- Use real nvim interactions to trigger change tracking naturally
-
-**Testing Best Practices:**
-
-- **DO**: Use realistic nvim interactions (`driver.editFile()`, `driver.command()`)
-- **DON'T**: Reach into internal APIs (`driver.magenta.changeTracker.onTextDocumentDidChange()`)
-- **DO**: Let the system work naturally - make real edits and let change tracking happen
-- **DO**: Write integration tests that exercise the full user flow
-- **DON'T**: Mock internal components - use the provided driver and mock provider
-
-**Change Tracker Testing:**
-
-- **DO**: Use `driver.assertChangeTrackerHasEdits(count)` and `driver.assertChangeTrackerContains(changes)` instead of arbitrary timeouts
-- **DO**: Be aware that rapid edits may be batched into single changes by the tracker
-- **DO**: Use explicit assertions about what changes should be tracked rather than waiting fixed amounts of time
-- **DON'T**: Use `setTimeout()` or fixed delays when waiting for change tracking - use the assertion methods instead
-
-**Mock Provider Request Objects:**
-Force tool use requests captured by `awaitPendingForceToolUseRequest()` contain:
-
-- `request.spec` - The tool specification used
-- `request.model` - Which model was requested
-- `request.messages` - The messages array containing user/assistant conversation
-- `request.systemPrompt` - The system prompt used (if any)
-- `request.defer` - Promise resolution control
-
-**System Prompt vs User Messages:**
-When implementing AI features, maintain proper separation:
-
-- **System prompt**: General instructions about the agent's role and behavior ("You have to do your best to predict...")
-- **User messages**: Specific contextual data (buffer content, cursor position, recent changes)
-  This separation keeps the system prompt focused on behavior while allowing dynamic context in messages.
+- Run tests: `npx vitest run` (from project root)
+- Run specific test: `npx vitest run <file>`
+- Use `withDriver()` helper for integration tests
+- Prefer realistic nvim interactions over internal API access
 
 # Type checks
 
