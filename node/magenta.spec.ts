@@ -210,9 +210,11 @@ it("should use project settings to allow bash commands without permission", asyn
         const magentaDir = path.join(tmpDir, ".magenta");
         await mkdir(magentaDir, { recursive: true });
 
-        // Create project settings file that allows bash commands
+        // Create project settings file that allows echo commands
         const projectSettings = {
-          commandAllowlist: ["bash_command"],
+          commandConfig: {
+            echo: { allowAll: true },
+          },
         };
 
         await writeFile(
@@ -245,7 +247,7 @@ it("should use project settings to allow bash commands without permission", asyn
       });
 
       // The bash command should execute without requiring user permission
-      // because it's in the project's commandAllowlist
+      // because echo is in the project's commandConfig with allowAll
 
       // First verify the command output appears (meaning it executed)
       await driver.assertDisplayBufferContains(`⚡✅ \`echo 'hello world'\``);

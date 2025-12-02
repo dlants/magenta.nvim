@@ -216,46 +216,53 @@ function vdomToString(node: VDOMNode): string {
 }
 
 it("insert requires approval for gitignored file", async () => {
-  await withDriver({}, async (driver) => {
-    const { $ } = await import("zx");
-    const cwd = await getcwd(driver.nvim);
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        const fsPromises = await import("fs/promises");
+        const pathModule = await import("path");
+        await fsPromises.writeFile(
+          pathModule.join(tmpDir, ".gitignore"),
+          "ignored-insert.txt\n",
+        );
+        await fsPromises.writeFile(
+          pathModule.join(tmpDir, "ignored-insert.txt"),
+          "existing content",
+        );
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+      await driver.inputMagentaText(
+        "Insert content in file ignored-insert.txt",
+      );
+      await driver.send();
 
-    // Create .gitignore and the ignored file
-    await $`cd ${cwd} && echo 'ignored-insert.txt' > .gitignore`;
-    fs.writeFileSync(
-      path.join(cwd, "ignored-insert.txt"),
-      "existing content",
-      "utf-8",
-    );
-
-    await driver.showSidebar();
-    await driver.inputMagentaText("Insert content in file ignored-insert.txt");
-    await driver.send();
-
-    const request = await driver.mockAnthropic.awaitPendingRequest();
-    request.respond({
-      stopReason: "tool_use",
-      text: "ok, here goes",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: "id" as ToolRequestId,
-            toolName: "insert" as ToolName,
-            input: {
-              filePath: "ignored-insert.txt" as UnresolvedFilePath,
-              insertAfter: "existing content",
-              content: "\nnew content",
+      const request = await driver.mockAnthropic.awaitPendingRequest();
+      request.respond({
+        stopReason: "tool_use",
+        text: "ok, here goes",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "id" as ToolRequestId,
+              toolName: "insert" as ToolName,
+              input: {
+                filePath: "ignored-insert.txt" as UnresolvedFilePath,
+                insertAfter: "existing content",
+                content: "\nnew content",
+              },
             },
           },
-        },
-      ],
-    });
+        ],
+      });
 
-    await driver.assertDisplayBufferContains(
-      "✏️⏳ May I insert in file `ignored-insert.txt`?",
-    );
-  });
+      await driver.assertDisplayBufferContains(
+        "✏️⏳ May I insert in file `ignored-insert.txt`?",
+      );
+    },
+  );
 });
 
 it("insert requires approval for file outside cwd", async () => {

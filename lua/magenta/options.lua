@@ -100,13 +100,67 @@ local defaults = {
     ".magenta/skills",
     ".claude/skills"
   },
-  commandAllowlist = {
-    "^ls( [^;&|()<>]*)?$",
-    "^pwd$",
-    "^echo( [^;&|()<>]*)?$",
-    "^git (status|log|diff|show|add|commit|push|reset|restore|branch|checkout|switch|fetch|pull|merge|rebase|tag|stash)( [^;&|()<>]*)?$",
-    "^ls [^;&()<>]* | grep [^;&|()<>]*$",
-    "^echo [^;&|()<>]* > [a-zA-Z0-9_\\-.]+$",
+  commandConfig = {
+    ls = { allowAll = true },
+    pwd = { args = { {} } },
+    echo = { allowAll = true },
+    cat = { args = { { { file = true } } } },
+    head = { args = { { "-n", { any = true } }, { { pattern = "-[0-9]+" } } } },
+    tail = { args = { { "-n", { any = true } }, { { pattern = "-[0-9]+" } } } },
+    wc = { args = { { { file = true } }, { "-l", { file = true } } } },
+    git = {
+      subCommands = {
+        status = { allowAll = true },
+        log = { allowAll = true },
+        diff = { allowAll = true },
+        show = { allowAll = true },
+        add = { allowAll = true },
+        commit = { allowAll = true },
+        push = { allowAll = true },
+        reset = { allowAll = true },
+        restore = { allowAll = true },
+        branch = { allowAll = true },
+        checkout = { allowAll = true },
+        switch = { allowAll = true },
+        fetch = { allowAll = true },
+        pull = { allowAll = true },
+        merge = { allowAll = true },
+        rebase = { allowAll = true },
+        tag = { allowAll = true },
+        stash = { allowAll = true },
+      }
+    },
+    -- ripgrep for searching file contents
+    rg = {
+      args = {
+        { { any = true } },                                                  -- rg "pattern"
+        { { any = true }, { file = true } },                                 -- rg "pattern" <dir>
+        { { any = true }, { restFiles = true } },                            -- rg "pattern" <file1> <file2> ...
+        { "-l",           { any = true } },                                  -- rg -l "pattern"
+        { "-l",           { any = true },      { file = true } },            -- rg -l "pattern" <dir>
+        { { any = true }, { file = true },     "--type",        { any = true } }, -- rg "pattern" <dir> --type <ext>
+        { "-l",           { any = true },      { file = true }, "--type",      { any = true } }, -- rg -l "pattern" <dir> --type <ext>
+        { { any = true }, "--type",            { any = true } },             -- rg "pattern" --type <ext>
+        { "-l",           { any = true },      "--type",        { any = true } }, -- rg -l "pattern" --type <ext>
+        { "-l",           { any = true },      { file = true }, "--type",      { any = true } }, -- rg -l "pattern" <dir> --type <ext>
+      }
+    },
+    -- fd for finding files by name (skips hidden/gitignored by default)
+    fd = {
+      args = {
+        {},                                                                  -- fd (list all files)
+        { { any = true } },                                                  -- fd "pattern"
+        { { any = true }, { file = true } },                                 -- fd "pattern" <dir>
+        { "-e",           { any = true } },                                  -- fd -e <ext>
+        { "-e",           { any = true }, { file = true } },                 -- fd -e <ext> <dir>
+        { "-t",           "f" },                                             -- fd -t f (files only)
+        { "-t",           "d" },                                             -- fd -t d (dirs only)
+        { "-t",           "f",            { any = true } },                  -- fd -t f "pattern"
+        { "-t",           "d",            { any = true } },                  -- fd -t d "pattern"
+        { "-t",           "f",            { any = true }, { file = true } }, -- fd -t f "pattern" <dir>
+        { "-t",           "d",            { any = true }, { file = true } }, -- fd -t d "pattern" <dir>
+      }
+    },
   },
   maxConcurrentSubagents = 3,
   chimeVolume = 0.3,

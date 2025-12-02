@@ -45,6 +45,7 @@ import type { MCPTool } from "./mcp/tool.ts";
 import { unwrapMcpToolMsg } from "./mcp/types.ts";
 import type { ThreadId, ThreadType } from "../chat/types.ts";
 import type { NvimCwd } from "../utils/files.ts";
+import type { Gitignore } from "./util.ts";
 export type { Tool, ToolRequestId } from "./types.ts";
 
 export type StaticToolMap = {
@@ -204,6 +205,7 @@ export class ToolManager {
       cwd: NvimCwd;
       options: MagentaOptions;
       chat: Chat;
+      gitignore: Gitignore;
     },
   ) {
     this.tools = {};
@@ -312,7 +314,10 @@ export class ToolManager {
             }
 
             const getFileTool = new GetFile.GetFileTool(staticRequest, {
-              ...this.context,
+              nvim: this.context.nvim,
+              cwd: this.context.cwd,
+              options: this.context.options,
+              gitignore: this.context.gitignore,
               contextManager: threadWrapper.thread.contextManager,
               threadDispatch: (msg) =>
                 this.context.dispatch({
@@ -487,6 +492,7 @@ export class ToolManager {
                 options: this.context.options,
                 rememberedCommands: this.context.chat.rememberedCommands,
                 getDisplayWidth: this.context.getDisplayWidth,
+                gitignore: this.context.gitignore,
               },
             );
 

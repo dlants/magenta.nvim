@@ -5,7 +5,7 @@ import type { AbsFilePath, NvimCwd } from "../utils/files.ts";
 import type { MagentaOptions } from "../options.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import { relativePath } from "../utils/files.ts";
-import { readGitignore } from "./util.ts";
+import type { Gitignore } from "./util.ts";
 
 function expandTilde(filepath: string): string {
   if (filepath.startsWith("~/") || filepath === "~") {
@@ -81,6 +81,7 @@ export async function canReadFile(
     cwd: NvimCwd;
     nvim: Nvim;
     options: MagentaOptions;
+    gitignore: Gitignore;
   },
 ): Promise<boolean> {
   const relFilePath = relativePath(context.cwd, absFilePath);
@@ -106,21 +107,21 @@ export async function canReadFile(
   }
 
   // Gitignored files require confirmation
-  const ig = await readGitignore(context.cwd);
-  if (ig.ignores(relFilePath)) {
+  if (context.gitignore.ignores(relFilePath)) {
     return false;
   }
 
   return true;
 }
 
-export async function canWriteFile(
+export function canWriteFile(
   absFilePath: AbsFilePath,
   context: {
     cwd: NvimCwd;
     options: MagentaOptions;
+    gitignore: Gitignore;
   },
-): Promise<boolean> {
+): boolean {
   const relFilePath = relativePath(context.cwd, absFilePath);
 
   // Skills files always require confirmation for writing
@@ -139,8 +140,7 @@ export async function canWriteFile(
   }
 
   // Gitignored files require confirmation
-  const ig = await readGitignore(context.cwd);
-  if (ig.ignores(relFilePath)) {
+  if (context.gitignore.ignores(relFilePath)) {
     return false;
   }
 

@@ -527,49 +527,53 @@ function newFunction() {
 });
 
 it("replace requires approval for gitignored file", async () => {
-  await withDriver({}, async (driver) => {
-    const { getcwd } = await import("../nvim/nvim.ts");
-    const { $ } = await import("zx");
-    const cwd = await getcwd(driver.nvim);
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        const fsPromises = await import("fs/promises");
+        const pathModule = await import("path");
+        await fsPromises.writeFile(
+          pathModule.join(tmpDir, ".gitignore"),
+          "ignored-replace.txt\n",
+        );
+        await fsPromises.writeFile(
+          pathModule.join(tmpDir, "ignored-replace.txt"),
+          "old content",
+        );
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+      await driver.inputMagentaText(
+        "Replace content in file ignored-replace.txt",
+      );
+      await driver.send();
 
-    // Create .gitignore and the ignored file
-    await $`cd ${cwd} && echo 'ignored-replace.txt' > .gitignore`;
-    fs.writeFileSync(
-      path.join(cwd, "ignored-replace.txt"),
-      "old content",
-      "utf-8",
-    );
-
-    await driver.showSidebar();
-    await driver.inputMagentaText(
-      "Replace content in file ignored-replace.txt",
-    );
-    await driver.send();
-
-    const request = await driver.mockAnthropic.awaitPendingRequest();
-    request.respond({
-      stopReason: "tool_use",
-      text: "ok, here goes",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: "id" as ToolRequestId,
-            toolName: "replace" as ToolName,
-            input: {
-              filePath: "ignored-replace.txt" as UnresolvedFilePath,
-              find: "old content",
-              replace: "new content",
+      const request = await driver.mockAnthropic.awaitPendingRequest();
+      request.respond({
+        stopReason: "tool_use",
+        text: "ok, here goes",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "id" as ToolRequestId,
+              toolName: "replace" as ToolName,
+              input: {
+                filePath: "ignored-replace.txt" as UnresolvedFilePath,
+                find: "old content",
+                replace: "new content",
+              },
             },
           },
-        },
-      ],
-    });
+        ],
+      });
 
-    await driver.assertDisplayBufferContains(
-      "✏️⏳ May I replace in file `ignored-replace.txt`?",
-    );
-  });
+      await driver.assertDisplayBufferContains(
+        "✏️⏳ May I replace in file `ignored-replace.txt`?",
+      );
+    },
+  );
 });
 
 it("replace requires approval for file outside cwd", async () => {

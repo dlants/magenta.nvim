@@ -6,14 +6,17 @@ import {
   type RelFilePath,
 } from "../utils/files";
 
-export async function readGitignore(cwd: NvimCwd): Promise<ignore.Ignore> {
+export type Gitignore = ignore.Ignore;
+
+export function readGitignoreSync(cwd: NvimCwd): Gitignore {
   const ig = ignore();
   try {
     const gitignorePath = resolveFilePath(cwd, ".gitignore" as RelFilePath);
-    const gitignoreContent = await fs.promises.readFile(gitignorePath, "utf8");
+    const gitignoreContent = fs.readFileSync(gitignorePath, "utf8");
     ig.add(gitignoreContent);
   } catch {
     // If .gitignore doesn't exist, just return empty ignore rules
   }
+
   return ig;
 }

@@ -1,5 +1,18 @@
 {
-  "commandAllowlist": [
-    "^npx tsc --noEmit$",
-    "^npx vitest run( [^;&|()<>]*)?$"]
+  "commandConfig": {
+    "npx": {
+      "subCommands": {
+        "tsc": {
+          "args": [["--noEmit"]]
+        },
+        "vitest": {
+          "subCommands": {
+            "run": {
+              "allowAll": true
+            }
+          }
+        }
+      }
+    }
+  }
 }

@@ -197,5 +197,3 @@ node/test/tmp
 
 # Test recordings (generated during COPILOT_RECORD=true)
 node/providers/recordings/
-
-.magenta

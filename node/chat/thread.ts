@@ -50,6 +50,7 @@ import { fileURLToPath } from "url";
 import player from "play-sound";
 import { CommandRegistry } from "./commands/registry.ts";
 import { getSubsequentReminder } from "../providers/system-reminders.ts";
+import { readGitignoreSync, type Gitignore } from "../tools/util.ts";
 
 export type StoppedConversationState = {
   state: "stopped";
@@ -157,6 +158,7 @@ export class Thread {
   public contextManager: ContextManager;
   public forkNextPrompt: string | undefined;
   private commandRegistry: CommandRegistry;
+  public gitignore: Gitignore;
 
   constructor(
     public id: ThreadId,
@@ -184,6 +186,7 @@ export class Thread {
       });
 
     this.counter = new Counter();
+    this.gitignore = readGitignoreSync(this.context.cwd);
     this.toolManager = new ToolManager(
       (msg) =>
         this.myDispatch({
@@ -193,6 +196,7 @@ export class Thread {
       {
         ...this.context,
         threadId: this.id,
+        gitignore: this.gitignore,
       },
     );
 

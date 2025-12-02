@@ -5,7 +5,7 @@ import { d, withInlineCode } from "../tea/view.ts";
 import type { Result } from "../utils/result.ts";
 
 import type { Nvim } from "../nvim/nvim-node";
-import { readGitignore } from "./util.ts";
+import { readGitignoreSync } from "./util.ts";
 import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
@@ -39,7 +39,7 @@ async function listDirectoryBFS(
   startPath: AbsFilePath,
   cwd: NvimCwd,
 ): Promise<string[]> {
-  const ig = await readGitignore(cwd);
+  const ig = readGitignoreSync(cwd);
   const queue: string[] = [startPath];
   const results: string[] = [];
   const seen = new Set<string>();

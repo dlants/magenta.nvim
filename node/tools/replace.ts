@@ -27,6 +27,7 @@ import type { BufferTracker } from "../buffer-tracker.ts";
 import { resolveFilePath } from "../utils/files.ts";
 import type { MagentaOptions } from "../options.ts";
 import { canWriteFile } from "./permissions.ts";
+import type { Gitignore } from "./util.ts";
 
 export type State =
   | {
@@ -76,30 +77,33 @@ export class ReplaceTool implements StaticTool {
       nvim: Nvim;
       options: MagentaOptions;
       getDisplayWidth(): number;
+      gitignore: Gitignore;
     },
   ) {
     this.state = { state: "pending" };
 
     // wrap in setTimeout to force a new eventloop frame, so we don't dispatch-in-dispatch
     setTimeout(() => {
-      this.initReplace().catch((error: Error) =>
+      try {
+        this.initReplace();
+      } catch (error) {
         this.context.myDispatch({
           type: "finish",
           result: {
             status: "error",
-            error: error.message + "\n" + error.stack,
+            error: (error as Error).message + "\n" + (error as Error).stack,
           },
-        }),
-      );
+        });
+      }
     });
   }
 
-  private async initReplace(): Promise<void> {
+  private initReplace(): void {
     const filePath = this.request.input.filePath;
     const absFilePath = resolveFilePath(this.context.cwd, filePath);
 
     if (this.state.state === "pending") {
-      const allowed = await canWriteFile(absFilePath, this.context);
+      const allowed = canWriteFile(absFilePath, this.context);
 
       if (allowed) {
         this.context.myDispatch({

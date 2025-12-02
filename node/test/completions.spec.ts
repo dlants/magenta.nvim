@@ -162,23 +162,31 @@ it("should ignore gitignored files in @file: completions", async () => {
 });
 
 it("should show @diff: completions for unstaged files", async () => {
-  await withDriver({}, async (driver) => {
-    // Get the test working directory
-    const cwd = await getcwd(driver.nvim);
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        // Initialize git repo before Magenta starts - add all files and commit
+        await $`cd ${tmpDir} && git init && git config user.email "test@test.com" && git config user.name "Test" && git add -A && git commit -m "initial"`;
+      },
+    },
+    async (driver) => {
+      // Get the test working directory
+      const cwd = await getcwd(driver.nvim);
 
-    // Create an unstaged change by modifying a file
-    await $`cd ${cwd} && echo 'modified content' >> poem.txt`;
+      // Create an unstaged change by modifying a file
+      await $`cd ${cwd} && echo 'modified content' >> poem.txt`;
 
-    // Set up sidebar and wait for it to be ready
-    await driver.showSidebar();
-    await driver.waitForChatReady();
+      // Set up sidebar and wait for it to be ready
+      await driver.showSidebar();
+      await driver.waitForChatReady();
 
-    // Switch to input window, enter insert mode and type '@diff:' to trigger diff completion
-    await driver.sendKeysToInputBuffer("i@diff:");
+      // Switch to input window, enter insert mode and type '@diff:' to trigger diff completion
+      await driver.sendKeysToInputBuffer("i@diff:");
 
-    // Wait for completion menu to appear with the modified file
-    await driver.completions.waitForCompletionContaining("poem.txt");
-  });
+      // Wait for completion menu to appear with the modified file
+      await driver.completions.waitForCompletionContaining("poem.txt");
+    },
+  );
 });
 
 it("should show @staged: completions for staged files", async () => {
