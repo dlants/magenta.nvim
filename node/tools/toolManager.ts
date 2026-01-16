@@ -5,6 +5,7 @@ import * as Replace from "./replace.ts";
 import * as ListDirectory from "./listDirectory.ts";
 import * as Hover from "./hover.ts";
 import * as FindReferences from "./findReferences.ts";
+import * as GotoDefinition from "./gotoDefinition.ts";
 import * as Diagnostics from "./diagnostics.ts";
 import * as BashCommand from "./bashCommand.ts";
 import * as InlineEdit from "./inline-edit-tool.ts";
@@ -85,6 +86,12 @@ export type StaticToolMap = {
     input: FindReferences.Input;
     msg: FindReferences.Msg;
     spec: typeof FindReferences.spec;
+  };
+  goto_definition: {
+    controller: GotoDefinition.GotoDefinitionTool;
+    input: GotoDefinition.Input;
+    msg: GotoDefinition.Msg;
+    spec: typeof GotoDefinition.spec;
   };
   diagnostics: {
     controller: Diagnostics.DiagnosticsTool;
@@ -220,6 +227,7 @@ export class ToolManager {
     list_directory: ListDirectory.spec,
     hover: Hover.spec,
     find_references: FindReferences.spec,
+    goto_definition: GotoDefinition.spec,
     diagnostics: Diagnostics.spec,
     bash_command: BashCommand.spec,
     inline_edit: InlineEdit.spec,
@@ -450,6 +458,29 @@ export class ToolManager {
             );
 
             this.tools[staticRequest.id] = findReferencesTool;
+            return;
+          }
+
+          case "goto_definition": {
+            const gotoDefinitionTool = new GotoDefinition.GotoDefinitionTool(
+              staticRequest,
+              {
+                nvim: this.context.nvim,
+                cwd: this.context.cwd,
+                lsp: this.context.lsp,
+                myDispatch: (msg) =>
+                  this.myDispatch({
+                    type: "tool-msg",
+                    msg: {
+                      id: staticRequest.id,
+                      toolName: staticRequest.toolName as ToolName,
+                      msg: msg as unknown as ToolMsg,
+                    },
+                  }),
+              },
+            );
+
+            this.tools[staticRequest.id] = gotoDefinitionTool;
             return;
           }
 
