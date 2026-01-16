@@ -5,6 +5,7 @@ import * as Replace from "./replace";
 import * as ListDirectory from "./listDirectory";
 import * as Hover from "./hover";
 import * as FindReferences from "./findReferences";
+import * as GotoDefinition from "./gotoDefinition";
 import * as Diagnostics from "./diagnostics";
 import * as BashCommand from "./bashCommand";
 import * as ReplaceSelection from "./replace-selection-tool";
@@ -48,6 +49,8 @@ export function validateInput(
       return Hover.validateInput(input);
     case "find_references":
       return FindReferences.validateInput(input);
+    case "goto_definition":
+      return GotoDefinition.validateInput(input);
     case "diagnostics":
       return Diagnostics.validateInput();
     case "bash_command":
@@ -93,6 +96,7 @@ export function renderStreamdedTool(
     case "list_directory":
     case "hover":
     case "find_references":
+    case "goto_definition":
     case "diagnostics":
     case "bash_command":
     case "inline_edit":
