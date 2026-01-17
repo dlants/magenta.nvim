@@ -1,7 +1,7 @@
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { d } from "../tea/view.ts";
+import { d, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
+import type { CompletedToolInfo } from "./types.ts";
 import type {
   ProviderToolResult,
   ProviderToolResultContent,
@@ -9,7 +9,7 @@ import type {
 } from "../providers/provider.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
 
 export type State =
   | {
@@ -28,9 +28,10 @@ export type Msg = {
 export class ThreadTitleTool implements StaticTool {
   state: State;
   toolName = "thread_title" as const;
+  aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "thread_title" }>,
+    public request: ToolRequest,
     public context: { nvim: Nvim; myDispatch: Dispatch<Msg> },
   ) {
     this.state = {
@@ -58,15 +59,28 @@ export class ThreadTitleTool implements StaticTool {
     return false;
   }
 
-  abort() {
-    this.state = {
-      state: "done",
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: { status: "error", error: `The user aborted this request.` },
+        status: "error",
+        error: "Request was aborted by the user.",
       },
     };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   update(msg: Msg): void {
@@ -105,14 +119,11 @@ export class ThreadTitleTool implements StaticTool {
     switch (this.state.state) {
       case "processing":
         return d`📝⚙️ Setting thread title: "${this.request.input.title}"`;
-      case "done": {
-        const result = this.state.result.result;
-        if (result.status === "error") {
-          return d`📝❌ Setting thread title: "${this.request.input.title}"`;
-        } else {
-          return d`📝✅ Setting thread title: "${this.request.input.title}"`;
-        }
-      }
+      case "done":
+        return renderCompletedSummary({
+          request: this.request as CompletedToolInfo["request"],
+          result: this.state.result,
+        });
       default:
         assertUnreachable(this.state);
     }
@@ -135,6 +146,16 @@ export class ThreadTitleTool implements StaticTool {
   }
 }
 
+function getStatusEmoji(result: ProviderToolResult): string {
+  return result.result.status === "error" ? "❌" : "✅";
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const input = info.request.input as Input;
+  const status = getStatusEmoji(info.result);
+  return d`📝${status} thread_title: ${input.title ?? ""}`;
+}
+
 export const spec: ProviderToolSpec = {
   name: "thread_title" as ToolName,
   description: `Set a title for the current conversation thread based on the user's message.`,
@@ -155,6 +176,8 @@ export const spec: ProviderToolSpec = {
 export type Input = {
   title: string;
 };
+
+export type ToolRequest = GenericToolRequest<"thread_title", Input>;
 
 export function validateInput(input: {
   [key: string]: unknown;

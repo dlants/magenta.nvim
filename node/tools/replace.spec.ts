@@ -8,6 +8,7 @@ import * as path from "path";
 import { getcwd } from "../nvim/nvim";
 import * as fs from "node:fs";
 import type { UnresolvedFilePath } from "../utils/files";
+import { MockProvider } from "../providers/mock";
 
 describe("node/tools/replace.spec.ts", () => {
   it("validate input", () => {
@@ -154,9 +155,9 @@ export type Model = immer.Immutable<
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll update the imports",
         toolRequests: [
           {
@@ -233,9 +234,9 @@ export type Model = immer.Immutable<
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll update the imports",
         toolRequests: [
           {
@@ -305,7 +306,7 @@ export const Component = () => {
       );
       await driver.send();
 
-      const getFileRequest = await driver.mockAnthropic.awaitPendingRequest();
+      const getFileRequest = await driver.mockAnthropic.awaitPendingStream();
       getFileRequest.respond({
         stopReason: "tool_use",
         text: "I'll read the file first to see the current imports",
@@ -351,7 +352,7 @@ export const Component = () => {
       await driver.showSidebar();
 
       // Now the agent can make the replace request on the unloaded buffer
-      const replaceRequest = await driver.mockAnthropic.awaitPendingRequest();
+      const replaceRequest = await driver.mockAnthropic.awaitPendingStream();
       replaceRequest.respond({
         stopReason: "tool_use",
         text: "Now I'll update the imports",
@@ -377,30 +378,32 @@ import { Dispatch } from "../tea";`,
       await driver.assertDisplayBufferContains("✏️✅ Replace [[ -3 / +2 ]]");
 
       // Check that the tool result is properly returned
-      const toolResultRequest =
-        await driver.mockAnthropic.awaitPendingRequest();
-      const toolResultMessage =
-        toolResultRequest.messages[toolResultRequest.messages.length - 1];
+      const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage = MockProvider.findLastToolResultMessage(
+        toolResultRequest.messages,
+      );
 
+      expect(toolResultMessage).toBeDefined();
+      if (!toolResultMessage) {
+        throw new Error("Expected tool result message");
+      }
       expect(toolResultMessage.role).toBe("user");
       expect(Array.isArray(toolResultMessage.content)).toBe(true);
 
-      const toolResult = toolResultMessage.content.find(
-        (item) => item.type === "tool_result",
-      );
+      const content = toolResultMessage.content;
+      if (typeof content === "string") {
+        throw new Error("Expected array content");
+      }
+
+      const toolResult = content.find((item) => item.type === "tool_result");
 
       expect(toolResult).toBeDefined();
       if (!toolResult || toolResult.type !== "tool_result") {
         throw new Error("Expected tool result");
       }
 
-      // Verify the tool result indicates success
-      const result = toolResult.result;
-      expect(result.status).toBe("ok");
-
-      if (result.status !== "ok") {
-        throw new Error("Expected ok status");
-      }
+      // Verify the tool result indicates success (Anthropic format uses is_error)
+      expect(toolResult.is_error).toBeFalsy();
 
       // Check that the file contents are properly updated
       const fileContent = fs.readFileSync(testFile, "utf-8");
@@ -444,7 +447,7 @@ function oldFunction() {
     await driver.inputMagentaText("Replace the function content");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const stream = await driver.mockAnthropic.awaitPendingStream();
 
     // Create the actual tool input that would be used
     const toolInput = {
@@ -471,7 +474,7 @@ function newFunction() {
 
     // Stream the tool use with gradual JSON building to test line count updates
     const toolIndex = 0;
-    request.onStreamEvent({
+    stream.emitEvent({
       type: "content_block_start",
       index: toolIndex,
       content_block: {
@@ -487,7 +490,7 @@ function newFunction() {
     const chunk2 = fullJson.substring(30, 80); // Complete filePath + start of find
     const chunk3 = fullJson.substring(80, 250); // More of find content, some of the replace
 
-    request.onStreamEvent({
+    stream.emitEvent({
       type: "content_block_delta",
       index: toolIndex,
       delta: {
@@ -501,7 +504,7 @@ function newFunction() {
       "⏳ Preparing replace operation...",
     );
 
-    request.onStreamEvent({
+    stream.emitEvent({
       type: "content_block_delta",
       index: toolIndex,
       delta: {
@@ -513,7 +516,7 @@ function newFunction() {
     // Now we should have complete filePath and partial find/replace, can show line counts
     await driver.assertDisplayBufferContains("Replace [[ -2 / +1 ]]");
 
-    request.onStreamEvent({
+    stream.emitEvent({
       type: "content_block_delta",
       index: toolIndex,
       delta: {
@@ -549,7 +552,7 @@ it("replace requires approval for gitignored file", async () => {
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "ok, here goes",
@@ -582,7 +585,7 @@ it("replace requires approval for file outside cwd", async () => {
     await driver.inputMagentaText("Replace content in file /tmp/outside.txt");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -617,7 +620,7 @@ it("replace requires approval for hidden file", async () => {
     await driver.inputMagentaText("Replace content in file .hidden");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -672,7 +675,7 @@ it("replace requires approval for skills directory file", async () => {
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "ok, here goes",
@@ -711,7 +714,7 @@ it("replace auto-approves regular files in cwd", async () => {
     await driver.inputMagentaText("Replace content in regular-file.txt");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -750,7 +753,7 @@ it("replace approval dialog allows user to approve", async () => {
     await driver.inputMagentaText("Replace content in .secret");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -801,7 +804,7 @@ it("replace approval dialog allows user to reject", async () => {
     await driver.inputMagentaText("Replace content in .secret");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -835,6 +838,115 @@ it("replace approval dialog allows user to reject", async () => {
     // Verify file was not modified
     const fileContent = fs.readFileSync(path.join(cwd, ".secret"), "utf-8");
     expect(fileContent).toBe("old secret");
+  });
+});
+
+it("replace approval dialog shows diff preview", async () => {
+  await withDriver({}, async (driver) => {
+    const cwd = await getcwd(driver.nvim);
+    fs.writeFileSync(
+      path.join(cwd, ".config-file"),
+      `\
+line1
+old line
+line3`,
+      "utf-8",
+    );
+
+    await driver.showSidebar();
+    await driver.inputMagentaText("Replace content in .config-file");
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "ok, here goes",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "replace-preview-test" as ToolRequestId,
+            toolName: "replace" as ToolName,
+            input: {
+              filePath: ".config-file" as UnresolvedFilePath,
+              find: "old line",
+              replace: "new line",
+            },
+          },
+        },
+      ],
+    });
+
+    // Verify the approval dialog is shown
+    await driver.assertDisplayBufferContains(
+      "✏️⏳ May I replace in file `.config-file`?",
+    );
+
+    // Verify diff preview is shown with the change
+    await driver.assertDisplayBufferContains("-old line");
+    await driver.assertDisplayBufferContains("+new line");
+  });
+});
+
+it("replace approval dialog can toggle to show full detail", async () => {
+  await withDriver({}, async (driver) => {
+    const cwd = await getcwd(driver.nvim);
+    fs.writeFileSync(
+      path.join(cwd, ".detailed-file"),
+      `\
+first line
+second line
+third line
+fourth line
+fifth line`,
+      "utf-8",
+    );
+
+    await driver.showSidebar();
+    await driver.inputMagentaText("Replace content in .detailed-file");
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "ok, here goes",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "replace-detail-test" as ToolRequestId,
+            toolName: "replace" as ToolName,
+            input: {
+              filePath: ".detailed-file" as UnresolvedFilePath,
+              find: `\
+second line
+third line`,
+              replace: `\
+SECOND LINE
+THIRD LINE
+EXTRA LINE`,
+            },
+          },
+        },
+      ],
+    });
+
+    // Verify the approval dialog is shown
+    await driver.assertDisplayBufferContains(
+      "✏️⏳ May I replace in file `.detailed-file`?",
+    );
+
+    // Verify preview is shown initially
+    await driver.assertDisplayBufferContains("-second line");
+    await driver.assertDisplayBufferContains("+SECOND LINE");
+
+    // Toggle to show detail view by pressing Enter on the diff preview
+    const previewPos = await driver.assertDisplayBufferContains("-second line");
+    await driver.triggerDisplayBufferKey(previewPos, "<CR>");
+
+    // After toggling, should show the full detail with filePath header
+    await driver.assertDisplayBufferContains("filePath: `.detailed-file`");
+    await driver.assertDisplayBufferContains("+EXTRA LINE");
   });
 });
 function vdomToString(node: VDOMNode): string {

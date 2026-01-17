@@ -1,15 +1,21 @@
-import { d } from "../tea/view.ts";
+import { d, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
+import type { CompletedToolInfo } from "./types.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { ThreadId } from "../chat/types";
+
+export type Input = {
+  result: string;
+};
+
+export type ToolRequest = GenericToolRequest<"yield_to_parent", Input>;
 
 export type Msg = {
   type: "finish";
@@ -24,9 +30,10 @@ export type State = {
 export class YieldToParentTool implements StaticTool {
   toolName = "yield_to_parent" as const;
   public state: State;
+  public aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "yield_to_parent" }>,
+    public request: ToolRequest,
     public context: {
       nvim: Nvim;
       dispatch: Dispatch<RootMsg>;
@@ -55,7 +62,29 @@ export class YieldToParentTool implements StaticTool {
     return false;
   }
 
-  abort() {}
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
+      result: {
+        status: "error",
+        error: "Request was aborted by the user.",
+      },
+    };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
+  }
 
   update(msg: Msg): void {
     switch (msg.type) {
@@ -91,13 +120,29 @@ export class YieldToParentTool implements StaticTool {
   }
 
   renderSummary() {
-    const result = this.state.result.result;
-    if (result.status === "error") {
-      return d`↗️❌ Yielding to parent: ${this.request.input.result}`;
-    } else {
-      return d`↗️✅ Yielding to parent: ${this.request.input.result}`;
-    }
+    return renderCompletedSummary({
+      request: this.request as CompletedToolInfo["request"],
+      result: this.state.result,
+    });
   }
+}
+
+function isError(result: ProviderToolResult): boolean {
+  return result.result.status === "error";
+}
+
+function getStatusEmoji(result: ProviderToolResult): string {
+  return isError(result) ? "❌" : "✅";
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const input = info.request.input as Input;
+  const status = getStatusEmoji(info.result);
+  const resultPreview =
+    input.result?.length > 50
+      ? input.result.substring(0, 50) + "..."
+      : (input.result ?? "");
+  return d`↩️${status} yield_to_parent: ${resultPreview}`;
 }
 
 export const spec: ProviderToolSpec = {
@@ -120,10 +165,6 @@ After using this tool, the sub-agent thread will be terminated.`,
     },
     required: ["result"],
   },
-};
-
-export type Input = {
-  result: string;
 };
 
 export function validateInput(input: {

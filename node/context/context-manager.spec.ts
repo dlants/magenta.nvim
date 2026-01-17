@@ -174,7 +174,7 @@ it("avoids sending redundant context updates after tool application (no buffer)"
     await driver.send();
 
     // Respond with a tool call that will modify the file
-    const request1 = await driver.mockAnthropic.awaitPendingRequest();
+    const request1 = await driver.mockAnthropic.awaitPendingStream();
     request1.respond({
       stopReason: "tool_use",
       text: "I'll add a new line to the poem",
@@ -197,10 +197,12 @@ it("avoids sending redundant context updates after tool application (no buffer)"
     await driver.assertDisplayBufferContains("✅ Insert [[ +2 ]]");
 
     {
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
+      const providerMessages = request.getProviderMessages();
+      // Tool result is in second-to-last message, system reminder is last
       expect(
-        request.messages[request.messages.length - 1],
-        "auto-respond request goes out",
+        providerMessages[providerMessages.length - 2],
+        "auto-respond request has tool result",
       ).toEqual({
         content: [
           {
@@ -219,9 +221,23 @@ it("avoids sending redundant context updates after tool application (no buffer)"
         ],
         role: "user",
       });
+      // System reminder is in the last message
+      expect(
+        providerMessages[providerMessages.length - 1],
+        "auto-respond request has system reminder",
+      ).toEqual({
+        content: [
+          {
+            type: "system_reminder",
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            text: expect.stringContaining("Remember to use the skills"),
+          },
+        ],
+        role: "user",
+      });
     }
     {
-      const request2 = await driver.mockAnthropic.awaitPendingRequest();
+      const request2 = await driver.mockAnthropic.awaitPendingStream();
       request2.respond({
         stopReason: "end_turn",
         text: "I did it!",
@@ -229,23 +245,17 @@ it("avoids sending redundant context updates after tool application (no buffer)"
       });
 
       const request = await driver.mockAnthropic.awaitStopped();
+      const providerMessages = request.getProviderMessages();
+      // After end_turn, the system reminder is still the last message
       expect(
-        request.messages[request.messages.length - 1],
+        providerMessages[providerMessages.length - 1],
         "end_turn request stopped agent",
       ).toEqual({
         content: [
           {
-            id: "tool1",
-            result: {
-              status: "ok",
-              value: [
-                {
-                  type: "text",
-                  text: "Successfully applied edits.",
-                },
-              ],
-            },
-            type: "tool_result",
+            type: "system_reminder",
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            text: expect.stringContaining("Remember to use the skills"),
           },
         ],
         role: "user",
@@ -256,9 +266,10 @@ it("avoids sending redundant context updates after tool application (no buffer)"
     await driver.send();
 
     const userRequest = await driver.mockAnthropic.awaitPendingUserRequest();
+    const providerMessages = userRequest.getProviderMessages();
 
     expect(
-      userRequest.messages[userRequest.messages.length - 1],
+      providerMessages[providerMessages.length - 1],
       "next user message does not have context update",
     ).toEqual({
       content: [
@@ -295,7 +306,11 @@ it("sends update if the file was edited pre-insert", async () => {
     await driver.inputMagentaText(`Add a new line to the poem.txt file`);
     await driver.send();
 
-    const request3 = await driver.mockAnthropic.awaitPendingRequest();
+    const request3 = await driver.mockAnthropic.awaitPendingStream();
+
+    // Set up intercept BEFORE responding, so we catch the auto-respond
+    const autoRespondCatcher = driver.interceptAutoRespond();
+
     request3.respond({
       stopReason: "tool_use",
       text: "I'll add a new line to the poem",
@@ -314,29 +329,29 @@ it("sends update if the file was edited pre-insert", async () => {
         },
       ],
     });
-    const autoRespondCatcher = driver.interceptSendMessage();
 
     await driver.assertDisplayBufferContains(
       "✏️✅ Insert [[ +2 ]] in `poem.txt`",
     );
 
-    const args = await autoRespondCatcher.promise;
+    // Wait for maybeAutoRespond to be called
+    await autoRespondCatcher.promise;
 
-    // edit the input buffer before the end turn response
+    // edit the buffer before the auto-respond fires
     await poemBuffer.setLines({
       start: 0 as Row0Indexed,
       end: 1 as Row0Indexed,
       lines: ["changed first line" as Line],
     });
 
-    // this promise will not resolve until we respond via mockAnthropic
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    autoRespondCatcher.execute(...args);
+    // Now execute the auto-respond
+    autoRespondCatcher.execute();
 
     {
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const stream = await driver.mockAnthropic.awaitPendingStream();
+      const providerMessages = stream.getProviderMessages();
       expect(
-        request.messages[request.messages.length - 2],
+        providerMessages[providerMessages.length - 2],
         "auto-respond request goes out",
       ).toEqual({
         content: [
@@ -358,7 +373,7 @@ it("sends update if the file was edited pre-insert", async () => {
       });
 
       expect(
-        request.messages[request.messages.length - 1],
+        providerMessages[providerMessages.length - 1],
         "auto-respond request goes out",
       ).toMatchSnapshot();
     }
@@ -651,13 +666,7 @@ it("context-files multiple, weird path names", async () => {
 
     await driver.inputMagentaText("check out this file");
     await driver.send();
-    await pollUntil(() => {
-      if (driver.mockAnthropic.requests.length != 1) {
-        throw new Error(`Expected a message to be pending.`);
-      }
-    });
-    const request =
-      driver.mockAnthropic.requests[driver.mockAnthropic.requests.length - 1];
+    const request = await driver.mockAnthropic.awaitPendingStream();
     expect(request.messages).toMatchSnapshot();
   });
 });
@@ -754,7 +763,7 @@ it("issuing a getFile request adds the file to the context but doesn't send its 
     await driver.inputMagentaText(`Please analyze the image test.jpg`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "I'll analyze the image",
@@ -775,17 +784,14 @@ it("issuing a getFile request adds the file to the context but doesn't send its 
     await driver.assertDisplayBufferContains(`👀✅ \`test.jpg\``);
 
     // Handle the auto-respond message
-    const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const providerMessages = toolResultRequest.getProviderMessages();
 
-    const flattenedMessages = toolResultRequest.messages.flatMap((msg) =>
-      Array.isArray(msg.content)
-        ? msg.content.map(
-            (content) =>
-              `${msg.role};${content.type};${content.type === "text" ? content.text : ""}`,
-          )
-        : [
-            `${msg.role};text;${typeof msg.content === "string" ? msg.content : ""}`,
-          ],
+    const flattenedMessages = providerMessages.flatMap((msg) =>
+      msg.content.map(
+        (content) =>
+          `${msg.role};${content.type};${content.type === "text" ? content.text : ""}`,
+      ),
     );
 
     expect(flattenedMessages).toEqual([
@@ -794,6 +800,7 @@ it("issuing a getFile request adds the file to the context but doesn't send its 
       "assistant;text;I'll analyze the image",
       "assistant;tool_use;",
       "user;tool_result;",
+      "user;system_reminder;",
     ]);
 
     // Verify the tool result contains the file content exactly once
@@ -807,7 +814,7 @@ it("issuing a getFile request adds the file to the context but doesn't send its 
   });
 });
 
-it("autoContext loads on startup and after clear", async () => {
+it("autoContext loads on startup and after new-thread", async () => {
   const testOptions = {
     autoContext: [`test-auto-context.md`],
   };
@@ -819,8 +826,8 @@ it("autoContext loads on startup and after clear", async () => {
       `# context:\n- \`test-auto-context.md\``,
     );
 
-    // Clear thread and verify autoContext is reloaded
-    await driver.clear();
+    // Create new thread and verify autoContext is loaded
+    await driver.magenta.command("new-thread");
     await driver.assertDisplayBufferContains(
       `# context:\n- \`test-auto-context.md\``,
     );
@@ -829,7 +836,7 @@ it("autoContext loads on startup and after clear", async () => {
     await driver.inputMagentaText("hello");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     expect(request.messages).toContainEqual(
       expect.objectContaining<ProviderMessage>({
         role: "user",
@@ -874,7 +881,7 @@ it("includes PDF file in context and sends summary in context updates", async ()
       await driver.send();
 
       {
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
 
         await driver.assertDisplayBufferContains(
           "- `context-test.pdf` (summary)",
@@ -903,11 +910,13 @@ it("includes PDF file in context and sends summary in context updates", async ()
       // wait for autorespond after get_file finishes
       {
         await driver.assertDisplayBufferContains("`context-test.pdf` (page 1)");
-        const request = await driver.mockAnthropic.awaitPendingRequest();
-        const lastMessage = request.messages[request.messages.length - 1];
+        const request = await driver.mockAnthropic.awaitPendingStream();
+        const providerMessages = request.getProviderMessages();
+        // Tool result with document is second-to-last, system reminder is last
+        const toolResultMessage = providerMessages[providerMessages.length - 2];
 
-        // Validate structure while ignoring the changing PDF data
-        expect(lastMessage).toEqual({
+        // Validate structure - document blocks are siblings to tool_result, not nested
+        expect(toolResultMessage).toEqual({
           role: "user",
           content: [
             {
@@ -915,19 +924,30 @@ it("includes PDF file in context and sends summary in context updates", async ()
               type: "tool_result",
               result: {
                 status: "ok",
-                value: [
-                  {
-                    type: "document",
-                    title: "context-test.pdf - Page 1",
-                    source: {
-                      type: "base64",
-                      media_type: "application/pdf",
-                      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                      data: expect.any(String), // Ignore the actual PDF data
-                    },
-                  },
-                ],
+                value: [], // Documents are extracted as siblings
               },
+            },
+            {
+              type: "document",
+              title: "context-test.pdf - Page 1",
+              source: {
+                type: "base64",
+                media_type: "application/pdf",
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                data: expect.any(String), // Ignore the actual PDF data
+              },
+            },
+          ],
+        });
+
+        // Verify system reminder is in last message
+        expect(providerMessages[providerMessages.length - 1]).toEqual({
+          role: "user",
+          content: [
+            {
+              type: "system_reminder",
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+              text: expect.stringContaining("Remember to use the skills"),
             },
           ],
         });

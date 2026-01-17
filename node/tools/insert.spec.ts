@@ -126,7 +126,7 @@ function existingFunction() {
     await driver.inputMagentaText("Add new code to the function");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
 
     // Create the actual tool input that would be used
     const toolInput = {
@@ -146,7 +146,7 @@ function existingFunction() {
 
     // Stream the tool use with gradual JSON building
     const toolIndex = 0;
-    request.onStreamEvent({
+    request.emitEvent({
       type: "content_block_start",
       index: toolIndex,
       content_block: {
@@ -162,7 +162,7 @@ function existingFunction() {
     const chunk2 = fullJson.substring(30, 120); // Complete filePath + insertAfter
     const chunk3 = fullJson.substring(120); // Rest of content
 
-    request.onStreamEvent({
+    request.emitEvent({
       type: "content_block_delta",
       index: toolIndex,
       delta: {
@@ -174,7 +174,7 @@ function existingFunction() {
     // At this point we only have partial filePath, should show preparing message
     await driver.assertDisplayBufferContains("⏳ Insert...");
 
-    request.onStreamEvent({
+    request.emitEvent({
       type: "content_block_delta",
       index: toolIndex,
       delta: {
@@ -186,7 +186,7 @@ function existingFunction() {
     // Now we should have complete filePath and insertAfter, can show line counts
     await driver.assertDisplayBufferContains("Insert [[ +1 ]]");
 
-    request.onStreamEvent({
+    request.emitEvent({
       type: "content_block_delta",
       index: toolIndex,
       delta: {
@@ -238,7 +238,7 @@ it("insert requires approval for gitignored file", async () => {
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "ok, here goes",
@@ -271,7 +271,7 @@ it("insert requires approval for file outside cwd", async () => {
     await driver.inputMagentaText("Insert content in file /tmp/outside.txt");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -310,7 +310,7 @@ it("insert requires approval for hidden file", async () => {
     await driver.inputMagentaText("Insert content in file .hidden-insert");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -365,7 +365,7 @@ it("insert requires approval for skills directory file", async () => {
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "ok, here goes",
@@ -404,7 +404,7 @@ it("insert auto-approves regular files in cwd", async () => {
     await driver.inputMagentaText("Insert content in regular-insert-file.txt");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -443,7 +443,7 @@ it("insert approval dialog allows user to approve", async () => {
     await driver.inputMagentaText("Insert content in .secret-insert");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -497,7 +497,7 @@ it("insert approval dialog allows user to reject", async () => {
     await driver.inputMagentaText("Insert content in .secret-insert2");
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -534,5 +534,106 @@ it("insert approval dialog allows user to reject", async () => {
       "utf-8",
     );
     expect(fileContent).toBe("old secret");
+  });
+});
+
+it("insert approval dialog shows content preview", async () => {
+  await withDriver({}, async (driver) => {
+    const cwd = await getcwd(driver.nvim);
+    fs.writeFileSync(
+      path.join(cwd, ".config-insert"),
+      "existing content",
+      "utf-8",
+    );
+
+    await driver.showSidebar();
+    await driver.inputMagentaText("Insert content in .config-insert");
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "ok, here goes",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "insert-preview-test" as ToolRequestId,
+            toolName: "insert" as ToolName,
+            input: {
+              filePath: ".config-insert" as UnresolvedFilePath,
+              insertAfter: "existing content",
+              content: "\nnew line 1\nnew line 2",
+            },
+          },
+        },
+      ],
+    });
+
+    // Verify the approval dialog is shown
+    await driver.assertDisplayBufferContains(
+      "✏️⏳ May I insert in file `.config-insert`?",
+    );
+
+    // Verify preview is shown with the content to be inserted
+    await driver.assertDisplayBufferContains("new line 1");
+    await driver.assertDisplayBufferContains("new line 2");
+  });
+});
+
+it("insert approval dialog can toggle to show full detail", async () => {
+  await withDriver({}, async (driver) => {
+    const cwd = await getcwd(driver.nvim);
+    fs.writeFileSync(
+      path.join(cwd, ".detailed-insert"),
+      "marker text here",
+      "utf-8",
+    );
+
+    await driver.showSidebar();
+    await driver.inputMagentaText("Insert content in .detailed-insert");
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "ok, here goes",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "insert-detail-test" as ToolRequestId,
+            toolName: "insert" as ToolName,
+            input: {
+              filePath: ".detailed-insert" as UnresolvedFilePath,
+              insertAfter: "marker text here",
+              content: `\
+\nfirst inserted line
+second inserted line
+third inserted line`,
+            },
+          },
+        },
+      ],
+    });
+
+    // Verify the approval dialog is shown
+    await driver.assertDisplayBufferContains(
+      "✏️⏳ May I insert in file `.detailed-insert`?",
+    );
+
+    // Verify preview is shown initially
+    await driver.assertDisplayBufferContains("first inserted line");
+
+    // Toggle to show detail view by pressing Enter on the preview
+    const previewPos = await driver.assertDisplayBufferContains(
+      "first inserted line",
+    );
+    await driver.triggerDisplayBufferKey(previewPos, "<CR>");
+
+    // After toggling, should show the full detail with filePath and insertAfter
+    await driver.assertDisplayBufferContains("filePath: `.detailed-insert`");
+    await driver.assertDisplayBufferContains("insertAfter: `marker text here`");
+    await driver.assertDisplayBufferContains("third inserted line");
   });
 });

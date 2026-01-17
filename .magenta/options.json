@@ -1,18 +1,8 @@
 {
   "commandConfig": {
-    "npx": {
-      "subCommands": {
-        "tsc": {
-          "args": [["--noEmit"]]
-        },
-        "vitest": {
-          "subCommands": {
-            "run": {
-              "allowAll": true
-            }
-          }
-        }
-      }
-    }
+    "commands": [
+      ["npx", "tsc", "--noEmit"],
+      ["npx", "vitest", "run", { "type": "restAny" }]
+    ]
   }
 }

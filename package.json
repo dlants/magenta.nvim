@@ -6,6 +6,7 @@
     "@types/mime-types": "^3.0.1",
     "@types/node": "^22.10.5",
     "@types/play-sound": "^1.1.2",
+    "@types/uuid": "^10.0.0",
     "eslint": "^9.17.0",
     "nock": "^14.0.5",
     "prettier": "^3.3.3",
@@ -34,6 +35,7 @@
     "pdfjs-dist": "^5.3.93",
     "play-sound": "^1.1.6",
     "tsx": "^4.19.2",
+    "uuid": "^13.0.0",
     "winston": "^3.17.0",
     "yaml": "^2.8.1",
     "zx": "^8.8.5"

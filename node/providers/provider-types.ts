@@ -43,7 +43,8 @@ export type Usage = {
 export type ProviderMessage = {
   role: "user" | "assistant";
   content: Array<ProviderMessageContent>;
-  providerMetadata?: ProviderMetadata | undefined;
+  stopReason?: StopReason;
+  usage?: Usage;
 };
 
 export type ProviderWebSearchCitation = {
@@ -73,6 +74,11 @@ export type ProviderRedactedThinkingContent = {
 
 export type ProviderSystemReminderContent = {
   type: "system_reminder";
+  text: string;
+};
+
+export type ProviderContextUpdateContent = {
+  type: "context_update";
   text: string;
 };
 
@@ -135,63 +141,29 @@ export type ProviderToolSpec = {
 };
 
 export type ProviderMessageContent =
-  | (ProviderTextContent & { providerMetadata?: ProviderMetadata | undefined })
-  | (ProviderImageContent & { providerMetadata?: ProviderMetadata | undefined })
-  | (ProviderDocumentContent & {
-      providerMetadata?: ProviderMetadata | undefined;
-    })
-  | (ProviderToolUseContent & {
-      providerMetadata?: ProviderMetadata | undefined;
-    })
-  | (ProviderServerToolUseContent & {
-      providerMetadata?: ProviderMetadata | undefined;
-    })
-  | (ProviderWebSearchToolResult & {
-      providerMetadata?: ProviderMetadata | undefined;
-    })
-  | (ProviderToolResult & { providerMetadata?: ProviderMetadata | undefined })
-  | (ProviderThinkingContent & {
-      providerMetadata?: ProviderMetadata | undefined;
-    })
-  | (ProviderRedactedThinkingContent & {
-      providerMetadata?: ProviderMetadata | undefined;
-    })
-  | (ProviderSystemReminderContent & {
-      providerMetadata?: ProviderMetadata | undefined;
-    });
+  | ProviderTextContent
+  | ProviderImageContent
+  | ProviderDocumentContent
+  | ProviderToolUseContent
+  | ProviderServerToolUseContent
+  | ProviderWebSearchToolResult
+  | ProviderToolResult
+  | ProviderThinkingContent
+  | ProviderRedactedThinkingContent
+  | ProviderSystemReminderContent
+  | ProviderContextUpdateContent;
 
 export interface Provider {
-  createStreamParameters(options: {
-    model: string;
-    messages: Array<ProviderMessage>;
-    tools: Array<ProviderToolSpec>;
-    disableCaching?: boolean;
-    systemPrompt?: string;
-  }): unknown;
-
   forceToolUse(options: {
     model: string;
-    messages: Array<ProviderMessage>;
+    input: ProviderThreadInput[];
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
+    contextThread?: ProviderThread;
   }): ProviderToolUseRequest;
 
-  sendMessage(options: {
-    model: string;
-    messages: Array<ProviderMessage>;
-    onStreamEvent: (event: ProviderStreamEvent) => void;
-    tools: Array<ProviderToolSpec>;
-    systemPrompt?: string;
-    thinking?: {
-      enabled: boolean;
-      budgetTokens?: number;
-    };
-    reasoning?: {
-      effort?: "low" | "medium" | "high";
-      summary?: "auto" | "concise" | "detailed";
-    };
-  }): ProviderStreamRequest;
+  createThread(options: ProviderThreadOptions): ProviderThread;
 }
 
 export type ProviderMetadata = {
@@ -232,4 +204,93 @@ export interface ProviderToolUseRequest {
   abort(): void;
   aborted: boolean;
   promise: Promise<ProviderToolUseResponse>;
+}
+
+// ============================================================================
+// ProviderThread - Stateful conversation thread interface
+// ============================================================================
+
+export type ProviderThreadStatus =
+  | { type: "idle" }
+  | { type: "streaming"; startTime: Date }
+  | { type: "stopped"; stopReason: StopReason }
+  | { type: "error"; error: Error };
+
+/** Branded type for native message index within a ProviderThread.
+ * This is opaque to external code - only the ProviderThread knows how to use it.
+ */
+export type NativeMessageIdx = number & { __nativeMessageIdx: true };
+
+export type ProviderStreamingBlock =
+  | { type: "text"; text: string }
+  | { type: "thinking"; thinking: string; signature: string }
+  | {
+      type: "tool_use";
+      id: ToolManager.ToolRequestId;
+      name: ToolName;
+      inputJson: string;
+    };
+
+export interface ProviderThreadState {
+  status: ProviderThreadStatus;
+  messages: ReadonlyArray<ProviderMessage>;
+  streamingBlock?: ProviderStreamingBlock | undefined;
+  latestUsage?: Usage | undefined;
+}
+
+export type ProviderThreadInput =
+  | ProviderTextContent
+  | ProviderImageContent
+  | ProviderDocumentContent;
+
+export type ProviderThreadEvents = {
+  "messages-updated": [];
+  "streaming-block-updated": [];
+  "status-changed": [];
+};
+
+export interface ProviderThread {
+  getState(): ProviderThreadState;
+
+  getProviderStreamingBlock(): ProviderStreamingBlock | undefined;
+
+  /** Get the current native message index. Use this to capture a position
+   * that can later be passed to truncateMessages.
+   */
+  getNativeMessageIdx(): NativeMessageIdx;
+
+  appendUserMessage(content: ProviderThreadInput[]): void;
+
+  toolResult(
+    toolUseId: ToolManager.ToolRequestId,
+    result: ProviderToolResult,
+  ): void;
+
+  /** Start streaming a response. Throws if the last message is from the assistant. */
+  continueConversation(): void;
+
+  abort(): void;
+
+  /** Truncate messages to keep only messages 0..messageIdx (inclusive).
+   * Sets status to stopped with end_turn.
+   */
+  truncateMessages(messageIdx: NativeMessageIdx): void;
+
+  on<E extends keyof ProviderThreadEvents>(
+    event: E,
+    listener: (...args: ProviderThreadEvents[E]) => void,
+  ): void;
+
+  off<E extends keyof ProviderThreadEvents>(
+    event: E,
+    listener: (...args: ProviderThreadEvents[E]) => void,
+  ): void;
+}
+
+export interface ProviderThreadOptions {
+  model: string;
+  systemPrompt: string;
+  tools: ProviderToolSpec[];
+  thinking?: { enabled: boolean; budgetTokens?: number };
+  reasoning?: { effort?: "low" | "medium" | "high"; summary?: string };
 }

@@ -9,6 +9,10 @@ it("should have nvim-cmp available", async () => {
     const cmpAvailable = await driver.completions.isAvailable();
     expect(cmpAvailable).toBe(true);
 
+    // Wait for cmp to be fully configured - sources may take a moment to register
+    await driver.showSidebar();
+    await driver.waitForChatReady();
+
     // Check if it's properly configured
     const cmpSetupInfo = await driver.completions.getSetupInfo();
     expect(cmpSetupInfo.has_sources).toBe(true);

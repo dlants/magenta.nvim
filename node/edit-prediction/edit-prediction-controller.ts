@@ -900,12 +900,7 @@ Predict the most likely next edit the user will make.`;
 
     const request = provider.forceToolUse({
       model: profile.model,
-      messages: [
-        {
-          role: "user",
-          content: [{ type: "text", text: userMessage }],
-        },
-      ],
+      input: [{ type: "text", text: userMessage }],
       spec,
       systemPrompt: this.predictionSystemPrompt,
       disableCaching: true,

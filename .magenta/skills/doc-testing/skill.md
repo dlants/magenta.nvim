@@ -88,40 +88,52 @@ Available options include:
 
 **Mock Provider Interactions:**
 
-The mock provider (`driver.mockAnthropic`) captures all requests and allows controlled responses:
-**Awaiting Requests:**
+The mock provider (`driver.mockAnthropic`) uses `MockStream` objects that mirror Anthropic's streaming API. Streams contain Anthropic-formatted messages (`Anthropic.MessageParam[]`), not our internal `ProviderMessage[]` format.
+
+**Required Type Imports for Tests:**
 
 ```typescript
-// Wait for any pending request
-const request = await driver.mockAnthropic.awaitPendingRequest();
+import type Anthropic from "@anthropic-ai/sdk";
 
-// Wait for request with specific text in message content
-const request =
-  await driver.mockAnthropic.awaitPendingRequestWithText("specific text");
+type ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;
+type ContentBlockParam = Anthropic.Messages.ContentBlockParam;
+type TextBlockParam = Anthropic.Messages.TextBlockParam;
+type DocumentBlockParam = Anthropic.Messages.DocumentBlockParam;
+```
+
+**Awaiting Streams:**
+
+```typescript
+// Wait for any pending stream
+const stream = await driver.mockAnthropic.awaitPendingStream();
+
+// Wait for stream with specific text in message content
+const stream =
+  await driver.mockAnthropic.awaitPendingStreamWithText("specific text");
 
 // Wait for user message (tool results, etc.)
-const request = await driver.mockAnthropic.awaitPendingUserRequest();
+const stream = await driver.mockAnthropic.awaitPendingUserRequest();
 
 // Wait for forced tool use requests
 const forceRequest =
   await driver.mockAnthropic.awaitPendingForceToolUseRequest();
 
-// Check if there's a pending request with specific text (non-blocking)
-const hasPending = driver.mockAnthropic.hasPendingRequestWithText("text");
+// Check if there's a pending stream with specific text (non-blocking)
+const hasPending = driver.mockAnthropic.hasPendingStreamWithText("text");
 ```
 
-**Responding to Regular Requests:**
+**Responding to Streams:**
 
 ```typescript
 // Simple text response
-request.respond({
+stream.respond({
   stopReason: "end_turn",
   text: "Response text",
   toolRequests: [],
 });
 
 // Response with tool use
-request.respond({
+stream.respond({
   stopReason: "tool_use",
   text: "I'll use a tool",
   toolRequests: [
@@ -137,7 +149,7 @@ request.respond({
 });
 
 // Response with error tool request
-request.respond({
+stream.respond({
   stopReason: "tool_use",
   text: "Tool failed",
   toolRequests: [
@@ -178,23 +190,22 @@ await driver.mockAnthropic.respondToForceToolUse({
 });
 ```
 
-**Request Inspection:**
+**Stream Inspection:**
 
 ```typescript
-// Access request properties
-console.log(request.messages); // Message history
-console.log(request.model); // Model used
-console.log(request.tools); // Available tools
-console.log(request.systemPrompt); // System prompt (if any)
+// Access stream properties (Anthropic format)
+console.log(stream.messages); // Anthropic.MessageParam[] - raw Anthropic format
+console.log(stream.getProviderMessages()); // ProviderMessage[] - converted format
+console.log(stream.systemPrompt); // System prompt (if any)
 
 // For force tool use requests
 console.log(forceRequest.spec); // Tool specification
 console.log(forceRequest.model); // Model used
 console.log(forceRequest.messages); // Message history
 
-// Check if request was aborted
-if (request.aborted) {
-  // Handle aborted request
+// Check if stream was aborted
+if (stream.aborted) {
+  // Handle aborted stream
 }
 ```
 
@@ -202,24 +213,105 @@ if (request.aborted) {
 
 ```typescript
 // Stream individual parts of response
-request.streamText("First part of response");
-request.streamToolUse(toolRequest);
-request.finishResponse("end_turn");
+stream.streamText("First part of response");
+stream.streamToolUse(toolId, toolName, input);
+stream.streamThinking("Thinking content", "signature");
+stream.finishResponse("end_turn");
 
 // Respond with errors
-request.respondWithError(new Error("Something went wrong"));
-
-// Access tool responses from previous messages
-const toolResponses = request.getToolResponses();
+stream.respondWithError(new Error("Something went wrong"));
 ```
 
 **Mock Provider:**
 
-- `driver.mockAnthropic` - Pre-configured mock provider that captures all requests
-- `await driver.mockAnthropic.awaitPendingForceToolUseRequest()` - Wait for and capture forced tool use requests
-- `await driver.mockAnthropic.awaitPendingRequest()` - Wait for regular message requests
+- `driver.mockAnthropic` - Pre-configured mock provider that captures all streams
+- `await driver.mockAnthropic.awaitPendingStream()` - Wait for regular message streams
+- `await driver.mockAnthropic.awaitPendingStreamWithText("text")` - Wait for stream containing specific text
+- `await driver.mockAnthropic.awaitPendingForceToolUseRequest()` - Wait for forced tool use requests
 - `await driver.mockAnthropic.respondToForceToolUse({...})` - Send mock responses
 - No need to manually mock providers - they're already set up in the test infrastructure
+
+**Tool Result Content Structure (Important!):**
+
+Anthropic's `ToolResultBlockParam` has a different structure than our internal `ProviderToolResult`:
+
+```typescript
+// Our internal format (ProviderToolResult):
+{
+  type: "tool_result",
+  id: ToolRequestId,
+  result: {
+    status: "ok" | "error",
+    value: ProviderToolResultContent[], // nested here
+    error?: string,
+  }
+}
+
+// Anthropic format (ToolResultBlockParam) - what you see in stream.messages:
+{
+  type: "tool_result",
+  tool_use_id: string,         // different field name!
+  content: string | ContentBlockParam[],  // different field name!
+  is_error?: boolean,          // different error indicator!
+}
+```
+
+**Document Blocks are Siblings, Not Nested:**
+
+When documents are sent to Anthropic, they appear as sibling blocks in the user message, not nested inside `tool_result.content`:
+
+```typescript
+// User message content array:
+[
+  { type: "tool_result", tool_use_id: "...", content: [], is_error: false },
+  { type: "document", source: {...}, title: "..." }  // <-- sibling, not nested!
+]
+```
+
+**Finding Tool Results in Stream Messages:**
+
+```typescript
+const stream = await driver.mockAnthropic.awaitPendingStream();
+
+// Find user message containing the tool result
+let userMessageContent: ContentBlockParam[] | undefined;
+for (const msg of stream.messages) {
+  if (msg.role === "user" && Array.isArray(msg.content)) {
+    const content = msg.content as ContentBlockParam[];
+    const hasToolResult = content.some(
+      (block: ContentBlockParam) => block.type === "tool_result",
+    );
+    if (hasToolResult) userMessageContent = content;
+  }
+}
+
+// Get the tool result block
+const toolResult = userMessageContent!.find(
+  (block: ContentBlockParam) => block.type === "tool_result",
+) as ToolResultBlockParam;
+
+// Check for errors
+expect(toolResult.is_error).toBeFalsy();
+
+// Access content (note: might be string or array)
+if (Array.isArray(toolResult.content)) {
+  const textContent = toolResult.content.find(
+    (item: ContentBlockParam) => item.type === "text",
+  ) as TextBlockParam;
+}
+```
+
+**Checking Error Results:**
+
+```typescript
+// Anthropic format for errors:
+expect(toolResult.is_error).toBe(true);
+const errorContent =
+  typeof toolResult.content === "string"
+    ? toolResult.content
+    : JSON.stringify(toolResult.content);
+expect(errorContent).toContain("expected error message");
+```
 
 **Driver Interactions (prefer these over internal API access):**
 
@@ -243,7 +335,15 @@ const toolResponses = request.getToolResponses();
 - **DO**: Use explicit assertions about what changes should be tracked rather than waiting fixed amounts of time
 - **DON'T**: Use `setTimeout()` or fixed delays when waiting for change tracking - use the assertion methods instead
 
-**Mock Provider Request Objects:**
+**Mock Stream Objects:**
+Streams captured by `awaitPendingStream()` contain:
+
+- `stream.messages` - Anthropic.MessageParam[] (raw Anthropic format)
+- `stream.getProviderMessages()` - ProviderMessage[] (converted format for easier assertions)
+- `stream.systemPrompt` - The system prompt used (if any)
+- `stream.aborted` - Whether the stream was aborted
+- `stream.resolved` - Whether the stream has finished
+
 Force tool use requests captured by `awaitPendingForceToolUseRequest()` contain:
 
 - `request.spec` - The tool specification used
@@ -251,6 +351,36 @@ Force tool use requests captured by `awaitPendingForceToolUseRequest()` contain:
 - `request.messages` - The messages array containing user/assistant conversation
 - `request.systemPrompt` - The system prompt used (if any)
 - `request.defer` - Promise resolution control
+
+**Type Narrowing with expect():**
+
+`expect()` assertions don't narrow TypeScript's discriminated unions. Add explicit guards:
+
+```typescript
+expect(documentContent.source.type).toBe("base64");
+// This doesn't narrow the type, so add:
+if (documentContent.source.type !== "base64")
+  throw new Error("Expected base64 source");
+// Now TypeScript knows source has media_type and data
+expect(documentContent.source.media_type).toBe("application/pdf");
+```
+
+**System Reminders in Mock Streams:**
+
+System reminders are an internal `ProviderMessage` type (`system_reminder`) that get converted to plain text blocks with `<system-reminder>` tags when sent to Anthropic:
+
+```typescript
+// In tests checking mock stream messages, search for text blocks containing the tag:
+function findSystemReminderText(
+  content: string | ContentBlockParam[],
+): TextBlockParam | undefined {
+  if (typeof content === "string") return undefined;
+  return content.find(
+    (c): c is TextBlockParam =>
+      c.type === "text" && c.text.includes("<system-reminder>"),
+  );
+}
+```
 
 **System Prompt vs User Messages:**
 When implementing AI features, maintain proper separation:
@@ -407,29 +537,29 @@ it("should respect configuration", async () => {
 
 ## Mock Provider Patterns
 
-### Awaiting Requests
+### Awaiting Streams
 
 ```typescript
-// Wait for regular requests
-const request = await driver.mockAnthropic.awaitPendingRequest();
+// Wait for regular streams
+const stream = await driver.mockAnthropic.awaitPendingStream();
 
 // Wait for forced tool use requests
 const forceRequest =
   await driver.mockAnthropic.awaitPendingForceToolUseRequest();
 ```
 
-### Responding to Requests
+### Responding to Streams
 
 ```typescript
 // Simple response
-request.respond({
+stream.respond({
   stopReason: "end_turn",
   text: "Response text",
   toolRequests: [],
 });
 
 // Response with tool use
-request.respond({
+stream.respond({
   stopReason: "tool_use",
   text: "I'll use a tool",
   toolRequests: [

@@ -20,9 +20,9 @@ describe("node/tools/display-snapshot-diff.spec.ts", () => {
       await driver.inputMagentaText(`Update the poem in the file poem.txt`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "ok, I will try to rewrite the poem in that file",
         toolRequests: [
           {

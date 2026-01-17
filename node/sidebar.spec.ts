@@ -3,12 +3,54 @@ import { withDriver } from "./test/preamble";
 import { pollUntil } from "./utils/async";
 
 describe("node/sidebar.spec.ts", () => {
+  it("should create empty window when hiding sidebar if only magenta windows remain", async () => {
+    await withDriver({}, async (driver) => {
+      // Close all windows except the initial one, then show sidebar
+      await driver.showSidebar();
+
+      // Close the initial window that was created when nvim started
+      // This leaves only magenta windows
+      const windows = await driver.nvim.call("nvim_list_wins", []);
+      for (const winId of windows) {
+        const isMagenta = await driver.nvim
+          .call("nvim_win_get_var", [winId, "magenta"])
+          .catch(() => false);
+        if (!isMagenta) {
+          await driver.nvim.call("nvim_win_close", [winId, true]);
+        }
+      }
+
+      // Verify only magenta windows remain
+      const windowsBeforeHide = await driver.nvim.call("nvim_list_wins", []);
+      expect(windowsBeforeHide.length).toBe(2); // display + input
+
+      // Toggle sidebar off
+      await driver.sidebar.hide();
+
+      // Verify a new window was created
+      const windowsAfterHide = await driver.nvim.call("nvim_list_wins", []);
+      expect(windowsAfterHide.length).toBe(1);
+
+      // Verify the new window has an empty buffer
+      const bufId = await driver.nvim.call("nvim_win_get_buf", [
+        windowsAfterHide[0],
+      ]);
+      const lines = await driver.nvim.call("nvim_buf_get_lines", [
+        bufId,
+        0,
+        -1,
+        false,
+      ]);
+      expect(lines).toEqual([""]);
+    });
+  });
+
   it("send command should scroll to last user message", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
       await driver.inputMagentaText(`\n`.repeat(100));
       await driver.send();
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "end_turn",
         text: "sup?",
@@ -231,7 +273,7 @@ describe("node/sidebar.spec.ts", () => {
       const largeMessage = "Hello, this is a test message. ".repeat(500);
       await driver.inputMagentaText(largeMessage);
       await driver.send();
-      const request1 = await driver.mockAnthropic.awaitPendingRequest();
+      const request1 = await driver.mockAnthropic.awaitPendingStream();
       request1.respond({
         stopReason: "tool_use",
         text: "ok, here goes",

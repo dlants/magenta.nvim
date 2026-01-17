@@ -2,8 +2,7 @@ import { diffthis, getAllWindows } from "../nvim/nvim.ts";
 import { NvimBuffer, type Line } from "../nvim/buffer.ts";
 import { type WindowId, type Row0Indexed } from "../nvim/window.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { MessageId } from "../chat/message.ts";
-import type { FileSnapshots } from "./file-snapshots.ts";
+import { type FileSnapshots, type Turn } from "./file-snapshots.ts";
 import {
   resolveFilePath,
   type NvimCwd,
@@ -12,14 +11,14 @@ import {
 
 export async function displaySnapshotDiff({
   unresolvedFilePath,
-  messageId,
+  turn,
   nvim,
   cwd,
   fileSnapshots,
   getDisplayWidth,
 }: {
   unresolvedFilePath: UnresolvedFilePath;
-  messageId: MessageId;
+  turn?: Turn;
   nvim: Nvim;
   cwd: NvimCwd;
   fileSnapshots: FileSnapshots;
@@ -27,11 +26,11 @@ export async function displaySnapshotDiff({
 }) {
   const absFilePath = resolveFilePath(cwd, unresolvedFilePath);
 
-  const snapshot = fileSnapshots.getSnapshot(absFilePath, messageId);
+  const snapshot = fileSnapshots.getSnapshot(absFilePath, turn);
   if (snapshot == undefined) {
     // No need to call dispatchError as this may be used in contexts outside of a tool request
     nvim.logger.error(
-      `No snapshot found for file ${unresolvedFilePath} with messageId ${messageId}`,
+      `No snapshot found for file ${unresolvedFilePath} for turn ${turn ?? "current"}`,
     );
     return;
   }
@@ -73,7 +72,9 @@ export async function displaySnapshotDiff({
     lines: snapshot.content.split("\n") as Line[],
   });
 
-  await scratchBuffer.setName(`${unresolvedFilePath}_${messageId}_snapshot`);
+  await scratchBuffer.setName(
+    `${unresolvedFilePath}_turn${turn ?? "current"}_snapshot`,
+  );
   await nvim.call("nvim_open_win", [
     scratchBuffer.id,
     true,

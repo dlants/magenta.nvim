@@ -2,14 +2,9 @@ import type { MagentaOptions } from "../../options.ts";
 import type { Nvim } from "../../nvim/nvim-node";
 import type { ProviderToolSpec } from "../../providers/provider-types.ts";
 import { MCPClient } from "./client.ts";
-import { MCPTool, type Input as MCPInput, type Msg } from "./tool.ts";
-import type {
-  ToolManagerToolMsg,
-  ToolName,
-  ToolRequest,
-  ToolRequestId,
-} from "../types.ts";
-import { parseToolName, wrapMcpToolMsg, type ServerName } from "./types.ts";
+import { MCPTool } from "./tool.ts";
+import type { ToolName } from "../types.ts";
+import { type ServerName } from "./types.ts";
 
 type ServerMap = {
   [serverName: ServerName]: {
@@ -21,8 +16,7 @@ type ServerMap = {
 };
 
 export class MCPToolManager {
-  private tools: Map<ToolRequestId, MCPTool> = new Map();
-  private serverMap: ServerMap;
+  serverMap: ServerMap;
 
   constructor(
     options: MagentaOptions["mcpServers"],
@@ -74,70 +68,7 @@ export class MCPToolManager {
     return allToolSpecs;
   }
 
-  isMCPTool(toolName: string): boolean {
-    return toolName.startsWith("mcp_");
-  }
-
-  initMCPTool(
-    request: ToolRequest,
-    toolManagerDispatch: (msg: ToolManagerToolMsg) => void,
-    context: { nvim: Nvim },
-  ) {
-    const { serverName } = parseToolName(request.toolName);
-
-    const mcpClient = this.serverMap[serverName].client;
-    if (!mcpClient) {
-      toolManagerDispatch({
-        type: "tool-msg",
-        msg: {
-          id: request.id,
-          toolName: request.toolName,
-          msg: wrapMcpToolMsg({
-            type: "error",
-            error: `${request.toolName} not found in any connected server`,
-          }),
-        },
-      });
-      return;
-    }
-
-    const mcpTool = new MCPTool(
-      {
-        id: request.id,
-        toolName: request.toolName,
-        input: request.input as MCPInput,
-      },
-      {
-        nvim: context.nvim,
-        mcpClient,
-        myDispatch: (msg) =>
-          toolManagerDispatch({
-            type: "tool-msg",
-            msg: {
-              id: request.id,
-              toolName: request.toolName,
-              msg: wrapMcpToolMsg(msg),
-            },
-          }),
-      },
-    );
-
-    this.tools.set(request.id, mcpTool);
-  }
-
-  getTool(id: ToolRequestId): MCPTool | undefined {
-    return this.tools.get(id);
-  }
-
-  updateTool(id: ToolRequestId, msg: Msg): void {
-    const tool = this.tools.get(id);
-    if (tool) {
-      tool.update(msg);
-    }
-  }
-
-  renderToolResult(id: ToolRequestId): string {
-    const tool = this.tools.get(id);
+  renderToolResult(tool: MCPTool): string {
     if (!tool) {
       return "";
     }
@@ -164,6 +95,8 @@ export class MCPToolManager {
       }
     }
     this.serverMap = {};
-    this.tools.clear();
   }
+}
+export function isMCPTool(toolName: string): boolean {
+  return toolName.startsWith("mcp_");
 }

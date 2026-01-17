@@ -7,6 +7,8 @@ export type AbsFilePath = string & { __abs_file_path: true };
 export type RelFilePath = string & { __rel_file_path: true };
 export type UnresolvedFilePath = string & { __unresolved_file_path: true };
 
+export const MAGENTA_TEMP_DIR = "/tmp/magenta" as AbsFilePath;
+
 /** Special nominal type to represent the neovim directory. The node plugin runs in the magenta directory, but when
  * dealing with paths, we always want to do it from the POV of the nvim cwd.
  */

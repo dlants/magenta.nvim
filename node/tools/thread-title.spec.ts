@@ -24,24 +24,19 @@ describe("node/tools/thread-title.spec.ts", () => {
       // Verify the request uses the fast model
       expect(request.model).toBe("mock-fast");
 
-      // Verify the request contains the user message
-      expect(request.messages).toMatchObject([
+      // Verify the request input contains the user message
+      expect(request.input).toMatchObject([
         {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-              text: expect.stringContaining(userMessage),
-            },
-          ],
+          type: "text",
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          text: expect.stringContaining(userMessage),
         },
       ]);
 
       // 4. Respond to the tool use request with a title
       const title = "Exploring the Solar System";
       await driver.mockAnthropic.respondToForceToolUse({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         toolRequest: {
           status: "ok",
           value: {
@@ -58,7 +53,7 @@ describe("node/tools/thread-title.spec.ts", () => {
       await driver.assertDisplayBufferContains(`# ${title}`);
 
       // Respond to the original user message
-      const messageRequest = await driver.mockAnthropic.awaitPendingRequest();
+      const messageRequest = await driver.mockAnthropic.awaitPendingStream();
       messageRequest.streamText(
         "The solar system consists of the Sun and everything that orbits around it.",
       );

@@ -1,7 +1,11 @@
 import type { ProviderToolResult } from "../providers/provider-types";
 import type { VDOMNode } from "../tea/view";
 import type { StaticToolName } from "./tool-registry";
-import type { StaticToolRequest } from "./toolManager";
+
+export type CompletedToolInfo = {
+  request: ToolRequest;
+  result: ProviderToolResult;
+};
 
 export type ToolRequestId = string & { __toolRequestId: true };
 
@@ -9,6 +13,12 @@ export type ToolRequestId = string & { __toolRequestId: true };
  * manager, we'll use opaque types.
  */
 export type ToolName = string & { __toolName: true };
+
+export type GenericToolRequest<K extends StaticToolName, I> = {
+  id: ToolRequestId;
+  toolName: K;
+  input: I;
+};
 
 export type ToolRequest = {
   id: ToolRequestId;
@@ -18,11 +28,13 @@ export type ToolRequest = {
 
 export interface Tool {
   toolName: ToolName;
+  aborted: boolean;
   isDone(): boolean;
   isPendingUserAction(): boolean;
   getToolResult(): ProviderToolResult;
   request: ToolRequest;
-  abort(): void;
+  /** Abort the tool and return its result synchronously */
+  abort(): ProviderToolResult;
   renderSummary(): VDOMNode;
   renderPreview?(): VDOMNode;
   renderDetail?(): VDOMNode;
@@ -30,11 +42,13 @@ export interface Tool {
 
 export interface StaticTool {
   toolName: StaticToolName;
+  aborted: boolean;
   isDone(): boolean;
   isPendingUserAction(): boolean;
   getToolResult(): ProviderToolResult;
-  request: StaticToolRequest;
-  abort(): void;
+  request: GenericToolRequest<StaticToolName, unknown>;
+  /** Abort the tool and return its result synchronously */
+  abort(): ProviderToolResult;
   renderSummary(): VDOMNode;
   renderPreview?(): VDOMNode;
   renderDetail?(): VDOMNode;

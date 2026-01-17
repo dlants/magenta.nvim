@@ -1,14 +1,12 @@
 import { NvimBuffer, type Line } from "../nvim/buffer.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import path from "node:path";
 import fs from "node:fs";
 import { getBufferIfOpen } from "../utils/buffers.ts";
 import type { Result } from "../utils/result.ts";
 import type { RootMsg } from "../root-msg.ts";
-import type { MessageId } from "../chat/message.ts";
-import type { ThreadId } from "../chat/types";
+import type { ThreadId } from "../chat/types.ts";
 import {
   relativePath,
   resolveFilePath,
@@ -20,9 +18,9 @@ import { applyInsert, applyReplace } from "../utils/contentEdits.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import type { ProviderToolResultContent } from "../providers/provider-types.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
+import type { ToolRequest as InsertRequest } from "./insert.ts";
+import type { ToolRequest as ReplaceRequest } from "./replace.ts";
 
-type InsertRequest = Extract<StaticToolRequest, { toolName: "insert" }>;
-type ReplaceRequest = Extract<StaticToolRequest, { toolName: "replace" }>;
 type EditRequest = InsertRequest | ReplaceRequest;
 type Msg = {
   type: "finish";
@@ -316,7 +314,6 @@ async function handleFileEdit(
 export async function applyEdit(
   request: EditRequest,
   threadId: ThreadId,
-  messageId: MessageId,
   context: EditContext,
 ): Promise<void> {
   const { filePath } = request.input;
@@ -328,7 +325,6 @@ export async function applyEdit(
     msg: {
       type: "take-file-snapshot",
       unresolvedFilePath: filePath,
-      messageId,
     },
   });
 

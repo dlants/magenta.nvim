@@ -351,6 +351,36 @@ export class Sidebar {
     if (this.state.state == "visible") {
       const { displayWindow, inputWindow, displayBuffer, inputBuffer } =
         this.state;
+
+      // Check if the only windows open are magenta windows
+      const allWindows = (await this.nvim.call(
+        "nvim_list_wins",
+        [],
+      )) as WindowId[];
+
+      const nonMagentaWindows: WindowId[] = [];
+      for (const winId of allWindows) {
+        const win = new NvimWindow(winId, this.nvim);
+        const isMagenta = await win.getVar("magenta").catch(() => false);
+        if (!isMagenta) {
+          nonMagentaWindows.push(winId);
+        }
+      }
+
+      // If only magenta windows are open, create a new empty window first
+      if (nonMagentaWindows.length === 0) {
+        // Create a new empty buffer and open it in a new window
+        const emptyBuf = await NvimBuffer.create(false, true, this.nvim);
+        await this.nvim.call("nvim_open_win", [
+          emptyBuf.id,
+          true,
+          {
+            win: -1, // global split
+            split: "left",
+          },
+        ]);
+      }
+
       try {
         await Promise.all([displayWindow.close(), inputWindow.close()]);
       } catch {

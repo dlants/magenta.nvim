@@ -1,18 +1,18 @@
 import fs from "fs";
 import path from "path";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { d, withInlineCode } from "../tea/view.ts";
+import { d, withInlineCode, type VDOMNode } from "../tea/view.ts";
 import type { Result } from "../utils/result.ts";
+import type { CompletedToolInfo } from "./types.ts";
 
 import type { Nvim } from "../nvim/nvim-node";
 import { readGitignoreSync } from "./util.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
 import {
   relativePath,
   resolveFilePath,
@@ -20,6 +20,8 @@ import {
   type NvimCwd,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
+
+export type ToolRequest = GenericToolRequest<"list_directory", Input>;
 
 export type State =
   | {
@@ -85,9 +87,10 @@ export class ListDirectoryTool implements StaticTool {
   state: State;
   toolName = "list_directory" as const;
   autoRespond = true;
+  aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "list_directory" }>,
+    public request: ToolRequest,
     public context: {
       nvim: Nvim;
       cwd: NvimCwd;
@@ -112,18 +115,28 @@ export class ListDirectoryTool implements StaticTool {
     return false;
   }
 
-  abort() {
-    this.state = {
-      state: "done",
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: {
-          status: "error",
-          error: "The user aborted this tool request.",
-        },
+        status: "error",
+        error: "Request was aborted by the user.",
       },
     };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   update(msg: Msg) {
@@ -151,6 +164,7 @@ export class ListDirectoryTool implements StaticTool {
       const absolutePath = resolveFilePath(this.context.cwd, dirPath);
 
       if (!absolutePath.startsWith(this.context.cwd)) {
+        if (this.aborted) return;
         this.context.myDispatch({
           type: "finish",
           result: {
@@ -162,6 +176,7 @@ export class ListDirectoryTool implements StaticTool {
       }
 
       const files = await listDirectoryBFS(absolutePath, this.context.cwd);
+      if (this.aborted) return;
       this.context.nvim.logger.debug(`files: ${files.join("\n")}`);
       this.context.myDispatch({
         type: "finish",
@@ -171,6 +186,7 @@ export class ListDirectoryTool implements StaticTool {
         },
       });
     } catch (error) {
+      if (this.aborted) return;
       this.context.myDispatch({
         type: "finish",
         result: {
@@ -208,14 +224,11 @@ export class ListDirectoryTool implements StaticTool {
     switch (this.state.state) {
       case "processing":
         return d`📁⚙️ list_directory ${withInlineCode(d`\`${this.request.input.dirPath || "."}\``)}`;
-      case "done": {
-        const result = this.state.result.result;
-        if (result.status === "error") {
-          return d`📁❌ list_directory ${withInlineCode(d`\`${this.request.input.dirPath || "."}\``)}`;
-        } else {
-          return d`📁✅ list_directory ${withInlineCode(d`\`${this.request.input.dirPath || "."}\``)}`;
-        }
-      }
+      case "done":
+        return renderCompletedSummary({
+          request: this.request as CompletedToolInfo["request"],
+          result: this.state.result,
+        });
       default:
         assertUnreachable(this.state);
     }
@@ -226,6 +239,20 @@ export class ListDirectoryTool implements StaticTool {
     dirPath: ${this.request.input.dirPath || "."}
 }`;
   }
+}
+
+function isError(result: CompletedToolInfo["result"]): boolean {
+  return result.result.status === "error";
+}
+
+function getStatusEmoji(result: CompletedToolInfo["result"]): string {
+  return isError(result) ? "❌" : "✅";
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const input = info.request.input as Input;
+  const status = getStatusEmoji(info.result);
+  return d`📁${status} list_directory ${withInlineCode(d`\`${input.dirPath || "."}\``)}`;
 }
 
 export const spec: ProviderToolSpec = {

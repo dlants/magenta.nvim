@@ -285,13 +285,6 @@ export class SidebarInteraction {
   }
 
   /**
-   * Clear the current thread
-   */
-  async clearThread(): Promise<void> {
-    await this.magenta.command("clear");
-  }
-
-  /**
    * Abort the current operation
    */
   async abort(): Promise<void> {

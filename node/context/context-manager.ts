@@ -1041,7 +1041,7 @@ ${fileContext}`;
   contextUpdatesToContent(
     contextUpdates: FileUpdates,
   ): ProviderMessageContent[] {
-    const content: ProviderMessageContent[] = [];
+    const textParts: string[] = [];
 
     for (const path in contextUpdates) {
       const absFilePath = path as AbsFilePath;
@@ -1050,52 +1050,53 @@ ${fileContext}`;
       if (update.update.status === "ok") {
         switch (update.update.value.type) {
           case "whole-file": {
-            content.push(...update.update.value.content);
+            // Extract text from whole-file content
+            for (const c of update.update.value.content) {
+              if (c.type === "text") {
+                textParts.push(c.text);
+              }
+            }
             break;
           }
           case "diff": {
-            content.push({
-              type: "text",
-              text: `\
+            textParts.push(`\
 - \`${update.relFilePath}\`
 \`\`\`diff
 ${update.update.value.patch}
-\`\`\``,
-            });
+\`\`\``);
             break;
           }
           case "file-deleted": {
-            content.push({
-              type: "text",
-              text: `\
+            textParts.push(`\
 - \`${update.relFilePath}\`
-This file has been deleted and removed from context.`,
-            });
+This file has been deleted and removed from context.`);
             break;
           }
           default:
             assertUnreachable(update.update.value);
         }
       } else {
-        content.push({
-          type: "text",
-          text: `\
+        textParts.push(`\
 - \`${update.relFilePath}\`
-Error fetching update: ${update.update.error}`,
-        });
+Error fetching update: ${update.update.error}`);
       }
     }
 
-    // Add text content first
-    if (content.length > 0) {
-      content.unshift({
-        type: "text",
-        text: `\
-These files are part of your context. This is the latest information about the content of each file.
-From now on, whenever any of these files are updated by the user, you will get a message letting you know.`,
-      });
+    if (textParts.length === 0) {
+      return [];
     }
 
-    return content;
+    // Wrap all context updates in <context_update> tags so they can be
+    // recognized and collapsed when rendering ProviderMessages
+    const header = `\
+These files are part of your context. This is the latest information about the content of each file.
+From now on, whenever any of these files are updated by the user, you will get a message letting you know.`;
+
+    return [
+      {
+        type: "text",
+        text: `<context_update>\n${header}\n${textParts.join("\n")}\n</context_update>`,
+      },
+    ];
   }
 }

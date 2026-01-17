@@ -1,22 +1,24 @@
-import { d } from "../tea/view.ts";
+import { d, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
-import type { StaticTool, ToolName } from "./types.ts";
+import type {
+  GenericToolRequest,
+  StaticTool,
+  ToolName,
+  CompletedToolInfo,
+} from "./types.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { ThreadId } from "../chat/types.ts";
 import type { Chat } from "../chat/chat.ts";
-import { assertUnreachable } from "../utils/assertUnreachable.ts";
 
 export type Msg = {
-  type: "thread-forked";
-  threadId: ThreadId;
+  type: "finish";
 };
 
 export type State =
@@ -26,33 +28,24 @@ export type State =
   | {
       state: "done";
       result: ProviderToolResult;
-      forkedThreadId?: ThreadId;
     };
 
 export class ForkThreadTool implements StaticTool {
   toolName = "fork_thread" as const;
   public state: State;
+  public aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "fork_thread" }>,
+    public request: ToolRequest,
     public context: {
       nvim: Nvim;
       chat: Chat;
       threadId: ThreadId;
       dispatch: Dispatch<RootMsg>;
+      myDispatch: Dispatch<Msg>;
     },
   ) {
-    this.state = {
-      state: "done",
-      result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: {
-          status: "ok",
-          value: [{ type: "text", text: "" }], // this should never need to be sent to the agent
-        },
-      },
-    };
+    this.state = { state: "pending" };
 
     try {
       this.doFork();
@@ -81,7 +74,8 @@ export class ForkThreadTool implements StaticTool {
       );
     }
 
-    const pendingPrompt = threadWrapper.thread.forkNextPrompt;
+    const thread = threadWrapper.thread;
+    const pendingPrompt = thread.forkNextPrompt;
     if (!pendingPrompt) {
       throw new Error(
         `No pending prompt found for thread ${this.context.threadId}`,
@@ -117,29 +111,50 @@ ${this.request.input.summary}
     return false;
   }
 
-  abort() {}
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
+      result: {
+        status: "error",
+        error: "Request was aborted by the user.",
+      },
+    };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
+  }
 
   update(msg: Msg): void {
     switch (msg.type) {
-      case "thread-forked":
+      case "finish":
         this.state = {
           state: "done",
           result: {
             type: "tool_result",
             id: this.request.id,
-            result: {
-              status: "ok",
-              value: [
-                {
-                  type: "text",
-                  text: `Thread forked successfully.`,
+            result: this.aborted
+              ? {
+                  status: "error",
+                  error: "Fork operation was aborted.",
+                }
+              : {
+                  status: "ok",
+                  value: [{ type: "text", text: "Fork completed." }],
                 },
-              ],
-            },
           },
-          forkedThreadId: msg.threadId,
         };
-        break;
+        return;
     }
   }
 
@@ -164,15 +179,25 @@ ${this.request.input.summary}
         return d`Forking thread...`;
 
       case "done":
-        if (this.state.result.result.status === "error") {
-          return d`Fork failed: ${this.state.result.result.error}`;
-        }
-
-        return d`Forked to thread ${this.state.forkedThreadId?.toString() || "thread-id-not-found"}`;
-      default:
-        assertUnreachable(this.state);
+        return renderCompletedSummary({
+          request: this.request as CompletedToolInfo["request"],
+          result: this.state.result,
+        });
     }
   }
+}
+
+function isError(result: ProviderToolResult): boolean {
+  return result.result.status === "error";
+}
+
+function getStatusEmoji(result: ProviderToolResult): string {
+  return isError(result) ? "❌" : "✅";
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const status = getStatusEmoji(info.result);
+  return d`🍴${status} fork_thread`;
 }
 
 export const spec: ProviderToolSpec = {
@@ -202,6 +227,8 @@ export type Input = {
   contextFiles: UnresolvedFilePath[];
   summary: string;
 };
+
+export type ToolRequest = GenericToolRequest<"fork_thread", Input>;
 
 export function validateInput(input: {
   [key: string]: unknown;

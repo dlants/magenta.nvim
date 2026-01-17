@@ -4,7 +4,6 @@ import { AnthropicProvider } from "./anthropic.ts";
 import type Anthropic from "@anthropic-ai/sdk";
 
 export type BedrockProviderOptions = {
-  promptCaching?: boolean | undefined;
   env?: Record<string, string> | undefined;
 };
 
@@ -18,9 +17,7 @@ export class BedrockProvider extends AnthropicProvider {
       }
     }
 
-    super(nvim, {
-      promptCaching: options?.promptCaching ?? true,
-    });
+    super(nvim, {});
 
     this.client = new AnthropicBedrock() as unknown as Anthropic;
     // Bedrock does not support web_search tool

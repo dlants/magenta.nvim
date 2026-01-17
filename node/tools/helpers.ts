@@ -16,10 +16,10 @@ import * as SpawnForeach from "./spawn-foreach";
 import * as WaitForSubagents from "./wait-for-subagents";
 import * as YieldToParent from "./yield-to-parent";
 import * as PredictEdit from "./predict-edit";
-import type { StreamingBlock } from "../providers/helpers";
 import { d, type VDOMNode } from "../tea/view";
 import type { StaticToolName } from "./tool-registry";
 import { assertUnreachable } from "../utils/assertUnreachable";
+import type { ProviderStreamingBlock } from "../providers/provider-types";
 
 export function validateInput(
   toolName: unknown,
@@ -76,7 +76,7 @@ export function validateInput(
 }
 
 export function renderStreamdedTool(
-  streamingBlock: Extract<StreamingBlock, { type: "tool_use" }>,
+  streamingBlock: Extract<ProviderStreamingBlock, { type: "tool_use" }>,
 ): string | VDOMNode {
   if (streamingBlock.name.startsWith("mcp_")) {
     return d`Invoking mcp tool ${streamingBlock.name}`;
@@ -87,9 +87,9 @@ export function renderStreamdedTool(
     case "get_file":
       break;
     case "insert":
-      return Insert.renderStreamedBlock(streamingBlock.streamed);
+      return Insert.renderStreamedBlock(streamingBlock.inputJson);
     case "replace":
-      return Replace.renderStreamedBlock(streamingBlock.streamed);
+      return Replace.renderStreamedBlock(streamingBlock.inputJson);
     case "list_directory":
     case "hover":
     case "find_references":
@@ -109,5 +109,5 @@ export function renderStreamdedTool(
       assertUnreachable(name);
   }
 
-  return d`Invoking tool ${streamingBlock.name}`;
+  return d`Invoking tool ${streamingBlock.name}\n`;
 }

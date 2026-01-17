@@ -119,7 +119,18 @@ export class Magenta {
     this.sidebar = new Sidebar(
       this.nvim,
       () => this.getActiveProfile(),
-      () => this.chat.getActiveThread().getLastStopTokenCount(),
+      () => {
+        // Thread may not be initialized yet during first sidebar show
+        if (!this.chat.state.activeThreadId) {
+          return 0;
+        }
+        const wrapper =
+          this.chat.threadWrappers[this.chat.state.activeThreadId];
+        if (!wrapper || wrapper.state !== "initialized") {
+          return 0;
+        }
+        return wrapper.thread.getLastStopTokenCount();
+      },
     );
 
     this.chatApp = TEA.createApp<Chat>({
@@ -132,7 +143,7 @@ export class Magenta {
       nvim,
       cwd: this.cwd,
       options,
-      getMessages: () => this.chat.getMessages(),
+      getContextThread: () => this.chat.getContextThread(),
     });
   }
 
@@ -304,17 +315,6 @@ export class Magenta {
 
         break;
       }
-
-      case "clear":
-        this.dispatch({
-          type: "thread-msg",
-          id: this.chat.getActiveThread().id,
-          msg: {
-            type: "clear",
-            profile: this.getActiveProfile(),
-          },
-        });
-        break;
 
       case "abort": {
         this.dispatch({
@@ -552,8 +552,10 @@ ${lines.join("\n")}
     const key = args[0];
     if (this.mountedChatApp) {
       if (BINDING_KEYS.indexOf(key as BindingKey) > -1) {
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        this.mountedChatApp.onKey(key as BindingKey);
+        this.mountedChatApp.onKey(key as BindingKey).catch((err) => {
+          this.nvim.logger.error(err);
+          throw err;
+        });
       } else {
         this.nvim.logger.error(`Unexpected MagentaKey ${JSON.stringify(key)}`);
         // eslint-disable-next-line @typescript-eslint/no-floating-promises

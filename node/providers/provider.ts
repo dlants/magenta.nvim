@@ -2,11 +2,11 @@ import type { Nvim } from "../nvim/nvim-node";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { AnthropicProvider } from "./anthropic.ts";
 import { BedrockProvider } from "./bedrock.ts";
-import { OpenAIProvider } from "./openai.ts";
+// import { OpenAIProvider } from "./openai.ts";
 import type { Provider } from "./provider-types.ts";
 import { type EditPredictionProfile, type Profile } from "../options.ts";
-import { OllamaProvider } from "./ollama.ts";
-import { CopilotProvider } from "./copilot.ts";
+// import { OllamaProvider } from "./ollama.ts";
+// import { CopilotProvider } from "./copilot.ts";
 
 export * from "./provider-types.ts";
 
@@ -26,22 +26,23 @@ export function getProvider(
           baseUrl: profile.baseUrl,
           apiKeyEnvVar: profile.apiKeyEnvVar,
           authType: profile.authType,
-          promptCaching: true,
-        });
-      case "openai":
-        return new OpenAIProvider(nvim, {
-          baseUrl: profile.baseUrl,
-          apiKeyEnvVar: profile.apiKeyEnvVar,
         });
       case "bedrock":
         return new BedrockProvider(nvim, {
-          promptCaching: (profile as Profile).promptCaching,
           env: (profile as Profile).env,
         });
+      case "openai":
+        // return new OpenAIProvider(nvim, {
+        //   baseUrl: profile.baseUrl,
+        //   apiKeyEnvVar: profile.apiKeyEnvVar,
+        // });
+        throw new Error("Not implemented");
       case "ollama":
-        return new OllamaProvider(nvim);
+        // return new OllamaProvider(nvim);
+        throw new Error("Not implemented");
       case "copilot":
-        return new CopilotProvider(nvim);
+        // return new CopilotProvider(nvim);
+        throw new Error("Not implemented");
       case "mock":
         return mockProvider!;
       default:

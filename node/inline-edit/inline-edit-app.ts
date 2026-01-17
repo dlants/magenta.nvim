@@ -12,7 +12,11 @@ import {
 import { getCurrentWindow } from "../nvim/nvim";
 import * as TEA from "../tea/tea";
 import * as InlineEdit from "./inline-edit-controller";
-import { getProvider, type ProviderMessage } from "../providers/provider";
+import {
+  getProvider,
+  type ProviderThread,
+  type ProviderThreadInput,
+} from "../providers/provider";
 import path from "node:path";
 import { getMarkdownExt } from "../utils/markdown";
 import {
@@ -58,21 +62,21 @@ export class InlineEditManager {
     nvim,
     cwd,
     options,
-    getMessages,
+    getContextThread,
   }: {
     nvim: Nvim;
     cwd: NvimCwd;
     options: MagentaOptions;
-    getMessages: () => ProviderMessage[];
+    getContextThread: () => ProviderThread | undefined;
   }) {
     this.nvim = nvim;
     this.cwd = cwd;
     this.options = options;
-    this.getMessages = getMessages;
+    this.getContextThread = getContextThread;
   }
 
   private options: MagentaOptions;
-  private getMessages: () => ProviderMessage[];
+  private getContextThread: () => ProviderThread | undefined;
 
   onWinClosed() {
     return Promise.all(
@@ -248,8 +252,8 @@ export class InlineEditManager {
       selectionWithText,
     );
 
-    const messages = this.getMessages();
-    messages.push(await this.prepareMessage(targetBuffer.id, this.lastInput));
+    const contextThread = this.getContextThread();
+    const input = await this.prepareInput(targetBuffer.id, this.lastInput);
 
     await inputBuffer.setOption("modifiable", false);
     const { app, dispatch } = this.inlineEdits[targetBuffer.id];
@@ -272,8 +276,9 @@ export class InlineEditManager {
 
     const request = getProvider(this.nvim, profileForRequest).forceToolUse({
       model: isFast ? activeProfile.fastModel : activeProfile.model,
-      messages,
+      input,
       spec: selection ? replaceSelectionSpec : inlineEditSpec,
+      ...(contextThread ? { contextThread } : {}),
     });
     dispatch({
       type: "request-sent",
@@ -384,10 +389,10 @@ export class InlineEditManager {
     );
   }
 
-  async prepareMessage(
+  async prepareInput(
     targetBufnr: BufNr,
     inputText: string,
-  ): Promise<ProviderMessage> {
+  ): Promise<ProviderThreadInput[]> {
     const { selection, cursor } = this.inlineEdits[targetBufnr];
     const { text: processedInputText } = this.processFastModifier(inputText);
 
@@ -399,12 +404,10 @@ export class InlineEditManager {
     const bufferName = await targetBuffer.getName();
 
     if (selection) {
-      return {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: `\
+      return [
+        {
+          type: "text",
+          text: `\
 I am working in file \`${relativePath(this.cwd, resolveFilePath(this.cwd, bufferName))}\` with the following contents:
 \`\`\`${getMarkdownExt(bufferName)}
 ${targetLines.join("\n")}
@@ -416,16 +419,13 @@ ${selection.text}
 \`\`\`
 
 ${processedInputText}`,
-          },
-        ],
-      };
+        },
+      ];
     } else {
-      return {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: `\
+      return [
+        {
+          type: "text",
+          text: `\
 I am working in file \`${path.relative(this.cwd, bufferName)}\` with the following contents:
 \`\`\`${getMarkdownExt(bufferName)}
 ${targetLines.join("\n")}
@@ -434,9 +434,8 @@ ${targetLines.join("\n")}
 My cursor is on line ${cursor.row - 1}: ${targetLines[cursor.row - 1]}
 
 ${processedInputText}`,
-          },
-        ],
-      };
+        },
+      ];
     }
   }
 
@@ -458,8 +457,8 @@ ${processedInputText}`,
     this.lastInput = inputText;
     const activeProfile = this.getActiveProfile();
 
-    const messages = this.getMessages();
-    messages.push(await this.prepareMessage(targetBufnr, inputText));
+    const contextThread = this.getContextThread();
+    const input = await this.prepareInput(targetBufnr, inputText);
 
     await inputBuffer.setOption("modifiable", false);
     const mountedApp = await app.mount({
@@ -479,8 +478,9 @@ ${processedInputText}`,
 
     const request = getProvider(this.nvim, profileForRequest).forceToolUse({
       model: isFast ? activeProfile.fastModel : activeProfile.model,
-      messages,
+      input,
       spec: selection ? replaceSelectionSpec : inlineEditSpec,
+      ...(contextThread ? { contextThread } : {}),
     });
     dispatch({
       type: "request-sent",

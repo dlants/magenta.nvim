@@ -3,9 +3,7 @@
 exports[`node/inline-edit/inline-edit-app.spec.ts > inline edit end of line selected 1`] = `
 [
   {
-    "content": [
-      {
-        "text": "I am working in file \`poem.txt\` with the following contents:
+    "text": "I am working in file \`poem.txt\` with the following contents:
 \`\`\`txt
 Moonlight whispers through the trees,
 Silver shadows dance with ease.
@@ -20,10 +18,7 @@ Stars above like diamonds bright,
 \`\`\`
 
 Please change 'Silver' to 'Golden'",
-        "type": "text",
-      },
-    ],
-    "role": "user",
+    "type": "text",
   },
 ]
 `;
@@ -31,9 +26,7 @@ Please change 'Silver' to 'Golden'",
 exports[`node/inline-edit/inline-edit-app.spec.ts > inline edit mid-line selected 1`] = `
 [
   {
-    "content": [
-      {
-        "text": "I am working in file \`poem.txt\` with the following contents:
+    "text": "I am working in file \`poem.txt\` with the following contents:
 \`\`\`txt
 Moonlight whispers through the trees,
 Silver shadows dance with ease.
@@ -48,10 +41,7 @@ Stars
 \`\`\`
 
 Please change 'shadows' to 'ghosts'",
-        "type": "text",
-      },
-    ],
-    "role": "user",
+    "type": "text",
   },
 ]
 `;
@@ -59,9 +49,7 @@ Please change 'shadows' to 'ghosts'",
 exports[`node/inline-edit/inline-edit-app.spec.ts > performs inline edit on file 1`] = `
 [
   {
-    "content": [
-      {
-        "text": "I am working in file \`poem.txt\` with the following contents:
+    "text": "I am working in file \`poem.txt\` with the following contents:
 \`\`\`txt
 Moonlight whispers through the trees,
 Silver shadows dance with ease.
@@ -72,10 +60,7 @@ Paint their stories in the night.
 My cursor is on line 0: Moonlight whispers through the trees,
 
 Please change 'Silver' to 'Golden' in line 2",
-        "type": "text",
-      },
-    ],
-    "role": "user",
+    "type": "text",
   },
 ]
 `;
@@ -83,9 +68,7 @@ Please change 'Silver' to 'Golden' in line 2",
 exports[`node/inline-edit/inline-edit-app.spec.ts > performs inline edit with selection 1`] = `
 [
   {
-    "content": [
-      {
-        "text": "I am working in file \`poem.txt\` with the following contents:
+    "text": "I am working in file \`poem.txt\` with the following contents:
 \`\`\`txt
 Moonlight whispers through the trees,
 Silver shadows dance with ease.
@@ -99,10 +82,7 @@ Silver shadows dance with ease.
 \`\`\`
 
 Please change 'Silver' to 'Golden'",
-        "type": "text",
-      },
-    ],
-    "role": "user",
+    "type": "text",
   },
 ]
 `;

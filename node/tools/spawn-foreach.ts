@@ -1,12 +1,11 @@
-import { d, withBindings } from "../tea/view.ts";
+import { d, withBindings, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { GenericToolRequest, StaticTool, ToolName } from "./types.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
@@ -14,6 +13,7 @@ import { AGENT_TYPES, type AgentType } from "../providers/system-prompt.ts";
 import type { ThreadId, ThreadType } from "../chat/types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Chat } from "../chat/chat.ts";
+import type { CompletedToolInfo } from "./types.ts";
 
 export type ForEachElement = string & { __forEachElement: true };
 
@@ -27,6 +27,9 @@ export type Msg =
       type: "subagent-completed";
       threadId: ThreadId;
       result: Result<string>;
+    }
+  | {
+      type: "abort";
     };
 
 type ElementState =
@@ -62,9 +65,10 @@ export type State =
 export class SpawnForeachTool implements StaticTool {
   toolName = "spawn_foreach" as const;
   public state: State;
+  public aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "spawn_foreach" }>,
+    public request: ToolRequest,
     public context: {
       nvim: Nvim;
       dispatch: Dispatch<RootMsg>;
@@ -110,6 +114,7 @@ export class SpawnForeachTool implements StaticTool {
   }
 
   private startNextBatch(): void {
+    if (this.aborted) return;
     if (this.state.state !== "running") {
       return;
     }
@@ -187,18 +192,28 @@ ${element}`;
     return false;
   }
 
-  abort() {
-    this.state = {
-      state: "done",
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: {
-          status: "error",
-          error: "Foreach sub-agent execution was aborted",
-        },
+        status: "error",
+        error: "Request was aborted by the user.",
       },
     };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   update(msg: Msg): void {
@@ -209,6 +224,23 @@ ${element}`;
 
       case "subagent-completed":
         this.handleSubagentCompleted(msg);
+        return;
+
+      case "abort":
+        if (this.state.state === "done") {
+          return;
+        }
+        this.state = {
+          state: "done",
+          result: {
+            type: "tool_result",
+            id: this.request.id,
+            result: {
+              status: "error",
+              error: "Foreach sub-agent execution was aborted",
+            },
+          },
+        };
         return;
 
       default:
@@ -319,6 +351,17 @@ ${element}`;
     resultText += `Total elements: ${this.state.elements.length}\n`;
     resultText += `Successful: ${successful.length}\n`;
     resultText += `Failed: ${failed.length}\n\n`;
+
+    // Collect threadIds for completed summary navigation
+    const threadIds: string[] = [];
+    for (const item of completedElements) {
+      if (item.state.status === "completed" && item.state.threadId) {
+        threadIds.push(item.state.threadId);
+      }
+    }
+    if (threadIds.length > 0) {
+      resultText += `ThreadIds: ${threadIds.join(",")}\n\n`;
+    }
 
     if (successful.length > 0) {
       resultText += `Successful results:\n`;
@@ -491,26 +534,56 @@ ${element}`;
 ${elementViews}`;
       }
 
-      case "done": {
-        const result = this.state.result.result;
-
-        // Re-validate input to get element count for display
-        const validationResult = validateInput(
-          this.request.input as Record<string, unknown>,
+      case "done":
+        return renderCompletedSummary(
+          {
+            request: this.request as CompletedToolInfo["request"],
+            result: this.state.result,
+          },
+          this.context.dispatch,
         );
-        const totalElements =
-          validationResult.status === "ok"
-            ? validationResult.value.elements.length
-            : 0;
-
-        if (result.status === "error") {
-          return d`🤖❌ Foreach subagents${agentTypeText} (${totalElements.toString()}/${totalElements.toString()})`;
-        } else {
-          return d`🤖✅ Foreach subagents${agentTypeText} (${totalElements.toString()}/${totalElements.toString()})`;
-        }
-      }
     }
   }
+}
+
+export function renderCompletedSummary(
+  info: CompletedToolInfo,
+  dispatch: Dispatch<RootMsg>,
+): VDOMNode {
+  const input = info.request.input as Input;
+  const result = info.result.result;
+
+  const agentTypeText = input.agentType ? ` (${input.agentType})` : "";
+  const totalElements = input.elements?.length ?? 0;
+  const status = result.status === "error" ? "❌" : "✅";
+
+  // Parse threadIds from result text
+  let threadIds: ThreadId[] = [];
+  if (result.status === "ok" && result.value[0]?.type === "text") {
+    const match = result.value[0].text.match(/ThreadIds: ([a-f0-9,-]+)/);
+    if (match) {
+      threadIds = match[1].split(",") as ThreadId[];
+    }
+  }
+
+  const threadLinks = threadIds.map((threadId) =>
+    withBindings(d`${threadId}`, {
+      "<CR>": () =>
+        dispatch({
+          type: "chat-msg",
+          msg: {
+            type: "select-thread",
+            id: threadId,
+          },
+        }),
+    }),
+  );
+
+  if (threadLinks.length > 0) {
+    return d`🤖${status} Foreach subagents${agentTypeText} (${totalElements.toString()}/${totalElements.toString()}): ${threadLinks.map((link, i) => (i === threadLinks.length - 1 ? link : d`${link}, `))}`;
+  }
+
+  return d`🤖${status} Foreach subagents${agentTypeText} (${totalElements.toString()}/${totalElements.toString()})`;
 }
 
 export const spec: ProviderToolSpec = {
@@ -575,6 +648,8 @@ export type Input = {
   contextFiles?: UnresolvedFilePath[] | undefined;
   agentType?: AgentType | undefined;
 };
+
+export type ToolRequest = GenericToolRequest<"spawn_foreach", Input>;
 
 export function validateInput(input: {
   [key: string]: unknown;

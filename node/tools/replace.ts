@@ -9,7 +9,6 @@ import {
 } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
 import type { Dispatch } from "../tea/tea.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolResultContent,
@@ -18,16 +17,24 @@ import type {
 import { applyEdit } from "./applyEdit.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import type { RootMsg } from "../root-msg.ts";
-import type { MessageId } from "../chat/message.ts";
+import type { ThreadId } from "../chat/types.ts";
 import * as diff from "diff";
-import type { ThreadId } from "../chat/types";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
 import type { NvimCwd, UnresolvedFilePath } from "../utils/files.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import { resolveFilePath } from "../utils/files.ts";
 import type { MagentaOptions } from "../options.ts";
 import { canWriteFile } from "./permissions.ts";
 import type { Gitignore } from "./util.ts";
+import type { CompletedToolInfo } from "./types.ts";
+
+export type Input = {
+  filePath: UnresolvedFilePath;
+  find: string;
+  replace: string;
+};
+
+export type ToolRequest = GenericToolRequest<"replace", Input>;
 
 export type State =
   | {
@@ -64,11 +71,11 @@ export type Msg =
 export class ReplaceTool implements StaticTool {
   state: State;
   toolName = "replace" as const;
+  aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "replace" }>,
+    public request: ToolRequest,
     public threadId: ThreadId,
-    public messageId: MessageId,
     private context: {
       myDispatch: Dispatch<Msg>;
       dispatch: Dispatch<RootMsg>;
@@ -84,6 +91,7 @@ export class ReplaceTool implements StaticTool {
 
     // wrap in setTimeout to force a new eventloop frame, so we don't dispatch-in-dispatch
     setTimeout(() => {
+      if (this.aborted) return;
       try {
         this.initReplace();
       } catch (error) {
@@ -116,7 +124,7 @@ export class ReplaceTool implements StaticTool {
   }
 
   private async doReplace(): Promise<void> {
-    await applyEdit(this.request, this.threadId, this.messageId, this.context);
+    await applyEdit(this.request, this.threadId, this.context);
   }
 
   isDone(): boolean {
@@ -127,18 +135,28 @@ export class ReplaceTool implements StaticTool {
     return this.state.state === "pending-user-action";
   }
 
-  abort(): void {
-    this.state = {
-      state: "done",
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: {
-          status: "error",
-          error: "The user aborted this tool request.",
-        },
+        status: "error",
+        error: "Request was aborted by the user.",
       },
     };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   update(msg: Msg): void {
@@ -170,15 +188,17 @@ export class ReplaceTool implements StaticTool {
 
             // wrap in setTimeout to force a new eventloop frame, to avoid dispatch-in-dispatch
             setTimeout(() => {
-              this.doReplace().catch((error: Error) =>
+              if (this.aborted) return;
+              this.doReplace().catch((error: Error) => {
+                if (this.aborted) return;
                 this.context.myDispatch({
                   type: "finish",
                   result: {
                     status: "error",
                     error: error.message + "\n" + error.stack,
                   },
-                }),
-              );
+                });
+              });
             });
             return;
           } else {
@@ -207,15 +227,17 @@ export class ReplaceTool implements StaticTool {
 
           // wrap in setTimeout to force a new eventloop frame, to avoid dispatch-in-dispatch
           setTimeout(() => {
-            this.doReplace().catch((error: Error) =>
+            if (this.aborted) return;
+            this.doReplace().catch((error: Error) => {
+              if (this.aborted) return;
               this.context.myDispatch({
                 type: "finish",
                 result: {
                   status: "error",
                   error: error.message + "\n" + error.stack,
                 },
-              }),
-            );
+              });
+            });
           });
         }
         return;
@@ -226,8 +248,8 @@ export class ReplaceTool implements StaticTool {
   }
 
   renderSummary(): VDOMNode {
-    const findLines = this.countLines(this.request.input.find);
-    const replaceLines = this.countLines(this.request.input.replace);
+    const findLines = countLines(this.request.input.find);
+    const replaceLines = countLines(this.request.input.replace);
 
     switch (this.state.state) {
       case "pending":
@@ -262,11 +284,10 @@ export class ReplaceTool implements StaticTool {
         )} │
 └────────────────┘`;
       case "done":
-        if (this.state.result.result.status === "error") {
-          return d`✏️❌ Replace [[ -${findLines.toString()} / +${replaceLines.toString()} ]] in ${withInlineCode(d`\`${this.request.input.filePath}\``)} - ${this.state.result.result.error}`;
-        } else {
-          return d`✏️✅ Replace [[ -${findLines.toString()} / +${replaceLines.toString()} ]] in ${withInlineCode(d`\`${this.request.input.filePath}\``)}`;
-        }
+        return renderCompletedSummary({
+          request: this.request as CompletedToolInfo["request"],
+          result: this.state.result,
+        });
       default:
         assertUnreachable(this.state);
     }
@@ -275,22 +296,25 @@ export class ReplaceTool implements StaticTool {
   renderPreview(): VDOMNode {
     switch (this.state.state) {
       case "pending":
-      case "pending-user-action":
       case "processing":
         return d``;
+      case "pending-user-action":
+        return renderReplacePreview(
+          this.request.input,
+          this.context.getDisplayWidth(),
+        );
       case "done":
         if (this.state.result.result.status === "error") {
           return d``;
         } else {
-          return this.renderDiffPreview();
+          return renderReplacePreview(
+            this.request.input,
+            this.context.getDisplayWidth(),
+          );
         }
       default:
         assertUnreachable(this.state);
     }
-  }
-
-  countLines(str: string) {
-    return (str.match(/\n/g) || []).length + 1;
   }
 
   getReplacePreview(): string {
@@ -338,95 +362,8 @@ export class ReplaceTool implements StaticTool {
     return result;
   }
 
-  private renderDiffPreview(): VDOMNode {
-    const find = this.request.input.find;
-    const replace = this.request.input.replace;
-
-    const diffResult = diff.createPatch(
-      this.request.input.filePath,
-      find,
-      replace,
-      "before",
-      "after",
-      {
-        context: 2,
-        ignoreNewlineAtEof: true,
-      },
-    );
-
-    // slice off the diff header
-    const diffLines = diffResult.split("\n").slice(5);
-
-    const maxLines = 10;
-    const maxLength = this.context.getDisplayWidth() - 5;
-
-    let previewLines =
-      diffLines.length > maxLines
-        ? diffLines.slice(diffLines.length - maxLines)
-        : diffLines;
-
-    previewLines = previewLines.map((line) => {
-      if (line.length > maxLength) {
-        return line.substring(0, maxLength) + "...";
-      }
-      return line;
-    });
-
-    // Add ellipsis if we truncated
-    const allLines =
-      diffLines.length > maxLines ? ["...", ...previewLines] : previewLines;
-
-    // Create diff content with individual line highlighting
-    const diffContent = allLines.map((line) => {
-      if (line.startsWith("+")) {
-        return withExtmark(d`${line}`, { line_hl_group: "DiffAdd" });
-      } else if (line.startsWith("-")) {
-        return withExtmark(d`${line}`, { line_hl_group: "DiffDelete" });
-      } else {
-        return d`${line}`;
-      }
-    });
-
-    return withCode(d`\`\`\`diff
-${diffContent.map((line, index) => (index === diffContent.length - 1 ? line : d`${line}\n`))}
-\`\`\``);
-  }
-
   renderDetail(): VDOMNode {
-    const find = this.request.input.find;
-    const replace = this.request.input.replace;
-
-    const diffResult = diff.createPatch(
-      this.request.input.filePath,
-      find,
-      replace,
-      "before",
-      "after",
-      {
-        context: 5,
-        ignoreNewlineAtEof: true,
-      },
-    );
-
-    // slice off the diff header
-    const diffLines = diffResult.split("\n").slice(5);
-
-    // Create diff content with individual line highlighting
-    const diffContent = diffLines.map((line) => {
-      if (line.startsWith("+")) {
-        return withExtmark(d`${line}`, { line_hl_group: "DiffAdd" });
-      } else if (line.startsWith("-")) {
-        return withExtmark(d`${line}`, { line_hl_group: "DiffDelete" });
-      } else {
-        return d`${line}`;
-      }
-    });
-
-    return d`\
-filePath: ${withInlineCode(d`\`${this.request.input.filePath}\``)}
-${withCode(d`\`\`\`diff
-${diffContent.map((line, index) => (index === diffContent.length - 1 ? line : d`${line}\n`))}
-\`\`\``)}`;
+    return renderReplaceDetail(this.request.input);
   }
 
   getToolResult(): ProviderToolResult {
@@ -468,6 +405,104 @@ ${diffContent.map((line, index) => (index === diffContent.length - 1 ? line : d`
   }
 }
 
+function countLines(str: string): number {
+  return (str.match(/\n/g) || []).length + 1;
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const input = info.request.input as Input;
+  const result = info.result.result;
+  const findLines = countLines(input.find);
+  const replaceLines = countLines(input.replace);
+
+  if (result.status === "error") {
+    return d`✏️❌ Replace [[ -${findLines.toString()} / +${replaceLines.toString()} ]] in ${withInlineCode(d`\`${input.filePath}\``)} - ${result.error}`;
+  }
+  return d`✏️✅ Replace [[ -${findLines.toString()} / +${replaceLines.toString()} ]] in ${withInlineCode(d`\`${input.filePath}\``)}`;
+}
+
+export function renderReplacePreview(
+  input: Input,
+  displayWidth: number,
+): VDOMNode {
+  const diffResult = diff.createPatch(
+    input.filePath,
+    input.find,
+    input.replace,
+    "before",
+    "after",
+    {
+      context: 2,
+      ignoreNewlineAtEof: true,
+    },
+  );
+
+  const diffLines = diffResult.split("\n").slice(5);
+  const maxLines = 10;
+  const maxLength = displayWidth - 5;
+
+  let previewLines =
+    diffLines.length > maxLines
+      ? diffLines.slice(diffLines.length - maxLines)
+      : diffLines;
+
+  previewLines = previewLines.map((line) => {
+    if (line.length > maxLength) {
+      return line.substring(0, maxLength) + "...";
+    }
+    return line;
+  });
+
+  const allLines =
+    diffLines.length > maxLines ? ["...", ...previewLines] : previewLines;
+
+  const diffContent = allLines.map((line) => {
+    if (line.startsWith("+")) {
+      return withExtmark(d`${line}`, { line_hl_group: "DiffAdd" });
+    } else if (line.startsWith("-")) {
+      return withExtmark(d`${line}`, { line_hl_group: "DiffDelete" });
+    } else {
+      return d`${line}`;
+    }
+  });
+
+  return withCode(d`\`\`\`diff
+${diffContent.map((line, index) => (index === diffContent.length - 1 ? line : d`${line}\n`))}
+\`\`\``);
+}
+
+export function renderReplaceDetail(input: Input): VDOMNode {
+  const diffResult = diff.createPatch(
+    input.filePath,
+    input.find,
+    input.replace,
+    "before",
+    "after",
+    {
+      context: 5,
+      ignoreNewlineAtEof: true,
+    },
+  );
+
+  const diffLines = diffResult.split("\n").slice(5);
+
+  const diffContent = diffLines.map((line) => {
+    if (line.startsWith("+")) {
+      return withExtmark(d`${line}`, { line_hl_group: "DiffAdd" });
+    } else if (line.startsWith("-")) {
+      return withExtmark(d`${line}`, { line_hl_group: "DiffDelete" });
+    } else {
+      return d`${line}`;
+    }
+  });
+
+  return d`\
+filePath: ${withInlineCode(d`\`${input.filePath}\``)}
+${withCode(d`\`\`\`diff
+${diffContent.map((line, index) => (index === diffContent.length - 1 ? line : d`${line}\n`))}
+\`\`\``)}`;
+}
+
 export const spec: ProviderToolSpec = {
   name: "replace" as ToolName,
   description: `This is a tool for replacing text in a file.
@@ -505,12 +540,6 @@ This MUST be the complete and exact replacement text. Make sure to match braces 
     },
     required: ["filePath", "find", "replace"],
   },
-};
-
-export type Input = {
-  filePath: UnresolvedFilePath;
-  find: string;
-  replace: string;
 };
 
 export function validateInput(input: {

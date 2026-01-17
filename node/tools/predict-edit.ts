@@ -2,15 +2,20 @@ import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
 import type { Dispatch } from "../tea/tea.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
-import type { MessageId } from "../chat/message.ts";
-import type { ThreadId } from "../chat/types";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { ThreadId } from "../chat/types.ts";
+import type {
+  StaticTool,
+  ToolName,
+  GenericToolRequest,
+  CompletedToolInfo,
+} from "./types.ts";
+
+export type ToolRequest = GenericToolRequest<"predict_edit", Input>;
 
 export type State =
   | {
@@ -29,11 +34,11 @@ export type Msg = {
 export class PredictEditTool implements StaticTool {
   state: State;
   toolName = "predict_edit" as const;
+  aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "predict_edit" }>,
+    public request: ToolRequest,
     public threadId: ThreadId,
-    public messageId: MessageId,
     private context: {
       myDispatch: Dispatch<Msg>;
     },
@@ -42,6 +47,7 @@ export class PredictEditTool implements StaticTool {
 
     // For now, just mark as done immediately
     setTimeout(() => {
+      if (this.aborted) return;
       this.context.myDispatch({
         type: "finish",
         result: {
@@ -60,18 +66,28 @@ export class PredictEditTool implements StaticTool {
     return false;
   }
 
-  abort(): void {
-    this.state = {
-      state: "done",
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: {
-          status: "error",
-          error: "The user aborted this tool request.",
-        },
+        status: "error",
+        error: "Request was aborted by the user.",
       },
     };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   update(msg: Msg): void {
@@ -98,11 +114,10 @@ export class PredictEditTool implements StaticTool {
       case "processing":
         return d`🔮⚙️ Predicting next edit...`;
       case "done":
-        if (this.state.result.result.status === "error") {
-          return d`🔮❌ Edit prediction failed - ${this.state.result.result.error}`;
-        } else {
-          return d`🔮✅ Edit prediction completed`;
-        }
+        return renderCompletedSummary({
+          request: this.request as CompletedToolInfo["request"],
+          result: this.state.result,
+        });
       default:
         assertUnreachable(this.state);
     }
@@ -135,6 +150,16 @@ export class PredictEditTool implements StaticTool {
         assertUnreachable(this.state);
     }
   }
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const result = info.result.result;
+
+  if (result.status === "error") {
+    return d`🔮❌ Edit prediction failed - ${result.error}`;
+  }
+
+  return d`🔮✅ Edit prediction completed`;
 }
 
 export const spec: ProviderToolSpec = {

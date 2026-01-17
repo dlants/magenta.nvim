@@ -1,15 +1,20 @@
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { d } from "../tea/view.ts";
+import { d, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
+import type { CompletedToolInfo } from "./types.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import { getDiagnostics } from "../utils/diagnostics.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
+
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export type Input = {};
+
+export type ToolRequest = GenericToolRequest<"diagnostics", Input>;
 
 export type State =
   | {
@@ -28,9 +33,10 @@ export type Msg = {
 export class DiagnosticsTool implements StaticTool {
   state: State;
   toolName = "diagnostics" as const;
+  aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "diagnostics" }>,
+    public request: ToolRequest,
     public context: { nvim: Nvim; myDispatch: (msg: Msg) => void },
   ) {
     this.state = {
@@ -70,25 +76,34 @@ export class DiagnosticsTool implements StaticTool {
     return false;
   }
 
-  /** this is expected to execute as part of a dispatch, so we don't need to dispatch anything to update the view
-   */
-  abort() {
-    this.state = {
-      state: "done",
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: {
-          status: "error",
-          error: `The user aborted this request.`,
-        },
+        status: "error",
+        error: "Request was aborted by the user.",
       },
     };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   async getDiagnostics() {
     try {
       const content = await getDiagnostics(this.context.nvim);
+      if (this.aborted) return;
       this.context.myDispatch({
         type: "finish",
         result: {
@@ -97,6 +112,7 @@ export class DiagnosticsTool implements StaticTool {
         },
       });
     } catch (error) {
+      if (this.aborted) return;
       this.context.myDispatch({
         type: "finish",
         result: {
@@ -135,15 +151,24 @@ export class DiagnosticsTool implements StaticTool {
       case "processing":
         return d`🔍⚙️ diagnostics`;
       case "done":
-        if (this.state.result.result.status === "error") {
-          return d`🔍❌ diagnostics - ${this.state.result.result.error}`;
-        } else {
-          return d`🔍✅ diagnostics - Diagnostics retrieved`;
-        }
+        return renderCompletedSummary({
+          request: this.request as CompletedToolInfo["request"],
+          result: this.state.result,
+        });
       default:
         assertUnreachable(this.state);
     }
   }
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const result = info.result.result;
+
+  if (result.status === "error") {
+    return d`🔍❌ diagnostics - ${result.error}`;
+  }
+
+  return d`🔍✅ diagnostics - Diagnostics retrieved`;
 }
 
 export const spec: ProviderToolSpec = {
@@ -155,9 +180,6 @@ export const spec: ProviderToolSpec = {
     required: [],
   },
 };
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export type Input = {};
 
 export function validateInput(): Result<Input> {
   return {

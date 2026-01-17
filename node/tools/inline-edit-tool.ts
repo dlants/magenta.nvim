@@ -1,7 +1,7 @@
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { d } from "../tea/view.ts";
+import { d, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
+import type { CompletedToolInfo } from "./types.ts";
 import type {
   ProviderToolResult,
   ProviderToolResultContent,
@@ -9,9 +9,16 @@ import type {
 } from "../providers/provider.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { GenericToolRequest, StaticTool, ToolName } from "./types.ts";
 import { NvimBuffer, type BufNr, type Line } from "../nvim/buffer.ts";
 import type { ByteIdx, Position0Indexed, Row0Indexed } from "../nvim/window.ts";
+
+export type Input = {
+  find: string;
+  replace: string;
+};
+
+export type ToolRequest = GenericToolRequest<"inline_edit", Input>;
 
 export type State =
   | {
@@ -30,9 +37,10 @@ export type Msg = {
 export class InlineEditTool implements StaticTool {
   state: State;
   toolName = "inline_edit" as const;
+  aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "inline_edit" }>,
+    public request: ToolRequest,
     public context: { bufnr: BufNr; nvim: Nvim; myDispatch: Dispatch<Msg> },
   ) {
     this.state = {
@@ -41,15 +49,17 @@ export class InlineEditTool implements StaticTool {
 
     // wrap in setTimeout to force a new eventloop frame, to avoid dispatch-in-dispatch
     setTimeout(() => {
-      this.apply().catch((err: Error) =>
+      if (this.aborted) return;
+      this.apply().catch((err: Error) => {
+        if (this.aborted) return;
         this.context.myDispatch({
           type: "finish",
           result: {
             status: "error",
             error: err.message + "\n" + err.stack,
           },
-        }),
-      );
+        });
+      });
     });
   }
 
@@ -61,17 +71,28 @@ export class InlineEditTool implements StaticTool {
     return false;
   }
 
-  /** this is expected to be invoked as part of a dispatch, so we don't need to dispatch here to update the view
-   */
-  abort() {
-    this.state = {
-      state: "done",
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: { status: "error", error: `The user aborted this request.` },
+        status: "error",
+        error: "Request was aborted by the user.",
       },
     };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   update(msg: Msg): void {
@@ -111,11 +132,10 @@ export class InlineEditTool implements StaticTool {
       case "processing":
         return d`✏️⚙️ Applying edit`;
       case "done":
-        if (this.state.result.result.status === "error") {
-          return d`✏️❌ Applying edit`;
-        } else {
-          return d`✏️✅ Applying edit`;
-        }
+        return renderCompletedSummary({
+          request: this.request as CompletedToolInfo["request"],
+          result: this.state.result,
+        });
       default:
         assertUnreachable(this.state);
     }
@@ -129,6 +149,9 @@ export class InlineEditTool implements StaticTool {
       start: 0 as Row0Indexed,
       end: -1 as Row0Indexed,
     });
+
+    if (this.aborted) return;
+
     const content = lines.join("\n");
 
     const replaceStart = content.indexOf(input.find);
@@ -181,6 +204,8 @@ ${input.find}
       lines: input.replace.split("\n") as Line[],
     });
 
+    if (this.aborted) return;
+
     this.context.myDispatch({
       type: "finish",
       result: {
@@ -189,6 +214,16 @@ ${input.find}
       },
     });
   }
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const result = info.result.result;
+
+  if (result.status === "error") {
+    return d`✏️❌ Applying edit`;
+  }
+
+  return d`✏️✅ Applying edit`;
 }
 
 export const spec: ProviderToolSpec = {
@@ -211,11 +246,6 @@ If the text appears multiple times, only the first match will be replaced.`,
     },
     required: ["find", "replace"],
   },
-};
-
-export type Input = {
-  find: string;
-  replace: string;
 };
 
 export function validateInput(input: {

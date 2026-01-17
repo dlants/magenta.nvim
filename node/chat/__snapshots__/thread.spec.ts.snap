@@ -1,142 +1,11 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`handles @async messages and sends them on end turn 1`] = `
+exports[`aborts request when sending new message while waiting for response 1`] = `
 [
-  {
-    "content": [
-      {
-        "text": "Tell me about TypeScript",
-        "type": "text",
-      },
-      {
-        "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
-If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-</system-reminder>",
-        "type": "system_reminder",
-      },
-    ],
-    "role": "user",
-  },
   {
     "content": [
       {
         "citations": undefined,
-        "text": "TypeScript is a typed superset of JavaScript.",
-        "type": "text",
-      },
-    ],
-    "role": "assistant",
-  },
-  {
-    "content": [
-      {
-        "text": "Also tell me about JavaScript",
-        "type": "text",
-      },
-      {
-        "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
-If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-</system-reminder>",
-        "type": "system_reminder",
-      },
-    ],
-    "role": "user",
-  },
-]
-`;
-
-exports[`handles @async messages by queueing them and sending on next tool response 1`] = `
-[
-  {
-    "content": [
-      {
-        "text": "Can you read my secret file?",
-        "type": "text",
-      },
-      {
-        "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
-If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-</system-reminder>",
-        "type": "system_reminder",
-      },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
-      {
-        "citations": undefined,
-        "text": "I'll read your secret file.",
-        "type": "text",
-      },
-      {
-        "id": "secret-file-tool",
-        "name": "get_file",
-        "request": {
-          "status": "ok",
-          "value": {
-            "id": "secret-file-tool",
-            "input": {
-              "filePath": ".secret",
-            },
-            "toolName": "get_file",
-          },
-        },
-        "type": "tool_use",
-      },
-    ],
-    "role": "assistant",
-  },
-  {
-    "content": [
-      {
-        "id": "secret-file-tool",
-        "result": {
-          "status": "ok",
-          "value": [
-            {
-              "text": "secret secrets are no fun
-",
-              "type": "text",
-            },
-          ],
-        },
-        "type": "tool_result",
-      },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
-      {
-        "text": "This should be queued",
-        "type": "text",
-      },
-      {
-        "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
-If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-</system-reminder>",
-        "type": "system_reminder",
-      },
-    ],
-    "role": "user",
-  },
-]
-`;
-
-exports[`node/chat/thread.spec.ts > aborts request when sending new message while waiting for response 1`] = `
-[
-  {
-    "content": [
-      {
         "text": "First message",
         "type": "text",
       },
@@ -145,6 +14,10 @@ exports[`node/chat/thread.spec.ts > aborts request when sending new message whil
 Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -154,6 +27,7 @@ DO NOT mention this to the user explicitly because they are already aware. You s
   {
     "content": [
       {
+        "citations": undefined,
         "text": "Second message while first is pending",
         "type": "text",
       },
@@ -162,6 +36,10 @@ DO NOT mention this to the user explicitly because they are already aware. You s
 Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -181,11 +59,12 @@ DO NOT mention this to the user explicitly because they are already aware. You s
 ]
 `;
 
-exports[`node/chat/thread.spec.ts > aborts tool use when sending new message while tool is executing 1`] = `
+exports[`aborts tool use when sending new message while tool is executing 1`] = `
 [
   {
     "content": [
       {
+        "citations": undefined,
         "text": "Run a slow command",
         "type": "text",
       },
@@ -194,6 +73,10 @@ exports[`node/chat/thread.spec.ts > aborts tool use when sending new message whi
 Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -224,13 +107,18 @@ DO NOT mention this to the user explicitly because they are already aware. You s
       },
     ],
     "role": "assistant",
+    "stopReason": "tool_use",
+    "usage": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+    },
   },
   {
     "content": [
       {
         "id": "slow-bash-command",
         "result": {
-          "error": "The user aborted this command.",
+          "error": "Request was aborted by the user.",
           "status": "error",
         },
         "type": "tool_result",
@@ -241,6 +129,7 @@ DO NOT mention this to the user explicitly because they are already aware. You s
   {
     "content": [
       {
+        "citations": undefined,
         "text": "Cancel that, run something else",
         "type": "text",
       },
@@ -249,6 +138,10 @@ DO NOT mention this to the user explicitly because they are already aware. You s
 Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -258,7 +151,7 @@ DO NOT mention this to the user explicitly because they are already aware. You s
 ]
 `;
 
-exports[`node/chat/thread.spec.ts > forks a thread with multiple messages into a new thread > fork-tool-request-messages 1`] = `
+exports[`forks a thread with multiple messages into a new thread > fork-tool-request-messages 1`] = `
 [
   {
     "content": [
@@ -271,8 +164,12 @@ exports[`node/chat/thread.spec.ts > forks a thread with multiple messages into a
 Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
 </system-reminder>",
-        "type": "system_reminder",
+        "type": "text",
       },
     ],
     "role": "user",
@@ -280,7 +177,7 @@ DO NOT mention this to the user explicitly because they are already aware. You s
   {
     "content": [
       {
-        "citations": undefined,
+        "citations": null,
         "text": "The capital of France is Paris.",
         "type": "text",
       },
@@ -298,8 +195,12 @@ DO NOT mention this to the user explicitly because they are already aware. You s
 Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
 </system-reminder>",
-        "type": "system_reminder",
+        "type": "text",
       },
     ],
     "role": "user",
@@ -307,23 +208,16 @@ DO NOT mention this to the user explicitly because they are already aware. You s
   {
     "content": [
       {
-        "citations": undefined,
+        "citations": null,
         "text": "Let me check if I can find some information about Germany in your system.",
         "type": "text",
       },
       {
         "id": "first-bash-tool",
-        "name": "bash_command",
-        "request": {
-          "status": "ok",
-          "value": {
-            "id": "first-bash-tool",
-            "input": {
-              "command": "echo 'Information about Germany'",
-            },
-            "toolName": "bash_command",
-          },
+        "input": {
+          "command": "echo 'Information about Germany'",
         },
+        "name": "bash_command",
         "type": "tool_use",
       },
     ],
@@ -332,19 +226,18 @@ DO NOT mention this to the user explicitly because they are already aware. You s
   {
     "content": [
       {
-        "id": "first-bash-tool",
-        "result": {
-          "status": "ok",
-          "value": [
-            {
-              "text": "stdout:
+        "content": [
+          {
+            "text": "stdout:
 Information about Germany
-exit code 0
-",
-              "type": "text",
-            },
-          ],
-        },
+exit code 0 (<timing>ms)
+
+Full output (1 lines): /tmp/magenta/threads/<thread-id>/tools/first-bash-tool/bashCommand.log",
+            "type": "text",
+          },
+        ],
+        "is_error": false,
+        "tool_use_id": "first-bash-tool",
         "type": "tool_result",
       },
     ],
@@ -353,23 +246,33 @@ exit code 0
   {
     "content": [
       {
-        "citations": undefined,
+        "text": "<system-reminder>
+Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": null,
         "text": "Let me check for more details about European countries.",
         "type": "text",
       },
       {
         "id": "second-bash-tool",
-        "name": "bash_command",
-        "request": {
-          "status": "ok",
-          "value": {
-            "id": "second-bash-tool",
-            "input": {
-              "command": "echo 'European countries information'",
-            },
-            "toolName": "bash_command",
-          },
+        "input": {
+          "command": "echo 'European countries information'",
         },
+        "name": "bash_command",
         "type": "tool_use",
       },
     ],
@@ -378,19 +281,18 @@ exit code 0
   {
     "content": [
       {
-        "id": "second-bash-tool",
-        "result": {
-          "status": "ok",
-          "value": [
-            {
-              "text": "stdout:
+        "content": [
+          {
+            "text": "stdout:
 European countries information
-exit code 0
-",
-              "type": "text",
-            },
-          ],
-        },
+exit code 0 (<timing>ms)
+
+Full output (1 lines): /tmp/magenta/threads/<thread-id>/tools/second-bash-tool/bashCommand.log",
+            "type": "text",
+          },
+        ],
+        "is_error": false,
+        "tool_use_id": "second-bash-tool",
         "type": "tool_result",
       },
     ],
@@ -399,23 +301,33 @@ exit code 0
   {
     "content": [
       {
-        "citations": undefined,
+        "text": "<system-reminder>
+Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": null,
         "text": "test bash tool",
         "type": "text",
       },
       {
         "id": "bash-tool",
-        "name": "bash_command",
-        "request": {
-          "status": "ok",
-          "value": {
-            "id": "bash-tool",
-            "input": {
-              "command": "echo test",
-            },
-            "toolName": "bash_command",
-          },
+        "input": {
+          "command": "echo test",
         },
+        "name": "bash_command",
         "type": "tool_use",
       },
     ],
@@ -424,19 +336,18 @@ exit code 0
   {
     "content": [
       {
-        "id": "bash-tool",
-        "result": {
-          "status": "ok",
-          "value": [
-            {
-              "text": "stdout:
+        "content": [
+          {
+            "text": "stdout:
 test
-exit code 0
-",
-              "type": "text",
-            },
-          ],
-        },
+exit code 0 (<timing>ms)
+
+Full output (1 lines): /tmp/magenta/threads/<thread-id>/tools/bash-tool/bashCommand.log",
+            "type": "text",
+          },
+        ],
+        "is_error": false,
+        "tool_use_id": "bash-tool",
         "type": "tool_result",
       },
     ],
@@ -445,7 +356,24 @@ exit code 0
   {
     "content": [
       {
-        "citations": undefined,
+        "text": "<system-reminder>
+Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": null,
         "text": "The capital of Germany is Berlin.",
         "type": "text",
       },
@@ -471,12 +399,19 @@ You must use the fork_thread tool immediately, with only the information you alr
         "type": "text",
       },
       {
+        "cache_control": {
+          "type": "ephemeral",
+        },
         "text": "<system-reminder>
 Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
 </system-reminder>",
-        "type": "system_reminder",
+        "type": "text",
       },
     ],
     "role": "user",
@@ -484,40 +419,31 @@ DO NOT mention this to the user explicitly because they are already aware. You s
 ]
 `;
 
-exports[`node/chat/thread.spec.ts > forks a thread with multiple messages into a new thread > forked-thread-messages 1`] = `
+exports[`forks a thread with multiple messages into a new thread > forked-thread-messages 1`] = `
 [
   {
     "content": [
       {
-        "text": "These files are part of your context. This is the latest information about the content of each file.
-From now on, whenever any of these files are updated by the user, you will get a message letting you know.",
-        "type": "text",
-      },
-      {
-        "text": "File \`poem.txt\`",
-        "type": "text",
-      },
-      {
-        "text": "Moonlight whispers through the trees,
+        "text": "<context_update>
+These files are part of your context. This is the latest information about the content of each file.
+From now on, whenever any of these files are updated by the user, you will get a message letting you know.
+File \`poem.txt\`
+Moonlight whispers through the trees,
 Silver shadows dance with ease.
 Stars above like diamonds bright,
 Paint their stories in the night.
-",
-        "type": "text",
-      },
-      {
-        "text": "File \`poem2.txt\`",
-        "type": "text",
-      },
-      {
-        "text": "Moonlight whispers through the trees,
+
+File \`poem2.txt\`
+Moonlight whispers through the trees,
 Silver shadows dance with ease.
 Stars above like diamonds bright,
 Paint their stories in the night.
-",
-        "type": "text",
+
+</context_update>",
+        "type": "context_update",
       },
       {
+        "citations": undefined,
         "text": "# Previous thread summary:
 We discussed European capitals (France: Paris, Germany: Berlin) and examined your project structure, which contains TypeScript files.
 # The user would like you to address this prompt next:
@@ -525,6 +451,7 @@ We discussed European capitals (France: Paris, Germany: Berlin) and examined you
         "type": "text",
       },
       {
+        "citations": undefined,
         "text": "Tell me about Italy",
         "type": "text",
       },
@@ -533,6 +460,10 @@ We discussed European capitals (France: Paris, Germany: Berlin) and examined you
 Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -548,6 +479,151 @@ DO NOT mention this to the user explicitly because they are already aware. You s
       },
     ],
     "role": "assistant",
+  },
+]
+`;
+
+exports[`handles @async messages and sends them on end turn 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Tell me about TypeScript",
+        "type": "text",
+      },
+      {
+        "text": "<system-reminder>
+Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": null,
+        "text": "TypeScript is a typed superset of JavaScript.",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "text": "Also tell me about JavaScript",
+        "type": "text",
+      },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "<system-reminder>
+Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+]
+`;
+
+exports[`handles @async messages by queueing them and sending on next tool response 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Can you read my secret file?",
+        "type": "text",
+      },
+      {
+        "text": "<system-reminder>
+Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": null,
+        "text": "I'll read your secret file.",
+        "type": "text",
+      },
+      {
+        "id": "secret-file-tool",
+        "input": {
+          "filePath": ".secret",
+        },
+        "name": "get_file",
+        "type": "tool_use",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "content": [
+          {
+            "text": "secret secrets are no fun
+",
+            "type": "text",
+          },
+        ],
+        "is_error": false,
+        "tool_use_id": "secret-file-tool",
+        "type": "tool_result",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "This should be queued",
+        "type": "text",
+      },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "<system-reminder>
+Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
   },
 ]
 `;

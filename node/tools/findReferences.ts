@@ -1,5 +1,6 @@
-import { d, withInlineCode } from "../tea/view.ts";
+import { d, withInlineCode, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
+import type { CompletedToolInfo } from "./types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { getOrOpenBuffer } from "../utils/buffers.ts";
 import type { NvimBuffer } from "../nvim/buffer.ts";
@@ -7,7 +8,6 @@ import type { Nvim } from "../nvim/nvim-node";
 import type { Lsp } from "../lsp.ts";
 import { calculateStringPosition } from "../tea/util.ts";
 import type { PositionString, Row0Indexed, StringIdx } from "../nvim/window.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolResultContent,
@@ -18,7 +18,7 @@ import {
   type NvimCwd,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
 
 export type State =
   | {
@@ -37,9 +37,10 @@ export type Msg = {
 export class FindReferencesTool implements StaticTool {
   state: State;
   toolName = "find_references" as const;
+  aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "find_references" }>,
+    public request: ToolRequest,
     public context: {
       nvim: Nvim;
       cwd: NvimCwd;
@@ -65,20 +66,28 @@ export class FindReferencesTool implements StaticTool {
     return false;
   }
 
-  /** This is expected to be invoked as part of a dispatch so we don't need to dispatch new actions to update the view.
-   */
-  abort() {
-    this.state = {
-      state: "done",
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: {
-          status: "error",
-          error: `The user aborted this request.`,
-        },
+        status: "error",
+        error: "Request was aborted by the user.",
       },
     };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   update(msg: Msg) {
@@ -108,6 +117,8 @@ export class FindReferencesTool implements StaticTool {
       context: { nvim, cwd },
     });
 
+    if (this.aborted) return;
+
     let buffer: NvimBuffer;
     let bufferContent: string;
     if (bufferResult.status == "ok") {
@@ -128,6 +139,8 @@ export class FindReferencesTool implements StaticTool {
       });
       return;
     }
+
+    if (this.aborted) return;
     const symbolStart = bufferContent.indexOf(
       this.request.input.symbol,
     ) as StringIdx;
@@ -151,6 +164,9 @@ export class FindReferencesTool implements StaticTool {
 
     try {
       const result = await lsp.requestReferences(buffer, symbolPos);
+
+      if (this.aborted) return;
+
       let content = "";
       for (const lspResult of result) {
         if (lspResult != null && lspResult.result) {
@@ -175,6 +191,8 @@ export class FindReferencesTool implements StaticTool {
         },
       });
     } catch (error) {
+      if (this.aborted) return;
+
       this.context.myDispatch({
         type: "finish",
         result: {
@@ -210,15 +228,20 @@ export class FindReferencesTool implements StaticTool {
       case "processing":
         return d`🔍⚙️ ${withInlineCode(d`\`${this.request.input.symbol}\``)} in ${withInlineCode(d`\`${this.request.input.filePath}\``)}`;
       case "done":
-        if (this.state.result.result.status === "error") {
-          return d`🔍❌ ${withInlineCode(d`\`${this.request.input.symbol}\``)} in ${withInlineCode(d`\`${this.request.input.filePath}\``)}`;
-        } else {
-          return d`🔍✅ ${withInlineCode(d`\`${this.request.input.symbol}\``)} in ${withInlineCode(d`\`${this.request.input.filePath}\``)}`;
-        }
+        return renderCompletedSummary({
+          request: this.request as CompletedToolInfo["request"],
+          result: this.state.result,
+        });
       default:
         assertUnreachable(this.state);
     }
   }
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const input = info.request.input as Input;
+  const status = info.result.result.status === "error" ? "❌" : "✅";
+  return d`🔍${status} ${withInlineCode(d`\`${input.symbol}\``)} in ${withInlineCode(d`\`${input.filePath}\``)}`;
 }
 
 export const spec: ProviderToolSpec = {
@@ -246,6 +269,8 @@ export type Input = {
   filePath: UnresolvedFilePath;
   symbol: string;
 };
+
+export type ToolRequest = GenericToolRequest<"find_references", Input>;
 
 export function validateInput(input: {
   [key: string]: unknown;

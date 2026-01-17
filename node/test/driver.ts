@@ -146,12 +146,47 @@ export class NvimDriver {
     };
   }
 
-  send() {
-    return this.magenta.command("send");
+  /**
+   * Intercept the maybeAutoRespond method to pause auto-respond after tool completion.
+   * This allows tests to modify state (e.g., edit buffers) before the auto-respond fires.
+   */
+  interceptAutoRespond() {
+    const thread = this.magenta.chat.getActiveThread();
+    const callDefer = new Defer<void>();
+    const executeDefer = new Defer<
+      ReturnType<typeof thread.maybeAutoRespond>
+    >();
+
+    const originalMaybeAutoRespond = thread.maybeAutoRespond.bind(thread);
+    const spy = vi.spyOn(thread, "maybeAutoRespond").mockImplementation(() => {
+      callDefer.resolve();
+      // Block until execute() is called - return a default value synchronously
+      let result: ReturnType<typeof thread.maybeAutoRespond> = {
+        type: "no-action-needed",
+      };
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      executeDefer.promise.then((r) => {
+        result = r;
+      });
+      return result;
+    });
+
+    return {
+      /** Resolves when maybeAutoRespond is called */
+      promise: callDefer.promise,
+      spy,
+      /** Call this to restore the original method and execute it */
+      execute: () => {
+        spy.mockRestore();
+        const result = originalMaybeAutoRespond();
+        executeDefer.resolve(result);
+        return result;
+      },
+    };
   }
 
-  clear() {
-    return this.magenta.command("clear");
+  send() {
+    return this.magenta.command("send");
   }
 
   abort() {
@@ -282,7 +317,7 @@ export class NvimDriver {
   awaitChatState(
     desiredState:
       | { state: "thread-overview" }
-      | { state: "thread-selected"; id: ThreadId },
+      | { state: "thread-selected"; id?: ThreadId },
     message?: string,
   ) {
     return pollUntil(() => {
@@ -295,6 +330,7 @@ export class NvimDriver {
 
       if (
         desiredState.state == "thread-selected" &&
+        desiredState.id !== undefined &&
         desiredState.id != state.activeThreadId
       ) {
         throw new Error(
@@ -303,6 +339,44 @@ export class NvimDriver {
       }
 
       return;
+    });
+  }
+
+  /** Get thread IDs in creation order */
+  getThreadIds(): ThreadId[] {
+    return Object.keys(this.magenta.chat.threadWrappers).sort() as ThreadId[];
+  }
+
+  /** Get the nth thread ID (0-indexed) */
+  getThreadId(index: number): ThreadId {
+    const ids = this.getThreadIds();
+    if (index < 0 || index >= ids.length) {
+      throw new Error(
+        `Thread index ${index} out of bounds. Available threads: ${ids.length}`,
+      );
+    }
+    return ids[index];
+  }
+
+  /** Get the active thread ID */
+  getActiveThreadId(): ThreadId | undefined {
+    const state = this.magenta.chat.state;
+    if (state.state === "thread-selected") {
+      return state.activeThreadId;
+    }
+    return undefined;
+  }
+
+  /** Wait until the specified number of threads exist */
+  async awaitThreadCount(count: number) {
+    return pollUntil(() => {
+      const ids = this.getThreadIds();
+      if (ids.length < count) {
+        throw new Error(
+          `Expected ${count} threads, but only ${ids.length} exist`,
+        );
+      }
+      return ids;
     });
   }
 
