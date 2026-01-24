@@ -101,7 +101,8 @@ Logs are shipped to a centralized ELK stack for analysis.`,
 
         // PKBManager starts immediately and calls updateEmbeddings
         // Context generation happens first for each chunk, then embedding
-        const embedRequest = await awaitEmbedRequestWithContextResponses(driver);
+        const embedRequest =
+          await awaitEmbedRequestWithContextResponses(driver);
         expect(embedRequest.type).toBe("chunks");
 
         // Respond with embeddings for the chunks
@@ -291,7 +292,7 @@ Services communicate via REST APIs.`,
       await driver.assertDisplayBufferContains(
         '🔍✅ PKB search: "architecture"',
       );
-      await driver.assertDisplayBufferContains("1 results in 1 files");
+      await driver.assertDisplayBufferContains("2 results in 1 files");
 
       // Check preview shows file with line ranges
       await driver.assertDisplayBufferContains("• notes.md: lines");

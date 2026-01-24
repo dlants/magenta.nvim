@@ -1,6 +1,6 @@
 export type Embedding = number[];
 
-export const MAGENTA_EMBEDDING_VERSION = 1;
+export const MAGENTA_EMBEDDING_VERSION = 3;
 
 export interface EmbeddingModel {
   modelName: string;

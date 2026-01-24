@@ -7,82 +7,73 @@ exports[`searchPkb tool > should search PKB and return relevant chunks 1`] = `
     {
       "text": "## Result 1 (score: 1.000)
 File: notes.md
-Lines 1-9
+Lines 1-2
+
+# Project Documentation
 
 Context for chunk 1
 
 # Project Documentation
-
-## Architecture Overview
-The system uses a microservices architecture with REST APIs for communication between services.
-Each service is independently deployable and scalable, following the principles of domain-driven design.
-The architecture enables teams to work autonomously on different parts of the system.
-
-### Service Communication
-Services communicate via REST APIs and message queues. We use RabbitMQ for async messaging.
 
 
 ---
 
 ## Result 2 (score: 0.293)
 File: notes.md
-Lines 9-15
+Lines 3-7
+
+# Project Documentation > ## Architecture Overview
 
 Context for chunk 2
 
-sage queues. We use RabbitMQ for async messaging.
-This pattern helps decouple services and improves system resilience.
-
-### Deployment
-All services are containerized using Docker and orchestrated with Kubernetes.
-We use Helm charts for deployment configuration and ArgoCD for GitOps-style continuous delivery.
-
+## Architecture Overview
+The system uses a microservices architecture with REST APIs for communication between services.
+Each service is independently deployable and scalable, following the principles of domain-driven design.
+The architecture enables teams to work autonomously on different parts of the system.
 
 
 ---
 
 ## Result 3 (score: 0.181)
 File: notes.md
-Lines 14-16
+Lines 8-11
+
+# Project Documentation > ## Architecture Overview > ### Service Communication
 
 Context for chunk 3
 
-and ArgoCD for GitOps-style continuous delivery.
-
-Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. 
+### Service Communication
+Services communicate via REST APIs and message queues. We use RabbitMQ for async messaging.
+This pattern helps decouple services and improves system resilience.
 
 
 ---
 
 ## Result 4 (score: 0.089)
 File: notes.md
-Lines 41-42
+Lines 40-42
 
-Context for chunk 8
+# Project Documentation > ## Security Considerations > ### Audit Logging
 
-are logged for compliance and debugging purposes.
+Context for chunk 16
+
+### Audit Logging
+All sensitive operations are logged for compliance and debugging purposes.
 Logs are shipped to a centralized ELK stack for analysis.
 
 ---
 
 ## Result 5 (score: 0.089)
 File: notes.md
-Lines 30-41
+Lines 36-39
 
-Context for chunk 7
+# Project Documentation > ## Security Considerations > ### Authorization
 
-ur adipiscing elit. Consectetur adipiscing elit. 
-
-## Security Considerations
-Authentication is handled via OAuth 2.0 with JWT tokens.
-All API endpoints require authentication except for health checks.
+Context for chunk 15
 
 ### Authorization
 Role-based access control (RBAC) is implemented at the service level.
 Permissions are validated on each request using a centralized authorization service.
-
-### Audit Logging
-All sensitive operations are logged for compliance and debugging purposes.
 ",
       "type": "text",
     },

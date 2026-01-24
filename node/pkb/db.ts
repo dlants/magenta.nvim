@@ -13,10 +13,12 @@ export function initDatabase(pkbPath: string): PKBDatabase {
   db.exec(`
     CREATE TABLE IF NOT EXISTS files (
       id INTEGER PRIMARY KEY,
-      filename TEXT UNIQUE NOT NULL,
+      filename TEXT NOT NULL,
+      model_name TEXT NOT NULL,
+      embedding_version INTEGER NOT NULL,
       mtime_ms INTEGER NOT NULL,
       hash TEXT NOT NULL,
-      embedding_version INTEGER NOT NULL DEFAULT 0
+      UNIQUE(filename, model_name, embedding_version)
     );
 
     CREATE TABLE IF NOT EXISTS chunks (
@@ -27,8 +29,7 @@ export function initDatabase(pkbPath: string): PKBDatabase {
       start_line INTEGER NOT NULL,
       start_col INTEGER NOT NULL,
       end_line INTEGER NOT NULL,
-      end_col INTEGER NOT NULL,
-      version INTEGER NOT NULL
+      end_col INTEGER NOT NULL
     );
   `);
 
@@ -40,15 +41,16 @@ export function initDatabase(pkbPath: string): PKBDatabase {
 export function ensureVecTable(
   db: PKBDatabase,
   modelName: string,
+  embeddingVersion: number,
   dimensions: number,
 ): void {
-  const tableName = getVecTableName(modelName);
+  const tableName = getVecTableName(modelName, embeddingVersion);
   db.exec(
     `CREATE VIRTUAL TABLE IF NOT EXISTS ${tableName} USING vec0(chunk_id INTEGER PRIMARY KEY, embedding float[${dimensions}])`,
   );
 }
 
-export function getVecTableName(modelName: string): string {
+export function getVecTableName(modelName: string, embeddingVersion: number): string {
   const sanitized = modelName.replace(/[^a-zA-Z0-9_]/g, "_");
-  return `vec_${sanitized}`;
+  return `vec_${sanitized}_v${embeddingVersion}`;
 }

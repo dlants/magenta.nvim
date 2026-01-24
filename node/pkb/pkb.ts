@@ -6,7 +6,7 @@ import {
   type EmbeddingModel,
   type ChunkData,
 } from "./embedding/types.ts";
-import { chunkText } from "./chunker.ts";
+import { chunkMarkdown } from "./chunker.ts";
 import type { ContextGenerator } from "./context-generator.ts";
 import {
   initDatabase,
@@ -70,6 +70,7 @@ export class PKB {
     ensureVecTable(
       this.db,
       this.embeddingModel.modelName,
+      MAGENTA_EMBEDDING_VERSION,
       this.embeddingModel.dimensions,
     );
     this.vecTableInitialized = true;
@@ -85,10 +86,10 @@ export class PKB {
     const mdFiles = files.filter((f) => f.endsWith(".md"));
 
     const getFileRecord = this.db.prepare<
-      [string],
-      { id: number; mtime_ms: number; hash: string; embedding_version: number }
+      [string, string, number],
+      { id: number; mtime_ms: number; hash: string }
     >(
-      "SELECT id, mtime_ms, hash, embedding_version FROM files WHERE filename = ?",
+      "SELECT id, mtime_ms, hash FROM files WHERE filename = ? AND model_name = ? AND embedding_version = ?",
     );
 
     const updateFileMtime = this.db.prepare<[number, number]>(
@@ -100,19 +101,20 @@ export class PKB {
       const stat = fs.statSync(mdPath);
       const currentMtime = stat.mtimeMs;
 
-      const existingFile = getFileRecord.get(mdFile);
+      const existingFile = getFileRecord.get(
+        mdFile,
+        this.embeddingModel.modelName,
+        MAGENTA_EMBEDDING_VERSION,
+      );
 
       if (existingFile) {
-        const versionChanged =
-          existingFile.embedding_version !== MAGENTA_EMBEDDING_VERSION;
-
-        if (!versionChanged && existingFile.mtime_ms === currentMtime) {
+        if (existingFile.mtime_ms === currentMtime) {
           skipped.push(mdFile);
           continue;
         }
 
         const currentHash = computeFileHash(mdPath);
-        if (!versionChanged && existingFile.hash === currentHash) {
+        if (existingFile.hash === currentHash) {
           updateFileMtime.run(currentMtime, existingFile.id);
           skipped.push(mdFile);
           continue;
@@ -176,49 +178,54 @@ export class PKB {
     const currentHash = computeFileHash(mdPath);
 
     const getFileRecord = this.db.prepare<
-      [string],
-      { id: number; mtime_ms: number; hash: string; embedding_version: number }
+      [string, string, number],
+      { id: number; mtime_ms: number; hash: string }
     >(
-      "SELECT id, mtime_ms, hash, embedding_version FROM files WHERE filename = ?",
+      "SELECT id, mtime_ms, hash FROM files WHERE filename = ? AND model_name = ? AND embedding_version = ?",
     );
 
-    const insertFile = this.db.prepare<[string, number, string, number]>(
-      "INSERT INTO files (filename, mtime_ms, hash, embedding_version) VALUES (?, ?, ?, ?)",
+    const insertFile = this.db.prepare<
+      [string, string, number, number, string]
+    >(
+      "INSERT INTO files (filename, model_name, embedding_version, mtime_ms, hash) VALUES (?, ?, ?, ?, ?)",
     );
 
-    const updateFileHash = this.db.prepare<[number, string, number, number]>(
-      "UPDATE files SET mtime_ms = ?, hash = ?, embedding_version = ? WHERE id = ?",
+    const updateFileHash = this.db.prepare<[number, string, number]>(
+      "UPDATE files SET mtime_ms = ?, hash = ? WHERE id = ?",
     );
 
     const deleteFileChunks = this.db.prepare<[number]>(
       "DELETE FROM chunks WHERE file_id = ?",
     );
 
-    const vecTableName = getVecTableName(this.embeddingModel.modelName);
+    const vecTableName = getVecTableName(
+      this.embeddingModel.modelName,
+      MAGENTA_EMBEDDING_VERSION,
+    );
     const deleteVec = this.db.prepare(
       `DELETE FROM ${vecTableName} WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?)`,
     );
 
-    const existingFile = getFileRecord.get(mdFile);
+    const existingFile = getFileRecord.get(
+      mdFile,
+      this.embeddingModel.modelName,
+      MAGENTA_EMBEDDING_VERSION,
+    );
 
     let fileId: number;
 
     if (existingFile) {
       deleteVec.run(existingFile.id);
       deleteFileChunks.run(existingFile.id);
-      updateFileHash.run(
-        currentMtime,
-        currentHash,
-        MAGENTA_EMBEDDING_VERSION,
-        existingFile.id,
-      );
+      updateFileHash.run(currentMtime, currentHash, existingFile.id);
       fileId = existingFile.id;
     } else {
       const result = insertFile.run(
         mdFile,
+        this.embeddingModel.modelName,
+        MAGENTA_EMBEDDING_VERSION,
         currentMtime,
         currentHash,
-        MAGENTA_EMBEDDING_VERSION,
       );
       fileId = Number(result.lastInsertRowid);
     }
@@ -232,16 +239,27 @@ export class PKB {
     fileId: number,
   ): Promise<void> {
     const content = fs.readFileSync(mdPath, "utf-8");
-    const chunks = chunkText(content);
+    const chunks = chunkMarkdown(content);
 
     const contextualizedTexts: string[] = [];
     for (const chunk of chunks) {
+      // Build context: heading context + LLM-generated context (if available)
+      const parts: string[] = [];
+
+      if (chunk.headingContext) {
+        parts.push(chunk.headingContext);
+      }
+
       if (this.contextGenerator) {
         const context = await this.contextGenerator.generateContext(
           content,
           chunk.text,
         );
-        contextualizedTexts.push(`${context}\n\n${chunk.text}`);
+        parts.push(context);
+      }
+
+      if (parts.length > 0) {
+        contextualizedTexts.push(`${parts.join("\n\n")}\n\n${chunk.text}`);
       } else {
         contextualizedTexts.push(chunk.text);
       }
@@ -250,10 +268,13 @@ export class PKB {
     const embeddings =
       await this.embeddingModel.embedChunks(contextualizedTexts);
 
-    const vecTableName = getVecTableName(this.embeddingModel.modelName);
+    const vecTableName = getVecTableName(
+      this.embeddingModel.modelName,
+      MAGENTA_EMBEDDING_VERSION,
+    );
     const insertChunk = this.db.prepare(
-      `INSERT INTO chunks (file_id, text, contextualized_text, start_line, start_col, end_line, end_col, version)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO chunks (file_id, text, contextualized_text, start_line, start_col, end_line, end_col)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertVec = this.db.prepare(
       `INSERT INTO ${vecTableName} (chunk_id, embedding) VALUES (?, ?)`,
@@ -269,7 +290,6 @@ export class PKB {
         chunk.start.col,
         chunk.end.line,
         chunk.end.col,
-        MAGENTA_EMBEDDING_VERSION,
       );
       const chunkId = Number(result.lastInsertRowid);
       insertVec.run(BigInt(chunkId), new Float32Array(embeddings[i]));
@@ -289,17 +309,17 @@ export class PKB {
   getStats(): PKBStats {
     const fileCount = this.db
       .prepare<
-        [number],
+        [string, number],
         { count: number }
-      >("SELECT COUNT(*) as count FROM files WHERE embedding_version = ?")
-      .get(MAGENTA_EMBEDDING_VERSION);
+      >("SELECT COUNT(*) as count FROM files WHERE model_name = ? AND embedding_version = ?")
+      .get(this.embeddingModel.modelName, MAGENTA_EMBEDDING_VERSION);
 
     const chunkCount = this.db
       .prepare<
-        [number],
+        [string, number],
         { count: number }
-      >("SELECT COUNT(*) as count FROM chunks c JOIN files f ON c.file_id = f.id WHERE f.embedding_version = ?")
-      .get(MAGENTA_EMBEDDING_VERSION);
+      >("SELECT COUNT(*) as count FROM chunks c JOIN files f ON c.file_id = f.id WHERE f.model_name = ? AND f.embedding_version = ?")
+      .get(this.embeddingModel.modelName, MAGENTA_EMBEDDING_VERSION);
 
     return {
       totalFiles: fileCount?.count ?? 0,
@@ -313,7 +333,10 @@ export class PKB {
     this.ensureVecTableInitialized();
 
     const queryEmbedding = await this.embeddingModel.embedQuery(query);
-    const vecTableName = getVecTableName(this.embeddingModel.modelName);
+    const vecTableName = getVecTableName(
+      this.embeddingModel.modelName,
+      MAGENTA_EMBEDDING_VERSION,
+    );
 
     const results = this.db
       .prepare<
@@ -326,7 +349,7 @@ export class PKB {
           start_col: number;
           end_line: number;
           end_col: number;
-          version: number;
+          embedding_version: number;
           distance: number;
         }
       >(
@@ -338,7 +361,7 @@ export class PKB {
           c.start_col,
           c.end_line,
           c.end_col,
-          c.version,
+          f.embedding_version,
           v.distance
         FROM ${vecTableName} v
         JOIN chunks c ON c.id = v.chunk_id
@@ -355,7 +378,7 @@ export class PKB {
         contextualizedText: row.contextualized_text,
         start: { line: row.start_line, col: row.start_col },
         end: { line: row.end_line, col: row.end_col },
-        version: row.version,
+        version: row.embedding_version,
       },
       score: 1 - row.distance,
     }));

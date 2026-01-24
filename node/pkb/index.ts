@@ -7,7 +7,7 @@ export type {
   ChunkData,
   Position,
 } from "./embedding/types.ts";
-export { chunkText } from "./chunker.ts";
+export { chunkMarkdown } from "./chunker.ts";
 export type { ChunkInfo } from "./chunker.ts";
 export {
   createPKB,

@@ -7,7 +7,10 @@ Here is the chunk we want to situate within the whole document
 <chunk>
 {{CHUNK_CONTENT}}
 </chunk>
-Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else. If the chunk refers to anything ambiguously, like using abbreviations, "it", "he", etc... Make sure to disambiguate that in the context.`;
+Provide succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk.
+Do not repeat any context that can be inferred from the headings, as those will be included in the chunk.
+If the chunk uses abbreviations, "it", "he", etc... Make sure to disambiguate that.
+Answer only with the context and nothing else.`;
 
 export class ContextGenerator {
   constructor(
@@ -16,10 +19,10 @@ export class ContextGenerator {
   ) {}
 
   async generateContext(document: string, chunk: string): Promise<string> {
-    const prompt = CONTEXT_PROMPT.replace("{{WHOLE_DOCUMENT}}", document).replace(
-      "{{CHUNK_CONTENT}}",
-      chunk,
-    );
+    const prompt = CONTEXT_PROMPT.replace(
+      "{{WHOLE_DOCUMENT}}",
+      document,
+    ).replace("{{CHUNK_CONTENT}}", chunk);
 
     const request = this.provider.request({
       model: this.model,

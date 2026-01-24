@@ -84,13 +84,8 @@ export class Magenta {
           fastModel: activeProfile.fastModel,
         };
         this.pkb = createPKB(this.options.pkb, this.cwd, pkbContext);
-        this.pkbManager = new PKBManager(
-          this.pkb,
-          this.nvim,
-          this.options.pkb.updateIntervalMs,
-        );
-        this.pkbManager.start();
-        this.nvim.logger.info("PKB initialized and embedding updates started");
+        this.pkbManager = new PKBManager(this.pkb, this.nvim.logger);
+        this.nvim.logger.info("PKB initialized");
       } catch (e) {
         this.nvim.logger.error(
           `Failed to initialize PKB: ${e instanceof Error ? e.message + "\n" + e.stack : String(e)}`,
@@ -672,8 +667,8 @@ ${lines.join("\n")}
         `Error destroying inline edit manager: ${e instanceof Error ? e.message + "\n" + e.stack : JSON.stringify(e)}`,
       );
     });
-    if (this.pkbManager) {
-      this.pkbManager.stop();
+    if (this.pkb) {
+      this.pkb.close();
     }
   }
 
