@@ -15,7 +15,8 @@ export function initDatabase(pkbPath: string): PKBDatabase {
       id INTEGER PRIMARY KEY,
       filename TEXT UNIQUE NOT NULL,
       mtime_ms INTEGER NOT NULL,
-      hash TEXT NOT NULL
+      hash TEXT NOT NULL,
+      embedding_version INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS chunks (

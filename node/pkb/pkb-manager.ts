@@ -1,49 +1,91 @@
 import type { PKB } from "./pkb.ts";
 import type { Nvim } from "../nvim/nvim-node";
 
-const DEFAULT_UPDATE_INTERVAL_MS = 60_000; // 1 minute
+const DEFAULT_SCAN_INTERVAL_MS = 5_000; // 5 seconds
+const DEFAULT_PROCESS_INTERVAL_MS = 100; // 100ms between processing files
 
 export class PKBManager {
-  private updateInterval: ReturnType<typeof setInterval> | undefined;
+  private scanInterval: ReturnType<typeof setInterval> | undefined;
+  private processTimeout: ReturnType<typeof setTimeout> | undefined;
+  private isProcessing = false;
 
   constructor(
     private pkb: PKB,
     private nvim: Nvim,
-    private intervalMs: number = DEFAULT_UPDATE_INTERVAL_MS,
+    private scanIntervalMs: number = DEFAULT_SCAN_INTERVAL_MS,
+    private processIntervalMs: number = DEFAULT_PROCESS_INTERVAL_MS,
   ) {}
 
   start(): void {
-    this.runUpdate();
+    this.runScan();
+    this.scheduleNextProcess();
 
-    this.updateInterval = setInterval(() => {
-      this.runUpdate();
-    }, this.intervalMs);
+    this.scanInterval = setInterval(() => {
+      this.runScan();
+    }, this.scanIntervalMs);
   }
 
   stop(): void {
-    if (this.updateInterval) {
-      clearInterval(this.updateInterval);
-      this.updateInterval = undefined;
+    if (this.scanInterval) {
+      clearInterval(this.scanInterval);
+      this.scanInterval = undefined;
+    }
+    if (this.processTimeout) {
+      clearTimeout(this.processTimeout);
+      this.processTimeout = undefined;
     }
   }
 
-  private runUpdate(): void {
+  private runScan(): void {
+    try {
+      const { queued, skipped } = this.pkb.scanForChanges();
+      if (queued.length > 0) {
+        this.nvim.logger.info(
+          `PKB: Queued ${queued.length} files for indexing: ${queued.join(", ")}`,
+        );
+      }
+      this.nvim.logger.debug(
+        `PKB: Scanned ${queued.length + skipped.length} files, ${skipped.length} unchanged`,
+      );
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.nvim.logger.error(
+        `PKB: Failed to scan for changes: ${err.message}\n${err.stack}`,
+      );
+    }
+  }
+
+  private scheduleNextProcess(): void {
+    this.processTimeout = setTimeout(() => {
+      this.processNext();
+    }, this.processIntervalMs);
+  }
+
+  private processNext(): void {
+    if (this.isProcessing) {
+      this.scheduleNextProcess();
+      return;
+    }
+
+    this.isProcessing = true;
+
     this.pkb
-      .updateEmbeddings()
-      .then(({ updated, skipped }) => {
-        if (updated.length > 0) {
+      .processNextInQueue()
+      .then((result) => {
+        if (result.status === "processed") {
           this.nvim.logger.info(
-            `PKB: Updated embeddings for ${updated.length} files: ${updated.join(", ")}`,
+            `PKB: Indexed ${result.filename} (${this.pkb.getQueueSize()} remaining)`,
           );
         }
-        this.nvim.logger.debug(
-          `PKB: Skipped ${skipped.length} files (unchanged)`,
-        );
       })
       .catch((error: Error) => {
         this.nvim.logger.error(
-          `PKB: Failed to update embeddings: ${error.message}\n${error.stack}`,
+          `PKB: Failed to process file: ${error.message}\n${error.stack}`,
         );
+      })
+      .finally(() => {
+        this.isProcessing = false;
+        this.scheduleNextProcess();
       });
   }
 

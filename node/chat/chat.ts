@@ -587,23 +587,26 @@ export class Chat {
       return d``;
     }
 
-    const indexLog = this.context.pkb.indexLog;
-    if (indexLog.length === 0) {
-      return d``;
-    }
+    const stats = this.context.pkb.getStats();
 
-    const logEntries = indexLog
-      .slice()
-      .reverse()
-      .map((entry) => {
-        const timeStr = entry.timestamp.toLocaleTimeString();
-        return d`  ${timeStr} ${entry.file} (${String(entry.chunkCount)} chunks)\n`;
-      });
+    const queueSection =
+      stats.queuedFiles > 0 ? ` | Queued: ${String(stats.queuedFiles)}` : "";
+
+    const recentFilesSection =
+      stats.recentFiles.length > 0
+        ? d`
+Recent reindexes:
+${stats.recentFiles.map((entry) => {
+  const timeStr = entry.timestamp.toLocaleTimeString();
+  return d`  ${timeStr} ${entry.file} (${String(entry.chunkCount)} chunks)\n`;
+})}`
+        : d``;
 
     return d`
-## PKB Index Log
+## PKB Status
 
-${logEntries}`;
+Files: ${String(stats.totalFiles)} | Chunks: ${String(stats.totalChunks)}${queueSection}
+${recentFilesSection}`;
   }
 
   renderThreadOverview() {

@@ -10,7 +10,6 @@ class MockEmbeddingModel implements EmbeddingModel {
   dimensions = 10;
 
   async embedChunk(chunk: string): Promise<Embedding> {
-    // Return a deterministic embedding based on chunk content
     return this.textToEmbedding(chunk);
   }
 
@@ -23,16 +22,30 @@ class MockEmbeddingModel implements EmbeddingModel {
   }
 
   private textToEmbedding(text: string): Embedding {
-    // Create a simple deterministic embedding from text
-    // Just use character codes normalized
     const embedding = new Array(10).fill(0);
     for (let i = 0; i < text.length; i++) {
       embedding[i % 10] += text.charCodeAt(i) / 1000;
     }
-    // Normalize
     const norm = Math.sqrt(embedding.reduce((sum, v) => sum + v * v, 0));
     return embedding.map((v) => v / norm);
   }
+}
+
+async function scanAndProcessAll(pkb: PKB): Promise<{
+  queued: string[];
+  skipped: string[];
+  processed: string[];
+}> {
+  const { queued, skipped } = pkb.scanForChanges();
+  const processed: string[] = [];
+
+  let result = await pkb.processNextInQueue();
+  while (result.status === "processed") {
+    processed.push(result.filename);
+    result = await pkb.processNextInQueue();
+  }
+
+  return { queued, skipped, processed };
 }
 
 describe("PKB", () => {
@@ -54,20 +67,19 @@ describe("PKB", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("should update embeddings for new markdown files", async () => {
+  it("should index new markdown files", async () => {
     const mdContent = "# Test Document\n\nThis is test content.";
     fs.writeFileSync(path.join(tempDir, "test.md"), mdContent);
 
-    const result = await pkb.updateEmbeddings();
+    const result = await scanAndProcessAll(pkb);
 
-    expect(result.updated).toContain("test.md");
+    expect(result.queued).toContain("test.md");
+    expect(result.processed).toContain("test.md");
     expect(result.skipped).toHaveLength(0);
 
-    // Check database file was created
     const dbPath = path.join(tempDir, "pkb.db");
     expect(fs.existsSync(dbPath)).toBe(true);
 
-    // Verify we can search and get results
     const searchResults = await pkb.search("test content", 5);
     expect(searchResults.length).toBeGreaterThan(0);
     expect(searchResults[0].file).toBe("test.md");
@@ -77,26 +89,24 @@ describe("PKB", () => {
     const mdContent = "# Test Document\n\nThis is test content.";
     fs.writeFileSync(path.join(tempDir, "test.md"), mdContent);
 
-    // First run
-    await pkb.updateEmbeddings();
+    await scanAndProcessAll(pkb);
 
-    // Second run should skip
-    const result = await pkb.updateEmbeddings();
+    const result = await scanAndProcessAll(pkb);
 
-    expect(result.updated).toHaveLength(0);
+    expect(result.queued).toHaveLength(0);
     expect(result.skipped).toContain("test.md");
   });
 
   it("should re-embed when file content changes", async () => {
     fs.writeFileSync(path.join(tempDir, "test.md"), "Original content");
-    await pkb.updateEmbeddings();
+    await scanAndProcessAll(pkb);
 
-    // Modify the file
     fs.writeFileSync(path.join(tempDir, "test.md"), "Modified content");
 
-    const result = await pkb.updateEmbeddings();
+    const result = await scanAndProcessAll(pkb);
 
-    expect(result.updated).toContain("test.md");
+    expect(result.queued).toContain("test.md");
+    expect(result.processed).toContain("test.md");
     expect(result.skipped).toHaveLength(0);
   });
 
@@ -110,7 +120,7 @@ describe("PKB", () => {
       "# Oranges\n\nOranges are orange colored citrus fruits.",
     );
 
-    await pkb.updateEmbeddings();
+    await scanAndProcessAll(pkb);
 
     const results = await pkb.search("apple fruit", 5);
 
