@@ -36,7 +36,8 @@ import {
 } from "./edit-prediction/edit-prediction-controller.ts";
 import { initializeMagentaHighlightGroups } from "./nvim/extmarks.ts";
 import { MAGENTA_HIGHLIGHT_NAMESPACE } from "./nvim/buffer.ts";
-import { createPKB } from "./pkb/create-pkb.ts";
+import { createPKB, type CreatePKBContext } from "./pkb/create-pkb.ts";
+import { getProvider } from "./providers/provider.ts";
 import { PKBManager } from "./pkb/pkb-manager.ts";
 import type { PKB } from "./pkb/pkb.ts";
 
@@ -74,7 +75,15 @@ export class Magenta {
     // Initialize PKB if configured
     if (this.options.pkb) {
       try {
-        this.pkb = createPKB(this.options.pkb, this.cwd);
+        const activeProfile = getActiveProfile(
+          this.options.profiles,
+          this.options.activeProfile,
+        );
+        const pkbContext: CreatePKBContext = {
+          provider: getProvider(this.nvim, activeProfile),
+          fastModel: activeProfile.fastModel,
+        };
+        this.pkb = createPKB(this.options.pkb, this.cwd, pkbContext);
         this.pkbManager = new PKBManager(
           this.pkb,
           this.nvim,

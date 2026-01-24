@@ -7,7 +7,9 @@ exports[`searchPkb tool > should search PKB and return relevant chunks 1`] = `
     {
       "text": "## Result 1 (score: 1.000)
 File: notes.md
-Lines 1-15
+Lines 1-9
+
+Context for chunk 1
 
 # Project Documentation
 
@@ -18,6 +20,17 @@ The architecture enables teams to work autonomously on different parts of the sy
 
 ### Service Communication
 Services communicate via REST APIs and message queues. We use RabbitMQ for async messaging.
+
+
+---
+
+## Result 2 (score: 0.707)
+File: notes.md
+Lines 9-15
+
+Context for chunk 2
+
+sage queues. We use RabbitMQ for async messaging.
 This pattern helps decouple services and improves system resilience.
 
 ### Deployment
@@ -28,63 +41,39 @@ We use Helm charts for deployment configuration and ArgoCD for GitOps-style cont
 
 ---
 
-## Result 2 (score: 0.707)
+## Result 3 (score: 0.577)
 File: notes.md
-Lines 10-16
+Lines 14-16
 
-lience.
+Context for chunk 3
 
-### Deployment
-All services are containerized using Docker and orchestrated with Kubernetes.
-We use Helm charts for deployment configuration and ArgoCD for GitOps-style continuous delivery.
+and ArgoCD for GitOps-style continuous delivery.
 
 Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. 
 
 
 ---
 
-## Result 3 (score: 0.577)
+## Result 4 (score: 0.577)
 File: notes.md
-Lines 16-29
+Lines 28-30
 
-t. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet. 
+Context for chunk 6
 
-## Database Design
-We use PostgreSQL for persistent storage of relational data.
-The database follows a multi-tenant architecture with row-level security.
-
-### Schema Design
-Each service owns its data and exposes it through well-defined APIs.
-We avoid shared databases to maintain service independence.
-
-### Data Migration
-Database migrations are handled using Flyway, with version-controlled SQL scripts.
-All migrations are tested in staging before production deployment.
-
-
-
----
-
-## Result 4 (score: 0.000)
-File: notes.md
-Lines 24-30
-
-intain service independence.
-
-### Data Migration
-Database migrations are handled using Flyway, with version-controlled SQL scripts.
-All migrations are tested in staging before production deployment.
+ tested in staging before production deployment.
 
 Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. 
 
 
 ---
 
-## Result 5 (score: 0.000)
+## Result 5 (score: 0.577)
 File: notes.md
-Lines 30-42
+Lines 30-41
 
-ectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. Consectetur adipiscing elit. 
+Context for chunk 7
+
+ur adipiscing elit. Consectetur adipiscing elit. 
 
 ## Security Considerations
 Authentication is handled via OAuth 2.0 with JWT tokens.
@@ -96,7 +85,7 @@ Permissions are validated on each request using a centralized authorization serv
 
 ### Audit Logging
 All sensitive operations are logged for compliance and debugging purposes.
-Logs are shipped to a centralized ELK stack for analysis.",
+",
       "type": "text",
     },
   ],

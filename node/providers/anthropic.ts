@@ -8,6 +8,7 @@ import type {
   Usage,
   ProviderToolSpec,
   ProviderToolUseRequest,
+  ProviderTextRequest,
   ProviderTextContent,
   Agent,
   AgentOptions,
@@ -449,6 +450,92 @@ export class AnthropicProvider implements Provider {
     }
 
     return params;
+  }
+
+  request(options: {
+    model: string;
+    input: AgentInput[];
+    systemPrompt?: string;
+  }): ProviderTextRequest {
+    const { model, input, systemPrompt } = options;
+    let aborted = false;
+
+    const userContent: Anthropic.Messages.ContentBlockParam[] = input.map(
+      (c): Anthropic.Messages.ContentBlockParam => {
+        switch (c.type) {
+          case "text":
+            return { type: "text", text: c.text, citations: null };
+          case "image":
+            return { type: "image", source: c.source };
+          case "document":
+            return {
+              type: "document",
+              source: c.source,
+              title: c.title || null,
+            };
+          default:
+            assertUnreachable(c);
+        }
+      },
+    );
+
+    const messages: Anthropic.MessageParam[] = [
+      { role: "user", content: userContent },
+    ];
+
+    const streamParams: Anthropic.Messages.MessageStreamParams = {
+      model,
+      max_tokens: getMaxTokensForModel(model),
+      messages,
+    };
+
+    if (systemPrompt) {
+      streamParams.system = [
+        {
+          type: "text" as const,
+          text: systemPrompt,
+        },
+      ];
+    }
+
+    const request = this.client.messages.stream(streamParams);
+
+    const promise = (async () => {
+      const response: Anthropic.Message = await request.finalMessage();
+
+      let text = "";
+      for (const block of response.content) {
+        if (block.type === "text") {
+          text += block.text;
+        }
+      }
+
+      const usage: Usage = {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      };
+      if (response.usage.cache_read_input_tokens != undefined) {
+        usage.cacheHits = response.usage.cache_read_input_tokens;
+      }
+      if (response.usage.cache_creation_input_tokens != undefined) {
+        usage.cacheMisses = response.usage.cache_creation_input_tokens;
+      }
+
+      return {
+        text,
+        stopReason: response.stop_reason || "end_turn",
+        usage,
+      };
+    })();
+
+    return {
+      promise,
+      aborted,
+      abort: () => {
+        aborted = true;
+        request.abort();
+      },
+    };
   }
 
   forceToolUse(options: {

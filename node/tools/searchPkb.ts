@@ -132,7 +132,7 @@ export class SearchPkbTool implements StaticTool {
           const formattedResults = results
             .map(
               (r, i) =>
-                `## Result ${i + 1} (score: ${r.score.toFixed(3)})\nFile: ${r.file}\nLines ${r.chunk.start.line}-${r.chunk.end.line}\n\n${r.chunk.text}`,
+                `## Result ${i + 1} (score: ${r.score.toFixed(3)})\nFile: ${r.file}\nLines ${r.chunk.start.line}-${r.chunk.end.line}\n\n${r.chunk.contextualizedText}`,
             )
             .join("\n\n---\n\n");
 
@@ -368,7 +368,7 @@ No results found.`;
 File: ${r.file}
 Lines ${r.chunk.start.line.toString()}-${r.chunk.end.line.toString()}
 
-${r.chunk.text}`;
+${r.chunk.contextualizedText}`;
   });
 
   return d`Query: "${input.query}"

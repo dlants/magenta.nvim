@@ -6,8 +6,8 @@ export type ChunkInfo = {
   end: Position;
 };
 
-const DEFAULT_CHUNK_SIZE = 2000; // ~500 tokens
-const DEFAULT_OVERLAP = 200; // ~50 tokens overlap
+const DEFAULT_CHUNK_SIZE = 500; // ~125 tokens, roughly one paragraph
+const DEFAULT_OVERLAP = 50; // ~12 tokens overlap
 
 export function chunkText(
   text: string,
@@ -35,7 +35,10 @@ export function chunkText(
       chunks.push({
         text: currentChunk,
         start: { line: chunkStartLine, col: chunkStartCol },
-        end: { line: currentLine - 1, col: lines[currentLine - 2]?.length ?? 1 },
+        end: {
+          line: currentLine - 1,
+          col: lines[currentLine - 2]?.length ?? 1,
+        },
       });
 
       // Start a new chunk with overlap

@@ -4,6 +4,37 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { respondToEmbedRequest } from "../pkb/embedding/mock.ts";
 import type { ToolRequestId, ToolName } from "./types.ts";
+import { pollUntil } from "../utils/async.ts";
+import type { NvimDriver } from "../test/driver.ts";
+
+async function respondToAllContextRequests(driver: NvimDriver) {
+  let count = 0;
+  while (true) {
+    const pendingRequest = driver.mockAnthropic.textRequests.find(
+      (r) => !r.defer.resolved,
+    );
+    if (!pendingRequest) break;
+    pendingRequest.defer.resolve({
+      text: `Context for chunk ${count + 1}`,
+      stopReason: "end_turn",
+      usage: { inputTokens: 10, outputTokens: 20 },
+    });
+    count++;
+    await driver.wait(10);
+  }
+  return count;
+}
+
+async function awaitEmbedRequestWithContextResponses(driver: NvimDriver) {
+  return pollUntil(async () => {
+    await respondToAllContextRequests(driver);
+    const embedReq = driver.mockEmbed!.requests.find((r) => !r.defer.resolved);
+    if (!embedReq) {
+      throw new Error("waiting for embedChunks call");
+    }
+    return embedReq;
+  });
+}
 
 describe("searchPkb tool", () => {
   it("should search PKB and return relevant chunks", async () => {
@@ -69,10 +100,8 @@ Logs are shipped to a centralized ELK stack for analysis.`,
         expect(driver.mockEmbed).toBeDefined();
 
         // PKBManager starts immediately and calls updateEmbeddings
-        // which will call embedChunks on our mock
-        const embedRequest = await driver.mockEmbed!.awaitPendingRequest(
-          "waiting for initial embedChunks call",
-        );
+        // Context generation happens first for each chunk, then embedding
+        const embedRequest = await awaitEmbedRequestWithContextResponses(driver);
         expect(embedRequest.type).toBe("chunks");
 
         // Respond with embeddings for the chunks
@@ -163,12 +192,12 @@ Logs are shipped to a centralized ELK stack for analysis.`,
       async (driver) => {
         expect(driver.mockEmbed).toBeDefined();
 
-        // Wait for initial embedding request
-        const initialRequest = await driver.mockEmbed!.awaitPendingRequest(
-          "waiting for initial embedChunks call",
-        );
+        // Wait for initial embedding request (with context generation)
+        const initialRequest =
+          await awaitEmbedRequestWithContextResponses(driver);
         expect(initialRequest.type).toBe("chunks");
         const initialChunks = initialRequest.input as string[];
+        // Now contains contextualizedText which prepends context
         expect(initialChunks[0]).toContain("Original Content");
 
         // Respond to initial request
@@ -183,10 +212,9 @@ Logs are shipped to a centralized ELK stack for analysis.`,
           "# Updated Content\nThis content has been modified.",
         );
 
-        // Wait for re-embedding request (triggered by the interval)
-        const updateRequest = await driver.mockEmbed!.awaitPendingRequest(
-          "waiting for re-embed after file change",
-        );
+        // Wait for re-embedding request (triggered by the interval, with context generation)
+        const updateRequest =
+          await awaitEmbedRequestWithContextResponses(driver);
         expect(updateRequest.type).toBe("chunks");
         const updatedChunks = updateRequest.input as string[];
         expect(updatedChunks[0]).toContain("Updated Content");
@@ -224,9 +252,7 @@ Services communicate via REST APIs.`,
       },
     },
     async (driver) => {
-      const embedRequest = await driver.mockEmbed!.awaitPendingRequest(
-        "waiting for initial embedChunks call",
-      );
+      const embedRequest = await awaitEmbedRequestWithContextResponses(driver);
       const chunks = embedRequest.input as string[];
       respondToEmbedRequest(
         embedRequest,

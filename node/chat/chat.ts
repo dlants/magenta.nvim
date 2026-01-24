@@ -582,11 +582,35 @@ export class Chat {
     });
   }
 
+  private renderPkbStatus(): VDOMNode {
+    if (!this.context.pkb) {
+      return d``;
+    }
+
+    const indexLog = this.context.pkb.indexLog;
+    if (indexLog.length === 0) {
+      return d``;
+    }
+
+    const logEntries = indexLog
+      .slice()
+      .reverse()
+      .map((entry) => {
+        const timeStr = entry.timestamp.toLocaleTimeString();
+        return d`  ${timeStr} ${entry.file} (${String(entry.chunkCount)} chunks)\n`;
+      });
+
+    return d`
+## PKB Index Log
+
+${logEntries}`;
+  }
+
   renderThreadOverview() {
     if (Object.keys(this.threadWrappers).length === 0) {
       return d`# Threads
 
-No threads yet`;
+No threads yet${this.renderPkbStatus()}`;
     }
 
     const { rootThreads, childrenMap } = this.buildThreadHierarchy();
@@ -610,7 +634,7 @@ No threads yet`;
 
     return d`# Threads
 
-${threadViews.map((view) => d`${view}\n`)}`;
+${threadViews.map((view) => d`${view}\n`)}${this.renderPkbStatus()}`;
   }
 
   getActiveThread(): Thread {

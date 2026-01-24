@@ -8,6 +8,7 @@ import type {
   Usage,
   ProviderToolSpec,
   ProviderToolUseRequest,
+  ProviderTextRequest,
   ProviderStreamEvent,
   Agent,
   AgentOptions,
@@ -62,8 +63,21 @@ type MockForceToolUseRequest = {
   aborted: boolean;
 };
 
+export type MockTextRequest = {
+  model: string;
+  input: AgentInput[];
+  systemPrompt?: string | undefined;
+  defer: Defer<{
+    text: string;
+    stopReason: StopReason;
+    usage: Usage;
+  }>;
+  aborted: boolean;
+};
+
 export class MockProvider implements Provider {
   public forceToolUseRequests: MockForceToolUseRequest[] = [];
+  public textRequests: MockTextRequest[] = [];
   public mockClient = new MockAnthropicClient();
   private blockCounter = 0;
 
@@ -94,6 +108,33 @@ export class MockProvider implements Provider {
     charCount += JSON.stringify(messages).length;
 
     return Math.ceil(charCount / CHARS_PER_TOKEN);
+  }
+
+  request(options: {
+    model: string;
+    input: AgentInput[];
+    systemPrompt?: string;
+  }): ProviderTextRequest {
+    const { model, input, systemPrompt } = options;
+    const request: MockTextRequest = {
+      model,
+      input,
+      systemPrompt,
+      defer: new Defer(),
+      aborted: false,
+    };
+    this.textRequests.push(request);
+
+    return {
+      abort: () => {
+        if (!request.defer.resolved) {
+          request.aborted = true;
+          request.defer.reject(new Error("request aborted"));
+        }
+      },
+      aborted: request.aborted,
+      promise: request.defer.promise,
+    };
   }
 
   forceToolUse(options: {
@@ -246,6 +287,31 @@ Streams: ${this.mockClient.streams.length}`);
         return lastRequest;
       }
       throw new Error(`no pending force tool use requests: ${message}`);
+    });
+  }
+
+  async awaitPendingTextRequest(message?: string) {
+    return pollUntil(() => {
+      const pendingRequest = this.textRequests.find((r) => !r.defer.resolved);
+      if (pendingRequest) {
+        return pendingRequest;
+      }
+      throw new Error(
+        `no pending text requests: ${message} Total requests: ${this.textRequests.length}`,
+      );
+    });
+  }
+
+  async respondToTextRequest({ text }: { text: string }) {
+    const lastRequest = await this.awaitPendingTextRequest();
+
+    lastRequest.defer.resolve({
+      text,
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 20,
+      },
     });
   }
 

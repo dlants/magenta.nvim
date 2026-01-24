@@ -161,6 +161,12 @@ export type ProviderMessageContent =
   | ProviderCheckpointContent;
 
 export interface Provider {
+  request(options: {
+    model: string;
+    input: AgentInput[];
+    systemPrompt?: string;
+  }): ProviderTextRequest;
+
   forceToolUse(options: {
     model: string;
     input: AgentInput[];
@@ -211,6 +217,18 @@ export interface ProviderToolUseRequest {
   abort(): void;
   aborted: boolean;
   promise: Promise<ProviderToolUseResponse>;
+}
+
+export type ProviderTextResponse = {
+  text: string;
+  stopReason: StopReason;
+  usage: Usage;
+};
+
+export interface ProviderTextRequest {
+  abort(): void;
+  aborted: boolean;
+  promise: Promise<ProviderTextResponse>;
 }
 
 // ============================================================================
