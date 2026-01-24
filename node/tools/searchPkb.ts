@@ -23,6 +23,7 @@ export type State =
   | {
       state: "done";
       result: ProviderToolResult;
+      searchResults?: SearchResult[];
     };
 
 export type Msg = {
@@ -137,6 +138,7 @@ export class SearchPkbTool implements StaticTool {
 
           this.state = {
             state: "done",
+            searchResults: results,
             result: {
               type: "tool_result",
               id: this.request.id,
@@ -194,14 +196,59 @@ export class SearchPkbTool implements StaticTool {
         return renderCompletedSummary({
           request: this.request as CompletedToolInfo["request"],
           result: this.state.result,
+          searchResults: this.state.searchResults,
         });
       default:
         assertUnreachable(this.state);
     }
   }
+
+  renderPreview(): VDOMNode {
+    if (this.state.state !== "done" || !this.state.searchResults) {
+      return d``;
+    }
+    return renderSearchPreview(this.state.searchResults);
+  }
+
+  renderDetail(): VDOMNode {
+    if (this.state.state !== "done" || !this.state.searchResults) {
+      return d``;
+    }
+    return renderSearchDetail(this.request.input, this.state.searchResults);
+  }
 }
 
-export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+export type SearchPkbCompletedInfo = CompletedToolInfo & {
+  searchResults?: SearchResult[] | undefined;
+};
+
+type ParsedResult = {
+  file: string;
+  startLine: number;
+  endLine: number;
+  score: number;
+  text: string;
+};
+
+function parseResultsFromText(text: string): ParsedResult[] {
+  const results: ParsedResult[] = [];
+  const resultPattern =
+    /## Result \d+ \(score: ([\d.]+)\)\nFile: ([^\n]+)\nLines (\d+)-(\d+)\n\n([\s\S]*?)(?=\n\n---\n\n|$)/g;
+
+  let match;
+  while ((match = resultPattern.exec(text)) !== null) {
+    results.push({
+      score: parseFloat(match[1]),
+      file: match[2],
+      startLine: parseInt(match[3], 10),
+      endLine: parseInt(match[4], 10),
+      text: match[5],
+    });
+  }
+  return results;
+}
+
+export function renderCompletedSummary(info: SearchPkbCompletedInfo): VDOMNode {
   const input = info.request.input as Input;
   const result = info.result.result;
 
@@ -209,7 +256,124 @@ export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
     return d`🔍❌ PKB search: "${input.query}"`;
   }
 
-  return d`🔍✅ PKB search: "${input.query}"`;
+  // Try to get counts from searchResults if available, otherwise parse from text
+  let resultCount = 0;
+  let fileCount = 0;
+
+  if (info.searchResults) {
+    resultCount = info.searchResults.length;
+    fileCount = new Set(info.searchResults.map((r) => r.file)).size;
+  } else if (result.value.length > 0 && result.value[0].type === "text") {
+    const text = result.value[0].text;
+    if (text === "No results found.") {
+      resultCount = 0;
+      fileCount = 0;
+    } else {
+      const parsed = parseResultsFromText(text);
+      resultCount = parsed.length;
+      fileCount = new Set(parsed.map((r) => r.file)).size;
+    }
+  }
+
+  return d`🔍✅ PKB search: "${input.query}" (${resultCount.toString()} results in ${fileCount.toString()} files)`;
+}
+
+export function renderCompletedPreview(info: CompletedToolInfo): VDOMNode {
+  const result = info.result.result;
+  if (result.status !== "ok" || result.value.length === 0) {
+    return d``;
+  }
+
+  const firstValue = result.value[0];
+  if (firstValue.type !== "text") {
+    return d``;
+  }
+
+  if (firstValue.text === "No results found.") {
+    return d`No results found.`;
+  }
+
+  const parsed = parseResultsFromText(firstValue.text);
+  if (parsed.length === 0) {
+    return d``;
+  }
+
+  const fileGroups = new Map<string, ParsedResult[]>();
+  for (const r of parsed) {
+    const existing = fileGroups.get(r.file) || [];
+    existing.push(r);
+    fileGroups.set(r.file, existing);
+  }
+
+  const lines: VDOMNode[] = [];
+  for (const [file, fileResults] of fileGroups) {
+    const lineRanges = fileResults
+      .map((r) => `${r.startLine}-${r.endLine}`)
+      .join(", ");
+    lines.push(d`• ${file}: lines ${lineRanges}`);
+  }
+
+  return d`${lines.map((line, i) => (i === lines.length - 1 ? line : d`${line}\n`))}`;
+}
+
+export function renderCompletedDetail(info: CompletedToolInfo): VDOMNode {
+  const input = info.request.input as Input;
+  const result = info.result.result;
+
+  if (result.status !== "ok" || result.value.length === 0) {
+    return d`Query: "${input.query}"`;
+  }
+
+  const firstValue = result.value[0];
+  if (firstValue.type !== "text") {
+    return d`Query: "${input.query}"`;
+  }
+
+  return d`Query: "${input.query}"
+
+${firstValue.text}`;
+}
+
+function renderSearchPreview(results: SearchResult[]): VDOMNode {
+  if (results.length === 0) {
+    return d`No results found.`;
+  }
+
+  const fileGroups = new Map<string, SearchResult[]>();
+  for (const r of results) {
+    const existing = fileGroups.get(r.file) || [];
+    existing.push(r);
+    fileGroups.set(r.file, existing);
+  }
+
+  const lines: VDOMNode[] = [];
+  for (const [file, fileResults] of fileGroups) {
+    const lineRanges = fileResults
+      .map((r) => `${r.chunk.start.line}-${r.chunk.end.line}`)
+      .join(", ");
+    lines.push(d`• ${file}: lines ${lineRanges}`);
+  }
+
+  return d`${lines.map((line, i) => (i === lines.length - 1 ? line : d`${line}\n`))}`;
+}
+
+function renderSearchDetail(input: Input, results: SearchResult[]): VDOMNode {
+  if (results.length === 0) {
+    return d`Query: "${input.query}"
+No results found.`;
+  }
+
+  const resultBlocks = results.map((r, i) => {
+    return d`## Result ${(i + 1).toString()} (score: ${r.score.toFixed(3)})
+File: ${r.file}
+Lines ${r.chunk.start.line.toString()}-${r.chunk.end.line.toString()}
+
+${r.chunk.text}`;
+  });
+
+  return d`Query: "${input.query}"
+
+${resultBlocks.map((block, i) => (i === resultBlocks.length - 1 ? block : d`${block}\n\n---\n\n`))}`;
 }
 
 export const spec: ProviderToolSpec = {

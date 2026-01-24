@@ -326,6 +326,8 @@ export function renderCompletedToolPreview(
       );
     case "bash_command":
       return BashCommand.renderCompletedPreview(info, context);
+    case "search_pkb":
+      return SearchPkb.renderCompletedPreview(info);
     default:
       return d``;
   }
@@ -346,6 +348,8 @@ export function renderCompletedToolDetail(
       return Replace.renderReplaceDetail(info.request.input as Replace.Input);
     case "bash_command":
       return BashCommand.renderCompletedDetail(info, context);
+    case "search_pkb":
+      return SearchPkb.renderCompletedDetail(info);
     default:
       return d`${JSON.stringify(info.request.input, null, 2)}`;
   }

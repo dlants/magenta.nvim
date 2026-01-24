@@ -200,3 +200,84 @@ Logs are shipped to a centralized ELK stack for analysis.`,
     );
   });
 });
+
+it("shows summary with result count, preview with files, and can toggle to detail", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        const pkbDir = path.join(tmpDir, "pkb");
+        await fs.mkdir(pkbDir);
+        await fs.writeFile(
+          path.join(pkbDir, "notes.md"),
+          `# Architecture Overview
+The system uses microservices.
+
+## Service Communication
+Services communicate via REST APIs.`,
+        );
+      },
+      options: {
+        pkb: {
+          path: "./pkb",
+          embeddingModel: { provider: "mock" },
+        },
+      },
+    },
+    async (driver) => {
+      const embedRequest = await driver.mockEmbed!.awaitPendingRequest(
+        "waiting for initial embedChunks call",
+      );
+      const chunks = embedRequest.input as string[];
+      respondToEmbedRequest(
+        embedRequest,
+        chunks.map(() => [1, 0, 0]),
+      );
+
+      await driver.showSidebar();
+      await driver.inputMagentaText("Search for architecture info");
+      await driver.send();
+
+      const stream = await driver.mockAnthropic.awaitPendingStream();
+      stream.respond({
+        stopReason: "tool_use",
+        text: "I'll search the PKB.",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "search_1" as ToolRequestId,
+              toolName: "search_pkb" as ToolName,
+              input: { query: "architecture", topK: 5 },
+            },
+          },
+        ],
+      });
+
+      const queryRequest = await driver.mockEmbed!.awaitPendingRequest(
+        "waiting for embedQuery call",
+      );
+      respondToEmbedRequest(queryRequest, [1, 0, 0]);
+
+      // Wait for tool result to be sent back to the model
+      await pollForToolResult(driver, "search_1" as ToolRequestId);
+
+      // Check summary shows result count and file count
+      await driver.assertDisplayBufferContains(
+        '🔍✅ PKB search: "architecture"',
+      );
+      await driver.assertDisplayBufferContains("1 results in 1 files");
+
+      // Check preview shows file with line ranges
+      await driver.assertDisplayBufferContains("• notes.md: lines");
+
+      // Toggle to show detail view
+      const previewPos = await driver.assertDisplayBufferContains("• notes.md");
+      await driver.triggerDisplayBufferKey(previewPos, "<CR>");
+
+      // Detail view should show full content
+      await driver.assertDisplayBufferContains('Query: "architecture"');
+      await driver.assertDisplayBufferContains("## Result 1");
+      await driver.assertDisplayBufferContains("File: notes.md");
+    },
+  );
+});
