@@ -21,18 +21,22 @@ import { expect, vi } from "vitest";
 import type { ThreadId } from "../chat/types";
 import { CompletionsInteraction } from "./driver/completions.ts";
 import { SidebarInteraction } from "./driver/sidebar.ts";
+import type { MockEmbeddingModel } from "../pkb/embedding/mock.ts";
 
 export class NvimDriver {
   public completions: CompletionsInteraction;
   public sidebar: SidebarInteraction;
+  public mockEmbed: MockEmbeddingModel | undefined;
 
   constructor(
     public nvim: Nvim,
     public magenta: Magenta,
     public mockAnthropic: MockProvider,
+    mockEmbed?: MockEmbeddingModel,
   ) {
     this.completions = new CompletionsInteraction(nvim);
     this.sidebar = new SidebarInteraction(nvim, magenta);
+    this.mockEmbed = mockEmbed;
   }
 
   async wait(ms: number) {

@@ -16,6 +16,7 @@ export const STATIC_TOOL_NAMES = [
   "yield_to_parent",
   "predict_edit",
   "compact",
+  "search_pkb",
 ] as const;
 
 export type StaticToolName = (typeof STATIC_TOOL_NAMES)[number];

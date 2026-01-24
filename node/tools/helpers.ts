@@ -16,6 +16,7 @@ import * as WaitForSubagents from "./wait-for-subagents";
 import * as YieldToParent from "./yield-to-parent";
 import * as PredictEdit from "./predict-edit";
 import * as Compact from "./compact";
+import * as SearchPkb from "./searchPkb";
 import { d, type VDOMNode } from "../tea/view";
 import type { StaticToolName } from "./tool-registry";
 import { assertUnreachable } from "../utils/assertUnreachable";
@@ -70,6 +71,8 @@ export function validateInput(
       return PredictEdit.validateInput(input);
     case "compact":
       return Compact.validateInput(input);
+    case "search_pkb":
+      return SearchPkb.validateInput(input);
     default:
       throw new Error(`Unexpected toolName: ${toolName as string}`);
   }
@@ -104,6 +107,7 @@ export function renderStreamdedTool(
     case "spawn_foreach":
     case "predict_edit":
     case "compact":
+    case "search_pkb":
       break;
     default:
       assertUnreachable(name);

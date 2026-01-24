@@ -122,6 +122,22 @@ export type EditPredictionOptions = {
   profile?: EditPredictionProfile;
 };
 
+export type PKBEmbeddingModel =
+  | {
+      provider: "bedrock";
+      model: "cohere.embed-v4:0";
+      region?: string | undefined;
+    }
+  | {
+      provider: "mock";
+    };
+
+export type PKBOptions = {
+  path?: string | undefined;
+  embeddingModel: PKBEmbeddingModel;
+  updateIntervalMs?: number;
+};
+
 export type HSplitWindowDimensions = {
   displayHeightPercentage: number;
   inputHeightPercentage: number;
@@ -171,6 +187,7 @@ export type MagentaOptions = {
   chimeVolume?: number; // Volume from 0.0 (silent) to 1.0 (full), defaults to 0.3
   // New structured options
   editPrediction?: EditPredictionOptions;
+  pkb?: PKBOptions;
 };
 
 // Reusable parsing helpers
@@ -236,6 +253,81 @@ function parseEditPredictionProfile(
   }
 
   return profile;
+}
+
+function parsePKBOptions(
+  pkbInput: Record<string, unknown>,
+  logger: { warn: (msg: string) => void },
+): PKBOptions | undefined {
+  // Validate embeddingModel - required field
+  if (
+    !("embeddingModel" in pkbInput) ||
+    typeof pkbInput["embeddingModel"] !== "object" ||
+    pkbInput["embeddingModel"] === null
+  ) {
+    logger.warn("pkb.embeddingModel must be an object");
+    return undefined;
+  }
+
+  const embeddingModelInput = pkbInput["embeddingModel"] as Record<
+    string,
+    unknown
+  >;
+
+  if (typeof embeddingModelInput["provider"] !== "string") {
+    logger.warn("pkb.embeddingModel.provider must be a string");
+    return undefined;
+  }
+
+  const provider = embeddingModelInput["provider"];
+
+  let embeddingModel: PKBEmbeddingModel;
+
+  if (provider === "mock") {
+    embeddingModel = { provider: "mock" };
+  } else if (provider === "bedrock") {
+    if (embeddingModelInput["model"] !== "cohere.embed-v4:0") {
+      logger.warn(
+        'pkb.embeddingModel.model must be "cohere.embed-v4:0" for bedrock provider',
+      );
+      return undefined;
+    }
+    embeddingModel = {
+      provider: "bedrock",
+      model: "cohere.embed-v4:0",
+      region:
+        typeof embeddingModelInput["region"] === "string"
+          ? embeddingModelInput["region"]
+          : undefined,
+    };
+  } else {
+    logger.warn(`Unknown pkb.embeddingModel.provider: ${provider}`);
+    return undefined;
+  }
+
+  const pkbOptions: PKBOptions = {
+    embeddingModel,
+  };
+
+  // Parse optional path
+  if ("path" in pkbInput) {
+    if (typeof pkbInput["path"] === "string") {
+      pkbOptions.path = pkbInput["path"];
+    } else {
+      logger.warn("pkb.path must be a string");
+    }
+  }
+
+  // Parse optional updateIntervalMs
+  if ("updateIntervalMs" in pkbInput) {
+    if (typeof pkbInput["updateIntervalMs"] === "number") {
+      pkbOptions.updateIntervalMs = pkbInput["updateIntervalMs"];
+    } else {
+      logger.warn("pkb.updateIntervalMs must be a number");
+    }
+  }
+
+  return pkbOptions;
 }
 
 function parseProfiles(
@@ -1205,6 +1297,19 @@ export function parseOptions(
         if (profile) {
           options.editPrediction.profile = profile;
         }
+      }
+    }
+
+    // Parse PKB options
+    if (
+      "pkb" in inputOptionsObj &&
+      typeof inputOptionsObj["pkb"] === "object" &&
+      inputOptionsObj["pkb"] !== null
+    ) {
+      const pkbInput = inputOptionsObj["pkb"] as Record<string, unknown>;
+      const pkbOptions = parsePKBOptions(pkbInput, logger);
+      if (pkbOptions) {
+        options.pkb = pkbOptions;
       }
     }
   }

@@ -14,6 +14,10 @@ import type { ServerName } from "../tools/mcp/types.ts";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ProviderToolResult } from "../providers/provider-types.ts";
 import type { ToolRequestId } from "../tools/types.ts";
+import {
+  getMockEmbeddingModel,
+  setMockEmbeddingModel,
+} from "../pkb/embedding/mock.ts";
 
 type ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;
 
@@ -449,11 +453,13 @@ end
           } as any;
         }
 
+        const mockEmbed = getMockEmbeddingModel();
         try {
-          await fn(new NvimDriver(nvim, magenta, mockAnthropic));
+          await fn(new NvimDriver(nvim, magenta, mockAnthropic, mockEmbed));
         } finally {
           magenta.destroy();
           nvim.detach();
+          setMockEmbeddingModel(undefined);
           for (const serverName in mockServers) {
             await mockServers[serverName as ServerName].stop();
             delete mockServers[serverName as ServerName];

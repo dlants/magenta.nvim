@@ -15,6 +15,7 @@ import * as WaitForSubagents from "./wait-for-subagents.ts";
 import * as YieldToParent from "./yield-to-parent.ts";
 import * as PredictEdit from "./predict-edit.ts";
 import * as Compact from "./compact.ts";
+import * as SearchPkb from "./searchPkb.ts";
 
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d, type VDOMNode } from "../tea/view.ts";
@@ -144,6 +145,12 @@ export type StaticToolMap = {
     msg: Compact.Msg;
     spec: typeof Compact.spec;
   };
+  search_pkb: {
+    controller: SearchPkb.SearchPkbTool;
+    input: SearchPkb.Input;
+    msg: SearchPkb.Msg;
+    spec: typeof SearchPkb.spec;
+  };
 };
 
 export type StaticToolRequest = {
@@ -194,11 +201,13 @@ const TOOL_SPEC_MAP: {
   wait_for_subagents: WaitForSubagents.spec,
   predict_edit: PredictEdit.spec,
   compact: Compact.spec,
+  search_pkb: SearchPkb.spec,
 };
 
 export function getToolSpecs(
   threadType: ThreadType,
   mcpToolManager: MCPToolManager,
+  options?: { pkbEnabled?: boolean },
 ): ProviderToolSpec[] {
   let staticToolNames: StaticToolName[] = [];
   switch (threadType) {
@@ -212,10 +221,15 @@ export function getToolSpecs(
     default:
       assertUnreachable(threadType);
   }
-  return [
-    ...staticToolNames.map((toolName) => TOOL_SPEC_MAP[toolName]),
-    ...mcpToolManager.getToolSpecs(),
-  ];
+
+  const specs = staticToolNames.map((toolName) => TOOL_SPEC_MAP[toolName]);
+
+  // Add search_pkb tool if PKB is enabled
+  if (options?.pkbEnabled) {
+    specs.push(SearchPkb.spec);
+  }
+
+  return [...specs, ...mcpToolManager.getToolSpecs()];
 }
 
 // ============================================================================
@@ -282,6 +296,8 @@ export function renderCompletedToolSummary(
       return PredictEdit.renderCompletedSummary(info);
     case "compact":
       return Compact.renderCompletedSummary(info);
+    case "search_pkb":
+      return SearchPkb.renderCompletedSummary(info);
     default:
       assertUnreachable(toolName);
   }

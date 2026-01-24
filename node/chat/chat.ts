@@ -28,6 +28,7 @@ import type {
   ForEachElement,
   SpawnForeachTool,
 } from "../tools/spawn-foreach.ts";
+import type { PKB } from "../pkb/pkb.ts";
 
 type ThreadWrapper = (
   | {
@@ -113,6 +114,7 @@ export class Chat {
       cwd: NvimCwd;
       nvim: Nvim;
       lsp: Lsp;
+      pkb: PKB | undefined;
     },
   ) {
     this.threadWrappers = {};

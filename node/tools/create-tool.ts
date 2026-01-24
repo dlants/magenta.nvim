@@ -13,6 +13,7 @@ import * as WaitForSubagents from "./wait-for-subagents.ts";
 import * as YieldToParent from "./yield-to-parent.ts";
 import * as PredictEdit from "./predict-edit.ts";
 import * as Compact from "./compact.ts";
+import * as SearchPkb from "./searchPkb.ts";
 
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Nvim } from "../nvim/nvim-node";
@@ -39,6 +40,7 @@ import type { StaticToolRequest } from "./toolManager.ts";
 import type { MCPToolManager } from "./mcp/manager.ts";
 import { parseToolName, wrapMcpToolMsg } from "./mcp/types.ts";
 import { MCPTool, type Input as MCPInput } from "./mcp/tool.ts";
+import type { PKB } from "../pkb/pkb.ts";
 
 export type CreateToolContext = {
   dispatch: Dispatch<RootMsg>;
@@ -54,6 +56,7 @@ export type CreateToolContext = {
   gitignore: Gitignore;
   contextManager: ContextManager;
   threadDispatch: Dispatch<ThreadMsg>;
+  pkb: PKB | undefined;
 };
 
 export type ToolDispatch = (msg: {
@@ -237,6 +240,19 @@ export function createTool(
       return new Compact.CompactTool(staticRequest, {
         nvim: context.nvim,
         thread: threadWrapper.thread,
+        myDispatch: wrapDispatch,
+      });
+    }
+
+    case "search_pkb": {
+      if (!context.pkb) {
+        throw new Error(
+          `PKB is not configured. Add pkb options to your magenta configuration.`,
+        );
+      }
+      return new SearchPkb.SearchPkbTool(staticRequest, {
+        nvim: context.nvim,
+        pkb: context.pkb,
         myDispatch: wrapDispatch,
       });
     }

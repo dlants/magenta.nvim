@@ -17,6 +17,7 @@
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.25.0",
     "@anthropic-ai/sdk": "^0.71.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.975.0",
     "@modelcontextprotocol/sdk": "^1.15.1",
     "@openauthjs/openauth": "^0.4.3",
     "@types/diff": "^7.0.2",

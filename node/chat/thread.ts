@@ -68,6 +68,7 @@ import { CommandRegistry } from "./commands/registry.ts";
 import { getSubsequentReminder } from "../providers/system-reminders.ts";
 import { readGitignoreSync, type Gitignore } from "../tools/util.ts";
 import { renderStreamdedTool } from "../tools/helpers.ts";
+import type { PKB } from "../pkb/pkb.ts";
 
 export type InputMessage =
   | {
@@ -239,6 +240,7 @@ export class Thread {
       contextManager: ContextManager;
       options: MagentaOptions;
       getDisplayWidth: () => number;
+      pkb: PKB | undefined;
     },
     clonedAgent?: Agent,
   ) {
@@ -287,6 +289,7 @@ export class Thread {
           tools: getToolSpecs(
             this.state.threadType,
             this.context.mcpToolManager,
+            { pkbEnabled: this.context.pkb !== undefined },
           ),
           ...(this.state.profile.thinking &&
             (this.state.profile.provider === "anthropic" ||
@@ -512,6 +515,7 @@ export class Thread {
         gitignore: this.gitignore,
         contextManager: this.contextManager,
         threadDispatch: this.myDispatch,
+        pkb: this.context.pkb,
       };
 
       // Create the dispatch function for this tool

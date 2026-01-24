@@ -36,6 +36,9 @@ import {
 } from "./edit-prediction/edit-prediction-controller.ts";
 import { initializeMagentaHighlightGroups } from "./nvim/extmarks.ts";
 import { MAGENTA_HIGHLIGHT_NAMESPACE } from "./nvim/buffer.ts";
+import { createPKB } from "./pkb/create-pkb.ts";
+import { PKBManager } from "./pkb/pkb-manager.ts";
+import type { PKB } from "./pkb/pkb.ts";
 
 // these constants should match lua/magenta/init.lua
 const MAGENTA_COMMAND = "magentaCommand";
@@ -56,6 +59,8 @@ export class Magenta {
   public bufferTracker: BufferTracker;
   public changeTracker: ChangeTracker;
   public editPredictionController: EditPredictionController;
+  private pkbManager: PKBManager | undefined;
+  private pkb: PKB | undefined;
 
   constructor(
     public nvim: Nvim,
@@ -65,6 +70,24 @@ export class Magenta {
   ) {
     this.bufferTracker = new BufferTracker(this.nvim);
     this.changeTracker = new ChangeTracker(this.nvim, this.cwd, this.options);
+
+    // Initialize PKB if configured
+    if (this.options.pkb) {
+      try {
+        this.pkb = createPKB(this.options.pkb, this.cwd);
+        this.pkbManager = new PKBManager(
+          this.pkb,
+          this.nvim,
+          this.options.pkb.updateIntervalMs,
+        );
+        this.pkbManager.start();
+        this.nvim.logger.info("PKB initialized and embedding updates started");
+      } catch (e) {
+        this.nvim.logger.error(
+          `Failed to initialize PKB: ${e instanceof Error ? e.message + "\n" + e.stack : String(e)}`,
+        );
+      }
+    }
 
     this.dispatch = (msg: RootMsg) => {
       try {
@@ -103,6 +126,7 @@ export class Magenta {
       nvim: this.nvim,
       options: this.options,
       lsp: this.lsp,
+      pkb: this.pkb,
     });
 
     this.editPredictionController = new EditPredictionController(
@@ -639,6 +663,9 @@ ${lines.join("\n")}
         `Error destroying inline edit manager: ${e instanceof Error ? e.message + "\n" + e.stack : JSON.stringify(e)}`,
       );
     });
+    if (this.pkbManager) {
+      this.pkbManager.stop();
+    }
   }
 
   static async start(nvim: Nvim) {
