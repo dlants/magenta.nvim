@@ -7,6 +7,7 @@ import type { EmbeddingModel, Embedding } from "./embedding/types.ts";
 
 class MockEmbeddingModel implements EmbeddingModel {
   modelName = "mock-embedding";
+  dimensions = 10;
 
   async embedChunk(chunk: string): Promise<Embedding> {
     // Return a deterministic embedding based on chunk content
@@ -62,14 +63,14 @@ describe("PKB", () => {
     expect(result.updated).toContain("test.md");
     expect(result.skipped).toHaveLength(0);
 
-    // Check embed file was created
-    const embedPath = path.join(tempDir, "test.embed");
-    expect(fs.existsSync(embedPath)).toBe(true);
+    // Check database file was created
+    const dbPath = path.join(tempDir, "pkb.db");
+    expect(fs.existsSync(dbPath)).toBe(true);
 
-    const embedFile = JSON.parse(fs.readFileSync(embedPath, "utf-8"));
-    expect(embedFile.file).toBe("test.md");
-    expect(embedFile.chunks.length).toBeGreaterThan(0);
-    expect(embedFile.chunks[0].embedding[mockModel.modelName]).toBeDefined();
+    // Verify we can search and get results
+    const searchResults = await pkb.search("test content", 5);
+    expect(searchResults.length).toBeGreaterThan(0);
+    expect(searchResults[0].file).toBe("test.md");
   });
 
   it("should skip files that haven't changed", async () => {

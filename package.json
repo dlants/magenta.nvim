@@ -3,6 +3,7 @@
   "module": "magenta.ts",
   "type": "module",
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/mime-types": "^3.0.1",
     "@types/node": "^22.10.5",
     "@types/play-sound": "^1.1.2",
@@ -22,6 +23,7 @@
     "@openauthjs/openauth": "^0.4.3",
     "@types/diff": "^7.0.2",
     "@types/lodash": "^4.17.20",
+    "better-sqlite3": "^12.6.2",
     "diff": "^7.0.0",
     "file-type": "^21.0.0",
     "glob": "^10.3.10",
@@ -35,6 +37,7 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.3.93",
     "play-sound": "^1.1.6",
+    "sqlite-vec": "^0.1.7-alpha.2",
     "tsx": "^4.19.2",
     "uuid": "^13.0.0",
     "winston": "^3.17.0",

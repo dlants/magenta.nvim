@@ -4,7 +4,6 @@ export { BedrockCohereEmbedding } from "./embedding/bedrock-cohere.ts";
 export type {
   EmbeddingModel,
   Embedding,
-  EmbedFile,
   ChunkData,
   Position,
 } from "./embedding/types.ts";

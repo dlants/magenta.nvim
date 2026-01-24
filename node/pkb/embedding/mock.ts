@@ -23,6 +23,7 @@ export function getMockEmbeddingModel(): MockEmbeddingModel | undefined {
 
 export class MockEmbeddingModel implements EmbeddingModel {
   public modelName = "mock-embedding";
+  public dimensions = 3;
   public requests: MockEmbedRequest[] = [];
 
   async embedChunk(chunk: string): Promise<Embedding> {
