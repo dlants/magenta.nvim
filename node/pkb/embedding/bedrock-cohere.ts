@@ -70,9 +70,9 @@ export class BedrockCohereEmbedding implements EmbeddingModel {
     });
 
     const response = await this.client.send(command);
-    const responseBody: CohereEmbedV4Response = JSON.parse(
+    const responseBody = JSON.parse(
       new TextDecoder().decode(response.body),
-    );
+    ) as CohereEmbedV4Response;
 
     if (!responseBody.embeddings.float) {
       throw new Error("No float embeddings returned from Cohere");

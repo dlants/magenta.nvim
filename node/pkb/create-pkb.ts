@@ -10,8 +10,8 @@ import {
   getMockEmbeddingModel,
   setMockEmbeddingModel,
 } from "./embedding/mock.ts";
-import { ContextGenerator } from "./context-generator.ts";
 import type { Provider } from "../providers/provider-types.ts";
+import type { Logger } from "./pkb-manager.ts";
 
 export const DEFAULT_PKB_PATH = path.join(os.homedir(), "pkb");
 
@@ -47,12 +47,13 @@ function expandTilde(filePath: string): string {
 export type CreatePKBContext = {
   provider: Provider;
   fastModel: string;
+  logger?: Logger;
 };
 
 export function createPKB(
   options: PKBOptions,
   cwd: NvimCwd,
-  context?: CreatePKBContext,
+  context: CreatePKBContext,
 ): PKB {
   const embeddingModel = createEmbeddingModel(options.embeddingModel);
   const pkbPath = options.path ?? DEFAULT_PKB_PATH;
@@ -61,9 +62,10 @@ export function createPKB(
     ? expandedPath
     : path.join(cwd, expandedPath);
 
-  const contextGenerator = context
-    ? new ContextGenerator(context.provider, context.fastModel)
-    : undefined;
-
-  return new PKB(resolvedPath, embeddingModel, contextGenerator);
+  return new PKB(
+    resolvedPath,
+    embeddingModel,
+    { provider: context.provider, model: context.fastModel },
+    { logger: context?.logger },
+  );
 }

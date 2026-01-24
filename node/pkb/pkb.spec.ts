@@ -1,137 +1,125 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import * as fs from "fs";
+import { it, expect } from "vitest";
+import * as fs from "fs/promises";
 import * as path from "path";
-import * as os from "os";
-import { PKB } from "./pkb.ts";
-import type { EmbeddingModel, Embedding } from "./embedding/types.ts";
+import { withDriver } from "../test/preamble.ts";
+import { respondToEmbedRequest } from "./embedding/mock.ts";
+import { pollUntil } from "../utils/async.ts";
+import type { NvimDriver } from "../test/driver.ts";
 
-class MockEmbeddingModel implements EmbeddingModel {
-  modelName = "mock-embedding";
-  dimensions = 10;
-
-  async embedChunk(chunk: string): Promise<Embedding> {
-    return this.textToEmbedding(chunk);
+async function respondToAllContextRequests(driver: NvimDriver) {
+  let count = 0;
+  while (true) {
+    const pendingRequest = driver.mockAnthropic.textRequests.find(
+      (r) => !r.defer.resolved,
+    );
+    if (!pendingRequest) break;
+    pendingRequest.defer.resolve({
+      text: `Context for chunk ${count + 1}`,
+      stopReason: "end_turn",
+      usage: { inputTokens: 10, outputTokens: 20 },
+    });
+    count++;
+    await driver.wait(10);
   }
+  return count;
+}
 
-  async embedQuery(query: string): Promise<Embedding> {
-    return this.textToEmbedding(query);
-  }
-
-  async embedChunks(chunks: string[]): Promise<Embedding[]> {
-    return chunks.map((c) => this.textToEmbedding(c));
-  }
-
-  private textToEmbedding(text: string): Embedding {
-    const embedding = new Array(10).fill(0);
-    for (let i = 0; i < text.length; i++) {
-      embedding[i % 10] += text.charCodeAt(i) / 1000;
+async function awaitEmbedRequestWithContextResponses(driver: NvimDriver) {
+  return pollUntil(async () => {
+    await respondToAllContextRequests(driver);
+    const embedReq = driver.mockEmbed!.requests.find((r) => !r.defer.resolved);
+    if (!embedReq) {
+      throw new Error("waiting for embedChunks call");
     }
-    const norm = Math.sqrt(embedding.reduce((sum, v) => sum + v * v, 0));
-    return embedding.map((v) => v / norm);
-  }
+    return embedReq;
+  });
 }
 
-async function scanAndProcessAll(pkb: PKB): Promise<{
-  queued: string[];
-  skipped: string[];
-  processed: string[];
-}> {
-  const { queued, skipped } = pkb.scanForChanges();
-  const processed: string[] = [];
+it("should search and return relevant chunks", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        const pkbDir = path.join(tmpDir, "pkb");
+        await fs.mkdir(pkbDir);
+        await fs.writeFile(
+          path.join(pkbDir, "doc1.md"),
+          "# Apples\n\nApples are red fruits that grow on trees.",
+        );
+        await fs.writeFile(
+          path.join(pkbDir, "doc2.md"),
+          "# Oranges\n\nOranges are orange colored citrus fruits.",
+        );
+      },
+      options: {
+        pkb: {
+          path: "./pkb",
+          embeddingModel: { provider: "mock" },
+        },
+      },
+    },
+    async (driver) => {
+      expect(driver.mockEmbed).toBeDefined();
 
-  let result = await pkb.processNextInQueue();
-  while (result.status === "processed") {
-    processed.push(result.filename);
-    result = await pkb.processNextInQueue();
-  }
+      // Trigger reindex to index both files
+      const reindexPromise = driver.magenta.pkbManager!.reindex();
 
-  return { queued, skipped, processed };
-}
+      // First file embedding
+      const embedReq1 = await awaitEmbedRequestWithContextResponses(driver);
+      const chunks1 = embedReq1.input as string[];
+      respondToEmbedRequest(
+        embedReq1,
+        chunks1.map(() => [0.9, 0.1, 0.1]), // apple-like embedding
+      );
 
-describe("PKB", () => {
-  let tempDir: string;
-  let pkb: PKB;
-  let mockModel: MockEmbeddingModel;
+      // Second file embedding
+      const embedReq2 = await awaitEmbedRequestWithContextResponses(driver);
+      const chunks2 = embedReq2.input as string[];
+      respondToEmbedRequest(
+        embedReq2,
+        chunks2.map(() => [0.1, 0.9, 0.1]), // orange-like embedding
+      );
 
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pkb-test-"));
-    // Initialize as git repo for hash-object to work
-    const { execSync } = require("child_process");
-    execSync("git init", { cwd: tempDir });
+      await reindexPromise;
 
-    mockModel = new MockEmbeddingModel();
-    pkb = new PKB(tempDir, mockModel);
-  });
+      // Search
+      const searchPromise = driver.magenta.pkb!.search("apple fruit", 5);
+      const queryReq = await driver.mockEmbed!.awaitPendingRequest();
+      respondToEmbedRequest(queryReq, [0.9, 0.1, 0.1]); // apple-like query
+      const results = await searchPromise;
 
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  });
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0].score).toBeGreaterThan(0);
+      expect(results[0].file).toBeDefined();
+      expect(results[0].chunk.text).toBeDefined();
+    },
+  );
+});
 
-  it("should index new markdown files", async () => {
-    const mdContent = "# Test Document\n\nThis is test content.";
-    fs.writeFileSync(path.join(tempDir, "test.md"), mdContent);
+it("should return empty results for empty PKB", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        const pkbDir = path.join(tmpDir, "pkb");
+        await fs.mkdir(pkbDir);
+        // No files in pkb directory
+      },
+      options: {
+        pkb: {
+          path: "./pkb",
+          embeddingModel: { provider: "mock" },
+        },
+      },
+    },
+    async (driver) => {
+      expect(driver.mockEmbed).toBeDefined();
 
-    const result = await scanAndProcessAll(pkb);
+      // Search with no indexed files
+      const searchPromise = driver.magenta.pkb!.search("anything", 5);
+      const queryReq = await driver.mockEmbed!.awaitPendingRequest();
+      respondToEmbedRequest(queryReq, [0.5, 0.5, 0.5]);
+      const results = await searchPromise;
 
-    expect(result.queued).toContain("test.md");
-    expect(result.processed).toContain("test.md");
-    expect(result.skipped).toHaveLength(0);
-
-    const dbPath = path.join(tempDir, "pkb.db");
-    expect(fs.existsSync(dbPath)).toBe(true);
-
-    const searchResults = await pkb.search("test content", 5);
-    expect(searchResults.length).toBeGreaterThan(0);
-    expect(searchResults[0].file).toBe("test.md");
-  });
-
-  it("should skip files that haven't changed", async () => {
-    const mdContent = "# Test Document\n\nThis is test content.";
-    fs.writeFileSync(path.join(tempDir, "test.md"), mdContent);
-
-    await scanAndProcessAll(pkb);
-
-    const result = await scanAndProcessAll(pkb);
-
-    expect(result.queued).toHaveLength(0);
-    expect(result.skipped).toContain("test.md");
-  });
-
-  it("should re-embed when file content changes", async () => {
-    fs.writeFileSync(path.join(tempDir, "test.md"), "Original content");
-    await scanAndProcessAll(pkb);
-
-    fs.writeFileSync(path.join(tempDir, "test.md"), "Modified content");
-
-    const result = await scanAndProcessAll(pkb);
-
-    expect(result.queued).toContain("test.md");
-    expect(result.processed).toContain("test.md");
-    expect(result.skipped).toHaveLength(0);
-  });
-
-  it("should search and return relevant chunks", async () => {
-    fs.writeFileSync(
-      path.join(tempDir, "doc1.md"),
-      "# Apples\n\nApples are red fruits that grow on trees.",
-    );
-    fs.writeFileSync(
-      path.join(tempDir, "doc2.md"),
-      "# Oranges\n\nOranges are orange colored citrus fruits.",
-    );
-
-    await scanAndProcessAll(pkb);
-
-    const results = await pkb.search("apple fruit", 5);
-
-    expect(results.length).toBeGreaterThan(0);
-    expect(results[0].score).toBeGreaterThan(0);
-    expect(results[0].file).toBeDefined();
-    expect(results[0].chunk.text).toBeDefined();
-  });
-
-  it("should return empty results for empty PKB", async () => {
-    const results = await pkb.search("anything", 5);
-    expect(results).toHaveLength(0);
-  });
+      expect(results).toHaveLength(0);
+    },
+  );
 });

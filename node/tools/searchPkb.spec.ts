@@ -99,7 +99,9 @@ Logs are shipped to a centralized ELK stack for analysis.`,
       async (driver) => {
         expect(driver.mockEmbed).toBeDefined();
 
-        // PKBManager starts immediately and calls updateEmbeddings
+        // Manually trigger reindex
+        const reindexPromise = driver.magenta.pkbManager!.reindex();
+
         // Context generation happens first for each chunk, then embedding
         const embedRequest =
           await awaitEmbedRequestWithContextResponses(driver);
@@ -124,6 +126,7 @@ Logs are shipped to a centralized ELK stack for analysis.`,
           (_, i) => chunkEmbeddings[i] || [0.1, 0.1, 0.1],
         );
         respondToEmbedRequest(embedRequest, embeddings);
+        await reindexPromise;
 
         // Now show sidebar and send a message
         await driver.showSidebar();
@@ -186,14 +189,14 @@ Logs are shipped to a centralized ELK stack for analysis.`,
           pkb: {
             path: "./pkb",
             embeddingModel: { provider: "mock" },
-            updateIntervalMs: 100,
           },
         },
       },
       async (driver) => {
         expect(driver.mockEmbed).toBeDefined();
 
-        // Wait for initial embedding request (with context generation)
+        // Manually trigger initial reindex
+        const reindexPromise1 = driver.magenta.pkbManager!.reindex();
         const initialRequest =
           await awaitEmbedRequestWithContextResponses(driver);
         expect(initialRequest.type).toBe("chunks");
@@ -206,6 +209,7 @@ Logs are shipped to a centralized ELK stack for analysis.`,
           initialRequest,
           initialChunks.map(() => [0.1, 0.2, 0.3]),
         );
+        await reindexPromise1;
 
         // Modify the file
         await fs.writeFile(
@@ -213,7 +217,8 @@ Logs are shipped to a centralized ELK stack for analysis.`,
           "# Updated Content\nThis content has been modified.",
         );
 
-        // Wait for re-embedding request (triggered by the interval, with context generation)
+        // Manually trigger reindex again
+        const reindexPromise2 = driver.magenta.pkbManager!.reindex();
         const updateRequest =
           await awaitEmbedRequestWithContextResponses(driver);
         expect(updateRequest.type).toBe("chunks");
@@ -225,6 +230,7 @@ Logs are shipped to a centralized ELK stack for analysis.`,
           updateRequest,
           updatedChunks.map(() => [0.4, 0.5, 0.6]),
         );
+        await reindexPromise2;
       },
     );
   });
@@ -253,12 +259,15 @@ Services communicate via REST APIs.`,
       },
     },
     async (driver) => {
+      // Manually trigger reindex
+      const reindexPromise = driver.magenta.pkbManager!.reindex();
       const embedRequest = await awaitEmbedRequestWithContextResponses(driver);
       const chunks = embedRequest.input as string[];
       respondToEmbedRequest(
         embedRequest,
         chunks.map(() => [1, 0, 0]),
       );
+      await reindexPromise;
 
       await driver.showSidebar();
       await driver.inputMagentaText("Search for architecture info");

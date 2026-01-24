@@ -4,6 +4,8 @@ import * as path from "path";
 import { PKB } from "./pkb.ts";
 import { PKBManager, type Logger } from "./pkb-manager.ts";
 import { BedrockCohereEmbedding } from "./embedding/bedrock-cohere.ts";
+import { AnthropicProvider } from "../providers/anthropic.ts";
+import type { Nvim } from "../nvim/nvim-node/types.ts";
 
 const pkbPath = process.argv[2];
 
@@ -33,7 +35,13 @@ const logger: Logger = {
 
 async function main() {
   const embeddingModel = new BedrockCohereEmbedding();
-  const pkb = new PKB(resolvedPath, embeddingModel);
+  const provider = new AnthropicProvider({ logger } as Nvim);
+  const pkb = new PKB(
+    resolvedPath,
+    embeddingModel,
+    { provider, model: "claude-haiku-4-5" },
+    { logger },
+  );
   const manager = new PKBManager(pkb, logger);
 
   try {

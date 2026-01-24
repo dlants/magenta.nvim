@@ -7,26 +7,12 @@ exports[`searchPkb tool > should search PKB and return relevant chunks 1`] = `
     {
       "text": "## Result 1 (score: 1.000)
 File: notes.md
-Lines 1-2
-
-# Project Documentation
-
-Context for chunk 1
-
-# Project Documentation
-
-
----
-
-## Result 2 (score: 0.293)
-File: notes.md
-Lines 3-7
+Lines 4-7
 
 # Project Documentation > ## Architecture Overview
 
-Context for chunk 2
+Context for chunk 1
 
-## Architecture Overview
 The system uses a microservices architecture with REST APIs for communication between services.
 Each service is independently deployable and scalable, following the principles of domain-driven design.
 The architecture enables teams to work autonomously on different parts of the system.
@@ -34,44 +20,54 @@ The architecture enables teams to work autonomously on different parts of the sy
 
 ---
 
-## Result 3 (score: 0.181)
+## Result 2 (score: 0.707)
 File: notes.md
-Lines 8-11
+Lines 9-11
 
 # Project Documentation > ## Architecture Overview > ### Service Communication
 
-Context for chunk 3
+Context for chunk 2
 
-### Service Communication
 Services communicate via REST APIs and message queues. We use RabbitMQ for async messaging.
 This pattern helps decouple services and improves system resilience.
 
 
 ---
 
-## Result 4 (score: 0.089)
+## Result 3 (score: 0.577)
 File: notes.md
-Lines 40-42
+Lines 13-14
+
+# Project Documentation > ## Architecture Overview > ### Deployment
+
+Context for chunk 3
+
+All services are containerized using Docker and orchestrated with Kubernetes.
+We use Helm charts for deployment configuration and ArgoCD for GitOps-style continuous delivery.
+
+---
+
+## Result 4 (score: 0.577)
+File: notes.md
+Lines 41-42
 
 # Project Documentation > ## Security Considerations > ### Audit Logging
 
-Context for chunk 16
+Context for chunk 13
 
-### Audit Logging
 All sensitive operations are logged for compliance and debugging purposes.
 Logs are shipped to a centralized ELK stack for analysis.
 
 ---
 
-## Result 5 (score: 0.089)
+## Result 5 (score: 0.577)
 File: notes.md
-Lines 36-39
+Lines 37-39
 
 # Project Documentation > ## Security Considerations > ### Authorization
 
-Context for chunk 15
+Context for chunk 12
 
-### Authorization
 Role-based access control (RBAC) is implemented at the service level.
 Permissions are validated on each request using a centralized authorization service.
 ",

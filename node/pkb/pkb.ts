@@ -7,13 +7,15 @@ import {
   type ChunkData,
 } from "./embedding/types.ts";
 import { chunkMarkdown } from "./chunker.ts";
-import type { ContextGenerator } from "./context-generator.ts";
+import { generateContext } from "./context-generator.ts";
+import type { Provider } from "../providers/provider-types.ts";
 import {
   initDatabase,
   ensureVecTable,
   getVecTableName,
   type PKBDatabase,
 } from "./db.ts";
+import type { Logger } from "./pkb-manager.ts";
 
 export type SearchResult = {
   file: string;
@@ -30,34 +32,50 @@ export type IndexLogEntry = {
 export type PKBStats = {
   totalFiles: number;
   totalChunks: number;
-  queuedFiles: number;
   recentFiles: IndexLogEntry[];
 };
 
+export type FileOperation =
+  | { type: "index"; filename: string }
+  | { type: "delete"; filename: string; fileId: number };
+
 const MAX_INDEX_LOG_ENTRIES = 20;
 
-function computeFileHash(filePath: string): string {
+export function computeFileHash(filePath: string): string {
   const content = fs.readFileSync(filePath);
   return crypto.createHash("md5").update(content).digest("hex");
 }
 
-type QueuedFile = {
+export type IndexedFileInfo = {
+  id: number;
   filename: string;
-  queuedAt: number;
+  mtimeMs: number;
+  hash: string;
+};
+
+export type ContextGeneratorConfig = {
+  provider: Provider;
+  model: string;
+};
+
+export type PKBOptions = {
+  logger?: Logger | undefined;
 };
 
 export class PKB {
   public indexLog: IndexLogEntry[] = [];
   private db: PKBDatabase;
   private vecTableInitialized = false;
-  private indexQueue: Map<string, QueuedFile> = new Map();
+  private logger?: Logger | undefined;
 
   constructor(
     private pkbPath: string,
     private embeddingModel: EmbeddingModel,
-    private contextGenerator?: ContextGenerator,
+    private contextGeneratorConfig: ContextGeneratorConfig | undefined,
+    options?: PKBOptions,
   ) {
     this.db = initDatabase(pkbPath);
+    this.logger = options?.logger;
   }
 
   close(): void {
@@ -76,95 +94,48 @@ export class PKB {
     this.vecTableInitialized = true;
   }
 
-  scanForChanges(): { queued: string[]; skipped: string[] } {
-    const queued: string[] = [];
-    const skipped: string[] = [];
-
+  getIndexedFiles(): IndexedFileInfo[] {
     this.ensureVecTableInitialized();
 
-    const files = fs.readdirSync(this.pkbPath);
-    const mdFiles = files.filter((f) => f.endsWith(".md"));
+    const rows = this.db
+      .prepare<
+        [string, number],
+        { id: number; filename: string; mtime_ms: number; hash: string }
+      >("SELECT id, filename, mtime_ms, hash FROM files WHERE model_name = ? AND embedding_version = ?")
+      .all(this.embeddingModel.modelName, MAGENTA_EMBEDDING_VERSION);
 
-    const getFileRecord = this.db.prepare<
-      [string, string, number],
-      { id: number; mtime_ms: number; hash: string }
-    >(
-      "SELECT id, mtime_ms, hash FROM files WHERE filename = ? AND model_name = ? AND embedding_version = ?",
+    return rows.map((row) => ({
+      id: row.id,
+      filename: row.filename,
+      mtimeMs: row.mtime_ms,
+      hash: row.hash,
+    }));
+  }
+
+  updateFileMtime(fileId: number, mtimeMs: number): void {
+    this.db
+      .prepare<[number, number]>("UPDATE files SET mtime_ms = ? WHERE id = ?")
+      .run(mtimeMs, fileId);
+  }
+
+  deleteFile(fileId: number): void {
+    this.ensureVecTableInitialized();
+
+    const vecTableName = getVecTableName(
+      this.embeddingModel.modelName,
+      MAGENTA_EMBEDDING_VERSION,
     );
 
-    const updateFileMtime = this.db.prepare<[number, number]>(
-      "UPDATE files SET mtime_ms = ? WHERE id = ?",
-    );
-
-    for (const mdFile of mdFiles) {
-      const mdPath = path.join(this.pkbPath, mdFile);
-      const stat = fs.statSync(mdPath);
-      const currentMtime = stat.mtimeMs;
-
-      const existingFile = getFileRecord.get(
-        mdFile,
-        this.embeddingModel.modelName,
-        MAGENTA_EMBEDDING_VERSION,
-      );
-
-      if (existingFile) {
-        if (existingFile.mtime_ms === currentMtime) {
-          skipped.push(mdFile);
-          continue;
-        }
-
-        const currentHash = computeFileHash(mdPath);
-        if (existingFile.hash === currentHash) {
-          updateFileMtime.run(currentMtime, existingFile.id);
-          skipped.push(mdFile);
-          continue;
-        }
-
-        this.queueFile(mdFile);
-        queued.push(mdFile);
-      } else {
-        this.queueFile(mdFile);
-        queued.push(mdFile);
-      }
-    }
-
-    return { queued, skipped };
+    this.db
+      .prepare(
+        `DELETE FROM ${vecTableName} WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?)`,
+      )
+      .run(fileId);
+    this.db.prepare("DELETE FROM chunks WHERE file_id = ?").run(fileId);
+    this.db.prepare("DELETE FROM files WHERE id = ?").run(fileId);
   }
 
-  private queueFile(filename: string): void {
-    // Remove from queue if already present (will re-add at end)
-    this.indexQueue.delete(filename);
-    // Add to end of queue with current timestamp
-    this.indexQueue.set(filename, {
-      filename,
-      queuedAt: Date.now(),
-    });
-  }
-
-  getQueueSize(): number {
-    return this.indexQueue.size;
-  }
-
-  getQueuedFiles(): string[] {
-    return Array.from(this.indexQueue.keys());
-  }
-
-  async processNextInQueue(): Promise<
-    { status: "processed"; filename: string } | { status: "empty" }
-  > {
-    const firstEntry = this.indexQueue.entries().next();
-    if (firstEntry.done) {
-      return { status: "empty" };
-    }
-
-    const [filename] = firstEntry.value;
-    this.indexQueue.delete(filename);
-
-    await this.indexFile(filename);
-    return { status: "processed", filename };
-  }
-
-  private async indexFile(mdFile: string): Promise<void> {
+  async indexFile(mdFile: string): Promise<void> {
     this.ensureVecTableInitialized();
 
     const mdPath = path.join(this.pkbPath, mdFile);
@@ -194,18 +165,6 @@ export class PKB {
       "UPDATE files SET mtime_ms = ?, hash = ? WHERE id = ?",
     );
 
-    const deleteFileChunks = this.db.prepare<[number]>(
-      "DELETE FROM chunks WHERE file_id = ?",
-    );
-
-    const vecTableName = getVecTableName(
-      this.embeddingModel.modelName,
-      MAGENTA_EMBEDDING_VERSION,
-    );
-    const deleteVec = this.db.prepare(
-      `DELETE FROM ${vecTableName} WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?)`,
-    );
-
     const existingFile = getFileRecord.get(
       mdFile,
       this.embeddingModel.modelName,
@@ -215,8 +174,6 @@ export class PKB {
     let fileId: number;
 
     if (existingFile) {
-      deleteVec.run(existingFile.id);
-      deleteFileChunks.run(existingFile.id);
       updateFileHash.run(currentMtime, currentHash, existingFile.id);
       fileId = existingFile.id;
     } else {
@@ -241,17 +198,84 @@ export class PKB {
     const content = fs.readFileSync(mdPath, "utf-8");
     const chunks = chunkMarkdown(content);
 
+    const vecTableName = getVecTableName(
+      this.embeddingModel.modelName,
+      MAGENTA_EMBEDDING_VERSION,
+    );
+
+    // Get existing chunks for this file
+    const existingChunks = this.db
+      .prepare<
+        [number],
+        { id: number; text: string }
+      >("SELECT id, text FROM chunks WHERE file_id = ?")
+      .all(fileId);
+
+    // Build a map of existing chunk text -> chunk id for quick lookup
+    const existingChunkMap = new Map<string, number>();
+    for (const chunk of existingChunks) {
+      existingChunkMap.set(chunk.text, chunk.id);
+    }
+
+    // Track which existing chunks are still present in the new file
+    const newChunkTexts = new Set(chunks.map((c) => c.text));
+
+    // Delete chunks that no longer exist in the file
+    const chunksToDelete = existingChunks.filter(
+      (c) => !newChunkTexts.has(c.text),
+    );
+    if (chunksToDelete.length > 0) {
+      this.logger?.debug(
+        `  ${mdFile}: deleting ${chunksToDelete.length} obsolete chunks`,
+      );
+      const deleteVec = this.db.prepare(
+        `DELETE FROM ${vecTableName} WHERE chunk_id = ?`,
+      );
+      const deleteChunk = this.db.prepare("DELETE FROM chunks WHERE id = ?");
+      for (const chunk of chunksToDelete) {
+        deleteVec.run(chunk.id);
+        deleteChunk.run(chunk.id);
+      }
+    }
+
+    // Find chunks that need to be embedded (new chunks not in existing map)
+    const chunksToEmbed = chunks.filter((c) => !existingChunkMap.has(c.text));
+    const reusedCount = chunks.length - chunksToEmbed.length;
+
+    if (reusedCount > 0) {
+      this.logger?.debug(`  ${mdFile}: reusing ${reusedCount} existing chunks`);
+    }
+
+    if (chunksToEmbed.length === 0) {
+      this.logger?.debug(`  ${mdFile}: no new chunks to embed`);
+      this.indexLog.push({
+        file: mdFile,
+        chunkCount: 0,
+        timestamp: new Date(),
+      });
+      if (this.indexLog.length > MAX_INDEX_LOG_ENTRIES) {
+        this.indexLog = this.indexLog.slice(-MAX_INDEX_LOG_ENTRIES);
+      }
+      return;
+    }
+
+    this.logger?.info(
+      `  ${mdFile}: embedding ${chunksToEmbed.length} new chunks`,
+    );
+
+    // Generate contextualized text for new chunks only
     const contextualizedTexts: string[] = [];
-    for (const chunk of chunks) {
-      // Build context: heading context + LLM-generated context (if available)
+    for (const chunk of chunksToEmbed) {
       const parts: string[] = [];
 
       if (chunk.headingContext) {
         parts.push(chunk.headingContext);
       }
 
-      if (this.contextGenerator) {
-        const context = await this.contextGenerator.generateContext(
+      if (this.contextGeneratorConfig) {
+        const context = await generateContext(
+          this.contextGeneratorConfig.provider,
+          this.contextGeneratorConfig.model,
           content,
           chunk.text,
         );
@@ -268,10 +292,6 @@ export class PKB {
     const embeddings =
       await this.embeddingModel.embedChunks(contextualizedTexts);
 
-    const vecTableName = getVecTableName(
-      this.embeddingModel.modelName,
-      MAGENTA_EMBEDDING_VERSION,
-    );
     const insertChunk = this.db.prepare(
       `INSERT INTO chunks (file_id, text, contextualized_text, start_line, start_col, end_line, end_col)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -280,8 +300,8 @@ export class PKB {
       `INSERT INTO ${vecTableName} (chunk_id, embedding) VALUES (?, ?)`,
     );
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
+    for (let i = 0; i < chunksToEmbed.length; i++) {
+      const chunk = chunksToEmbed[i];
       const result = insertChunk.run(
         fileId,
         chunk.text,
@@ -297,7 +317,7 @@ export class PKB {
 
     this.indexLog.push({
       file: mdFile,
-      chunkCount: chunks.length,
+      chunkCount: chunksToEmbed.length,
       timestamp: new Date(),
     });
 
@@ -324,9 +344,37 @@ export class PKB {
     return {
       totalFiles: fileCount?.count ?? 0,
       totalChunks: chunkCount?.count ?? 0,
-      queuedFiles: this.indexQueue.size,
       recentFiles: this.indexLog.slice(-5).reverse(),
     };
+  }
+
+  getPkbPath(): string {
+    return this.pkbPath;
+  }
+
+  getAllChunks(): Array<{
+    filename: string;
+    text: string;
+    contextualizedText: string;
+  }> {
+    const rows = this.db
+      .prepare<
+        [string, number],
+        { filename: string; text: string; contextualized_text: string }
+      >(
+        `SELECT f.filename, c.text, c.contextualized_text
+         FROM chunks c
+         JOIN files f ON c.file_id = f.id
+         WHERE f.model_name = ? AND f.embedding_version = ?
+         ORDER BY f.filename, c.start_line, c.start_col`,
+      )
+      .all(this.embeddingModel.modelName, MAGENTA_EMBEDDING_VERSION);
+
+    return rows.map((row) => ({
+      filename: row.filename,
+      text: row.text,
+      contextualizedText: row.contextualized_text,
+    }));
   }
 
   async search(query: string, topK: number = 10): Promise<SearchResult[]> {

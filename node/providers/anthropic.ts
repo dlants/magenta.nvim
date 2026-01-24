@@ -486,7 +486,7 @@ export class AnthropicProvider implements Provider {
     const streamParams: Anthropic.Messages.MessageStreamParams = {
       model,
       max_tokens: getMaxTokensForModel(model),
-      messages,
+      messages: withCacheControl(messages),
     };
 
     if (systemPrompt) {
@@ -494,6 +494,7 @@ export class AnthropicProvider implements Provider {
         {
           type: "text" as const,
           text: systemPrompt,
+          cache_control: { type: "ephemeral" },
         },
       ];
     }

@@ -46,7 +46,7 @@ export function ensureVecTable(
 ): void {
   const tableName = getVecTableName(modelName, embeddingVersion);
   db.exec(
-    `CREATE VIRTUAL TABLE IF NOT EXISTS ${tableName} USING vec0(chunk_id INTEGER PRIMARY KEY, embedding float[${dimensions}])`,
+    `CREATE VIRTUAL TABLE IF NOT EXISTS ${tableName} USING vec0(chunk_id INTEGER PRIMARY KEY, embedding float[${dimensions}] distance_metric=cosine)`,
   );
 }
 

@@ -582,31 +582,9 @@ export class Chat {
     });
   }
 
+  // TODO: re-enable PKB status display once we have a better UI for it
   private renderPkbStatus(): VDOMNode {
-    if (!this.context.pkb) {
-      return d``;
-    }
-
-    const stats = this.context.pkb.getStats();
-
-    const queueSection =
-      stats.queuedFiles > 0 ? ` | Queued: ${String(stats.queuedFiles)}` : "";
-
-    const recentFilesSection =
-      stats.recentFiles.length > 0
-        ? d`
-Recent reindexes:
-${stats.recentFiles.map((entry) => {
-  const timeStr = entry.timestamp.toLocaleTimeString();
-  return d`  ${timeStr} ${entry.file} (${String(entry.chunkCount)} chunks)\n`;
-})}`
-        : d``;
-
-    return d`
-## PKB Status
-
-Files: ${String(stats.totalFiles)} | Chunks: ${String(stats.totalChunks)}${queueSection}
-${recentFilesSection}`;
+    return d``;
   }
 
   renderThreadOverview() {

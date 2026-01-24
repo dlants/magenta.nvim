@@ -60,8 +60,8 @@ export class Magenta {
   public bufferTracker: BufferTracker;
   public changeTracker: ChangeTracker;
   public editPredictionController: EditPredictionController;
-  private pkbManager: PKBManager | undefined;
-  private pkb: PKB | undefined;
+  public pkbManager: PKBManager | undefined;
+  public pkb: PKB | undefined;
 
   constructor(
     public nvim: Nvim,
@@ -82,9 +82,16 @@ export class Magenta {
         const pkbContext: CreatePKBContext = {
           provider: getProvider(this.nvim, activeProfile),
           fastModel: activeProfile.fastModel,
+          logger: this.nvim.logger,
         };
         this.pkb = createPKB(this.options.pkb, this.cwd, pkbContext);
-        this.pkbManager = new PKBManager(this.pkb, this.nvim.logger);
+        this.pkbManager = new PKBManager(
+          this.pkb,
+          this.nvim.logger,
+          this.options.pkb.updateIntervalMs,
+        );
+        // for now, indexing will be manual
+        // this.pkbManager.start();
         this.nvim.logger.info("PKB initialized");
       } catch (e) {
         this.nvim.logger.error(
@@ -667,6 +674,9 @@ ${lines.join("\n")}
         `Error destroying inline edit manager: ${e instanceof Error ? e.message + "\n" + e.stack : JSON.stringify(e)}`,
       );
     });
+    if (this.pkbManager) {
+      this.pkbManager.stop();
+    }
     if (this.pkb) {
       this.pkb.close();
     }

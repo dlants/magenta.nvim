@@ -12,24 +12,22 @@ Do not repeat any context that can be inferred from the headings, as those will 
 If the chunk uses abbreviations, "it", "he", etc... Make sure to disambiguate that.
 Answer only with the context and nothing else.`;
 
-export class ContextGenerator {
-  constructor(
-    private provider: Provider,
-    private model: string,
-  ) {}
+export async function generateContext(
+  provider: Provider,
+  model: string,
+  document: string,
+  chunk: string,
+): Promise<string> {
+  const prompt = CONTEXT_PROMPT.replace("{{WHOLE_DOCUMENT}}", document).replace(
+    "{{CHUNK_CONTENT}}",
+    chunk,
+  );
 
-  async generateContext(document: string, chunk: string): Promise<string> {
-    const prompt = CONTEXT_PROMPT.replace(
-      "{{WHOLE_DOCUMENT}}",
-      document,
-    ).replace("{{CHUNK_CONTENT}}", chunk);
+  const request = provider.request({
+    model,
+    input: [{ type: "text", text: prompt }],
+  });
 
-    const request = this.provider.request({
-      model: this.model,
-      input: [{ type: "text", text: prompt }],
-    });
-
-    const response = await request.promise;
-    return response.text;
-  }
+  const response = await request.promise;
+  return response.text;
 }
