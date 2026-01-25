@@ -774,29 +774,19 @@ Some text after.`;
     [
       {
         "end": {
-          "col": 3,
-          "line": 5,
-        },
-        "headingContext": "# Code Example",
-        "start": {
-          "col": 1,
-          "line": 3,
-        },
-        "text": "\`\`\`typescript
-    const x = 1;
-    \`\`\`",
-      },
-      {
-        "end": {
           "col": 16,
           "line": 7,
         },
         "headingContext": "# Code Example",
         "start": {
           "col": 1,
-          "line": 6,
+          "line": 2,
         },
         "text": "
+    \`\`\`typescript
+    const x = 1;
+    \`\`\`
+
     Some text after.",
       },
     ]

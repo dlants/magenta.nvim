@@ -97,11 +97,12 @@ export class PKB {
   getIndexedFiles(): IndexedFileInfo[] {
     this.ensureVecTableInitialized();
 
+    // Filter out files with empty hash (incomplete indexing)
     const rows = this.db
       .prepare<
         [string, number],
         { id: number; filename: string; mtime_ms: number; hash: string }
-      >("SELECT id, filename, mtime_ms, hash FROM files WHERE model_name = ? AND embedding_version = ?")
+      >("SELECT id, filename, mtime_ms, hash FROM files WHERE model_name = ? AND embedding_version = ? AND hash != ''")
       .all(this.embeddingModel.modelName, MAGENTA_EMBEDDING_VERSION);
 
     return rows.map((row) => ({
@@ -110,6 +111,19 @@ export class PKB {
       mtimeMs: row.mtime_ms,
       hash: row.hash,
     }));
+  }
+
+  getFileIdsByFilename(filename: string): number[] {
+    this.ensureVecTableInitialized();
+
+    const rows = this.db
+      .prepare<
+        [string, string, number],
+        { id: number }
+      >("SELECT id FROM files WHERE filename = ? AND model_name = ? AND embedding_version = ?")
+      .all(filename, this.embeddingModel.modelName, MAGENTA_EMBEDDING_VERSION);
+
+    return rows.map((row) => row.id);
   }
 
   updateFileMtime(fileId: number, mtimeMs: number): void {
@@ -135,6 +149,23 @@ export class PKB {
     this.db.prepare("DELETE FROM files WHERE id = ?").run(fileId);
   }
 
+  cleanupOrphanVecEntries(): number {
+    this.ensureVecTableInitialized();
+
+    const vecTableName = getVecTableName(
+      this.embeddingModel.modelName,
+      MAGENTA_EMBEDDING_VERSION,
+    );
+
+    const result = this.db
+      .prepare(
+        `DELETE FROM ${vecTableName} WHERE chunk_id NOT IN (SELECT id FROM chunks)`,
+      )
+      .run();
+
+    return result.changes;
+  }
+
   async indexFile(mdFile: string): Promise<void> {
     this.ensureVecTableInitialized();
 
@@ -155,16 +186,6 @@ export class PKB {
       "SELECT id, mtime_ms, hash FROM files WHERE filename = ? AND model_name = ? AND embedding_version = ?",
     );
 
-    const insertFile = this.db.prepare<
-      [string, string, number, number, string]
-    >(
-      "INSERT INTO files (filename, model_name, embedding_version, mtime_ms, hash) VALUES (?, ?, ?, ?, ?)",
-    );
-
-    const updateFileHash = this.db.prepare<[number, string, number]>(
-      "UPDATE files SET mtime_ms = ?, hash = ? WHERE id = ?",
-    );
-
     const existingFile = getFileRecord.get(
       mdFile,
       this.embeddingModel.modelName,
@@ -172,27 +193,32 @@ export class PKB {
     );
 
     let fileId: number;
-
     if (existingFile) {
-      updateFileHash.run(currentMtime, currentHash, existingFile.id);
       fileId = existingFile.id;
     } else {
-      const result = insertFile.run(
-        mdFile,
-        this.embeddingModel.modelName,
-        MAGENTA_EMBEDDING_VERSION,
-        currentMtime,
-        currentHash,
-      );
+      // Create file record with empty hash to mark as "indexing in progress"
+      const result = this.db
+        .prepare<
+          [string, string, number, number, string]
+        >("INSERT INTO files (filename, model_name, embedding_version, mtime_ms, hash) VALUES (?, ?, ?, ?, ?)")
+        .run(
+          mdFile,
+          this.embeddingModel.modelName,
+          MAGENTA_EMBEDDING_VERSION,
+          0,
+          "",
+        );
       fileId = Number(result.lastInsertRowid);
     }
 
-    await this.embedFile(mdPath, mdFile, fileId);
+    await this.embedFile(mdPath, mdFile, currentMtime, currentHash, fileId);
   }
 
   private async embedFile(
     mdPath: string,
     mdFile: string,
+    currentMtime: number,
+    currentHash: string,
     fileId: number,
   ): Promise<void> {
     const content = fs.readFileSync(mdPath, "utf-8");
@@ -248,6 +274,12 @@ export class PKB {
 
     if (chunksToEmbed.length === 0) {
       this.logger?.debug(`  ${mdFile}: no new chunks to embed`);
+      // Update file record with hash/mtime to mark indexing complete
+      this.db
+        .prepare<
+          [number, string, number]
+        >("UPDATE files SET mtime_ms = ?, hash = ? WHERE id = ?")
+        .run(currentMtime, currentHash, fileId);
       this.indexLog.push({
         file: mdFile,
         chunkCount: 0,
@@ -265,25 +297,36 @@ export class PKB {
 
     // Generate contextualized text for new chunks only
     const contextualizedTexts: string[] = [];
-    for (const chunk of chunksToEmbed) {
-      const parts: string[] = [];
+    for (let i = 0; i < chunksToEmbed.length; i++) {
+      const chunk = chunksToEmbed[i];
+      const contextParts: string[] = [];
 
       if (chunk.headingContext) {
-        parts.push(chunk.headingContext);
+        contextParts.push(chunk.headingContext);
       }
 
       if (this.contextGeneratorConfig) {
-        const context = await generateContext(
+        const result = await generateContext(
           this.contextGeneratorConfig.provider,
           this.contextGeneratorConfig.model,
           content,
           chunk.text,
         );
-        parts.push(context);
+        contextParts.push(result.context);
+
+        // Log progress and sample usage every 5 chunks
+        if ((i + 1) % 5 === 0 || i === chunksToEmbed.length - 1) {
+          const usage = result.usage;
+          this.logger?.info(
+            `  ${mdFile}: context ${i + 1}/${chunksToEmbed.length} (in: ${usage.inputTokens}, out: ${usage.outputTokens}, cache hits: ${usage.cacheHits ?? 0}, misses: ${usage.cacheMisses ?? 0})`,
+          );
+        }
       }
 
-      if (parts.length > 0) {
-        contextualizedTexts.push(`${parts.join("\n\n")}\n\n${chunk.text}`);
+      if (contextParts.length > 0) {
+        contextualizedTexts.push(
+          `<context>\n${contextParts.join("\n\n")}\n</context>\n\n${chunk.text}`,
+        );
       } else {
         contextualizedTexts.push(chunk.text);
       }
@@ -314,6 +357,13 @@ export class PKB {
       const chunkId = Number(result.lastInsertRowid);
       insertVec.run(BigInt(chunkId), new Float32Array(embeddings[i]));
     }
+
+    // Update file record with hash/mtime to mark indexing complete
+    this.db
+      .prepare<
+        [number, string, number]
+      >("UPDATE files SET mtime_ms = ?, hash = ? WHERE id = ?")
+      .run(currentMtime, currentHash, fileId);
 
     this.indexLog.push({
       file: mdFile,

@@ -16,7 +16,6 @@ type HardBlock = {
   start: Position;
   end: Position;
   headingContext?: string;
-  isCodeBlock?: boolean;
 };
 
 export type Unit = {
@@ -80,14 +79,13 @@ function splitIntoHardBlocks(text: string): HardBlock[] {
   let blockHeadingContext: string | undefined;
   let inCodeBlock = false;
 
-  function flushBlock(endLineNum: number, isCode: boolean = false) {
+  function flushBlock(endLineNum: number) {
     if (currentBlock.length > 0) {
       const lastLine = currentBlock[currentBlock.length - 1];
       const hardBlock: HardBlock = {
         text: currentBlock.join("\n"),
         start: { line: blockStartLine, col: 1 },
         end: endPosOfLine(endLineNum, lastLine),
-        isCodeBlock: isCode,
       };
       if (blockHeadingContext) {
         hardBlock.headingContext = blockHeadingContext;
@@ -101,23 +99,10 @@ function splitIntoHardBlocks(text: string): HardBlock[] {
     const line = lines[i];
     const lineNum = i + 1;
 
-    // Handle code fences
+    // Track code fence state but don't treat as hard boundary
     if (isCodeFence(line)) {
-      if (!inCodeBlock) {
-        // Starting a code block - save current block first
-        flushBlock(lineNum - 1);
-        currentBlock = [line];
-        blockStartLine = lineNum;
-        blockHeadingContext = getHeadingContext(headingHierarchy);
-        inCodeBlock = true;
-      } else {
-        // Ending a code block
-        currentBlock.push(line);
-        flushBlock(lineNum, true);
-        blockStartLine = lineNum + 1;
-        blockHeadingContext = getHeadingContext(headingHierarchy);
-        inCodeBlock = false;
-      }
+      inCodeBlock = !inCodeBlock;
+      currentBlock.push(line);
       continue;
     }
 
@@ -148,7 +133,7 @@ function splitIntoHardBlocks(text: string): HardBlock[] {
   }
 
   // Don't forget the last block
-  flushBlock(lines.length, inCodeBlock);
+  flushBlock(lines.length);
 
   return blocks;
 }
@@ -603,27 +588,6 @@ export function chunkMarkdown(
   const chunks: ChunkInfo[] = [];
 
   for (const block of hardBlocks) {
-    // Code blocks are split by lines (and long lines by characters)
-    if (block.isCodeBlock) {
-      const subChunks = splitCodeBlockByLines(
-        block.text,
-        block.start,
-        maxChunkSize,
-      );
-      for (const subChunk of subChunks) {
-        const chunk: ChunkInfo = {
-          text: subChunk.text,
-          start: subChunk.start,
-          end: subChunk.end,
-        };
-        if (block.headingContext) {
-          chunk.headingContext = block.headingContext;
-        }
-        chunks.push(chunk);
-      }
-      continue;
-    }
-
     // Strip leading heading line from text if this block starts with a heading
     let blockText = block.text;
     let blockStart = block.start;
