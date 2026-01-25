@@ -8,7 +8,6 @@ import * as fs from "node:fs";
 import { type Line } from "../nvim/buffer";
 import type { AbsFilePath, UnresolvedFilePath } from "../utils/files";
 import { applyEdit } from "./applyEdit";
-import type { MessageId } from "../chat/message";
 import type { Row0Indexed } from "../nvim/window";
 
 describe("node/tools/applyEdit.spec.ts", () => {
@@ -26,9 +25,9 @@ describe("node/tools/applyEdit.spec.ts", () => {
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "ok, here is a new poem",
         toolRequests: [
           {
@@ -63,9 +62,9 @@ describe("node/tools/applyEdit.spec.ts", () => {
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "ok, here is a poem",
         toolRequests: [
           {
@@ -104,9 +103,9 @@ describe("node/tools/applyEdit.spec.ts", () => {
       await driver.inputMagentaText(`Update the poem in the file poem.txt`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "ok, I will try to rewrite the poem in that file",
         toolRequests: [
           {
@@ -154,15 +153,15 @@ Paints its colors stories in the night.
       );
       await driver.send();
 
-      const request1 = await driver.mockAnthropic.awaitPendingRequest();
+      const request1 = await driver.mockAnthropic.awaitPendingStream();
       request1.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "ok, here is a poem",
         toolRequests: [
           {
             status: "ok",
             value: {
-              id: "id" as ToolRequestId,
+              id: "id1" as ToolRequestId,
               toolName: "insert" as ToolName,
               input: {
                 filePath: "multiple.txt" as UnresolvedFilePath,
@@ -185,15 +184,15 @@ Paints its colors stories in the night.
       await driver.inputMagentaText(`Another one!`);
       await driver.send();
 
-      const request2 = await driver.mockAnthropic.awaitPendingRequest();
+      const request2 = await driver.mockAnthropic.awaitPendingStream();
       request2.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "ok, here is another poem",
         toolRequests: [
           {
             status: "ok",
             value: {
-              id: "id" as ToolRequestId,
+              id: "id2" as ToolRequestId,
               toolName: "insert" as ToolName,
               input: {
                 filePath: "multiple.txt" as UnresolvedFilePath,
@@ -217,9 +216,9 @@ Paints its colors stories in the night.
       await driver.inputMagentaText(`Update line 2 in poem.txt`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll update that line",
         toolRequests: [
           {
@@ -260,9 +259,9 @@ Paint their stories in the night.
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll replace the entire file content",
         toolRequests: [
           {
@@ -306,9 +305,9 @@ Paint their stories in the night.
       await driver.inputMagentaText(`Update the poem in the file poem.txt`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "ok, I will try to rewrite the poem in that file",
         toolRequests: [
           {
@@ -410,9 +409,9 @@ Paint their stories in the night.
       await driver.inputMagentaText(`Add to the end of poem_to_change.txt`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll append to that file",
         toolRequests: [
           {
@@ -451,6 +450,7 @@ Paint their stories in the night.
       const myDispatch = vi.fn();
       const dispatch = vi.fn();
       await driver.wait(100);
+      const threadId = driver.magenta.chat.getActiveThread().id;
       await applyEdit(
         {
           id: "id" as ToolRequestId,
@@ -461,8 +461,7 @@ Paint their stories in the night.
             content: "\nAppended content",
           },
         },
-        driver.magenta.chat.getActiveThread().id,
-        0 as MessageId,
+        threadId,
         {
           cwd,
           nvim: driver.nvim,
@@ -474,7 +473,7 @@ Paint their stories in the night.
 
       expect(dispatch, "dispatch").toBeCalledTimes(2);
       expect(dispatch).toHaveBeenLastCalledWith({
-        id: 1,
+        id: threadId,
         msg: {
           msg: {
             absFilePath: poemFile,
@@ -547,7 +546,6 @@ Paint their stories in the night.
           },
         },
         driver.magenta.chat.getActiveThread().id,
-        0 as MessageId,
         {
           nvim: driver.nvim,
           cwd,
@@ -590,9 +588,9 @@ Paint their stories in the night.
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll try to add content",
         toolRequests: [
           {
@@ -656,9 +654,9 @@ Paint their stories in the night.
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll add text to that file",
         toolRequests: [
           {

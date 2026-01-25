@@ -5,6 +5,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { getcwd } from "../nvim/nvim";
 import type { ToolName } from "./types";
+import { MockProvider } from "../providers/mock";
+import type { Row0Indexed } from "../nvim/window";
+import { pollUntil } from "../utils/async.ts";
+import { BashCommandTool } from "./bashCommand.ts";
+import { spawnSync } from "child_process";
 
 describe("node/tools/bashCommand.spec.ts", () => {
   it("executes a simple echo command without requiring approval (allowlisted)", async () => {
@@ -15,11 +20,11 @@ describe("node/tools/bashCommand.spec.ts", () => {
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       const toolRequestId = "test-echo-command" as ToolRequestId;
 
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll run that command for you.",
         toolRequests: [
           {
@@ -56,11 +61,11 @@ describe("node/tools/bashCommand.spec.ts", () => {
       await driver.inputMagentaText(`Run this command: nonexistentcommand`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       const toolRequestId = "test-error-command" as ToolRequestId;
 
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll run that command for you.",
         toolRequests: [
           {
@@ -97,11 +102,11 @@ describe("node/tools/bashCommand.spec.ts", () => {
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       const toolRequestId = "test-curl-command" as ToolRequestId;
 
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll run that curl command for you.",
         toolRequests: [
           {
@@ -146,11 +151,11 @@ describe("node/tools/bashCommand.spec.ts", () => {
       await driver.inputMagentaText(`Run this command: true && ls -la`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       const toolRequestId = "test-rejected-command" as ToolRequestId;
 
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll run that command for you.",
         toolRequests: [
           {
@@ -176,7 +181,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
       await driver.triggerDisplayBufferKey(pos, "<CR>");
 
       // Verify the rejection message in the result
-      await driver.assertDisplayBufferContains("Exit code: 1");
+      await driver.assertDisplayBufferContains("The user did not allow");
     });
   });
 
@@ -186,11 +191,11 @@ describe("node/tools/bashCommand.spec.ts", () => {
       await driver.inputMagentaText(`Run this command: dangerous-command`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       const toolRequestId = "test-box-formatting" as ToolRequestId;
 
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll run that command for you.",
         toolRequests: [
           {
@@ -233,11 +238,11 @@ describe("node/tools/bashCommand.spec.ts", () => {
       await driver.inputMagentaText(`Run this command: sleep 30`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       const toolRequestId = "test-terminate-command" as ToolRequestId;
 
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll run that command for you.",
         toolRequests: [
           {
@@ -265,12 +270,12 @@ describe("node/tools/bashCommand.spec.ts", () => {
       await driver.triggerDisplayBufferKey(pos, "t");
 
       // Verify that the command was terminated
-      await driver.assertDisplayBufferContains(
-        "Process terminated by user with SIGTERM",
-      );
+      await driver.assertDisplayBufferContains("terminated by signal SIGTERM");
 
       // Ensure the command prompt is updated to show completion
-      await driver.assertDisplayBufferContains("⚡❌ `sleep 30`");
+      await driver.assertDisplayBufferContains(
+        "⚡❌ `sleep 30` - Terminated by SIGTERM",
+      );
       await driver.assertDisplayBufferContains("```");
     });
   });
@@ -283,11 +288,11 @@ describe("node/tools/bashCommand.spec.ts", () => {
       await driver.inputMagentaText(`Run this command: "true && echo 'tada'`);
       await driver.send();
 
-      const request1 = await driver.mockAnthropic.awaitPendingRequest();
+      const request1 = await driver.mockAnthropic.awaitPendingStream();
       const toolRequestId1 = "test-remembered-command-1" as ToolRequestId;
 
       request1.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll run that command for you.",
         toolRequests: [
           {
@@ -313,11 +318,11 @@ describe("node/tools/bashCommand.spec.ts", () => {
       await driver.inputMagentaText(`Ok, run it again`);
       await driver.send();
 
-      const request2 = await driver.mockAnthropic.awaitPendingRequest();
+      const request2 = await driver.mockAnthropic.awaitPendingStream();
       const toolRequestId2 = "test-remembered-command-2" as ToolRequestId;
 
       request2.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "Running that command again.",
         toolRequests: [
           {
@@ -362,11 +367,11 @@ describe("node/tools/bashCommand.spec.ts", () => {
       await driver.inputMagentaText(`Run this command: ${appendCmd}`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       const toolRequestId = "test-single-execution" as ToolRequestId;
 
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "I'll run the append command for you.",
         toolRequests: [
           {
@@ -424,7 +429,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
         await driver.inputMagentaText(`Run this command: echo "${longText}"`);
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-truncation" as ToolRequestId;
 
         request.respond({
@@ -452,7 +457,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
 
         // Verify the full output is preserved for the agent
         const toolResultRequest =
-          await driver.mockAnthropic.awaitPendingRequest();
+          await driver.mockAnthropic.awaitPendingStream();
         const toolResultMessage =
           toolResultRequest.messages[toolResultRequest.messages.length - 1];
 
@@ -462,18 +467,24 @@ describe("node/tools/bashCommand.spec.ts", () => {
         ) {
           const toolResult = toolResultMessage.content[0];
           if (toolResult.type === "tool_result") {
-            expect(toolResult.result.status).toBe("ok");
-            if (toolResult.result.status === "ok") {
-              const resultItem = toolResult.result.value[0];
-              if (resultItem.type !== "text") {
-                throw new Error("Expected text result from bash command");
-              }
-              const resultText = resultItem.text;
+            expect(toolResult.is_error).toBeFalsy();
+            const content = toolResult.content;
+            const resultText =
+              typeof content === "string"
+                ? content
+                : Array.isArray(content)
+                  ? content
+                      .filter(
+                        (item): item is { type: "text"; text: string } =>
+                          item.type === "text",
+                      )
+                      .map((item) => item.text)
+                      .join("")
+                  : "";
 
-              // Verify the full 200-character string is preserved for the agent
-              expect(resultText).toContain(longText);
-              expect(resultText).toContain("exit code 0");
-            }
+            // Verify the full 200-character string is preserved for the agent
+            expect(resultText).toContain(longText);
+            expect(resultText).toContain("exit code 0");
           }
         }
       },
@@ -499,11 +510,11 @@ describe("node/tools/bashCommand.spec.ts", () => {
         await driver.inputMagentaText(`Run this command: ${commandWithCd}`);
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-cd-prefix" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "I'll run that command for you.",
           toolRequests: [
             {
@@ -529,7 +540,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
     );
   });
 
-  it("trims output to token limit for agent", async () => {
+  it("abbreviates long lines and trims output to token limit", async () => {
     await withDriver(
       {
         options: {
@@ -545,15 +556,15 @@ describe("node/tools/bashCommand.spec.ts", () => {
       async (driver) => {
         await driver.showSidebar();
 
-        // Generate output that will exceed the 10,000 token limit (40,000 characters)
-        // Use 'yes' command with a long string to create repetitive output
-        const longString = "A".repeat(100); // 100 characters per line
+        // Generate output with very long lines (5000 chars each)
+        // Lines longer than MAX_OUTPUT_TOKENS_FOR_ONE_LINE * 4 (800 chars) will be abbreviated
+        const longString = "A".repeat(5000);
         await driver.inputMagentaText(
-          `Run this command: yes "${longString}" | head -500`,
+          `Run this command: yes "${longString}" | head -50`,
         );
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-token-limit" as ToolRequestId;
 
         request.respond({
@@ -566,7 +577,7 @@ describe("node/tools/bashCommand.spec.ts", () => {
                 id: toolRequestId,
                 toolName: "bash_command" as ToolName,
                 input: {
-                  command: `yes "${longString}" | head -500`,
+                  command: `yes "${longString}" | head -50`,
                 },
               },
             },
@@ -576,51 +587,32 @@ describe("node/tools/bashCommand.spec.ts", () => {
         await driver.assertDisplayBufferContains("⚡✅");
 
         const toolResultRequest =
-          await driver.mockAnthropic.awaitPendingRequest();
-        const toolResultMessage =
-          toolResultRequest.messages[toolResultRequest.messages.length - 1];
+          await driver.mockAnthropic.awaitPendingStream();
+        const toolResultMessage = MockProvider.findLastToolResultMessage(
+          toolResultRequest.messages,
+        )!;
 
-        if (
-          toolResultMessage.role === "user" &&
-          Array.isArray(toolResultMessage.content)
-        ) {
-          const toolResult = toolResultMessage.content[0];
-          if (toolResult.type === "tool_result") {
-            expect(toolResult.result.status).toBe("ok");
-            if (toolResult.result.status === "ok") {
-              const resultItem = toolResult.result.value[0];
-              if (resultItem.type !== "text") {
-                throw new Error("Expected text result from bash command");
-              }
-              const resultText = resultItem.text;
+        const content = extractToolResultText(toolResultMessage);
 
-              // Verify the output is limited by token count (40,000 characters max)
-              // Account for "stdout:\n" and "exit code 0\n" overhead
-              expect(resultText.length).toBeLessThan(40100); // Small buffer for overhead
+        // Verify the output is limited by token count (8000 characters max for 2000 tokens)
+        expect(content.length).toBeLessThan(9000);
 
-              // Should contain the exit code at the end
-              expect(resultText).toContain("exit code 0");
+        // Should contain exit code
+        expect(content).toContain("exit code 0");
 
-              // Should contain the repeated string pattern
-              expect(resultText).toContain(longString);
+        // Long lines should be abbreviated with "..." in the middle
+        // The full 5000-char string should NOT be present
+        expect(content).not.toContain(longString);
 
-              // Should not contain the very beginning of the output since we're trimming from the start
-              // The output starts with many repetitions, so early lines should be trimmed
-              const lines = resultText
-                .split("\n")
-                .filter((line) => line.trim() !== "");
-              const contentLines = lines.filter(
-                (line) =>
-                  !line.startsWith("stdout:") && !line.startsWith("exit code"),
-              );
+        // But abbreviated lines should contain the "..." marker
+        expect(content).toContain("AAA...AAA");
 
-              // With 100 chars per line + newline, we should have roughly 40,000 / 101 ≈ 396 lines max
-              // But the actual limit depends on the overhead from "stdout:" markers
-              expect(contentLines.length).toBeLessThan(500); // Should be less than the full 500 lines
-              expect(contentLines.length).toBeGreaterThan(300); // Should have a substantial portion
-            }
-          }
-        }
+        // Should contain omission marker due to token trimming (50 lines don't all fit)
+        expect(content).toContain("lines omitted");
+
+        // Should have log file reference
+        expect(content).toMatch(/Full output \(\d+ lines\):/);
+        expect(content).toContain("bashCommand.log");
       },
     );
   });
@@ -642,11 +634,11 @@ describe("commandConfig integration tests", () => {
         await driver.inputMagentaText(`Run this command: echo "hello world"`);
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-restAny" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "Running echo command.",
           toolRequests: [
             {
@@ -685,11 +677,11 @@ describe("commandConfig integration tests", () => {
         await driver.inputMagentaText(`Run this command: ls -la`);
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-subcommand" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "Listing files.",
           toolRequests: [
             {
@@ -730,11 +722,11 @@ describe("commandConfig integration tests", () => {
         );
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-wrong-args" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "Running tsc.",
           toolRequests: [
             {
@@ -782,11 +774,11 @@ describe("commandConfig integration tests", () => {
         );
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-cat-file" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "Reading file.",
           toolRequests: [
             {
@@ -828,11 +820,11 @@ describe("commandConfig integration tests", () => {
         await driver.inputMagentaText(`Run this command: cat /etc/passwd`);
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-cat-outside" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "Reading file.",
           toolRequests: [
             {
@@ -882,11 +874,11 @@ describe("commandConfig integration tests", () => {
         );
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-restfiles" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "Reading files.",
           toolRequests: [
             {
@@ -936,11 +928,11 @@ describe("commandConfig integration tests", () => {
         );
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-restfiles-outside" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "Reading files.",
           toolRequests: [
             {
@@ -988,11 +980,11 @@ describe("commandConfig integration tests", () => {
         );
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-cd-chain" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "Reading nested file.",
           toolRequests: [
             {
@@ -1036,11 +1028,11 @@ describe("commandConfig integration tests", () => {
         );
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-cd-outside" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "Reading file.",
           toolRequests: [
             {
@@ -1070,11 +1062,11 @@ describe("commandConfig integration tests", () => {
       await driver.inputMagentaText(`Run this command: rm -rf /tmp/test`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       const toolRequestId = "test-not-in-config" as ToolRequestId;
 
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "Removing files.",
         toolRequests: [
           {
@@ -1119,11 +1111,11 @@ describe("commandConfig integration tests", () => {
         await driver.inputMagentaText(`Run this command: cat .hidden-file.txt`);
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-hidden-file" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "Reading hidden file.",
           toolRequests: [
             {
@@ -1168,11 +1160,11 @@ describe("commandConfig integration tests", () => {
         );
         await driver.send();
 
-        const request = await driver.mockAnthropic.awaitPendingRequest();
+        const request = await driver.mockAnthropic.awaitPendingStream();
         const toolRequestId = "test-git-status" as ToolRequestId;
 
         request.respond({
-          stopReason: "end_turn",
+          stopReason: "tool_use",
           text: "Checking status.",
           toolRequests: [
             {
@@ -1192,6 +1184,801 @@ describe("commandConfig integration tests", () => {
           "⚡✅ `git status --porcelain`",
         );
         await driver.assertDisplayBufferDoesNotContain("[ YES ]");
+      },
+    );
+  });
+});
+
+function extractToolResultText(toolResultMessage: {
+  role: string;
+  content: unknown;
+}): string {
+  const content = toolResultMessage.content as {
+    type: string;
+    content?: string | { type: string; text?: string }[];
+  }[];
+  const toolResult = content[0];
+  const toolContent = toolResult.content;
+  if (typeof toolContent === "string") {
+    return toolContent;
+  }
+  if (Array.isArray(toolContent)) {
+    return toolContent
+      .filter(
+        (item): item is { type: "text"; text: string } => item.type === "text",
+      )
+      .map((item) => item.text)
+      .join("");
+  }
+  return "";
+}
+
+describe("bash command output logging", () => {
+  it("creates log file with command and output", async () => {
+    await withDriver(
+      {
+        options: {
+          commandConfig: {
+            commands: [["echo", { type: "restAny" }]],
+            pipeCommands: [],
+          },
+        },
+      },
+      async (driver) => {
+        await driver.showSidebar();
+        await driver.inputMagentaText(`Run: echo "line1" && echo "line2"`);
+        await driver.send();
+
+        const request = await driver.mockAnthropic.awaitPendingStream();
+        const toolRequestId = "test-log-file" as ToolRequestId;
+
+        request.respond({
+          stopReason: "tool_use",
+          text: "Running command.",
+          toolRequests: [
+            {
+              status: "ok",
+              value: {
+                id: toolRequestId,
+                toolName: "bash_command" as ToolName,
+                input: {
+                  command: 'echo "line1" && echo "line2"',
+                },
+              },
+            },
+          ],
+        });
+
+        // Command is auto-approved since both echo commands are allowed
+        await driver.assertDisplayBufferContains("⚡✅");
+
+        // Get the tool result - log file path won't be in output since it fits
+        const toolResultRequest =
+          await driver.mockAnthropic.awaitPendingStream();
+        const toolResultMessage = MockProvider.findLastToolResultMessage(
+          toolResultRequest.messages,
+        )!;
+
+        expect(toolResultMessage.role).toBe("user");
+        expect(Array.isArray(toolResultMessage.content)).toBe(true);
+
+        const content = extractToolResultText(toolResultMessage);
+        // Log file path should NOT be in the result since output fits completely
+        expect(content).not.toContain("Full output");
+
+        // But we can verify the log file exists by getting the thread id and constructing the path
+        const thread = driver.magenta.chat.getActiveThread();
+        const logPath = path.join(
+          "/tmp/magenta/threads",
+          thread.id,
+          "tools",
+          toolRequestId,
+          "bashCommand.log",
+        );
+        expect(fs.existsSync(logPath)).toBe(true);
+
+        const logContent = fs.readFileSync(logPath, "utf8");
+        expect(logContent).toContain('$ echo "line1" && echo "line2"');
+        expect(logContent).toContain("stdout:");
+        expect(logContent).toContain("line1");
+        expect(logContent).toContain("line2");
+        expect(logContent).toContain("exit code 0");
+      },
+    );
+  });
+
+  it("abbreviates output when it exceeds token budget", async () => {
+    await withDriver(
+      {
+        options: {
+          commandConfig: {
+            commands: [["bash", { type: "restAny" }]],
+            pipeCommands: [],
+          },
+        },
+      },
+      async (driver) => {
+        await driver.showSidebar();
+        // Generate output that exceeds token budget (2000 tokens = 8000 chars)
+        // Each line is ~200 chars, 100 lines = 20000 chars (exceeds budget)
+        const lineContent = "X".repeat(200);
+        await driver.inputMagentaText(
+          `Run: bash -c 'for i in $(seq 1 100); do echo "LINE$i:${lineContent}"; done'`,
+        );
+        await driver.send();
+
+        const request = await driver.mockAnthropic.awaitPendingStream();
+        const toolRequestId = "test-abbreviated" as ToolRequestId;
+
+        request.respond({
+          stopReason: "tool_use",
+          text: "Running command.",
+          toolRequests: [
+            {
+              status: "ok",
+              value: {
+                id: toolRequestId,
+                toolName: "bash_command" as ToolName,
+                input: {
+                  command: `bash -c 'for i in $(seq 1 100); do echo "LINE$i:${lineContent}"; done'`,
+                },
+              },
+            },
+          ],
+        });
+
+        await driver.assertDisplayBufferContains("⚡✅");
+
+        const toolResultRequest =
+          await driver.mockAnthropic.awaitPendingStream();
+        const toolResultMessage = MockProvider.findLastToolResultMessage(
+          toolResultRequest.messages,
+        )!;
+
+        const content = extractToolResultText(toolResultMessage);
+
+        // Should contain exit code
+        expect(content).toContain("exit code 0");
+
+        // Should contain omission marker since output exceeds budget
+        expect(content).toContain("lines omitted");
+
+        // Should contain some head lines (early LINE numbers)
+        expect(content).toContain("LINE1:");
+
+        // Should contain some tail lines (later LINE numbers)
+        expect(content).toContain("LINE100:");
+
+        // Should contain log file reference
+        expect(content).toContain("Full output (100 lines):");
+        expect(content).toContain("bashCommand.log");
+      },
+    );
+  });
+
+  it("includes full output when 30 lines or fewer", async () => {
+    await withDriver(
+      {
+        options: {
+          commandConfig: {
+            commands: [["seq", { type: "restAny" }]],
+            pipeCommands: [],
+          },
+        },
+      },
+      async (driver) => {
+        await driver.showSidebar();
+        // Generate exactly 30 lines
+        await driver.inputMagentaText(`Run: seq 1 30`);
+        await driver.send();
+
+        const request = await driver.mockAnthropic.awaitPendingStream();
+        const toolRequestId = "test-full-output" as ToolRequestId;
+
+        request.respond({
+          stopReason: "tool_use",
+          text: "Running seq.",
+          toolRequests: [
+            {
+              status: "ok",
+              value: {
+                id: toolRequestId,
+                toolName: "bash_command" as ToolName,
+                input: {
+                  command: "seq 1 30",
+                },
+              },
+            },
+          ],
+        });
+
+        await driver.assertDisplayBufferContains("⚡✅");
+
+        const toolResultRequest =
+          await driver.mockAnthropic.awaitPendingStream();
+        const toolResultMessage = MockProvider.findLastToolResultMessage(
+          toolResultRequest.messages,
+        )!;
+
+        const content = extractToolResultText(toolResultMessage);
+
+        // Should contain all lines 1-30
+        for (let i = 1; i <= 30; i++) {
+          expect(content).toContain(`${i}\n`);
+        }
+
+        // Should NOT contain omission marker
+        expect(content).not.toContain("lines omitted");
+
+        // Should NOT have log file reference when output fits completely
+        expect(content).not.toContain("Full output");
+      },
+    );
+  });
+
+  it("toggles between preview and detail view with Enter key", async () => {
+    await withDriver(
+      {
+        options: {
+          commandConfig: {
+            commands: [["echo", { type: "restAny" }]],
+            pipeCommands: [],
+          },
+        },
+      },
+      async (driver) => {
+        await driver.showSidebar();
+        await driver.inputMagentaText(`Run: echo "test output"`);
+        await driver.send();
+
+        const request = await driver.mockAnthropic.awaitPendingStream();
+        const toolRequestId = "test-toggle-detail" as ToolRequestId;
+
+        request.respond({
+          stopReason: "tool_use",
+          text: "Running echo.",
+          toolRequests: [
+            {
+              status: "ok",
+              value: {
+                id: toolRequestId,
+                toolName: "bash_command" as ToolName,
+                input: {
+                  command: 'echo "test output"',
+                },
+              },
+            },
+          ],
+        });
+
+        // Wait for command to complete
+        await driver.assertDisplayBufferContains('⚡✅ `echo "test output"`');
+
+        // Initially in preview mode - should show output in code block
+        await driver.assertDisplayBufferContains("stdout:");
+        await driver.assertDisplayBufferContains("test output");
+
+        // Detail view should NOT be shown yet (no command: header)
+        await driver.assertDisplayBufferDoesNotContain("command:");
+
+        // Toggle to detail view by pressing Enter on the output preview
+        const previewPos = await driver.assertDisplayBufferContains("stdout:");
+        await driver.triggerDisplayBufferKey(previewPos, "<CR>");
+
+        // After toggling, should show full detail with command header
+        await driver.assertDisplayBufferContains("command:");
+
+        // Toggle back to preview view
+        const detailPos = await driver.assertDisplayBufferContains("command:");
+        await driver.triggerDisplayBufferKey(detailPos, "<CR>");
+
+        // Should be back in preview mode (no command header)
+        await driver.assertDisplayBufferDoesNotContain("command:");
+        await driver.assertDisplayBufferContains("stdout:");
+      },
+    );
+  });
+
+  it("opens log file in non-magenta window when clicking Full output link", async () => {
+    await withDriver(
+      {
+        options: {
+          commandConfig: {
+            commands: [["bash", { type: "restAny" }]],
+            pipeCommands: [],
+          },
+        },
+      },
+      async (driver) => {
+        await driver.showSidebar();
+        // Generate output that exceeds token budget to show log file link
+        // Each line is ~200 chars, 100 lines = 20000 chars (exceeds 8000 char budget)
+        const lineContent = "X".repeat(200);
+        const command = `bash -c 'for i in $(seq 1 100); do echo "LINE$i:${lineContent}"; done'`;
+        await driver.inputMagentaText(`Run: ${command}`);
+        await driver.send();
+
+        const request = await driver.mockAnthropic.awaitPendingStream();
+        const toolRequestId = "test-open-log" as ToolRequestId;
+
+        request.respond({
+          stopReason: "tool_use",
+          text: "Running command.",
+          toolRequests: [
+            {
+              status: "ok",
+              value: {
+                id: toolRequestId,
+                toolName: "bash_command" as ToolName,
+                input: {
+                  command,
+                },
+              },
+            },
+          ],
+        });
+
+        await driver.assertDisplayBufferContains("⚡✅");
+
+        // Find and click the "Full output" link
+        const fullOutputPos = await driver.assertDisplayBufferContains(
+          "Full output (100 lines):",
+        );
+        await driver.triggerDisplayBufferKey(fullOutputPos, "<CR>");
+
+        // Verify a new window was opened with the log file
+        const logWindow = await driver.findWindow(async (w) => {
+          const buf = await w.buffer();
+          const name = await buf.getName();
+          return name.includes("bashCommand.log");
+        });
+
+        expect(logWindow).toBeDefined();
+
+        // Verify the window is not a magenta window
+        const isMagenta = await logWindow.getVar("magenta");
+        expect(isMagenta).toBeFalsy();
+
+        // Verify the log file contains the expected content
+        const logBuffer = await logWindow.buffer();
+        const lines = await logBuffer.getLines({
+          start: 0 as Row0Indexed,
+          end: -1 as Row0Indexed,
+        });
+        const content = lines.join("\n");
+        expect(content).toContain("$ bash -c");
+        expect(content).toContain("stdout:");
+        expect(content).toContain("LINE1:");
+        expect(content).toContain("LINE100:");
+      },
+    );
+  });
+
+  it("includes duration in the tool result for successful commands", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      await driver.inputMagentaText(`Run this command: echo 'test'`);
+      await driver.send();
+
+      const request = await driver.mockAnthropic.awaitPendingStream();
+      const toolRequestId = "test-duration" as ToolRequestId;
+
+      request.respond({
+        stopReason: "tool_use",
+        text: "I'll run that command for you.",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: toolRequestId,
+              toolName: "bash_command" as ToolName,
+              input: {
+                command: "echo 'test'",
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains("⚡✅ `echo 'test'`");
+
+      const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage =
+        toolResultRequest.messages[toolResultRequest.messages.length - 1];
+
+      if (
+        toolResultMessage.role === "user" &&
+        Array.isArray(toolResultMessage.content)
+      ) {
+        const toolResult = toolResultMessage.content[0];
+        if (toolResult.type === "tool_result") {
+          expect(toolResult.is_error).toBeFalsy();
+          const content = toolResult.content;
+          const resultText =
+            typeof content === "string"
+              ? content
+              : Array.isArray(content)
+                ? content
+                    .filter(
+                      (item): item is { type: "text"; text: string } =>
+                        item.type === "text",
+                    )
+                    .map((item) => item.text)
+                    .join("")
+                : "";
+
+          // Verify the result contains duration in milliseconds
+          expect(resultText).toMatch(/exit code 0 \(\d+ms\)/);
+        }
+      }
+    });
+  });
+
+  it("includes duration in the tool result for failed commands", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      await driver.inputMagentaText(`Run this command: exit 1`);
+      await driver.send();
+
+      const request = await driver.mockAnthropic.awaitPendingStream();
+      const toolRequestId = "test-duration-error" as ToolRequestId;
+
+      request.respond({
+        stopReason: "tool_use",
+        text: "I'll run that command for you.",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: toolRequestId,
+              toolName: "bash_command" as ToolName,
+              input: {
+                command: "exit 1",
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(
+        "⚡⏳ May I run command `exit 1`?",
+      );
+      const pos = await driver.assertDisplayBufferContains("[ YES ]");
+      await driver.triggerDisplayBufferKey(pos, "<CR>");
+
+      await driver.assertDisplayBufferContains("Exit code: 1");
+
+      const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage =
+        toolResultRequest.messages[toolResultRequest.messages.length - 1];
+
+      if (
+        toolResultMessage.role === "user" &&
+        Array.isArray(toolResultMessage.content)
+      ) {
+        const toolResult = toolResultMessage.content[0];
+        if (toolResult.type === "tool_result") {
+          const content = toolResult.content;
+          const resultText =
+            typeof content === "string"
+              ? content
+              : Array.isArray(content)
+                ? content
+                    .filter(
+                      (item): item is { type: "text"; text: string } =>
+                        item.type === "text",
+                    )
+                    .map((item) => item.text)
+                    .join("")
+                : "";
+
+          // Verify the result contains duration in milliseconds
+          expect(resultText).toMatch(/exit code 1 \(\d+ms\)/);
+        }
+      }
+    });
+  });
+
+  it("terminates process with SIGTERM", async () => {
+    await withDriver(
+      {
+        options: {
+          commandConfig: {
+            commands: [
+              ["echo", { type: "restAny" }],
+              ["sleep", { type: "restAny" }],
+            ],
+            pipeCommands: [],
+          },
+        },
+      },
+      async (driver) => {
+        await driver.showSidebar();
+
+        await driver.inputMagentaText("Run a bash command that sleeps");
+        await driver.send();
+
+        const request =
+          await driver.mockAnthropic.awaitPendingStreamWithText(
+            "Run a bash command",
+          );
+
+        // Command that outputs its PID then sleeps
+        const command = `echo "pid: $$" && sleep 60`;
+
+        request.respond({
+          stopReason: "tool_use",
+          text: "I'll run that command for you.",
+          toolRequests: [
+            {
+              status: "ok",
+              value: {
+                id: "test-bash-sigterm" as ToolRequestId,
+                toolName: "bash_command" as ToolName,
+                input: {
+                  command,
+                },
+              },
+            },
+          ],
+        });
+
+        // Wait for PID to appear in output
+        await driver.assertDisplayBufferContains("pid:");
+
+        // Extract PID from the display buffer
+        const displayText = await driver.getDisplayBufferText();
+        const pidMatch = displayText.match(/pid: (\d+)/);
+        expect(pidMatch).not.toBeNull();
+        const pid = parseInt(pidMatch![1], 10);
+
+        // Verify process is running
+        const isRunning = (p: number) => {
+          const result = spawnSync("kill", ["-0", p.toString()], {
+            stdio: "pipe",
+          });
+          return result.status === 0;
+        };
+        expect(isRunning(pid)).toBe(true);
+
+        // Get the tool instance and trigger termination
+        const thread = driver.magenta.chat.getActiveThread();
+        const { mode } = thread.state;
+        if (mode.type !== "tool_use") {
+          throw new Error(`Expected tool_use mode, got ${mode.type}`);
+        }
+        const tool = mode.activeTools.get(
+          "test-bash-sigterm" as ToolRequestId,
+        ) as BashCommandTool;
+        expect(tool).toBeDefined();
+
+        // Dispatch terminate message
+        tool.update({ type: "terminate" });
+
+        // Wait for process to be gone
+        await pollUntil(
+          () => {
+            if (isRunning(pid)) {
+              throw new Error(`Process ${pid} still running`);
+            }
+          },
+          { timeout: 3000 },
+        );
+
+        // Verify the tool shows SIGTERM message
+        await driver.assertDisplayBufferContains("SIGTERM");
+      },
+    );
+  });
+
+  it("escalates to SIGKILL when process ignores SIGTERM", async () => {
+    await withDriver(
+      {
+        options: {
+          commandConfig: {
+            commands: [["bash", { type: "restAny" }]],
+            pipeCommands: [],
+          },
+        },
+      },
+      async (driver) => {
+        await driver.showSidebar();
+
+        await driver.inputMagentaText(
+          "Run a bash command that ignores SIGTERM",
+        );
+        await driver.send();
+
+        const request =
+          await driver.mockAnthropic.awaitPendingStreamWithText(
+            "Run a bash command",
+          );
+
+        // Command that traps SIGTERM and ignores it, only SIGKILL can kill it
+        const command = `bash -c 'trap "" TERM; echo "pid: $$"; while true; do sleep 1; done'`;
+
+        request.respond({
+          stopReason: "tool_use",
+          text: "I'll run that command for you.",
+          toolRequests: [
+            {
+              status: "ok",
+              value: {
+                id: "test-bash-sigkill" as ToolRequestId,
+                toolName: "bash_command" as ToolName,
+                input: {
+                  command,
+                },
+              },
+            },
+          ],
+        });
+
+        // Wait for PID to appear in output
+        await driver.assertDisplayBufferContains("pid:");
+
+        // Extract PID from the display buffer
+        const displayText = await driver.getDisplayBufferText();
+        const pidMatch = displayText.match(/pid: (\d+)/);
+        expect(pidMatch).not.toBeNull();
+        const pid = parseInt(pidMatch![1], 10);
+
+        // Verify process is running
+        const isRunning = (p: number) => {
+          const result = spawnSync("kill", ["-0", p.toString()], {
+            stdio: "pipe",
+          });
+          return result.status === 0;
+        };
+        expect(isRunning(pid)).toBe(true);
+
+        // Get the tool instance and trigger termination
+        const thread = driver.magenta.chat.getActiveThread();
+        const { mode } = thread.state;
+        if (mode.type !== "tool_use") {
+          throw new Error(`Expected tool_use mode, got ${mode.type}`);
+        }
+        const tool = mode.activeTools.get(
+          "test-bash-sigkill" as ToolRequestId,
+        ) as BashCommandTool;
+        expect(tool).toBeDefined();
+
+        // Dispatch terminate message
+        tool.update({ type: "terminate" });
+
+        // Process should survive SIGTERM (for ~1 second) then die from SIGKILL
+        // Wait a bit and verify process is still running (SIGTERM ignored)
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Process might still be running at this point since it ignores SIGTERM
+
+        // Wait for process to be gone after SIGKILL (after 1s timeout + some buffer)
+        await pollUntil(
+          () => {
+            if (isRunning(pid)) {
+              throw new Error(`Process ${pid} still running`);
+            }
+          },
+          { timeout: 5000 },
+        );
+
+        // Verify the tool shows SIGKILL message
+        await driver.assertDisplayBufferContains("SIGKILL");
+      },
+    );
+  });
+
+  it("kills entire process tree including child processes", async () => {
+    await withDriver(
+      {
+        options: {
+          commandConfig: {
+            commands: [["bash", { type: "restAny" }]],
+            pipeCommands: [],
+          },
+        },
+      },
+      async (driver) => {
+        await driver.showSidebar();
+
+        await driver.inputMagentaText(
+          "Run a bash command that spawns child processes",
+        );
+        await driver.send();
+
+        const request =
+          await driver.mockAnthropic.awaitPendingStreamWithText(
+            "Run a bash command",
+          );
+
+        // Command that spawns child processes that output their PIDs
+        // The parent spawns two children, each outputs its PID and sleeps
+        const command = `bash -c '
+echo "parent: $$"
+bash -c "echo child1: \\$\\$; sleep 60" &
+bash -c "echo child2: \\$\\$; sleep 60" &
+wait
+'`;
+
+        request.respond({
+          stopReason: "tool_use",
+          text: "I'll run that command for you.",
+          toolRequests: [
+            {
+              status: "ok",
+              value: {
+                id: "test-bash-tree" as ToolRequestId,
+                toolName: "bash_command" as ToolName,
+                input: {
+                  command,
+                },
+              },
+            },
+          ],
+        });
+
+        // Wait for all PIDs to appear in output
+        await driver.assertDisplayBufferContains("parent:");
+        await driver.assertDisplayBufferContains("child1:");
+        await driver.assertDisplayBufferContains("child2:");
+
+        // Extract PIDs from the display buffer
+        const displayText = await driver.getDisplayBufferText();
+        const parentMatch = displayText.match(/parent: (\d+)/);
+        const child1Match = displayText.match(/child1: (\d+)/);
+        const child2Match = displayText.match(/child2: (\d+)/);
+
+        expect(parentMatch).not.toBeNull();
+        expect(child1Match).not.toBeNull();
+        expect(child2Match).not.toBeNull();
+
+        const parentPid = parseInt(parentMatch![1], 10);
+        const child1Pid = parseInt(child1Match![1], 10);
+        const child2Pid = parseInt(child2Match![1], 10);
+
+        // Verify all processes are running
+        const isRunning = (p: number) => {
+          const result = spawnSync("kill", ["-0", p.toString()], {
+            stdio: "pipe",
+          });
+          return result.status === 0;
+        };
+
+        expect(isRunning(parentPid)).toBe(true);
+        expect(isRunning(child1Pid)).toBe(true);
+        expect(isRunning(child2Pid)).toBe(true);
+
+        // Get the tool instance and trigger termination
+        const thread = driver.magenta.chat.getActiveThread();
+        const { mode } = thread.state;
+        if (mode.type !== "tool_use") {
+          throw new Error(`Expected tool_use mode, got ${mode.type}`);
+        }
+        const tool = mode.activeTools.get(
+          "test-bash-tree" as ToolRequestId,
+        ) as BashCommandTool;
+        expect(tool).toBeDefined();
+
+        // Dispatch terminate message
+        tool.update({ type: "terminate" });
+
+        // Wait for ALL processes to be gone
+        await pollUntil(
+          () => {
+            const parentRunning = isRunning(parentPid);
+            const child1Running = isRunning(child1Pid);
+            const child2Running = isRunning(child2Pid);
+
+            if (parentRunning || child1Running || child2Running) {
+              throw new Error(
+                `Processes still running: parent=${parentRunning}, child1=${child1Running}, child2=${child2Running}`,
+              );
+            }
+          },
+          { timeout: 5000 },
+        );
+
+        // Verify the tool shows termination message
+        await driver.assertDisplayBufferContains("SIGTERM");
       },
     );
   });

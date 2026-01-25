@@ -366,7 +366,7 @@ Content B
         await driver.inputMagentaText("hello");
         await driver.send();
 
-        const firstRequest = await driver.mockAnthropic.awaitPendingRequest();
+        const firstRequest = await driver.mockAnthropic.awaitPendingStream();
 
         // Check that skills are in the system prompt
         const systemPrompt = firstRequest.systemPrompt;
@@ -396,7 +396,7 @@ Content B
         await driver.inputMagentaText("second message");
         await driver.send();
 
-        const secondRequest = await driver.mockAnthropic.awaitPendingRequest();
+        const secondRequest = await driver.mockAnthropic.awaitPendingStream();
 
         // Check that skills are still in system prompt
         const secondSystemPrompt = secondRequest.systemPrompt;

@@ -3,7 +3,6 @@ import { describe, it } from "vitest";
 import { LOGO } from "./thread.ts";
 import type { ToolRequestId } from "../tools/toolManager.ts";
 import type { ToolName } from "../tools/types.ts";
-import type { ThreadId } from "./types.ts";
 
 describe("node/chat/chat.spec.ts", () => {
   it("resets view when switching to a new thread", async () => {
@@ -22,7 +21,7 @@ describe("node/chat/chat.spec.ts", () => {
         "Hello, this is a test message in thread 1",
       );
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.streamText("I'm the assistant's response to the first thread");
       request.finishResponse("end_turn");
 
@@ -39,28 +38,33 @@ describe("node/chat/chat.spec.ts", () => {
   it("shows thread overview and allows selecting a thread", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      const thread1 = driver.getThreadId(0);
 
       await driver.magenta.command("new-thread");
+      await driver.awaitThreadCount(2);
+      const thread2 = driver.getThreadId(1);
       await driver.awaitChatState({
         state: "thread-selected",
-        id: 2 as ThreadId,
+        id: thread2,
       });
 
       await driver.magenta.command("threads-overview");
 
-      await driver.assertDisplayBufferContains(`\
-# Threads
-
-- 1 [Untitled]: ⏹️ stopped (end_turn)
-* 2 [Untitled]: ⏹️ stopped (end_turn)`);
+      await driver.assertDisplayBufferContains("# Threads");
+      await driver.assertDisplayBufferContains(
+        `- ${thread1} [Untitled]: ⏹️ stopped (end_turn)`,
+      );
+      await driver.assertDisplayBufferContains(
+        `* ${thread2} [Untitled]: ⏹️ stopped (end_turn)`,
+      );
 
       await driver.triggerDisplayBufferKeyOnContent(
-        "- 1 [Untitled]: ⏹️ stopped (end_turn)",
+        `- ${thread1} [Untitled]: ⏹️ stopped (end_turn)`,
         "<CR>",
       );
       await driver.awaitChatState({
         state: "thread-selected",
-        id: 1 as ThreadId,
+        id: thread1,
       });
     });
   });
@@ -68,6 +72,7 @@ describe("node/chat/chat.spec.ts", () => {
   it("spawns subagent, runs command, yields result to parent", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      const thread1 = driver.getThreadId(0);
 
       await driver.inputMagentaText(
         "Use spawn_subagent to create a sub-agent that will echo 'Hello from subagent' and then yield that result back to me.",
@@ -75,7 +80,7 @@ describe("node/chat/chat.spec.ts", () => {
       await driver.send();
 
       const request1 =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Use spawn_subagent",
         );
       request1.respond({
@@ -96,10 +101,11 @@ describe("node/chat/chat.spec.ts", () => {
         ],
       });
 
-      await driver.assertDisplayBufferContains("🤖✅ Spawning subagent");
+      await driver.assertDisplayBufferContains("🤖✅ spawn_subagent");
+      const thread2 = driver.getThreadId(1);
 
-      const request = await driver.mockAnthropic.awaitPendingRequestWithText(
-        "Sub-agent started with threadId: 2",
+      const request = await driver.mockAnthropic.awaitPendingStreamWithText(
+        `Sub-agent started with threadId: ${thread2}`,
       );
 
       request.respond({
@@ -112,7 +118,7 @@ describe("node/chat/chat.spec.ts", () => {
               id: "test-wait-for-subagents" as ToolRequestId,
               toolName: "wait_for_subagents" as ToolName,
               input: {
-                threadIds: [2 as ThreadId],
+                threadIds: [thread2],
               },
             },
           },
@@ -123,7 +129,7 @@ describe("node/chat/chat.spec.ts", () => {
       await driver.awaitChatState(
         {
           state: "thread-selected",
-          id: 1 as ThreadId,
+          id: thread1,
         },
         `We stay in the parent thread during subagent execution`,
       );
@@ -131,11 +137,11 @@ describe("node/chat/chat.spec.ts", () => {
       // Assert we see the waiting state in the parent thread
       await driver.assertDisplayBufferContains("⏳ Waiting for 1 subagent(s):");
       await driver.assertDisplayBufferContains(
-        "- 2 [Untitled]: ⏳ streaming response",
+        `- ${thread2} [Untitled]: ⏳ streaming response`,
       );
 
       const request3 =
-        await driver.mockAnthropic.awaitPendingRequestWithText("Echo the text");
+        await driver.mockAnthropic.awaitPendingStreamWithText("Echo the text");
       request3.respond({
         stopReason: "tool_use",
         text: "I'll echo that text for you.",
@@ -154,7 +160,7 @@ describe("node/chat/chat.spec.ts", () => {
       });
 
       const request4 =
-        await driver.mockAnthropic.awaitPendingRequestWithText("exit code 0");
+        await driver.mockAnthropic.awaitPendingStreamWithText("exit code 0");
       request4.respond({
         stopReason: "tool_use",
         text: "I'll now yield this result back to the parent.",
@@ -175,13 +181,13 @@ describe("node/chat/chat.spec.ts", () => {
       await driver.awaitChatState(
         {
           state: "thread-selected",
-          id: 1 as ThreadId,
+          id: thread1,
         },
         "We remain in the parent thread and see the subagent result",
       );
 
       await driver.assertDisplayBufferContains(
-        `⏸️✅ Waiting for 1 subagent(s)`,
+        `⏳✅ wait_for_subagents (1 threads)`,
       );
     });
   });
@@ -194,7 +200,7 @@ describe("node/chat/chat.spec.ts", () => {
       await driver.send();
 
       const request =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Wait for a thread",
         );
       request.respond({
@@ -207,7 +213,7 @@ describe("node/chat/chat.spec.ts", () => {
               id: "wait-missing" as ToolRequestId,
               toolName: "wait_for_subagents" as ToolName,
               input: {
-                threadIds: [999 as ThreadId], // Non-existent thread ID
+                threadIds: ["nonexistent-thread-id"], // Non-existent thread ID
               },
             },
           },
@@ -217,7 +223,7 @@ describe("node/chat/chat.spec.ts", () => {
       // Verify we see the missing thread status
       await driver.assertDisplayBufferContains("⏳ Waiting for 1 subagent(s):");
       await driver.assertDisplayBufferContains(
-        "- 999 [Untitled]: ❓ not found",
+        "- nonexistent-thread-id [Untitled]: ❓ not found",
       );
     });
   });
@@ -232,7 +238,7 @@ describe("node/chat/chat.spec.ts", () => {
       await driver.send();
 
       const request1 =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Use spawn_subagent",
         );
       request1.respond({
@@ -252,10 +258,11 @@ describe("node/chat/chat.spec.ts", () => {
         ],
       });
 
-      await driver.assertDisplayBufferContains("🤖✅ Spawning subagent");
+      await driver.assertDisplayBufferContains("🤖✅ spawn_subagent");
+      const thread2 = driver.getThreadId(1);
 
-      const request2 = await driver.mockAnthropic.awaitPendingRequestWithText(
-        "Sub-agent started with threadId: 2",
+      const request2 = await driver.mockAnthropic.awaitPendingStreamWithText(
+        `Sub-agent started with threadId: ${thread2}`,
       );
       request2.respond({
         stopReason: "tool_use",
@@ -274,11 +281,13 @@ describe("node/chat/chat.spec.ts", () => {
         ],
       });
 
-      await driver.assertDisplayBufferContains("🤖✅ Spawning subagent");
+      await driver.assertDisplayBufferContains("🤖✅ spawn_subagent");
+      await driver.awaitThreadCount(3);
+      const thread3 = driver.getThreadId(2);
 
       // Start waiting for both subagents
-      const request3 = await driver.mockAnthropic.awaitPendingRequestWithText(
-        "Sub-agent started with threadId: 3",
+      const request3 = await driver.mockAnthropic.awaitPendingStreamWithText(
+        `Sub-agent started with threadId: ${thread3}`,
       );
       request3.respond({
         stopReason: "tool_use",
@@ -290,7 +299,7 @@ describe("node/chat/chat.spec.ts", () => {
               id: "wait-both" as ToolRequestId,
               toolName: "wait_for_subagents" as ToolName,
               input: {
-                threadIds: [2 as ThreadId, 3 as ThreadId],
+                threadIds: [thread2, thread3],
               },
             },
           },
@@ -300,15 +309,15 @@ describe("node/chat/chat.spec.ts", () => {
       // Verify we see both threads in waiting state
       await driver.assertDisplayBufferContains("⏳ Waiting for 2 subagent(s):");
       await driver.assertDisplayBufferContains(
-        "- 2 [Untitled]: ⏳ streaming response",
+        `- ${thread2} [Untitled]: ⏳ streaming response`,
       );
       await driver.assertDisplayBufferContains(
-        "- 3 [Untitled]: ⏳ streaming response",
+        `- ${thread3} [Untitled]: ⏳ streaming response`,
       );
 
       // First subagent yields successfully
       const subagent1Request =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Echo 'Hello from subagent 1'",
         );
       subagent1Request.respond({
@@ -330,16 +339,16 @@ describe("node/chat/chat.spec.ts", () => {
 
       // Verify the first thread shows as yielded
       await driver.assertDisplayBufferContains(
-        "- 2 [Untitled]: ✅ yielded: Hello from subagent 1",
+        `- ${thread2} [Untitled]: ✅ yielded: Hello from subagent 1`,
       );
       // Second thread should still be running
       await driver.assertDisplayBufferContains(
-        "- 3 [Untitled]: ⏳ streaming response",
+        `- ${thread3} [Untitled]: ⏳ streaming response`,
       );
 
       // Second subagent yields successfully
       const subagent2Request =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Echo 'Hello from subagent 2'",
         );
       subagent2Request.respond({
@@ -361,7 +370,7 @@ describe("node/chat/chat.spec.ts", () => {
 
       // Verify both threads have completed and the wait tool shows final results
       await driver.assertDisplayBufferContains(
-        `⏸️✅ Waiting for 2 subagent(s)`,
+        `⏳✅ wait_for_subagents (2 threads)`,
       );
     });
   });
@@ -375,7 +384,7 @@ describe("node/chat/chat.spec.ts", () => {
       );
       await driver.send();
 
-      const request1 = await driver.mockAnthropic.awaitPendingRequestWithText(
+      const request1 = await driver.mockAnthropic.awaitPendingStreamWithText(
         "Create two subagents",
       );
       request1.respond({
@@ -395,10 +404,11 @@ describe("node/chat/chat.spec.ts", () => {
         ],
       });
 
-      await driver.assertDisplayBufferContains("🤖✅ Spawning subagent");
+      await driver.assertDisplayBufferContains("🤖✅ spawn_subagent");
+      const thread2 = driver.getThreadId(1);
 
-      const request2 = await driver.mockAnthropic.awaitPendingRequestWithText(
-        "Sub-agent started with threadId: 2",
+      const request2 = await driver.mockAnthropic.awaitPendingStreamWithText(
+        `Sub-agent started with threadId: ${thread2}`,
       );
       request2.respond({
         stopReason: "tool_use",
@@ -417,11 +427,12 @@ describe("node/chat/chat.spec.ts", () => {
         ],
       });
 
-      await driver.assertDisplayBufferContains("🤖✅ Spawning subagent");
+      await driver.awaitThreadCount(3);
+      const thread3 = driver.getThreadId(2);
 
       // Start waiting for both subagents
-      const request3 = await driver.mockAnthropic.awaitPendingRequestWithText(
-        "Sub-agent started with threadId: 3",
+      const request3 = await driver.mockAnthropic.awaitPendingStreamWithText(
+        `Sub-agent started with threadId: ${thread3}`,
       );
       request3.respond({
         stopReason: "tool_use",
@@ -433,7 +444,7 @@ describe("node/chat/chat.spec.ts", () => {
               id: "wait-both" as ToolRequestId,
               toolName: "wait_for_subagents" as ToolName,
               input: {
-                threadIds: [2 as ThreadId, 3 as ThreadId],
+                threadIds: [thread2, thread3],
               },
             },
           },
@@ -445,7 +456,7 @@ describe("node/chat/chat.spec.ts", () => {
 
       // First subagent stops without yielding
       const subagent1Request =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Just say something and stop",
         );
       subagent1Request.respond({
@@ -456,12 +467,12 @@ describe("node/chat/chat.spec.ts", () => {
 
       // Verify the first thread shows as stopped
       await driver.assertDisplayBufferContains(
-        "- 2 [Untitled]: ⏹️ stopped (end_turn)",
+        `- ${thread2} [Untitled]: ⏹️ stopped (end_turn)`,
       );
 
       // Second subagent succeeds and yields
       const subagent2Request =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Echo 'Success!'",
         );
       subagent2Request.respond({
@@ -482,7 +493,7 @@ describe("node/chat/chat.spec.ts", () => {
       });
 
       const subagent2Request2 =
-        await driver.mockAnthropic.awaitPendingRequestWithText("exit code 0");
+        await driver.mockAnthropic.awaitPendingStreamWithText("exit code 0");
       subagent2Request2.respond({
         stopReason: "tool_use",
         text: "I'll yield this successful result.",
@@ -502,16 +513,16 @@ describe("node/chat/chat.spec.ts", () => {
 
       // Verify the second thread shows as yielded
       await driver.assertDisplayBufferContains(
-        "- 3 [Untitled]: ✅ yielded: Success!",
+        `- ${thread3} [Untitled]: ✅ yielded: Success!`,
       );
 
       // Verify we can see both final states - one stopped, one yielded
       // The tool is still waiting because thread 2 stopped without yielding
       await driver.assertDisplayBufferContains(
-        "- 2 [Untitled]: ⏹️ stopped (end_turn)",
+        `- ${thread2} [Untitled]: ⏹️ stopped (end_turn)`,
       );
       await driver.assertDisplayBufferContains(
-        "- 3 [Untitled]: ✅ yielded: Success!",
+        `- ${thread3} [Untitled]: ✅ yielded: Success!`,
       );
     });
   });
@@ -519,6 +530,7 @@ describe("node/chat/chat.spec.ts", () => {
   it("wait_for_subagents view allows clicking on thread lines to navigate to them", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      const thread1 = driver.getThreadId(0);
 
       // Spawn a subagent to have something to wait for
       await driver.inputMagentaText(
@@ -527,7 +539,7 @@ describe("node/chat/chat.spec.ts", () => {
       await driver.send();
 
       const request1 =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Use spawn_subagent",
         );
       request1.respond({
@@ -547,11 +559,12 @@ describe("node/chat/chat.spec.ts", () => {
         ],
       });
 
-      await driver.assertDisplayBufferContains("🤖✅ Spawning subagent");
+      await driver.assertDisplayBufferContains("🤖✅ spawn_subagent");
+      const thread2 = driver.getThreadId(1);
 
       // Start waiting for the subagent
-      const request2 = await driver.mockAnthropic.awaitPendingRequestWithText(
-        "Sub-agent started with threadId: 2",
+      const request2 = await driver.mockAnthropic.awaitPendingStreamWithText(
+        `Sub-agent started with threadId: ${thread2}`,
       );
       request2.respond({
         stopReason: "tool_use",
@@ -563,7 +576,7 @@ describe("node/chat/chat.spec.ts", () => {
               id: "wait-test" as ToolRequestId,
               toolName: "wait_for_subagents" as ToolName,
               input: {
-                threadIds: [2 as ThreadId],
+                threadIds: [thread2],
               },
             },
           },
@@ -575,32 +588,35 @@ describe("node/chat/chat.spec.ts", () => {
       // We should currently be in thread 1 (the parent)
       await driver.awaitChatState({
         state: "thread-selected",
-        id: 1 as ThreadId,
+        id: thread1,
       });
 
       // Click on the thread line to navigate to thread 2
       await driver.triggerDisplayBufferKeyOnContent(
-        "- 2 [Untitled]: ⏳ streaming response",
+        `- ${thread2} [Untitled]: ⏳ streaming response`,
         "<CR>",
       );
 
       // Verify we switched to thread 2
       await driver.awaitChatState({
         state: "thread-selected",
-        id: 2 as ThreadId,
+        id: thread2,
       });
 
       // We should now see the subagent thread content
-      await driver.assertDisplayBufferContains("Parent thread: 1");
+      await driver.assertDisplayBufferContains(`Parent thread: ${thread1}`);
       await driver.assertDisplayBufferContains("# [ Untitled ]");
 
       // Navigate back to thread 1 via the parent thread link
-      await driver.triggerDisplayBufferKeyOnContent("Parent thread: 1", "<CR>");
+      await driver.triggerDisplayBufferKeyOnContent(
+        `Parent thread: ${thread1}`,
+        "<CR>",
+      );
 
       // Verify we're back in thread 1
       await driver.awaitChatState({
         state: "thread-selected",
-        id: 1 as ThreadId,
+        id: thread1,
       });
 
       // We should see the wait_for_subagents view again
@@ -611,13 +627,14 @@ describe("node/chat/chat.spec.ts", () => {
   it("shows thread hierarchy with parent-child relationships", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      const thread1 = driver.getThreadId(0);
 
       // Create a parent thread with some content
       await driver.inputMagentaText("This is the parent thread");
       await driver.send();
 
       const parentRequest =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "This is the parent thread",
         );
       parentRequest.respond({
@@ -637,20 +654,20 @@ describe("node/chat/chat.spec.ts", () => {
         ],
       });
 
-      await driver.assertDisplayBufferContains("🤖✅ Spawning subagent");
+      await driver.assertDisplayBufferContains("🤖✅ spawn_subagent");
+      const thread2 = driver.getThreadId(1);
 
       // Create another parent thread
       await driver.magenta.command("new-thread");
-      await driver.awaitChatState({
-        state: "thread-selected",
-        id: 3 as ThreadId,
-      });
+      // Wait for new thread to be created
+      await driver.awaitThreadCount(3);
+      const thread3 = driver.getThreadId(2);
 
       await driver.inputMagentaText("This is another parent thread");
       await driver.send();
 
       const parent2Request =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "This is another parent thread",
         );
       parent2Request.respond({
@@ -671,7 +688,8 @@ describe("node/chat/chat.spec.ts", () => {
       });
 
       // Wait for the spawn message to appear in the display buffer
-      await driver.assertDisplayBufferContains("🤖✅ Spawning subagent");
+      await driver.assertDisplayBufferContains("🤖✅ spawn_subagent");
+      const thread4 = driver.getThreadId(3);
 
       // Now view the thread hierarchy
       await driver.magenta.command("threads-overview");
@@ -680,26 +698,33 @@ describe("node/chat/chat.spec.ts", () => {
       });
 
       // Verify hierarchical display with proper indentation
-      await driver.assertDisplayBufferContains(`\
-# Threads
-
-- 1 [Untitled]: ⏳ streaming response
-  - 2 [Untitled]: ⏳ streaming response
-* 3 [Untitled]: ⏳ streaming response
-  - 4 [Untitled]: ⏳ streaming response`);
+      await driver.assertDisplayBufferContains("# Threads");
+      await driver.assertDisplayBufferContains(
+        `- ${thread1} [Untitled]: ⏳ streaming response`,
+      );
+      await driver.assertDisplayBufferContains(
+        `  - ${thread2} [Untitled]: ⏳ streaming response`,
+      );
+      await driver.assertDisplayBufferContains(
+        `* ${thread3} [Untitled]: ⏳ streaming response`,
+      );
+      await driver.assertDisplayBufferContains(
+        `  - ${thread4} [Untitled]: ⏳ streaming response`,
+      );
     });
   });
 
   it("handles thread hierarchy with stopped and yielded children", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      const thread1 = driver.getThreadId(0);
 
       // Create parent and spawn child that will yield
       await driver.inputMagentaText("Parent with yielding child");
       await driver.send();
 
       const parentRequest =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Parent with yielding child",
         );
       parentRequest.respond({
@@ -719,9 +744,13 @@ describe("node/chat/chat.spec.ts", () => {
         ],
       });
 
+      // Wait for subagent to be spawned
+      await driver.assertDisplayBufferContains("🤖✅ spawn_subagent");
+      const thread2 = driver.getThreadId(1);
+
       // Child thread yields a result
       const childRequest =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Yield a result back to parent",
         );
       childRequest.respond({
@@ -744,11 +773,14 @@ describe("node/chat/chat.spec.ts", () => {
 
       // Create another parent with child that stops
       await driver.magenta.command("new-thread");
+      // Wait for new thread to be created
+      await driver.awaitThreadCount(3);
+      const thread3 = driver.getThreadId(2);
       await driver.inputMagentaText("Parent with stopping child");
       await driver.send();
 
       const parent2Request =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Parent with stopping child",
         );
       parent2Request.respond({
@@ -768,9 +800,13 @@ describe("node/chat/chat.spec.ts", () => {
         ],
       });
 
+      // Wait for subagent to be spawned
+      await driver.assertDisplayBufferContains("🤖✅ spawn_subagent");
+      const thread4 = driver.getThreadId(3);
+
       // Child thread stops without yielding
       const child2Request =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Just stop without yielding",
         );
       child2Request.respond({
@@ -784,16 +820,16 @@ describe("node/chat/chat.spec.ts", () => {
 
       // Verify hierarchy shows different child states with proper formatting
       await driver.assertDisplayBufferContains(
-        "- 1 [Untitled]: ⏳ streaming response",
+        `- ${thread1} [Untitled]: ⏳ streaming response`,
       );
       await driver.assertDisplayBufferContains(
-        "  - 2 [Untitled]: ✅ yielded: This is a very long result message that should ...",
+        `  - ${thread2} [Untitled]: ✅ yielded: This is a very long result message that should ...`,
       );
       await driver.assertDisplayBufferContains(
-        "* 3 [Untitled]: ⏳ streaming response",
+        `* ${thread3} [Untitled]: ⏳ streaming response`,
       );
       await driver.assertDisplayBufferContains(
-        "  - 4 [Untitled]: ⏹️ stopped (end_turn)",
+        `  - ${thread4} [Untitled]: ⏹️ stopped (end_turn)`,
       );
     });
   });
@@ -801,13 +837,14 @@ describe("node/chat/chat.spec.ts", () => {
   it("allows selecting parent and child threads from hierarchy view", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      const thread1 = driver.getThreadId(0);
 
       // Create parent thread
       await driver.inputMagentaText("Parent thread message");
       await driver.send();
 
       const parentRequest =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Parent thread message",
         );
       parentRequest.respond({
@@ -828,31 +865,32 @@ describe("node/chat/chat.spec.ts", () => {
       });
 
       // Wait for the subagent to be spawned
-      await driver.assertDisplayBufferContains("🤖✅ Spawning subagent");
+      await driver.assertDisplayBufferContains("🤖✅ spawn_subagent");
+      const thread2 = driver.getThreadId(1);
 
       await driver.magenta.command("threads-overview");
 
       await driver.triggerDisplayBufferKeyOnContent(
-        "  - 2 [Untitled]: ⏳ streaming response",
+        `  - ${thread2} [Untitled]: ⏳ streaming response`,
         "<CR>",
       );
 
       await driver.awaitChatState({
         state: "thread-selected",
-        id: 2 as ThreadId,
+        id: thread2,
       });
-      await driver.assertDisplayBufferContains("Parent thread: 1");
+      await driver.assertDisplayBufferContains(`Parent thread: ${thread1}`);
 
       await driver.magenta.command("threads-overview");
       await driver.triggerDisplayBufferKeyOnContent(
-        "- 1 [Untitled]: ⏳ streaming response",
+        `- ${thread1} [Untitled]: ⏳ streaming response`,
         "<CR>",
       );
 
       // Verify we switched to the parent thread
       await driver.awaitChatState({
         state: "thread-selected",
-        id: 1 as ThreadId,
+        id: thread1,
       });
       await driver.assertDisplayBufferContains("Parent thread message");
     });
@@ -861,13 +899,14 @@ describe("node/chat/chat.spec.ts", () => {
   it("formats thread status correctly for different states", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
+      const thread1 = driver.getThreadId(0);
 
       // Create a thread and let it complete normally
       await driver.inputMagentaText("Test message");
       await driver.send();
 
       const request =
-        await driver.mockAnthropic.awaitPendingRequestWithText("Test message");
+        await driver.mockAnthropic.awaitPendingStreamWithText("Test message");
       request.streamText("Assistant response");
       request.finishResponse("end_turn");
 
@@ -879,7 +918,7 @@ describe("node/chat/chat.spec.ts", () => {
       await driver.send();
 
       const request2 =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Spawn a subagent",
         );
       request2.respond({
@@ -904,7 +943,7 @@ describe("node/chat/chat.spec.ts", () => {
 
       // Verify different status displays
       await driver.assertDisplayBufferContains(
-        "- 1 [Untitled]: ⏹️ stopped (end_turn)",
+        `- ${thread1} [Untitled]: ⏹️ stopped (end_turn)`,
       );
     });
   });

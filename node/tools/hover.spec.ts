@@ -1,9 +1,7 @@
 import { type ToolRequestId } from "./toolManager.ts";
 import { it, expect } from "vitest";
-import { withDriver } from "../test/preamble";
-import { pollUntil } from "../utils/async.ts";
+import { pollForToolResult, withDriver } from "../test/preamble";
 import type { UnresolvedFilePath } from "../utils/files.ts";
-import type { HoverTool } from "./hover.ts";
 import type { ToolName } from "./types.ts";
 import path from "path";
 import fs from "fs";
@@ -18,7 +16,7 @@ it("hover end-to-end", async () => {
 
     // wait for ts_ls to start/attach
     const toolRequestId = "id" as ToolRequestId;
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -37,27 +35,15 @@ it("hover end-to-end", async () => {
       ],
     });
 
-    const result = await pollUntil(
-      () => {
-        const thread = driver.magenta.chat.getActiveThread();
-        if (!thread || !thread.state || typeof thread.state !== "object") {
-          throw new Error("Thread state is not valid");
-        }
+    // After tool completes, thread auto-responds and creates a new stream
+    const request2 = await driver.mockAnthropic.awaitPendingStream();
+    request2.respond({
+      stopReason: "end_turn",
+      text: "Got the hover result.",
+      toolRequests: [],
+    });
 
-        const tool = thread.toolManager.getTool(toolRequestId);
-        if (!(tool && tool.toolName == "hover")) {
-          throw new Error(`could not find tool with id ${toolRequestId}`);
-        }
-
-        const hoverTool = tool as unknown as HoverTool;
-        if (hoverTool.state.state != "done") {
-          throw new Error(`Request not done`);
-        }
-
-        return hoverTool.state.result;
-      },
-      { timeout: 5000 },
-    );
+    const result = await pollForToolResult(driver, toolRequestId);
 
     expect(result.type).toBe("tool_result");
     expect(result.id).toBe(toolRequestId);
@@ -102,7 +88,7 @@ it("hover with word boundaries", async () => {
     await driver.send();
 
     const toolRequestId = "id2" as ToolRequestId;
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -121,27 +107,15 @@ it("hover with word boundaries", async () => {
       ],
     });
 
-    const result = await pollUntil(
-      () => {
-        const thread = driver.magenta.chat.getActiveThread();
-        if (!thread || !thread.state || typeof thread.state !== "object") {
-          throw new Error("Thread state is not valid");
-        }
+    // After tool completes, thread auto-responds and creates a new stream
+    const request2 = await driver.mockAnthropic.awaitPendingStream();
+    request2.respond({
+      stopReason: "end_turn",
+      text: "Got the hover result.",
+      toolRequests: [],
+    });
 
-        const tool = thread.toolManager.getTool(toolRequestId);
-        if (!(tool && tool.toolName == "hover")) {
-          throw new Error(`could not find tool with id ${toolRequestId}`);
-        }
-
-        const hoverTool = tool as unknown as HoverTool;
-        if (hoverTool.state.state != "done") {
-          throw new Error(`Request not done`);
-        }
-
-        return hoverTool.state.result;
-      },
-      { timeout: 5000 },
-    );
+    const result = await pollForToolResult(driver, toolRequestId);
 
     expect(result.type).toBe("tool_result");
     expect(result.id).toBe(toolRequestId);
@@ -185,7 +159,7 @@ it("hover with context disambiguation", async () => {
     await driver.send();
 
     const toolRequestId = "id3" as ToolRequestId;
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -205,27 +179,15 @@ it("hover with context disambiguation", async () => {
       ],
     });
 
-    const result = await pollUntil(
-      () => {
-        const thread = driver.magenta.chat.getActiveThread();
-        if (!thread || !thread.state || typeof thread.state !== "object") {
-          throw new Error("Thread state is not valid");
-        }
+    // After tool completes, thread auto-responds and creates a new stream
+    const request2 = await driver.mockAnthropic.awaitPendingStream();
+    request2.respond({
+      stopReason: "end_turn",
+      text: "Got the hover result.",
+      toolRequests: [],
+    });
 
-        const tool = thread.toolManager.getTool(toolRequestId);
-        if (!(tool && tool.toolName == "hover")) {
-          throw new Error(`could not find tool with id ${toolRequestId}`);
-        }
-
-        const hoverTool = tool as unknown as HoverTool;
-        if (hoverTool.state.state != "done") {
-          throw new Error(`Request not done`);
-        }
-
-        return hoverTool.state.result;
-      },
-      { timeout: 5000 },
-    );
+    const result = await pollForToolResult(driver, toolRequestId);
 
     expect(result.type).toBe("tool_result");
     expect(result.id).toBe(toolRequestId);
@@ -258,7 +220,7 @@ it("hover with context not found", async () => {
     await driver.send();
 
     const toolRequestId = "id4" as ToolRequestId;
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -278,27 +240,15 @@ it("hover with context not found", async () => {
       ],
     });
 
-    const result = await pollUntil(
-      () => {
-        const thread = driver.magenta.chat.getActiveThread();
-        if (!thread || !thread.state || typeof thread.state !== "object") {
-          throw new Error("Thread state is not valid");
-        }
+    // After tool completes, thread auto-responds and creates a new stream
+    const request2 = await driver.mockAnthropic.awaitPendingStream();
+    request2.respond({
+      stopReason: "end_turn",
+      text: "Got an error from hover.",
+      toolRequests: [],
+    });
 
-        const tool = thread.toolManager.getTool(toolRequestId);
-        if (!(tool && tool.toolName == "hover")) {
-          throw new Error(`could not find tool with id ${toolRequestId}`);
-        }
-
-        const hoverTool = tool as unknown as HoverTool;
-        if (hoverTool.state.state != "done") {
-          throw new Error(`Request not done`);
-        }
-
-        return hoverTool.state.result;
-      },
-      { timeout: 5000 },
-    );
+    const result = await pollForToolResult(driver, toolRequestId);
 
     expect(result.type).toBe("tool_result");
     expect(result.id).toBe(toolRequestId);

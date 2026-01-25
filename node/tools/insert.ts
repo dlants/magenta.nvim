@@ -8,8 +8,8 @@ import {
   withBindings,
 } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
+import type { CompletedToolInfo } from "./types.ts";
 import type { Dispatch } from "../tea/tea.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolResultContent,
@@ -18,15 +18,16 @@ import type {
 import { applyEdit } from "./applyEdit.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import type { RootMsg } from "../root-msg.ts";
-import type { MessageId } from "../chat/message.ts";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { ThreadId } from "../chat/types.ts";
+import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
 import type { NvimCwd, UnresolvedFilePath } from "../utils/files.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import { resolveFilePath } from "../utils/files.ts";
 import type { MagentaOptions } from "../options.ts";
 import { canWriteFile } from "./permissions.ts";
-import type { ThreadId } from "../chat/types.ts";
 import type { Gitignore } from "./util.ts";
+
+export type ToolRequest = GenericToolRequest<"insert", Input>;
 
 export type State =
   | {
@@ -63,11 +64,11 @@ export type Msg =
 export class InsertTool implements StaticTool {
   state: State;
   toolName = "insert" as const;
+  aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "insert" }>,
+    public request: ToolRequest,
     public threadId: ThreadId,
-    public messageId: MessageId,
     private context: {
       myDispatch: Dispatch<Msg>;
       bufferTracker: BufferTracker;
@@ -83,9 +84,11 @@ export class InsertTool implements StaticTool {
 
     // wrap in setTimeout to force a new eventloop frame, so we don't dispatch-in-dispatch
     setTimeout(() => {
+      if (this.aborted) return;
       try {
         this.initInsert();
       } catch (error) {
+        if (this.aborted) return;
         this.context.myDispatch({
           type: "finish",
           result: {
@@ -98,6 +101,8 @@ export class InsertTool implements StaticTool {
   }
 
   private initInsert(): void {
+    if (this.aborted) return;
+
     const filePath = this.request.input.filePath;
     const absFilePath = resolveFilePath(this.context.cwd, filePath);
 
@@ -115,7 +120,7 @@ export class InsertTool implements StaticTool {
   }
 
   private async doInsert(): Promise<void> {
-    await applyEdit(this.request, this.threadId, this.messageId, this.context);
+    await applyEdit(this.request, this.threadId, this.context);
   }
 
   isDone(): boolean {
@@ -126,18 +131,28 @@ export class InsertTool implements StaticTool {
     return this.state.state === "pending-user-action";
   }
 
-  abort(): void {
-    this.state = {
-      state: "done",
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: {
-          status: "error",
-          error: "The user aborted this tool request.",
-        },
+        status: "error",
+        error: "Request was aborted by the user.",
       },
     };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   update(msg: Msg): void {
@@ -169,15 +184,17 @@ export class InsertTool implements StaticTool {
 
             // wrap in setTimeout to force a new eventloop frame, to avoid dispatch-in-dispatch
             setTimeout(() => {
-              this.doInsert().catch((error: Error) =>
+              if (this.aborted) return;
+              this.doInsert().catch((error: Error) => {
+                if (this.aborted) return;
                 this.context.myDispatch({
                   type: "finish",
                   result: {
                     status: "error",
                     error: error.message + "\n" + error.stack,
                   },
-                }),
-              );
+                });
+              });
             });
             return;
           } else {
@@ -206,15 +223,17 @@ export class InsertTool implements StaticTool {
 
           // wrap in setTimeout to force a new eventloop frame, to avoid dispatch-in-dispatch
           setTimeout(() => {
-            this.doInsert().catch((error: Error) =>
+            if (this.aborted) return;
+            this.doInsert().catch((error: Error) => {
+              if (this.aborted) return;
               this.context.myDispatch({
                 type: "finish",
                 result: {
                   status: "error",
                   error: error.message + "\n" + error.stack,
                 },
-              }),
-            );
+              });
+            });
           });
         }
         return;
@@ -261,11 +280,10 @@ export class InsertTool implements StaticTool {
         )} │
 └────────────────┘`;
       case "done":
-        if (this.state.result.result.status === "error") {
-          return d`✏️❌ Insert [[ +${lineCount.toString()} ]] in ${withInlineCode(d`\`${this.request.input.filePath}\``)} - ${this.state.result.result.error}`;
-        } else {
-          return d`✏️✅ Insert [[ +${lineCount.toString()} ]] in ${withInlineCode(d`\`${this.request.input.filePath}\``)}`;
-        }
+        return renderCompletedSummary({
+          request: this.request as CompletedToolInfo["request"],
+          result: this.state.result,
+        });
       default:
         assertUnreachable(this.state);
     }
@@ -274,34 +292,21 @@ export class InsertTool implements StaticTool {
   renderPreview(): VDOMNode {
     switch (this.state.state) {
       case "pending":
-      case "pending-user-action":
       case "processing":
         return d``;
+      case "pending-user-action":
+        return renderInsertPreview(
+          this.request.input,
+          this.context.getDisplayWidth(),
+        );
       case "done":
         if (this.state.result.result.status === "error") {
           return d``;
         } else {
-          const content = this.request.input.content;
-          const lines = content.split("\n");
-          const maxLines = 5;
-          const maxLength = this.context.getDisplayWidth() - 5;
-
-          let previewLines =
-            lines.length > maxLines ? lines.slice(-maxLines) : lines;
-          previewLines = previewLines.map((line) =>
-            line.length > maxLength
-              ? line.substring(0, maxLength) + "..."
-              : line,
+          return renderInsertPreview(
+            this.request.input,
+            this.context.getDisplayWidth(),
           );
-
-          let result = previewLines.join("\n");
-          if (lines.length > maxLines) {
-            result = "...\n" + result;
-          }
-
-          return withCode(d`\`\`\`
-${withExtmark(d`${result}`, { line_hl_group: "DiffAdd" })}
-\`\`\``);
         }
       default:
         assertUnreachable(this.state);
@@ -355,6 +360,52 @@ ${withExtmark(d`${this.request.input.content}`, { line_hl_group: "DiffAdd" })}
         assertUnreachable(this.state);
     }
   }
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const input = info.request.input as Input;
+  const lineCount = (input.content.match(/\n/g) || []).length + 1;
+  const result = info.result.result;
+  const status = result.status === "error" ? "❌" : "✅";
+
+  if (result.status === "error") {
+    return d`✏️${status} Insert [[ +${lineCount.toString()} ]] in ${withInlineCode(d`\`${input.filePath}\``)} - ${result.error}`;
+  }
+  return d`✏️${status} Insert [[ +${lineCount.toString()} ]] in ${withInlineCode(d`\`${input.filePath}\``)}`;
+}
+
+export function renderInsertPreview(
+  input: Input,
+  displayWidth: number,
+): VDOMNode {
+  const content = input.content;
+  const lines = content.split("\n");
+  const maxLines = 5;
+  const maxLength = displayWidth - 5;
+
+  let previewLines = lines.length > maxLines ? lines.slice(-maxLines) : lines;
+  previewLines = previewLines.map((line) =>
+    line.length > maxLength ? line.substring(0, maxLength) + "..." : line,
+  );
+
+  let result = previewLines.join("\n");
+  if (lines.length > maxLines) {
+    result = "...\n" + result;
+  }
+
+  return withCode(d`\`\`\`
+${withExtmark(d`${result}`, { line_hl_group: "DiffAdd" })}
+\`\`\``);
+}
+
+export function renderInsertDetail(input: Input): VDOMNode {
+  return d`\
+filePath: ${withInlineCode(d`\`${input.filePath}\``)}
+insertAfter: ${withInlineCode(d`\`${input.insertAfter}\``)}
+content:
+${withCode(d`\`\`\`
+${withExtmark(d`${input.content}`, { line_hl_group: "DiffAdd" })}
+\`\`\``)}`;
 }
 
 export const spec: ProviderToolSpec = {

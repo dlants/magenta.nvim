@@ -1,0 +1,101 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`should index new markdown files 1`] = `
+[
+  {
+    "contextualizedText": "# Test Document
+
+Context for test document
+
+
+This is test content.",
+    "filename": "test.md",
+    "text": "
+This is test content.",
+  },
+]
+`;
+
+exports[`should only re-embed changed chunks when file content changes > after initial indexing 1`] = `
+[
+  {
+    "contextualizedText": "# Section One
+
+Section one introduces the document
+
+
+This is the first section content.
+",
+    "filename": "test.md",
+    "text": "
+This is the first section content.
+",
+  },
+  {
+    "contextualizedText": "# Section Two
+
+Section two provides secondary content
+
+
+This is the second section content.
+",
+    "filename": "test.md",
+    "text": "
+This is the second section content.
+",
+  },
+  {
+    "contextualizedText": "# Section Three
+
+Section three concludes the document
+
+
+This is the third section content.",
+    "filename": "test.md",
+    "text": "
+This is the third section content.",
+  },
+]
+`;
+
+exports[`should only re-embed changed chunks when file content changes > after modifying section two 1`] = `
+[
+  {
+    "contextualizedText": "# Section One
+
+Section one introduces the document
+
+
+This is the first section content.
+",
+    "filename": "test.md",
+    "text": "
+This is the first section content.
+",
+  },
+  {
+    "contextualizedText": "# Section Two
+
+Section two now contains modified content
+
+
+This section has been MODIFIED with new content.
+",
+    "filename": "test.md",
+    "text": "
+This section has been MODIFIED with new content.
+",
+  },
+  {
+    "contextualizedText": "# Section Three
+
+Section three concludes the document
+
+
+This is the third section content.",
+    "filename": "test.md",
+    "text": "
+This is the third section content.",
+  },
+]
+`;

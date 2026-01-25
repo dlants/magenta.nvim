@@ -6,19 +6,20 @@ import { Thread, view as threadView, type InputMessage } from "./thread";
 import type { Lsp } from "../lsp";
 import { assertUnreachable } from "../utils/assertUnreachable";
 import { d, withBindings, type VDOMNode } from "../tea/view";
-import { Counter } from "../utils/uniqueId.ts";
+import { v7 as uuidv7 } from "uuid";
 import { ContextManager } from "../context/context-manager.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import {
   detectFileType,
   relativePath,
   resolveFilePath,
+  type AbsFilePath,
   type NvimCwd,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
 import { wrapStaticToolMsg, type ToolRequestId } from "../tools/toolManager.ts";
-import type { ToolMsg, ToolName } from "../tools/types.ts";
+import type { ToolName } from "../tools/types.ts";
 import { MCPToolManager } from "../tools/mcp/manager.ts";
 import type { WaitForSubagentsTool } from "../tools/wait-for-subagents.ts";
 import type { ThreadId, ThreadType } from "./types.ts";
@@ -27,7 +28,7 @@ import type {
   ForEachElement,
   SpawnForeachTool,
 } from "../tools/spawn-foreach.ts";
-import type { Msg as ForkThreadMsg } from "../tools/fork-thread.ts";
+import type { PKB } from "../pkb/pkb.ts";
 
 type ThreadWrapper = (
   | {
@@ -70,10 +71,8 @@ export type Msg =
     }
   | {
       type: "fork-thread";
-      threadId: ThreadId;
-      toolRequestId: ToolRequestId;
-      contextFilePaths: UnresolvedFilePath[];
-      inputMessages: InputMessage[];
+      sourceThreadId: ThreadId;
+      strippedMessages: InputMessage[];
     }
   | {
       type: "spawn-subagent-thread";
@@ -101,7 +100,6 @@ export type ChatMsg = {
 };
 
 export class Chat {
-  private threadCounter = new Counter();
   state: ChatState;
   public threadWrappers: { [id: ThreadId]: ThreadWrapper };
   public rememberedCommands: Set<string>;
@@ -116,6 +114,7 @@ export class Chat {
       cwd: NvimCwd;
       nvim: Nvim;
       lsp: Lsp;
+      pkb: PKB | undefined;
     },
   ) {
     this.threadWrappers = {};
@@ -162,7 +161,7 @@ export class Chat {
             ) {
               threadWrapper.thread.update({
                 type: "thread-msg",
-                id: Number(threadId) as ThreadId,
+                id: threadId as ThreadId,
                 msg: {
                   type: "abort",
                 },
@@ -173,22 +172,23 @@ export class Chat {
 
         // it's ok to do this on every dispatch. After the initial yielded/error message, the thread should be dormant
         // and should not generate any more thread messages. As such, this won't be terribly inefficient.
-        if (
-          threadState.parentThreadId &&
-          (thread.state.conversation.state == "yielded" ||
-            thread.state.conversation.state == "error")
-        ) {
-          this.notifyParent({
-            threadId: thread.id,
-            parentThreadId: threadState.parentThreadId,
-            result:
-              thread.state.conversation.state == "yielded"
-                ? { status: "ok", value: thread.state.conversation.response }
-                : {
-                    status: "error",
-                    error: thread.state.conversation.error.message,
-                  },
-          });
+        const mode = thread.state.mode;
+        const agentStatus = thread.agent.getState().status;
+
+        if (threadState.parentThreadId) {
+          if (mode.type === "control_flow" && mode.operation.type === "yield") {
+            this.notifyParent({
+              threadId: thread.id,
+              parentThreadId: threadState.parentThreadId,
+              result: { status: "ok", value: mode.operation.response },
+            });
+          } else if (agentStatus.type === "error") {
+            this.notifyParent({
+              threadId: thread.id,
+              parentThreadId: threadState.parentThreadId,
+              result: { status: "error", error: agentStatus.error.message },
+            });
+          }
         }
       }
     }
@@ -353,6 +353,20 @@ export class Chat {
     return [];
   }
 
+  /** Get the active agent for use as context in forceToolUse calls */
+  getContextAgent() {
+    if (
+      this.state.state === "thread-selected" &&
+      this.state.activeThreadId in this.threadWrappers
+    ) {
+      const threadState = this.threadWrappers[this.state.activeThreadId];
+      if (threadState.state === "initialized") {
+        return threadState.thread.agent;
+      }
+    }
+    return undefined;
+  }
+
   private async createThreadWithContext({
     threadId,
     profile,
@@ -402,23 +416,27 @@ export class Chat {
     ]);
 
     if (contextFiles.length > 0) {
-      await Promise.all(
+      const fileTypeResults = await Promise.all(
         contextFiles.map(async (filePath) => {
           const absFilePath = resolveFilePath(this.context.cwd, filePath);
-          const relFilePath = relativePath(this.context.cwd, absFilePath);
           const fileTypeInfo = await detectFileType(absFilePath);
-          if (!fileTypeInfo) {
-            this.context.nvim.logger.error(`File ${filePath} does not exist.`);
-            return;
-          }
-          contextManager.update({
-            type: "add-file-context",
-            absFilePath,
-            relFilePath,
-            fileTypeInfo,
-          });
+          return { filePath, absFilePath, fileTypeInfo };
         }),
       );
+
+      for (const { filePath, absFilePath, fileTypeInfo } of fileTypeResults) {
+        if (!fileTypeInfo) {
+          this.context.nvim.logger.error(`File ${filePath} does not exist.`);
+          continue;
+        }
+        const relFilePath = relativePath(this.context.cwd, absFilePath);
+        contextManager.update({
+          type: "add-file-context",
+          absFilePath,
+          relFilePath,
+          fileTypeInfo,
+        });
+      }
     }
 
     const thread = new Thread(threadId, threadType, systemPrompt, {
@@ -462,7 +480,7 @@ export class Chat {
   }
 
   async createNewThread() {
-    const id = this.threadCounter.get() as ThreadId;
+    const id = uuidv7() as ThreadId;
 
     await this.createThreadWithContext({
       threadId: id,
@@ -484,7 +502,7 @@ export class Chat {
 
     // Iterate through all threads to build hierarchy
     for (const [idStr, threadWrapper] of Object.entries(this.threadWrappers)) {
-      const threadId = Number(idStr) as ThreadId;
+      const threadId = idStr as ThreadId;
       const parentId = threadWrapper.parentThreadId;
 
       if (parentId === undefined) {
@@ -564,11 +582,16 @@ export class Chat {
     });
   }
 
+  // TODO: re-enable PKB status display once we have a better UI for it
+  private renderPkbStatus(): VDOMNode {
+    return d``;
+  }
+
   renderThreadOverview() {
     if (Object.keys(this.threadWrappers).length === 0) {
       return d`# Threads
 
-No threads yet`;
+No threads yet${this.renderPkbStatus()}`;
     }
 
     const { rootThreads, childrenMap } = this.buildThreadHierarchy();
@@ -592,7 +615,7 @@ No threads yet`;
 
     return d`# Threads
 
-${threadViews.map((view) => d`${view}\n`)}`;
+${threadViews.map((view) => d`${view}\n`)}${this.renderPkbStatus()}`;
   }
 
   getActiveThread(): Thread {
@@ -609,53 +632,126 @@ ${threadViews.map((view) => d`${view}\n`)}`;
   }
 
   async handleForkThread({
-    threadId,
-    toolRequestId,
-    contextFilePaths,
-    inputMessages,
+    sourceThreadId,
+    strippedMessages,
   }: {
-    threadId: ThreadId;
-    toolRequestId: ToolRequestId;
-    contextFilePaths: UnresolvedFilePath[];
-    inputMessages: InputMessage[];
+    sourceThreadId: ThreadId;
+    strippedMessages: InputMessage[];
   }) {
-    const sourceThreadWrapper = this.threadWrappers[threadId];
+    const sourceThreadWrapper = this.threadWrappers[sourceThreadId];
     if (!sourceThreadWrapper || sourceThreadWrapper.state !== "initialized") {
-      throw new Error(`Thread ${threadId} not available for forking`);
+      throw new Error(`Thread ${sourceThreadId} not available for forking`);
     }
 
     const sourceThread = sourceThreadWrapper.thread;
-    const newThreadId = this.threadCounter.get() as ThreadId;
+    const sourceAgent = sourceThread.agent;
 
-    const thread = await this.createThreadWithContext({
-      threadType: "root",
-      threadId: newThreadId,
-      profile: sourceThread.state.profile,
-      contextFiles: contextFilePaths,
-      switchToThread: true,
-      inputMessages,
-    });
+    // Abort any in-progress operations and wait for completion
+    // This handles both streaming and tool_use states
+    const agentStatus = sourceAgent.getState().status;
+    if (
+      agentStatus.type === "streaming" ||
+      (agentStatus.type === "stopped" && agentStatus.stopReason === "tool_use")
+    ) {
+      await sourceThread.abortAndWait();
+    }
 
-    const msg: ForkThreadMsg = {
-      type: "thread-forked",
-      threadId: thread.id,
+    const newThreadId = uuidv7() as ThreadId;
+
+    // Clone the agent with dispatch pointing to the new thread
+    const clonedAgent = sourceAgent.clone((msg) =>
+      this.context.dispatch({
+        type: "thread-msg",
+        id: newThreadId,
+        msg: { type: "agent-msg", msg },
+      }),
+    );
+
+    // Create the new thread with the cloned agent
+    this.threadWrappers[newThreadId] = {
+      state: "pending",
+      parentThreadId: undefined,
     };
 
-    this.context.dispatch({
-      type: "thread-msg",
-      id: sourceThread.id,
-      msg: {
-        type: "tool-manager-msg",
-        msg: {
-          type: "tool-msg",
-          msg: {
-            id: toolRequestId,
-            toolName: "fork_thread" as ToolName,
-            msg: msg as unknown as ToolMsg,
-          },
+    const [contextManager, systemPrompt] = await Promise.all([
+      ContextManager.create(
+        (msg) =>
+          this.context.dispatch({
+            type: "thread-msg",
+            id: newThreadId,
+            msg: {
+              type: "context-manager-msg",
+              msg,
+            },
+          }),
+        {
+          dispatch: this.context.dispatch,
+          bufferTracker: this.context.bufferTracker,
+          cwd: this.context.cwd,
+          nvim: this.context.nvim,
+          options: this.context.options,
         },
+      ),
+      createSystemPrompt("root", {
+        nvim: this.context.nvim,
+        cwd: this.context.cwd,
+        options: this.context.options,
+      }),
+    ]);
+
+    // Copy context files from source thread
+    for (const [absFilePath, fileContext] of Object.entries(
+      sourceThread.contextManager.files,
+    )) {
+      contextManager.update({
+        type: "add-file-context",
+        absFilePath: absFilePath as AbsFilePath,
+        relFilePath: fileContext.relFilePath,
+        fileTypeInfo: fileContext.fileTypeInfo,
+      });
+    }
+
+    const thread = new Thread(
+      newThreadId,
+      "root",
+      systemPrompt,
+      {
+        ...this.context,
+        contextManager,
+        mcpToolManager: this.mcpToolManager,
+        profile: sourceThread.state.profile,
+        chat: this,
+      },
+      clonedAgent,
+    );
+
+    this.context.dispatch({
+      type: "chat-msg",
+      msg: {
+        type: "thread-initialized",
+        thread,
       },
     });
+
+    this.context.dispatch({
+      type: "chat-msg",
+      msg: {
+        type: "select-thread",
+        id: newThreadId,
+      },
+    });
+
+    // Send the stripped messages to the new thread
+    if (strippedMessages.length > 0) {
+      this.context.dispatch({
+        type: "thread-msg",
+        id: newThreadId,
+        msg: {
+          type: "send-message",
+          messages: strippedMessages,
+        },
+      });
+    }
   }
 
   async handleSpawnSubagentThread({
@@ -679,7 +775,7 @@ ${threadViews.map((view) => d`${view}\n`)}`;
     }
 
     const parentThread = parentThreadWrapper.thread;
-    const subagentThreadId = this.threadCounter.get() as ThreadId;
+    const subagentThreadId = uuidv7() as ThreadId;
 
     // Create profile for subagent - use fast model if threadType is "subagent_fast"
     const subagentProfile: Profile =
@@ -709,22 +805,17 @@ ${threadViews.map((view) => d`${view}\n`)}`;
           type: "thread-msg",
           id: parentThreadId,
           msg: {
-            type: "tool-manager-msg",
-            msg: {
-              type: "tool-msg",
-              msg: {
-                id: spawnToolRequestId,
-                toolName: "spawn_foreach" as ToolName,
-                msg: wrapStaticToolMsg({
-                  type: "foreach-subagent-created",
-                  result: {
-                    status: "ok" as const,
-                    value: thread.id,
-                  },
-                  element: foreachElement,
-                }),
+            type: "tool-msg",
+            id: spawnToolRequestId,
+            toolName: "spawn_foreach" as ToolName,
+            msg: wrapStaticToolMsg({
+              type: "foreach-subagent-created",
+              result: {
+                status: "ok" as const,
+                value: thread.id,
               },
-            },
+              element: foreachElement,
+            }),
           },
         });
       } catch (e) {
@@ -732,25 +823,18 @@ ${threadViews.map((view) => d`${view}\n`)}`;
           type: "thread-msg",
           id: parentThreadId,
           msg: {
-            type: "tool-manager-msg",
-            msg: {
-              type: "tool-msg",
-              msg: {
-                id: spawnToolRequestId,
-                toolName: "spawn_foreach" as ToolName,
-                msg: wrapStaticToolMsg({
-                  type: "foreach-subagent-created",
-                  result: {
-                    status: "error" as const,
-                    error:
-                      e instanceof Error
-                        ? e.message + "\n" + e.stack
-                        : String(e),
-                  },
-                  element: foreachElement,
-                }),
+            type: "tool-msg",
+            id: spawnToolRequestId,
+            toolName: "spawn_foreach" as ToolName,
+            msg: wrapStaticToolMsg({
+              type: "foreach-subagent-created",
+              result: {
+                status: "error" as const,
+                error:
+                  e instanceof Error ? e.message + "\n" + e.stack : String(e),
               },
-            },
+              element: foreachElement,
+            }),
           },
         });
       }
@@ -770,21 +854,16 @@ ${threadViews.map((view) => d`${view}\n`)}`;
           type: "thread-msg",
           id: parentThreadId,
           msg: {
-            type: "tool-manager-msg",
-            msg: {
-              type: "tool-msg",
-              msg: {
-                id: spawnToolRequestId,
-                toolName: "spawn_subagent" as ToolName,
-                msg: wrapStaticToolMsg({
-                  type: "subagent-created",
-                  result: {
-                    status: "ok" as const,
-                    value: thread.id,
-                  },
-                }),
+            type: "tool-msg",
+            id: spawnToolRequestId,
+            toolName: "spawn_subagent" as ToolName,
+            msg: wrapStaticToolMsg({
+              type: "subagent-created",
+              result: {
+                status: "ok" as const,
+                value: thread.id,
               },
-            },
+            }),
           },
         });
       } catch (e) {
@@ -792,24 +871,17 @@ ${threadViews.map((view) => d`${view}\n`)}`;
           type: "thread-msg",
           id: parentThreadId,
           msg: {
-            type: "tool-manager-msg",
-            msg: {
-              type: "tool-msg",
-              msg: {
-                id: spawnToolRequestId,
-                toolName: "spawn_subagent" as ToolName,
-                msg: wrapStaticToolMsg({
-                  type: "subagent-created",
-                  result: {
-                    status: "error" as const,
-                    error:
-                      e instanceof Error
-                        ? e.message + "\n" + e.stack
-                        : String(e),
-                  },
-                }),
+            type: "tool-msg",
+            id: spawnToolRequestId,
+            toolName: "spawn_subagent" as ToolName,
+            msg: wrapStaticToolMsg({
+              type: "subagent-created",
+              result: {
+                status: "error" as const,
+                error:
+                  e instanceof Error ? e.message + "\n" + e.stack : String(e),
               },
-            },
+            }),
           },
         });
       }
@@ -841,47 +913,47 @@ ${threadViews.map((view) => d`${view}\n`)}`;
 
       case "initialized": {
         const thread = threadWrapper.thread;
-        const conversation = thread.state.conversation;
+        const mode = thread.state.mode;
+        const agentStatus = thread.agent.getState().status;
 
-        switch (conversation.state) {
-          case "yielded":
-            return {
-              status: "done",
-              result: {
-                status: "ok",
-                value: conversation.response,
-              },
-            };
-
-          case "error":
-            return {
-              status: "done",
-              result: {
-                status: "error",
-                error: conversation.error.message,
-              },
-            };
-
-          case "stopped":
-            if (conversation.stopReason === "aborted") {
-              return {
-                status: "done",
-                result: {
-                  status: "error",
-                  error: "Thread was aborted",
-                },
-              };
-            }
-
-            // If stopped normally but not yielded, consider it pending
-            return { status: "pending" };
-
-          case "message-in-flight":
-            return { status: "pending" };
-
-          default:
-            return assertUnreachable(conversation);
+        // Check for yielded state first
+        if (mode.type === "control_flow" && mode.operation.type === "yield") {
+          return {
+            status: "done",
+            result: {
+              status: "ok",
+              value: mode.operation.response,
+            },
+          };
         }
+
+        // Check for error state
+        if (agentStatus.type === "error") {
+          return {
+            status: "done",
+            result: {
+              status: "error",
+              error: agentStatus.error.message,
+            },
+          };
+        }
+
+        // Check for aborted state
+        if (
+          agentStatus.type === "stopped" &&
+          agentStatus.stopReason === "aborted"
+        ) {
+          return {
+            status: "done",
+            result: {
+              status: "error",
+              error: "Thread was aborted",
+            },
+          };
+        }
+
+        // All other states are considered pending
+        return { status: "pending" };
       }
 
       default:
@@ -922,38 +994,62 @@ ${threadViews.map((view) => d`${view}\n`)}`;
 
       case "initialized": {
         const thread = threadWrapper.thread;
-        const conversation = thread.state.conversation;
+        const mode = thread.state.mode;
+        const agentStatus = thread.agent.getState().status;
 
         const summary = {
           title: thread.state.title,
           status: (() => {
-            switch (conversation.state) {
-              case "yielded":
-                return {
-                  type: "yielded" as const,
-                  response: conversation.response,
-                };
+            // Check mode for thread-specific states first
+            if (
+              mode.type === "control_flow" &&
+              mode.operation.type === "yield"
+            ) {
+              return {
+                type: "yielded" as const,
+                response: mode.operation.response,
+              };
+            }
 
+            if (mode.type === "tool_use") {
+              return {
+                type: "running" as const,
+                activity: "executing tools",
+              };
+            }
+
+            if (
+              mode.type === "control_flow" &&
+              mode.operation.type === "compact"
+            ) {
+              return {
+                type: "running" as const,
+                activity: "compacting thread",
+              };
+            }
+
+            // Then check agent status
+            switch (agentStatus.type) {
               case "error":
                 return {
                   type: "error" as const,
-                  message: conversation.error.message,
+                  message: agentStatus.error.message,
                 };
 
               case "stopped":
                 return {
                   type: "stopped" as const,
-                  reason: conversation.stopReason,
+                  reason: agentStatus.stopReason,
                 };
 
-              case "message-in-flight":
+              case "streaming":
                 return {
                   type: "running" as const,
                   activity: "streaming response",
                 };
 
               default:
-                return assertUnreachable(conversation);
+                return assertUnreachable(agentStatus);
             }
           })(),
         };
@@ -978,70 +1074,51 @@ ${threadViews.map((view) => d`${view}\n`)}`;
     const parentThreadWrapper = this.threadWrappers[parentThreadId];
     if (parentThreadWrapper && parentThreadWrapper.state === "initialized") {
       const parentThread = parentThreadWrapper.thread;
+      const mode = parentThread.state.mode;
 
-      const lastMessage =
-        parentThread.state.messages[parentThread.state.messages.length - 1];
-      if (!lastMessage || lastMessage.state.role !== "assistant") {
+      if (mode.type !== "tool_use") {
         return;
       }
 
-      for (const content of lastMessage.state.content) {
-        if (content.type === "tool_use" && content.request.status === "ok") {
-          const request = content.request.value;
-          if (request.toolName === "wait_for_subagents") {
-            const tool = parentThread.toolManager.getTool(
-              request.id,
-            ) as unknown as WaitForSubagentsTool;
-            if (tool && tool.state.state === "waiting") {
-              setTimeout(() => {
-                this.context.dispatch({
-                  type: "thread-msg",
-                  id: parentThread.id,
-                  msg: {
-                    type: "tool-manager-msg",
-                    msg: {
-                      type: "tool-msg",
-                      msg: {
-                        id: tool.request.id,
-                        toolName: "wait_for_subagents" as ToolName,
-                        msg: wrapStaticToolMsg({
-                          type: "check-threads",
-                        }),
-                      },
-                    },
-                  },
-                });
-              });
-            }
-          } else if (request.toolName === "spawn_foreach") {
-            // Handle foreach completion - notify parent that this thread has completed
-            const tool = parentThread.toolManager.getTool(
-              request.id,
-            ) as unknown as SpawnForeachTool;
-            if (tool && tool.state.state == "running") {
-              setTimeout(() => {
-                this.context.dispatch({
-                  type: "thread-msg",
-                  id: parentThread.id,
-                  msg: {
-                    type: "tool-manager-msg",
-                    msg: {
-                      type: "tool-msg",
-                      msg: {
-                        id: tool.request.id,
-                        toolName: "spawn_foreach" as ToolName,
-                        msg: wrapStaticToolMsg({
-                          type: "subagent-completed",
-                          threadId,
-                          result,
-                        }),
-                      },
-                    },
-                  },
-                });
-              });
-            }
-          }
+      for (const [, tool] of mode.activeTools) {
+        if (
+          tool.toolName === "wait_for_subagents" &&
+          (tool as WaitForSubagentsTool).state.state === "waiting"
+        ) {
+          setTimeout(() => {
+            this.context.dispatch({
+              type: "thread-msg",
+              id: parentThread.id,
+              msg: {
+                type: "tool-msg",
+                id: tool.request.id,
+                toolName: "wait_for_subagents" as ToolName,
+                msg: wrapStaticToolMsg({
+                  type: "check-threads",
+                }),
+              },
+            });
+          });
+        } else if (
+          tool.toolName === "spawn_foreach" &&
+          (tool as SpawnForeachTool).state.state === "running"
+        ) {
+          setTimeout(() => {
+            this.context.dispatch({
+              type: "thread-msg",
+              id: parentThread.id,
+              msg: {
+                type: "tool-msg",
+                id: tool.request.id,
+                toolName: "spawn_foreach" as ToolName,
+                msg: wrapStaticToolMsg({
+                  type: "subagent-completed",
+                  threadId,
+                  result,
+                }),
+              },
+            });
+          });
         }
       }
     }

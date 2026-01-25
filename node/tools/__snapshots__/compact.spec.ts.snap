@@ -1,0 +1,129 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`agent-initiated compact with continuation 1`] = `
+[
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Greeting exchange",
+        "type": "text",
+      },
+      {
+        "citations": undefined,
+        "text": "Hi there",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Compact and continue",
+        "type": "text",
+      },
+      {
+        "id": "000001",
+        "type": "checkpoint",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Compacting",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Now let me continue with the next task.",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+]
+`;
+
+exports[`agent-initiated compact without continuation 1`] = `
+[
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Greeting exchange",
+        "type": "text",
+      },
+      {
+        "citations": undefined,
+        "text": "Hi there",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Compact please",
+        "type": "text",
+      },
+      {
+        "id": "000001",
+        "type": "checkpoint",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Compacting",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`user-initiated @compact removes compact request and appends next prompt 1`] = `
+[
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "User greeted and asked about TypeScript",
+        "type": "text",
+      },
+      {
+        "citations": undefined,
+        "text": "TypeScript is a typed superset of JavaScript.",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Now help me with Python",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+]
+`;

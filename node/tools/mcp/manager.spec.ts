@@ -41,7 +41,7 @@ it("should call mock tool through chat agent", async () => {
       await driver.send();
 
       const request =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Use echo_test tool",
         );
 
@@ -76,7 +76,7 @@ it("should call mock tool through chat agent", async () => {
 
       // Continue the conversation to show the tool result was processed
       const followupRequest =
-        await driver.mockAnthropic.awaitPendingRequestWithText(
+        await driver.mockAnthropic.awaitPendingStreamWithText(
           "Echo: Hello World",
         );
       followupRequest.streamText("Great! The echo tool worked perfectly.");
@@ -122,7 +122,7 @@ it("should handle tool errors gracefully", async () => {
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequestWithText(
+      const request = await driver.mockAnthropic.awaitPendingStreamWithText(
         "Use error_test tool",
       );
 
@@ -155,7 +155,7 @@ it("should handle tool errors gracefully", async () => {
       );
 
       // Continue conversation to show error was handled
-      await driver.mockAnthropic.awaitPendingRequestWithText(
+      await driver.mockAnthropic.awaitPendingStreamWithText(
         "Error: Simulated tool error",
       );
     },
@@ -190,7 +190,7 @@ it("should handle tools with no input schema", async () => {
       await driver.inputMagentaText("Use the simple_test tool");
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequestWithText(
+      const request = await driver.mockAnthropic.awaitPendingStreamWithText(
         "Use the simple_test tool",
       );
 

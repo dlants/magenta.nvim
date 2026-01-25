@@ -43,15 +43,13 @@ test("prediction after making edits", async () => {
     // Verify the system prompt contains general instructions
     expect(request.systemPrompt).toBeDefined();
 
-    // Verify the user message contains the specific context
-    expect(request.messages).toHaveLength(1);
-    expect(request.messages[0].role).toBe("user");
-    expect(request.messages[0].content).toHaveLength(1);
+    // Verify the input contains the specific context
+    expect(request.input).toHaveLength(1);
 
-    const userMessage = request.messages[0].content[0];
-    expect(userMessage.type).toBe("text");
+    const userInput = request.input[0];
+    expect(userInput.type).toBe("text");
 
-    const text = userMessage.type === "text" ? userMessage.text : "";
+    const text = userInput.type === "text" ? userInput.text : "";
 
     // Should contain buffer content around cursor with cursor marker
     expect(text).toMatchSnapshot();
@@ -244,7 +242,7 @@ test("state management through prediction lifecycle", async () => {
 
     // Mock a successful response
     await driver.mockAnthropic.respondToForceToolUse({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       toolRequest: {
         status: "ok",
         value: {
@@ -297,7 +295,7 @@ test("error handling during prediction", async () => {
 
     // Mock an error response
     await driver.mockAnthropic.respondToForceToolUse({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       toolRequest: {
         status: "error",
         error: "Network timeout",
@@ -498,7 +496,7 @@ test("virtual text preview shows predicted edits", async () => {
     // Mock a response with a simple replacement
     await driver.mockAnthropic.awaitPendingForceToolUseRequest();
     await driver.mockAnthropic.respondToForceToolUse({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       toolRequest: {
         status: "ok",
         value: {
@@ -549,7 +547,7 @@ test("prediction accepted applies edits", async () => {
     // Mock response with a replacement
     await driver.mockAnthropic.awaitPendingForceToolUseRequest();
     await driver.mockAnthropic.respondToForceToolUse({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       toolRequest: {
         status: "ok",
         value: {
@@ -612,7 +610,7 @@ test("prediction dismissed clears virtual text", async () => {
     // Mock response
     await driver.mockAnthropic.awaitPendingForceToolUseRequest();
     await driver.mockAnthropic.respondToForceToolUse({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       toolRequest: {
         status: "ok",
         value: {
@@ -661,7 +659,7 @@ test("prediction dismissed by ESC key in normal mode", async () => {
     // Mock response
     await driver.mockAnthropic.awaitPendingForceToolUseRequest();
     await driver.mockAnthropic.respondToForceToolUse({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       toolRequest: {
         status: "ok",
         value: {
@@ -696,7 +694,7 @@ test("buffer changes auto-dismiss predictions", async () => {
     // Mock response
     await driver.mockAnthropic.awaitPendingForceToolUseRequest();
     await driver.mockAnthropic.respondToForceToolUse({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       toolRequest: {
         status: "ok",
         value: {
@@ -781,7 +779,7 @@ function processConfig() {
     // - Replaces with a flattened structure spanning different number of lines
     await driver.mockAnthropic.awaitPendingForceToolUseRequest();
     await driver.mockAnthropic.respondToForceToolUse({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       toolRequest: {
         status: "ok",
         value: {
@@ -997,7 +995,7 @@ function processConfig() {
     // - Replaces with a flattened structure spanning different number of lines
     await driver.mockAnthropic.awaitPendingForceToolUseRequest();
     await driver.mockAnthropic.respondToForceToolUse({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       toolRequest: {
         status: "ok",
         value: {

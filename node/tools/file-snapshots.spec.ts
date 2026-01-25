@@ -4,7 +4,6 @@ import { FileSnapshots } from "./file-snapshots";
 import * as path from "path";
 import * as fs from "node:fs";
 import { getcwd } from "../nvim/nvim";
-import type { MessageId } from "../chat/message.ts";
 import type { AbsFilePath, UnresolvedFilePath } from "../utils/files.ts";
 
 describe("FileSnapshots", () => {
@@ -16,19 +15,15 @@ describe("FileSnapshots", () => {
       fs.writeFileSync(filePath, fileContent);
 
       const fileSnapshots = new FileSnapshots(driver.nvim, cwd);
-      const messageId = 1 as MessageId;
+      const turn = fileSnapshots.startNewTurn();
 
       const result = await fileSnapshots.willEditFile(
         filePath as UnresolvedFilePath,
-        messageId,
       );
 
       expect(result).toBe(true);
 
-      const snapshot = fileSnapshots.getSnapshot(
-        filePath as AbsFilePath,
-        messageId,
-      );
+      const snapshot = fileSnapshots.getSnapshot(filePath as AbsFilePath, turn);
       expect(snapshot).toBeDefined();
       expect(snapshot?.content).toEqual(fileContent);
     });
@@ -40,25 +35,24 @@ describe("FileSnapshots", () => {
       const nonExistentPath = path.join(cwd, "non-existent.txt");
 
       const fileSnapshots = new FileSnapshots(driver.nvim, cwd);
-      const messageId = 2 as MessageId;
+      const turn = fileSnapshots.startNewTurn();
 
       const result = await fileSnapshots.willEditFile(
         nonExistentPath as UnresolvedFilePath,
-        messageId,
       );
 
       expect(result).toBe(true);
 
       const snapshot = fileSnapshots.getSnapshot(
         nonExistentPath as AbsFilePath,
-        messageId,
+        turn,
       );
       expect(snapshot).toBeDefined();
       expect(snapshot?.content).toEqual("");
     });
   });
 
-  it("should not create a duplicate snapshot for the same file and message", async () => {
+  it("should not create a duplicate snapshot for the same file in the same turn", async () => {
     await withDriver({}, async (driver) => {
       const cwd = await getcwd(driver.nvim);
       const filePath = path.join(cwd, "duplicate-test.txt");
@@ -66,65 +60,57 @@ describe("FileSnapshots", () => {
       fs.writeFileSync(filePath, fileContent);
 
       const fileSnapshots = new FileSnapshots(driver.nvim, cwd);
-      const messageId = 3 as MessageId;
+      const turn = fileSnapshots.startNewTurn();
 
       // First snapshot
       const firstResult = await fileSnapshots.willEditFile(
         filePath as UnresolvedFilePath,
-        messageId,
       );
       expect(firstResult).toBe(true);
 
       // Change the file
       fs.writeFileSync(filePath, "Modified content");
 
-      // Try to create another snapshot
+      // Try to create another snapshot in the same turn
       const secondResult = await fileSnapshots.willEditFile(
         filePath as UnresolvedFilePath,
-        messageId,
       );
       expect(secondResult).toBe(false);
 
       // Verify it's still the original snapshot
-      const snapshot = fileSnapshots.getSnapshot(
-        filePath as AbsFilePath,
-        messageId,
-      );
+      const snapshot = fileSnapshots.getSnapshot(filePath as AbsFilePath, turn);
       expect(snapshot?.content).toEqual(fileContent);
     });
   });
 
-  it("should create different snapshots for different messages", async () => {
+  it("should create different snapshots for different turns", async () => {
     await withDriver({}, async (driver) => {
       const cwd = await getcwd(driver.nvim);
-      const filePath = path.join(cwd, "multiple-messages.txt");
+      const filePath = path.join(cwd, "multiple-turns.txt");
       const initialContent = "Initial content";
       fs.writeFileSync(filePath, initialContent);
 
       const fileSnapshots = new FileSnapshots(driver.nvim, cwd);
-      const messageId1 = 4 as MessageId;
-      await fileSnapshots.willEditFile(
-        filePath as UnresolvedFilePath,
-        messageId1,
-      );
+
+      // First turn
+      const turn1 = fileSnapshots.startNewTurn();
+      await fileSnapshots.willEditFile(filePath as UnresolvedFilePath);
 
       // Change file
       const updatedContent = "Updated content";
       fs.writeFileSync(filePath, updatedContent);
 
-      const messageId2 = 5 as MessageId;
-      await fileSnapshots.willEditFile(
-        filePath as UnresolvedFilePath,
-        messageId2,
-      );
+      // Second turn
+      const turn2 = fileSnapshots.startNewTurn();
+      await fileSnapshots.willEditFile(filePath as UnresolvedFilePath);
 
       const snapshot1 = fileSnapshots.getSnapshot(
         filePath as AbsFilePath,
-        messageId1,
+        turn1,
       );
       const snapshot2 = fileSnapshots.getSnapshot(
         filePath as AbsFilePath,
-        messageId2,
+        turn2,
       );
 
       expect(snapshot1?.content).toEqual(initialContent);
@@ -142,29 +128,32 @@ describe("FileSnapshots", () => {
       fs.writeFileSync(file2, "File 2 content");
 
       const fileSnapshots = new FileSnapshots(driver.nvim, cwd);
-      const messageId1 = 6 as MessageId;
-      const messageId2 = 7 as MessageId;
 
-      await fileSnapshots.willEditFile(file1 as UnresolvedFilePath, messageId1);
-      await fileSnapshots.willEditFile(file2 as UnresolvedFilePath, messageId1);
-      await fileSnapshots.willEditFile(file1 as UnresolvedFilePath, messageId2);
+      // First turn
+      const turn1 = fileSnapshots.startNewTurn();
+      await fileSnapshots.willEditFile(file1 as UnresolvedFilePath);
+      await fileSnapshots.willEditFile(file2 as UnresolvedFilePath);
+
+      // Second turn
+      const turn2 = fileSnapshots.startNewTurn();
+      await fileSnapshots.willEditFile(file1 as UnresolvedFilePath);
 
       // Clear all snapshots
       fileSnapshots.clearSnapshots();
 
       expect(
-        fileSnapshots.getSnapshot(file1 as AbsFilePath, messageId1),
+        fileSnapshots.getSnapshot(file1 as AbsFilePath, turn1),
       ).toBeUndefined();
       expect(
-        fileSnapshots.getSnapshot(file2 as AbsFilePath, messageId1),
+        fileSnapshots.getSnapshot(file2 as AbsFilePath, turn1),
       ).toBeUndefined();
       expect(
-        fileSnapshots.getSnapshot(file1 as AbsFilePath, messageId2),
+        fileSnapshots.getSnapshot(file1 as AbsFilePath, turn2),
       ).toBeUndefined();
     });
   });
 
-  it("should clear only snapshots for a specific message", async () => {
+  it("should clear only snapshots for a specific turn", async () => {
     await withDriver({}, async (driver) => {
       const cwd = await getcwd(driver.nvim);
       const file1 = path.join(cwd, "file1.txt");
@@ -174,24 +163,27 @@ describe("FileSnapshots", () => {
       fs.writeFileSync(file2, "File 2 content");
 
       const fileSnapshots = new FileSnapshots(driver.nvim, cwd);
-      const messageId1 = 8 as MessageId;
-      const messageId2 = 9 as MessageId;
 
-      await fileSnapshots.willEditFile(file1 as UnresolvedFilePath, messageId1);
-      await fileSnapshots.willEditFile(file2 as UnresolvedFilePath, messageId1);
-      await fileSnapshots.willEditFile(file1 as UnresolvedFilePath, messageId2);
+      // First turn
+      const turn1 = fileSnapshots.startNewTurn();
+      await fileSnapshots.willEditFile(file1 as UnresolvedFilePath);
+      await fileSnapshots.willEditFile(file2 as UnresolvedFilePath);
 
-      // Clear only messageId1 snapshots
-      fileSnapshots.clearSnapshots(messageId1);
+      // Second turn
+      const turn2 = fileSnapshots.startNewTurn();
+      await fileSnapshots.willEditFile(file1 as UnresolvedFilePath);
+
+      // Clear only turn1 snapshots
+      fileSnapshots.clearSnapshots(turn1);
 
       expect(
-        fileSnapshots.getSnapshot(file1 as AbsFilePath, messageId1),
+        fileSnapshots.getSnapshot(file1 as AbsFilePath, turn1),
       ).toBeUndefined();
       expect(
-        fileSnapshots.getSnapshot(file2 as AbsFilePath, messageId1),
+        fileSnapshots.getSnapshot(file2 as AbsFilePath, turn1),
       ).toBeUndefined();
       expect(
-        fileSnapshots.getSnapshot(file1 as AbsFilePath, messageId2),
+        fileSnapshots.getSnapshot(file1 as AbsFilePath, turn2),
       ).toBeDefined();
     });
   });
@@ -209,24 +201,37 @@ describe("FileSnapshots", () => {
 
       // Create FileSnapshots instance
       const fileSnapshots = new FileSnapshots(driver.nvim, cwd);
-      const messageId = 10 as MessageId;
+      const turn = fileSnapshots.startNewTurn();
 
       // Create snapshot - should use buffer content, not file content
-      await fileSnapshots.willEditFile(
-        filePath as UnresolvedFilePath,
-        messageId,
-      );
+      await fileSnapshots.willEditFile(filePath as UnresolvedFilePath);
 
-      const snapshot = fileSnapshots.getSnapshot(
-        filePath as AbsFilePath,
-        messageId,
-      );
+      const snapshot = fileSnapshots.getSnapshot(filePath as AbsFilePath, turn);
       expect(snapshot).toBeDefined();
       expect(snapshot?.content).toEqual("Buffer content that is different");
 
       // Verify the file on disk still has the original content
       const diskContent = fs.readFileSync(filePath, "utf-8");
       expect(diskContent).toEqual(fileContent);
+    });
+  });
+
+  it("should use current turn when getting snapshot without specifying turn", async () => {
+    await withDriver({}, async (driver) => {
+      const cwd = await getcwd(driver.nvim);
+      const filePath = path.join(cwd, "current-turn-test.txt");
+      const fileContent = "Test content";
+      fs.writeFileSync(filePath, fileContent);
+
+      const fileSnapshots = new FileSnapshots(driver.nvim, cwd);
+      fileSnapshots.startNewTurn();
+
+      await fileSnapshots.willEditFile(filePath as UnresolvedFilePath);
+
+      // Get snapshot without specifying turn - should use current turn
+      const snapshot = fileSnapshots.getSnapshot(filePath as AbsFilePath);
+      expect(snapshot).toBeDefined();
+      expect(snapshot?.content).toEqual(fileContent);
     });
   });
 });

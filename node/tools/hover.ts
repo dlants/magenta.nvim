@@ -1,5 +1,6 @@
-import { d, withInlineCode } from "../tea/view.ts";
+import { d, withInlineCode, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
+import type { CompletedToolInfo } from "./types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { getOrOpenBuffer } from "../utils/buffers.ts";
 import type { NvimBuffer } from "../nvim/buffer.ts";
@@ -7,15 +8,16 @@ import type { Nvim } from "../nvim/nvim-node";
 import type { Lsp, LspDefinitionResponse, LspRange } from "../lsp.ts";
 import { calculateStringPosition } from "../tea/util.ts";
 import type { PositionString, Row0Indexed, StringIdx } from "../nvim/window.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { NvimCwd, UnresolvedFilePath } from "../utils/files.ts";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { GenericToolRequest, StaticTool, ToolName } from "./types.ts";
 import path from "path";
+
+export type ToolRequest = GenericToolRequest<"hover", Input>;
 
 export type State =
   | {
@@ -34,9 +36,10 @@ export type Msg = {
 export class HoverTool implements StaticTool {
   state: State;
   toolName = "hover" as const;
+  aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "hover" }>,
+    public request: ToolRequest,
     public context: {
       nvim: Nvim;
       cwd: NvimCwd;
@@ -81,18 +84,28 @@ export class HoverTool implements StaticTool {
     return false;
   }
 
-  abort() {
-    this.state = {
-      state: "done",
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: {
-          status: "error",
-          error: `The user aborted this request.`,
-        },
+        status: "error",
+        error: "Request was aborted by the user.",
       },
     };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   async requestHover() {
@@ -114,6 +127,7 @@ export class HoverTool implements StaticTool {
       ).join("\n");
       buffer = bufferResult.buffer;
     } else {
+      if (this.aborted) return;
       this.context.myDispatch({
         type: "finish",
         result: {
@@ -131,6 +145,7 @@ export class HoverTool implements StaticTool {
       // If context is provided, find the context first
       const contextIndex = bufferContent.indexOf(this.request.input.context);
       if (contextIndex === -1) {
+        if (this.aborted) return;
         this.context.myDispatch({
           type: "finish",
           result: {
@@ -151,6 +166,7 @@ export class HoverTool implements StaticTool {
       );
       const match = contextContent.match(symbolRegex);
       if (!match || match.index === undefined) {
+        if (this.aborted) return;
         this.context.myDispatch({
           type: "finish",
           result: {
@@ -168,6 +184,7 @@ export class HoverTool implements StaticTool {
       );
       const match = bufferContent.match(symbolRegex);
       if (!match || match.index === undefined) {
+        if (this.aborted) return;
         this.context.myDispatch({
           type: "finish",
           result: {
@@ -282,6 +299,7 @@ export class HoverTool implements StaticTool {
         }
       }
 
+      if (this.aborted) return;
       this.context.myDispatch({
         type: "finish",
         result: {
@@ -290,6 +308,7 @@ export class HoverTool implements StaticTool {
         },
       });
     } catch (error) {
+      if (this.aborted) return;
       this.context.myDispatch({
         type: "finish",
         result: {
@@ -323,17 +342,22 @@ export class HoverTool implements StaticTool {
   renderSummary() {
     switch (this.state.state) {
       case "processing":
-        return d`ℹ️⚙️ ${withInlineCode(d`\`${this.request.input.symbol}\``)} in ${withInlineCode(d`\`${this.request.input.filePath}\``)}`;
+        return d`🔍⚙️ hover ${withInlineCode(d`\`${this.request.input.symbol}\``)} in ${withInlineCode(d`\`${this.request.input.filePath}\``)}`;
       case "done":
-        if (this.state.result.result.status === "error") {
-          return d`ℹ️❌ ${withInlineCode(d`\`${this.request.input.symbol}\``)} in ${withInlineCode(d`\`${this.request.input.filePath}\``)}`;
-        } else {
-          return d`ℹ️✅ ${withInlineCode(d`\`${this.request.input.symbol}\``)} in ${withInlineCode(d`\`${this.request.input.filePath}\``)}`;
-        }
+        return renderCompletedSummary({
+          request: this.request as CompletedToolInfo["request"],
+          result: this.state.result,
+        });
       default:
         assertUnreachable(this.state);
     }
   }
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const input = info.request.input as Input;
+  const status = info.result.result.status === "error" ? "❌" : "✅";
+  return d`🔍${status} hover ${withInlineCode(d`\`${input.symbol}\``)} in ${withInlineCode(d`\`${input.filePath}\``)}`;
 }
 
 export const spec: ProviderToolSpec = {

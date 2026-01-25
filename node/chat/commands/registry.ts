@@ -1,6 +1,7 @@
 import type { Command, MessageContext } from "./types.ts";
 import type { ProviderMessageContent } from "../../providers/provider-types.ts";
 import { forkCommand } from "./fork.ts";
+import { compactCommand } from "./compact.ts";
 import { fileCommand } from "./file.ts";
 import { diffCommand, stagedCommand } from "./diff.ts";
 import { diagCommand, diagnosticsCommand } from "./diagnostics.ts";
@@ -19,6 +20,7 @@ export class CommandRegistry {
   private registerBuiltinCommands(): void {
     const builtinCommands: Command[] = [
       forkCommand,
+      compactCommand,
       fileCommand,
       diffCommand,
       stagedCommand,

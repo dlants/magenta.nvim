@@ -10,16 +10,17 @@ import * as BashCommand from "./bashCommand";
 import * as ReplaceSelection from "./replace-selection-tool";
 import * as InlineEdit from "./inline-edit-tool";
 import * as ThreadTitle from "./thread-title";
-import * as ForkThread from "./fork-thread";
 import * as SpawnSubagent from "./spawn-subagent";
 import * as SpawnForeach from "./spawn-foreach";
 import * as WaitForSubagents from "./wait-for-subagents";
 import * as YieldToParent from "./yield-to-parent";
 import * as PredictEdit from "./predict-edit";
-import type { StreamingBlock } from "../providers/helpers";
+import * as Compact from "./compact";
+import * as SearchPkb from "./searchPkb";
 import { d, type VDOMNode } from "../tea/view";
 import type { StaticToolName } from "./tool-registry";
 import { assertUnreachable } from "../utils/assertUnreachable";
+import type { AgentStreamingBlock } from "../providers/provider-types";
 
 export function validateInput(
   toolName: unknown,
@@ -58,8 +59,6 @@ export function validateInput(
       return ReplaceSelection.validateInput(input);
     case "thread_title":
       return ThreadTitle.validateInput(input);
-    case "fork_thread":
-      return ForkThread.validateInput(input);
     case "spawn_foreach":
       return SpawnForeach.validateInput(input);
     case "spawn_subagent":
@@ -70,13 +69,17 @@ export function validateInput(
       return YieldToParent.validateInput(input);
     case "predict_edit":
       return PredictEdit.validateInput(input);
+    case "compact":
+      return Compact.validateInput(input);
+    case "search_pkb":
+      return SearchPkb.validateInput(input);
     default:
       throw new Error(`Unexpected toolName: ${toolName as string}`);
   }
 }
 
 export function renderStreamdedTool(
-  streamingBlock: Extract<StreamingBlock, { type: "tool_use" }>,
+  streamingBlock: Extract<AgentStreamingBlock, { type: "tool_use" }>,
 ): string | VDOMNode {
   if (streamingBlock.name.startsWith("mcp_")) {
     return d`Invoking mcp tool ${streamingBlock.name}`;
@@ -87,9 +90,9 @@ export function renderStreamdedTool(
     case "get_file":
       break;
     case "insert":
-      return Insert.renderStreamedBlock(streamingBlock.streamed);
+      return Insert.renderStreamedBlock(streamingBlock.inputJson);
     case "replace":
-      return Replace.renderStreamedBlock(streamingBlock.streamed);
+      return Replace.renderStreamedBlock(streamingBlock.inputJson);
     case "list_directory":
     case "hover":
     case "find_references":
@@ -98,16 +101,17 @@ export function renderStreamdedTool(
     case "inline_edit":
     case "replace_selection":
     case "thread_title":
-    case "fork_thread":
     case "spawn_subagent":
     case "wait_for_subagents":
     case "yield_to_parent":
     case "spawn_foreach":
     case "predict_edit":
+    case "compact":
+    case "search_pkb":
       break;
     default:
       assertUnreachable(name);
   }
 
-  return d`Invoking tool ${streamingBlock.name}`;
+  return d`Invoking tool ${streamingBlock.name}\n`;
 }

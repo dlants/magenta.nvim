@@ -1,8 +1,13 @@
 import { getBufferIfOpen } from "../utils/buffers.ts";
 import fs from "fs";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { d, withBindings, withInlineCode, withExtmark } from "../tea/view.ts";
-import { type StaticToolRequest } from "./toolManager.ts";
+import {
+  d,
+  withBindings,
+  withInlineCode,
+  withExtmark,
+  type VDOMNode,
+} from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import type {
@@ -19,7 +24,7 @@ import {
   FileCategory,
   type NvimCwd,
 } from "../utils/files.ts";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
 import type { ContextManager } from "../context/context-manager.ts";
 import type { ProviderToolResultContent } from "../providers/provider-types.ts";
@@ -31,6 +36,14 @@ import type { MagentaOptions } from "../options.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
 import { canReadFile } from "./permissions.ts";
 import type { Gitignore } from "./util.ts";
+import { getTreeSitterMinimap, formatMinimap } from "../utils/treesitter.ts";
+import type { CompletedToolInfo } from "./types.ts";
+
+export type ToolRequest = GenericToolRequest<"get_file", Input>;
+
+const MAX_FILE_CHARACTERS = 40000;
+const MAX_LINE_CHARACTERS = 2000;
+const DEFAULT_LINES_FOR_LARGE_FILE = 100;
 
 export type State =
   | {
@@ -67,9 +80,10 @@ export type Msg =
 export class GetFileTool implements StaticTool {
   state: State;
   toolName = "get_file" as const;
+  aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "get_file" }>,
+    public request: ToolRequest,
     public context: {
       nvim: Nvim;
       cwd: NvimCwd;
@@ -106,17 +120,28 @@ export class GetFileTool implements StaticTool {
     return this.state.state === "pending-user-action";
   }
 
-  /** this is expected to be invoked as part of a dispatch, so we don't need to dispatch here to update the view
-   */
-  abort() {
-    this.state = {
-      state: "done",
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.state.result;
+    }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: { status: "error", error: `The user aborted this request.` },
+        status: "error",
+        error: "Request was aborted by the user.",
       },
     };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   update(msg: Msg) {
@@ -206,13 +231,20 @@ export class GetFileTool implements StaticTool {
   }
 
   async initReadFile(): Promise<void> {
+    if (this.aborted) return;
+
     const filePath = this.request.input.filePath;
     const absFilePath = resolveFilePath(this.context.cwd, filePath);
+
+    const hasLineParams =
+      this.request.input.startLine !== undefined ||
+      this.request.input.numLines !== undefined;
 
     if (
       this.context.contextManager.files[absFilePath] &&
       !this.request.input.force &&
-      this.request.input.pdfPage === undefined
+      this.request.input.pdfPage === undefined &&
+      !hasLineParams
     ) {
       this.context.myDispatch({
         type: "finish",
@@ -244,6 +276,8 @@ You already have the most up-to-date information about the contents of this file
   }
 
   async readFile() {
+    if (this.aborted) return;
+
     const filePath = this.request.input.filePath;
     const absFilePath = resolveFilePath(this.context.cwd, filePath);
     const relFilePath = relativePath(this.context.cwd, absFilePath);
@@ -296,16 +330,15 @@ You already have the most up-to-date information about the contents of this file
         context: this.context,
       });
 
-      let textContent: string;
+      let lines: string[];
       if (bufferContents.status === "ok") {
-        textContent = (
-          await bufferContents.buffer.getLines({
-            start: 0 as Row0Indexed,
-            end: -1 as Row0Indexed,
-          })
-        ).join("\n");
+        lines = await bufferContents.buffer.getLines({
+          start: 0 as Row0Indexed,
+          end: -1 as Row0Indexed,
+        });
       } else if (bufferContents.status == "not-found") {
-        textContent = await fs.promises.readFile(absFilePath, "utf-8");
+        const rawContent = await fs.promises.readFile(absFilePath, "utf-8");
+        lines = rawContent.split("\n");
       } else {
         this.context.myDispatch({
           type: "finish",
@@ -317,23 +350,67 @@ You already have the most up-to-date information about the contents of this file
         return;
       }
 
-      this.context.threadDispatch({
-        type: "context-manager-msg",
-        msg: {
-          type: "tool-applied",
-          absFilePath,
-          tool: {
-            type: "get-file",
-            content: textContent,
+      const totalLines = lines.length;
+      const startLine = this.request.input.startLine ?? 1;
+      const startIndex = startLine - 1;
+
+      if (startIndex >= totalLines) {
+        this.context.myDispatch({
+          type: "finish",
+          result: {
+            status: "error",
+            error: `startLine ${startLine} is beyond end of file (${totalLines} lines)`,
           },
-          fileTypeInfo,
-        },
-      });
+        });
+        return;
+      }
+
+      // For large files, try to generate a tree-sitter minimap
+      const totalChars = lines.reduce((sum, line) => sum + line.length + 1, 0);
+      const isLargeFile =
+        this.request.input.numLines === undefined &&
+        totalChars > MAX_FILE_CHARACTERS;
+
+      let minimapText: string | undefined;
+      if (isLargeFile && startIndex === 0) {
+        const minimapResult = await getTreeSitterMinimap(absFilePath);
+        if (minimapResult.status === "ok") {
+          minimapText = formatMinimap(minimapResult.value);
+        }
+        // If minimap fails, we just proceed without it (graceful fallback)
+      }
+
+      const processedResult = this.processTextContent(
+        lines,
+        startIndex,
+        this.request.input.numLines,
+        minimapText,
+      );
+
+      // Only add to context manager if returning full, unabridged content
+      if (
+        processedResult.isComplete &&
+        !processedResult.hasAbridgedLines &&
+        startIndex === 0
+      ) {
+        this.context.threadDispatch({
+          type: "context-manager-msg",
+          msg: {
+            type: "tool-applied",
+            absFilePath,
+            tool: {
+              type: "get-file",
+              content: lines.join("\n"),
+            },
+            fileTypeInfo,
+          },
+        });
+      }
 
       result = [
         {
           type: "text",
-          text: textContent,
+          text: processedResult.text,
         },
       ];
     } else if (fileTypeInfo.category === FileCategory.PDF) {
@@ -552,13 +629,74 @@ You already have the most up-to-date information about the contents of this file
     }
   }
 
+  private processTextContent(
+    lines: string[],
+    startIndex: number,
+    requestedNumLines: number | undefined,
+    minimapText?: string,
+  ): { text: string; isComplete: boolean; hasAbridgedLines: boolean } {
+    const totalLines = lines.length;
+    const totalChars = lines.reduce((sum, line) => sum + line.length + 1, 0);
+
+    const isLargeFile =
+      requestedNumLines === undefined && totalChars > MAX_FILE_CHARACTERS;
+
+    // If we have a minimap for a large file, just return the minimap
+    if (isLargeFile && minimapText) {
+      return {
+        text: minimapText,
+        isComplete: false,
+        hasAbridgedLines: false,
+      };
+    }
+
+    let hasAbridgedLines = false;
+    const outputLines: string[] = [];
+
+    let effectiveNumLines: number | undefined;
+    if (isLargeFile) {
+      effectiveNumLines = DEFAULT_LINES_FOR_LARGE_FILE;
+    } else {
+      effectiveNumLines = requestedNumLines;
+    }
+
+    const maxLinesToProcess =
+      effectiveNumLines !== undefined
+        ? Math.min(startIndex + effectiveNumLines, totalLines)
+        : totalLines;
+
+    for (let i = startIndex; i < maxLinesToProcess; i++) {
+      let line = lines[i];
+
+      if (line.length > MAX_LINE_CHARACTERS) {
+        const halfMax = Math.floor(MAX_LINE_CHARACTERS / 2);
+        line = `${line.slice(0, halfMax)}... [${line.length - MAX_LINE_CHARACTERS} chars omitted] ...${line.slice(-halfMax)}`;
+        hasAbridgedLines = true;
+      }
+
+      outputLines.push(line);
+    }
+
+    const endIndex = startIndex + outputLines.length;
+    const isComplete =
+      startIndex === 0 && endIndex === totalLines && !hasAbridgedLines;
+
+    let text = outputLines.join("\n");
+
+    if (!isComplete || startIndex > 0 || endIndex < totalLines) {
+      const header = `[Lines ${startIndex + 1}-${endIndex} of ${totalLines}]${hasAbridgedLines ? " (some lines abridged)" : ""}\n\n`;
+      text = header + text;
+
+      if (endIndex < totalLines) {
+        text += `\n\n[${totalLines - endIndex} more lines not shown. Use startLine=${endIndex + 1} to continue.]`;
+      }
+    }
+
+    return { text, isComplete, hasAbridgedLines };
+  }
+
   private formatFileDisplay() {
-    const filePath = this.request.input.filePath;
-    const pageInfo =
-      this.request.input.pdfPage !== undefined
-        ? ` (page ${this.request.input.pdfPage})`
-        : "";
-    return withInlineCode(d`\`${filePath}\`${pageInfo}`);
+    return formatGetFileDisplay(this.request.input);
   }
 
   renderSummary() {
@@ -595,27 +733,70 @@ You already have the most up-to-date information about the contents of this file
         )} │
 └────────────────┘`;
       case "done":
-        if (this.state.result.result.status == "error") {
-          return d`👀❌ ${this.formatFileDisplay()}`;
-        } else {
-          // Count lines in the result
-          let lineCount = 0;
-          if (
-            this.state.result.result.value &&
-            this.state.result.result.value.length > 0
-          ) {
-            const firstValue = this.state.result.result.value[0];
-            if (firstValue.type === "text") {
-              lineCount = firstValue.text.split("\n").length;
-            }
-          }
-          const lineCountStr = lineCount > 0 ? ` [+ ${lineCount}]` : "";
-          return d`👀✅ ${this.formatFileDisplay()}${lineCountStr}`;
-        }
+        return renderCompletedSummary({
+          request: this.request as CompletedToolInfo["request"],
+          result: this.state.result,
+        });
       default:
         assertUnreachable(this.state);
     }
   }
+}
+
+function formatGetFileDisplay(input: Input): VDOMNode {
+  const filePath = input.filePath;
+  let extraInfo = "";
+  if (input.pdfPage !== undefined) {
+    extraInfo = ` (page ${input.pdfPage})`;
+  } else if (input.startLine !== undefined || input.numLines !== undefined) {
+    const start = input.startLine ?? 1;
+    const num = input.numLines;
+    extraInfo =
+      num !== undefined
+        ? ` (lines ${start}-${start + num - 1})`
+        : ` (from line ${start})`;
+  }
+  return withInlineCode(d`\`${filePath}\`${extraInfo}`);
+}
+
+export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
+  const input = info.request.input as Input;
+  const result = info.result.result;
+
+  if (result.status === "error") {
+    return d`👀❌ ${formatGetFileDisplay(input)}`;
+  }
+
+  let lineCount = 0;
+  if (result.value.length > 0) {
+    const firstValue = result.value[0];
+    if (firstValue.type === "text") {
+      lineCount = firstValue.text.split("\n").length;
+    }
+  }
+  const lineCountStr = lineCount > 0 ? ` [+ ${lineCount}]` : "";
+  return d`👀✅ ${formatGetFileDisplay(input)}${lineCountStr}`;
+}
+
+export function renderCompletedDetail(info: CompletedToolInfo): VDOMNode {
+  const result = info.result.result;
+
+  if (result.status === "error") {
+    return d`Error: ${result.error}`;
+  }
+
+  const parts: VDOMNode[] = [];
+  for (const content of result.value) {
+    if (content.type === "text") {
+      parts.push(d`${content.text}`);
+    } else if (content.type === "image") {
+      parts.push(d`[Image: ${content.source.media_type}]`);
+    } else if (content.type === "document") {
+      parts.push(d`[Document${content.title ? `: ${content.title}` : ""}]`);
+    }
+  }
+
+  return d`${parts}`;
 }
 
 export const spec: ProviderToolSpec = {
@@ -627,6 +808,9 @@ Supports:
 - Text files (source code, markdown, JSON, XML, etc.) - added to context for tracking changes
 - Images (JPEG, PNG, GIF, WebP) - returned as base64 encoded content
 - PDF documents - returned as base64 encoded content
+
+For large text files, content may be truncated. Use startLine and numLines to navigate.
+Very long lines (>2000 chars) will be abridged.
 
 File size limits: 1MB for text files, 10MB for images, 32MB for PDFs.`,
   input_schema: {
@@ -647,6 +831,14 @@ File size limits: 1MB for text files, 10MB for images, 32MB for PDFs.`,
 For PDF files, you can use this 1-indexed parameter to fetch the given page of the file.
 Omitting this parameter for pdf files returns just the summary of the pdf.`,
       },
+      startLine: {
+        type: "number",
+        description: `1-indexed line number to start reading from. If omitted, starts from line 1.`,
+      },
+      numLines: {
+        type: "number",
+        description: `Number of lines to return. If omitted, returns as many lines as fit within the token limit.`,
+      },
     },
     required: ["filePath"],
   },
@@ -656,6 +848,8 @@ export type Input = {
   filePath: UnresolvedFilePath;
   force?: boolean;
   pdfPage?: number;
+  startLine?: number;
+  numLines?: number;
 };
 
 export function validateInput(input: {
@@ -690,6 +884,41 @@ export function validateInput(input: {
       status: "error",
       error:
         "expected req.input.pdfPage to be a positive integer (1-indexed page number)",
+    };
+  }
+
+  if (input.startLine !== undefined && typeof input.startLine !== "number") {
+    return {
+      status: "error",
+      error: "expected req.input.startLine to be a number",
+    };
+  }
+
+  if (
+    input.startLine !== undefined &&
+    (input.startLine < 1 || !Number.isInteger(input.startLine))
+  ) {
+    return {
+      status: "error",
+      error:
+        "expected req.input.startLine to be a positive integer (1-indexed line number)",
+    };
+  }
+
+  if (input.numLines !== undefined && typeof input.numLines !== "number") {
+    return {
+      status: "error",
+      error: "expected req.input.numLines to be a number",
+    };
+  }
+
+  if (
+    input.numLines !== undefined &&
+    (input.numLines < 1 || !Number.isInteger(input.numLines))
+  ) {
+    return {
+      status: "error",
+      error: "expected req.input.numLines to be a positive integer",
     };
   }
 

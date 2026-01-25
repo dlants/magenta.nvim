@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import type { Nvim } from "../nvim/nvim-node";
 import { getBufferIfOpen } from "../utils/buffers.ts";
-import type { MessageId } from "../chat/message.ts";
 import {
   resolveFilePath,
   type AbsFilePath,
@@ -15,8 +14,12 @@ export interface FileSnapshot {
   timestamp: number;
 }
 
+/** A turn represents one user message and all subsequent assistant responses until the next user message */
+export type Turn = number & { __turn: true };
+
 export class FileSnapshots {
   private snapshots: Map<string, FileSnapshot> = new Map();
+  private currentTurn: Turn = 0 as Turn;
 
   constructor(
     private nvim: Nvim,
@@ -24,25 +27,40 @@ export class FileSnapshots {
   ) {}
 
   /**
-   * Creates a key for the snapshots map from a messageId and filePath
+   * Start a new turn when a user message is sent.
+   * All subsequent file edits will be snapshotted under this turn.
    */
-  private createKey(messageId: MessageId, absFilePath: AbsFilePath): string {
-    return `${messageId}:${absFilePath}`;
+  public startNewTurn(): Turn {
+    this.currentTurn = (this.currentTurn + 1) as Turn;
+    return this.currentTurn;
   }
 
   /**
-   * Take a snapshot of a file before it's edited by the assistant
-   * @param absFilePath The path to the file that will be edited
-   * @param messageId The ID of the message that is editing the file
+   * Get the current turn number
+   */
+  public getCurrentTurn(): Turn {
+    return this.currentTurn;
+  }
+
+  /**
+   * Creates a key for the snapshots map from a turn and filePath
+   */
+  private createKey(turn: Turn, absFilePath: AbsFilePath): string {
+    return `${turn}:${absFilePath}`;
+  }
+
+  /**
+   * Take a snapshot of a file before it's edited by the assistant.
+   * Uses the current turn - all edits after a user message are grouped together.
+   * @param unresolvedPath The path to the file that will be edited
    * @returns Promise<boolean> True if a new snapshot was taken, false if one already existed
    */
   public async willEditFile(
     unresolvedPath: UnresolvedFilePath,
-    messageId: MessageId,
   ): Promise<boolean> {
     const absFilePath = resolveFilePath(this.cwd, unresolvedPath);
-    const key = this.createKey(messageId, absFilePath);
-    // If we already have a snapshot for this file and message, don't take another one
+    const key = this.createKey(this.currentTurn, absFilePath);
+    // If we already have a snapshot for this file in this turn, don't take another one
     if (this.snapshots.has(key)) {
       return false;
     }
@@ -95,32 +113,32 @@ export class FileSnapshots {
   }
 
   /**
-   * Get a snapshot for a specific file and message
+   * Get a snapshot for a specific file and turn
    * @param absFilePath The path to the file
-   * @param messageId The ID of the message
+   * @param turn The turn number (defaults to current turn)
    * @returns The file snapshot or undefined if none exists
    */
   public getSnapshot(
     absFilePath: AbsFilePath,
-    messageId: MessageId,
+    turn?: Turn,
   ): FileSnapshot | undefined {
-    const key = this.createKey(messageId, absFilePath);
+    const key = this.createKey(turn ?? this.currentTurn, absFilePath);
     return this.snapshots.get(key);
   }
 
   /**
-   * Clear snapshots for a specific message or all snapshots if no messageId is provided
-   * @param messageId Optional ID of the message to clear snapshots for
+   * Clear snapshots for a specific turn or all snapshots if no turn is provided
+   * @param turn Optional turn number to clear snapshots for
    */
-  public clearSnapshots(messageId?: MessageId): void {
-    if (!messageId) {
+  public clearSnapshots(turn?: Turn): void {
+    if (turn === undefined) {
       this.snapshots.clear();
       return;
     }
 
-    // Remove all snapshots for the specified messageId
+    // Remove all snapshots for the specified turn
     for (const key of this.snapshots.keys()) {
-      if (key.startsWith(`${messageId}:`)) {
+      if (key.startsWith(`${turn}:`)) {
         this.snapshots.delete(key);
       }
     }

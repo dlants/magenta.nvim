@@ -1,21 +1,36 @@
 import { d, withBindings, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { StaticTool, ToolName } from "./types.ts";
+import type {
+  StaticTool,
+  ToolName,
+  GenericToolRequest,
+  CompletedToolInfo,
+} from "./types.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { ThreadId } from "../chat/types";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Chat } from "../chat/chat.ts";
 
-export type Msg = {
-  type: "check-threads";
+export type Input = {
+  threadIds: ThreadId[];
 };
+
+export type ToolRequest = GenericToolRequest<"wait_for_subagents", Input>;
+
+export type Msg =
+  | {
+      type: "check-threads";
+    }
+  | {
+      type: "finish";
+      result: ProviderToolResult;
+    };
 
 export type State =
   | {
@@ -29,12 +44,10 @@ export type State =
 export class WaitForSubagentsTool implements StaticTool {
   toolName = "wait_for_subagents" as const;
   public state: State;
+  public aborted: boolean = false;
 
   constructor(
-    public request: Extract<
-      StaticToolRequest,
-      { toolName: "wait_for_subagents" }
-    >,
+    public request: ToolRequest,
     public context: {
       nvim: Nvim;
       dispatch: Dispatch<RootMsg>;
@@ -48,12 +61,13 @@ export class WaitForSubagentsTool implements StaticTool {
     };
 
     setTimeout(() => {
+      if (this.aborted) return;
       this.checkThreads();
     });
   }
 
   private checkThreads() {
-    if (this.state.state !== "waiting") {
+    if (this.state.state !== "waiting" || this.aborted) {
       return;
     }
 
@@ -114,20 +128,28 @@ ${results
     return false;
   }
 
-  abort() {
-    if (this.state.state === "waiting") {
-      this.state = {
-        state: "done",
-        result: {
-          type: "tool_result",
-          id: this.request.id,
-          result: {
-            status: "error",
-            error: "Wait for subagents was aborted",
-          },
-        },
-      };
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
     }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
+      result: {
+        status: "error",
+        error: "Request was aborted by the user.",
+      },
+    };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   update(msg: Msg): void {
@@ -136,8 +158,18 @@ ${results
         this.checkThreads();
         return;
 
+      case "finish":
+        if (this.state.state === "done") {
+          return;
+        }
+        this.state = {
+          state: "done",
+          result: msg.result,
+        };
+        return;
+
       default:
-        assertUnreachable(msg.type);
+        assertUnreachable(msg);
     }
   }
 
@@ -172,14 +204,14 @@ ${results
         return d`⏸️⏳ Waiting for ${threadIds.length.toString()} subagent(s):
 ${threadStatusLines}`;
       }
-      case "done": {
-        const result = this.state.result.result;
-        if (result.status === "error") {
-          return d`⏸️❌ Waiting for ${this.request.input.threadIds.length.toString()} subagent(s)`;
-        } else {
-          return d`⏸️✅ Waiting for ${this.request.input.threadIds.length.toString()} subagent(s)`;
-        }
-      }
+      case "done":
+        return renderCompletedSummary(
+          {
+            request: this.request as CompletedToolInfo["request"],
+            result: this.state.result,
+          },
+          this.context.dispatch,
+        );
     }
   }
 
@@ -240,6 +272,42 @@ ${threadStatusLines}`;
   }
 }
 
+function isError(info: CompletedToolInfo): boolean {
+  return info.result.result.status === "error";
+}
+
+function getStatusEmoji(info: CompletedToolInfo): string {
+  return isError(info) ? "❌" : "✅";
+}
+
+export function renderCompletedSummary(
+  info: CompletedToolInfo,
+  dispatch: Dispatch<RootMsg>,
+): VDOMNode {
+  const input = info.request.input as Input;
+  const status = getStatusEmoji(info);
+  const count = input.threadIds?.length ?? 0;
+
+  const threadLinks = input.threadIds?.map((threadId) =>
+    withBindings(d`${threadId}`, {
+      "<CR>": () =>
+        dispatch({
+          type: "chat-msg",
+          msg: {
+            type: "select-thread",
+            id: threadId,
+          },
+        }),
+    }),
+  );
+
+  if (threadLinks && threadLinks.length > 0) {
+    return d`⏳${status} wait_for_subagents (${count.toString()} threads): ${threadLinks.map((link, i) => (i === threadLinks.length - 1 ? link : d`${link}, `))}`;
+  }
+
+  return d`⏳${status} wait_for_subagents (${count.toString()} threads)`;
+}
+
 export const spec: ProviderToolSpec = {
   name: "wait_for_subagents" as ToolName,
   description: `Wait for one or more subagents to complete execution. This tool blocks until all specified subagents have finished running and returned their results.`,
@@ -249,7 +317,7 @@ export const spec: ProviderToolSpec = {
       threadIds: {
         type: "array",
         items: {
-          type: "number",
+          type: "string",
         },
         description: "Array of thread IDs to wait for completion",
         minItems: 1,
@@ -257,10 +325,6 @@ export const spec: ProviderToolSpec = {
     },
     required: ["threadIds"],
   },
-};
-
-export type Input = {
-  threadIds: ThreadId[];
 };
 
 export function validateInput(input: {
@@ -280,10 +344,10 @@ export function validateInput(input: {
     };
   }
 
-  if (!input.threadIds.every((item) => typeof item === "number")) {
+  if (!input.threadIds.every((item) => typeof item === "string")) {
     return {
       status: "error",
-      error: `expected all items in req.input.threadIds to be numbers but they were ${JSON.stringify(input.threadIds)}`,
+      error: `expected all items in req.input.threadIds to be strings but they were ${JSON.stringify(input.threadIds)}`,
     };
   }
 

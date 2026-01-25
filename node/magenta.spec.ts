@@ -1,6 +1,5 @@
 import { expect, it } from "vitest";
 import { withDriver } from "./test/preamble";
-import { pollUntil } from "./utils/async";
 import type { Position0Indexed } from "./nvim/window";
 import { LOGO } from "./chat/thread";
 import type { ToolRequestId } from "./tools/toolManager";
@@ -9,12 +8,12 @@ import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { ToolName } from "./tools/types";
 
-it("clear command should work", async () => {
+it("new-thread command should work", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
     await driver.inputMagentaText(`hello`);
     await driver.send();
-    const request1 = await driver.mockAnthropic.awaitPendingRequest();
+    const request1 = await driver.mockAnthropic.awaitPendingStream();
     request1.respond({
       stopReason: "end_turn",
       text: "sup?",
@@ -28,11 +27,12 @@ it("clear command should work", async () => {
     await driver.assertDisplayBufferContains("sup?");
     await driver.assertDisplayBufferContains("Stopped (end_turn)");
 
-    await driver.clear();
+    // Create a new thread
+    await driver.magenta.command("new-thread");
     await driver.assertDisplayBufferContains(LOGO);
     await driver.inputMagentaText(`hello again`);
     await driver.send();
-    const request2 = await driver.mockAnthropic.awaitPendingRequest();
+    const request2 = await driver.mockAnthropic.awaitPendingStream();
     request2.respond({
       stopReason: "end_turn",
       text: "huh?",
@@ -58,17 +58,11 @@ it("abort command should work when waiting for response", async () => {
     await driver.assertDisplayBufferContains("hello");
     await driver.assertDisplayBufferContains("Streaming response ⠁");
 
-    await pollUntil(() => {
-      if (driver.mockAnthropic.requests.length != 1) {
-        throw new Error(`Expected a message to be pending.`);
-      }
-    });
-    const request =
-      driver.mockAnthropic.requests[driver.mockAnthropic.requests.length - 1];
-    expect(request.defer.resolved).toBe(false);
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    expect(request.resolved).toBe(false);
 
     await driver.abort();
-    expect(request.defer.resolved).toBe(true);
+    expect(request.resolved).toBe(true);
   });
 });
 
@@ -78,15 +72,8 @@ it("abort command should work when response is in progress", async () => {
     await driver.inputMagentaText(`hello`);
     await driver.send();
 
-    // Wait for the pending request to be registered
-    await pollUntil(() => {
-      if (driver.mockAnthropic.requests.length != 1) {
-        throw new Error(`Expected a message to be pending.`);
-      }
-    });
-
     // Get the latest request and start streaming a response but don't complete it
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.streamText("I'm starting to respond");
 
     // Verify that response has started appearing - check pieces separately
@@ -95,10 +82,10 @@ it("abort command should work when response is in progress", async () => {
     await driver.assertDisplayBufferContains("# assistant:");
     await driver.assertDisplayBufferContains("I'm starting to respond");
 
-    expect(request.defer.resolved).toBe(false);
+    expect(request.resolved).toBe(false);
 
     await driver.abort();
-    expect(request.defer.resolved).toBe(true);
+    expect(request.resolved).toBe(true);
 
     // Verify the final state shows the aborted message
     await driver.assertDisplayBufferContains(`[ABORTED]`);
@@ -111,14 +98,7 @@ it("abort command should stop pending tool use", async () => {
     await driver.inputMagentaText(`hello`);
     await driver.send();
 
-    // Wait for the pending request to be registered
-    await pollUntil(() => {
-      if (driver.mockAnthropic.requests.length != 1) {
-        throw new Error(`Expected a message to be pending.`);
-      }
-    });
-
-    const request3 = await driver.mockAnthropic.awaitPendingRequest();
+    const request3 = await driver.mockAnthropic.awaitPendingStream();
     request3.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -229,7 +209,7 @@ it("should use project settings to allow bash commands without permission", asyn
       await driver.inputMagentaText(`run echo "hello world"`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "I'll run that command for you.",

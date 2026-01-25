@@ -1,0 +1,164 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`compact > handles 'from' checkpoint that was truncated 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Summary from truncated",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`compact > handles checkpoint consumed by previous summary 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "First",
+        "type": "text",
+      },
+      {
+        "text": "<checkpoint:aaaaaa>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "Summary A to B",
+        "type": "text",
+      },
+      {
+        "text": "Summary B to C",
+        "type": "text",
+      },
+      {
+        "citations": null,
+        "text": "Response 3",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "text": "Fourth",
+        "type": "text",
+      },
+      {
+        "text": "<checkpoint:dddddd>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": null,
+        "text": "Response 4",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`compact > handles checkpoint not in map gracefully 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Hello",
+        "type": "text",
+      },
+      {
+        "text": "<checkpoint:aaaaaa>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "Summary",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`compact > handles checkpoint truncated past truncateIdx 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "First",
+        "type": "text",
+      },
+      {
+        "text": "<checkpoint:aaaaaa>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "Summary",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`compact > handles overlapping checkpoint ranges 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "First",
+        "type": "text",
+      },
+      {
+        "text": "<checkpoint:aaaaaa>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "Summary B to C",
+        "type": "text",
+      },
+      {
+        "text": "Summary A to C",
+        "type": "text",
+      },
+      {
+        "citations": null,
+        "text": "Response 3",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;

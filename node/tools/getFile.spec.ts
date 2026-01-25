@@ -8,6 +8,13 @@ import {
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import type { ToolName } from "./types.ts";
 import type { BufNr } from "../nvim/buffer.ts";
+import type Anthropic from "@anthropic-ai/sdk";
+import { MockProvider } from "../providers/mock.ts";
+
+type ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;
+type ContentBlockParam = Anthropic.Messages.ContentBlockParam;
+type TextBlockParam = Anthropic.Messages.TextBlockParam;
+type DocumentBlockParam = Anthropic.Messages.DocumentBlockParam;
 
 it("render the getFile tool.", async () => {
   await withDriver({}, async (driver) => {
@@ -15,7 +22,7 @@ it("render the getFile tool.", async () => {
     await driver.inputMagentaText(`Try reading the file poem.txt`);
     await driver.send();
 
-    const request1 = await driver.mockAnthropic.awaitPendingRequest();
+    const request1 = await driver.mockAnthropic.awaitPendingStream();
     request1.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -34,6 +41,44 @@ it("render the getFile tool.", async () => {
     });
 
     await driver.assertDisplayBufferContains(`👀✅ \`./poem.txt\``);
+  });
+});
+
+it("should expand get_file tool detail on <CR>", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText(`Try reading the file poem.txt`);
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "ok, here goes",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "request_id" as ToolRequestId,
+            toolName: "get_file" as ToolName,
+            input: {
+              filePath: "./poem.txt" as UnresolvedFilePath,
+            },
+          },
+        },
+      ],
+    });
+
+    // Verify summary is shown
+    const summaryPos =
+      await driver.assertDisplayBufferContains(`👀✅ \`./poem.txt\``);
+
+    // Press <CR> on the summary to expand details
+    await driver.triggerDisplayBufferKey(summaryPos, "<CR>");
+
+    // Verify the file content is now visible (poem.txt content from fixtures)
+    await driver.assertDisplayBufferContains(
+      "Moonlight whispers through the trees",
+    );
   });
 });
 
@@ -65,7 +110,7 @@ it("should extract PDF page as binary document when pdfPage parameter is provide
       await driver.inputMagentaText(`Please read page 2 of multipage.pdf`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "I'll extract the specific page from the PDF",
@@ -87,32 +132,39 @@ it("should extract PDF page as binary document when pdfPage parameter is provide
       await driver.assertDisplayBufferContains(`👀✅ \`multipage.pdf`);
 
       // Verify the tool result contains document content
-      const toolResultRequest =
-        await driver.mockAnthropic.awaitPendingRequest();
-      const toolResultMessage =
-        toolResultRequest.messages[toolResultRequest.messages.length - 2];
+      const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+      // Find the user message with the tool result - documents are sibling blocks, not nested
+      let userMessageContent: ContentBlockParam[] | undefined;
+      for (const msg of toolResultRequest.messages) {
+        if (msg.role === "user" && Array.isArray(msg.content)) {
+          const content = msg.content;
+          const hasToolResult = content.some(
+            (block: ContentBlockParam) =>
+              block.type === "tool_result" &&
+              block.tool_use_id === "pdf_page_request",
+          );
+          if (hasToolResult) userMessageContent = content;
+        }
+      }
+      expect(userMessageContent).toBeDefined();
+      if (!userMessageContent)
+        throw new Error("No user message with tool result found");
 
-      expect(toolResultMessage.role).toBe("user");
-      expect(Array.isArray(toolResultMessage.content)).toBe(true);
+      // Tool result should not have error
+      const toolResult = userMessageContent.find(
+        (block: ContentBlockParam) => block.type === "tool_result",
+      ) as ToolResultBlockParam;
+      expect(toolResult.is_error).toBeFalsy();
 
-      const toolResult = toolResultMessage.content[0] as Extract<
-        (typeof toolResultMessage.content)[0],
-        { type: "tool_result" }
-      >;
-      expect(toolResult.type).toBe("tool_result");
-      expect(toolResult.result.status).toBe("ok");
-
-      const toolResultResult = toolResult.result as Extract<
-        typeof toolResult.result,
-        { status: "ok" }
-      >;
-
-      const documentContent = toolResultResult.value.find(
-        (item) => item.type === "document",
-      ) as Extract<(typeof toolResultResult.value)[0], { type: "document" }>;
+      // Document is a sibling block in the user message, not nested in tool_result.content
+      const documentContent = userMessageContent.find(
+        (item: ContentBlockParam) => item.type === "document",
+      ) as DocumentBlockParam;
       expect(documentContent).toBeDefined();
 
       expect(documentContent.source.type).toBe("base64");
+      if (documentContent.source.type !== "base64")
+        throw new Error("Expected base64 source");
       expect(documentContent.source.media_type).toBe("application/pdf");
       expect(documentContent.source.data).toBeTruthy();
       expect(documentContent.title).toContain("multipage.pdf - Page 2");
@@ -176,7 +228,7 @@ it("should handle multiple PDF pages and show correct context summary", async ()
       await driver.inputMagentaText(`Please read multipage-test.pdf`);
       await driver.send();
 
-      const summaryRequest = await driver.mockAnthropic.awaitPendingRequest();
+      const summaryRequest = await driver.mockAnthropic.awaitPendingStream();
       summaryRequest.respond({
         stopReason: "tool_use",
         text: "I'll read the PDF summary",
@@ -196,8 +248,7 @@ it("should handle multiple PDF pages and show correct context summary", async ()
 
       await driver.assertDisplayBufferContains(`👀✅ \`multipage-test.pdf\``);
 
-      const summaryToolResult =
-        await driver.mockAnthropic.awaitPendingRequest();
+      const summaryToolResult = await driver.mockAnthropic.awaitPendingStream();
       summaryToolResult.respond({
         stopReason: "end_turn",
         toolRequests: [],
@@ -213,7 +264,7 @@ it("should handle multiple PDF pages and show correct context summary", async ()
       await driver.inputMagentaText(`Please read page 1 of multipage-test.pdf`);
       await driver.send();
 
-      const page1Request = await driver.mockAnthropic.awaitPendingRequest();
+      const page1Request = await driver.mockAnthropic.awaitPendingStream();
       page1Request.respond({
         stopReason: "tool_use",
         text: "I'll extract page 1",
@@ -234,7 +285,7 @@ it("should handle multiple PDF pages and show correct context summary", async ()
 
       await driver.assertDisplayBufferContains(`👀✅ \`multipage-test.pdf`);
 
-      const page1ToolResult = await driver.mockAnthropic.awaitPendingRequest();
+      const page1ToolResult = await driver.mockAnthropic.awaitPendingStream();
       page1ToolResult.respond({
         stopReason: "end_turn",
         toolRequests: [],
@@ -250,7 +301,7 @@ it("should handle multiple PDF pages and show correct context summary", async ()
       await driver.inputMagentaText(`Please read page 3 of multipage-test.pdf`);
       await driver.send();
 
-      const page3Request = await driver.mockAnthropic.awaitPendingRequest();
+      const page3Request = await driver.mockAnthropic.awaitPendingStream();
       page3Request.respond({
         stopReason: "tool_use",
         text: "I'll extract page 3",
@@ -271,7 +322,7 @@ it("should handle multiple PDF pages and show correct context summary", async ()
 
       await driver.assertDisplayBufferContains(`👀✅ \`multipage-test.pdf`);
 
-      const page3ToolResult = await driver.mockAnthropic.awaitPendingRequest();
+      const page3ToolResult = await driver.mockAnthropic.awaitPendingStream();
       page3ToolResult.respond({
         stopReason: "end_turn",
         toolRequests: [],
@@ -287,7 +338,7 @@ it("should handle multiple PDF pages and show correct context summary", async ()
       await driver.inputMagentaText(`Please read page 2 of multipage-test.pdf`);
       await driver.send();
 
-      const page2Request = await driver.mockAnthropic.awaitPendingRequest();
+      const page2Request = await driver.mockAnthropic.awaitPendingStream();
       page2Request.respond({
         stopReason: "tool_use",
         text: "I'll extract page 2",
@@ -308,7 +359,7 @@ it("should handle multiple PDF pages and show correct context summary", async ()
 
       await driver.assertDisplayBufferContains(`👀✅ \`multipage-test.pdf`);
 
-      const page2ToolResult = await driver.mockAnthropic.awaitPendingRequest();
+      const page2ToolResult = await driver.mockAnthropic.awaitPendingStream();
       page2ToolResult.respond({
         stopReason: "end_turn",
         toolRequests: [],
@@ -324,7 +375,7 @@ it("should handle multiple PDF pages and show correct context summary", async ()
       await driver.inputMagentaText(`Please read page 5 of multipage-test.pdf`);
       await driver.send();
 
-      const page5Request = await driver.mockAnthropic.awaitPendingRequest();
+      const page5Request = await driver.mockAnthropic.awaitPendingStream();
       page5Request.respond({
         stopReason: "tool_use",
         text: "I'll extract page 5",
@@ -345,7 +396,7 @@ it("should handle multiple PDF pages and show correct context summary", async ()
 
       await driver.assertDisplayBufferContains(`👀✅ \`multipage-test.pdf`);
 
-      const page5ToolResult = await driver.mockAnthropic.awaitPendingRequest();
+      const page5ToolResult = await driver.mockAnthropic.awaitPendingStream();
       page5ToolResult.respond({
         stopReason: "end_turn",
         toolRequests: [],
@@ -406,7 +457,7 @@ it("should return PDF basic info when pdfPage parameter is not provided", async 
       await driver.inputMagentaText(`Please read multipage.pdf`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "I'll read the PDF document",
@@ -427,29 +478,24 @@ it("should return PDF basic info when pdfPage parameter is not provided", async 
       await driver.assertDisplayBufferContains(`👀✅ \`multipage.pdf`);
 
       // Verify the tool result contains basic PDF info
-      const toolResultRequest =
-        await driver.mockAnthropic.awaitPendingRequest();
-      const toolResultMessage =
-        toolResultRequest.messages[toolResultRequest.messages.length - 1];
+      const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage = MockProvider.findLastToolResultMessage(
+        toolResultRequest.messages,
+      );
 
-      expect(toolResultMessage.role).toBe("user");
-      expect(Array.isArray(toolResultMessage.content)).toBe(true);
+      expect(toolResultMessage).toBeDefined();
+      expect(toolResultMessage!.role).toBe("user");
+      expect(Array.isArray(toolResultMessage!.content)).toBe(true);
+      const contentArray = toolResultMessage!.content as ContentBlockParam[];
 
-      const toolResult = toolResultMessage.content[0] as Extract<
-        (typeof toolResultMessage.content)[0],
-        { type: "tool_result" }
-      >;
+      const toolResult = contentArray[0] as ToolResultBlockParam;
       expect(toolResult.type).toBe("tool_result");
-      expect(toolResult.result.status).toBe("ok");
+      expect(toolResult.is_error).toBeFalsy();
 
-      const toolResultResult = toolResult.result as Extract<
-        typeof toolResult.result,
-        { status: "ok" }
-      >;
-
-      const textContent = toolResultResult.value.find(
-        (item) => item.type === "text",
-      ) as Extract<(typeof toolResultResult.value)[0], { type: "text" }>;
+      const toolResultContent = toolResult.content as ContentBlockParam[];
+      const textContent = toolResultContent.find(
+        (item: ContentBlockParam) => item.type === "text",
+      ) as TextBlockParam;
       expect(textContent).toBeDefined();
       expect(textContent.text).toContain("PDF Document: multipage.pdf");
       expect(textContent.text).toContain("Pages: 3");
@@ -485,7 +531,7 @@ it("should handle invalid PDF page index", async () => {
       await driver.inputMagentaText(`Please read page 5 of singlepage.pdf`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "I'll try to extract page 5 from the PDF",
@@ -507,27 +553,26 @@ it("should handle invalid PDF page index", async () => {
       await driver.assertDisplayBufferContains(`👀❌ \`singlepage.pdf`);
 
       // Verify the tool result contains error
-      const toolResultRequest =
-        await driver.mockAnthropic.awaitPendingRequest();
-      const toolResultMessage =
-        toolResultRequest.messages[toolResultRequest.messages.length - 1];
+      const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage = MockProvider.findLastToolResultMessage(
+        toolResultRequest.messages,
+      );
 
-      expect(toolResultMessage.role).toBe("user");
-      expect(Array.isArray(toolResultMessage.content)).toBe(true);
+      expect(toolResultMessage).toBeDefined();
+      expect(toolResultMessage!.role).toBe("user");
+      expect(Array.isArray(toolResultMessage!.content)).toBe(true);
+      const contentArray = toolResultMessage!.content as ContentBlockParam[];
 
-      const toolResult = toolResultMessage.content[0] as Extract<
-        (typeof toolResultMessage.content)[0],
-        { type: "tool_result" }
-      >;
+      const toolResult = contentArray[0] as ToolResultBlockParam;
       expect(toolResult.type).toBe("tool_result");
-      expect(toolResult.result.status).toBe("error");
+      expect(toolResult.is_error).toBe(true);
 
-      const toolResultError = toolResult.result as Extract<
-        typeof toolResult.result,
-        { status: "error" }
-      >;
-      expect(toolResultError.error).toContain("Page index 5 is out of range");
-      expect(toolResultError.error).toContain("Document has 1 pages");
+      const errorContent =
+        typeof toolResult.content === "string"
+          ? toolResult.content
+          : JSON.stringify(toolResult.content);
+      expect(errorContent).toContain("Page index 5 is out of range");
+      expect(errorContent).toContain("Document has 1 pages");
     },
   );
 });
@@ -546,7 +591,7 @@ it("getFile automatically allows files matching getFileAutoAllowGlobs", async ()
       await driver.inputMagentaText(`Try reading the file .secret`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "ok, here goes",
@@ -593,7 +638,7 @@ it("getFile automatically allows files matching glob patterns", async () => {
       await driver.inputMagentaText(`Try reading the file test.log`);
       await driver.send();
 
-      const request1 = await driver.mockAnthropic.awaitPendingRequest();
+      const request1 = await driver.mockAnthropic.awaitPendingStream();
       request1.respond({
         stopReason: "tool_use",
         text: "ok, here goes",
@@ -615,7 +660,7 @@ it("getFile automatically allows files matching glob patterns", async () => {
 
       // Handle the first request response
       const toolResultRequest1 =
-        await driver.mockAnthropic.awaitPendingRequest();
+        await driver.mockAnthropic.awaitPendingStream();
       toolResultRequest1.respond({
         stopReason: "end_turn",
         toolRequests: [],
@@ -628,7 +673,7 @@ it("getFile automatically allows files matching glob patterns", async () => {
       );
       await driver.send();
 
-      const request2 = await driver.mockAnthropic.awaitPendingRequest();
+      const request2 = await driver.mockAnthropic.awaitPendingStream();
       request2.respond({
         stopReason: "tool_use",
         text: "ok, here goes",
@@ -665,7 +710,7 @@ it("getFile still requires approval for files not matching getFileAutoAllowGlobs
       await driver.inputMagentaText(`Try reading the file .secret`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "ok, here goes",
@@ -720,7 +765,7 @@ it("getFile automatically allows files in skills directory", async () => {
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "ok, here goes",
@@ -745,20 +790,19 @@ it("getFile automatically allows files in skills directory", async () => {
       );
 
       // Verify the file contents are returned
-      const toolResultRequest =
-        await driver.mockAnthropic.awaitPendingRequest();
-      const toolResultMessage =
-        toolResultRequest.messages[toolResultRequest.messages.length - 1];
+      const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage = MockProvider.findLastToolResultMessage(
+        toolResultRequest.messages,
+      );
 
-      expect(toolResultMessage.role).toBe("user");
-      expect(Array.isArray(toolResultMessage.content)).toBe(true);
+      expect(toolResultMessage).toBeDefined();
+      expect(toolResultMessage!.role).toBe("user");
+      expect(Array.isArray(toolResultMessage!.content)).toBe(true);
+      const contentArray = toolResultMessage!.content as ContentBlockParam[];
 
-      const toolResult = toolResultMessage.content.find(
-        (item) => item.type === "tool_result",
-      ) as Extract<
-        (typeof toolResultMessage.content)[0],
-        { type: "tool_result" }
-      >;
+      const toolResult = contentArray.find(
+        (item: ContentBlockParam) => item.type === "tool_result",
+      ) as ToolResultBlockParam;
       expect(toolResult).toBeDefined();
 
       assertToolResultContainsText(toolResult, "Skill content");
@@ -772,9 +816,9 @@ it("getFile rejection", async () => {
     await driver.inputMagentaText(`Try reading the file .secret`);
     await driver.send();
 
-    const request2 = await driver.mockAnthropic.awaitPendingRequest();
+    const request2 = await driver.mockAnthropic.awaitPendingStream();
     request2.respond({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       text: "ok, here goes",
       toolRequests: [
         {
@@ -805,9 +849,9 @@ it("displays approval dialog with proper box formatting", async () => {
     await driver.inputMagentaText(`Try reading the file .secret`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       text: "ok, here goes",
       toolRequests: [
         {
@@ -847,9 +891,9 @@ it("getFile approval", async () => {
     await driver.inputMagentaText(`Try reading the file .secret`);
     await driver.send();
 
-    const request3 = await driver.mockAnthropic.awaitPendingRequest();
+    const request3 = await driver.mockAnthropic.awaitPendingStream();
     request3.respond({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       text: "ok, here goes",
       toolRequests: [
         {
@@ -892,9 +936,9 @@ it("getFile requests approval for gitignored file", async () => {
       await driver.inputMagentaText(`Try reading the file ignored-file.txt`);
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "ok, here goes",
         toolRequests: [
           {
@@ -922,9 +966,9 @@ it("getFile requests approval for file outside cwd", async () => {
     await driver.inputMagentaText(`Try reading the file /tmp/file`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
-      stopReason: "end_turn",
+      stopReason: "tool_use",
       text: "ok, here goes",
       toolRequests: [
         {
@@ -956,7 +1000,7 @@ it("getFile returns early when file is already in context", async () => {
     await driver.inputMagentaText(`Try reading the file ./poem.txt`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -978,19 +1022,19 @@ it("getFile returns early when file is already in context", async () => {
     await driver.assertDisplayBufferContains(`👀✅ \`./poem.txt\``);
 
     // Check the actual response content in the next request
-    const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
-    const toolResultMessage =
-      toolResultRequest.messages[toolResultRequest.messages.length - 1];
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const toolResultMessage = MockProvider.findLastToolResultMessage(
+      toolResultRequest.messages,
+    );
 
-    expect(toolResultMessage.role).toBe("user");
-    expect(Array.isArray(toolResultMessage.content)).toBe(true);
+    expect(toolResultMessage).toBeDefined();
+    expect(toolResultMessage!.role).toBe("user");
+    expect(Array.isArray(toolResultMessage!.content)).toBe(true);
+    const contentArray = toolResultMessage!.content as ContentBlockParam[];
 
-    const toolResult = toolResultMessage.content.find(
-      (item) => item.type === "tool_result",
-    ) as Extract<
-      (typeof toolResultMessage.content)[0],
-      { type: "tool_result" }
-    >;
+    const toolResult = contentArray.find(
+      (item: ContentBlockParam) => item.type === "tool_result",
+    ) as ToolResultBlockParam;
     expect(toolResult).toBeDefined();
     assertToolResultContainsText(
       toolResult,
@@ -1009,7 +1053,7 @@ it("getFile reads file when force is true even if already in context", async () 
     await driver.inputMagentaText(`Try reading the file ./poem.txt with force`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -1030,19 +1074,19 @@ it("getFile reads file when force is true even if already in context", async () 
 
     await driver.assertDisplayBufferContains(`👀✅ \`./poem.txt\``);
 
-    const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
-    const toolResultMessage =
-      toolResultRequest.messages[toolResultRequest.messages.length - 1];
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const toolResultMessage = MockProvider.findLastToolResultMessage(
+      toolResultRequest.messages,
+    );
 
-    expect(toolResultMessage.role).toBe("user");
-    expect(Array.isArray(toolResultMessage.content)).toBe(true);
+    expect(toolResultMessage).toBeDefined();
+    expect(toolResultMessage!.role).toBe("user");
+    expect(Array.isArray(toolResultMessage!.content)).toBe(true);
+    const contentArray = toolResultMessage!.content as ContentBlockParam[];
 
-    const toolResult = toolResultMessage.content.find(
-      (item) => item.type === "tool_result",
-    ) as Extract<
-      (typeof toolResultMessage.content)[0],
-      { type: "tool_result" }
-    >;
+    const toolResult = contentArray.find(
+      (item: ContentBlockParam) => item.type === "tool_result",
+    ) as ToolResultBlockParam;
     expect(toolResult).toBeDefined();
     assertToolResultContainsText(
       toolResult,
@@ -1050,13 +1094,10 @@ it("getFile reads file when force is true even if already in context", async () 
     );
 
     // Verify that the "already part of the thread context" message is NOT present
-    const result = toolResult.result as Extract<
-      typeof toolResult.result,
-      { status: "ok" }
-    >;
-    expect(result.status).toBe("ok");
-    const hasContextText = result.value.some((item) => {
-      if (typeof item === "object" && item.type === "text") {
+    expect(toolResult.is_error).toBeFalsy();
+    const toolResultContent = toolResult.content as ContentBlockParam[];
+    const hasContextText = toolResultContent.some((item: ContentBlockParam) => {
+      if (item.type === "text") {
         return item.text.includes("already part of the thread context");
       }
       return false;
@@ -1078,7 +1119,7 @@ it("getFile adds file to context after reading", async () => {
     await driver.inputMagentaText(`Try reading the file ./poem.txt`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -1099,7 +1140,7 @@ it("getFile adds file to context after reading", async () => {
     await driver.assertDisplayBufferContains(`👀✅ \`./poem.txt\``);
 
     // Handle the auto-respond message
-    const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
     toolResultRequest.respond({
       stopReason: "end_turn",
       toolRequests: [],
@@ -1149,7 +1190,7 @@ it("getFile reads unloaded buffer", async () => {
     await driver.inputMagentaText(`Try reading the file ./poem.txt`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -1170,19 +1211,19 @@ it("getFile reads unloaded buffer", async () => {
     await driver.assertDisplayBufferContains(`👀✅ \`./poem.txt\``);
 
     // Check that the file contents are properly returned
-    const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
-    const toolResultMessage =
-      toolResultRequest.messages[toolResultRequest.messages.length - 1];
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const toolResultMessage = MockProvider.findLastToolResultMessage(
+      toolResultRequest.messages,
+    );
 
-    expect(toolResultMessage.role).toBe("user");
-    expect(Array.isArray(toolResultMessage.content)).toBe(true);
+    expect(toolResultMessage).toBeDefined();
+    expect(toolResultMessage!.role).toBe("user");
+    expect(Array.isArray(toolResultMessage!.content)).toBe(true);
+    const contentArray = toolResultMessage!.content as ContentBlockParam[];
 
-    const toolResult = toolResultMessage.content.find(
-      (item) => item.type === "tool_result",
-    ) as Extract<
-      (typeof toolResultMessage.content)[0],
-      { type: "tool_result" }
-    >;
+    const toolResult = contentArray.find(
+      (item: ContentBlockParam) => item.type === "tool_result",
+    ) as ToolResultBlockParam;
     expect(toolResult).toBeDefined();
 
     assertToolResultContainsText(
@@ -1191,22 +1232,18 @@ it("getFile reads unloaded buffer", async () => {
     );
 
     // Verify the full content is returned, not empty content
-    expect(toolResult.result.status).toBe("ok");
+    expect(toolResult.is_error).toBeFalsy();
 
-    const result = toolResult.result as Extract<
-      typeof toolResult.result,
-      { status: "ok" }
-    >;
-
-    const content = result.value.find(
-      (item) => item.type === "text",
-    ) as Extract<(typeof result.value)[0], { type: "text" }>;
-    expect(content).toBeDefined();
+    const toolResultContent = toolResult.content as ContentBlockParam[];
+    const textContent = toolResultContent.find(
+      (item: ContentBlockParam) => item.type === "text",
+    ) as TextBlockParam;
+    expect(textContent).toBeDefined();
 
     // Should contain the full poem, not be empty
-    expect(content.text.trim()).not.toBe("");
-    expect(content.text).toContain("Moonlight whispers through the trees");
-    expect(content.text).toContain("Silver shadows dance with ease");
+    expect(textContent.text.trim()).not.toBe("");
+    expect(textContent.text).toContain("Moonlight whispers through the trees");
+    expect(textContent.text).toContain("Silver shadows dance with ease");
 
     // Respond to complete the conversation
     toolResultRequest.respond({
@@ -1225,7 +1262,7 @@ it("should process image files end-to-end", async () => {
     await driver.inputMagentaText(`Please analyze the image in test.jpg`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "I'll analyze the image for you",
@@ -1247,19 +1284,19 @@ it("should process image files end-to-end", async () => {
     await driver.assertDisplayBufferContains(`👀✅ \`test.jpg\``);
 
     // Verify the tool result contains image content
-    const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
-    const toolResultMessage =
-      toolResultRequest.messages[toolResultRequest.messages.length - 1];
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const toolResultMessage = MockProvider.findLastToolResultMessage(
+      toolResultRequest.messages,
+    );
 
-    expect(toolResultMessage.role).toBe("user");
-    expect(Array.isArray(toolResultMessage.content)).toBe(true);
+    expect(toolResultMessage).toBeDefined();
+    expect(toolResultMessage!.role).toBe("user");
+    expect(Array.isArray(toolResultMessage!.content)).toBe(true);
+    const contentArray = toolResultMessage!.content as ContentBlockParam[];
 
-    const toolResult = toolResultMessage.content[0] as Extract<
-      (typeof toolResultMessage.content)[0],
-      { type: "tool_result" }
-    >;
+    const toolResult = contentArray[0] as ToolResultBlockParam;
     expect(toolResult.type).toBe("tool_result");
-    expect(toolResult.result.status).toBe("ok");
+    expect(toolResult.is_error).toBeFalsy();
 
     // The result should be image content, not text
     assertToolResultHasImageSource(toolResult, "image/jpeg");
@@ -1279,7 +1316,7 @@ it("getFile provides PDF summary info when no pdfPage parameter is given", async
     await driver.inputMagentaText(`Try reading the PDF file sample2.pdf`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "ok, here goes",
@@ -1300,30 +1337,26 @@ it("getFile provides PDF summary info when no pdfPage parameter is given", async
     await driver.assertDisplayBufferContains(`👀✅ \`sample2.pdf\``);
 
     // Check that the PDF summary is returned
-    const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
-    const toolResultMessage =
-      toolResultRequest.messages[toolResultRequest.messages.length - 1];
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const toolResultMessage = MockProvider.findLastToolResultMessage(
+      toolResultRequest.messages,
+    );
 
-    expect(toolResultMessage.role).toBe("user");
-    expect(Array.isArray(toolResultMessage.content)).toBe(true);
+    expect(toolResultMessage).toBeDefined();
+    expect(toolResultMessage!.role).toBe("user");
+    expect(Array.isArray(toolResultMessage!.content)).toBe(true);
+    const contentArray = toolResultMessage!.content as ContentBlockParam[];
 
-    const toolResult = toolResultMessage.content.find(
-      (item) => item.type === "tool_result",
-    ) as Extract<
-      (typeof toolResultMessage.content)[0],
-      { type: "tool_result" }
-    >;
+    const toolResult = contentArray.find(
+      (item: ContentBlockParam) => item.type === "tool_result",
+    ) as ToolResultBlockParam;
     expect(toolResult).toBeDefined();
-    expect(toolResult.result.status).toBe("ok");
+    expect(toolResult.is_error).toBeFalsy();
 
-    const result = toolResult.result as Extract<
-      typeof toolResult.result,
-      { status: "ok" }
-    >;
-
-    const textContent = result.value.find(
-      (item) => item.type === "text",
-    ) as Extract<(typeof result.value)[0], { type: "text" }>;
+    const toolResultContent = toolResult.content as ContentBlockParam[];
+    const textContent = toolResultContent.find(
+      (item: ContentBlockParam) => item.type === "text",
+    ) as TextBlockParam;
     expect(textContent).toBeDefined();
 
     // Should contain PDF summary information
@@ -1350,7 +1383,7 @@ it("should reject binary files that are not supported", async () => {
     await driver.inputMagentaText(`Please read the file test.bin`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "I'll try to read the binary file",
@@ -1372,25 +1405,25 @@ it("should reject binary files that are not supported", async () => {
     await driver.assertDisplayBufferContains(`👀❌ \`test.bin\``);
 
     // Verify the tool result contains error
-    const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
-    const toolResultMessage =
-      toolResultRequest.messages[toolResultRequest.messages.length - 1];
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const toolResultMessage = MockProvider.findLastToolResultMessage(
+      toolResultRequest.messages,
+    );
 
-    expect(toolResultMessage.role).toBe("user");
-    expect(Array.isArray(toolResultMessage.content)).toBe(true);
+    expect(toolResultMessage).toBeDefined();
+    expect(toolResultMessage!.role).toBe("user");
+    expect(Array.isArray(toolResultMessage!.content)).toBe(true);
+    const contentArray = toolResultMessage!.content as ContentBlockParam[];
 
-    const toolResult = toolResultMessage.content[0] as Extract<
-      (typeof toolResultMessage.content)[0],
-      { type: "tool_result" }
-    >;
+    const toolResult = contentArray[0] as ToolResultBlockParam;
     expect(toolResult.type).toBe("tool_result");
-    expect(toolResult.result.status).toBe("error");
+    expect(toolResult.is_error).toBe(true);
 
-    const toolResultError = toolResult.result as Extract<
-      typeof toolResult.result,
-      { status: "error" }
-    >;
-    expect(toolResultError.error).toContain("Unsupported file type");
+    const errorContent =
+      typeof toolResult.content === "string"
+        ? toolResult.content
+        : JSON.stringify(toolResult.content);
+    expect(errorContent).toContain("Unsupported file type");
   });
 });
 
@@ -1407,7 +1440,7 @@ it("should add images to context manager", async () => {
     await driver.inputMagentaText(`Please analyze test.jpg`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "I'll analyze the image",
@@ -1428,7 +1461,7 @@ it("should add images to context manager", async () => {
     await driver.assertDisplayBufferContains(`👀✅ \`test.jpg\``);
 
     // Handle the auto-respond message
-    const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
     toolResultRequest.respond({
       stopReason: "end_turn",
       toolRequests: [],
@@ -1465,7 +1498,7 @@ it("should add PDFs to context manager", async () => {
     await driver.inputMagentaText(`Please read sample2.pdf`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "I'll read the PDF",
@@ -1486,7 +1519,7 @@ it("should add PDFs to context manager", async () => {
     await driver.assertDisplayBufferContains(`👀✅ \`sample2.pdf\``);
 
     // Handle the auto-respond message
-    const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
     toolResultRequest.respond({
       stopReason: "end_turn",
       toolRequests: [],
@@ -1518,7 +1551,7 @@ it("should continue to add text files to context normally", async () => {
     await driver.inputMagentaText(`Please read poem.txt`);
     await driver.send();
 
-    const request = await driver.mockAnthropic.awaitPendingRequest();
+    const request = await driver.mockAnthropic.awaitPendingStream();
     request.respond({
       stopReason: "tool_use",
       text: "I'll read the text file",
@@ -1539,7 +1572,7 @@ it("should continue to add text files to context normally", async () => {
     await driver.assertDisplayBufferContains(`👀✅ \`poem.txt\``);
 
     // Handle the auto-respond message
-    const toolResultRequest = await driver.mockAnthropic.awaitPendingRequest();
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
     toolResultRequest.respond({
       stopReason: "end_turn",
       toolRequests: [],
@@ -1565,7 +1598,7 @@ it("should handle mixed content types in a single conversation", async () => {
     await driver.inputMagentaText(`Please read the poem.txt file`);
     await driver.send();
 
-    const request1 = await driver.mockAnthropic.awaitPendingRequest();
+    const request1 = await driver.mockAnthropic.awaitPendingStream();
     request1.respond({
       stopReason: "tool_use",
       text: "I'll read the text file",
@@ -1586,7 +1619,7 @@ it("should handle mixed content types in a single conversation", async () => {
     await driver.assertDisplayBufferContains(`👀✅ \`poem.txt\``);
 
     // Handle first auto-respond message
-    const toolResultRequest1 = await driver.mockAnthropic.awaitPendingRequest();
+    const toolResultRequest1 = await driver.mockAnthropic.awaitPendingStream();
     toolResultRequest1.respond({
       stopReason: "end_turn",
       toolRequests: [],
@@ -1597,7 +1630,7 @@ it("should handle mixed content types in a single conversation", async () => {
     await driver.inputMagentaText(`Now please analyze the test.jpg image`);
     await driver.send();
 
-    const request2 = await driver.mockAnthropic.awaitPendingRequest();
+    const request2 = await driver.mockAnthropic.awaitPendingStream();
     request2.respond({
       stopReason: "tool_use",
       text: "I'll analyze the image",
@@ -1618,7 +1651,7 @@ it("should handle mixed content types in a single conversation", async () => {
     await driver.assertDisplayBufferContains(`👀✅ \`test.jpg\``);
 
     // Handle second auto-respond message
-    const toolResultRequest2 = await driver.mockAnthropic.awaitPendingRequest();
+    const toolResultRequest2 = await driver.mockAnthropic.awaitPendingStream();
     toolResultRequest2.respond({
       stopReason: "end_turn",
       toolRequests: [],
@@ -1631,7 +1664,7 @@ it("should handle mixed content types in a single conversation", async () => {
     );
     await driver.send();
 
-    const request3 = await driver.mockAnthropic.awaitPendingRequest();
+    const request3 = await driver.mockAnthropic.awaitPendingStream();
     request3.respond({
       stopReason: "tool_use",
       text: "I'll read the PDF",
@@ -1652,7 +1685,7 @@ it("should handle mixed content types in a single conversation", async () => {
     await driver.assertDisplayBufferContains(`👀✅ \`sample2.pdf\``);
 
     // Handle final auto-respond message
-    const toolResultRequest3 = await driver.mockAnthropic.awaitPendingRequest();
+    const toolResultRequest3 = await driver.mockAnthropic.awaitPendingStream();
     toolResultRequest3.respond({
       stopReason: "end_turn",
       toolRequests: [],
@@ -1693,7 +1726,7 @@ it("should handle file size limits appropriately", async () => {
       );
       await driver.send();
 
-      const request = await driver.mockAnthropic.awaitPendingRequest();
+      const request = await driver.mockAnthropic.awaitPendingStream();
       request.respond({
         stopReason: "tool_use",
         text: "I'll try to analyze the large image",
@@ -1715,28 +1748,702 @@ it("should handle file size limits appropriately", async () => {
       await driver.assertDisplayBufferContains(`👀❌ \`large-image.jpg\``);
 
       // Verify the tool result contains error
-      const toolResultRequest =
-        await driver.mockAnthropic.awaitPendingRequest();
-      const toolResultMessage =
-        toolResultRequest.messages[toolResultRequest.messages.length - 1];
+      const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage = MockProvider.findLastToolResultMessage(
+        toolResultRequest.messages,
+      );
 
-      expect(toolResultMessage.role).toBe("user");
-      expect(Array.isArray(toolResultMessage.content)).toBe(true);
+      expect(toolResultMessage).toBeDefined();
+      expect(toolResultMessage!.role).toBe("user");
+      expect(Array.isArray(toolResultMessage!.content)).toBe(true);
+      const contentArray = toolResultMessage!.content as ContentBlockParam[];
 
-      const toolResult = toolResultMessage.content[0] as Extract<
-        (typeof toolResultMessage.content)[0],
-        { type: "tool_result" }
-      >;
+      const toolResult = contentArray[0] as ToolResultBlockParam;
       expect(toolResult.type).toBe("tool_result");
-      expect(toolResult.result.status).toBe("error");
+      expect(toolResult.is_error).toBe(true);
 
-      const toolResultError = toolResult.result as Extract<
-        typeof toolResult.result,
-        { status: "error" }
-      >;
-      expect(toolResultError.error).toContain("File too large");
+      const errorContent =
+        typeof toolResult.content === "string"
+          ? toolResult.content
+          : JSON.stringify(toolResult.content);
+      expect(errorContent).toContain("File too large");
 
       // No cleanup needed since the file is in the temporary test directory
+    },
+  );
+});
+
+it("large text files are truncated and skip context manager", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        const { writeFile } = await import("node:fs/promises");
+        // Create a file with many lines (more than would fit in token limit)
+        // MAX_FILE_TOKENS = 10000, CHARACTERS_PER_TOKEN = 4, so max chars = 40000
+        // Create a file with 1000 lines of 100 chars each = 100000 chars
+        const lines = Array.from(
+          { length: 1000 },
+          (_, i) => `Line ${String(i + 1).padStart(4, "0")}: ${"x".repeat(90)}`,
+        );
+        await writeFile(`${tmpDir}/large-file.txt`, lines.join("\n"));
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+
+      await driver.inputMagentaText(`Please read large-file.txt`);
+      await driver.send();
+
+      const request = await driver.mockAnthropic.awaitPendingStream();
+      request.respond({
+        stopReason: "tool_use",
+        text: "I'll read the file",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "large_file_request" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: {
+                filePath: "large-file.txt" as UnresolvedFilePath,
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(`👀✅ \`large-file.txt\``);
+
+      const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage = MockProvider.findLastToolResultMessage(
+        toolResultRequest.messages,
+      );
+
+      expect(toolResultMessage).toBeDefined();
+      expect(toolResultMessage!.role).toBe("user");
+      const contentArray = toolResultMessage!.content as ContentBlockParam[];
+      const toolResult = contentArray.find(
+        (item: ContentBlockParam) => item.type === "tool_result",
+      ) as ToolResultBlockParam;
+      expect(toolResult.is_error).toBeFalsy();
+
+      const toolResultContent = toolResult.content as ContentBlockParam[];
+      const textContent = toolResultContent.find(
+        (item: ContentBlockParam) => item.type === "text",
+      ) as TextBlockParam;
+
+      // Should have truncation header
+      expect(textContent.text).toContain("[Lines 1-");
+      expect(textContent.text).toContain("of 1000]");
+      // Should have continuation hint
+      expect(textContent.text).toContain("more lines not shown");
+      expect(textContent.text).toContain("Use startLine=");
+
+      toolResultRequest.respond({
+        stopReason: "end_turn",
+        toolRequests: [],
+        text: "I've read the truncated file.",
+      });
+
+      // File should NOT be added to context manager since it was truncated
+      const contextFiles =
+        driver.magenta.chat.getActiveThread().contextManager.files;
+      expect(Object.keys(contextFiles)).toHaveLength(0);
+    },
+  );
+});
+
+it("lines that are too long are abridged and skip context manager", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        const { writeFile } = await import("node:fs/promises");
+        // Create a file with one very long line (> MAX_LINE_TOKENS * CHARACTERS_PER_TOKEN = 2000 chars)
+        const longLine = "x".repeat(3000);
+        const content = `Line 1: normal\nLine 2: ${longLine}\nLine 3: normal`;
+        await writeFile(`${tmpDir}/long-line-file.txt`, content);
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+
+      await driver.inputMagentaText(`Please read long-line-file.txt`);
+      await driver.send();
+
+      const request = await driver.mockAnthropic.awaitPendingStream();
+      request.respond({
+        stopReason: "tool_use",
+        text: "I'll read the file",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "long_line_request" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: {
+                filePath: "long-line-file.txt" as UnresolvedFilePath,
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(`👀✅ \`long-line-file.txt\``);
+
+      const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage = MockProvider.findLastToolResultMessage(
+        toolResultRequest.messages,
+      );
+
+      expect(toolResultMessage).toBeDefined();
+      const contentArray = toolResultMessage!.content as ContentBlockParam[];
+      const toolResult = contentArray.find(
+        (item: ContentBlockParam) => item.type === "tool_result",
+      ) as ToolResultBlockParam;
+      expect(toolResult.is_error).toBeFalsy();
+
+      const toolResultContent = toolResult.content as ContentBlockParam[];
+      const textContent = toolResultContent.find(
+        (item: ContentBlockParam) => item.type === "text",
+      ) as TextBlockParam;
+
+      // Should indicate lines were abridged
+      expect(textContent.text).toContain("(some lines abridged)");
+      // Should have the abridging marker in the content
+      expect(textContent.text).toContain("chars omitted");
+
+      toolResultRequest.respond({
+        stopReason: "end_turn",
+        toolRequests: [],
+        text: "I've read the file with abridged lines.",
+      });
+
+      // File should NOT be added to context manager since lines were abridged
+      const contextFiles =
+        driver.magenta.chat.getActiveThread().contextManager.files;
+      expect(Object.keys(contextFiles)).toHaveLength(0);
+    },
+  );
+});
+
+it("startLine and numLines parameters work and skip context manager", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    await driver.inputMagentaText(`Please read lines 2-3 of poem.txt`);
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "I'll read those specific lines",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "partial_request" as ToolRequestId,
+            toolName: "get_file" as ToolName,
+            input: {
+              filePath: "poem.txt" as UnresolvedFilePath,
+              startLine: 2,
+              numLines: 2,
+            },
+          },
+        },
+      ],
+    });
+
+    // Should show the line range in the display
+    await driver.assertDisplayBufferContains(`👀✅ \`poem.txt\` (lines 2-3)`);
+
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const toolResultMessage = MockProvider.findLastToolResultMessage(
+      toolResultRequest.messages,
+    );
+
+    expect(toolResultMessage).toBeDefined();
+    const contentArray = toolResultMessage!.content as ContentBlockParam[];
+    const toolResult = contentArray.find(
+      (item: ContentBlockParam) => item.type === "tool_result",
+    ) as ToolResultBlockParam;
+    expect(toolResult.is_error).toBeFalsy();
+
+    const toolResultContent = toolResult.content as ContentBlockParam[];
+    const textContent = toolResultContent.find(
+      (item: ContentBlockParam) => item.type === "text",
+    ) as TextBlockParam;
+
+    // Should have line range header
+    expect(textContent.text).toContain("[Lines 2-3 of");
+    // Should contain line 2 content
+    expect(textContent.text).toContain("Silver shadows dance with ease");
+    // Should NOT contain line 1
+    expect(textContent.text).not.toContain("Moonlight whispers");
+
+    toolResultRequest.respond({
+      stopReason: "end_turn",
+      toolRequests: [],
+      text: "I've read the specific lines.",
+    });
+
+    // File should NOT be added to context manager since we only read partial content
+    const contextFiles =
+      driver.magenta.chat.getActiveThread().contextManager.files;
+    expect(Object.keys(contextFiles)).toHaveLength(0);
+  });
+});
+
+it("startLine parameter alone works and skips context manager", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    await driver.inputMagentaText(`Please read poem.txt from line 3`);
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "I'll read from that line",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "partial_request" as ToolRequestId,
+            toolName: "get_file" as ToolName,
+            input: {
+              filePath: "poem.txt" as UnresolvedFilePath,
+              startLine: 3,
+            },
+          },
+        },
+      ],
+    });
+
+    // Should show the starting line in the display
+    await driver.assertDisplayBufferContains(`👀✅ \`poem.txt\` (from line 3)`);
+
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const toolResultMessage = MockProvider.findLastToolResultMessage(
+      toolResultRequest.messages,
+    );
+
+    expect(toolResultMessage).toBeDefined();
+    const contentArray = toolResultMessage!.content as ContentBlockParam[];
+    const toolResult = contentArray.find(
+      (item: ContentBlockParam) => item.type === "tool_result",
+    ) as ToolResultBlockParam;
+    expect(toolResult.is_error).toBeFalsy();
+
+    const toolResultContent = toolResult.content as ContentBlockParam[];
+    const textContent = toolResultContent.find(
+      (item: ContentBlockParam) => item.type === "text",
+    ) as TextBlockParam;
+
+    // Should have line range header starting at line 3
+    expect(textContent.text).toContain("[Lines 3-");
+    // Should contain lines 3 and 4
+    expect(textContent.text).toContain("Stars above like diamonds bright");
+    expect(textContent.text).toContain("Paint their stories in the night");
+    // Should NOT contain lines 1-2
+    expect(textContent.text).not.toContain("Moonlight whispers");
+    expect(textContent.text).not.toContain("Silver shadows");
+
+    toolResultRequest.respond({
+      stopReason: "end_turn",
+      toolRequests: [],
+      text: "I've read from the specified line.",
+    });
+
+    // File should NOT be added to context manager since we started from a non-zero line
+    const contextFiles =
+      driver.magenta.chat.getActiveThread().contextManager.files;
+    expect(Object.keys(contextFiles)).toHaveLength(0);
+  });
+});
+
+it("requesting line range from file already in context returns early without force", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    // Add the file to context first
+    await driver.addContextFiles("./poem.txt");
+
+    // Now try to read a specific range without force
+    await driver.inputMagentaText(`Please read lines 2-3 of poem.txt`);
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "I'll read those lines",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "range_request" as ToolRequestId,
+            toolName: "get_file" as ToolName,
+            input: {
+              filePath: "poem.txt" as UnresolvedFilePath,
+              startLine: 2,
+              numLines: 2,
+            },
+          },
+        },
+      ],
+    });
+
+    // Should still show the line range (not early return)
+    await driver.assertDisplayBufferContains(`👀✅ \`poem.txt\` (lines 2-3)`);
+
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const toolResultMessage = MockProvider.findLastToolResultMessage(
+      toolResultRequest.messages,
+    );
+
+    expect(toolResultMessage).toBeDefined();
+    const contentArray = toolResultMessage!.content as ContentBlockParam[];
+    const toolResult = contentArray.find(
+      (item: ContentBlockParam) => item.type === "tool_result",
+    ) as ToolResultBlockParam;
+
+    const toolResultContent = toolResult.content as ContentBlockParam[];
+    const textContent = toolResultContent.find(
+      (item: ContentBlockParam) => item.type === "text",
+    ) as TextBlockParam;
+
+    // With line params, should return the actual content (not early return)
+    expect(textContent.text).toContain("[Lines 2-3 of");
+    expect(textContent.text).toContain("Silver shadows dance with ease");
+  });
+});
+
+it("force parameter with line range returns just those lines", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    // Add the file to context first
+    await driver.addContextFiles("./poem.txt");
+
+    // Now try to read a specific range with force
+    await driver.inputMagentaText(
+      `Please read lines 2-3 of poem.txt with force`,
+    );
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "I'll read those lines with force",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "force_range_request" as ToolRequestId,
+            toolName: "get_file" as ToolName,
+            input: {
+              filePath: "poem.txt" as UnresolvedFilePath,
+              startLine: 2,
+              numLines: 2,
+              force: true,
+            },
+          },
+        },
+      ],
+    });
+
+    await driver.assertDisplayBufferContains(`👀✅ \`poem.txt\` (lines 2-3)`);
+
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const toolResultMessage = MockProvider.findLastToolResultMessage(
+      toolResultRequest.messages,
+    );
+
+    expect(toolResultMessage).toBeDefined();
+    const contentArray = toolResultMessage!.content as ContentBlockParam[];
+    const toolResult = contentArray.find(
+      (item: ContentBlockParam) => item.type === "tool_result",
+    ) as ToolResultBlockParam;
+    expect(toolResult.is_error).toBeFalsy();
+
+    const toolResultContent = toolResult.content as ContentBlockParam[];
+    const textContent = toolResultContent.find(
+      (item: ContentBlockParam) => item.type === "text",
+    ) as TextBlockParam;
+    // Should return actual content with line range header
+    expect(textContent.text).toContain("[Lines 2-3 of");
+    expect(textContent.text).toContain("Silver shadows dance with ease");
+    // Should NOT contain the "already in context" message
+    expect(textContent.text).not.toContain(
+      "already part of the thread context",
+    );
+  });
+});
+
+it("invalid startLine beyond file length returns error", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    await driver.inputMagentaText(`Please read poem.txt from line 100`);
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "I'll try to read from that line",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "invalid_start_request" as ToolRequestId,
+            toolName: "get_file" as ToolName,
+            input: {
+              filePath: "poem.txt" as UnresolvedFilePath,
+              startLine: 100,
+            },
+          },
+        },
+      ],
+    });
+
+    await driver.assertDisplayBufferContains(`👀❌ \`poem.txt\``);
+
+    const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+    const toolResultMessage = MockProvider.findLastToolResultMessage(
+      toolResultRequest.messages,
+    );
+
+    expect(toolResultMessage).toBeDefined();
+    const contentArray = toolResultMessage!.content as ContentBlockParam[];
+    const toolResult = contentArray[0] as ToolResultBlockParam;
+    expect(toolResult.is_error).toBe(true);
+
+    const errorContent =
+      typeof toolResult.content === "string"
+        ? toolResult.content
+        : JSON.stringify(toolResult.content);
+    expect(errorContent).toContain("startLine 100 is beyond end of file");
+  });
+});
+
+it("line ranges with long lines still get abridged", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        const { writeFile } = await import("node:fs/promises");
+        // Create a file with a very long line in the middle
+        const longLine = "x".repeat(3000);
+        const content = `Line 1: normal\nLine 2: ${longLine}\nLine 3: normal\nLine 4: also normal`;
+        await writeFile(`${tmpDir}/long-line-range.txt`, content);
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+
+      // Request a specific range that includes the long line
+      await driver.inputMagentaText(
+        `Please read lines 2-3 of long-line-range.txt`,
+      );
+      await driver.send();
+
+      const request = await driver.mockAnthropic.awaitPendingStream();
+      request.respond({
+        stopReason: "tool_use",
+        text: "I'll read those lines",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "range_long_line_request" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: {
+                filePath: "long-line-range.txt" as UnresolvedFilePath,
+                startLine: 2,
+                numLines: 2,
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.assertDisplayBufferContains(
+        `👀✅ \`long-line-range.txt\` (lines 2-3)`,
+      );
+
+      const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage = MockProvider.findLastToolResultMessage(
+        toolResultRequest.messages,
+      );
+
+      expect(toolResultMessage).toBeDefined();
+      const contentArray = toolResultMessage!.content as ContentBlockParam[];
+      const toolResult = contentArray.find(
+        (item: ContentBlockParam) => item.type === "tool_result",
+      ) as ToolResultBlockParam;
+      expect(toolResult.is_error).toBeFalsy();
+
+      const toolResultContent = toolResult.content as ContentBlockParam[];
+      const textContent = toolResultContent.find(
+        (item: ContentBlockParam) => item.type === "text",
+      ) as TextBlockParam;
+
+      // Should indicate lines were abridged
+      expect(textContent.text).toContain("(some lines abridged)");
+      // Should have the abridging marker in the content
+      expect(textContent.text).toContain("chars omitted");
+      // Should still show line 3 content
+      expect(textContent.text).toContain("Line 3: normal");
+    },
+  );
+});
+
+it("should show treesitter minimap for large TypeScript file", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        const fs = await import("fs/promises");
+        const path = await import("path");
+
+        // Create a large TypeScript file (>40K chars)
+        const lines: string[] = [];
+        lines.push("interface User {");
+        lines.push("  name: string;");
+        lines.push("  age: number;");
+        lines.push("}");
+        lines.push("");
+
+        // Add many function declarations to make file large
+        for (let i = 0; i < 500; i++) {
+          lines.push(`function processItem${i}(data: User): string {`);
+          lines.push(
+            `  const result = data.name + " is " + data.age + " years old";`,
+          );
+          lines.push(`  console.log("Processing item ${i}:", result);`);
+          lines.push(`  return result;`);
+          lines.push(`}`);
+          lines.push("");
+        }
+
+        lines.push("class DataProcessor {");
+        lines.push("  private items: User[] = [];");
+        lines.push("");
+        lines.push("  addItem(item: User): void {");
+        lines.push("    this.items.push(item);");
+        lines.push("  }");
+        lines.push("}");
+
+        await fs.writeFile(path.join(tmpDir, "large.ts"), lines.join("\n"));
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+      await driver.inputMagentaText("Read the large.ts file");
+      await driver.send();
+
+      const stream = await driver.mockAnthropic.awaitPendingStream();
+      stream.respond({
+        stopReason: "tool_use",
+        text: "I'll read that file",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "tool1" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: { filePath: "./large.ts" as UnresolvedFilePath },
+            },
+          },
+        ],
+      });
+
+      // Wait for tool result
+      const resultStream = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage = MockProvider.findLastToolResultMessage(
+        resultStream.messages,
+      );
+
+      expect(toolResultMessage).toBeDefined();
+      const contentArray = toolResultMessage!.content as ContentBlockParam[];
+      const toolResult = contentArray.find(
+        (item: ContentBlockParam) => item.type === "tool_result",
+      ) as ToolResultBlockParam;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.is_error).toBeFalsy();
+
+      const toolResultContent = toolResult.content as ContentBlockParam[];
+      const textContent = toolResultContent.find(
+        (item: ContentBlockParam) => item.type === "text",
+      ) as TextBlockParam;
+
+      // Check that the result contains the minimap header
+      expect(textContent.text).toContain("[Tree-sitter minimap (typescript)]");
+      expect(textContent.text).toContain("interface User");
+      expect(textContent.text).toContain("class DataProcessor");
+    },
+  );
+});
+
+it("should fallback to line-based truncation for unknown file type", async () => {
+  await withDriver(
+    {
+      setupFiles: async (tmpDir) => {
+        const fs = await import("fs/promises");
+        const path = await import("path");
+
+        // Create a large file with unknown extension
+        const lines: string[] = [];
+        for (let i = 0; i < 1000; i++) {
+          lines.push(`Line ${i}: ${"x".repeat(50)}`);
+        }
+        await fs.writeFile(
+          path.join(tmpDir, "large.unknown123"),
+          lines.join("\n"),
+        );
+      },
+    },
+    async (driver) => {
+      await driver.showSidebar();
+      await driver.inputMagentaText("Read the large.unknown123 file");
+      await driver.send();
+
+      const stream = await driver.mockAnthropic.awaitPendingStream();
+      stream.respond({
+        stopReason: "tool_use",
+        text: "I'll read that file",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "tool1" as ToolRequestId,
+              toolName: "get_file" as ToolName,
+              input: { filePath: "./large.unknown123" as UnresolvedFilePath },
+            },
+          },
+        ],
+      });
+
+      // Wait for tool result
+      const resultStream = await driver.mockAnthropic.awaitPendingStream();
+      const toolResultMessage = MockProvider.findLastToolResultMessage(
+        resultStream.messages,
+      );
+
+      expect(toolResultMessage).toBeDefined();
+      const contentArray = toolResultMessage!.content as ContentBlockParam[];
+      const toolResult = contentArray.find(
+        (item: ContentBlockParam) => item.type === "tool_result",
+      ) as ToolResultBlockParam;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.is_error).toBeFalsy();
+
+      const toolResultContent = toolResult.content as ContentBlockParam[];
+      const textContent = toolResultContent.find(
+        (item: ContentBlockParam) => item.type === "text",
+      ) as TextBlockParam;
+
+      // Should NOT contain minimap header since no parser available
+      expect(textContent.text).not.toContain("[Tree-sitter minimap");
+      // Should still have the line count header
+      expect(textContent.text).toContain("[Lines 1-100 of 1000]");
     },
   );
 });

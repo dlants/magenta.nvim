@@ -7,7 +7,6 @@ import {
   isLikelyTextFile,
   validateFileSize,
   FileCategory,
-  FILE_SIZE_LIMITS,
 } from "./files";
 import { withNvimClient } from "../test/preamble";
 import { getcwd } from "../nvim/nvim";
@@ -165,7 +164,7 @@ describe("detectFileType", () => {
 });
 
 describe("validateFileSize", () => {
-  it("should validate text file sizes correctly", async () => {
+  it("should always allow text files regardless of size", async () => {
     await withNvimClient(async (nvim) => {
       const cwd = await getcwd(nvim);
       const textFile = path.join(cwd, "poem.txt");
@@ -173,24 +172,26 @@ describe("validateFileSize", () => {
 
       expect(result.isValid).toBe(true);
       expect(result.actualSize).toBeGreaterThan(0);
-      expect(result.maxSize).toBe(FILE_SIZE_LIMITS.TEXT);
+      expect(result.maxSize).toBe(Infinity);
     });
   });
 
-  it("should reject oversized text files", async () => {
+  it("should allow large text files (tree-sitter handles them)", async () => {
     await withNvimClient(async (nvim) => {
       const cwd = await getcwd(nvim);
       const largeFile = path.join(cwd, "large.txt");
 
-      // Create a file that exceeds the text file size limit
-      const content = "x".repeat(FILE_SIZE_LIMITS.TEXT + 1000);
+      // Create a large file - should still be valid
+      const content = "x".repeat(2 * 1024 * 1024); // 2MB
       await fs.writeFile(largeFile, content);
 
       const result = await validateFileSize(largeFile, FileCategory.TEXT);
 
-      expect(result.isValid).toBe(false);
-      expect(result.actualSize).toBeGreaterThan(FILE_SIZE_LIMITS.TEXT);
-      expect(result.maxSize).toBe(FILE_SIZE_LIMITS.TEXT);
+      expect(result.isValid).toBe(true);
+      expect(result.maxSize).toBe(Infinity);
+
+      // Cleanup
+      await fs.unlink(largeFile);
     });
   });
 });

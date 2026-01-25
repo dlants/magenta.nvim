@@ -8,6 +8,7 @@ import {
   resolveFilePath,
   type NvimCwd,
   type UnresolvedFilePath,
+  MAGENTA_TEMP_DIR,
 } from "../../utils/files.ts";
 import type { Gitignore } from "../util.ts";
 
@@ -147,6 +148,11 @@ function isPathSafe(
     currentCwd,
     expandedPath as UnresolvedFilePath,
   );
+
+  // Magenta temp files (e.g., bash command logs) are always safe
+  if (absPath.startsWith(MAGENTA_TEMP_DIR + path.sep)) {
+    return { safe: true };
+  }
 
   // Check if within project cwd (the original project root)
   if (!absPath.startsWith(projectCwd + path.sep) && absPath !== projectCwd) {

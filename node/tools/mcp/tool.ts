@@ -41,6 +41,7 @@ export function validateInput(args: { [key: string]: unknown }): Result<Input> {
 export class MCPTool implements Tool {
   state: State;
   toolName: ToolName;
+  aborted: boolean = false;
 
   constructor(
     public request: {
@@ -62,12 +63,14 @@ export class MCPTool implements Tool {
 
     // Start the MCP tool execution in a fresh frame
     setTimeout(() => {
-      this.executeMCPTool().catch((err: Error) =>
+      if (this.aborted) return;
+      this.executeMCPTool().catch((err: Error) => {
+        if (this.aborted) return;
         this.context.myDispatch({
           type: "error",
           error: err.message + "\n" + err.stack,
-        }),
-      );
+        });
+      });
     });
   }
 
@@ -117,6 +120,8 @@ export class MCPTool implements Tool {
 
       const result = await this.context.mcpClient.callTool(mcpToolName, params);
 
+      if (this.aborted) return;
+
       this.context.myDispatch({
         type: "success",
         result: {
@@ -129,6 +134,8 @@ export class MCPTool implements Tool {
         },
       });
     } catch (error) {
+      if (this.aborted) return;
+
       const errorMessage =
         error instanceof Error
           ? error.message + "\n" + error.stack
@@ -141,23 +148,28 @@ export class MCPTool implements Tool {
     }
   }
 
-  /** It is the expectation that this is happening as part of a dispatch, so it should not trigger
-   * new dispatches...
-   */
-  abort(): void {
-    if (this.state.state === "processing") {
-      this.state = {
-        state: "done",
-        result: {
-          type: "tool_result",
-          id: this.request.id,
-          result: {
-            status: "error",
-            error: "MCP tool execution was aborted",
-          },
-        },
-      };
+  abort(): ProviderToolResult {
+    if (this.state.state === "done" || this.state.state === "error") {
+      return this.getToolResult();
     }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
+      result: {
+        status: "error",
+        error: "Request was aborted by the user.",
+      },
+    };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   getToolResult(): ProviderToolResult {

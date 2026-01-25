@@ -36,6 +36,10 @@ import {
 } from "./edit-prediction/edit-prediction-controller.ts";
 import { initializeMagentaHighlightGroups } from "./nvim/extmarks.ts";
 import { MAGENTA_HIGHLIGHT_NAMESPACE } from "./nvim/buffer.ts";
+import { createPKB, type CreatePKBContext } from "./pkb/create-pkb.ts";
+import { getProvider } from "./providers/provider.ts";
+import { PKBManager } from "./pkb/pkb-manager.ts";
+import type { PKB } from "./pkb/pkb.ts";
 
 // these constants should match lua/magenta/init.lua
 const MAGENTA_COMMAND = "magentaCommand";
@@ -56,6 +60,8 @@ export class Magenta {
   public bufferTracker: BufferTracker;
   public changeTracker: ChangeTracker;
   public editPredictionController: EditPredictionController;
+  public pkbManager: PKBManager | undefined;
+  public pkb: PKB | undefined;
 
   constructor(
     public nvim: Nvim,
@@ -65,6 +71,34 @@ export class Magenta {
   ) {
     this.bufferTracker = new BufferTracker(this.nvim);
     this.changeTracker = new ChangeTracker(this.nvim, this.cwd, this.options);
+
+    // Initialize PKB if configured
+    if (this.options.pkb) {
+      try {
+        const activeProfile = getActiveProfile(
+          this.options.profiles,
+          this.options.activeProfile,
+        );
+        const pkbContext: CreatePKBContext = {
+          provider: getProvider(this.nvim, activeProfile),
+          fastModel: activeProfile.fastModel,
+          logger: this.nvim.logger,
+        };
+        this.pkb = createPKB(this.options.pkb, this.cwd, pkbContext);
+        this.pkbManager = new PKBManager(
+          this.pkb,
+          this.nvim.logger,
+          this.options.pkb.updateIntervalMs,
+        );
+        // for now, indexing will be manual
+        // this.pkbManager.start();
+        this.nvim.logger.info("PKB initialized");
+      } catch (e) {
+        this.nvim.logger.error(
+          `Failed to initialize PKB: ${e instanceof Error ? e.message + "\n" + e.stack : String(e)}`,
+        );
+      }
+    }
 
     this.dispatch = (msg: RootMsg) => {
       try {
@@ -103,6 +137,7 @@ export class Magenta {
       nvim: this.nvim,
       options: this.options,
       lsp: this.lsp,
+      pkb: this.pkb,
     });
 
     this.editPredictionController = new EditPredictionController(
@@ -119,7 +154,18 @@ export class Magenta {
     this.sidebar = new Sidebar(
       this.nvim,
       () => this.getActiveProfile(),
-      () => this.chat.getActiveThread().getLastStopTokenCount(),
+      () => {
+        // Thread may not be initialized yet during first sidebar show
+        if (!this.chat.state.activeThreadId) {
+          return 0;
+        }
+        const wrapper =
+          this.chat.threadWrappers[this.chat.state.activeThreadId];
+        if (!wrapper || wrapper.state !== "initialized") {
+          return 0;
+        }
+        return wrapper.thread.getLastStopTokenCount();
+      },
     );
 
     this.chatApp = TEA.createApp<Chat>({
@@ -132,7 +178,7 @@ export class Magenta {
       nvim,
       cwd: this.cwd,
       options,
-      getMessages: () => this.chat.getMessages(),
+      getContextAgent: () => this.chat.getContextAgent(),
     });
   }
 
@@ -304,17 +350,6 @@ export class Magenta {
 
         break;
       }
-
-      case "clear":
-        this.dispatch({
-          type: "thread-msg",
-          id: this.chat.getActiveThread().id,
-          msg: {
-            type: "clear",
-            profile: this.getActiveProfile(),
-          },
-        });
-        break;
 
       case "abort": {
         this.dispatch({
@@ -552,8 +587,10 @@ ${lines.join("\n")}
     const key = args[0];
     if (this.mountedChatApp) {
       if (BINDING_KEYS.indexOf(key as BindingKey) > -1) {
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        this.mountedChatApp.onKey(key as BindingKey);
+        this.mountedChatApp.onKey(key as BindingKey).catch((err) => {
+          this.nvim.logger.error(err);
+          throw err;
+        });
       } else {
         this.nvim.logger.error(`Unexpected MagentaKey ${JSON.stringify(key)}`);
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
@@ -637,6 +674,12 @@ ${lines.join("\n")}
         `Error destroying inline edit manager: ${e instanceof Error ? e.message + "\n" + e.stack : JSON.stringify(e)}`,
       );
     });
+    if (this.pkbManager) {
+      this.pkbManager.stop();
+    }
+    if (this.pkb) {
+      this.pkb.close();
+    }
   }
 
   static async start(nvim: Nvim) {

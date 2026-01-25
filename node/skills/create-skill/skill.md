@@ -9,13 +9,14 @@ This guide explains how to create custom skills that extend Claude's capabilitie
 
 ## Skill Locations
 
-Skills can be placed in two locations:
+Skills can be placed in several locations:
 
 ### Global Skills
 
-- **Location**: `~/.magenta/skills/`
+- **Location**: `~/.magenta/skills/` or `~/.claude/skills/`
 - **Usage**: Available across all projects
 - **Use case**: General-purpose skills you want in every project
+- **Note**: Both locations work identically; choose based on preference
 
 ### Project-Specific Skills
 

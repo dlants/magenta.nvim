@@ -5,20 +5,16 @@ exports[`context-files end-to-end 1`] = `
   {
     "content": [
       {
-        "text": "These files are part of your context. This is the latest information about the content of each file.
-From now on, whenever any of these files are updated by the user, you will get a message letting you know.",
-        "type": "text",
-      },
-      {
-        "text": "File \`poem.txt\`",
-        "type": "text",
-      },
-      {
-        "text": "Moonlight whispers through the trees,
+        "text": "<context_update>
+These files are part of your context. This is the latest information about the content of each file.
+From now on, whenever any of these files are updated by the user, you will get a message letting you know.
+File \`poem.txt\`
+Moonlight whispers through the trees,
 Silver shadows dance with ease.
 Stars above like diamonds bright,
 Paint their stories in the night.
-",
+
+</context_update>",
         "type": "text",
       },
       {
@@ -30,8 +26,19 @@ Paint their stories in the night.
 Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
 </system-reminder>",
-        "type": "system_reminder",
+        "type": "text",
+      },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "<checkpoint:000000>",
+        "type": "text",
       },
     ],
     "role": "user",
@@ -44,29 +51,19 @@ exports[`context-files multiple, weird path names 1`] = `
   {
     "content": [
       {
-        "text": "These files are part of your context. This is the latest information about the content of each file.
-From now on, whenever any of these files are updated by the user, you will get a message letting you know.",
-        "type": "text",
-      },
-      {
-        "text": "File \`poem.txt\`",
-        "type": "text",
-      },
-      {
-        "text": "Moonlight whispers through the trees,
+        "text": "<context_update>
+These files are part of your context. This is the latest information about the content of each file.
+From now on, whenever any of these files are updated by the user, you will get a message letting you know.
+File \`poem.txt\`
+Moonlight whispers through the trees,
 Silver shadows dance with ease.
 Stars above like diamonds bright,
 Paint their stories in the night.
-",
-        "type": "text",
-      },
-      {
-        "text": "File \`poem 3.txt\`",
-        "type": "text",
-      },
-      {
-        "text": "poem3
-",
+
+File \`poem 3.txt\`
+poem3
+
+</context_update>",
         "type": "text",
       },
       {
@@ -78,8 +75,19 @@ Paint their stories in the night.
 Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
 </system-reminder>",
-        "type": "system_reminder",
+        "type": "text",
+      },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "<checkpoint:000000>",
+        "type": "text",
       },
     ],
     "role": "user",
@@ -92,15 +100,14 @@ exports[`includes PDF file in context and sends summary in context updates 1`] =
   {
     "content": [
       {
-        "text": "These files are part of your context. This is the latest information about the content of each file.
-From now on, whenever any of these files are updated by the user, you will get a message letting you know.",
-        "type": "text",
-      },
-      {
-        "text": "PDF Document: context-test.pdf
+        "text": "<context_update>
+These files are part of your context. This is the latest information about the content of each file.
+From now on, whenever any of these files are updated by the user, you will get a message letting you know.
+PDF Document: context-test.pdf
 Pages: 3
 
-Use get-file tool with a pdfPage parameter to access specific pages.",
+Use get-file tool with a pdfPage parameter to access specific pages.
+</context_update>",
         "type": "text",
       },
       {
@@ -112,8 +119,19 @@ Use get-file tool with a pdfPage parameter to access specific pages.",
 Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
 </system-reminder>",
-        "type": "system_reminder",
+        "type": "text",
+      },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "<checkpoint:000000>",
+        "type": "text",
       },
     ],
     "role": "user",
@@ -125,12 +143,10 @@ exports[`sends update if the file was edited pre-insert 1`] = `
 {
   "content": [
     {
-      "text": "These files are part of your context. This is the latest information about the content of each file.
-From now on, whenever any of these files are updated by the user, you will get a message letting you know.",
-      "type": "text",
-    },
-    {
-      "text": "- \`poem.txt\`
+      "text": "<context_update>
+These files are part of your context. This is the latest information about the content of each file.
+From now on, whenever any of these files are updated by the user, you will get a message letting you know.
+- \`poem.txt\`
 \`\`\`diff
 Index: poem.txt
 ===================================================================
@@ -142,8 +158,25 @@ Index: poem.txt
  Silver shadows dance with ease.
  Stars above like diamonds bright,
 
-\`\`\`",
-      "type": "text",
+\`\`\`
+</context_update>",
+      "type": "context_update",
+    },
+    {
+      "text": "<system-reminder>
+Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
+CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+</system-reminder>",
+      "type": "system_reminder",
+    },
+    {
+      "id": "000001",
+      "type": "checkpoint",
     },
   ],
   "role": "user",

@@ -1,18 +1,20 @@
-import { d, withBindings } from "../tea/view.ts";
+import { d, withBindings, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { StaticToolRequest } from "./toolManager.ts";
 import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
+import type { CompletedToolInfo } from "./types.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { StaticTool, ToolName } from "./types.ts";
+import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import { AGENT_TYPES, type AgentType } from "../providers/system-prompt.ts";
 import type { ThreadId, ThreadType } from "../chat/types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
+
+export type ToolRequest = GenericToolRequest<"spawn_subagent", Input>;
 
 export type Msg = {
   type: "subagent-created";
@@ -25,16 +27,16 @@ export type State =
     }
   | {
       state: "done";
-      threadId?: ThreadId;
       result: ProviderToolResult;
     };
 
 export class SpawnSubagentTool implements StaticTool {
   toolName = "spawn_subagent" as const;
   public state: State;
+  public aborted: boolean = false;
 
   constructor(
-    public request: Extract<StaticToolRequest, { toolName: "spawn_subagent" }>,
+    public request: ToolRequest,
     public context: {
       nvim: Nvim;
       dispatch: Dispatch<RootMsg>;
@@ -49,6 +51,7 @@ export class SpawnSubagentTool implements StaticTool {
     // Start the process of spawning a sub-agent
     // Wrap in setTimeout to force new eventloop frame, to avoid dispatch-in-dispatch
     setTimeout(() => {
+      if (this.aborted) return;
       this.spawnSubagent();
     });
   }
@@ -81,31 +84,33 @@ export class SpawnSubagentTool implements StaticTool {
     return false; // Spawn subagent never requires user action
   }
 
-  abort() {
-    switch (this.state.state) {
-      case "preparing":
-        this.state = {
-          state: "done",
-          result: {
-            type: "tool_result",
-            id: this.request.id,
-            result: {
-              status: "error",
-              error: "Sub-agent execution was aborted",
-            },
-          },
-        };
-        break;
-
-      case "done":
-        // Already done, nothing to abort
-        break;
-      default:
-        assertUnreachable(this.state);
+  abort(): ProviderToolResult {
+    if (this.state.state === "done") {
+      return this.getToolResult();
     }
+
+    this.aborted = true;
+
+    const result: ProviderToolResult = {
+      type: "tool_result",
+      id: this.request.id,
+      result: {
+        status: "error",
+        error: "Request was aborted by the user.",
+      },
+    };
+
+    this.state = {
+      state: "done",
+      result,
+    };
+
+    return result;
   }
 
   update(msg: Msg): void {
+    if (this.aborted) return;
+
     switch (msg.type) {
       case "subagent-created":
         switch (msg.result.status) {
@@ -168,36 +173,59 @@ export class SpawnSubagentTool implements StaticTool {
   }
 
   renderSummary() {
-    const agentTypeText = this.request.input.agentType
-      ? ` (${this.request.input.agentType})`
-      : "";
+    const promptPreview =
+      this.request.input.prompt.length > 50
+        ? this.request.input.prompt.substring(0, 50) + "..."
+        : this.request.input.prompt;
 
     switch (this.state.state) {
       case "preparing":
-        return d`🤖⚙️ Spawning subagent${agentTypeText}`;
-      case "done": {
-        const threadId = this.state.threadId;
-        const result = this.state.result.result;
-        if (result.status === "error") {
-          return d`🤖❌ Spawning subagent${agentTypeText}`;
-        } else {
-          return withBindings(d`🤖✅ Spawning subagent${agentTypeText}`, {
-            "<CR>": () => {
-              if (threadId) {
-                this.context.dispatch({
-                  type: "chat-msg",
-                  msg: {
-                    type: "select-thread",
-                    id: threadId,
-                  },
-                });
-              }
-            },
-          });
-        }
-      }
+        return d`🚀⚙️ spawn_subagent: ${promptPreview}`;
+      case "done":
+        return renderCompletedSummary(
+          {
+            request: this.request as CompletedToolInfo["request"],
+            result: this.state.result,
+          },
+          this.context.dispatch,
+        );
     }
   }
+}
+
+export function renderCompletedSummary(
+  info: CompletedToolInfo,
+  dispatch: Dispatch<RootMsg>,
+): VDOMNode {
+  const result = info.result.result;
+  if (result.status === "error") {
+    const errorPreview =
+      result.error.length > 50
+        ? result.error.substring(0, 50) + "..."
+        : result.error;
+
+    return d`🤖❌ spawn_subagent: ${errorPreview}`;
+  }
+
+  // Parse threadId from result text: "Sub-agent started with threadId: <id>"
+  const resultText =
+    result.value[0]?.type === "text" ? result.value[0].text : "";
+  const match = resultText.match(/threadId: ([a-f0-9-]+)/);
+  const threadId = match ? (match[1] as ThreadId) : undefined;
+
+  return withBindings(d`🤖✅ spawn_subagent ${threadId || "undefined"}`, {
+    "<CR>": () => {
+      if (threadId) {
+        dispatch({
+          type: "chat-msg",
+          msg: {
+            type: "select-thread",
+            id: threadId,
+          },
+        });
+      }
+    },
+  });
 }
 
 export const spec: ProviderToolSpec = {

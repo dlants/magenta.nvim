@@ -4,7 +4,7 @@ import { glob } from "glob";
 import type { AbsFilePath, NvimCwd } from "../utils/files.ts";
 import type { MagentaOptions } from "../options.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import { relativePath } from "../utils/files.ts";
+import { relativePath, MAGENTA_TEMP_DIR } from "../utils/files.ts";
 import type { Gitignore } from "./util.ts";
 
 function expandTilde(filepath: string): string {
@@ -12,6 +12,10 @@ function expandTilde(filepath: string): string {
     return path.join(os.homedir(), filepath.slice(1));
   }
   return filepath;
+}
+
+function isFileInMagentaTempDirectory(absFilePath: AbsFilePath): boolean {
+  return absFilePath.startsWith(MAGENTA_TEMP_DIR + path.sep);
 }
 
 function isFileInSkillsDirectory(
@@ -85,6 +89,11 @@ export async function canReadFile(
   },
 ): Promise<boolean> {
   const relFilePath = relativePath(context.cwd, absFilePath);
+
+  // Magenta temp files (e.g., bash command logs) are auto-approved for reading
+  if (isFileInMagentaTempDirectory(absFilePath)) {
+    return true;
+  }
 
   // Skills files are auto-approved for reading
   if (isFileInSkillsDirectory(absFilePath, context)) {
