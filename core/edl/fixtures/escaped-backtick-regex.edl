@@ -1,0 +1,5 @@
+file `{{FILE}}`
+narrow_one /\\`world\\`/
+replace <<END
+\`planet\`
+END

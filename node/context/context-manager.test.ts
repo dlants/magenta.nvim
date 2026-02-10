@@ -246,7 +246,7 @@ it.skip("avoids sending redundant context updates after tool application (no buf
         content: [
           {
             type: "system_reminder",
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
             text: expect.stringContaining("Remember to use the skills"),
           },
         ],
@@ -271,7 +271,7 @@ it.skip("avoids sending redundant context updates after tool application (no buf
         content: [
           {
             type: "system_reminder",
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
             text: expect.stringContaining("Remember to use the skills"),
           },
         ],
@@ -297,7 +297,7 @@ it.skip("avoids sending redundant context updates after tool application (no buf
         },
         {
           type: "system_reminder",
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
           text: expect.stringContaining("Remember to use the skills"),
         },
       ],
@@ -881,11 +881,11 @@ it("autoContext loads on startup and after new-thread", async () => {
     expect(request.messages).toContainEqual(
       expect.objectContaining<ProviderMessage>({
         role: "user",
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
         content: expect.arrayContaining([
           expect.objectContaining({
             type: "text",
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
             text: expect.stringContaining("test-auto-context.md"),
           }),
         ]),
@@ -996,7 +996,7 @@ it("includes PDF file in context and sends summary in context updates", async ()
               source: {
                 type: "base64",
                 media_type: "application/pdf",
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
                 data: expect.any(String), // Ignore the actual PDF data
               },
             },
@@ -1009,7 +1009,7 @@ it("includes PDF file in context and sends summary in context updates", async ()
           content: [
             {
               type: "system_reminder",
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
               text: expect.stringContaining("Remember to use the skills"),
             },
           ],

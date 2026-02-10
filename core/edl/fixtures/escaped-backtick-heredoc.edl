@@ -1,0 +1,7 @@
+file `{{FILE}}`
+narrow <<FIND
+\`world\`
+FIND
+replace <<END
+\`planet\`
+END

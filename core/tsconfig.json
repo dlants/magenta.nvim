@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ESNext",
+    "types": [],
+    "verbatimModuleSyntax": true,
+    "exactOptionalPropertyTypes": true
+  },
+  "include": [
+    "agent/**/*",
+    "src/**/*",
+    "utils/**/*",
+    "tools/**/*",
+    "edl/**/*",
+    "tea/**/*",
+    "chat/**/*",
+    "nvim/**/*",
+    "auth/**/*",
+    "options.ts"
+  ],
+  "exclude": ["**/node_modules/**"]
+}

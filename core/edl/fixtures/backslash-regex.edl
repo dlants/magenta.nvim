@@ -1,0 +1,5 @@
+file `{{FILE}}`
+narrow_one /\\path/
+replace <<END
+/newpath
+END

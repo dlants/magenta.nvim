@@ -28,7 +28,7 @@ describe("node/tools/thread-title.test.ts", () => {
       expect(request.input).toMatchObject([
         {
           type: "text",
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
           text: expect.stringContaining(userMessage),
         },
       ]);
