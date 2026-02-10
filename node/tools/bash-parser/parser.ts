@@ -1,10 +1,16 @@
 import type { Token } from "./lexer.ts";
 import { tokenize } from "./lexer.ts";
 
+export type FileRedirect = {
+  target: string;
+  direction: "input" | "output";
+};
+
 export type ParsedCommand = {
   executable: string;
   args: string[];
   receivingPipe: boolean;
+  fileRedirects: FileRedirect[];
 };
 
 export type ParsedCommandList = {
@@ -54,9 +60,29 @@ export class Parser {
     return { commands };
   }
 
+  private static FD_REDIRECT_RE = /^\d+>&\d+$/;
+  private static FILE_REDIRECT_RE = /^(\d*>>?|\d*<(?!&))(.+)$/;
+
+  private parseFileRedirect(value: string): FileRedirect | undefined {
+    if (Parser.FD_REDIRECT_RE.test(value)) {
+      return undefined;
+    }
+    const match = value.match(Parser.FILE_REDIRECT_RE);
+    if (!match) {
+      return undefined;
+    }
+    const [, op, target] = match;
+    return {
+      target,
+      direction: op.includes("<") ? "input" : "output",
+    };
+  }
+
   private parseCommand(receivingPipe: boolean): ParsedCommand | undefined {
+    const fileRedirects: FileRedirect[] = [];
+
     // Skip any redirections at the start
-    this.skipRedirects();
+    this.collectRedirects(fileRedirects);
 
     if (this.isAtEnd() || this.peek().type === "operator") {
       return undefined;
@@ -83,7 +109,11 @@ export class Parser {
       }
 
       if (token.type === "redirect") {
-        this.advance(); // skip redirect
+        const fileRedirect = this.parseFileRedirect(token.value);
+        if (fileRedirect) {
+          fileRedirects.push(fileRedirect);
+        }
+        this.advance();
         continue;
       }
 
@@ -97,12 +127,16 @@ export class Parser {
       break;
     }
 
-    return { executable, args, receivingPipe };
+    return { executable, args, receivingPipe, fileRedirects };
   }
 
-  private skipRedirects(): void {
+  private collectRedirects(fileRedirects: FileRedirect[]): void {
     while (!this.isAtEnd() && this.peek().type === "redirect") {
-      this.advance();
+      const token = this.advance();
+      const fileRedirect = this.parseFileRedirect(token.value);
+      if (fileRedirect) {
+        fileRedirects.push(fileRedirect);
+      }
     }
   }
 

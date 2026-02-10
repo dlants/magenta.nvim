@@ -15,7 +15,7 @@ export class LexerError extends Error {
 const OPERATORS = ["&&", "||", "|", ";"] as const;
 // Only fd-to-fd redirections like 2>&1, 1>&2
 const FD_REDIRECT_PATTERN = /^(\d+>&\d+)/;
-// File redirections that we don't support
+// File redirections like 2>/dev/null, >file, >>file
 const FILE_REDIRECT_PATTERN = /^(\d*>>?|\d*<(?!&))/;
 
 export class Lexer {
@@ -131,10 +131,22 @@ export class Lexer {
       return fdMatch[0];
     }
 
-    // Then check for file redirections and throw
+    // File redirections like 2>/dev/null, >file, >>file, <file
     const fileMatch = remaining.match(FILE_REDIRECT_PATTERN);
     if (fileMatch) {
-      throw new LexerError("File redirection is not supported");
+      this.pos += fileMatch[0].length;
+      let result = fileMatch[0];
+
+      // Skip optional whitespace between operator and target
+      this.skipWhitespace();
+
+      // Consume the redirect target (filename)
+      const target = this.parseWord();
+      if (target === undefined) {
+        throw new LexerError("Expected redirect target after " + fileMatch[0]);
+      }
+      result += target;
+      return result;
     }
 
     return undefined;

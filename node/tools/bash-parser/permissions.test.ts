@@ -1449,3 +1449,63 @@ describe("filePermissions with tilde expansion", () => {
     expect(result.allowed).toBe(false);
   });
 });
+
+describe("file redirect permissions", () => {
+  let testDir: string;
+  let cwd: NvimCwd;
+
+  beforeEach(() => {
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), "bash-redirect-test-"));
+    cwd = testDir as NvimCwd;
+  });
+
+  afterEach(() => {
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it("should allow redirect to /dev/null", () => {
+    const result = isCommandAllowedByConfig(
+      "ls 2>/dev/null",
+      BUILTIN_COMMAND_PERMISSIONS,
+      { cwd, homeDir },
+    );
+    expect(result.allowed).toBe(true);
+  });
+
+  it("should allow command with semicolons and /dev/null redirects", () => {
+    const result = isCommandAllowedByConfig(
+      'ls core/tools/specs/ 2>/dev/null; echo "---"; ls core/edl/ 2>/dev/null',
+      BUILTIN_COMMAND_PERMISSIONS,
+      { cwd, homeDir },
+    );
+    expect(result.allowed).toBe(true);
+  });
+
+  it("should deny redirect to arbitrary file", () => {
+    const result = isCommandAllowedByConfig(
+      "ls > output.txt",
+      BUILTIN_COMMAND_PERMISSIONS,
+      { cwd, homeDir },
+    );
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("file redirection");
+  });
+
+  it("should deny redirect to arbitrary file with fd", () => {
+    const result = isCommandAllowedByConfig(
+      "cmd 2> errors.log",
+      BUILTIN_COMMAND_PERMISSIONS,
+      { cwd, homeDir },
+    );
+    expect(result.allowed).toBe(false);
+  });
+
+  it("should allow fd-to-fd redirects", () => {
+    const result = isCommandAllowedByConfig(
+      "ls 2>&1",
+      BUILTIN_COMMAND_PERMISSIONS,
+      { cwd, homeDir },
+    );
+    expect(result.allowed).toBe(true);
+  });
+});

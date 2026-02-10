@@ -103,19 +103,49 @@ describe("bash lexer", () => {
       ]);
     });
 
-    it("should throw on > file redirect", () => {
-      expect(() => tokenize("cmd > file")).toThrow(LexerError);
-      expect(() => tokenize("cmd > file")).toThrow(/File redirection/);
+    it("should tokenize > file redirect", () => {
+      const tokens = tokenize("cmd > file");
+      expect(tokens).toEqual([
+        { type: "word", value: "cmd" },
+        { type: "redirect", value: ">file" },
+        { type: "eof", value: "" },
+      ]);
     });
 
-    it("should throw on >> file redirect", () => {
-      expect(() => tokenize("cmd >> file")).toThrow(LexerError);
-      expect(() => tokenize("cmd >> file")).toThrow(/File redirection/);
+    it("should tokenize >> file redirect", () => {
+      const tokens = tokenize("cmd >> file");
+      expect(tokens).toEqual([
+        { type: "word", value: "cmd" },
+        { type: "redirect", value: ">>file" },
+        { type: "eof", value: "" },
+      ]);
     });
 
-    it("should throw on < file redirect", () => {
-      expect(() => tokenize("cmd < file")).toThrow(LexerError);
-      expect(() => tokenize("cmd < file")).toThrow(/File redirection/);
+    it("should tokenize < file redirect", () => {
+      const tokens = tokenize("cmd < file");
+      expect(tokens).toEqual([
+        { type: "word", value: "cmd" },
+        { type: "redirect", value: "<file" },
+        { type: "eof", value: "" },
+      ]);
+    });
+
+    it("should tokenize 2>/dev/null", () => {
+      const tokens = tokenize("cmd 2>/dev/null");
+      expect(tokens).toEqual([
+        { type: "word", value: "cmd" },
+        { type: "redirect", value: "2>/dev/null" },
+        { type: "eof", value: "" },
+      ]);
+    });
+
+    it("should tokenize file redirect with space", () => {
+      const tokens = tokenize("cmd 2> /dev/null");
+      expect(tokens).toEqual([
+        { type: "word", value: "cmd" },
+        { type: "redirect", value: "2>/dev/null" },
+        { type: "eof", value: "" },
+      ]);
     });
   });
 

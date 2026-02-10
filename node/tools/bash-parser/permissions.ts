@@ -950,6 +950,15 @@ export function checkCommandListPermissions(
         reason: `command "${command.executable} ${command.args.join(" ")}": ${result.reason}`,
       };
     }
+
+    for (const redirect of command.fileRedirects) {
+      if (redirect.target !== "/dev/null") {
+        return {
+          allowed: false,
+          reason: `file redirection to "${redirect.target}" is not auto-approved`,
+        };
+      }
+    }
   }
 
   return { allowed: true };
