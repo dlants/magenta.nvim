@@ -110,7 +110,7 @@ Same interface as established by EdlTool: `isDone()`, `isPendingUserAction()`, `
 
 - [x] **Type check**: run `npx tsc --noEmit` and fix any errors
 
-- [ ] **Write tests `core/tools/bash-command-tool.test.ts`**
+- [x] **Write tests `core/tools/bash-command-tool.test.ts`**
   - **MockCommandExec**: a mock implementing `CommandExec` with:
     - A `handler: (command, options) => Promise<Result<CommandResult>>` function
     - The handler receives `options` including `onOutput`, so it can simulate streaming chunks during execution
@@ -131,4 +131,4 @@ Same interface as established by EdlTool: `isDone()`, `isPendingUserAction()`, `
   - Test: `validateInput` rejects missing/non-string command
   - Test: `createTool` with `"bash_command"` returns a `BashCommandTool`
 
-- [ ] **Run tests**: `cd core && npx vitest run tools/bash-command` and iterate until passing
+- [x] **Run tests**: `cd core && npx vitest run tools/bash-command` and iterate until passing
