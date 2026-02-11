@@ -2,7 +2,7 @@ export type Chunk = {
   text: string;
   line: number;
   col: number;
-  tokens: string[];
+  tokens: Map<string, number>;
 };
 
 export type FileSummary = {
@@ -39,7 +39,7 @@ export function chunkFile(content: string): Chunk[] {
         text: line,
         line: i + 1,
         col: 0,
-        tokens: tokenize(line),
+        tokens: buildFrequencyTable(tokenize(line)),
       });
     } else {
       // Split long lines into sub-chunks at token boundaries
@@ -58,7 +58,7 @@ export function chunkFile(content: string): Chunk[] {
           text,
           line: i + 1,
           col,
-          tokens: tokenize(text),
+          tokens: buildFrequencyTable(tokenize(text)),
         });
         col = end;
       }
@@ -68,10 +68,7 @@ export function chunkFile(content: string): Chunk[] {
   return chunks;
 }
 
-export function computeScopeSize(
-  lines: string[],
-  lineIndex: number,
-): number {
+export function computeScopeSize(lines: string[], lineIndex: number): number {
   const baseIndent = getIndentLevel(lines[lineIndex]);
   let count = 0;
   for (let i = lineIndex + 1; i < lines.length; i++) {
@@ -96,17 +93,19 @@ export function scoreChunk(
   scopeSize: number,
   seenTokens: Set<string>,
 ): number {
-  if (chunk.tokens.length === 0) return 0;
+  if (chunk.tokens.size === 0) return 0;
 
   // Surprise: average self-information with first-occurrence bonus
   let totalSurprise = 0;
-  for (const token of chunk.tokens) {
+  let totalCount = 0;
+  for (const [token, count] of chunk.tokens) {
     const freq = freqTable.get(token) ?? 1;
     const selfInfo = -Math.log2(freq / totalTokens);
     const multiplier = seenTokens.has(token) ? 1 : FIRST_OCCURRENCE_BONUS;
-    totalSurprise += selfInfo * multiplier;
+    totalSurprise += selfInfo * multiplier * count;
+    totalCount += count;
   }
-  const surprise = totalSurprise / chunk.tokens.length;
+  const surprise = totalCount === 0 ? 0 : totalSurprise / totalCount;
 
   // Scope bonus
   const scopeBonus = Math.log2(1 + scopeSize);
@@ -177,9 +176,15 @@ export function summarizeFile(
   const scores: number[] = [];
   for (const chunk of chunks) {
     const scopeSize = computeScopeSize(lines, chunk.line - 1);
-    const score = scoreChunk(chunk, freqTable, totalTokens, scopeSize, seenTokens);
+    const score = scoreChunk(
+      chunk,
+      freqTable,
+      totalTokens,
+      scopeSize,
+      seenTokens,
+    );
     scores.push(score);
-    for (const token of chunk.tokens) {
+    for (const token of chunk.tokens.keys()) {
       seenTokens.add(token);
     }
   }

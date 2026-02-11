@@ -58,19 +58,19 @@ describe("chunkFile", () => {
       text: "line one",
       line: 1,
       col: 0,
-      tokens: ["line", "one"],
+      tokens: buildFrequencyTable(["line", "one"]),
     });
     expect(chunks[1]).toEqual({
       text: "line two",
       line: 2,
       col: 0,
-      tokens: ["line", "two"],
+      tokens: buildFrequencyTable(["line", "two"]),
     });
     expect(chunks[2]).toEqual({
       text: "line three",
       line: 3,
       col: 0,
-      tokens: ["line", "three"],
+      tokens: buildFrequencyTable(["line", "three"]),
     });
   });
 
@@ -121,7 +121,12 @@ describe("chunkFile", () => {
   it("handles empty content", () => {
     const chunks = chunkFile("");
     expect(chunks).toHaveLength(1);
-    expect(chunks[0]).toEqual({ text: "", line: 1, col: 0, tokens: [] });
+    expect(chunks[0]).toEqual({
+      text: "",
+      line: 1,
+      col: 0,
+      tokens: buildFrequencyTable([]),
+    });
   });
 });
 
@@ -140,10 +145,7 @@ describe("computeScopeSize", () => {
   });
 
   it("returns 0 for leaf statements (no deeper indentation follows)", () => {
-    const lines = [
-      "  const x = 1;",
-      "  const y = 2;",
-    ];
+    const lines = ["  const x = 1;", "  const y = 2;"];
     // Line 0 has indent 2, line 1 has indent 2 (same level -> stop)
     expect(computeScopeSize(lines, 0)).toBe(0);
   });
@@ -182,7 +184,12 @@ describe("computeScopeSize", () => {
 
 describe("scoreChunk", () => {
   it("returns 0 for chunks with no tokens", () => {
-    const chunk: Chunk = { text: "", line: 1, col: 0, tokens: [] };
+    const chunk: Chunk = {
+      text: "",
+      line: 1,
+      col: 0,
+      tokens: buildFrequencyTable([]),
+    };
     const freq = new Map<string, number>();
     expect(scoreChunk(chunk, freq, 10, 0, new Set())).toBe(0);
   });
@@ -193,24 +200,36 @@ describe("scoreChunk", () => {
       text: "function processData() {",
       line: 1,
       col: 0,
-      tokens: ["function", "processData"],
+      tokens: buildFrequencyTable(["function", "processData"]),
     };
     // A "leaf" chunk at indent 4 with no scope
     const leafChunk: Chunk = {
       text: "    return result;",
       line: 5,
       col: 0,
-      tokens: ["return", "result"],
+      tokens: buildFrequencyTable(["return", "result"]),
     };
 
     const freq = buildFrequencyTable([
-      "function", "processData", "return", "result",
-      "const", "x", "const", "y",
+      "function",
+      "processData",
+      "return",
+      "result",
+      "const",
+      "x",
+      "const",
+      "y",
     ]);
     const totalTokens = 8;
     const seenTokens = new Set<string>();
 
-    const headerScore = scoreChunk(headerChunk, freq, totalTokens, 10, seenTokens);
+    const headerScore = scoreChunk(
+      headerChunk,
+      freq,
+      totalTokens,
+      10,
+      seenTokens,
+    );
     const leafScore = scoreChunk(leafChunk, freq, totalTokens, 0, seenTokens);
 
     expect(headerScore).toBeGreaterThan(leafScore);
@@ -224,13 +243,13 @@ describe("scoreChunk", () => {
       text: "return value;",
       line: 1,
       col: 0,
-      tokens,
+      tokens: buildFrequencyTable(tokens),
     };
     const indented: Chunk = {
       text: "        return value;",
       line: 5,
       col: 0,
-      tokens,
+      tokens: buildFrequencyTable(tokens),
     };
 
     const seenTokens = new Set<string>();
@@ -249,12 +268,18 @@ describe("scoreChunk", () => {
       text: "unique_token",
       line: 1,
       col: 0,
-      tokens: ["unique_token"],
+      tokens: buildFrequencyTable(["unique_token"]),
     };
     const freq = new Map([["unique_token", 1]]);
 
     const withBonus = scoreChunk(chunk, freq, 10, 0, new Set());
-    const withoutBonus = scoreChunk(chunk, freq, 10, 0, new Set(["unique_token"]));
+    const withoutBonus = scoreChunk(
+      chunk,
+      freq,
+      10,
+      0,
+      new Set(["unique_token"]),
+    );
 
     // First occurrence gets 2x multiplier on self-information
     expect(withBonus).toBeGreaterThan(withoutBonus);
@@ -266,8 +291,18 @@ describe("scoreChunk", () => {
 describe("selectChunks", () => {
   it("always includes the first chunk", () => {
     const chunks: Chunk[] = [
-      { text: "first", line: 1, col: 0, tokens: ["first"] },
-      { text: "second", line: 2, col: 0, tokens: ["second"] },
+      {
+        text: "first",
+        line: 1,
+        col: 0,
+        tokens: buildFrequencyTable(["first"]),
+      },
+      {
+        text: "second",
+        line: 2,
+        col: 0,
+        tokens: buildFrequencyTable(["second"]),
+      },
     ];
     const scores = [0, 100]; // first chunk has lowest score
     const selected = selectChunks(chunks, scores, 100);
@@ -276,10 +311,15 @@ describe("selectChunks", () => {
 
   it("selects by score descending within budget", () => {
     const chunks: Chunk[] = [
-      { text: "aaaa", line: 1, col: 0, tokens: ["aaaa"] }, // 4 chars
-      { text: "bb", line: 2, col: 0, tokens: ["bb"] },     // 2 chars
-      { text: "cccccc", line: 3, col: 0, tokens: ["cccccc"] }, // 6 chars
-      { text: "dd", line: 4, col: 0, tokens: ["dd"] },     // 2 chars
+      { text: "aaaa", line: 1, col: 0, tokens: buildFrequencyTable(["aaaa"]) }, // 4 chars
+      { text: "bb", line: 2, col: 0, tokens: buildFrequencyTable(["bb"]) }, // 2 chars
+      {
+        text: "cccccc",
+        line: 3,
+        col: 0,
+        tokens: buildFrequencyTable(["cccccc"]),
+      }, // 6 chars
+      { text: "dd", line: 4, col: 0, tokens: buildFrequencyTable(["dd"]) }, // 2 chars
     ];
     const scores = [1, 10, 5, 20]; // dd > bb > cccccc > aaaa
 
@@ -290,9 +330,9 @@ describe("selectChunks", () => {
 
   it("returns chunks in file order", () => {
     const chunks: Chunk[] = [
-      { text: "a", line: 1, col: 0, tokens: ["a"] },
-      { text: "b", line: 2, col: 0, tokens: ["b"] },
-      { text: "c", line: 3, col: 0, tokens: ["c"] },
+      { text: "a", line: 1, col: 0, tokens: buildFrequencyTable(["a"]) },
+      { text: "b", line: 2, col: 0, tokens: buildFrequencyTable(["b"]) },
+      { text: "c", line: 3, col: 0, tokens: buildFrequencyTable(["c"]) },
     ];
     const scores = [1, 100, 50];
     const selected = selectChunks(chunks, scores, 1000);
@@ -306,8 +346,18 @@ describe("selectChunks", () => {
 
   it("respects budget strictly", () => {
     const chunks: Chunk[] = [
-      { text: "hello", line: 1, col: 0, tokens: ["hello"] }, // 5 chars
-      { text: "world", line: 2, col: 0, tokens: ["world"] }, // 5 chars
+      {
+        text: "hello",
+        line: 1,
+        col: 0,
+        tokens: buildFrequencyTable(["hello"]),
+      }, // 5 chars
+      {
+        text: "world",
+        line: 2,
+        col: 0,
+        tokens: buildFrequencyTable(["world"]),
+      }, // 5 chars
     ];
     const scores = [1, 100];
     // Budget of 5: first chunk "hello" (5) fills budget, "world" (5) would exceed
@@ -464,7 +514,9 @@ export async function processAll(dir: string, options: ProcessOptions): Promise<
       const logLines = [];
       for (let i = 0; i < 20; i++) {
         const ts = `2024-01-${String(i + 1).padStart(2, "0")}T10:00:00Z`;
-        logLines.push(`${ts} INFO processed request_${i} status=200 duration=${i * 10}ms`);
+        logLines.push(
+          `${ts} INFO processed request_${i} status=200 duration=${i * 10}ms`,
+        );
       }
       const content = logLines.join("\n");
 
@@ -501,10 +553,17 @@ describe("formatSummary", () => {
       totalLines: 100,
       totalChars: 5000,
       selectedChunks: [
-        { text: "first line", line: 1, col: 0, tokens: ["first", "line"] },
+        {
+          text: "first line",
+          line: 1,
+          col: 0,
+          tokens: buildFrequencyTable(["first", "line"]),
+        },
       ],
     });
-    expect(result).toContain("[File summary: 100 lines, 5000 chars. Showing 1 key segments]");
+    expect(result).toContain(
+      "[File summary: 100 lines, 5000 chars. Showing 1 key segments]",
+    );
   });
 
   it("shows gap summaries between non-adjacent chunks", () => {
@@ -512,8 +571,18 @@ describe("formatSummary", () => {
       totalLines: 20,
       totalChars: 500,
       selectedChunks: [
-        { text: "line one", line: 1, col: 0, tokens: ["line", "one"] },
-        { text: "line ten", line: 10, col: 0, tokens: ["line", "ten"] },
+        {
+          text: "line one",
+          line: 1,
+          col: 0,
+          tokens: buildFrequencyTable(["line", "one"]),
+        },
+        {
+          text: "line ten",
+          line: 10,
+          col: 0,
+          tokens: buildFrequencyTable(["line", "ten"]),
+        },
       ],
     });
     expect(result).toContain("... (8 lines omitted) ...");
@@ -524,7 +593,12 @@ describe("formatSummary", () => {
       totalLines: 50,
       totalChars: 1000,
       selectedChunks: [
-        { text: "first", line: 1, col: 0, tokens: ["first"] },
+        {
+          text: "first",
+          line: 1,
+          col: 0,
+          tokens: buildFrequencyTable(["first"]),
+        },
       ],
     });
     expect(result).toContain("... (49 lines omitted) ...");
@@ -535,8 +609,18 @@ describe("formatSummary", () => {
       totalLines: 1000,
       totalChars: 50000,
       selectedChunks: [
-        { text: "start", line: 1, col: 0, tokens: ["start"] },
-        { text: "middle", line: 500, col: 0, tokens: ["middle"] },
+        {
+          text: "start",
+          line: 1,
+          col: 0,
+          tokens: buildFrequencyTable(["start"]),
+        },
+        {
+          text: "middle",
+          line: 500,
+          col: 0,
+          tokens: buildFrequencyTable(["middle"]),
+        },
       ],
     });
     // totalLines=1000 -> lineNumWidth = 4
@@ -549,8 +633,18 @@ describe("formatSummary", () => {
       totalLines: 10,
       totalChars: 500,
       selectedChunks: [
-        { text: "start of long line", line: 1, col: 0, tokens: ["start", "of", "long", "line"] },
-        { text: "continuation", line: 1, col: 100, tokens: ["continuation"] },
+        {
+          text: "start of long line",
+          line: 1,
+          col: 0,
+          tokens: buildFrequencyTable(["start", "of", "long", "line"]),
+        },
+        {
+          text: "continuation",
+          line: 1,
+          col: 100,
+          tokens: buildFrequencyTable(["continuation"]),
+        },
       ],
     });
     // col 0 -> no col marker
@@ -564,9 +658,24 @@ describe("formatSummary", () => {
       totalLines: 3,
       totalChars: 30,
       selectedChunks: [
-        { text: "line one", line: 1, col: 0, tokens: ["line", "one"] },
-        { text: "line two", line: 2, col: 0, tokens: ["line", "two"] },
-        { text: "line three", line: 3, col: 0, tokens: ["line", "three"] },
+        {
+          text: "line one",
+          line: 1,
+          col: 0,
+          tokens: buildFrequencyTable(["line", "one"]),
+        },
+        {
+          text: "line two",
+          line: 2,
+          col: 0,
+          tokens: buildFrequencyTable(["line", "two"]),
+        },
+        {
+          text: "line three",
+          line: 3,
+          col: 0,
+          tokens: buildFrequencyTable(["line", "three"]),
+        },
       ],
     });
     expect(result).not.toContain("omitted");

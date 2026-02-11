@@ -64,4 +64,3 @@ The goal is to replace the tree-sitter based file minimap (`node/utils/treesitte
   - [x] Check for type errors and iterate until clean
 
 - [x] Run full test suite and iterate until passing
-
