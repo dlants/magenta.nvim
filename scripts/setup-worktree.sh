@@ -40,6 +40,8 @@ else
   git worktree add -b "$BRANCH" "$WORKTREE_DIR"
 fi
 
+echo "Setting up tracking..."
+git branch --set-upstream-to="origin/$BRANCH" "$BRANCH" 2>/dev/null || true
 echo "Setting up hooks..."
 cd "$WORKTREE_DIR"
 GITDIR="$(git rev-parse --git-dir)"

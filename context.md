@@ -140,6 +140,18 @@ Quick reference:
 
 use `npx tsc --noEmit` to run type checking, from the project root. Once again, I remind you, you do not need to cd into any subdirectory.
 
+# Worktrees
+
+This repo uses git worktrees with a bare repo layout. Sibling directories of the repo root are individual worktrees (e.g. `../main`, `../my-feature`).
+
+To create a new worktree:
+
+```sh
+scripts/setup-worktree.sh <branch-name> [base-branch]
+```
+
+This creates the worktree as a sibling directory, sets up git hooks, and runs `npm ci`. If the branch already exists it checks it out; otherwise it creates a new branch optionally based on `[base-branch]`.
+
 # Notes
 
 To avoid complexity, keep variable names on the lua side camelCase, to match the variables defined in typescript.
