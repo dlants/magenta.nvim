@@ -99,12 +99,27 @@ export function* lex(script: string): Generator<Token> {
     // heredoc: <<DELIM
     if (ch === "<" && script[pos + 1] === "<") {
       pos += 2; // skip <<
-      const delimStart = pos;
-      while (pos < script.length && /\w/.test(script[pos])) pos++;
-      if (pos === delimStart) {
-        throw new ParseError(`Invalid heredoc marker`);
+      let delimiter: string;
+      if (script[pos] === "'") {
+        pos++; // skip opening quote
+        const delimStart = pos;
+        while (pos < script.length && script[pos] !== "'" && script[pos] !== "\n") pos++;
+        if (pos >= script.length || script[pos] !== "'") {
+          throw new ParseError(`Unterminated quoted heredoc marker`);
+        }
+        delimiter = script.slice(delimStart, pos);
+        pos++; // skip closing quote
+        if (delimiter.length === 0) {
+          throw new ParseError(`Invalid heredoc marker`);
+        }
+      } else {
+        const delimStart = pos;
+        while (pos < script.length && /\w/.test(script[pos])) pos++;
+        if (pos === delimStart) {
+          throw new ParseError(`Invalid heredoc marker`);
+        }
+        delimiter = script.slice(delimStart, pos);
       }
-      const delimiter = script.slice(delimStart, pos);
       // skip to next line
       while (pos < script.length && script[pos] !== "\n") {
         if (!/\s/.test(script[pos])) {
@@ -193,7 +208,29 @@ function tokenToPattern(tok: Token): Pattern {
   }
 }
 
+function findConflictingHeredocDelimiters(script: string): string[] {
+  const heredocPattern = /<<'?(\w+)'?/g;
+  const delimiters = new Set<string>();
+  let match;
+  while ((match = heredocPattern.exec(script)) !== null) {
+    delimiters.add(match[1]);
+  }
+
+  const lines = script.split("\n");
+  const conflicts: string[] = [];
+  for (const delim of delimiters) {
+    let count = 0;
+    for (const line of lines) {
+      if (line === delim) count++;
+    }
+    if (count > 1) {
+      conflicts.push(delim);
+    }
+  }
+  return conflicts;
+}
 export function parse(script: string): Command[] {
+  try {
   const iter = lex(script);
   const commands: Command[] = [];
 
@@ -307,4 +344,15 @@ export function parse(script: string): Command[] {
   }
 
   return commands;
+  } catch (e) {
+    if (e instanceof ParseError) {
+      const conflicts = findConflictingHeredocDelimiters(script);
+      if (conflicts.length > 0) {
+        throw new ParseError(
+          `${e.message}\nNote: heredoc delimiter${conflicts.length > 1 ? "s" : ""} ${conflicts.map((d) => `"${d}"`).join(", ")} appeared multiple times as standalone line${conflicts.length > 1 ? "s" : ""} in the script. This likely means the delimiter conflicts with the heredoc content. Use a unique termination code that does not appear in the content (e.g. <<UNIQUE_MARKER instead of <<${conflicts[0]}).`,
+        );
+      }
+    }
+    throw e;
+  }
 }

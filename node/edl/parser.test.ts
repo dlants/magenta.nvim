@@ -268,4 +268,56 @@ FIND`);
       },
     ]);
   });
+  it("parses heredoc with single-quoted delimiter", () => {
+    const cmds = parse(`select_one <<'END'
+some text
+END`);
+    expect(cmds).toEqual([
+      { type: "select_one", pattern: { type: "literal", text: "some text" } },
+    ]);
+  });
+
+  it("parses replace with single-quoted heredoc delimiter", () => {
+    const cmds = parse(`replace <<'DELIM'
+new text
+DELIM`);
+    expect(cmds).toEqual([{ type: "replace", text: "new text" }]);
+  });
+
+  it("errors on unterminated single-quoted heredoc marker", () => {
+    expect(() => parse(`replace <<'END\nsome text\nEND`)).toThrow(
+      "Unterminated quoted heredoc marker",
+    );
+  });
+
+  it("errors on empty single-quoted heredoc marker", () => {
+    expect(() => parse(`replace <<''\nsome text`)).toThrow(
+      "Invalid heredoc marker",
+    );
+  });
+  it("suggests unique delimiter when heredoc terminator conflicts with content", () => {
+    const script = `select_one <<END
+some text
+END
+more content with END on its own line
+END`;
+    expect(() => parse(script)).toThrow("Use a unique termination code");
+  });
+
+  it("does not add delimiter hint when there is no conflict", () => {
+    expect(() => parse(`replace <<END\nsome text`)).toThrow(
+      "Unterminated heredoc",
+    );
+    expect(() => parse(`replace <<END\nsome text`)).not.toThrow(
+      "unique termination code",
+    );
+  });
+
+  it("includes conflicting delimiter name in error message", () => {
+    const script = `replace <<END
+END
+extra stuff
+END`;
+    expect(() => parse(script)).toThrow('"END"');
+  });
 });
