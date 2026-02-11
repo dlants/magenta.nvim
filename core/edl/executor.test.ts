@@ -1712,3 +1712,17 @@ describe("register-based mutation commands", () => {
     });
   });
 });
+
+describe("empty literal pattern", () => {
+  it("errors on empty heredoc used as select pattern", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "hello world", "utf-8");
+
+      const commands = parse(`file \`${filePath}\`\nselect_one <<END\nEND`);
+      const result = await executor(commands);
+      const err = expectFileError(result, "test.txt", "Empty literal pattern");
+      expect(err).toBeDefined();
+    });
+  });
+});

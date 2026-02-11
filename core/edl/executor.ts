@@ -191,6 +191,11 @@ export class Executor {
         return results;
       }
       case "literal": {
+        if (pattern.text.length === 0) {
+          throw new ExecutionError(
+            `Empty literal pattern will match everywhere. Use a non-empty pattern for select/narrow operations.`,
+          );
+        }
         const results: Range[] = [];
         let idx = 0;
         while ((idx = text.indexOf(pattern.text, idx)) !== -1) {
@@ -198,7 +203,7 @@ export class Executor {
             start: baseOffset + idx,
             end: baseOffset + idx + pattern.text.length,
           });
-          idx += pattern.text.length || 1;
+          idx += pattern.text.length;
         }
         return results;
       }

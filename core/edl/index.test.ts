@@ -120,7 +120,28 @@ retain_first`,
       expect(normalizePaths(result, tmpDir)).toMatchSnapshot();
     });
   });
-});
+
+  it("returns error when empty heredoc is used as select pattern", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "hello world\n", "utf-8");
+
+      const result = await runScript(
+        `\
+file \`${filePath}\`
+select_one <<FIND
+FIND`,
+        fileIO,
+      );
+
+      expect(result.status).toBe("ok");
+      if (result.status !== "ok") return;
+      expect(result.data.fileErrors.length).toBe(1);
+      expect(result.data.fileErrors[0].error).toContain(
+        "Empty literal pattern",
+      );
+    });
+  });});
 
 describe("register persistence across invocations", () => {
   it("registers from one runScript call can be pre-loaded into the next", async () => {
