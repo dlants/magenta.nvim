@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 
-# Ensure scripts directory exists and file is executable
-mkdir -p .git/hooks
-chmod +x pre-commit
-cp pre-commit .git/hooks/
+# Install git pre-commit hook. Works in both regular repos and worktrees.
+GITDIR="$(git rev-parse --git-dir)"
+mkdir -p "$GITDIR/hooks"
+cp pre-commit "$GITDIR/hooks/pre-commit"
+chmod +x "$GITDIR/hooks/pre-commit"
 echo "Git pre-commit hook installed successfully"

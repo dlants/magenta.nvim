@@ -107,7 +107,7 @@ Port the EDL tool completely — spec, implementation, factory wiring, tests —
 
 #### 4a: EDL tool spec
 
-- [ ] Create `core/tools/specs/edl.ts` containing:
+- [x] Create `core/tools/specs/edl.ts` containing:
   - `spec: ProviderToolSpec` — the JSON schema for the tool's input
   - `Input` type — TypeScript type for validated input
   - `validateInput(input): Result<Input>` — input validation
@@ -115,27 +115,27 @@ Port the EDL tool completely — spec, implementation, factory wiring, tests —
 
 #### 4b: EDL tool implementation
 
-- [ ] Create `core/tools/edl-tool.ts`
-- [ ] Constructor context: `{ fileIO: FileIO, logger: Logger, cwd: Cwd, homeDir: HomeDir, myDispatch, edlRegisters }`
-- [ ] Remove: permission checks, `BufferAwareFileIO`, `BufferTracker`, context manager updates
-- [ ] Keep: EDL script execution via `core/edl/runScript()`, register management, description loading
-- [ ] The FileIO passed to the EDL engine is the same one from the environment (already permission-wrapped)
+- [x] Create `core/tools/edl-tool.ts`
+- [x] Constructor context: `{ fileIO: FileIO, logger: Logger, cwd: Cwd, homeDir: HomeDir, myDispatch, edlRegisters }`
+- [x] Remove: permission checks, `BufferAwareFileIO`, `BufferTracker`, context manager updates
+- [x] Keep: EDL script execution via `core/edl/runScript()`, register management, description loading
+- [x] The FileIO passed to the EDL engine is adapted via createEdlFileIO (unwraps Results, resolves paths)
 
 #### 4c: Tool manager and factory (minimal, for EDL)
 
-- [ ] Create `core/tools/create-tool.ts` — factory function, initially just handling EDL:
+- [x] Create `core/tools/create-tool.ts` — factory function, initially just handling EDL:
   - `CreateToolContext` type with all backend interfaces
   - `createTool(request, context)` → instantiates the right tool class
-- [ ] Update `core/tools/toolManager.ts` — replace the stub with enough to support EDL:
+- [x] Update `core/tools/toolManager.ts` — replace the stub with enough to support EDL:
   - `getToolSpecs(threadType, additionalSpecs?)` → returns `ProviderToolSpec[]`
   - `TOOL_SPEC_MAP` — maps tool names to specs (initially just EDL)
   - Grows as more tools are added
 
 #### 4d: EDL tool tests
 
-- [ ] Write tests with mock FileIO
-- [ ] Verify `cd core && npx vitest run tools/`
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Write tests with mock FileIO
+- [x] Verify `cd core && npx vitest run tools/`
+- [x] Verify `npx tsc --noEmit` passes (no new errors)
 
 ### Step 5: Port remaining tools one at a time
 

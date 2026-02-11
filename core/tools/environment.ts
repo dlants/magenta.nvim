@@ -31,10 +31,16 @@ export type CommandResult = {
   logFile: AbsFilePath | undefined;
 };
 
+export type OutputChunk = {
+  stream: "stdout" | "stderr";
+  text: string;
+};
+
 export type SpawnOptions = {
   cwd: AbsFilePath;
   timeout?: number;
   abortSignal?: AbortSignal;
+  onOutput?: (chunk: OutputChunk) => void;
 };
 
 export interface CommandExec {
