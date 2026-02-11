@@ -103,7 +103,12 @@ export function* lex(script: string): Generator<Token> {
       if (script[pos] === "'") {
         pos++; // skip opening quote
         const delimStart = pos;
-        while (pos < script.length && script[pos] !== "'" && script[pos] !== "\n") pos++;
+        while (
+          pos < script.length &&
+          script[pos] !== "'" &&
+          script[pos] !== "\n"
+        )
+          pos++;
         if (pos >= script.length || script[pos] !== "'") {
           throw new ParseError(`Unterminated quoted heredoc marker`);
         }
@@ -231,119 +236,122 @@ function findConflictingHeredocDelimiters(script: string): string[] {
 }
 export function parse(script: string): Command[] {
   try {
-  const iter = lex(script);
-  const commands: Command[] = [];
+    const iter = lex(script);
+    const commands: Command[] = [];
 
-  function next(expected?: string): Token | undefined {
-    const result = iter.next();
-    if (result.done) {
-      if (expected) {
-        throw new ParseError(`Expected ${expected}, got end of input`);
+    function next(expected?: string): Token | undefined {
+      const result = iter.next();
+      if (result.done) {
+        if (expected) {
+          throw new ParseError(`Expected ${expected}, got end of input`);
+        }
+        return undefined;
       }
-      return undefined;
-    }
-    return result.value;
-  }
-
-  function expectWord(expected: string): Token & { type: "word" } {
-    const tok = next(expected)!;
-    if (tok.type !== "word") {
-      throw new ParseError(`Expected ${expected}, got ${tok.type}`);
-    }
-    return tok as Token & { type: "word" };
-  }
-
-  let cmdTok: Token | undefined;
-  while ((cmdTok = next()) !== undefined) {
-    if (cmdTok.type !== "word") {
-      throw new ParseError(`Expected command, got ${cmdTok.type}`);
+      return result.value;
     }
 
-    switch (cmdTok.value) {
-      case "file": {
-        const pathTok = next("file path")!;
-        if (pathTok.type !== "word" && pathTok.type !== "path") {
-          throw new ParseError(`Expected file path, got ${pathTok.type}`);
-        }
-        commands.push({ type: "file", path: pathTok.value });
-        break;
+    function expectWord(expected: string): Token & { type: "word" } {
+      const tok = next(expected)!;
+      if (tok.type !== "word") {
+        throw new ParseError(`Expected ${expected}, got ${tok.type}`);
       }
-      case "newfile": {
-        const pathTok = next("file path")!;
-        if (pathTok.type !== "word" && pathTok.type !== "path") {
-          throw new ParseError(`Expected file path, got ${pathTok.type}`);
-        }
-        commands.push({ type: "newfile", path: pathTok.value });
-        break;
-      }
-
-      case "narrow":
-      case "narrow_one":
-      case "select":
-      case "select_one":
-      case "select_next":
-      case "select_prev":
-      case "extend_forward":
-      case "extend_back": {
-        const tok = next("pattern")!;
-        commands.push({ type: cmdTok.value, pattern: tokenToPattern(tok) });
-        break;
-      }
-
-      case "retain_nth": {
-        const nTok = expectWord("number");
-        commands.push({ type: "retain_nth", n: parseInt(nTok.value, 10) });
-        break;
-      }
-
-      case "replace": {
-        const tok = next("heredoc or register name")!;
-        if (tok.type === "heredoc") {
-          commands.push({ type: "replace", text: tok.value });
-        } else if (tok.type === "word") {
-          commands.push({ type: "replace", register: tok.value });
-        } else {
-          throw new ParseError(
-            `Expected heredoc or register name after replace, got ${tok.type}`,
-          );
-        }
-        break;
-      }
-
-      case "retain_first":
-      case "retain_last":
-      case "delete": {
-        commands.push({ type: cmdTok.value });
-        break;
-      }
-
-      case "insert_before":
-      case "insert_after": {
-        const tok = next("heredoc or register name")!;
-        if (tok.type === "heredoc") {
-          commands.push({ type: cmdTok.value, text: tok.value } as Command);
-        } else if (tok.type === "word") {
-          commands.push({ type: cmdTok.value, register: tok.value } as Command);
-        } else {
-          throw new ParseError(
-            `Expected heredoc or register name after ${cmdTok.value}, got ${tok.type}`,
-          );
-        }
-        break;
-      }
-
-      case "cut": {
-        const regTok = expectWord("register name");
-        commands.push({ type: "cut", register: regTok.value });
-        break;
-      }
-
-      default:
-        throw new ParseError(`Unknown command: ${cmdTok.value}`);
+      return tok as Token & { type: "word" };
     }
-  }
 
-  return commands;
+    let cmdTok: Token | undefined;
+    while ((cmdTok = next()) !== undefined) {
+      if (cmdTok.type !== "word") {
+        throw new ParseError(`Expected command, got ${cmdTok.type}`);
+      }
+
+      switch (cmdTok.value) {
+        case "file": {
+          const pathTok = next("file path")!;
+          if (pathTok.type !== "word" && pathTok.type !== "path") {
+            throw new ParseError(`Expected file path, got ${pathTok.type}`);
+          }
+          commands.push({ type: "file", path: pathTok.value });
+          break;
+        }
+        case "newfile": {
+          const pathTok = next("file path")!;
+          if (pathTok.type !== "word" && pathTok.type !== "path") {
+            throw new ParseError(`Expected file path, got ${pathTok.type}`);
+          }
+          commands.push({ type: "newfile", path: pathTok.value });
+          break;
+        }
+
+        case "narrow":
+        case "narrow_one":
+        case "select":
+        case "select_one":
+        case "select_next":
+        case "select_prev":
+        case "extend_forward":
+        case "extend_back": {
+          const tok = next("pattern")!;
+          commands.push({ type: cmdTok.value, pattern: tokenToPattern(tok) });
+          break;
+        }
+
+        case "retain_nth": {
+          const nTok = expectWord("number");
+          commands.push({ type: "retain_nth", n: parseInt(nTok.value, 10) });
+          break;
+        }
+
+        case "replace": {
+          const tok = next("heredoc or register name")!;
+          if (tok.type === "heredoc") {
+            commands.push({ type: "replace", text: tok.value });
+          } else if (tok.type === "word") {
+            commands.push({ type: "replace", register: tok.value });
+          } else {
+            throw new ParseError(
+              `Expected heredoc or register name after replace, got ${tok.type}`,
+            );
+          }
+          break;
+        }
+
+        case "retain_first":
+        case "retain_last":
+        case "delete": {
+          commands.push({ type: cmdTok.value });
+          break;
+        }
+
+        case "insert_before":
+        case "insert_after": {
+          const tok = next("heredoc or register name")!;
+          if (tok.type === "heredoc") {
+            commands.push({ type: cmdTok.value, text: tok.value } as Command);
+          } else if (tok.type === "word") {
+            commands.push({
+              type: cmdTok.value,
+              register: tok.value,
+            } as Command);
+          } else {
+            throw new ParseError(
+              `Expected heredoc or register name after ${cmdTok.value}, got ${tok.type}`,
+            );
+          }
+          break;
+        }
+
+        case "cut": {
+          const regTok = expectWord("register name");
+          commands.push({ type: "cut", register: regTok.value });
+          break;
+        }
+
+        default:
+          throw new ParseError(`Unknown command: ${cmdTok.value}`);
+      }
+    }
+
+    return commands;
   } catch (e) {
     if (e instanceof ParseError) {
       const conflicts = findConflictingHeredocDelimiters(script);
