@@ -36,7 +36,15 @@ describe("src/logger.test.ts", () => {
 
         // Parse and verify each line
 
-        const logs = logLines.map((line) => JSON.parse(line));
+        const logs: { level: string; message: string; timestamp: string }[] =
+          logLines.map(
+            (line) =>
+              JSON.parse(line) as {
+                level: string;
+                message: string;
+                timestamp: string;
+              },
+          );
 
         // Check error message
         expect(logs[0].level).toBe("error");

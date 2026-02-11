@@ -17,6 +17,7 @@ import type { ToolName } from "../tools/types";
 import {
   type ProviderImageContent,
   type ProviderMessage,
+  type ProviderMessageContent,
 } from "../providers/provider-types";
 
 it("returns full file contents on first getContextUpdate and no updates on second call when file hasn't changed", async () => {
@@ -246,8 +247,9 @@ it.skip("avoids sending redundant context updates after tool application (no buf
         content: [
           {
             type: "system_reminder",
-
-            text: expect.stringContaining("Remember to use the skills"),
+            text: expect.stringContaining(
+              "Remember to use the skills",
+            ) as string,
           },
         ],
         role: "user",
@@ -271,8 +273,9 @@ it.skip("avoids sending redundant context updates after tool application (no buf
         content: [
           {
             type: "system_reminder",
-
-            text: expect.stringContaining("Remember to use the skills"),
+            text: expect.stringContaining(
+              "Remember to use the skills",
+            ) as string,
           },
         ],
         role: "user",
@@ -298,7 +301,7 @@ it.skip("avoids sending redundant context updates after tool application (no buf
         {
           type: "system_reminder",
 
-          text: expect.stringContaining("Remember to use the skills"),
+          text: expect.stringContaining("Remember to use the skills") as string,
         },
       ],
       role: "user",
@@ -888,7 +891,7 @@ it("autoContext loads on startup and after new-thread", async () => {
 
             text: expect.stringContaining("test-auto-context.md"),
           }),
-        ]),
+        ]) as ProviderMessageContent[],
       }),
     );
   });
@@ -997,7 +1000,7 @@ it("includes PDF file in context and sends summary in context updates", async ()
                 type: "base64",
                 media_type: "application/pdf",
 
-                data: expect.any(String), // Ignore the actual PDF data
+                data: expect.any(String) as string, // Ignore the actual PDF data
               },
             },
           ],

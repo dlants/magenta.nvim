@@ -19,7 +19,10 @@ describe("node/tools/thread-title.test.ts", () => {
 
       // 3. Verify the forceToolUse request was made for thread_title
       const request =
-        await driver.mockAnthropic.awaitPendingForceToolUseRequest();
+        (await driver.mockAnthropic.awaitPendingForceToolUseRequest()) as {
+          model: string;
+          input: unknown[];
+        };
 
       // Verify the request uses the fast model
       expect(request.model).toBe("mock-fast");
@@ -31,7 +34,7 @@ describe("node/tools/thread-title.test.ts", () => {
 
           text: expect.stringContaining(userMessage),
         },
-      ]);
+      ] as unknown[]);
 
       // 4. Respond to the tool use request with a title
       const title = "Exploring the Solar System";
