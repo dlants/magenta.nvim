@@ -1793,12 +1793,7 @@ it("large text files are truncated and skip context manager", async () => {
         (item: ContentBlockParam) => item.type === "text",
       ) as TextBlockParam;
 
-      // Should have truncation header
-      expect(textContent.text).toContain("[Lines 1-");
-      expect(textContent.text).toContain("of 1000]");
-      // Should have continuation hint
-      expect(textContent.text).toContain("more lines not shown");
-      expect(textContent.text).toContain("Use startLine=");
+      expect(textContent.text).toContain("[File summary:");
 
       toolResultRequest.respond({
         stopReason: "end_turn",
@@ -2257,7 +2252,7 @@ it("line ranges with long lines still get abridged", async () => {
   );
 });
 
-it("should show treesitter minimap for large TypeScript file", async () => {
+it("should show file summary for large TypeScript file", async () => {
   await withDriver(
     {
       setupFiles: async (tmpDir) => {
@@ -2335,8 +2330,7 @@ it("should show treesitter minimap for large TypeScript file", async () => {
         (item: ContentBlockParam) => item.type === "text",
       ) as TextBlockParam;
 
-      // Check that the result contains the minimap header
-      expect(textContent.text).toContain("[Tree-sitter minimap (typescript)]");
+      expect(textContent.text).toContain("[File summary:");
       expect(textContent.text).toContain("interface User");
       expect(textContent.text).toContain("class DataProcessor");
     },
@@ -2638,7 +2632,7 @@ it("getFile can read files using tilde path with user approval", async () => {
   );
 });
 
-it("should fallback to line-based truncation for unknown file type", async () => {
+it("should show file summary for large file with unknown extension", async () => {
   await withDriver(
     {
       setupFiles: async (tmpDir) => {
@@ -2696,10 +2690,7 @@ it("should fallback to line-based truncation for unknown file type", async () =>
         (item: ContentBlockParam) => item.type === "text",
       ) as TextBlockParam;
 
-      // Should NOT contain minimap header since no parser available
-      expect(textContent.text).not.toContain("[Tree-sitter minimap");
-      // Should still have the line count header
-      expect(textContent.text).toContain("[Lines 1-100 of 1000]");
+      expect(textContent.text).toContain("[File summary:");
     },
   );
 });

@@ -41,7 +41,7 @@ import {
 import type { MagentaOptions } from "../options.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
 import { canReadFile } from "./permissions.ts";
-import { getTreeSitterMinimap, formatMinimap } from "../utils/treesitter.ts";
+import { summarizeFile, formatSummary } from "../utils/file-summary.ts";
 import type { CompletedToolInfo } from "./types.ts";
 
 export type ToolRequest = GenericToolRequest<"get_file", Input>;
@@ -377,26 +377,26 @@ You already have the most up-to-date information about the contents of this file
         return;
       }
 
-      // For large files, try to generate a tree-sitter minimap
+      // For large files, generate a file summary
       const totalChars = lines.reduce((sum, line) => sum + line.length + 1, 0);
       const isLargeFile =
         this.request.input.numLines === undefined &&
         totalChars > MAX_FILE_CHARACTERS;
 
-      let minimapText: string | undefined;
+      let summaryText: string | undefined;
       if (isLargeFile && startIndex === 0) {
-        const minimapResult = await getTreeSitterMinimap(absFilePath);
-        if (minimapResult.status === "ok") {
-          minimapText = formatMinimap(minimapResult.value);
-        }
-        // If minimap fails, we just proceed without it (graceful fallback)
+        const content = lines.join("\n");
+        const summary = summarizeFile(content, {
+          charBudget: MAX_FILE_CHARACTERS,
+        });
+        summaryText = formatSummary(summary);
       }
 
       const processedResult = this.processTextContent(
         lines,
         startIndex,
         this.request.input.numLines,
-        minimapText,
+        summaryText,
       );
 
       // Only add to context manager if returning full, unabridged content
@@ -642,7 +642,7 @@ You already have the most up-to-date information about the contents of this file
     lines: string[],
     startIndex: number,
     requestedNumLines: number | undefined,
-    minimapText?: string,
+    summaryText?: string,
   ): { text: string; isComplete: boolean; hasAbridgedLines: boolean } {
     const totalLines = lines.length;
     const totalChars = lines.reduce((sum, line) => sum + line.length + 1, 0);
@@ -650,10 +650,9 @@ You already have the most up-to-date information about the contents of this file
     const isLargeFile =
       requestedNumLines === undefined && totalChars > MAX_FILE_CHARACTERS;
 
-    // If we have a minimap for a large file, just return the minimap
-    if (isLargeFile && minimapText) {
+    if (isLargeFile && summaryText) {
       return {
-        text: minimapText,
+        text: summaryText,
         isComplete: false,
         hasAbridgedLines: false,
       };
