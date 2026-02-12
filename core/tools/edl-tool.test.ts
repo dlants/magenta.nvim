@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EdlTool, extractEdlData, type Msg } from "./edl-tool.ts";
 import type { FileIO } from "./environment.ts";
+import type { FileAccess } from "./environment.ts";
 import type { Logger } from "../logger.ts";
 import type { AbsFilePath, Cwd, HomeDir } from "../utils/files.ts";
 import type { ToolRequestId, ToolName, ToolMsg } from "./types.ts";
@@ -299,7 +300,20 @@ describe("createTool", () => {
       cwd: TEST_CWD,
       homeDir: TEST_HOME,
       myDispatch: vi.fn(),
-      edlRegisters: { registers: new Map(), nextSavedId: 0 },
+      edlRegisters: { registers: new Map(), nextSavedId: 0 },      fileAccess: {
+        async getFileInfo() {
+          return { status: "error", error: "not implemented" };
+        },
+        async readBinaryFileBase64() {
+          return { status: "error", error: "not implemented" };
+        },
+        async extractPDFPage() {
+          return { status: "error", error: "not implemented" };
+        },
+        async getPDFPageCount() {
+          return { status: "error", error: "not implemented" };
+        },
+      },
     };
 
     const result = createTool(
@@ -322,7 +336,20 @@ describe("createTool", () => {
       cwd: TEST_CWD,
       homeDir: TEST_HOME,
       myDispatch: vi.fn(),
-      edlRegisters: { registers: new Map(), nextSavedId: 0 },
+      edlRegisters: { registers: new Map(), nextSavedId: 0 },      fileAccess: {
+        async getFileInfo() {
+          return { status: "error", error: "not implemented" };
+        },
+        async readBinaryFileBase64() {
+          return { status: "error", error: "not implemented" };
+        },
+        async extractPDFPage() {
+          return { status: "error", error: "not implemented" };
+        },
+        async getPDFPageCount() {
+          return { status: "error", error: "not implemented" };
+        },
+      },
     };
 
     const result = createTool(
@@ -344,7 +371,20 @@ describe("createTool", () => {
       cwd: TEST_CWD,
       homeDir: TEST_HOME,
       myDispatch: vi.fn(),
-      edlRegisters: { registers: new Map(), nextSavedId: 0 },
+      edlRegisters: { registers: new Map(), nextSavedId: 0 },      fileAccess: {
+        async getFileInfo() {
+          return { status: "error", error: "not implemented" };
+        },
+        async readBinaryFileBase64() {
+          return { status: "error", error: "not implemented" };
+        },
+        async extractPDFPage() {
+          return { status: "error", error: "not implemented" };
+        },
+        async getPDFPageCount() {
+          return { status: "error", error: "not implemented" };
+        },
+      },
     };
 
     const result = createTool(

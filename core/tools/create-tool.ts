@@ -13,7 +13,13 @@ import { validateInput as validateEdlInput } from "./specs/edl.ts";
 import { validateInput as validateBashCommandInput } from "./specs/bash-command.ts";
 import type { ToolRequest as EdlToolRequest } from "./specs/edl.ts";
 import type { ToolRequest as BashCommandToolRequest } from "./specs/bash-command.ts";
-import type { CommandExec } from "./environment.ts";
+import type { CommandExec, FileAccess } from "./environment.ts";
+import {
+  GetFileTool,
+  type Msg as GetFileMsg,
+} from "./get-file-tool.ts";
+import { validateInput as validateGetFileInput } from "./specs/get-file.ts";
+import type { ToolRequest as GetFileToolRequest } from "./specs/get-file.ts";
 
 export type CreateToolContext = {
   fileIO: FileIO;
@@ -23,6 +29,7 @@ export type CreateToolContext = {
   myDispatch: Dispatch<ToolMsg>;
   edlRegisters: EdlRegisters;
   commandExec: CommandExec;
+  fileAccess: FileAccess;
 };
 
 export function createTool(
@@ -63,6 +70,24 @@ export function createTool(
       return new BashCommandTool(bashRequest, {
         ...context,
         myDispatch: (msg: BashCommandMsg) =>
+          context.myDispatch(msg as unknown as ToolMsg),
+      });
+    }
+    case "get_file": {
+      const validated = validateGetFileInput(
+        request.input as { [key: string]: unknown },
+      );
+      if (validated.status === "error") {
+        return { status: "error", error: validated.error };
+      }
+      const getFileRequest: GetFileToolRequest = {
+        id: request.id,
+        toolName: "get_file" as unknown as ToolName,
+        input: validated.value,
+      };
+      return new GetFileTool(getFileRequest, {
+        ...context,
+        myDispatch: (msg: GetFileMsg) =>
           context.myDispatch(msg as unknown as ToolMsg),
       });
     }

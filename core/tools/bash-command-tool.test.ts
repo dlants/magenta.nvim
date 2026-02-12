@@ -9,7 +9,12 @@ import {
   type Msg,
   type OutputLine,
 } from "./bash-command-tool.ts";
-import type { CommandExec, CommandResult, SpawnOptions } from "./environment.ts";
+import type {
+  CommandExec,
+  CommandResult,
+  SpawnOptions,
+  FileAccess,
+} from "./environment.ts";
 import type { Logger } from "../logger.ts";
 import type { AbsFilePath, Cwd, HomeDir } from "../utils/files.ts";
 import type { ToolRequestId, ToolName, ToolMsg } from "./types.ts";
@@ -83,10 +88,7 @@ describe("BashCommandTool", () => {
     logger = mockLogger();
   });
 
-  function createBashTool(
-    command: string,
-    handler?: MockCommandExecHandler,
-  ) {
+  function createBashTool(command: string, handler?: MockCommandExecHandler) {
     const request = makeRequest(command);
     const commandExec = mockCommandExec(handler);
     let tool: BashCommandTool;
@@ -383,9 +385,7 @@ describe("abbreviateLine", () => {
 });
 
 describe("formatOutputForToolResult", () => {
-  function makeResult(
-    overrides: Partial<CommandResult> = {},
-  ): CommandResult {
+  function makeResult(overrides: Partial<CommandResult> = {}): CommandResult {
     return {
       stdout: "",
       stderr: "",
@@ -427,9 +427,7 @@ describe("formatOutputForToolResult", () => {
     const text = (result[0] as { type: "text"; text: string }).text;
     expect(text).toContain("omitted");
     expect(text).toContain("line 0000");
-    expect(text).toContain(
-      `line ${String(numLines - 1).padStart(4, "0")}`,
-    );
+    expect(text).toContain(`line ${String(numLines - 1).padStart(4, "0")}`);
   });
 
   it("separates stdout and stderr sections", () => {
@@ -516,9 +514,7 @@ describe("toolManager integration", () => {
 });
 
 describe("createTool integration", () => {
-  function makeContext(
-    handler?: MockCommandExecHandler,
-  ): CreateToolContext {
+  function makeContext(handler?: MockCommandExecHandler): CreateToolContext {
     return {
       fileIO: {
         async readFile() {
@@ -543,6 +539,20 @@ describe("createTool integration", () => {
       myDispatch: vi.fn(),
       edlRegisters: { registers: new Map(), nextSavedId: 0 },
       commandExec: mockCommandExec(handler),
+      fileAccess: {
+        async getFileInfo() {
+          return { status: "error", error: "not implemented" };
+        },
+        async readBinaryFileBase64() {
+          return { status: "error", error: "not implemented" };
+        },
+        async extractPDFPage() {
+          return { status: "error", error: "not implemented" };
+        },
+        async getPDFPageCount() {
+          return { status: "error", error: "not implemented" };
+        },
+      },
     };
   }
 
@@ -573,3 +583,4 @@ describe("createTool integration", () => {
     expect("status" in result && result.status === "error").toBe(true);
   });
 });
+

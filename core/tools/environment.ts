@@ -20,6 +20,33 @@ export interface FileIO {
 }
 
 // ============================================================================
+// FileAccess — abstraction over file type detection and binary file operations
+// ============================================================================
+
+export type FileCategory = "text" | "image" | "pdf" | "unsupported";
+
+export type FileInfo = {
+  size: number;
+  category: FileCategory;
+  mimeType: string;
+};
+
+export const FILE_SIZE_LIMITS: Record<string, number> = {
+  text: 1_048_576,
+  image: 10_485_760,
+  pdf: 33_554_432,
+};
+
+export interface FileAccess {
+  getFileInfo(path: AbsFilePath): Promise<Result<FileInfo>>;
+  readBinaryFileBase64(path: AbsFilePath): Promise<Result<string>>;
+  extractPDFPage(
+    path: AbsFilePath,
+    pageNumber: number,
+  ): Promise<Result<string>>;
+  getPDFPageCount(path: AbsFilePath): Promise<Result<number>>;
+}
+// ============================================================================
 // CommandExec — abstraction over shell command execution
 // ============================================================================
 
