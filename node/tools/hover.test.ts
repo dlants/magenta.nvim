@@ -260,3 +260,123 @@ it("hover with context not found", async () => {
     expect(res.error).toBe('Context "nonexistent context" not found in file.');
   });
 });
+
+it("hover with includeSource", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.editFile("test.ts");
+    await driver.showSidebar();
+
+    await driver.inputMagentaText(`Get hover info with source`);
+    await driver.send();
+
+    const toolRequestId = "id5" as ToolRequestId;
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "ok, here goes",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: toolRequestId,
+            toolName: "hover" as ToolName,
+            input: {
+              filePath: "test.ts" as UnresolvedFilePath,
+              symbol: "val",
+              includeSource: true,
+            },
+          },
+        },
+      ],
+    });
+
+    // After tool completes, thread auto-responds and creates a new stream
+    const request2 = await driver.mockAnthropic.awaitPendingStream();
+    request2.respond({
+      stopReason: "end_turn",
+      text: "Got the hover result with source.",
+      toolRequests: [],
+    });
+
+    const result = await pollForToolResult(driver, toolRequestId);
+
+    expect(result.type).toBe("tool_result");
+    expect(result.id).toBe(toolRequestId);
+    expect(result.result.status).toBe("ok");
+    const res = result.result as Extract<
+      typeof result.result,
+      { status: "ok" }
+    >;
+    expect(res.value).toHaveLength(1);
+    expect(res.value[0].type).toBe("text");
+
+    const val0 = res.value[0];
+    const text = (val0 as Extract<typeof val0, { type: "text" }>).text;
+
+    expect(text).toContain("Definition locations:");
+    expect(text).toContain("test.ts:");
+    // Should include source code with line numbers
+    expect(text).toMatch(/\d+: .*const val/);
+  });
+});
+
+it("hover without includeSource (default)", async () => {
+  await withDriver({}, async (driver) => {
+    const testFilePath = path.join(driver.magenta.cwd, "test2.ts");
+    await fs.promises.writeFile(testFilePath, "const foo = 'bar';");
+
+    await driver.showSidebar();
+
+    await driver.inputMagentaText(`Get hover info without source`);
+    await driver.send();
+
+    const toolRequestId = "id6" as ToolRequestId;
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "ok, here goes",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: toolRequestId,
+            toolName: "hover" as ToolName,
+            input: {
+              filePath: "test2.ts" as UnresolvedFilePath,
+              symbol: "foo",
+              includeSource: false,
+            },
+          },
+        },
+      ],
+    });
+
+    // After tool completes, thread auto-responds and creates a new stream
+    const request2 = await driver.mockAnthropic.awaitPendingStream();
+    request2.respond({
+      stopReason: "end_turn",
+      text: "Got the hover result without source.",
+      toolRequests: [],
+    });
+
+    const result = await pollForToolResult(driver, toolRequestId);
+
+    expect(result.type).toBe("tool_result");
+    expect(result.id).toBe(toolRequestId);
+    expect(result.result.status).toBe("ok");
+    const res = result.result as Extract<
+      typeof result.result,
+      { status: "ok" }
+    >;
+    expect(res.value).toHaveLength(1);
+    expect(res.value[0].type).toBe("text");
+
+    const val0 = res.value[0];
+    const text = (val0 as Extract<typeof val0, { type: "text" }>).text;
+
+    expect(text).toContain("Definition locations:");
+    expect(text).toContain("test2.ts:");
+    // Should NOT include source code with line numbers when includeSource is false
+    expect(text).not.toMatch(/\d+: .*const foo/);
+  });
+});

@@ -258,7 +258,7 @@ M.wait_for_lsp_attach = function(bufnr, capability, timeout_ms)
 end
 
 M.lsp_hover_request = function(requestId, bufnr, row, col)
-  local success = M.wait_for_lsp_attach(bufnr, "hoverProvider", 1000)
+  local success = M.wait_for_lsp_attach(bufnr, "hoverProvider", 5000)
   if not success then
     M.lsp_response(requestId, "Timeout waiting for LSP client with hoverProvider to attach")
     return
@@ -311,7 +311,7 @@ M.lsp_references_request = function(requestId, bufnr, row, col)
 end
 
 M.lsp_definition_request = function(requestId, bufnr, row, col)
-  local success = M.wait_for_lsp_attach(bufnr, "definitionProvider", 1000)
+  local success = M.wait_for_lsp_attach(bufnr, "definitionProvider", 5000)
   if not success then
     M.lsp_response(requestId, "Timeout waiting for LSP client with definitionProvider to attach")
     return
@@ -336,7 +336,7 @@ M.lsp_definition_request = function(requestId, bufnr, row, col)
 end
 
 M.lsp_type_definition_request = function(requestId, bufnr, row, col)
-  local success = M.wait_for_lsp_attach(bufnr, "typeDefinitionProvider", 1000)
+  local success = M.wait_for_lsp_attach(bufnr, "typeDefinitionProvider", 5000)
   if not success then
     M.lsp_response(requestId, "Timeout waiting for LSP client with typeDefinitionProvider to attach")
     return

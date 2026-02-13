@@ -130,12 +130,28 @@ export class Lsp {
 
   onLspResponse(result: unknown) {
     this.nvim.logger.debug(`onLspResponse: ${JSON.stringify(result)}`);
+
+    // Check if result is an error string (from LSP timeout/attach failure)
+    if (typeof result === "string") {
+      this.nvim.logger.error(`LSP error: ${result}`);
+      // We can't reject because we don't have the requestId
+      // This shouldn't happen in practice since Lua should wrap it properly
+      return;
+    }
+
     const [[[requestId, res]]] = result as [[[number, unknown]]];
     const request = this.requests[requestId];
     if (!request) {
       throw new Error(
         `Expected to find lsp request with id ${requestId} but found none.`,
       );
+    }
+
+    // Check if res is an error string
+    if (typeof res === "string") {
+      delete this.requests[requestId];
+      request.reject(new Error(res));
+      return;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument

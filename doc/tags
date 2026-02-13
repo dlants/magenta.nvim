@@ -18,7 +18,6 @@ magenta-@staged	magenta-commands.txt	/*magenta-@staged*
 magenta-anthropic	magenta-providers.txt	/*magenta-anthropic*
 magenta-available-tools	magenta-tools.txt	/*magenta-available-tools*
 magenta-bedrock	magenta-providers.txt	/*magenta-bedrock*
-magenta-changelog	magenta.txt	/*magenta-changelog*
 magenta-chimeVolume	magenta-config.txt	/*magenta-chimeVolume*
 magenta-claude-max	magenta-providers.txt	/*magenta-claude-max*
 magenta-commands	magenta.txt	/*magenta-commands*

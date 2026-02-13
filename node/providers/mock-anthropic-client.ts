@@ -274,11 +274,11 @@ export class MockStream implements MockMessageStream {
       stop_sequence: null,
       usage: {
         input_tokens: usage.inputTokens,
-        inference_geo: null,
         output_tokens: usage.outputTokens,
         cache_read_input_tokens: usage.cacheHits ?? null,
         cache_creation_input_tokens: usage.cacheMisses ?? null,
         cache_creation: null,
+        inference_geo: null,
         server_tool_use: null,
         service_tier: null,
       },
