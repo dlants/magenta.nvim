@@ -15,6 +15,7 @@ Developed by [dlants.me](https://dlants.me): I was tempted by other editors due 
 
 I sometimes write about AI, neovim and magenta specifically:
 
+- [Why I don't think AGI is imminent](https://dlants.me/agi-not-imminent.html)
 - [AI whiplash, and neovim in the age of AI](https://dlants.me/ai-whiplash.html)
 - [AI is not mid](https://dlants.me/ai-mid.html)
 
