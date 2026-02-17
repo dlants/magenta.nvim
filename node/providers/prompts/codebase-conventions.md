@@ -26,7 +26,7 @@ assistant: This project uses playwright version 1.42.0. etc...
 user: install the lodash library
 assistant: [uses bash_command to run "npm show lodash version"]
 assistant: [uses bash_command to run "npm install lodash"]
-assistant: Installed lodash (latest version 4.17.21)
+assistant: Installed lodash (latest version x.x.x)
 </example>
 
 <example>
