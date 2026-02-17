@@ -24,9 +24,9 @@ WRONG: \`command | head -100\`
 RIGHT: \`command\``;
 
 const EXPLORE_REMINDER = `\
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only extract and report relevant line ranges and descriptions.
-WRONG: spawn explore agent to read the full contents of a large file
-RIGHT: spawn explore agent to find where X is handled, getting back line ranges and descriptions`;
+CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
+WRONG: read the full contents of a large file
+RIGHT: where is X is handled?`;
 
 const CODE_COPY_REMINDER = `\
 CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.`;
