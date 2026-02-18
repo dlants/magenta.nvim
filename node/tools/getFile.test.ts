@@ -837,7 +837,7 @@ it("getFile rejection", async () => {
 
     await driver.assertDisplayBufferContains(`\
 👀⏳ May I read file \`.secret\`?`);
-    const noPos = await driver.assertDisplayBufferContains("[ NO ]");
+    const noPos = await driver.assertDisplayBufferContains("> NO");
 
     await driver.triggerDisplayBufferKey(noPos, "<CR>");
     await driver.assertDisplayBufferContains("👀❌ `.secret`");
@@ -871,14 +871,12 @@ it("displays approval dialog with proper box formatting", async () => {
     // Wait for the user approval prompt
     await driver.assertDisplayBufferContains("👀⏳ May I read file `.secret`?");
 
-    // Verify the box formatting is displayed correctly
-    await driver.assertDisplayBufferContains(`\
-┌────────────────┐
-│ [ NO ] [ YES ] │
-└────────────────┘`);
+    // Verify the vertical button layout is displayed correctly
+    await driver.assertDisplayBufferContains("> NO");
+    await driver.assertDisplayBufferContains("> YES");
 
     // Test that clicking YES works
-    const yesPos = await driver.assertDisplayBufferContains("[ YES ]");
+    const yesPos = await driver.assertDisplayBufferContains("> YES");
     await driver.triggerDisplayBufferKey(yesPos, "<CR>");
 
     // Verify file is read successfully
@@ -912,7 +910,7 @@ it("getFile approval", async () => {
 
     await driver.assertDisplayBufferContains(`\
 👀⏳ May I read file \`.secret\`?`);
-    const okPos = await driver.assertDisplayBufferContains("[ YES ]");
+    const okPos = await driver.assertDisplayBufferContains("> YES");
 
     await driver.triggerDisplayBufferKey(okPos, "<CR>");
     await driver.assertDisplayBufferContains(`\
@@ -2604,7 +2602,7 @@ it("getFile can read files using tilde path with user approval", async () => {
       );
 
       // Approve the request
-      const yesPos = await driver.assertDisplayBufferContains("[ YES ]");
+      const yesPos = await driver.assertDisplayBufferContains("> YES");
       await driver.triggerDisplayBufferKey(yesPos, "<CR>");
 
       // Should now show success

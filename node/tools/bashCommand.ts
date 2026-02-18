@@ -861,44 +861,43 @@ export class BashCommandTool implements StaticTool {
     switch (this.state.state) {
       case "pending-user-action":
         return d`⚡⏳ May I run command ${withInlineCode(d`\`${this.request.input.command}\``)}?
-
-┌───────────────────────────┐
-│ ${withBindings(
-          withExtmark(d`[ NO ]`, {
-            hl_group: ["ErrorMsg", "@markup.strong.markdown"],
-          }),
-          {
-            "<CR>": () =>
-              this.context.myDispatch({
-                type: "user-approval",
-                approved: false,
-              }),
-          },
-        )} ${withBindings(
-          withExtmark(d`[ YES ]`, {
-            hl_group: ["String", "@markup.strong.markdown"],
-          }),
-          {
-            "<CR>": () =>
-              this.context.myDispatch({
-                type: "user-approval",
-                approved: true,
-              }),
-          },
-        )} ${withBindings(
-          withExtmark(d`[ ALWAYS ]`, {
-            hl_group: ["WarningMsg", "@markup.strong.markdown"],
-          }),
-          {
-            "<CR>": () =>
-              this.context.myDispatch({
-                type: "user-approval",
-                approved: true,
-                remember: true,
-              }),
-          },
-        )} │
-└───────────────────────────┘`;
+${withBindings(
+  withExtmark(d`> NO`, {
+    hl_group: ["ErrorMsg", "@markup.strong.markdown"],
+  }),
+  {
+    "<CR>": () =>
+      this.context.myDispatch({
+        type: "user-approval",
+        approved: false,
+      }),
+  },
+)}
+${withBindings(
+  withExtmark(d`> YES`, {
+    hl_group: ["String", "@markup.strong.markdown"],
+  }),
+  {
+    "<CR>": () =>
+      this.context.myDispatch({
+        type: "user-approval",
+        approved: true,
+      }),
+  },
+)}
+${withBindings(
+  withExtmark(d`> ALWAYS`, {
+    hl_group: ["WarningMsg", "@markup.strong.markdown"],
+  }),
+  {
+    "<CR>": () =>
+      this.context.myDispatch({
+        type: "user-approval",
+        approved: true,
+        remember: true,
+      }),
+  },
+)}`;
       case "processing": {
         const runningTime = Math.floor(
           (Date.now() - this.state.startTime) / 1000,

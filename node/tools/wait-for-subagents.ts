@@ -16,6 +16,7 @@ import type { RootMsg } from "../root-msg.ts";
 import type { ThreadId } from "../chat/types";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Chat } from "../chat/chat.ts";
+import { renderPendingApprovals } from "./render-pending-approvals.ts";
 
 export type Input = {
   threadIds: ThreadId[];
@@ -125,6 +126,14 @@ ${results
   }
 
   isPendingUserAction(): boolean {
+    if (this.state.state !== "waiting") return false;
+    for (const threadId of this.request.input.threadIds) {
+      if (
+        this.context.chat.getThreadPendingApprovalTools(threadId).length > 0
+      ) {
+        return true;
+      }
+    }
     return false;
   }
 
@@ -256,16 +265,23 @@ ${threadStatusLines}`;
         return assertUnreachable(summary.status);
     }
 
-    return withBindings(d`${statusText}\n`, {
-      "<CR>": () =>
-        this.context.dispatch({
-          type: "chat-msg",
-          msg: {
-            type: "select-thread",
-            id: threadId,
-          },
-        }),
-    });
+    const pendingApprovals = renderPendingApprovals(
+      this.context.chat,
+      threadId,
+    );
+    return withBindings(
+      d`${statusText}\n${pendingApprovals ? d`${pendingApprovals}` : d``}`,
+      {
+        "<CR>": () =>
+          this.context.dispatch({
+            type: "chat-msg",
+            msg: {
+              type: "select-thread",
+              id: threadId,
+            },
+          }),
+      },
+    );
   }
 }
 

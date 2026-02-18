@@ -14,6 +14,7 @@ import { AGENT_TYPES, type AgentType } from "../providers/system-prompt.ts";
 import type { ThreadId, ThreadType } from "../chat/types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Chat } from "../chat/chat.ts";
+import { renderPendingApprovals } from "./render-pending-approvals.ts";
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
@@ -116,7 +117,11 @@ export class SpawnSubagentTool implements StaticTool {
   }
 
   isPendingUserAction(): boolean {
-    return false; // Spawn subagent never requires user action
+    if (this.state.state !== "waiting-for-subagent") return false;
+    return (
+      this.context.chat.getThreadPendingApprovalTools(this.state.threadId)
+        .length > 0
+    );
   }
 
   abort(): ProviderToolResult {
@@ -304,8 +309,12 @@ export class SpawnSubagentTool implements StaticTool {
             assertUnreachable(summary.status);
         }
 
+        const pendingApprovals = renderPendingApprovals(
+          this.context.chat,
+          this.state.threadId,
+        );
         return withBindings(
-          d`🚀⏳ spawn_subagent${typeLabel} (blocking) ${displayName}: ${statusText}`,
+          d`🚀⏳ spawn_subagent${typeLabel} (blocking) ${displayName}: ${statusText}${pendingApprovals ? d`${pendingApprovals}` : d``}`,
           {
             "<CR>": () =>
               this.context.dispatch({

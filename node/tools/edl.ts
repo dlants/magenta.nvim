@@ -389,32 +389,30 @@ export class EdlTool implements StaticTool {
           .join("\n");
         return d`📝⏳ EDL script needs file access:
 ${fileList}
-
-┌───────────────────┐
-│ ${withBindings(
-          withExtmark(d`[ NO ]`, {
-            hl_group: ["ErrorMsg", "@markup.strong.markdown"],
-          }),
-          {
-            "<CR>": () =>
-              this.context.myDispatch({
-                type: "user-approval",
-                approved: false,
-              }),
-          },
-        )} ${withBindings(
-          withExtmark(d`[ YES ]`, {
-            hl_group: ["String", "@markup.strong.markdown"],
-          }),
-          {
-            "<CR>": () =>
-              this.context.myDispatch({
-                type: "user-approval",
-                approved: true,
-              }),
-          },
-        )} │
-└───────────────────┘`;
+${withBindings(
+  withExtmark(d`> NO`, {
+    hl_group: ["ErrorMsg", "@markup.strong.markdown"],
+  }),
+  {
+    "<CR>": () =>
+      this.context.myDispatch({
+        type: "user-approval",
+        approved: false,
+      }),
+  },
+)}
+${withBindings(
+  withExtmark(d`> YES`, {
+    hl_group: ["String", "@markup.strong.markdown"],
+  }),
+  {
+    "<CR>": () =>
+      this.context.myDispatch({
+        type: "user-approval",
+        approved: true,
+      }),
+  },
+)}`;
       }
       case "processing":
         return d`📝⚙️ edl script executing...`;

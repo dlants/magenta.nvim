@@ -717,32 +717,30 @@ You already have the most up-to-date information about the contents of this file
         return d`👀⚙️ ${this.formatFileDisplay()}`;
       case "pending-user-action":
         return d`👀⏳ May I read file ${this.formatFileDisplay()}?
-
-┌────────────────┐
-│ ${withBindings(
-          withExtmark(d`[ NO ]`, {
-            hl_group: ["ErrorMsg", "@markup.strong.markdown"],
-          }),
-          {
-            "<CR>": () =>
-              this.context.myDispatch({
-                type: "user-approval",
-                approved: false,
-              }),
-          },
-        )} ${withBindings(
-          withExtmark(d`[ YES ]`, {
-            hl_group: ["String", "@markup.strong.markdown"],
-          }),
-          {
-            "<CR>": () =>
-              this.context.myDispatch({
-                type: "user-approval",
-                approved: true,
-              }),
-          },
-        )} │
-└────────────────┘`;
+${withBindings(
+  withExtmark(d`> NO`, {
+    hl_group: ["ErrorMsg", "@markup.strong.markdown"],
+  }),
+  {
+    "<CR>": () =>
+      this.context.myDispatch({
+        type: "user-approval",
+        approved: false,
+      }),
+  },
+)}
+${withBindings(
+  withExtmark(d`> YES`, {
+    hl_group: ["String", "@markup.strong.markdown"],
+  }),
+  {
+    "<CR>": () =>
+      this.context.myDispatch({
+        type: "user-approval",
+        approved: true,
+      }),
+  },
+)}`;
       case "done":
         return renderCompletedSummary(
           {

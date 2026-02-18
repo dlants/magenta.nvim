@@ -13,6 +13,7 @@ import { AGENT_TYPES, type AgentType } from "../providers/system-prompt.ts";
 import type { ThreadId, ThreadType } from "../chat/types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Chat } from "../chat/chat.ts";
+import { renderPendingApprovals } from "./render-pending-approvals.ts";
 import type { CompletedToolInfo } from "./types.ts";
 
 export type ForEachElement = string & { __forEachElement: true };
@@ -189,6 +190,17 @@ ${element}`;
   }
 
   isPendingUserAction(): boolean {
+    if (this.state.state !== "running") return false;
+    for (const el of this.state.elements) {
+      if (el.state.status === "running") {
+        if (
+          this.context.chat.getThreadPendingApprovalTools(el.state.threadId)
+            .length > 0
+        ) {
+          return true;
+        }
+      }
+    }
     return false;
   }
 
@@ -469,17 +481,24 @@ ${element}`;
         return assertUnreachable(summary.status);
     }
 
-    return withBindings(d`${statusText}\n`, {
-      "<CR>": () => {
-        this.context.dispatch({
-          type: "chat-msg",
-          msg: {
-            type: "select-thread",
-            id: threadId,
-          },
-        });
+    const pendingApprovals = renderPendingApprovals(
+      this.context.chat,
+      threadId,
+    );
+    return withBindings(
+      d`${statusText}\n${pendingApprovals ? d`${pendingApprovals}` : d``}`,
+      {
+        "<CR>": () => {
+          this.context.dispatch({
+            type: "chat-msg",
+            msg: {
+              type: "select-thread",
+              id: threadId,
+            },
+          });
+        },
       },
-    });
+    );
   }
 
   renderSummary() {

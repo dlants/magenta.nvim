@@ -17,7 +17,7 @@ import {
 } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
 import { wrapStaticToolMsg, type ToolRequestId } from "../tools/toolManager.ts";
-import type { ToolName } from "../tools/types.ts";
+import type { Tool, StaticTool, ToolName } from "../tools/types.ts";
 import { MCPToolManager } from "../tools/mcp/manager.ts";
 import type { WaitForSubagentsTool } from "../tools/wait-for-subagents.ts";
 import type { SpawnSubagentTool } from "../tools/spawn-subagent.ts";
@@ -957,6 +957,20 @@ ${threadViews.map((view) => d`${view}\n`)}`;
     }
   }
 
+  getThreadPendingApprovalTools(threadId: ThreadId): (Tool | StaticTool)[] {
+    const wrapper = this.threadWrappers[threadId];
+    if (!wrapper || wrapper.state !== "initialized") return [];
+    const mode = wrapper.thread.state.mode;
+    if (mode.type !== "tool_use") return [];
+    const result: (Tool | StaticTool)[] = [];
+    for (const [, tool] of mode.activeTools) {
+      if (tool.isPendingUserAction()) {
+        result.push(tool);
+      }
+    }
+    return result;
+  }
+
   getThreadSummary(threadId: ThreadId): {
     title?: string | undefined;
     status:
@@ -1008,9 +1022,18 @@ ${threadViews.map((view) => d`${view}\n`)}`;
             }
 
             if (mode.type === "tool_use") {
+              let hasPendingApproval = false;
+              for (const [, tool] of mode.activeTools) {
+                if (tool.isPendingUserAction()) {
+                  hasPendingApproval = true;
+                  break;
+                }
+              }
               return {
                 type: "running" as const,
-                activity: "executing tools",
+                activity: hasPendingApproval
+                  ? "waiting for approval"
+                  : "executing tools",
               };
             }
 

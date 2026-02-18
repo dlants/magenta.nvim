@@ -1779,7 +1779,7 @@ it("handles @async messages by queueing them and sending on next tool response",
     expect(thread.state.pendingMessages[0].text).toBe("This should be queued");
 
     // Approve the file read to complete the tool execution
-    const yesPos = await driver.assertDisplayBufferContains("[ YES ]");
+    const yesPos = await driver.assertDisplayBufferContains("> YES");
     await driver.triggerDisplayBufferKey(yesPos, "<CR>");
 
     // Wait for file read to complete
