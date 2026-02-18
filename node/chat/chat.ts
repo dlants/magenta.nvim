@@ -1159,16 +1159,6 @@ Guidelines:
               };
             }
 
-            if (
-              mode.type === "control_flow" &&
-              mode.operation.type === "compact"
-            ) {
-              return {
-                type: "running" as const,
-                activity: "compacting thread",
-              };
-            }
-
             // Then check agent status
             switch (agentStatus.type) {
               case "error":

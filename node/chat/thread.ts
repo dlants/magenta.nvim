@@ -160,12 +160,7 @@ export type ToolCache = {
 };
 
 /** Control flow operations that intercept normal tool processing */
-export type ControlFlowOp =
-  | {
-      type: "compact";
-      nextPrompt?: string;
-    }
-  | { type: "yield"; response: string };
+export type ControlFlowOp = { type: "yield"; response: string };
 
 /** Thread-specific conversation mode (agent status is read directly from agent) */
 export type ConversationMode =
@@ -259,32 +254,31 @@ export class Thread {
     if (clonedAgent) {
       this.agent = clonedAgent;
     } else {
-      const provider = getProvider(this.context.nvim, this.state.profile);
-
-      this.agent = provider.createAgent(
-        {
-          model: this.state.profile.model,
-          systemPrompt: this.state.systemPrompt,
-          tools: getToolSpecs(
-            this.state.threadType,
-            this.context.mcpToolManager,
-          ),
-          ...(this.state.profile.thinking &&
-            (this.state.profile.provider === "anthropic" ||
-              this.state.profile.provider === "mock") && {
-              thinking: this.state.profile.thinking,
-            }),
-          ...(this.state.profile.reasoning &&
-            (this.state.profile.provider === "openai" ||
-              this.state.profile.provider === "mock") && {
-              reasoning: this.state.profile.reasoning,
-            }),
-        },
-        (msg) => this.myDispatch({ type: "agent-msg", msg }),
-      );
+      this.agent = this.createFreshAgent();
     }
   }
 
+  private createFreshAgent(): Agent {
+    const provider = getProvider(this.context.nvim, this.state.profile);
+    return provider.createAgent(
+      {
+        model: this.state.profile.model,
+        systemPrompt: this.state.systemPrompt,
+        tools: getToolSpecs(this.state.threadType, this.context.mcpToolManager),
+        ...(this.state.profile.thinking &&
+          (this.state.profile.provider === "anthropic" ||
+            this.state.profile.provider === "mock") && {
+            thinking: this.state.profile.thinking,
+          }),
+        ...(this.state.profile.reasoning &&
+          (this.state.profile.provider === "openai" ||
+            this.state.profile.provider === "mock") && {
+            reasoning: this.state.profile.reasoning,
+          }),
+      },
+      (msg) => this.myDispatch({ type: "agent-msg", msg }),
+    );
+  }
   getProviderStatus(): AgentStatus {
     return this.agent.getState().status;
   }
@@ -409,19 +403,15 @@ export class Thread {
             ? this.state.mode.nextPrompt
             : undefined;
 
-        const operation: ControlFlowOp = { type: "compact" };
-        if (nextPrompt !== undefined) operation.nextPrompt = nextPrompt;
-        this.state.mode = { type: "control_flow", operation };
+        this.state.mode = { type: "normal" };
 
-        this.resetContextManager()
-          .then(() => {
-            this.agent.compact({ summary: msg.summary });
-          })
-          .catch((e: Error) => {
+        this.handleCompactComplete(msg.summary, nextPrompt).catch(
+          (e: Error) => {
             this.context.nvim.logger.error(
               `Failed during compact-complete: ${e.message}`,
             );
-          });
+          },
+        );
         return;
       }
 
@@ -538,6 +528,28 @@ export class Thread {
     }
   }
 
+  private async handleCompactComplete(
+    summary: string,
+    nextPrompt: string | undefined,
+  ): Promise<void> {
+    await this.resetContextManager();
+
+    this.agent = this.createFreshAgent();
+
+    // Reset thread state for the fresh agent
+    this.state.messageViewState = {};
+    this.state.toolViewState = {};
+    this.state.toolCache = { results: new Map() };
+    this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
+    this.state.outputTokensSinceLastReminder = 0;
+
+    // Build user message with summary and optional next prompt
+    const userText = nextPrompt
+      ? `<conversation-summary>\n${summary}\n</conversation-summary>\n\n${nextPrompt}`
+      : `<conversation-summary>\n${summary}\n</conversation-summary>\n\nPlease continue from where you left off.`;
+
+    await this.sendMessage([{ type: "user", text: userText }]);
+  }
   /** Reset the context manager, optionally adding specified files */
   private async resetContextManager(contextFiles?: string[]): Promise<void> {
     this.contextManager = await ContextManager.create(
@@ -708,6 +720,12 @@ export class Thread {
 
   /** Handle send-message action - async handler for the entire flow */
   private async handleSendMessageMsg(messages: InputMessage[]): Promise<void> {
+    // For compact threads, skip all command processing and send raw text
+    if (this.state.threadType === "compact") {
+      this.sendRawMessage(messages);
+      return;
+    }
+
     // Check if the first user message starts with @fork
     const firstUserMessage = messages.find((m) => m.type === "user");
     if (firstUserMessage?.text.trim().startsWith("@fork")) {
@@ -864,25 +882,6 @@ export class Thread {
     } else if (
       agentStatus.type === "stopped" &&
       agentStatus.stopReason === "end_turn" &&
-      mode.type === "control_flow" &&
-      mode.operation.type === "compact"
-    ) {
-      // Handle continuation after compaction - read from operation
-      const operation = mode.operation;
-
-      // Reset mode to normal now that we've extracted the data
-      this.state.mode = { type: "normal" };
-
-      // Continue with next prompt if any
-      if (operation.nextPrompt !== undefined) {
-        this.sendMessage([{ type: "user", text: operation.nextPrompt }]).catch(
-          this.handleSendMessageError.bind(this),
-        );
-      }
-      return { type: "did-autorespond" };
-    } else if (
-      agentStatus.type === "stopped" &&
-      agentStatus.stopReason === "end_turn" &&
       this.state.pendingMessages.length
     ) {
       const pendingMessages = this.state.pendingMessages;
@@ -895,7 +894,6 @@ export class Thread {
     return { type: "no-action-needed" };
   }
 
-  /** Get context updates and convert to provider input format */
   private async getAndPrepareContextUpdates(): Promise<{
     content: AgentInput[];
     updates: FileUpdates | undefined;
@@ -1137,6 +1135,20 @@ export class Thread {
     this.agent.continueConversation();
   }
 
+  /** Send messages as raw text, bypassing command processing and context updates.
+   * Used for compact threads where message content should not be transformed.
+   */
+  private sendRawMessage(messages: InputMessage[]): void {
+    const contentToSend: AgentInput[] = messages.map((m) => ({
+      type: "text" as const,
+      text: m.text,
+    }));
+
+    if (contentToSend.length === 0) return;
+
+    this.agent.appendUserMessage(contentToSend);
+    this.agent.continueConversation();
+  }
   /** Get messages in provider format - delegates to provider thread */
   getMessages(): ProviderMessage[] {
     return [...this.getProviderMessages()];
@@ -1219,8 +1231,6 @@ const renderStatus = (
   }
   if (mode.type === "control_flow") {
     switch (mode.operation.type) {
-      case "compact":
-        return d`📦 Compacting thread...`;
       case "yield":
         return d`↗️ yielded to parent: ${mode.operation.response}`;
     }

@@ -8,7 +8,6 @@ import type {
   AgentState,
   AgentStatus,
   AgentStreamingBlock,
-  CompactRequest,
   NativeMessageIdx,
   ProviderMessage,
   ProviderToolResult,
@@ -469,123 +468,6 @@ export class AnthropicAgent implements Agent {
     );
 
     return cloned;
-  }
-
-  compact(request: CompactRequest, truncateIdx?: NativeMessageIdx): void {
-    // Run compaction async so Thread can set state before we dispatch events
-    queueMicrotask(() => {
-      this.executeCompact(request, truncateIdx);
-    });
-  }
-
-  private executeCompact(
-    request: CompactRequest,
-    truncateIdx?: NativeMessageIdx,
-  ): void {
-    const { summary } = request;
-
-    // If truncateIdx is provided (user-initiated @compact), first truncate to that point
-    // This removes the @compact user message and the agent's compact response
-    if (truncateIdx !== undefined) {
-      this.messages.length = truncateIdx + 1;
-      // Clean up messageStopInfo for removed messages
-      for (const idx of this.messageStopInfo.keys()) {
-        if (idx > truncateIdx) {
-          this.messageStopInfo.delete(idx);
-        }
-      }
-    } else {
-      // Agent-initiated: just trim the compact tool_use from the last assistant message
-      this.trimCompactToolUse();
-    }
-
-    // Build new messages array with just the summary as assistant message
-    const newMessages: Anthropic.MessageParam[] = [];
-
-    if (summary.trim()) {
-      newMessages.push({
-        role: "assistant",
-        content: [{ type: "text", text: summary }],
-      });
-    }
-
-    // Ensure conversation alternates properly
-    this.messages = this.ensureValidMessageSequence(newMessages);
-
-    // Clean up messageStopInfo
-    this.messageStopInfo.clear();
-
-    // Update cached messages
-    this.updateCachedProviderMessages();
-
-    // Set status to stopped/end_turn and dispatch
-    this.status = { type: "stopped", stopReason: "end_turn" };
-    this.dispatchAsync({ type: "agent-stopped", stopReason: "end_turn" });
-  }
-
-  /** Remove the compact tool_use block from the last assistant message */
-  private trimCompactToolUse(): void {
-    const lastMessage = this.messages[this.messages.length - 1];
-    if (!lastMessage || lastMessage.role !== "assistant") {
-      return;
-    }
-
-    if (typeof lastMessage.content === "string") {
-      return;
-    }
-
-    // Filter out compact tool_use blocks
-    const filteredContent = lastMessage.content.filter((block) => {
-      if (block.type !== "tool_use") {
-        return true;
-      }
-      return block.name !== "compact";
-    });
-
-    // Update the message content
-    if (filteredContent.length === 0) {
-      // Remove the entire message if no content remains
-      this.messages.pop();
-    } else {
-      lastMessage.content = filteredContent;
-    }
-  }
-
-  private ensureValidMessageSequence(
-    messages: Anthropic.MessageParam[],
-  ): Anthropic.MessageParam[] {
-    if (messages.length === 0) return messages;
-
-    const result: Anthropic.MessageParam[] = [];
-
-    for (const msg of messages) {
-      const lastMsg = result[result.length - 1];
-
-      // If same role as last message, merge content
-      if (lastMsg && lastMsg.role === msg.role) {
-        if (typeof lastMsg.content === "string") {
-          lastMsg.content = [{ type: "text", text: lastMsg.content }];
-        }
-        if (typeof msg.content === "string") {
-          lastMsg.content.push({
-            type: "text",
-            text: msg.content,
-          });
-        } else {
-          lastMsg.content.push(...msg.content);
-        }
-      } else {
-        result.push({
-          role: msg.role,
-          content:
-            typeof msg.content === "string"
-              ? [{ type: "text", text: msg.content }]
-              : [...msg.content],
-        });
-      }
-    }
-
-    return result;
   }
 
   /** Clean up a deep-copied messages array for use in a cloned agent.

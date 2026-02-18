@@ -249,10 +249,6 @@ export type AgentMsg =
   | { type: "agent-stopped"; stopReason: StopReason; usage?: Usage }
   | { type: "agent-error"; error: Error };
 
-export type CompactRequest = {
-  summary: string;
-};
-
 export interface Agent {
   getState(): AgentState;
 
@@ -289,15 +285,6 @@ export interface Agent {
    * Sets status to stopped with end_turn.
    */
   truncateMessages(messageIdx: NativeMessageIdx): void;
-
-  /** Compact the thread by replacing the entire thread with a summary.
-   * The compacted thread will have:
-   * 1. A single user message with context files (if any)
-   * 2. A single assistant message with the summary
-   * @param truncateIdx - If provided, truncate messages to this index before applying compaction
-   *                      (used for user-initiated @compact to remove the compact request itself)
-   */
-  compact(request: CompactRequest, truncateIdx?: NativeMessageIdx): void;
 
   /** Create a deep copy of this agent with a new dispatch function.
    * Can be called in any state (stopped, streaming, tool_use).

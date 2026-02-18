@@ -2266,3 +2266,120 @@ it("renders successive tool uses with single assistant header and inline metadat
     expect(displayText).toMatchSnapshot("successive-tool-uses-display");
   });
 });
+
+it("followup user message text is visible after tool-use cycle", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    // Send initial message
+    await driver.inputMagentaText("Read a file for me");
+    await driver.send();
+
+    const stream1 = await driver.mockAnthropic.awaitPendingStream();
+    const toolRequestId = "read-file-1" as ToolRequestId;
+
+    // Respond with a tool use
+    stream1.respond({
+      stopReason: "tool_use",
+      text: "I'll read the file for you.",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: toolRequestId,
+            toolName: "get_file" as ToolName,
+            input: { filePath: "./poem.txt" as UnresolvedFilePath },
+          },
+        },
+      ],
+    });
+
+    // Wait for tool to auto-execute and complete
+    await driver.assertDisplayBufferContains("poem.txt");
+
+    // Auto-respond after tool completion
+    const stream2 = await driver.mockAnthropic.awaitPendingStream();
+    stream2.respond({
+      stopReason: "end_turn",
+      text: "I've read the file. It contains a poem about moonlight.",
+      toolRequests: [],
+    });
+
+    await driver.assertDisplayBufferContains("poem about moonlight");
+
+    // Now send a followup message
+    await driver.inputMagentaText("Now edit the poem to be about sunshine");
+    await driver.send();
+
+    const stream3 = await driver.mockAnthropic.awaitPendingStream();
+    stream3.respond({
+      stopReason: "end_turn",
+      text: "I'll edit the poem for you.",
+      toolRequests: [],
+    });
+
+    // Verify the followup user message text is visible in the display
+    await driver.assertDisplayBufferContains(
+      "Now edit the poem to be about sunshine",
+    );
+
+    // Verify the assistant response to the followup is also visible
+    await driver.assertDisplayBufferContains("I'll edit the poem for you.");
+
+    // Snapshot the full display for verification
+    const displayText = sanitizeDisplayForSnapshot(
+      await driver.getDisplayBufferText(),
+    );
+    expect(displayText).toMatchSnapshot("followup-message-after-tool-use");
+  });
+});
+
+it("followup user message text is visible with context updates", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    // Add a file to context and send initial message
+    await driver.addContextFiles("poem.txt");
+    await driver.inputMagentaText("Help me with this poem");
+    await driver.send();
+
+    const stream1 = await driver.mockAnthropic.awaitPendingStream();
+    stream1.respond({
+      stopReason: "end_turn",
+      text: "I can see the poem. What would you like me to do?",
+      toolRequests: [],
+    });
+
+    await driver.assertDisplayBufferContains("What would you like me to do?");
+
+    // Modify the file externally to trigger a context update on next message
+    const cwd = await getcwd(driver.nvim);
+    await fs.promises.writeFile(
+      `${cwd}/poem.txt`,
+      "sunshine poem\nwith extra lines",
+    );
+
+    // Send a followup message - this should include context updates
+    await driver.inputMagentaText("Now make the poem longer please");
+    await driver.send();
+
+    const stream2 = await driver.mockAnthropic.awaitPendingStream();
+    stream2.respond({
+      stopReason: "end_turn",
+      text: "I'll make the poem longer.",
+      toolRequests: [],
+    });
+
+    // Verify the followup user message text is visible in the display
+    await driver.assertDisplayBufferContains("Now make the poem longer please");
+
+    // Verify the assistant response to the followup is also visible
+    await driver.assertDisplayBufferContains("I'll make the poem longer.");
+
+    // Snapshot the full display for verification
+    const displayText = sanitizeDisplayForSnapshot(
+      await driver.getDisplayBufferText(),
+    );
+    expect(displayText).toMatchSnapshot("followup-with-context-updates");
+  });
+});

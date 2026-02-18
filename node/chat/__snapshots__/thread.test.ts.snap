@@ -207,6 +207,56 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
 ]
 `;
 
+exports[`followup user message text is visible after tool-use cycle > followup-message-after-tool-use 1`] = `
+"# [ Untitled ]
+⚙️ [System Prompt ~2K]
+
+# user:
+Read a file for me
+📋 [System Reminder]
+# assistant:
+I'll read the file for you.
+👀✅ \`poem.txt\` [+ 5]
+
+📋 [System Reminder]
+I've read the file. It contains a poem about moonlight.
+# user:
+Now edit the poem to be about sunshine
+📋 [System Reminder]
+# assistant:
+I'll edit the poem for you.
+
+
+
+Streaming response ⠁"
+`;
+
+exports[`followup user message text is visible with context updates > followup-with-context-updates 1`] = `
+"# [ Untitled ]
+⚙️ [System Prompt ~2K]
+
+# user:
+Context Updates:
+- \`poem.txt\` [ +5 ]
+
+Help me with this poem
+📋 [System Reminder]
+# assistant:
+I can see the poem. What would you like me to do?
+# user:
+Context Updates:
+- \`poem.txt\` [ +2 / -4 ]
+
+Now make the poem longer please
+📋 [System Reminder]
+# assistant:
+I'll make the poem longer.
+
+
+
+Streaming response ⠁"
+`;
+
 exports[`forks a thread while streaming by aborting the stream first 1`] = `
 [
   {
