@@ -9,7 +9,7 @@ import * as SpawnSubagent from "./spawn-subagent";
 import * as SpawnForeach from "./spawn-foreach";
 import * as WaitForSubagents from "./wait-for-subagents";
 import * as YieldToParent from "./yield-to-parent";
-import * as Compact from "./compact";
+
 import * as Edl from "./edl";
 import { d, withCode, type VDOMNode } from "../tea/view";
 import type { StaticToolName } from "./tool-registry";
@@ -52,8 +52,6 @@ export function validateInput(
       return WaitForSubagents.validateInput(input);
     case "yield_to_parent":
       return YieldToParent.validateInput(input);
-    case "compact":
-      return Compact.validateInput(input);
     case "edl":
       return Edl.validateInput(input);
     default:
@@ -144,7 +142,6 @@ export function renderStreamdedTool(
     case "wait_for_subagents":
     case "yield_to_parent":
     case "spawn_foreach":
-    case "compact":
       break;
     case "edl": {
       const script = extractPartialJsonStringValue(

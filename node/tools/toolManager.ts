@@ -9,7 +9,7 @@ import * as SpawnSubagent from "./spawn-subagent.ts";
 import * as SpawnForeach from "./spawn-foreach.ts";
 import * as WaitForSubagents from "./wait-for-subagents.ts";
 import * as YieldToParent from "./yield-to-parent.ts";
-import * as Compact from "./compact.ts";
+
 import * as Edl from "./edl.ts";
 
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
@@ -29,6 +29,7 @@ import type {
 } from "../providers/provider-types.ts";
 import {
   CHAT_STATIC_TOOL_NAMES,
+  COMPACT_STATIC_TOOL_NAMES,
   SUBAGENT_STATIC_TOOL_NAMES,
   type StaticToolName,
 } from "./tool-registry.ts";
@@ -100,12 +101,6 @@ export type StaticToolMap = {
     msg: YieldToParent.Msg;
     spec: typeof YieldToParent.spec;
   };
-  compact: {
-    controller: Compact.CompactTool;
-    input: Compact.Input;
-    msg: Compact.Msg;
-    spec: typeof Compact.spec;
-  };
   edl: {
     controller: Edl.EdlTool;
     input: Edl.Input;
@@ -149,14 +144,15 @@ const TOOL_SPEC_MAP: {
 
   hover: Hover.spec,
   find_references: FindReferences.spec,
-  diagnostics: Diagnostics.spec,
+
   bash_command: BashCommand.spec,
+  diagnostics: Diagnostics.spec,
   thread_title: ThreadTitle.spec,
   spawn_subagent: SpawnSubagent.spec,
   spawn_foreach: SpawnForeach.spec,
   yield_to_parent: YieldToParent.spec,
   wait_for_subagents: WaitForSubagents.spec,
-  compact: Compact.spec,
+
   edl: Edl.spec,
 };
 
@@ -170,6 +166,9 @@ export function getToolSpecs(
     case "subagent_fast":
     case "subagent_explore":
       staticToolNames = SUBAGENT_STATIC_TOOL_NAMES;
+      break;
+    case "compact":
+      staticToolNames = COMPACT_STATIC_TOOL_NAMES;
       break;
     case "root":
       staticToolNames = CHAT_STATIC_TOOL_NAMES;
@@ -238,8 +237,6 @@ export function renderCompletedToolSummary(
       return YieldToParent.renderCompletedSummary(info);
     case "thread_title":
       return ThreadTitle.renderCompletedSummary(info);
-    case "compact":
-      return Compact.renderCompletedSummary(info);
     case "edl":
       return Edl.renderCompletedSummary(info);
     default:

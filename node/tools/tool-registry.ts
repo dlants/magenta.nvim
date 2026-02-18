@@ -9,7 +9,6 @@ export const STATIC_TOOL_NAMES = [
   "spawn_foreach",
   "wait_for_subagents",
   "yield_to_parent",
-  "compact",
   "edl",
 ] as const;
 
@@ -24,10 +23,10 @@ export const CHAT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "spawn_subagent",
   "spawn_foreach",
   "wait_for_subagents",
-  "compact",
   "edl",
 ];
 
+export const COMPACT_STATIC_TOOL_NAMES: StaticToolName[] = ["edl"];
 export const SUBAGENT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "get_file",
   "hover",

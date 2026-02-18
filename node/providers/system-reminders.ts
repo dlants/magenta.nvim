@@ -56,6 +56,8 @@ export function getSubsequentReminder(threadType: ThreadType): string {
     case "subagent_default":
     case "subagent_fast":
       return SUBAGENT_REMINDER;
+    case "compact":
+      return "";
     case "subagent_explore":
       return `<system-reminder>
 ${SKILLS_REMINDER}

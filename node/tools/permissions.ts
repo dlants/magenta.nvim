@@ -277,6 +277,10 @@ export function canWriteFile(
     options: MagentaOptions;
   },
 ): boolean {
+  // Files in magenta temp directory are always writable (magenta owns that directory)
+  if (isFileInMagentaTempDirectory(absFilePath)) {
+    return true;
+  }
   // Skills files always require confirmation for writing
   if (isFileInSkillsDirectory(absFilePath, context)) {
     return false;

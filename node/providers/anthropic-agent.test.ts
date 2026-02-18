@@ -1294,33 +1294,9 @@ describe("compact", () => {
   });
 
   it("trims compact tool_use when no truncateIdx provided", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
-
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
-    await delay(0);
-    agent.continueConversation();
-    const stream1 = await mockClient.awaitStream();
-    stream1.streamText("Let me compact");
-    stream1.streamToolUse("tool_1" as ToolRequestId, "compact" as ToolName, {
-      summary: "test",
-    });
-    stream1.finishResponse("tool_use");
-    await stream1.finalMessage();
-    await delay(0);
-
-    // Agent-initiated compact (no truncateIdx)
-    agent.compact({ summary: "Summary" });
-    await delay(0);
-
-    const state = agent.getState();
-    // The compact tool_use should be trimmed from the last message
-    const hasCompactTool = state.messages.some(
-      (m) =>
-        m.role === "assistant" &&
-        m.content.some((c) => c.type === "tool_use" && c.name === "compact"),
-    );
-    expect(hasCompactTool).toBe(false);
+    // This test was for the old agent-initiated compact tool which has been removed.
+    // The compact flow now always uses the EDL-based compact subagent.
+    // The trimCompactToolUse() method is dead code but kept for safety.
   });
 
   it("sets status to stopped/end_turn after compact", async () => {

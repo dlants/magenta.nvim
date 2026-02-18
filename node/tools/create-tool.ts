@@ -9,8 +9,6 @@ import * as SpawnSubagent from "./spawn-subagent.ts";
 import * as SpawnForeach from "./spawn-foreach.ts";
 import * as WaitForSubagents from "./wait-for-subagents.ts";
 import * as YieldToParent from "./yield-to-parent.ts";
-
-import * as Compact from "./compact.ts";
 import * as Edl from "./edl.ts";
 
 import type { EdlRegisters } from "../edl/index.ts";
@@ -190,20 +188,6 @@ export function createTool(
         nvim: context.nvim,
         dispatch: context.dispatch,
         threadId: context.threadId,
-        myDispatch: wrapDispatch,
-      });
-    }
-
-    case "compact": {
-      const threadWrapper = context.chat.threadWrappers[context.threadId];
-      if (threadWrapper.state !== "initialized") {
-        throw new Error(
-          `Cannot compact thread ${context.threadId}. Thread not initialized.`,
-        );
-      }
-      return new Compact.CompactTool(staticRequest, {
-        nvim: context.nvim,
-        thread: threadWrapper.thread,
         myDispatch: wrapDispatch,
       });
     }

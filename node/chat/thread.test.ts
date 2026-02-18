@@ -394,6 +394,259 @@ it("forks a thread while waiting for tool use by aborting pending tools first", 
   });
 });
 
+it("compact flow: user initiates @compact, spawns compact thread, compacts and continues", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    // Build up some conversation history
+    await driver.inputMagentaText("What is 2+2?");
+    await driver.send();
+
+    const request1 = await driver.mockAnthropic.awaitPendingStream({
+      message: "initial request",
+    });
+    request1.respond({
+      stopReason: "end_turn",
+      text: "2+2 equals 4.",
+      toolRequests: [],
+    });
+
+    await driver.inputMagentaText("What about 3+3?");
+    await driver.send();
+
+    const request2 = await driver.mockAnthropic.awaitPendingStream({
+      message: "followup request",
+    });
+    request2.respond({
+      stopReason: "end_turn",
+      text: "3+3 equals 6.",
+      toolRequests: [],
+    });
+
+    const originalThread = driver.magenta.chat.getActiveThread();
+    const originalThreadId = originalThread.id;
+
+    // Verify we have conversation history before compacting
+    expect(originalThread.getMessages().length).toBeGreaterThanOrEqual(4);
+
+    // User initiates compact with a next prompt
+    await driver.inputMagentaText("@compact Now help me with multiplication");
+    await driver.send();
+
+    // The compact flow should:
+    // 1. Render the thread to markdown
+    // 2. Write it to a temp file
+    // 3. Spawn a compact subagent thread
+
+    // Wait for the thread to enter compacting mode
+    await pollUntil(
+      () => {
+        if (originalThread.state.mode.type !== "compacting")
+          throw new Error(
+            `expected compacting mode but got ${originalThread.state.mode.type}`,
+          );
+      },
+      { timeout: 2000, message: "thread should enter compacting mode" },
+    );
+
+    // The compact subagent should receive a stream
+    const compactSubagentStream = await driver.mockAnthropic.awaitPendingStream(
+      {
+        message: "compact subagent stream",
+      },
+    );
+
+    // Verify the compact subagent uses the fast model
+    expect(compactSubagentStream.params.model).toBe("mock-fast");
+    // Verify the compact subagent received the file contents in its user message
+    const subagentMessages = compactSubagentStream.getProviderMessages();
+    const userMsg = subagentMessages.find((m) => m.role === "user");
+    expect(userMsg).toBeDefined();
+    const textContent = userMsg!.content
+      .filter(
+        (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
+      )
+      .map((c) => c.text)
+      .join("");
+    // The subagent should see the rendered thread content
+    expect(textContent).toContain("2+2 equals 4");
+    expect(textContent).toContain("3+3 equals 6");
+
+    // Find the temp file path from the subagent's user message
+    const tempFileMatch = textContent.match(/The file is at: ([^\n]+)/);
+    expect(tempFileMatch).toBeDefined();
+    const tempFilePath = tempFileMatch![1];
+
+    // Have the compact subagent use the real EDL tool to edit the temp file
+    const edlScript = `file \`${tempFilePath}\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked basic arithmetic: 2+2=4, 3+3=6\nCOMPACT_SUMMARY`;
+
+    compactSubagentStream.respond({
+      stopReason: "tool_use",
+      text: "I'll compact this conversation.",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "edl_1" as ToolRequestId,
+            toolName: "edl" as ToolName,
+            input: { script: edlScript },
+          },
+        },
+      ],
+    });
+
+    // EDL tool auto-executes (no permission needed for /tmp/magenta/ files)
+    // After EDL completes, the compact subagent gets a continuation stream
+    const afterEdlStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact subagent after EDL",
+    });
+
+    // Verify the EDL tool result was successful
+    const afterEdlMessages = afterEdlStream.getProviderMessages();
+    const toolResultMsg = afterEdlMessages.find(
+      (m) =>
+        m.role === "user" && m.content.some((c) => c.type === "tool_result"),
+    );
+    expect(toolResultMsg).toBeDefined();
+    const toolResult = toolResultMsg!.content.find(
+      (c) => c.type === "tool_result",
+    );
+    if (toolResult?.type === "tool_result") {
+      expect(toolResult.result.status).toBe("ok");
+    }
+
+    afterEdlStream.respond({
+      stopReason: "end_turn",
+      text: "I have compacted the conversation.",
+      toolRequests: [],
+    });
+
+    // After the compact subagent stops, the parent thread should:
+    // 1. Read back the temp file as the summary
+    // 2. Call agent.compact() to replace messages with the summary
+    // 3. Auto-respond with the next prompt
+
+    // Wait for the continuation stream on the parent thread
+    const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "after compact continuation",
+    });
+
+    // Verify the compacted thread has reduced messages
+    const afterCompactMessages = afterCompactStream.getProviderMessages();
+
+    // After compaction, messages should be minimal:
+    // The summary from the temp file + the user's next prompt
+    const hasNextPrompt = afterCompactMessages.some(
+      (m) =>
+        m.role === "user" &&
+        m.content.some(
+          (c) =>
+            c.type === "text" &&
+            c.text.includes("Now help me with multiplication"),
+        ),
+    );
+    expect(hasNextPrompt).toBe(true);
+
+    // The original conversation details should be gone (replaced by summary)
+    const allText = afterCompactMessages
+      .flatMap((m) =>
+        m.content
+          .filter(
+            (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
+          )
+          .map((c) => c.text),
+      )
+      .join("");
+
+    // The EDL-edited summary content should be present in the compacted thread
+    expect(allText).toContain("User asked basic arithmetic");
+    // Original conversation exchanges should be gone
+    expect(allText).not.toContain("What is 2+2?");
+    expect(allText).not.toContain("What about 3+3?");
+
+    // Respond to the continuation
+    afterCompactStream.respond({
+      stopReason: "end_turn",
+      text: "Sure! What multiplication would you like help with?",
+      toolRequests: [],
+    });
+
+    // We should still be on the same thread (compact doesn't create a new root thread)
+    expect(driver.magenta.chat.getActiveThread().id).toBe(originalThreadId);
+
+    await driver.assertDisplayBufferContains(
+      "What multiplication would you like help with?",
+    );
+  });
+});
+
+it("compact flow without continuation: @compact with no next prompt", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    // Build up conversation history
+    await driver.inputMagentaText("Hello");
+    await driver.send();
+
+    const stream1 = await driver.mockAnthropic.awaitPendingStream({
+      message: "initial request",
+    });
+    stream1.respond({
+      stopReason: "end_turn",
+      text: "Hi there!",
+      toolRequests: [],
+    });
+
+    const thread = driver.magenta.chat.getActiveThread();
+
+    // User initiates compact with no next prompt
+    await driver.inputMagentaText("@compact");
+    await driver.send();
+
+    // Wait for compacting mode
+    await pollUntil(
+      () => {
+        if (thread.state.mode.type !== "compacting")
+          throw new Error(
+            `expected compacting mode but got ${thread.state.mode.type}`,
+          );
+      },
+      { timeout: 2000, message: "thread should enter compacting mode" },
+    );
+
+    // Compact subagent receives its stream
+    const compactStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact subagent stream",
+    });
+
+    compactStream.respond({
+      stopReason: "end_turn",
+      text: "Compacted.",
+      toolRequests: [],
+    });
+
+    // Without a next prompt, the thread should just stop after compaction
+    // No continuation stream should be spawned
+    await pollUntil(
+      () => {
+        const agentStatus = thread.agent.getState().status;
+        if (agentStatus.type !== "stopped")
+          throw new Error(`expected stopped but got ${agentStatus.type}`);
+        if (agentStatus.stopReason !== "end_turn")
+          throw new Error(
+            `expected end_turn but got ${agentStatus.stopReason}`,
+          );
+      },
+      { timeout: 2000, message: "thread should stop after compaction" },
+    );
+
+    // Verify messages have been compacted
+    const messages = thread.getMessages();
+    // Should have the summary as an assistant message
+    expect(messages.length).toBeLessThanOrEqual(2);
+  });
+});
+
 it("forks a thread with @compact to clone and compact in one step", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
@@ -425,42 +678,67 @@ it("forks a thread with @compact to clone and compact in one step", async () => 
 
     const originalThreadId = driver.magenta.chat.state.activeThreadId;
 
-    // Fork with compact - should clone the thread, then process @compact
+    // Fork with compact - should clone the thread, then process @compact on the forked thread
     await driver.inputMagentaText(
       "@fork @compact Now help me with multiplication",
     );
     await driver.send();
 
-    // After fork, the new thread should receive "@compact Now help me with multiplication"
-    // which triggers the compact flow
-    const compactStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "compact request in forked thread",
-    });
+    // The forked thread detects @compact and spawns a compact subagent
+    const compactSubagentStream = await driver.mockAnthropic.awaitPendingStream(
+      {
+        message: "compact subagent in forked thread",
+      },
+    );
 
-    // The compact request should include a summary request
-    expect(compactStream.messages.some((m) => m.role === "user")).toBe(true);
+    // Verify the compact subagent sees the original conversation content
+    const subagentMessages = compactSubagentStream.getProviderMessages();
+    const userMsg = subagentMessages.find((m) => m.role === "user");
+    expect(userMsg).toBeDefined();
+    const textContent = userMsg!.content
+      .filter(
+        (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
+      )
+      .map((c) => c.text)
+      .join("");
+    expect(textContent).toContain("2+2 equals 4");
 
-    // Respond with compact summary
-    compactStream.respond({
+    // Use real EDL tool to edit the temp file
+    const tempFileMatch2 = textContent.match(/The file is at: ([^\n]+)/);
+    expect(tempFileMatch2).toBeDefined();
+    const tempFilePath2 = tempFileMatch2![1];
+
+    const edlScript2 = `file \`${tempFilePath2}\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nArithmetic conversation: 2+2=4, 3+3=6\nCOMPACT_SUMMARY`;
+
+    compactSubagentStream.respond({
       stopReason: "tool_use",
-      text: "",
+      text: "I'll compact this conversation.",
       toolRequests: [
         {
           status: "ok",
           value: {
-            id: "compact-tool" as ToolRequestId,
-            toolName: "compact" as ToolName,
-            input: {
-              summary: "User asked basic arithmetic: 2+2=4, 3+3=6",
-            },
+            id: "edl_1" as ToolRequestId,
+            toolName: "edl" as ToolName,
+            input: { script: edlScript2 },
           },
         },
       ],
     });
 
-    // After compact tool, the new prompt should be sent
+    // EDL tool auto-executes, then compact subagent finishes
+    const afterEdlStream2 = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact subagent after EDL in forked thread",
+    });
+
+    afterEdlStream2.respond({
+      stopReason: "end_turn",
+      text: "Compacted the arithmetic conversation.",
+      toolRequests: [],
+    });
+
+    // After compact completes, the forked thread should continue with the next prompt
     const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "after compact request",
+      message: "after compact in forked thread",
     });
 
     afterCompactStream.respond({
@@ -469,7 +747,7 @@ it("forks a thread with @compact to clone and compact in one step", async () => 
       toolRequests: [],
     });
 
-    // Verify we're on the new thread
+    // Verify we're on the new forked thread (not the original)
     const newThread = driver.magenta.chat.getActiveThread();
     expect(newThread.id).not.toBe(originalThreadId);
 

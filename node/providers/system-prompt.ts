@@ -4,7 +4,7 @@ import type { Nvim } from "../nvim/nvim-node";
 import type { NvimCwd } from "../utils/files";
 import { platform } from "os";
 import type { MagentaOptions } from "../options";
-import { loadSkills, formatSkillsIntroduction } from "./skills";
+import { loadSkills, formatSkillsIntroduction, type SkillsMap } from "./skills";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import path from "path";
@@ -57,6 +57,8 @@ export const DEFAULT_SUBAGENT_SYSTEM_PROMPT =
   loadPrompt("code-changes.md");
 
 export const EXPLORE_SUBAGENT_SYSTEM_PROMPT = loadPrompt("explore-subagent.md");
+export const COMPACT_SYSTEM_PROMPT =
+  "You are a compaction agent that reduces conversation transcripts using the edl tool.";
 
 function getBaseSystemPrompt(type: ThreadType): string {
   switch (type) {
@@ -66,6 +68,8 @@ function getBaseSystemPrompt(type: ThreadType): string {
       return DEFAULT_SUBAGENT_SYSTEM_PROMPT;
     case "subagent_explore":
       return EXPLORE_SUBAGENT_SYSTEM_PROMPT;
+    case "compact":
+      return COMPACT_SYSTEM_PROMPT;
     case "root":
       return DEFAULT_SYSTEM_PROMPT;
     default:
@@ -82,7 +86,7 @@ export async function createSystemPrompt(
   },
 ): Promise<SystemPrompt> {
   const basePrompt = getBaseSystemPrompt(type);
-  const skills = loadSkills(context);
+  const skills = type === "compact" ? ({} as SkillsMap) : loadSkills(context);
   const systemInfo = await getSystemInfo(context.nvim, context.cwd);
 
   const systemInfoText = `

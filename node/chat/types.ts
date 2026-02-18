@@ -8,4 +8,5 @@ export type ThreadType =
   | "subagent_default"
   | "subagent_fast"
   | "subagent_explore"
+  | "compact"
   | "root";

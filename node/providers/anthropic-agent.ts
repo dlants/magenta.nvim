@@ -1258,7 +1258,8 @@ export function withCacheControl(
         block &&
         typeof block != "string" &&
         block.type !== "thinking" &&
-        block.type !== "redacted_thinking"
+        block.type !== "redacted_thinking" &&
+        !(block.type === "text" && !block.text)
       ) {
         const result = [...messages];
         // Create new array with updated message containing the cache_control block

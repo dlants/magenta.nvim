@@ -48,6 +48,7 @@ import {
   type HomeDir,
   type NvimCwd,
   type UnresolvedFilePath,
+  MAGENTA_TEMP_DIR,
 } from "../utils/files.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import {
@@ -58,13 +59,14 @@ import {
 import type { Chat } from "./chat.ts";
 import type { ThreadId, ThreadType } from "./types.ts";
 import type { SystemPrompt } from "../providers/system-prompt.ts";
-import { readFileSync } from "fs";
+import { readFileSync, mkdirSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import player from "play-sound";
 import { CommandRegistry } from "./commands/registry.ts";
 import { getSubsequentReminder } from "../providers/system-reminders.ts";
 import type { EdlRegisters } from "../edl/index.ts";
+import { renderThreadToMarkdown } from "./compact-renderer.ts";
 import { renderStreamdedTool } from "../tools/helpers.ts";
 
 export type InputMessage =
@@ -122,6 +124,10 @@ export type Msg =
   | {
       type: "agent-msg";
       msg: AgentMsg;
+    }
+  | {
+      type: "compact-complete";
+      summary: string;
     };
 
 export type ThreadMsg = {
@@ -167,9 +173,8 @@ export type ConversationMode =
   | { type: "tool_use"; activeTools: Map<ToolRequestId, Tool | StaticTool> }
   | { type: "control_flow"; operation: ControlFlowOp }
   | {
-      type: "awaiting_control_flow";
-      pendingOp: "compact";
-      nextPrompt: string;
+      type: "compacting";
+      nextPrompt?: string;
     };
 
 /** Minimum output tokens between system reminders during auto-respond loops */
@@ -398,6 +403,28 @@ export class Thread {
         }
       }
 
+      case "compact-complete": {
+        const nextPrompt =
+          this.state.mode.type === "compacting"
+            ? this.state.mode.nextPrompt
+            : undefined;
+
+        const operation: ControlFlowOp = { type: "compact" };
+        if (nextPrompt !== undefined) operation.nextPrompt = nextPrompt;
+        this.state.mode = { type: "control_flow", operation };
+
+        this.resetContextManager()
+          .then(() => {
+            this.agent.compact({ summary: msg.summary });
+          })
+          .catch((e: Error) => {
+            this.context.nvim.logger.error(
+              `Failed during compact-complete: ${e.message}`,
+            );
+          });
+        return;
+      }
+
       default:
         assertUnreachable(msg);
     }
@@ -511,98 +538,6 @@ export class Thread {
     }
   }
 
-  /** Check if the last assistant message contains only a compact tool_use request */
-  private isCompactToolUseRequest(): boolean {
-    const messages = this.getProviderMessages();
-    const lastMessage = messages[messages.length - 1];
-
-    if (!lastMessage || lastMessage.role !== "assistant") {
-      return false;
-    }
-
-    // Check if the last content block is a tool_use for compact
-    const toolUseBlocks = lastMessage.content.filter(
-      (block) => block.type === "tool_use",
-    );
-
-    // Only intercept if there's exactly one tool_use and it's compact
-    if (toolUseBlocks.length !== 1) {
-      return false;
-    }
-
-    const toolUse = toolUseBlocks[0];
-    if (toolUse.type !== "tool_use") {
-      return false;
-    }
-
-    if (toolUse.request.status !== "ok") {
-      return false;
-    }
-
-    return toolUse.request.value.toolName === "compact";
-  }
-
-  /** Handle compact tool request by calling agent.compact() directly */
-  private handleCompactRequest(): void {
-    const messages = this.getProviderMessages();
-    const lastMessage = messages[messages.length - 1];
-
-    if (!lastMessage || lastMessage.role !== "assistant") {
-      return;
-    }
-
-    // Find the compact tool_use block
-    const toolUseBlock = lastMessage.content.find(
-      (block) =>
-        block.type === "tool_use" &&
-        block.request.status === "ok" &&
-        block.request.value.toolName === "compact",
-    );
-
-    if (
-      !toolUseBlock ||
-      toolUseBlock.type !== "tool_use" ||
-      toolUseBlock.request.status !== "ok"
-    ) {
-      return;
-    }
-
-    const input = toolUseBlock.request.value.input as {
-      summary: string;
-      contextFiles?: string[];
-      continuation?: string;
-    };
-
-    // Extract nextPrompt from awaiting_control_flow mode if user-initiated
-    // Otherwise use agent's continuation hint for agent-initiated compaction
-    const nextPrompt =
-      this.state.mode.type === "awaiting_control_flow" &&
-      this.state.mode.pendingOp === "compact"
-        ? this.state.mode.nextPrompt
-        : input.continuation;
-
-    // Transition to control_flow mode with data stored for maybeAutoRespond
-    const operation: ControlFlowOp = { type: "compact" };
-    if (nextPrompt !== undefined) operation.nextPrompt = nextPrompt;
-    this.state.mode = {
-      type: "control_flow",
-      operation,
-    };
-
-    // Create new context manager and add specified files before compacting
-    this.resetContextManager(input.contextFiles)
-      .then(() => {
-        // Call compact on agent - it will handle the async execution
-        // and emit status-changed when done
-        this.agent.compact({ summary: input.summary });
-      })
-      .catch((e: Error) => {
-        this.context.nvim.logger.error(
-          `Failed to reset context manager during compact: ${e.message}`,
-        );
-      });
-  }
-
   /** Reset the context manager, optionally adding specified files */
   private async resetContextManager(contextFiles?: string[]): Promise<void> {
     this.contextManager = await ContextManager.create(
@@ -629,6 +564,30 @@ export class Thread {
     this.context.contextManager = this.contextManager;
   }
 
+  private startCompaction(nextPrompt?: string): void {
+    this.state.mode =
+      nextPrompt !== undefined
+        ? { type: "compacting", nextPrompt }
+        : { type: "compacting" };
+
+    const markdown = renderThreadToMarkdown(this.getProviderMessages());
+
+    const tempDir = join(MAGENTA_TEMP_DIR, "threads", this.id);
+    mkdirSync(tempDir, { recursive: true });
+    const tempFilePath = join(tempDir, "compact.md");
+    writeFileSync(tempFilePath, markdown, "utf-8");
+
+    this.context.dispatch({
+      type: "chat-msg",
+      msg: {
+        type: "spawn-compact-thread",
+        parentThreadId: this.id,
+        tempFilePath,
+        fileContents: markdown,
+      },
+    });
+  }
+
   private handleProviderStopped(stopReason: StopReason): void {
     // Accumulate output tokens for system reminder throttling
     const latestUsage = this.agent.getState().latestUsage;
@@ -638,23 +597,13 @@ export class Thread {
 
     // Handle tool_use stop reason specially
     if (stopReason === "tool_use") {
-      // Check if the last tool_use is a compact request - intercept before normal tool handling
-      if (this.isCompactToolUseRequest()) {
-        this.handleCompactRequest();
-        return;
-      }
       this.handleProviderStoppedWithToolUse();
       return;
     }
 
-    const wasCompacting =
-      this.state.mode.type === "control_flow" &&
-      this.state.mode.operation.type === "compact";
-
-    // For all other stop reasons, reset mode to normal
-    // EXCEPT when wasCompacting - let maybeAutoRespond handle the mode transition
-    // so it can read the operation data
-    if (!wasCompacting) {
+    // Reset mode to normal unless in control_flow (e.g. after compact-complete)
+    // where maybeAutoRespond needs to read the operation data
+    if (this.state.mode.type !== "control_flow") {
       this.state.mode = { type: "normal" };
     }
 
@@ -778,6 +727,15 @@ export class Thread {
       return;
     }
 
+    // Check if the first user message starts with @compact
+    if (firstUserMessage?.text.trim().startsWith("@compact")) {
+      const nextPrompt = firstUserMessage.text
+        .replace(/^\s*@compact\s*/, "")
+        .trim();
+      this.startCompaction(nextPrompt || undefined);
+      return;
+    }
+
     // Check if any message starts with @async
     const isAsync = messages.some(
       (m) => m.type === "user" && m.text.trim().startsWith("@async"),
@@ -840,6 +798,11 @@ export class Thread {
       agentStatus.type === "stopped" &&
       agentStatus.stopReason === "aborted"
     ) {
+      return { type: "no-action-needed" };
+    }
+
+    // Don't auto-respond while compact subagent is running
+    if (mode.type === "compacting") {
       return { type: "no-action-needed" };
     }
 
@@ -983,10 +946,13 @@ export class Thread {
       this.state.outputTokensSinceLastReminder >=
       SYSTEM_REMINDER_MIN_TOKEN_INTERVAL
     ) {
-      contentToSend.push({
-        type: "text",
-        text: getSubsequentReminder(this.state.threadType),
-      });
+      const reminder = getSubsequentReminder(this.state.threadType);
+      if (reminder) {
+        contentToSend.push({
+          type: "text",
+          text: reminder,
+        });
+      }
       this.state.outputTokensSinceLastReminder = 0;
     }
 
@@ -1099,30 +1065,6 @@ export class Thread {
 
         // Add any additional content from commands
         messageContent.push(...additionalContent);
-
-        // Check for @compact command in user messages
-        if (m.text.includes("@compact")) {
-          const compactText = m.text.replace(/@compact\s*/g, "").trim();
-          messageContent[messageContent.length - 1 - additionalContent.length] =
-            {
-              type: "text",
-              text: `\
-The user's next prompt will be:
-${compactText}
-
-Use the compact tool. You should:
-- Preserve important context needed for the user's next prompt
-- Include a list of important context files that should be preserved
-- Strip redundant details, verbose tool outputs, and resolved discussions
-
-You must use the compact tool immediately. Do not use any other tools.`,
-            };
-          this.state.mode = {
-            type: "awaiting_control_flow",
-            pendingOp: "compact",
-            nextPrompt: compactText,
-          };
-        }
       } else {
         messageContent.push({
           type: "text",
@@ -1134,10 +1076,13 @@ You must use the compact tool immediately. Do not use any other tools.`,
     // Always add system reminder for user-submitted messages and reset counter
     if (inputMessages?.length) {
       this.state.outputTokensSinceLastReminder = 0;
-      messageContent.push({
-        type: "system_reminder",
-        text: getSubsequentReminder(this.state.threadType),
-      });
+      const reminder = getSubsequentReminder(this.state.threadType);
+      if (reminder) {
+        messageContent.push({
+          type: "system_reminder",
+          text: reminder,
+        });
+      }
     }
 
     return {
@@ -1278,6 +1223,9 @@ const renderStatus = (
       case "yield":
         return d`↗️ yielded to parent: ${mode.operation.response}`;
     }
+  }
+  if (mode.type === "compacting") {
+    return d`📦 Compacting thread...`;
   }
 
   // Then render based on agent status
