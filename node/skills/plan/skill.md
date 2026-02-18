@@ -75,3 +75,11 @@ MyType seems relevant. I will try to learn about it.
 [uses hover on MyType]
 [... and so on, until all relevant interfaces have been gathered ...]
 </example>
+
+# Working with Plans
+
+When working on implementing a plan from a `plans/` file:
+
+- Check off completed items by changing `- [ ]` to `- [x]` as you complete each step
+- Update the plan file regularly to track your progress
+- This helps both you and the user see what's been accomplished and what remains
