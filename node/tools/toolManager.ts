@@ -208,6 +208,7 @@ export function renderCompletedToolSummary(
   info: CompletedToolInfo,
   dispatch: Dispatch<RootMsg>,
   displayContext: DisplayContext,
+  chat?: import("../chat/chat.ts").Chat,
 ): VDOMNode {
   const toolName = info.request.toolName as StaticToolName;
 
@@ -228,7 +229,7 @@ export function renderCompletedToolSummary(
     case "diagnostics":
       return Diagnostics.renderCompletedSummary(info);
     case "spawn_subagent":
-      return SpawnSubagent.renderCompletedSummary(info, dispatch);
+      return SpawnSubagent.renderCompletedSummary(info, dispatch, chat);
     case "spawn_foreach":
       return SpawnForeach.renderCompletedSummary(info, dispatch);
     case "wait_for_subagents":

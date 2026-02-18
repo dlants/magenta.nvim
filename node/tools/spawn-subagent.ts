@@ -50,6 +50,16 @@ export type State =
       result: ProviderToolResult;
     };
 
+function truncate(text: string, maxLen: number = 50): string {
+  const singleLine = text.replace(/\n/g, " ");
+  return singleLine.length > maxLen
+    ? singleLine.substring(0, maxLen) + "..."
+    : singleLine;
+}
+
+function agentTypeLabel(agentType: AgentType | undefined): string {
+  return agentType && agentType !== "default" ? ` (${agentType})` : "";
+}
 export class SpawnSubagentTool implements StaticTool {
   toolName = "spawn_subagent" as const;
   public state: State;
@@ -258,14 +268,12 @@ export class SpawnSubagentTool implements StaticTool {
   }
 
   renderSummary(): VDOMNode {
-    const promptPreview =
-      this.request.input.prompt.length > 50
-        ? this.request.input.prompt.substring(0, 50) + "..."
-        : this.request.input.prompt;
+    const input = this.request.input;
+    const typeLabel = agentTypeLabel(input.agentType);
 
     switch (this.state.state) {
       case "preparing":
-        return d`🚀⚙️ spawn_subagent: ${promptPreview}`;
+        return d`🚀⚙️ spawn_subagent${typeLabel}: ${truncate(input.prompt)}`;
       case "waiting-for-subagent": {
         const summary = this.context.chat.getThreadSummary(this.state.threadId);
         const displayName = this.context.chat.getThreadDisplayName(
@@ -297,7 +305,7 @@ export class SpawnSubagentTool implements StaticTool {
         }
 
         return withBindings(
-          d`🚀⏳ spawn_subagent (blocking) ${displayName}: ${statusText}`,
+          d`🚀⏳ spawn_subagent${typeLabel} (blocking) ${displayName}: ${statusText}`,
           {
             "<CR>": () =>
               this.context.dispatch({
@@ -320,6 +328,7 @@ export class SpawnSubagentTool implements StaticTool {
             result: this.state.result,
           },
           this.context.dispatch,
+          this.context.chat,
         );
     }
   }
@@ -328,7 +337,10 @@ export class SpawnSubagentTool implements StaticTool {
 export function renderCompletedSummary(
   info: CompletedToolInfo,
   dispatch: Dispatch<RootMsg>,
+  chat?: Chat,
 ): VDOMNode {
+  const input = info.request.input as Input;
+  const typeLabel = agentTypeLabel(input.agentType);
   const result = info.result.result;
   if (result.status === "error") {
     const errorPreview =
@@ -336,7 +348,7 @@ export function renderCompletedSummary(
         ? result.error.substring(0, 50) + "..."
         : result.error;
 
-    return d`🤖❌ spawn_subagent: ${errorPreview}`;
+    return d`🤖❌ spawn_subagent${typeLabel}: ${errorPreview}`;
   }
 
   // Parse threadId from result text
@@ -354,7 +366,7 @@ export function renderCompletedSummary(
     threadId || (blockingMatch ? (blockingMatch[1] as ThreadId) : undefined);
 
   return withBindings(
-    d`🤖✅ spawn_subagent${isBlocking ? " (blocking)" : ""}`,
+    d`🤖✅ spawn_subagent${typeLabel}${isBlocking ? " (blocking)" : ""}: ${effectiveThreadId && chat ? truncate(chat.getThreadDisplayName(effectiveThreadId)) : truncate(input.prompt)}`,
     {
       "<CR>": () => {
         if (effectiveThreadId) {
@@ -380,16 +392,11 @@ export function renderCompletedPreview(info: CompletedToolInfo): VDOMNode {
   const resultText =
     result.value[0]?.type === "text" ? result.value[0].text : "";
 
-  // Check if this was a blocking call - show preview of response
   const completedMatch = resultText.match(/completed:\n([\s\S]*)/);
   if (completedMatch) {
     const response = completedMatch[1];
-    const previewLength = 200;
-    const preview =
-      response.length > previewLength
-        ? response.substring(0, previewLength) + "..."
-        : response;
-    return d`${preview}`;
+    const lineCount = response.split("\n").length;
+    return d`${lineCount.toString()} lines`;
   }
 
   return d``;

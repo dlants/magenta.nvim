@@ -1636,7 +1636,7 @@ function renderMessageContent(
 
       // Don't add trailing newline - let the message template handle it
       return withBindings(
-        d`${renderCompletedToolSummary(completedInfo, thread.context.dispatch, renderContext)}${
+        d`${renderCompletedToolSummary(completedInfo, thread.context.dispatch, renderContext, thread.context.chat)}${
           showDetails
             ? d`\n${renderCompletedToolDetail(completedInfo, renderContext)}${usageInDetails}`
             : previewContent
