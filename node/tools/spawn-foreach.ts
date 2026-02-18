@@ -451,11 +451,8 @@ ${element}`;
         break;
 
       case "yielded": {
-        const truncatedResponse =
-          summary.status.response.length > 50
-            ? summary.status.response.substring(0, 47) + "..."
-            : summary.status.response;
-        statusText = `  - ${element}: ✅ yielded: ${truncatedResponse}`;
+        const lineCount = summary.status.response.split("\n").length;
+        statusText = `  - ${element}: ✅ ${lineCount.toString()} lines`;
         break;
       }
 
@@ -491,7 +488,9 @@ ${element}`;
       this.request.input as Record<string, unknown>,
     );
     const agentTypeText =
-      validationResult.status === "ok" && validationResult.value.agentType
+      validationResult.status === "ok" &&
+      validationResult.value.agentType &&
+      validationResult.value.agentType !== "default"
         ? ` (${validationResult.value.agentType})`
         : "";
 
@@ -552,7 +551,10 @@ export function renderCompletedSummary(
   const input = info.request.input as Input;
   const result = info.result.result;
 
-  const agentTypeText = input.agentType ? ` (${input.agentType})` : "";
+  const agentTypeText =
+    input.agentType && input.agentType !== "default"
+      ? ` (${input.agentType})`
+      : "";
   const totalElements = input.elements?.length ?? 0;
   const status = result.status === "error" ? "❌" : "✅";
 

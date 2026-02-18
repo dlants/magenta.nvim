@@ -238,11 +238,8 @@ ${threadStatusLines}`;
         break;
 
       case "yielded": {
-        const truncatedResponse =
-          summary.status.response.length > 50
-            ? summary.status.response.substring(0, 47) + "..."
-            : summary.status.response;
-        statusText = `- ${displayName}: ✅ yielded: ${truncatedResponse}`;
+        const lineCount = summary.status.response.split("\n").length;
+        statusText = `- ${displayName}: ✅ ${lineCount.toString()} lines`;
         break;
       }
 
