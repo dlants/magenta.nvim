@@ -140,15 +140,15 @@ function renderToolResult(
   }
   return `## tool_result (error)\n${block.result.error}\n`;
 }
-/** Extract file paths from context_update text.
- * Matches patterns like `File \`path\`` and `- \`path\`` */
+/** Extract file paths from the <file_paths> section of a context_update.
+ * Each line in the section is formatted as "path (metadata)". */
 function extractFilePathsFromContextUpdate(text: string): string[] {
-  const paths: string[] = [];
-  // Match "File `path`" (whole file) and "- `path`" (diff/deleted/error)
-  const regex = /(?:^File |^- )`([^`]+)`/gm;
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    paths.push(match[1]);
+  const filePathsMatch = text.match(/<file_paths>([\s\S]*?)<\/file_paths>/);
+  if (!filePathsMatch) {
+    return [];
   }
-  return paths;
+  return filePathsMatch[1]
+    .split("\n")
+    .map((line) => line.replace(/\s+\(.*\)$/, "").trim())
+    .filter((line) => line.length > 0);
 }

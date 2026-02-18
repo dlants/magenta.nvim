@@ -471,6 +471,11 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
     // The subagent should see the rendered thread content
     expect(textContent).toContain("2+2 equals 4");
     expect(textContent).toContain("3+3 equals 6");
+    // The subagent should see the user's next prompt for prioritizing retention
+    expect(textContent).toContain("Now help me with multiplication");
+    expect(textContent).toContain(
+      "Prioritize retaining information relevant to this next prompt",
+    );
 
     // Find the temp file path from the subagent's user message
     const tempFileMatch = textContent.match(/The file is at: ([^\n]+)/);

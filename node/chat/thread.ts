@@ -584,6 +584,7 @@ export class Thread {
         parentThreadId: this.id,
         tempFilePath,
         fileContents: markdown,
+        ...(nextPrompt !== undefined && { nextPrompt }),
       },
     });
   }

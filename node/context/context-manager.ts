@@ -1045,6 +1045,7 @@ ${fileContext}`;
     contextUpdates: FileUpdates,
   ): ProviderMessageContent[] {
     const textParts: string[] = [];
+    const filePathEntries: string[] = [];
 
     for (const path in contextUpdates) {
       const absFilePath = path as AbsFilePath;
@@ -1053,15 +1054,23 @@ ${fileContext}`;
       if (update.update.status === "ok") {
         switch (update.update.value.type) {
           case "whole-file": {
-            // Extract text from whole-file content
+            let lineCount = 0;
             for (const c of update.update.value.content) {
               if (c.type === "text") {
                 textParts.push(c.text);
+                lineCount = (c.text.match(/\n/g) || []).length + 1;
               }
             }
+            filePathEntries.push(`${update.relFilePath} (${lineCount} lines)`);
             break;
           }
           case "diff": {
+            const patch = update.update.value.patch;
+            const additions = (patch.match(/^\+[^+]/gm) || []).length;
+            const deletions = (patch.match(/^-[^-]/gm) || []).length;
+            filePathEntries.push(
+              `${update.relFilePath} (+${additions}/-${deletions})`,
+            );
             textParts.push(`\
 - \`${absFilePath}\`
 \`\`\`diff
@@ -1070,6 +1079,7 @@ ${update.update.value.patch}
             break;
           }
           case "file-deleted": {
+            filePathEntries.push(`${update.relFilePath} (deleted)`);
             textParts.push(`\
 - \`${absFilePath}\`
 This file has been deleted and removed from context.`);
@@ -1079,6 +1089,7 @@ This file has been deleted and removed from context.`);
             assertUnreachable(update.update.value);
         }
       } else {
+        filePathEntries.push(`${update.relFilePath} (error)`);
         textParts.push(`\
 - \`${absFilePath}\`
 Error fetching update: ${update.update.error}`);
@@ -1089,16 +1100,15 @@ Error fetching update: ${update.update.error}`);
       return [];
     }
 
-    // Wrap all context updates in <context_update> tags so they can be
-    // recognized and collapsed when rendering ProviderMessages
     const header = `\
 These files are part of your context. This is the latest information about the content of each file.
 From now on, whenever any of these files are updated by the user, you will get a message letting you know.`;
+    const fileList = `<file_paths>\n${filePathEntries.join("\n")}\n</file_paths>`;
 
     return [
       {
         type: "text",
-        text: `<context_update>\n${header}\n${textParts.join("\n")}\n</context_update>`,
+        text: `<context_update>\n${fileList}\n${header}\n${textParts.join("\n")}\n</context_update>`,
       },
     ];
   }

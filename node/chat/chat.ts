@@ -98,6 +98,7 @@ export type Msg =
       parentThreadId: ThreadId;
       tempFilePath: string;
       fileContents: string;
+      nextPrompt?: string;
     };
 
 export type ChatMsg = {
@@ -821,6 +822,7 @@ ${threadViews.map((view) => d`${view}\n`)}`;
     parentThreadId,
     tempFilePath,
     fileContents,
+    nextPrompt,
   }: Extract<Msg, { type: "spawn-compact-thread" }>) {
     const parentThreadWrapper = this.threadWrappers[parentThreadId];
     if (!parentThreadWrapper || parentThreadWrapper.state !== "initialized") {
@@ -854,7 +856,7 @@ Guidelines:
 - Remove sections that discuss completed tasks that don't affect future work
 - Preserve: the current state of what's being worked on, any pending tasks, key decisions made, and important context
 - Use the edl tool to edit the file at ${tempFilePath}
-- You may need to make multiple edl calls to reduce different sections`,
+- You may need to make multiple edl calls to reduce different sections${nextPrompt ? `\n\nThe user's next prompt after compaction will be:\n"${nextPrompt}"\n\nPrioritize retaining information relevant to this next prompt.` : ""}`,
       },
     ];
 

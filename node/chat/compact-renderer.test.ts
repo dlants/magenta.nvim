@@ -80,6 +80,10 @@ describe("renderThreadToMarkdown", () => {
           {
             type: "context_update",
             text: `<context_update>
+<file_paths>
+src/index.ts (2 lines)
+src/utils.ts (+1/-0)
+</file_paths>
 These files are part of your context.
 File \`src/index.ts\`
 const x = 1;
@@ -95,10 +99,42 @@ const x = 1;
 
     const result = renderThreadToMarkdown(messages);
     expect(result).toContain(
-      "[context update: `src/index.ts`, `/Users/me/project/src/utils.ts`]",
+      "[context update: `src/index.ts`, `src/utils.ts`]",
     );
     expect(result).not.toContain("const x = 1");
     expect(result).not.toContain("new line");
+  });
+  it("does not extract file paths from markdown list items in file contents", () => {
+    const messages: ProviderMessage[] = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "context_update",
+            text: `<context_update>
+<file_paths>
+context.md (8 lines)
+</file_paths>
+These files are part of your context.
+File \`context.md\`
+# Architecture
+
+- \`Controllers\` - Classes that manage specific parts of the application.
+- \`Msg/RootMsg\` - Messages that trigger state changes.
+- \`dispatch/myDispatch\` - Functions passed to controllers.
+- \`view\` - A function that renders the current controller state in TUI.
+</context_update>`,
+          },
+        ],
+      },
+    ];
+
+    const result = renderThreadToMarkdown(messages);
+    expect(result).toContain("[context update: `context.md`]");
+    expect(result).not.toContain("Controllers");
+    expect(result).not.toContain("Msg/RootMsg");
+    expect(result).not.toContain("dispatch/myDispatch");
+    expect(result).not.toContain("view");
   });
 
   it("falls back to generic context update when no files found", () => {

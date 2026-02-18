@@ -6,6 +6,9 @@ exports[`context-files end-to-end 1`] = `
     "content": [
       {
         "text": "<context_update>
+<file_paths>
+poem.txt (5 lines)
+</file_paths>
 These files are part of your context. This is the latest information about the content of each file.
 From now on, whenever any of these files are updated by the user, you will get a message letting you know.
 File \`poem.txt\`
@@ -62,6 +65,10 @@ exports[`context-files multiple, weird path names 1`] = `
     "content": [
       {
         "text": "<context_update>
+<file_paths>
+poem.txt (5 lines)
+poem 3.txt (2 lines)
+</file_paths>
 These files are part of your context. This is the latest information about the content of each file.
 From now on, whenever any of these files are updated by the user, you will get a message letting you know.
 File \`poem.txt\`
