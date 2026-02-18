@@ -392,7 +392,7 @@ describe("node/chat/chat.test.ts", () => {
 
       // Verify the first thread shows as yielded
       await driver.assertDisplayBufferContains(
-        `- Echo 'Hello from subagent 1' and yield the result.: ✅ yielded: Hello from subagent 1`,
+        `- Echo 'Hello from subagent 1' and yield the result.: ✅ 1 lines`,
       );
       // Second thread should still be running
       await driver.assertDisplayBufferContains(
@@ -566,7 +566,7 @@ describe("node/chat/chat.test.ts", () => {
 
       // Verify the second thread shows as yielded
       await driver.assertDisplayBufferContains(
-        `- Echo 'Success!' and yield the result.: ✅ yielded: Success!`,
+        `- Echo 'Success!' and yield the result.: ✅ 1 lines`,
       );
 
       // Verify we can see both final states - one stopped, one yielded
@@ -575,7 +575,7 @@ describe("node/chat/chat.test.ts", () => {
         `- Just say something and stop without yielding.: ⏹️ stopped (end_turn)`,
       );
       await driver.assertDisplayBufferContains(
-        `- Echo 'Success!' and yield the result.: ✅ yielded: Success!`,
+        `- Echo 'Success!' and yield the result.: ✅ 1 lines`,
       );
     });
   });
@@ -870,7 +870,7 @@ describe("node/chat/chat.test.ts", () => {
         `- Parent with yielding child: ⏳ streaming response`,
       );
       await driver.assertDisplayBufferContains(
-        `  - Yield a result back to parent: ✅ yielded: This is a very long result message that should ...`,
+        `  - Yield a result back to parent: ✅ yielded`,
       );
       await driver.assertDisplayBufferContains(
         `* Parent with stopping child: ⏳ streaming response`,

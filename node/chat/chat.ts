@@ -515,13 +515,8 @@ export class Chat {
       case "stopped":
         return `⏹️ stopped (${summary.status.reason})`;
 
-      case "yielded": {
-        const truncatedResponse =
-          summary.status.response.length > 50
-            ? summary.status.response.substring(0, 47) + "..."
-            : summary.status.response;
-        return `✅ yielded: ${truncatedResponse}`;
-      }
+      case "yielded":
+        return "✅ yielded";
 
       case "error": {
         const truncatedError =
