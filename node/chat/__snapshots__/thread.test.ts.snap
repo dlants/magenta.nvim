@@ -151,8 +151,8 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
     "role": "assistant",
     "stopReason": "tool_use",
     "usage": {
-      "inputTokens": 0,
-      "outputTokens": 0,
+      "inputTokens": 1000,
+      "outputTokens": 5000,
     },
   },
   {
@@ -619,8 +619,8 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
     "role": "assistant",
     "stopReason": "end_turn",
     "usage": {
-      "inputTokens": 0,
-      "outputTokens": 0,
+      "inputTokens": 1000,
+      "outputTokens": 5000,
     },
   },
   {
@@ -670,8 +670,8 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
     "role": "assistant",
     "stopReason": "end_turn",
     "usage": {
-      "inputTokens": 0,
-      "outputTokens": 0,
+      "inputTokens": 1000,
+      "outputTokens": 5000,
     },
   },
   {
@@ -946,5 +946,5 @@ I've read both files for you.
 - \`poem.txt\`
 - \`poem2.txt\`
 
-Stopped (end_turn)  [input: 0, output: 0] "
+Stopped (end_turn)  [input: 1000, output: 5000] "
 `;

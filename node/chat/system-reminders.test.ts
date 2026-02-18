@@ -99,6 +99,107 @@ test("auto-respond messages should include system reminder after tool result", a
   });
 });
 
+test("auto-respond skips system reminder when output tokens are below threshold", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    // Send a user message (always includes reminder, resets counter)
+    await driver.inputMagentaText("Use a tool");
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+
+    // Respond with tool use but LOW output tokens (below 2000 threshold)
+    request.respond({
+      stopReason: "tool_use",
+      text: "I'll use get_file",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "tool_1" as ToolRequestId,
+            toolName: "get_file" as ToolName,
+            input: { filePath: "./poem.txt" },
+          },
+        },
+      ],
+      usage: { inputTokens: 100, outputTokens: 100 },
+    });
+
+    // Wait for the auto-respond
+    const autoRespondRequest = await driver.mockAnthropic.awaitPendingStream();
+
+    // The last message should NOT contain a system reminder since
+    // only 100 output tokens were generated (below 2000 threshold)
+    const lastMessage =
+      autoRespondRequest.messages[autoRespondRequest.messages.length - 1];
+    expect(lastMessage.role).toBe("user");
+
+    const systemReminder = findSystemReminderText(lastMessage.content);
+    expect(systemReminder).toBeUndefined();
+  });
+});
+
+test("auto-respond includes system reminder after accumulating enough output tokens", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    // Send a user message (always includes reminder, resets counter)
+    await driver.inputMagentaText("Use tools");
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+
+    // First tool-use response with LOW tokens (100 < 2000)
+    request.respond({
+      stopReason: "tool_use",
+      text: "I'll use get_file",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "tool_1" as ToolRequestId,
+            toolName: "get_file" as ToolName,
+            input: { filePath: "./poem.txt" },
+          },
+        },
+      ],
+      usage: { inputTokens: 100, outputTokens: 100 },
+    });
+
+    // Auto-respond (no reminder - 100 tokens < 2000 threshold)
+    const autoRespondRequest1 = await driver.mockAnthropic.awaitPendingStream();
+
+    // Second tool-use response with enough tokens to cross threshold
+    // cumulative: 100 + 2500 = 2600 >= 2000
+    autoRespondRequest1.respond({
+      stopReason: "tool_use",
+      text: "I'll use another tool",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "tool_2" as ToolRequestId,
+            toolName: "get_file" as ToolName,
+            input: { filePath: "./poem.txt" },
+          },
+        },
+      ],
+      usage: { inputTokens: 100, outputTokens: 2500 },
+    });
+
+    // Auto-respond (should include reminder - 2600 >= 2000)
+    const autoRespondRequest2 = await driver.mockAnthropic.awaitPendingStream();
+
+    const lastMessage =
+      autoRespondRequest2.messages[autoRespondRequest2.messages.length - 1];
+    expect(lastMessage.role).toBe("user");
+
+    const systemReminder = findSystemReminderText(lastMessage.content);
+    expect(systemReminder).toBeDefined();
+    expect(systemReminder!.text).toContain("<system-reminder>");
+  });
+});
 test("root thread should get base reminder", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();

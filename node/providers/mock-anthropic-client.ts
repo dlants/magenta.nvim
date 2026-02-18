@@ -262,7 +262,7 @@ export class MockStream implements MockMessageStream {
   /** Complete the response with the accumulated content blocks */
   finishResponse(
     stopReason: StopReason,
-    usage: Usage = { inputTokens: 0, outputTokens: 0 },
+    usage: Usage = { inputTokens: 1000, outputTokens: 5000 },
   ): void {
     const message: Anthropic.Message = {
       id: `msg_mock_${Date.now()}`,

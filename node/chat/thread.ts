@@ -172,6 +172,8 @@ export type ConversationMode =
       nextPrompt: string;
     };
 
+/** Minimum output tokens between system reminders during auto-respond loops */
+const SYSTEM_REMINDER_MIN_TOKEN_INTERVAL = 2000;
 export class Thread {
   public state: {
     title?: string | undefined;
@@ -190,6 +192,7 @@ export class Thread {
     /** Cached lookup maps for tool requests and results */
     toolCache: ToolCache;
     edlRegisters: EdlRegisters;
+    outputTokensSinceLastReminder: number;
   };
 
   private myDispatch: Dispatch<Msg>;
@@ -245,6 +248,7 @@ export class Thread {
       mode: { type: "normal" },
       toolCache: { results: new Map() },
       edlRegisters: { registers: new Map(), nextSavedId: 0 },
+      outputTokensSinceLastReminder: 0,
     };
 
     if (clonedAgent) {
@@ -626,6 +630,12 @@ export class Thread {
   }
 
   private handleProviderStopped(stopReason: StopReason): void {
+    // Accumulate output tokens for system reminder throttling
+    const latestUsage = this.agent.getState().latestUsage;
+    if (latestUsage) {
+      this.state.outputTokensSinceLastReminder += latestUsage.outputTokens;
+    }
+
     // Handle tool_use stop reason specially
     if (stopReason === "tool_use") {
       // Check if the last tool_use is a compact request - intercept before normal tool handling
@@ -968,11 +978,17 @@ export class Thread {
     // Build content for the follow-up user message with system reminder
     const contentToSend: AgentInput[] = [...contextContent];
 
-    // Always add system reminder when auto-responding
-    contentToSend.push({
-      type: "text",
-      text: getSubsequentReminder(this.state.threadType),
-    });
+    // Only add system reminder if enough tokens have been generated since the last one
+    if (
+      this.state.outputTokensSinceLastReminder >=
+      SYSTEM_REMINDER_MIN_TOKEN_INTERVAL
+    ) {
+      contentToSend.push({
+        type: "text",
+        text: getSubsequentReminder(this.state.threadType),
+      });
+      this.state.outputTokensSinceLastReminder = 0;
+    }
 
     if (contextUpdates) {
       const newMessageIdx = this.getProviderMessages().length;
@@ -981,7 +997,9 @@ export class Thread {
       };
     }
 
-    this.agent.appendUserMessage(contentToSend);
+    if (contentToSend.length > 0) {
+      this.agent.appendUserMessage(contentToSend);
+    }
     this.agent.continueConversation();
   }
 
@@ -1113,8 +1131,9 @@ You must use the compact tool immediately. Do not use any other tools.`,
       }
     }
 
-    // Add system reminder for user-submitted messages
+    // Always add system reminder for user-submitted messages and reset counter
     if (inputMessages?.length) {
+      this.state.outputTokensSinceLastReminder = 0;
       messageContent.push({
         type: "system_reminder",
         text: getSubsequentReminder(this.state.threadType),
