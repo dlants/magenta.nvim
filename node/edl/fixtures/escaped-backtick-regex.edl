@@ -1,5 +1,5 @@
 file `{{FILE}}`
-narrow_one /\\`world\\`/
+narrow /\\`world\\`/
 replace <<END
 \`planet\`
 END

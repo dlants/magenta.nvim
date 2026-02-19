@@ -28,7 +28,7 @@ describe("edl tool", () => {
 
         const filePath = path.join(dirs.tmpDir, "test.txt");
         const script = `file \`${filePath}\`
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -130,7 +130,7 @@ invalid_command`;
 
         const filePath = path.join(dirs.tmpDir, "test.txt");
         const script = `file \`${filePath}\`
-narrow_one /nonexistent pattern that does not exist/`;
+narrow /nonexistent pattern that does not exist/`;
 
         const stream = await driver.mockAnthropic.awaitPendingStream();
         stream.respond({
@@ -183,7 +183,7 @@ narrow_one /nonexistent pattern that does not exist/`;
 
         const filePath = path.join(dirs.tmpDir, "test.txt");
         const script = `file \`${filePath}\`
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -230,7 +230,7 @@ END`;
 
         const filePath = path.join(dirs.tmpDir, "test.txt");
         const script = `file \`${filePath}\`
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -285,7 +285,7 @@ END`;
         ).join("\n");
         const script = `file \`${filePath}\`
 ${extraLines}
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -334,7 +334,7 @@ END`;
 
         const filePath = path.join(dirs.tmpDir, "test.txt");
         const script = `file \`${filePath}\`
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -358,15 +358,14 @@ END`;
         await driver.assertDisplayBufferContains("📝✅ edl:");
 
         // Preview should show the script
-        await driver.assertDisplayBufferContains("narrow_one /hello/");
+        await driver.assertDisplayBufferContains("narrow /hello/");
 
         // Toggle to detail view
-        const pos =
-          await driver.assertDisplayBufferContains("narrow_one /hello/");
+        const pos = await driver.assertDisplayBufferContains("narrow /hello/");
         await driver.triggerDisplayBufferKey(pos, "<CR>");
 
         // Detail should show full script AND the trace output
-        await driver.assertDisplayBufferContains("narrow_one /hello/");
+        await driver.assertDisplayBufferContains("narrow /hello/");
         await driver.assertDisplayBufferContains("replace <<END");
         await driver.assertDisplayBufferContains("Trace:");
         await driver.assertDisplayBufferContains("Mutations:");
@@ -399,7 +398,7 @@ describe("edl tool buffer integration", () => {
 
         const filePath = path.join(dirs.tmpDir, "test.txt");
         const script = `file \`${filePath}\`
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -451,7 +450,7 @@ END`;
         await driver.send();
 
         const script = `file \`${filePath}\`
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -521,7 +520,7 @@ END`;
         await driver.send();
 
         const script1 = `file \`${filePath}\`
-narrow_one /original/
+narrow /original/
 replace <<END
 modified
 END`;
@@ -583,7 +582,7 @@ END`;
         await driver.send();
 
         const script2 = `file \`${filePath}\`
-narrow_one /buffer only/
+narrow /buffer only/
 replace <<END
 replaced
 END`;

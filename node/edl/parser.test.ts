@@ -137,10 +137,13 @@ END`);
     ]);
   });
 
-  it("parses narrow_one", () => {
-    const cmds = parse(`narrow_one /hello/`);
+  it("parses narrow_multiple", () => {
+    const cmds = parse(`narrow_multiple /hello/`);
     expect(cmds).toEqual([
-      { type: "narrow_one", pattern: { type: "regex", pattern: /hello/g } },
+      {
+        type: "narrow_multiple",
+        pattern: { type: "regex", pattern: /hello/g },
+      },
     ]);
   });
   it("parses select", () => {
@@ -150,10 +153,13 @@ END`);
     ]);
   });
 
-  it("parses select_one", () => {
-    const cmds = parse(`select_one /hello/`);
+  it("parses select_multiple", () => {
+    const cmds = parse(`select_multiple /hello/`);
     expect(cmds).toEqual([
-      { type: "select_one", pattern: { type: "regex", pattern: /hello/g } },
+      {
+        type: "select_multiple",
+        pattern: { type: "regex", pattern: /hello/g },
+      },
     ]);
   });
 
@@ -239,12 +245,12 @@ END`);
     expect(cmds).toEqual([{ type: "select", pattern: { type: "bof" } }]);
   });
 
-  it("parses select_one with heredoc", () => {
-    const cmds = parse(`select_one <<FIND
+  it("parses select with heredoc", () => {
+    const cmds = parse(`select <<FIND
 some text
 FIND`);
     expect(cmds).toEqual([
-      { type: "select_one", pattern: { type: "literal", text: "some text" } },
+      { type: "select", pattern: { type: "literal", text: "some text" } },
     ]);
   });
 
@@ -269,11 +275,11 @@ FIND`);
     ]);
   });
   it("parses heredoc with single-quoted delimiter", () => {
-    const cmds = parse(`select_one <<'END'
+    const cmds = parse(`select <<'END'
 some text
 END`);
     expect(cmds).toEqual([
-      { type: "select_one", pattern: { type: "literal", text: "some text" } },
+      { type: "select", pattern: { type: "literal", text: "some text" } },
     ]);
   });
 
@@ -296,7 +302,7 @@ DELIM`);
     );
   });
   it("suggests unique delimiter when heredoc terminator conflicts with content", () => {
-    const script = `select_one <<END
+    const script = `select <<END
 some text
 END
 more content with END on its own line

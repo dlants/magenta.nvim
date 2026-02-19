@@ -2238,13 +2238,13 @@ it("shows EDL script preview while streaming", async () => {
       index: toolIndex,
       delta: {
         type: "input_json_delta",
-        partial_json: '{"script": "file `src/utils.ts`\\nselect_one',
+        partial_json: '{"script": "file `src/utils.ts`\\nselect',
       },
     });
 
     // Assert the display shows the unescaped script with newlines separating commands
     await driver.assertDisplayBufferContains(
-      "📝 edl:\nfile `src/utils.ts`\nselect_one",
+      "📝 edl:\nfile `src/utils.ts`\nselect",
     );
 
     // Stream more of the script

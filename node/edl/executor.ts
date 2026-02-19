@@ -411,6 +411,22 @@ export class Executor {
         break;
       }
 
+      case "narrow_multiple": {
+        const file = this.requireFile();
+        const matches = this.findAllMatches(
+          cmd.pattern,
+          file.doc,
+          this.selection,
+        );
+        if (matches.length === 0)
+          throw new ExecutionError(
+            `narrow_multiple: no matches for pattern ${formatPattern(cmd.pattern)}`,
+            this.trace,
+          );
+        this.selection = matches;
+        this.addTrace("narrow_multiple", this.selection, file.doc);
+        break;
+      }
       case "narrow": {
         const file = this.requireFile();
         const matches = this.findAllMatches(
@@ -423,10 +439,33 @@ export class Executor {
             `narrow: no matches for pattern ${formatPattern(cmd.pattern)}`,
             this.trace,
           );
-        this.selection = matches;
+        if (matches.length > 1)
+          throw new ExecutionError(
+            `narrow: expected 1 match, got ${matches.length}`,
+            this.trace,
+          );
+        this.selection = [matches[0]];
         this.addTrace("narrow", this.selection, file.doc);
         break;
       }
+      case "select_multiple": {
+        const file = this.requireFile();
+        const matches = this.findInText(
+          cmd.pattern,
+          file.doc.content,
+          file.doc,
+          0,
+        );
+        if (matches.length === 0)
+          throw new ExecutionError(
+            `select_multiple: no matches for pattern ${formatPattern(cmd.pattern)}`,
+            this.trace,
+          );
+        this.selection = matches;
+        this.addTrace("select_multiple", this.selection, file.doc);
+        break;
+      }
+
       case "select": {
         const file = this.requireFile();
         const matches = this.findInText(
@@ -440,31 +479,13 @@ export class Executor {
             `select: no matches for pattern ${formatPattern(cmd.pattern)}`,
             this.trace,
           );
-        this.selection = matches;
-        this.addTrace("select", this.selection, file.doc);
-        break;
-      }
-
-      case "select_one": {
-        const file = this.requireFile();
-        const matches = this.findInText(
-          cmd.pattern,
-          file.doc.content,
-          file.doc,
-          0,
-        );
-        if (matches.length === 0)
-          throw new ExecutionError(
-            `select_one: no matches for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
-          );
         if (matches.length > 1)
           throw new ExecutionError(
-            `select_one: expected 1 match, got ${matches.length}`,
+            `select: expected 1 match, got ${matches.length}`,
             this.trace,
           );
         this.selection = [matches[0]];
-        this.addTrace("select_one", this.selection, file.doc);
+        this.addTrace("select", this.selection, file.doc);
         break;
       }
 
@@ -483,28 +504,6 @@ export class Executor {
         this.selection = [this.selection[this.selection.length - 1]];
         const file = this.requireFile();
         this.addTrace("retain_last", this.selection, file.doc);
-        break;
-      }
-
-      case "narrow_one": {
-        const file = this.requireFile();
-        const matches = this.findAllMatches(
-          cmd.pattern,
-          file.doc,
-          this.selection,
-        );
-        if (matches.length === 0)
-          throw new ExecutionError(
-            `narrow_one: no matches for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
-          );
-        if (matches.length > 1)
-          throw new ExecutionError(
-            `narrow_one: expected 1 match, got ${matches.length}`,
-            this.trace,
-          );
-        this.selection = [matches[0]];
-        this.addTrace("narrow_one", this.selection, file.doc);
         break;
       }
 

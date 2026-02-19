@@ -6,15 +6,13 @@ If a skill seems like it could be relevant, use the get_file tool to read the fu
 DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.`;
 
 const EDL_REMINDER = `\
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select/select_one. Large text blocks are fragile and wasteful.
-Instead, use line ranges (select 42-58), or select the first line then extend_forward to the last line boundary.
-WRONG: select_one with 5+ lines of text in a heredoc
-RIGHT: select_one first line, then extend_forward to match the end
+CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
+Instead, select the first line then extend_forward to the last line boundary.
+WRONG: select with 5+ lines of text in a heredoc
+RIGHT: select first line, then extend_forward to match the end
 
 
-CRITICAL: You're really bad at counting lines. Whenever using line or line:col ranges, first use a select to confirm that you're targeting the appropriate place in the code. The tool output will show you what text you're actually going to be operating on. Only once you confirm that you're going to be editing the right location, do the actual edit in a followup operation.
-WRONG: select_one 55-57 -> delete in one script
-RIGHT: select_one 55-57 in the first script, then confirm the selection in the tool response, then select_one 55-57 -> delete in the second script
+CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
 `;
 
 const BASH_REMINDER = `\

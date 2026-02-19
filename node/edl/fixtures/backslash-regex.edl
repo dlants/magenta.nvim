@@ -1,5 +1,5 @@
 file `{{FILE}}`
-narrow_one /\\path/
+narrow /\\path/
 replace <<END
 /newpath
 END

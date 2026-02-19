@@ -372,7 +372,7 @@ export class Magenta {
           this.homeDir,
         );
         const content = `
-Here is a snippet from the file \`${absFilePath}\`
+Here is a snippet from the file \`${absFilePath}\`, lines ${startPos.row}-${endPos.row}:
 \`\`\`${getMarkdownExt(absFilePath)}
 ${lines.join("\n")}
 \`\`\`

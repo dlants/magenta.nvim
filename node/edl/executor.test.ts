@@ -49,7 +49,7 @@ goodbye world
 
     const script = `\
 file \`${filePath}\`
-narrow /world/
+narrow_multiple /world/
 replace <<END
 planet
 END`;
@@ -74,7 +74,7 @@ describe("selection commands", () => {
 
       const script = `\
 file \`${filePath}\`
-narrow /aaa/
+narrow_multiple /aaa/
 replace <<END
 xxx
 END`;
@@ -107,7 +107,7 @@ narrow /zzz/`;
 
       const script = `\
 file \`${filePath}\`
-narrow /aaa/
+narrow_multiple /aaa/
 retain_first
 replace <<END
 xxx
@@ -126,7 +126,7 @@ END`;
 
       const script = `\
 file \`${filePath}\`
-narrow /aaa/
+narrow_multiple /aaa/
 retain_last
 replace <<END
 xxx
@@ -138,14 +138,14 @@ END`;
     });
   });
 
-  it("narrow_one: selects when exactly one match", async () => {
+  it("narrow: selects when exactly one match", async () => {
     await withTmpDir(async (tmpDir) => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "aaa bbb ccc\n", "utf-8");
 
       const script = `\
 file \`${filePath}\`
-narrow_one /bbb/
+narrow /bbb/
 replace <<END
 xxx
 END`;
@@ -156,14 +156,14 @@ END`;
     });
   });
 
-  it("narrow_one: errors when multiple matches", async () => {
+  it("narrow: errors when multiple matches", async () => {
     await withTmpDir(async (tmpDir) => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "aaa bbb aaa\n", "utf-8");
 
       const script = `\
 file \`${filePath}\`
-narrow_one /aaa/`;
+narrow /aaa/`;
       const commands = parse(script);
       const result = await executor(commands);
       expectFileError(result, "test.txt", "expected 1 match, got 2");
@@ -302,7 +302,7 @@ END2`;
 
       const script = `\
 file \`${filePath}\`
-narrow /bbb/
+narrow_multiple /bbb/
 retain_first
 select_next /aaa/
 replace <<END
@@ -322,7 +322,7 @@ END`;
 
       const script = `\
 file \`${filePath}\`
-narrow /bbb/
+narrow_multiple /bbb/
 retain_last
 select_prev /aaa/
 replace <<END
@@ -390,7 +390,7 @@ END`;
 
       const script = `\
 file \`${filePath}\`
-narrow /aaa/
+narrow_multiple /aaa/
 retain_nth 1
 replace <<END
 xxx
@@ -409,7 +409,7 @@ END`;
 
       const script = `\
 file \`${filePath}\`
-narrow /aaa/
+narrow_multiple /aaa/
 retain_nth -1
 replace <<END
 xxx
@@ -537,16 +537,16 @@ END2`;
     });
   });
 
-  it("select: searches entire document regardless of current selection", async () => {
+  it("select_multiple: searches entire document regardless of current selection", async () => {
     await withTmpDir(async (tmpDir) => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "aaa bbb aaa bbb aaa\n", "utf-8");
 
       const script = `\
 file \`${filePath}\`
-narrow /bbb/
+narrow_multiple /bbb/
 retain_first
-select /aaa/
+select_multiple /aaa/
 replace <<END2
 xxx
 END2`;
@@ -557,7 +557,7 @@ END2`;
     });
   });
 
-  it("select_one: searches entire document regardless of current selection", async () => {
+  it("select: searches entire document regardless of current selection", async () => {
     await withTmpDir(async (tmpDir) => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "aaa bbb ccc\n", "utf-8");
@@ -566,7 +566,7 @@ END2`;
 file \`${filePath}\`
 narrow /aaa/
 retain_first
-select_one /bbb/
+select /bbb/
 replace <<END2
 xxx
 END2`;
@@ -577,14 +577,14 @@ END2`;
     });
   });
 
-  it("select_one: errors when multiple matches in document", async () => {
+  it("select: errors when multiple matches in document", async () => {
     await withTmpDir(async (tmpDir) => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "aaa bbb aaa\n", "utf-8");
 
       const script = `\
 file \`${filePath}\`
-select_one /aaa/`;
+select /aaa/`;
       const commands = parse(script);
       const result = await executor(commands);
       expectFileError(result, "test.txt", "expected 1 match, got 2");
@@ -839,7 +839,7 @@ END`;
 
       const script = `\
 file \`${filePath}\`
-narrow /a/
+narrow_multiple /a/
 insert_before <<END
 [
 END`;
@@ -939,7 +939,7 @@ END`;
 
       const script = `\
 file \`${filePath}\`
-narrow /b /
+narrow_multiple /b /
 delete`;
       const commands = parse(script);
       const result = await executor(commands);
@@ -971,13 +971,13 @@ describe("error handling", () => {
 
       const script = `\
 file \`${filePath}\`
-narrow_one /nonexistent_pattern/`;
+narrow /nonexistent_pattern/`;
       const commands = parse(script);
       const result = await executor(commands);
       expectFileError(
         result,
         "test.txt",
-        "narrow_one: no matches for pattern /nonexistent_pattern/",
+        "narrow: no matches for pattern /nonexistent_pattern/",
       );
     });
   });
@@ -989,7 +989,7 @@ narrow_one /nonexistent_pattern/`;
 
       const script = `\
 file \`${filePath}\`
-narrow_one <<FIND
+narrow <<FIND
 this text does not exist
 FIND`;
       const commands = parse(script);
@@ -997,7 +997,7 @@ FIND`;
       expectFileError(
         result,
         "test.txt",
-        "narrow_one: no matches for pattern <<HEREDOC",
+        "narrow: no matches for pattern <<HEREDOC",
       );
     });
   });
@@ -1109,7 +1109,7 @@ describe("auto-save registers on error", () => {
 
       const script = `
 file \`${file1}\`
-select_one /nonexistent/
+select /nonexistent/
 replace <<R
 big replacement text here
 R`;
@@ -1134,11 +1134,11 @@ R`;
 
       const script = `
 file \`${file1}\`
-select_one /nonexistent/
+select /nonexistent/
 replace <<R
 first replacement
 R
-select_one /also_missing/
+select /also_missing/
 insert_after <<R
 inserted text
 R`;
@@ -1163,9 +1163,9 @@ R`;
 
       const script = `
 file \`${file1}\`
-select_one /nonexistent/
+select /nonexistent/
 file \`${file2}\`
-select_one /world/
+select /world/
 replace <<R
 WORLD
 R`;
@@ -1188,12 +1188,12 @@ R`;
 
       const script = `
 file \`${file1}\`
-select_one /nonexistent/
+select /nonexistent/
 replace <<R
 saved content
 R
 file \`${file2}\`
-select_one /world/
+select /world/
 replace <<R
 WORLD
 R`;
@@ -1220,17 +1220,17 @@ R`;
 
       const script = `
 file \`${file1}\`
-select_one /nonexistent/
+select /nonexistent/
 replace <<R
 text for file1
 R
 file \`${file2}\`
-select_one /also_nonexistent/
+select /also_nonexistent/
 replace <<R
 text for file2
 R
 file \`${file3}\`
-select_one /ccc/
+select /ccc/
 replace <<R
 CCC
 R`;
@@ -1300,12 +1300,12 @@ R`;
       const exec = new Executor();
       const script = `
 file \`${file1}\`
-select_one /nonexistent/
+select /nonexistent/
 replace <<R
 saved content
 R
 file \`${file2}\`
-select_one /world/
+select /world/
 replace _saved_1`;
       const commands = parse(script);
       const result = await exec.execute(commands);
@@ -1617,7 +1617,7 @@ R1`;
 
       const script = `\
 file \`${filePath}\`
-select_one /hello/
+select /hello/
 replace <<R1
 goodbye
 R1`;
@@ -1638,7 +1638,7 @@ describe("register-based mutation commands", () => {
       const exec = new Executor();
       exec.registers.set("myReg", "replaced content");
       const commands = parse(
-        `file \`${filePath}\`\nselect_one <<END\nhello world\nEND\nreplace myReg\n`,
+        `file \`${filePath}\`\nselect <<END\nhello world\nEND\nreplace myReg\n`,
       );
       const result = await exec.execute(commands);
       expect(result.mutations.size).toBe(1);
@@ -1655,7 +1655,7 @@ describe("register-based mutation commands", () => {
       const exec = new Executor();
       exec.registers.set("prefix", "INSERTED\n");
       const commands = parse(
-        `file \`${filePath}\`\nselect_one <<END\nline2\nEND\ninsert_before prefix\n`,
+        `file \`${filePath}\`\nselect <<END\nline2\nEND\ninsert_before prefix\n`,
       );
       const result = await exec.execute(commands);
       expect(result.mutations.size).toBe(1);
@@ -1672,7 +1672,7 @@ describe("register-based mutation commands", () => {
       const exec = new Executor();
       exec.registers.set("suffix", "\nAPPENDED");
       const commands = parse(
-        `file \`${filePath}\`\nselect_one <<END\nline1\nEND\ninsert_after suffix\n`,
+        `file \`${filePath}\`\nselect <<END\nline1\nEND\ninsert_after suffix\n`,
       );
       const result = await exec.execute(commands);
       expect(result.mutations.size).toBe(1);
@@ -1688,7 +1688,7 @@ describe("register-based mutation commands", () => {
 
       const exec = new Executor();
       const commands = parse(
-        `file \`${filePath}\`\nselect_one <<END\nhello\nEND\nreplace noSuchReg\n`,
+        `file \`${filePath}\`\nselect <<END\nhello\nEND\nreplace noSuchReg\n`,
       );
       const result = await exec.execute(commands);
       const err = expectFileError(result, "test.txt", "noSuchReg");
@@ -1703,7 +1703,7 @@ describe("register-based mutation commands", () => {
 
       const exec = new Executor();
       const commands = parse(
-        `file \`${filePath}\`\nselect_one <<END\nhello\nEND\ninsert_before noSuchReg\n`,
+        `file \`${filePath}\`\nselect <<END\nhello\nEND\ninsert_before noSuchReg\n`,
       );
       const result = await exec.execute(commands);
       const err = expectFileError(result, "test.txt", "noSuchReg");
@@ -1718,7 +1718,7 @@ describe("empty literal pattern", () => {
       const filePath = path.join(tmpDir, "test.txt");
       await fs.writeFile(filePath, "hello world", "utf-8");
 
-      const commands = parse(`file \`${filePath}\`\nselect_one <<END\nEND`);
+      const commands = parse(`file \`${filePath}\`\nselect <<END\nEND`);
       const result = await executor(commands);
       const err = expectFileError(result, "test.txt", "Empty literal pattern");
       expect(err).toBeDefined();
