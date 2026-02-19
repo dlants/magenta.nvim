@@ -29,10 +29,10 @@ import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
 import {
   runScript,
   analyzeFileAccess,
-  type EdlResultData,
   type FileAccessInfo,
   type EdlRegisters,
 } from "../edl/index.ts";
+import type { FileMutationSummary } from "../edl/types.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
@@ -46,6 +46,13 @@ const EDL_DESCRIPTION = readFileSync(
   "utf-8",
 );
 
+type EdlDisplayData = {
+  mutations: { path: string; summary: FileMutationSummary }[];
+  fileErrorCount: number;
+  finalSelectionCount: number | undefined;
+};
+
+const EDL_DISPLAY_PREFIX = "__EDL_DISPLAY__";
 export type ToolRequest = GenericToolRequest<"edl", Input>;
 
 export type State =
@@ -304,16 +311,27 @@ export class EdlTool implements StaticTool {
           });
         }
 
+        const displayData: EdlDisplayData = {
+          mutations: result.data.mutations.map((m) => ({
+            path: m.path,
+            summary: m.summary,
+          })),
+          fileErrorCount: result.data.fileErrors.length,
+          finalSelectionCount: result.data.finalSelection
+            ? result.data.finalSelection.ranges.length
+            : undefined,
+        };
+
         this.context.myDispatch({
           type: "finish",
           result: {
             status: "ok",
             value: [
-              { type: "text", text: result.formatted },
               {
                 type: "text",
-                text: `\n\n__EDL_DATA__${JSON.stringify(result.data)}`,
+                text: `${EDL_DISPLAY_PREFIX}${JSON.stringify(displayData)}`,
               },
+              { type: "text", text: result.formatted },
             ],
           },
         });
@@ -499,15 +517,17 @@ function getStatusEmoji(result: CompletedToolInfo["result"]): string {
   return isError(result) ? "❌" : "✅";
 }
 
-function extractEdlData(info: CompletedToolInfo): EdlResultData | undefined {
+function extractEdlDisplayData(
+  info: CompletedToolInfo,
+): EdlDisplayData | undefined {
   if (info.result.result.status !== "ok") return undefined;
   const content = info.result.result.value;
   for (const item of content) {
-    if (item.type === "text" && item.text.startsWith("\n\n__EDL_DATA__")) {
+    if (item.type === "text" && item.text.startsWith(EDL_DISPLAY_PREFIX)) {
       try {
         return JSON.parse(
-          item.text.slice("\n\n__EDL_DATA__".length),
-        ) as EdlResultData;
+          item.text.slice(EDL_DISPLAY_PREFIX.length),
+        ) as EdlDisplayData;
       } catch {
         return undefined;
       }
@@ -515,14 +535,13 @@ function extractEdlData(info: CompletedToolInfo): EdlResultData | undefined {
   }
   return undefined;
 }
-
 function extractFormattedResult(info: CompletedToolInfo): string {
   if (info.result.result.status !== "ok") {
     return info.result.result.error;
   }
   const content = info.result.result.value;
   for (const item of content) {
-    if (item.type === "text" && !item.text.startsWith("\n\n__EDL_DATA__")) {
+    if (item.type === "text" && !item.text.startsWith(EDL_DISPLAY_PREFIX)) {
       return item.text;
     }
   }
@@ -531,7 +550,7 @@ function extractFormattedResult(info: CompletedToolInfo): string {
 
 export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
   const status = getStatusEmoji(info.result);
-  const data = extractEdlData(info);
+  const data = extractEdlDisplayData(info);
 
   if (data) {
     const totalMutations = data.mutations.reduce(
@@ -543,7 +562,7 @@ export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
       0,
     );
     const filesCount = data.mutations.length;
-    const fileErrorCount = data.fileErrors.length;
+    const fileErrorCount = data.fileErrorCount;
     const errorSuffix =
       fileErrorCount > 0
         ? ` (${String(fileErrorCount)} file error${fileErrorCount !== 1 ? "s" : ""})`
@@ -560,7 +579,7 @@ export function renderCompletedPreview(info: CompletedToolInfo): VDOMNode {
   const scriptBlock = withCode(d`\`\`\`
 ${abridged}
 \`\`\``);
-  const data = extractEdlData(info);
+  const data = extractEdlDisplayData(info);
   if (!data || isError(info.result)) return scriptBlock;
 
   const lines: string[] = [];
@@ -575,9 +594,10 @@ ${abridged}
     );
   }
 
-  if (data.finalSelection) {
-    const count = data.finalSelection.ranges.length;
-    lines.push(`  Final selection: ${count} range${count !== 1 ? "s" : ""}`);
+  if (data.finalSelectionCount != undefined) {
+    lines.push(
+      `  Final selection: ${data.finalSelectionCount} range${data.finalSelectionCount !== 1 ? "s" : ""}`,
+    );
   }
 
   return d`${scriptBlock}

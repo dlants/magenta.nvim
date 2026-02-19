@@ -543,13 +543,20 @@ export class Thread {
     this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
     this.state.outputTokensSinceLastReminder = 0;
 
-    // Build user message with summary and optional next prompt
-    const userText = nextPrompt
-      ? `<conversation-summary>\n${summary}\n</conversation-summary>\n\n${nextPrompt}`
-      : `<conversation-summary>\n${summary}\n</conversation-summary>\n\nPlease continue from where you left off.`;
+    // Send the summary as a raw message (no command processing)
+    const summaryText = `<conversation-summary>\n${summary}\n</conversation-summary>`;
+    this.agent.appendUserMessage([{ type: "text", text: summaryText }]);
 
-    await this.sendMessage([{ type: "user", text: userText }]);
+    // Send the nextPrompt through normal sendMessage so commands like @file get processed
+    if (nextPrompt) {
+      await this.sendMessage([{ type: "user", text: nextPrompt }]);
+    } else {
+      await this.sendMessage([
+        { type: "user", text: "Please continue from where you left off." },
+      ]);
+    }
   }
+
   /** Reset the context manager, optionally adding specified files */
   private async resetContextManager(contextFiles?: string[]): Promise<void> {
     this.contextManager = await ContextManager.create(
@@ -1149,6 +1156,7 @@ export class Thread {
     this.agent.appendUserMessage(contentToSend);
     this.agent.continueConversation();
   }
+
   /** Get messages in provider format - delegates to provider thread */
   getMessages(): ProviderMessage[] {
     return [...this.getProviderMessages()];
