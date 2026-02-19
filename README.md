@@ -55,7 +55,7 @@ I sometimes write about AI, neovim and magenta specifically:
 
 - Introduced the edit description language (edl) tool, which subsumes the insert and replace tools.
 - Introduced explore subagent, blocking subagents for better token economy and exploration speed.
-- I decided to drop next edit prediciton and inline edits. I think I'm going to pivot this in a slightly different direction - for more power around unsupervised agent mode and managing teams of agents.
+- I decided to drop next edit prediction and inline edits. I think I'm going to pivot this in a slightly different direction - for more power around unsupervised agent mode and managing teams of agents.
 
 ## Jan 2026
 
