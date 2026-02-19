@@ -38,6 +38,7 @@ export type FileError = {
 };
 
 export type ScriptResult = {
+  warnings: string[];
   trace: TraceEntry[];
   finalSelection: { ranges: RangeWithPos[] } | undefined;
   mutations: Map<string, FileMutationSummary>;

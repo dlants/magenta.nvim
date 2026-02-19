@@ -1,0 +1,1 @@
+I want to discourage the agent from using line numbers to make edits as much as possible, and only to rely on them as a fallback when it can't make line numbers work. The agent frequently messes up the line numbers, munges the file, then spends a bunch of time noodling on it ineffectively.

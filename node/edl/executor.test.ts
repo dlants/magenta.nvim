@@ -1725,3 +1725,50 @@ describe("empty literal pattern", () => {
     });
   });
 });
+
+describe("line number warnings", () => {
+  it("warns when select uses a line number", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "line1\nline2\nline3\n");
+      const result = await executor(parse(`file \`${filePath}\`\nselect 2`));
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toContain("line number");
+    });
+  });
+
+  it("warns when select uses a range", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "line1\nline2\nline3\n");
+      const result = await executor(parse(`file \`${filePath}\`\nselect 1-2`));
+      expect(result.warnings.length).toBeGreaterThanOrEqual(1);
+      expect(result.warnings.some((w) => w.includes("line number"))).toBe(true);
+    });
+  });
+
+  it("does not warn when using text patterns", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "hello world\n");
+      const result = await executor(
+        parse(`file \`${filePath}\`\nselect <<END\nhello world\nEND`),
+      );
+      expect(result.warnings).toHaveLength(0);
+    });
+  });
+
+  it("warns for extend_forward with line number", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "line1\nline2\nline3\n");
+      const result = await executor(
+        parse(
+          `file \`${filePath}\`\nselect <<END\nline1\nEND\nextend_forward 3`,
+        ),
+      );
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toContain("extend_forward");
+    });
+  });
+});

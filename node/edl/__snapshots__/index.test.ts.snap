@@ -61,6 +61,7 @@ exports[`runScript > returns error with message and trace on execution failure 1
         "snippet": "hello",
       },
     ],
+    "warnings": [],
   },
   "edlRegisters": {
     "nextSavedId": 0,
@@ -122,6 +123,7 @@ exports[`runScript > returns ok with no mutations when script only selects 1`] =
         "snippet": "hello",
       },
     ],
+    "warnings": [],
   },
   "edlRegisters": {
     "nextSavedId": 0,
@@ -193,6 +195,7 @@ exports[`runScript > returns ok with trace, mutations, and final selection 1`] =
         "snippet": "planet",
       },
     ],
+    "warnings": [],
   },
   "edlRegisters": {
     "nextSavedId": 0,

@@ -24,12 +24,12 @@ The goal is to rename EDL commands to make single-match the default and discoura
 
 ## Behavioral mapping (old → new)
 
-| Old command     | Old behavior      | New command       | New behavior (same) |
-|-----------------|-------------------|-------------------|---------------------|
-| `select`        | multi-match       | `select_multiple` | multi-match         |
-| `select_one`    | single-match      | `select`          | single-match        |
-| `narrow`        | multi-match       | `narrow_multiple` | multi-match         |
-| `narrow_one`    | single-match      | `narrow`          | single-match        |
+| Old command  | Old behavior | New command       | New behavior (same) |
+| ------------ | ------------ | ----------------- | ------------------- |
+| `select`     | multi-match  | `select_multiple` | multi-match         |
+| `select_one` | single-match | `select`          | single-match        |
+| `narrow`     | multi-match  | `narrow_multiple` | multi-match         |
+| `narrow_one` | single-match | `narrow`          | single-match        |
 
 # implementation
 

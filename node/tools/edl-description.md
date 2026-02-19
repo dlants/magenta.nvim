@@ -33,7 +33,30 @@ cut <register_name>      # Cut selection into a named register
 
 ```
 
-**IMPORTANT: Always use heredoc or regex patterns for selection.** Prefer text matching over line numbers — line numbers are fragile and error-prone after mutations. Use heredoc patterns as the default since they match exactly. Only use regexes when you need wildcards or character classes.
+**IMPORTANT: Prefer heredoc or regex patterns for selection.** Prefer text matching over line numbers — line numbers are error-prone. Use heredoc patterns as the default since they match exactly. Only use regexes when you need wildcards or character classes. You should only use line numbers when you have verified that they are correct.
+
+WRONG - using line numbers to select:
+
+```
+file `src/service.ts`
+select 42-58
+replace <<END2
+function newImpl() { ... }
+END2
+```
+
+RIGHT - using text patterns:
+
+```
+file `src/service.ts`
+select <<END2
+function oldImpl() {
+END2
+extend_forward /^\}/
+replace <<END2
+function newImpl() { ... }
+END2
+```
 
 # Registers
 

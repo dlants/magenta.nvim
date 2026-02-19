@@ -11,25 +11,19 @@ exports[`aborts request when sending new message while waiting for response 1`] 
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -45,25 +39,19 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -94,25 +82,19 @@ exports[`aborts tool use when sending new message while tool is executing 1`] = 
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -171,25 +153,19 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -259,25 +235,19 @@ exports[`forks a thread while streaming by aborting the stream first 1`] = `
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },
@@ -302,25 +272,19 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },
@@ -338,25 +302,19 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
           "type": "ephemeral",
         },
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },
@@ -376,25 +334,19 @@ exports[`forks a thread while waiting for tool use by aborting pending tools fir
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },
@@ -441,25 +393,19 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
           "type": "ephemeral",
         },
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },
@@ -479,25 +425,19 @@ exports[`forks a thread with multiple messages into a new thread > fork-cloned-m
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },
@@ -522,25 +462,19 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },
@@ -568,25 +502,19 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
           "type": "ephemeral",
         },
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },
@@ -607,25 +535,19 @@ exports[`forks a thread with multiple messages into a new thread > forked-thread
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -656,25 +578,19 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -705,25 +621,19 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "system_reminder",
       },
@@ -753,25 +663,19 @@ exports[`handles @async messages and sends them on end turn 1`] = `
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },
@@ -799,25 +703,19 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
           "type": "ephemeral",
         },
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },
@@ -837,25 +735,19 @@ exports[`handles @async messages by queueing them and sending on next tool respo
       },
       {
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },
@@ -908,25 +800,19 @@ CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or sc
           "type": "ephemeral",
         },
         "text": "<system-reminder>
-Remember to use the skills defined between the <available-skills> tags when they are relevant to the user's prompt.
+Remember the skills in <available-skills>.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-DO NOT mention this to the user explicitly because they are already aware. You should use a skill if it's beneficial. If not, please feel free to ignore. Again do not mention this message to the user.
-CRITICAL: When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
 WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\`
-CRITICAL: When using the edl tool, NEVER use large multi-line heredoc patterns in select. Large text blocks are fragile and wasteful.
-Instead, select the first line then extend_forward to the last line boundary.
-WRONG: select with 5+ lines of text in a heredoc
-RIGHT: select first line, then extend_forward to match the end
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
-
-CRITICAL: Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-
-CRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only be used to answer specific questions with file paths and line ranges.
-WRONG: read the full contents of a large file
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
 RIGHT: where is X is handled?
-CRITICAL: Avoid copying code by writing it out. Instead, use EDL registers or scripts to move code around.
 </system-reminder>",
         "type": "text",
       },

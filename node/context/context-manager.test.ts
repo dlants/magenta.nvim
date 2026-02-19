@@ -248,9 +248,7 @@ it.skip("avoids sending redundant context updates after tool application (no buf
           {
             type: "system_reminder",
 
-            text: expect.stringContaining(
-              "Remember to use the skills",
-            ) as string,
+            text: expect.stringContaining("Remember the skills") as string,
           },
         ],
         role: "user",
@@ -275,9 +273,7 @@ it.skip("avoids sending redundant context updates after tool application (no buf
           {
             type: "system_reminder",
 
-            text: expect.stringContaining(
-              "Remember to use the skills",
-            ) as string,
+            text: expect.stringContaining("Remember the skills") as string,
           },
         ],
         role: "user",
@@ -303,7 +299,7 @@ it.skip("avoids sending redundant context updates after tool application (no buf
         {
           type: "system_reminder",
 
-          text: expect.stringContaining("Remember to use the skills") as string,
+          text: expect.stringContaining("Remember the skills") as string,
         },
       ],
       role: "user",
@@ -1015,7 +1011,7 @@ it("includes PDF file in context and sends summary in context updates", async ()
             {
               type: "system_reminder",
               // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-              text: expect.stringContaining("Remember to use the skills"),
+              text: expect.stringContaining("Remember the skills"),
             },
           ],
         });
