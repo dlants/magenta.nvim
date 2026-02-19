@@ -1203,6 +1203,20 @@ export function withCacheControl(
   return messages;
 }
 
+export function getContextWindowForModel(model: string): number {
+  // Claude 3+ models all have 200K context windows
+  if (model.match(/^claude-(opus-4|sonnet-4|haiku-4|3|4)/)) {
+    return 200_000;
+  }
+
+  // Legacy Claude 2.x models - 100K context window
+  if (model.match(/^claude-2\./)) {
+    return 100_000;
+  }
+
+  // Default for unknown models - conservative 200K
+  return 200_000;
+}
 export function getMaxTokensForModel(model: string): number {
   // Claude 4.5 models (Opus, Sonnet, Haiku) - use high limits
   if (model.match(/^claude-(opus-4-5|opus-4-6|sonnet-4-5|haiku-4-5)/)) {

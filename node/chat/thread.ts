@@ -68,6 +68,7 @@ import { getSubsequentReminder } from "../providers/system-reminders.ts";
 import type { EdlRegisters } from "../edl/index.ts";
 import { renderThreadToMarkdown } from "./compact-renderer.ts";
 import { renderStreamdedTool } from "../tools/helpers.ts";
+import { getContextWindowForModel } from "../providers/anthropic-agent.ts";
 
 export type InputMessage =
   | {
@@ -583,6 +584,14 @@ export class Thread {
     this.context.contextManager = this.contextManager;
   }
 
+  private shouldAutoCompact(): boolean {
+    const inputTokenCount = this.agent.getState().inputTokenCount;
+    if (inputTokenCount === undefined) return false;
+    if (this.state.threadType === "compact") return false;
+
+    const contextWindow = getContextWindowForModel(this.state.profile.model);
+    return inputTokenCount >= contextWindow * 0.8;
+  }
   private startCompaction(nextPrompt?: string): void {
     this.state.mode =
       nextPrompt !== undefined
@@ -969,6 +978,12 @@ export class Thread {
       };
     }
 
+    // Auto-compact if approaching context window limit
+    if (this.shouldAutoCompact()) {
+      this.startCompaction();
+      return;
+    }
+
     if (contentToSend.length > 0) {
       this.agent.appendUserMessage(contentToSend);
     }
@@ -1135,6 +1150,16 @@ export class Thread {
         // Convert system_reminder to text for the provider
         contentToSend.push({ type: "text", text: c.text });
       }
+    }
+
+    // Auto-compact if approaching context window limit
+    if (this.shouldAutoCompact()) {
+      const rawText = inputMessages
+        ?.filter((m) => m.type === "user")
+        .map((m) => m.text)
+        .join("\n");
+      this.startCompaction(rawText || undefined);
+      return;
     }
 
     // Send to provider thread and start response

@@ -343,11 +343,19 @@ export class MockStream implements MockMessageStream {
 export class MockAnthropicClient {
   public streams: MockStream[] = [];
 
+  /** If set, countTokens will return this value as input_tokens */
+  public mockInputTokenCount: number | undefined;
+
   messages = {
     stream: (params: Anthropic.Messages.MessageStreamParams): MockStream => {
       const stream = new MockStream(params);
       this.streams.push(stream);
       return stream;
+    },
+    countTokens: (
+      _params: Anthropic.Messages.MessageCountTokensParams,
+    ): Promise<{ input_tokens: number }> => {
+      return Promise.resolve({ input_tokens: this.mockInputTokenCount ?? 0 });
     },
   };
 
