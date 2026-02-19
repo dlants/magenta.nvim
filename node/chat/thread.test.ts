@@ -707,9 +707,7 @@ it("compact flow does not process @file commands in subagent or summary", async 
     expect(textBlocks).toHaveLength(1);
 
     // The raw text should contain the literal @file:poem.txt from the conversation
-    const subagentText = (
-      textBlocks[0]
-    ).text;
+    const subagentText = textBlocks[0].text;
     expect(subagentText).toContain("@file:poem.txt");
 
     // Have the compact subagent edit the temp file with a summary that also contains @file
@@ -1787,10 +1785,8 @@ it("handles web search results and citations together", async () => {
     await driver.assertDisplayBufferContains(
       "🔍 Searching TypeScript vs JavaScript large projects...",
     );
-    await driver.assertDisplayBufferContains("🌐 Search results");
-    await driver.assertDisplayBufferContains(
-      "[TypeScript vs JavaScript: Which Is Better for Your Project?]",
-    );
+    await driver.assertDisplayBufferContains("🌐 1 search result");
+
     await driver.assertDisplayBufferContains(
       "TypeScript offers significant advantages for large projects compared to JavaScript.",
     );

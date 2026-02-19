@@ -1200,10 +1200,16 @@ Come up with a succinct thread title for this prompt. It should be less than 80 
   }
 
   getLastStopTokenCount(): number {
-    const latestUsage = this.agent.getState().latestUsage;
+    const state = this.agent.getState();
+    if (state.inputTokenCount != undefined) {
+      return state.inputTokenCount;
+    }
+
+    const latestUsage = state.latestUsage;
     if (!latestUsage) {
       return 0;
     }
+
     return (
       latestUsage.inputTokens +
       latestUsage.outputTokens +
@@ -1653,31 +1659,53 @@ function renderMessageContent(
     case "server_tool_use":
       return d`🔍 Searching ${withExtmark(d`${content.input.query}`, { hl_group: "@string" })}...\n`;
 
-    case "web_search_tool_result":
+    case "web_search_tool_result": {
+      const viewState = thread.state.messageViewState[messageIdx];
+      const isExpanded = viewState?.expandedContent?.[contentIdx] || false;
+
       if (
         "type" in content.content &&
         content.content.type === "web_search_tool_result_error"
       ) {
         return d`🌐 Search error: ${withExtmark(d`${content.content.error_code}`, { hl_group: "ErrorMsg" })}\n`;
       }
-      // content.content is an array of web search results
       if (Array.isArray(content.content)) {
-        const results = content.content
-          .filter(
-            (
-              r,
-            ): r is Extract<
-              (typeof content.content)[number],
-              { type: "web_search_result" }
-            > => r.type === "web_search_result",
-          )
-          .map(
+        const searchResults = content.content.filter(
+          (
+            r,
+          ): r is Extract<
+            (typeof content.content)[number],
+            { type: "web_search_result" }
+          > => r.type === "web_search_result",
+        );
+        if (isExpanded) {
+          const results = searchResults.map(
             (r) =>
-              d`  [${r.title}](${r.url})${r.page_age ? ` (${r.page_age})` : ""}`,
+              d`  [${r.title}](${r.url})${r.page_age ? ` (${r.page_age})` : ""}\n`,
           );
-        return d`🌐 Search results\n${results}\n`;
+          return withBindings(d`🌐 Search results\n${results}\n`, {
+            "<CR>": () =>
+              dispatch({
+                type: "toggle-expand-content",
+                messageIdx,
+                contentIdx,
+              }),
+          });
+        }
+        return withBindings(
+          d`🌐 ${searchResults.length.toString()} search result${searchResults.length === 1 ? "" : "s"}\n`,
+          {
+            "<CR>": () =>
+              dispatch({
+                type: "toggle-expand-content",
+                messageIdx,
+                contentIdx,
+              }),
+          },
+        );
       }
       return d`🌐 Search results\n`;
+    }
 
     case "context_update":
       // Context updates are rendered via thread.state.messageViewState

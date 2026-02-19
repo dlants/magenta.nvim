@@ -236,6 +236,7 @@ export interface AgentState {
   messages: ReadonlyArray<ProviderMessage>;
   streamingBlock?: AgentStreamingBlock | undefined;
   latestUsage?: Usage | undefined;
+  inputTokenCount?: number | undefined;
 }
 
 export type AgentInput =
