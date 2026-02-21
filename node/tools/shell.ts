@@ -4,6 +4,7 @@ export interface Shell {
     opts: {
       toolRequestId: string;
       onOutput?: (line: OutputLine) => void;
+      onStart?: () => void;
     },
   ): Promise<ShellResult>;
   terminate(): void;

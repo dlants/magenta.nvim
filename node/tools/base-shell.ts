@@ -60,6 +60,7 @@ export class BaseShell implements Shell {
     opts: {
       toolRequestId: string;
       onOutput?: (line: OutputLine) => void;
+      onStart?: () => void;
     },
   ): Promise<ShellResult> {
     const logDir = path.join(
@@ -99,6 +100,7 @@ export class BaseShell implements Shell {
             detached: true,
           });
           this.runningProcess = childProcess;
+          opts.onStart?.();
 
           childProcess.stdout?.on("data", (data: Buffer) => {
             const text = stripAnsiCodes(data.toString());

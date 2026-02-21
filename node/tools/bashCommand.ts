@@ -123,7 +123,7 @@ type State =
   | {
       state: "processing";
       liveOutput: OutputLine[];
-      startTime: number;
+      startTime: number | undefined;
     }
   | {
       state: "done";
@@ -287,10 +287,8 @@ export class BashCommandTool implements StaticTool {
     this.state = {
       state: "processing",
       liveOutput,
-      startTime: Date.now(),
+      startTime: undefined,
     };
-
-    this.startTickInterval();
 
     this.context.shell
       .execute(request.input.command, {
@@ -298,6 +296,12 @@ export class BashCommandTool implements StaticTool {
         onOutput: (line) => {
           liveOutput.push(line);
           this.context.myDispatch({ type: "tick" });
+        },
+        onStart: () => {
+          if (this.state.state === "processing") {
+            this.state.startTime = Date.now();
+            this.startTickInterval();
+          }
         },
       })
       .then((result) => {
@@ -335,14 +339,15 @@ export class BashCommandTool implements StaticTool {
         if (this.aborted) return;
         this.stopTickInterval();
 
+        const durationMs =
+          this.state.state === "processing" && this.state.startTime
+            ? Date.now() - this.state.startTime
+            : 0;
+
         this.state = {
           state: "error",
           error: error.message,
-          durationMs:
-            Date.now() -
-            (this.state.state === "processing"
-              ? this.state.startTime
-              : Date.now()),
+          durationMs,
         };
         // trigger re-render
         this.context.myDispatch({ type: "tick" });
@@ -400,11 +405,15 @@ export class BashCommandTool implements StaticTool {
       },
     };
 
+    const durationMs = this.state.startTime
+      ? Date.now() - this.state.startTime
+      : 0;
+
     this.state = {
       state: "done",
       exitCode: -1,
       signal: undefined,
-      durationMs: 0,
+      durationMs,
       logFilePath: undefined,
       output: [],
       result,
@@ -472,10 +481,9 @@ export class BashCommandTool implements StaticTool {
   renderSummary() {
     switch (this.state.state) {
       case "processing": {
-        const runningTime = Math.floor(
-          (Date.now() - this.state.startTime) / 1000,
-        );
-        const content = d`⚡⚙️ (${String(runningTime)}s / 300s) ${withInlineCode(d`\`${this.request.input.command}\``)}`;
+        const content = this.state.startTime
+          ? d`⚡⚙️ (${String(Math.floor((Date.now() - this.state.startTime) / 1000))}s / 300s) ${withInlineCode(d`\`${this.request.input.command}\``)}`
+          : d`⚡⏳ ${withInlineCode(d`\`${this.request.input.command}\``)}`;
         return withBindings(content, {
           t: () => this.context.myDispatch({ type: "terminate" }),
         });

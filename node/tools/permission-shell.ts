@@ -11,7 +11,11 @@ import type { VDOMNode } from "../tea/view.ts";
 
 export type PendingCommand = {
   command: string;
-  opts: { toolRequestId: string };
+  opts: {
+    toolRequestId: string;
+    onOutput?: (line: OutputLine) => void;
+    onStart?: () => void;
+  };
   resolve: (result: ShellResult) => void;
   reject: (err: Error) => void;
 };
@@ -54,6 +58,7 @@ export class PermissionCheckingShell implements Shell {
     opts: {
       toolRequestId: string;
       onOutput?: (line: OutputLine) => void;
+      onStart?: () => void;
     },
   ): Promise<ShellResult> {
     const permissionResult = this.checkPermissions(command);
