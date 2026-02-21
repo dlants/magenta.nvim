@@ -1039,6 +1039,10 @@ ${chunks[chunkIndex]}
       this.rebuildToolCache();
     }
 
+    // Clear any pending permission checks so they don't block after abort
+    this.permissionFileIO?.denyAll();
+    this.permissionShell?.denyAll();
+
     // Transition to normal mode (agent status already reflects aborted)
     this.state.mode = { type: "normal" };
   }

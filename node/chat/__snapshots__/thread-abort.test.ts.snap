@@ -1,0 +1,366 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`aborts request when sending new message while waiting for response 1`] = `
+[
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "First message",
+        "type": "text",
+      },
+      {
+        "text": "<system-reminder>
+Remember the skills in <available-skills>.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
+
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
+RIGHT: where is X is handled?
+</system-reminder>",
+        "type": "system_reminder",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Second message while first is pending",
+        "type": "text",
+      },
+      {
+        "text": "<system-reminder>
+Remember the skills in <available-skills>.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
+
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
+RIGHT: where is X is handled?
+</system-reminder>",
+        "type": "system_reminder",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Second response that should be shown",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`aborts tool use when sending new message while tool is executing 1`] = `
+[
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Run a slow command",
+        "type": "text",
+      },
+      {
+        "text": "<system-reminder>
+Remember the skills in <available-skills>.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
+
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
+RIGHT: where is X is handled?
+</system-reminder>",
+        "type": "system_reminder",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "I'll run a slow bash command for you.",
+        "type": "text",
+      },
+      {
+        "id": "slow-bash-command",
+        "name": "bash_command",
+        "request": {
+          "status": "ok",
+          "value": {
+            "id": "slow-bash-command",
+            "input": {
+              "command": "sleep 5 && echo 'This should be aborted'",
+            },
+            "toolName": "bash_command",
+          },
+        },
+        "type": "tool_use",
+      },
+    ],
+    "role": "assistant",
+    "stopReason": "tool_use",
+    "usage": {
+      "inputTokens": 1000,
+      "outputTokens": 5000,
+    },
+  },
+  {
+    "content": [
+      {
+        "id": "slow-bash-command",
+        "result": {
+          "error": "Request was aborted by the user.",
+          "status": "error",
+        },
+        "type": "tool_result",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": undefined,
+        "text": "Cancel that, run something else",
+        "type": "text",
+      },
+      {
+        "text": "<system-reminder>
+Remember the skills in <available-skills>.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
+
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
+RIGHT: where is X is handled?
+</system-reminder>",
+        "type": "system_reminder",
+      },
+    ],
+    "role": "user",
+  },
+]
+`;
+
+exports[`forks a thread while streaming by aborting the stream first 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "What is 2+2?",
+        "type": "text",
+      },
+      {
+        "text": "<system-reminder>
+Remember the skills in <available-skills>.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
+
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
+RIGHT: where is X is handled?
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": null,
+        "text": "2+2 equals 4.",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "text": "What about 3+3?",
+        "type": "text",
+      },
+      {
+        "text": "<system-reminder>
+Remember the skills in <available-skills>.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
+
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
+RIGHT: where is X is handled?
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "Actually, tell me about 5+5",
+        "type": "text",
+      },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "<system-reminder>
+Remember the skills in <available-skills>.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
+
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
+RIGHT: where is X is handled?
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+]
+`;
+
+exports[`forks a thread while waiting for tool use by aborting pending tools first 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Read my secret file",
+        "type": "text",
+      },
+      {
+        "text": "<system-reminder>
+Remember the skills in <available-skills>.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
+
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
+RIGHT: where is X is handled?
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "citations": null,
+        "text": "I'll read your secret file.",
+        "type": "text",
+      },
+      {
+        "id": "get-file-tool",
+        "input": {
+          "filePath": ".secret",
+        },
+        "name": "get_file",
+        "type": "tool_use",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "content": "Request was aborted by the user.",
+        "is_error": true,
+        "tool_use_id": "get-file-tool",
+        "type": "tool_result",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "Do something else instead",
+        "type": "text",
+      },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "<system-reminder>
+Remember the skills in <available-skills>.
+If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
+When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
+WRONG: \`command 2>&1 | tail -50\`
+WRONG: \`command | head -100\`
+RIGHT: \`command\`
+Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
+When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
+
+Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+Only use the explore agent to answer specific questions that can be answered concisely, like summarizing how something works or where something is defined.
+WRONG: read the full contents of file
+RIGHT: where is X is handled?
+</system-reminder>",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+]
+`;
