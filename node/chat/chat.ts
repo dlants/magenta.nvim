@@ -6,7 +6,7 @@ import { Thread, view as threadView, type InputMessage } from "./thread";
 import type { Lsp } from "../lsp";
 import { assertUnreachable } from "../utils/assertUnreachable";
 import type { FileIO } from "../edl/file-io.ts";
-import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
+
 import { d, withBindings, type VDOMNode } from "../tea/view";
 import { v7 as uuidv7 } from "uuid";
 import { ContextManager } from "../context/context-manager.ts";
@@ -44,7 +44,6 @@ type ThreadWrapper = (
     }
 ) & {
   parentThreadId: ThreadId | undefined;
-  compactFileIO?: InMemoryFileIO;
 };
 
 type ChatState =
@@ -93,12 +92,6 @@ export type Msg =
     }
   | {
       type: "threads-overview";
-    }
-  | {
-      type: "spawn-compact-thread";
-      parentThreadId: ThreadId;
-      fileContents: string;
-      nextPrompt?: string;
     };
 
 export type ChatMsg = {
@@ -197,19 +190,6 @@ export class Chat {
             });
           }
         }
-        // Detect compact thread completion
-        if (
-          threadState.compactFileIO &&
-          threadState.parentThreadId &&
-          agentStatus.type === "stopped" &&
-          agentStatus.stopReason === "end_turn"
-        ) {
-          this.handleCompactThreadComplete(
-            threadState.parentThreadId,
-            threadState.compactFileIO,
-          );
-          delete threadState.compactFileIO;
-        }
       }
     }
   }
@@ -223,9 +203,6 @@ export class Chat {
           thread: msg.thread,
           parentThreadId: prev.parentThreadId,
         };
-        if (prev.compactFileIO) {
-          wrapper.compactFileIO = prev.compactFileIO;
-        }
         this.threadWrappers[msg.thread.id] = wrapper;
 
         if (!this.state.activeThreadId) {
@@ -351,14 +328,6 @@ export class Chat {
         return;
       }
 
-      case "spawn-compact-thread": {
-        this.handleSpawnCompactThread(msg).catch((e: Error) => {
-          this.context.nvim.logger.error(
-            `Failed to spawn compact thread: ${e.message} ${e.stack}`,
-          );
-        });
-        return;
-      }
       case "spawn-subagent-thread": {
         this.handleSpawnSubagentThread(msg).catch((e: Error) => {
           this.context.nvim.logger.error(
@@ -794,85 +763,6 @@ ${threadViews.map((view) => d`${view}\n`)}`;
     }
   }
 
-  private handleCompactThreadComplete(
-    parentThreadId: ThreadId,
-    compactFileIO: InMemoryFileIO,
-  ) {
-    const summary = compactFileIO.getFileContents("/thread.md");
-    if (summary === undefined) {
-      this.context.nvim.logger.error(
-        "Failed to read compact result from in-memory file /thread.md",
-      );
-      return;
-    }
-
-    setTimeout(() => {
-      this.context.dispatch({
-        type: "thread-msg",
-        id: parentThreadId,
-        msg: {
-          type: "compact-complete",
-          summary,
-        },
-      });
-    });
-  }
-  async handleSpawnCompactThread({
-    parentThreadId,
-    fileContents,
-    nextPrompt,
-  }: Extract<Msg, { type: "spawn-compact-thread" }>) {
-    const parentThreadWrapper = this.threadWrappers[parentThreadId];
-    if (!parentThreadWrapper || parentThreadWrapper.state !== "initialized") {
-      throw new Error(`Parent thread ${parentThreadId} not available`);
-    }
-
-    const parentThread = parentThreadWrapper.thread;
-    const compactThreadId = uuidv7() as ThreadId;
-
-    const compactProfile: Profile = {
-      ...parentThread.state.profile,
-      model: parentThread.state.profile.fastModel,
-      thinking: undefined,
-      reasoning: undefined,
-    };
-
-    const compactFileIO = new InMemoryFileIO({ "/thread.md": fileContents });
-
-    const inputMessages: InputMessage[] = [
-      {
-        type: "user",
-        text: `Here is a conversation transcript that needs to be compacted. The file is at: /thread.md
-
-<file_contents>
-${fileContents}
-</file_contents>
-
-Your job is to reduce the size of this transcript using the edl tool. The goal is to make it significantly shorter while preserving the essential information needed for the conversation to continue.
-
-Guidelines:
-- Remove iterations where multiple attempts were made before arriving at a result — just keep the final result
-- Remove verbose tool outputs, error messages, and stack traces that are no longer relevant
-- Remove sections that discuss completed tasks that don't affect future work
-- Preserve: the current state of what's being worked on, any pending tasks, key decisions made, and important context
-- Use the edl tool to edit the file at /thread.md
-- You can use get_file to re-read /thread.md if needed
-- You may need to make multiple edl calls to reduce different sections${nextPrompt ? `\n\nThe user's next prompt after compaction will be:\n"${nextPrompt}"\n\nPrioritize retaining information relevant to this next prompt.` : ""}`,
-      },
-    ];
-
-    const thread = await this.createThreadWithContext({
-      threadId: compactThreadId,
-      profile: compactProfile,
-      parent: parentThreadId,
-      switchToThread: false,
-      inputMessages,
-      threadType: "compact",
-      fileIO: compactFileIO,
-    });
-
-    this.threadWrappers[thread.id].compactFileIO = compactFileIO;
-  }
   async handleSpawnSubagentThread({
     parentThreadId,
     spawnToolRequestId,

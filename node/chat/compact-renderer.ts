@@ -8,6 +8,12 @@ import type { ToolRequestId } from "../tools/toolManager.ts";
 import type { ToolName } from "../tools/types.ts";
 type ToolInfoMap = Map<ToolRequestId, ToolName>;
 
+export type RenderResult = {
+  markdown: string;
+  /** Character offset in `markdown` where each message starts */
+  messageBoundaries: number[];
+};
+
 /** Render a thread's messages to a markdown string suitable for compaction.
  *
  * Filters out thinking blocks, system reminders, and file contents from get_file
@@ -15,7 +21,7 @@ type ToolInfoMap = Map<ToolRequestId, ToolName>;
  */
 export function renderThreadToMarkdown(
   messages: ReadonlyArray<ProviderMessage>,
-): string {
+): RenderResult {
   const toolInfoMap: ToolInfoMap = new Map();
   for (const message of messages) {
     for (const block of message.content) {
@@ -26,17 +32,107 @@ export function renderThreadToMarkdown(
   }
 
   const parts: string[] = [];
+  const messageBoundaries: number[] = [];
+  let currentLength = 0;
 
   for (const message of messages) {
-    parts.push(`# ${message.role}:\n`);
+    messageBoundaries.push(currentLength);
+    const header = `# ${message.role}:\n`;
+    parts.push(header);
+    currentLength += header.length + 1; // +1 for join separator
     for (const block of message.content) {
-      parts.push(renderContentBlock(block, toolInfoMap));
+      const rendered = renderContentBlock(block, toolInfoMap);
+      parts.push(rendered);
+      currentLength += rendered.length + 1;
     }
     parts.push("");
+    currentLength += 1; // empty string + join separator
   }
 
-  return parts.join("\n");
+  return { markdown: parts.join("\n"), messageBoundaries };
 }
+
+export const CHARS_PER_TOKEN = 4;
+export const TARGET_CHUNK_TOKENS = 25_000;
+export const TOLERANCE_TOKENS = 5_000;
+
+/** Split rendered markdown into chunks at message boundaries, respecting a token budget.
+ *
+ * Greedily adds messages until the chunk exceeds targetChunkChars. If a single
+ * message exceeds targetChunkChars + toleranceChars, it is split at a character boundary.
+ */
+export function chunkMessages(
+  markdown: string,
+  messageBoundaries: number[],
+  targetChunkChars: number,
+  toleranceChars: number,
+): string[] {
+  if (messageBoundaries.length === 0) return [];
+
+  // Extract individual message strings
+  const messageTexts: string[] = [];
+  for (let i = 0; i < messageBoundaries.length; i++) {
+    const start = messageBoundaries[i];
+    const end =
+      i + 1 < messageBoundaries.length
+        ? messageBoundaries[i + 1]
+        : markdown.length;
+    messageTexts.push(markdown.slice(start, end));
+  }
+
+  const maxChunkChars = targetChunkChars + toleranceChars;
+  const chunks: string[] = [];
+  let currentChunk = "";
+
+  for (const msgText of messageTexts) {
+    if (currentChunk.length === 0 && msgText.length <= maxChunkChars) {
+      // Start a new chunk with this message
+      currentChunk = msgText;
+    } else if (currentChunk.length + msgText.length <= maxChunkChars) {
+      // Fits in the current chunk
+      currentChunk += msgText;
+    } else if (currentChunk.length >= targetChunkChars) {
+      // Current chunk already at target, flush it and start new with this message
+      chunks.push(currentChunk);
+      if (msgText.length <= maxChunkChars) {
+        currentChunk = msgText;
+      } else {
+        // This single message is oversized, split it
+        currentChunk = "";
+        splitOversizedText(msgText, targetChunkChars, chunks);
+      }
+    } else {
+      // Current chunk is under target; add what fits, then split remainder
+      const combined = currentChunk + msgText;
+      if (combined.length <= maxChunkChars) {
+        currentChunk = combined;
+      } else {
+        // Split: fill current chunk to target, then split the rest
+        splitOversizedText(combined, targetChunkChars, chunks);
+        currentChunk = "";
+      }
+    }
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
+
+function splitOversizedText(
+  text: string,
+  chunkSize: number,
+  chunks: string[],
+): void {
+  let offset = 0;
+  while (offset < text.length) {
+    chunks.push(text.slice(offset, offset + chunkSize));
+    offset += chunkSize;
+  }
+}
+
 function renderContentBlock(
   block: ProviderMessageContent,
   toolInfoMap: ToolInfoMap,

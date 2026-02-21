@@ -68,7 +68,14 @@ import type { EdlRegisters } from "../edl/index.ts";
 import { BufferAwareFileIO } from "../tools/buffer-file-io.ts";
 import { PermissionCheckingFileIO } from "../tools/permission-file-io.ts";
 import type { FileIO } from "../edl/file-io.ts";
-import { renderThreadToMarkdown } from "./compact-renderer.ts";
+import {
+  renderThreadToMarkdown,
+  chunkMessages,
+  CHARS_PER_TOKEN,
+  TARGET_CHUNK_TOKENS,
+  TOLERANCE_TOKENS,
+} from "./compact-renderer.ts";
+import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import { renderStreamdedTool } from "../tools/helpers.ts";
 import { getContextWindowForModel } from "../providers/anthropic-agent.ts";
 
@@ -129,8 +136,14 @@ export type Msg =
       msg: AgentMsg;
     }
   | {
-      type: "compact-complete";
-      summary: string;
+      type: "compact-agent-msg";
+      msg: AgentMsg;
+    }
+  | {
+      type: "compact-tool-msg";
+      id: ToolRequestId;
+      toolName: ToolName;
+      msg: ToolMsg;
     }
   | {
       type: "permission-pending-change";
@@ -176,6 +189,12 @@ export type ConversationMode =
   | {
       type: "compacting";
       nextPrompt?: string;
+      chunks: string[];
+      currentChunkIndex: number;
+      compactFileIO: InMemoryFileIO;
+      compactAgent: Agent;
+      compactActiveTools: Map<ToolRequestId, Tool | StaticTool>;
+      compactEdlRegisters: EdlRegisters;
     };
 
 /** Minimum output tokens between system reminders during auto-respond loops */
@@ -431,23 +450,13 @@ export class Thread {
       case "permission-pending-change":
         // no-op: re-render is triggered by the dispatch itself
         return;
-      case "compact-complete": {
-        const nextPrompt =
-          this.state.mode.type === "compacting"
-            ? this.state.mode.nextPrompt
-            : undefined;
-
-        this.state.mode = { type: "normal" };
-
-        this.handleCompactComplete(msg.summary, nextPrompt).catch(
-          (e: Error) => {
-            this.context.nvim.logger.error(
-              `Failed during compact-complete: ${e.message}`,
-            );
-          },
-        );
+      case "compact-agent-msg":
+        this.handleCompactAgentMsg(msg.msg);
         return;
-      }
+
+      case "compact-tool-msg":
+        this.handleCompactToolMsg(msg.id, msg.msg);
+        return;
 
       default:
         assertUnreachable(msg);
@@ -626,23 +635,258 @@ export class Thread {
     const contextWindow = getContextWindowForModel(this.state.profile.model);
     return inputTokenCount >= contextWindow * 0.8;
   }
+
   private startCompaction(nextPrompt?: string): void {
-    this.state.mode =
-      nextPrompt !== undefined
-        ? { type: "compacting", nextPrompt }
-        : { type: "compacting" };
+    const { markdown, messageBoundaries } = renderThreadToMarkdown(
+      this.getProviderMessages(),
+    );
 
-    const markdown = renderThreadToMarkdown(this.getProviderMessages());
+    const targetChunkChars = TARGET_CHUNK_TOKENS * CHARS_PER_TOKEN;
+    const toleranceChars = TOLERANCE_TOKENS * CHARS_PER_TOKEN;
+    const chunks = chunkMessages(
+      markdown,
+      messageBoundaries,
+      targetChunkChars,
+      toleranceChars,
+    );
 
-    this.context.dispatch({
-      type: "chat-msg",
-      msg: {
-        type: "spawn-compact-thread",
-        parentThreadId: this.id,
-        fileContents: markdown,
-        ...(nextPrompt !== undefined && { nextPrompt }),
+    if (chunks.length === 0) {
+      this.context.nvim.logger.warn("No chunks to compact");
+      return;
+    }
+
+    const compactFileIO = new InMemoryFileIO({ "/summary.md": "" });
+    const compactEdlRegisters: EdlRegisters = {
+      registers: new Map(),
+      nextSavedId: 0,
+    };
+    const compactAgent = this.createCompactAgent();
+
+    this.state.mode = {
+      type: "compacting",
+      ...(nextPrompt !== undefined && { nextPrompt }),
+      chunks,
+      currentChunkIndex: 0,
+      compactFileIO,
+      compactAgent,
+      compactActiveTools: new Map(),
+      compactEdlRegisters,
+    };
+
+    this.sendCompactChunkToAgent(compactAgent, chunks, 0);
+  }
+
+  private createCompactAgent(): Agent {
+    const provider = getProvider(this.context.nvim, this.state.profile);
+    return provider.createAgent(
+      {
+        model: this.state.profile.fastModel,
+        systemPrompt:
+          "You are a conversation compactor. Your job is to summarize conversation transcripts into concise summaries that preserve essential information.",
+        tools: getToolSpecs("compact", this.context.mcpToolManager),
       },
-    });
+      (msg) => this.myDispatch({ type: "compact-agent-msg", msg }),
+    );
+  }
+
+  private sendCompactChunkToAgent(
+    agent: Agent,
+    chunks: string[],
+    chunkIndex: number,
+  ): void {
+    const isLastChunk = chunkIndex === chunks.length - 1;
+    const chunkLabel = `chunk ${chunkIndex + 1} of ${chunks.length}`;
+
+    const prompt =
+      chunkIndex === 0
+        ? `You are compacting a conversation transcript in chunks. This is ${chunkLabel}.
+
+The file /summary.md is currently empty. Write a condensed summary of the following transcript chunk into /summary.md using the edl tool.
+
+Guidelines:
+- Remove iterations where multiple attempts were made before arriving at a result — just keep the final result
+- Remove verbose tool outputs, error messages, and stack traces that are no longer relevant
+- Remove sections that discuss completed tasks that don't affect future work
+- Preserve: the current state of what's being worked on, any pending tasks, key decisions made, and important context
+- You can use get_file to read /summary.md if needed
+${isLastChunk ? "- This is the LAST chunk. Produce a final, complete summary.\n" : ""}
+<transcript_chunk>
+${chunks[chunkIndex]}
+</transcript_chunk>`
+        : `This is ${chunkLabel}. The file /summary.md contains the running summary from previous chunks.
+
+Edit /summary.md using the edl tool to incorporate the essential information from the following new transcript chunk. Do NOT re-condense the existing summary — just fold in what's important from the new chunk.
+${isLastChunk ? "\nThis is the LAST chunk. Make sure the summary is complete and well-organized.\n" : ""}
+<transcript_chunk>
+${chunks[chunkIndex]}
+</transcript_chunk>`;
+
+    agent.appendUserMessage([{ type: "text", text: prompt }]);
+    agent.continueConversation();
+  }
+
+  private handleCompactAgentMsg(msg: AgentMsg): void {
+    const mode = this.state.mode;
+    if (mode.type !== "compacting") {
+      this.context.nvim.logger.warn(
+        "Received compact-agent-msg while not in compacting mode",
+      );
+      return;
+    }
+
+    switch (msg.type) {
+      case "agent-content-updated":
+        return;
+
+      case "agent-error":
+        this.context.nvim.logger.error(
+          `Compact agent error: ${msg.error.message}`,
+        );
+        this.state.mode = { type: "normal" };
+        return;
+
+      case "agent-stopped": {
+        if (msg.stopReason === "tool_use") {
+          this.handleCompactAgentToolUse(mode);
+        } else if (msg.stopReason === "end_turn") {
+          this.handleCompactChunkComplete(mode);
+        } else {
+          this.context.nvim.logger.warn(
+            `Compact agent stopped with unexpected reason: ${msg.stopReason}`,
+          );
+          this.state.mode = { type: "normal" };
+        }
+        return;
+      }
+    }
+  }
+
+  private handleCompactAgentToolUse(
+    mode: Extract<ConversationMode, { type: "compacting" }>,
+  ): void {
+    const messages = mode.compactAgent.getState().messages;
+    const lastMessage = messages[messages.length - 1];
+
+    if (!lastMessage || lastMessage.role !== "assistant") {
+      this.context.nvim.logger.error(
+        "Compact agent tool_use but no assistant message",
+      );
+      this.state.mode = { type: "normal" };
+      return;
+    }
+
+    const activeTools = new Map<ToolRequestId, Tool | StaticTool>();
+
+    for (const block of lastMessage.content) {
+      if (block.type !== "tool_use" || block.request.status !== "ok") {
+        continue;
+      }
+
+      const request = block.request.value;
+      const toolContext: CreateToolContext = {
+        dispatch: this.context.dispatch,
+        mcpToolManager: this.context.mcpToolManager,
+        bufferTracker: this.context.bufferTracker,
+        getDisplayWidth: this.context.getDisplayWidth,
+        threadId: this.id,
+        nvim: this.context.nvim,
+        lsp: this.context.lsp,
+        cwd: this.context.cwd,
+        homeDir: this.context.homeDir,
+        options: this.context.options,
+        chat: this.context.chat,
+        contextManager: this.contextManager,
+        threadDispatch: this.myDispatch,
+        edlRegisters: mode.compactEdlRegisters,
+        fileIO: mode.compactFileIO,
+      };
+
+      const toolDispatch = ({
+        id,
+        toolName,
+        msg,
+      }: {
+        id: ToolRequestId;
+        toolName: ToolName;
+        msg: ToolMsg;
+      }) =>
+        this.myDispatch({
+          type: "compact-tool-msg",
+          id,
+          toolName,
+          msg,
+        });
+
+      const tool = createTool(request, toolContext, toolDispatch);
+      activeTools.set(request.id, tool);
+    }
+
+    mode.compactActiveTools = activeTools;
+  }
+
+  private handleCompactToolMsg(id: ToolRequestId, msg: ToolMsg): void {
+    const mode = this.state.mode;
+    if (mode.type !== "compacting") {
+      return;
+    }
+
+    const tool = mode.compactActiveTools.get(id);
+    if (!tool) {
+      this.context.nvim.logger.error(`Compact tool not found for id ${id}`);
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    (tool as any).update(msg);
+
+    // Check if all compact tools are done
+    for (const [, t] of mode.compactActiveTools) {
+      if (!t.isDone()) return;
+    }
+
+    // All tools done — send results back to compact agent and continue
+    for (const [toolId, t] of mode.compactActiveTools) {
+      mode.compactAgent.toolResult(toolId, {
+        type: "tool_result",
+        id: toolId,
+        result: t.getToolResult().result,
+      });
+    }
+    mode.compactActiveTools = new Map();
+    mode.compactAgent.continueConversation();
+  }
+
+  private handleCompactChunkComplete(
+    mode: Extract<ConversationMode, { type: "compacting" }>,
+  ): void {
+    const nextChunkIndex = mode.currentChunkIndex + 1;
+
+    if (nextChunkIndex < mode.chunks.length) {
+      // More chunks to process — create a new compact agent for the next chunk
+      const newAgent = this.createCompactAgent();
+      mode.compactAgent = newAgent;
+      mode.currentChunkIndex = nextChunkIndex;
+      mode.compactActiveTools = new Map();
+      this.sendCompactChunkToAgent(newAgent, mode.chunks, nextChunkIndex);
+    } else {
+      // All chunks processed — read the final summary
+      const summary = mode.compactFileIO.getFileContents("/summary.md");
+      if (summary === undefined || summary === "") {
+        this.context.nvim.logger.error(
+          "Compact agent finished but /summary.md is empty",
+        );
+        this.state.mode = { type: "normal" };
+        return;
+      }
+
+      const nextPrompt = mode.nextPrompt;
+      this.state.mode = { type: "normal" };
+      this.handleCompactComplete(summary, nextPrompt).catch((e: Error) => {
+        this.context.nvim.logger.error(
+          `Failed during compact-complete: ${e.message}`,
+        );
+      });
+    }
   }
 
   private handleProviderStopped(stopReason: StopReason): void {
