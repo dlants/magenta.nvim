@@ -2,6 +2,7 @@ import type { FileIO } from "../edl/file-io.ts";
 import { canReadFile, canWriteFile } from "./permissions.ts";
 import {
   displayPath,
+  resolveFilePath,
   type AbsFilePath,
   type HomeDir,
   type NvimCwd,
@@ -33,6 +34,14 @@ export class PermissionCheckingFileIO implements FileIO {
     },
     private onPendingChange: () => void,
   ) {}
+
+  private resolvePath(path: string): AbsFilePath {
+    return resolveFilePath(
+      this.permissionContext.cwd,
+      path as Parameters<typeof resolveFilePath>[1],
+      this.permissionContext.homeDir,
+    );
+  }
 
   private pendingKey(absFilePath: AbsFilePath, accessType: AccessType): string {
     return `${accessType}:${absFilePath}`;
@@ -81,17 +90,17 @@ export class PermissionCheckingFileIO implements FileIO {
   }
 
   async readFile(path: string): Promise<string> {
-    await this.checkReadPermission(path as AbsFilePath);
+    await this.checkReadPermission(this.resolvePath(path));
     return this.inner.readFile(path);
   }
 
   async readBinaryFile(path: string): Promise<Buffer> {
-    await this.checkReadPermission(path as AbsFilePath);
+    await this.checkReadPermission(this.resolvePath(path));
     return this.inner.readBinaryFile(path);
   }
 
   async writeFile(path: string, content: string): Promise<void> {
-    await this.checkWritePermission(path as AbsFilePath);
+    await this.checkWritePermission(this.resolvePath(path));
     return this.inner.writeFile(path, content);
   }
 

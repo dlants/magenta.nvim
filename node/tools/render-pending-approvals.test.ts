@@ -87,6 +87,33 @@ describe("pending approvals surfaced in parent thread", () => {
 
       // After approval, the approval dialog should disappear
       await driver.assertDisplayBufferDoesNotContain("> YES");
+
+      // After approval, the command should run and complete
+      await driver.assertDisplayBufferContains("⚡✅");
+
+      // The subagent should get a new stream to continue after the tool result
+      const subagentStream2 =
+        await driver.mockAnthropic.awaitPendingStreamWithText(
+          "mkdir test-approval-dir",
+        );
+
+      subagentStream2.respond({
+        stopReason: "end_turn",
+        text: "Directory created successfully.",
+        toolRequests: [],
+      });
+
+      // The blocking subagent completing should trigger the parent to continue
+      const parentStream2 =
+        await driver.mockAnthropic.awaitPendingStreamWithText(
+          "Directory created successfully",
+        );
+
+      parentStream2.respond({
+        stopReason: "end_turn",
+        text: "The subagent finished creating the directory.",
+        toolRequests: [],
+      });
     });
   });
 
@@ -183,6 +210,33 @@ describe("pending approvals surfaced in parent thread", () => {
 
       // After approval, it should disappear
       await driver.assertDisplayBufferDoesNotContain("> YES");
+
+      // After approval, the command should run and complete
+      await driver.assertDisplayBufferContains("⚡✅");
+
+      // The subagent should get a new stream to continue after the tool result
+      const subagentStream2 =
+        await driver.mockAnthropic.awaitPendingStreamWithText(
+          "mkdir test-wait-dir",
+        );
+
+      subagentStream2.respond({
+        stopReason: "end_turn",
+        text: "Directory created.",
+        toolRequests: [],
+      });
+
+      // wait_for_subagents should resolve and parent continues
+      const stream3 =
+        await driver.mockAnthropic.awaitPendingStreamWithText(
+          "Directory created",
+        );
+
+      stream3.respond({
+        stopReason: "end_turn",
+        text: "All done.",
+        toolRequests: [],
+      });
     });
   });
 
@@ -265,6 +319,33 @@ describe("pending approvals surfaced in parent thread", () => {
 
         // After approval, it should disappear
         await driver.assertDisplayBufferDoesNotContain("> YES");
+
+        // After approval, the command should run and complete
+        await driver.assertDisplayBufferContains("⚡✅");
+
+        // The subagent should get a new stream to continue after the tool result
+        const subagentStream2 =
+          await driver.mockAnthropic.awaitPendingStreamWithText(
+            "mkdir test-foreach-dir",
+          );
+
+        subagentStream2.respond({
+          stopReason: "end_turn",
+          text: "Directory created.",
+          toolRequests: [],
+        });
+
+        // spawn_foreach completes and parent continues
+        const parentStream2 =
+          await driver.mockAnthropic.awaitPendingStreamWithText(
+            "Directory created",
+          );
+
+        parentStream2.respond({
+          stopReason: "end_turn",
+          text: "All directories created.",
+          toolRequests: [],
+        });
       },
     );
   });

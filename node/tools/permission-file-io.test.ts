@@ -381,6 +381,44 @@ describe("PermissionCheckingFileIO", () => {
     });
   });
 
+  describe("relative path resolution", () => {
+    test("resolves relative paths for readFile permission check", async () => {
+      const pio = createPermissionIO(mockIO, defaultOptions, onPendingChange);
+      const result = await pio.readFile("src/file.ts");
+      expect(result).toBe("file content");
+      expect(mockIO.readFile).toHaveBeenCalledWith("src/file.ts");
+      expect(pio.getPendingPermissions().size).toBe(0);
+    });
+
+    test("resolves relative paths for readBinaryFile permission check", async () => {
+      const pio = createPermissionIO(mockIO, defaultOptions, onPendingChange);
+      const result = await pio.readBinaryFile("src/image.png");
+      expect(result).toEqual(Buffer.from("binary"));
+      expect(mockIO.readBinaryFile).toHaveBeenCalledWith("src/image.png");
+      expect(pio.getPendingPermissions().size).toBe(0);
+    });
+
+    test("resolves relative paths for writeFile permission check", async () => {
+      const pio = createPermissionIO(mockIO, defaultOptions, onPendingChange);
+      await pio.writeFile("src/out.ts", "data");
+      expect(mockIO.writeFile).toHaveBeenCalledWith("src/out.ts", "data");
+      expect(pio.getPendingPermissions().size).toBe(0);
+    });
+
+    test("relative path outside cwd still blocks", async () => {
+      const pio = createPermissionIO(mockIO, defaultOptions, onPendingChange);
+      let resolved = false;
+      void pio.readFile("../../outside/file.txt").then(() => {
+        resolved = true;
+      });
+
+      await vi.waitFor(() => {
+        expect(pio.getPendingPermissions().size).toBe(1);
+      });
+      expect(resolved).toBe(false);
+      expect(mockIO.readFile).not.toHaveBeenCalled();
+    });
+  });
   describe("tilde expansion in filePermissions", () => {
     test("expands ~ to homeDir in permission paths", async () => {
       const actualHomeDir = os.homedir() as HomeDir;
