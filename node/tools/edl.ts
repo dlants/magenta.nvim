@@ -1,42 +1,28 @@
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import {
-  d,
-  withBindings,
-  withCode,
-  withExtmark,
-  type VDOMNode,
-} from "../tea/view.ts";
+import { d, withCode, type VDOMNode } from "../tea/view.ts";
 import type { Result } from "../utils/result.ts";
 import type { CompletedToolInfo } from "./types.ts";
 
 import type { Nvim } from "../nvim/nvim-node";
 import {
   resolveFilePath,
-  displayPath,
   FileCategory,
-  type UnresolvedFilePath,
   type NvimCwd,
   type HomeDir,
 } from "../utils/files.ts";
-import type { MagentaOptions } from "../options.ts";
-import { canReadFile, canWriteFile } from "./permissions.ts";
+
 import type {
   ProviderToolResult,
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
-import {
-  runScript,
-  analyzeFileAccess,
-  type FileAccessInfo,
-  type EdlRegisters,
-} from "../edl/index.ts";
+import { runScript, type EdlRegisters } from "../edl/index.ts";
 import type { FileMutationSummary } from "../edl/types.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
-import { BufferAwareFileIO } from "./buffer-file-io.ts";
+import type { FileIO } from "../edl/file-io.ts";
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
@@ -57,13 +43,6 @@ export type ToolRequest = GenericToolRequest<"edl", Input>;
 
 export type State =
   | {
-      state: "pending";
-    }
-  | {
-      state: "pending-user-action";
-      deniedFiles: DeniedFileAccess[];
-    }
-  | {
       state: "processing";
     }
   | {
@@ -71,26 +50,10 @@ export type State =
       result: ProviderToolResult;
     };
 
-type DeniedFileAccess = FileAccessInfo & {
-  displayPath: string;
+export type Msg = {
+  type: "finish";
+  result: Result<ProviderToolResultContent[]>;
 };
-
-export type Msg =
-  | {
-      type: "finish";
-      result: Result<ProviderToolResultContent[]>;
-    }
-  | {
-      type: "permissions-ok";
-    }
-  | {
-      type: "permissions-denied";
-      deniedFiles: DeniedFileAccess[];
-    }
-  | {
-      type: "user-approval";
-      approved: boolean;
-    };
 
 export class EdlTool implements StaticTool {
   state: State;
@@ -104,21 +67,21 @@ export class EdlTool implements StaticTool {
       nvim: Nvim;
       cwd: NvimCwd;
       homeDir: HomeDir;
-      options: MagentaOptions;
       myDispatch: (msg: Msg) => void;
+      fileIO: FileIO;
       bufferTracker: BufferTracker;
       threadDispatch: Dispatch<ThreadMsg>;
       edlRegisters: EdlRegisters;
     },
   ) {
     this.state = {
-      state: "pending",
+      state: "processing",
     };
 
     setTimeout(() => {
-      this.checkPermissions().catch((error) => {
+      this.executeScript().catch((error) => {
         this.context.nvim.logger.error(
-          `Error checking EDL permissions: ${error instanceof Error ? error.message : String(error)}`,
+          `Error executing EDL script: ${error instanceof Error ? error.message : String(error)}`,
         );
       });
     });
@@ -129,7 +92,7 @@ export class EdlTool implements StaticTool {
   }
 
   isPendingUserAction(): boolean {
-    return this.state.state === "pending-user-action";
+    return false;
   }
 
   abort(): ProviderToolResult {
@@ -157,129 +120,26 @@ export class EdlTool implements StaticTool {
   }
 
   update(msg: Msg) {
-    switch (msg.type) {
-      case "finish":
-        if (this.state.state == "processing") {
-          this.state = {
-            state: "done",
-            result: {
-              type: "tool_result",
-              id: this.request.id,
-              result: msg.result,
-            },
-          };
-        }
-        return;
-
-      case "permissions-ok":
-        if (this.state.state === "pending") {
-          this.state = { state: "processing" };
-          this.executeScript().catch((error) => {
-            this.context.nvim.logger.error(
-              `Error executing EDL script: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          });
-        }
-        return;
-
-      case "permissions-denied":
-        if (this.state.state === "pending") {
-          this.state = {
-            state: "pending-user-action",
-            deniedFiles: msg.deniedFiles,
-          };
-        }
-        return;
-
-      case "user-approval":
-        if (this.state.state === "pending-user-action") {
-          if (msg.approved) {
-            this.state = { state: "processing" };
-            this.executeScript().catch((error) => {
-              this.context.nvim.logger.error(
-                `Error executing EDL script: ${error instanceof Error ? error.message : String(error)}`,
-              );
-            });
-          } else {
-            this.state = {
-              state: "done",
-              result: {
-                type: "tool_result",
-                id: this.request.id,
-                result: {
-                  status: "error",
-                  error:
-                    "The user did not approve the file access required by this EDL script.",
-                },
-              },
-            };
-          }
-        }
-        return;
-
-      default:
-        assertUnreachable(msg);
+    if (this.state.state == "processing") {
+      this.state = {
+        state: "done",
+        result: {
+          type: "tool_result",
+          id: this.request.id,
+          result: msg.result,
+        },
+      };
     }
   }
 
-  async checkPermissions() {
-    if (this.aborted) return;
-
-    const script = this.request.input.script;
-    let fileAccesses: FileAccessInfo[];
-    try {
-      fileAccesses = analyzeFileAccess(script);
-    } catch {
-      // If parsing fails, we'll let executeScript handle the error
-      this.context.myDispatch({ type: "permissions-ok" });
-      return;
-    }
-
-    if (fileAccesses.length === 0) {
-      this.context.myDispatch({ type: "permissions-ok" });
-      return;
-    }
-
-    const deniedFiles: DeniedFileAccess[] = [];
-
-    for (const access of fileAccesses) {
-      const absPath = resolveFilePath(
-        this.context.cwd,
-        access.path as UnresolvedFilePath,
-        this.context.homeDir,
-      );
-      const dp = displayPath(this.context.cwd, absPath, this.context.homeDir);
-
-      if (access.read) {
-        const canRead = await canReadFile(absPath, this.context);
-        if (!canRead) {
-          deniedFiles.push({ ...access, displayPath: dp });
-          continue;
-        }
-      }
-
-      if (access.write) {
-        const hasWrite = canWriteFile(absPath, this.context);
-        if (!hasWrite) {
-          deniedFiles.push({ ...access, displayPath: dp });
-        }
-      }
-    }
-
-    if (deniedFiles.length === 0) {
-      this.context.myDispatch({ type: "permissions-ok" });
-    } else {
-      this.context.myDispatch({
-        type: "permissions-denied",
-        deniedFiles,
-      });
-    }
-  }
   async executeScript() {
     try {
       const script = this.request.input.script;
-      const fileIO = new BufferAwareFileIO(this.context);
-      const result = await runScript(script, fileIO, this.context.edlRegisters);
+      const result = await runScript(
+        script,
+        this.context.fileIO,
+        this.context.edlRegisters,
+      );
 
       if (this.aborted) return;
 
@@ -358,7 +218,6 @@ export class EdlTool implements StaticTool {
 
   getToolResult(): ProviderToolResult {
     switch (this.state.state) {
-      case "pending":
       case "processing":
         return {
           type: "tool_result",
@@ -373,20 +232,6 @@ export class EdlTool implements StaticTool {
             ],
           },
         };
-      case "pending-user-action":
-        return {
-          type: "tool_result",
-          id: this.request.id,
-          result: {
-            status: "ok",
-            value: [
-              {
-                type: "text",
-                text: `Waiting for user approval to access files required by this EDL script.`,
-              },
-            ],
-          },
-        };
       case "done":
         return this.state.result;
       default:
@@ -396,42 +241,6 @@ export class EdlTool implements StaticTool {
 
   renderSummary() {
     switch (this.state.state) {
-      case "pending":
-        return d`📝⚙️ edl checking permissions...`;
-      case "pending-user-action": {
-        const fileList = this.state.deniedFiles
-          .map((f) => {
-            const access = f.write ? "read/write" : "read";
-            return `  ${f.displayPath} (${access})`;
-          })
-          .join("\n");
-        return d`📝⏳ EDL script needs file access:
-${fileList}
-${withBindings(
-  withExtmark(d`> NO`, {
-    hl_group: ["ErrorMsg", "@markup.strong.markdown"],
-  }),
-  {
-    "<CR>": () =>
-      this.context.myDispatch({
-        type: "user-approval",
-        approved: false,
-      }),
-  },
-)}
-${withBindings(
-  withExtmark(d`> YES`, {
-    hl_group: ["String", "@markup.strong.markdown"],
-  }),
-  {
-    "<CR>": () =>
-      this.context.myDispatch({
-        type: "user-approval",
-        approved: true,
-      }),
-  },
-)}`;
-      }
       case "processing":
         return d`📝⚙️ edl script executing...`;
       case "done":
@@ -443,12 +252,9 @@ ${withBindings(
         assertUnreachable(this.state);
     }
   }
-
   renderPreview() {
     const abridged = abridgeScript(this.request.input.script);
     switch (this.state.state) {
-      case "pending":
-      case "pending-user-action":
       case "processing":
         return withCode(d`\`\`\`
 ${abridged}
@@ -468,8 +274,6 @@ ${abridged}
 ${this.request.input.script}
 \`\`\``);
     switch (this.state.state) {
-      case "pending":
-      case "pending-user-action":
       case "processing":
         return scriptBlock;
       case "done":

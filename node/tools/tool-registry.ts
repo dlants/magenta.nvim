@@ -26,7 +26,7 @@ export const CHAT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "edl",
 ];
 
-export const COMPACT_STATIC_TOOL_NAMES: StaticToolName[] = ["edl"];
+export const COMPACT_STATIC_TOOL_NAMES: StaticToolName[] = ["get_file", "edl"];
 export const SUBAGENT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "get_file",
   "hover",

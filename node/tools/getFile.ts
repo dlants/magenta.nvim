@@ -1,13 +1,6 @@
-import { getBufferIfOpen } from "../utils/buffers.ts";
-import fs from "fs";
+import type { FileIO } from "../edl/file-io.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import {
-  d,
-  withBindings,
-  withInlineCode,
-  withExtmark,
-  type VDOMNode,
-} from "../tea/view.ts";
+import { d, withInlineCode, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import type {
@@ -38,9 +31,7 @@ import {
   extractPDFPage,
   getSummaryAsProviderContent,
 } from "../utils/pdf-pages.ts";
-import type { MagentaOptions } from "../options.ts";
-import type { Row0Indexed } from "../nvim/window.ts";
-import { canReadFile } from "./permissions.ts";
+
 import { summarizeFile, formatSummary } from "../utils/file-summary.ts";
 import type { CompletedToolInfo } from "./types.ts";
 
@@ -52,35 +43,17 @@ const DEFAULT_LINES_FOR_LARGE_FILE = 100;
 
 export type State =
   | {
-      state: "pending";
-    }
-  | {
       state: "processing";
-      approved: boolean;
-    }
-  | {
-      state: "pending-user-action";
     }
   | {
       state: "done";
       result: ProviderToolResult;
     };
 
-export type Msg =
-  | {
-      type: "finish";
-      result: Result<ProviderToolResultContent[]>;
-    }
-  | {
-      type: "automatic-approval";
-    }
-  | {
-      type: "request-user-approval";
-    }
-  | {
-      type: "user-approval";
-      approved: boolean;
-    };
+export type Msg = {
+  type: "finish";
+  result: Result<ProviderToolResultContent[]>;
+};
 
 export class GetFileTool implements StaticTool {
   state: State;
@@ -93,19 +66,19 @@ export class GetFileTool implements StaticTool {
       nvim: Nvim;
       cwd: NvimCwd;
       homeDir: HomeDir;
+      fileIO: FileIO;
       contextManager: ContextManager;
       threadDispatch: Dispatch<ThreadMsg>;
       myDispatch: Dispatch<Msg>;
-      options: MagentaOptions;
     },
   ) {
     this.state = {
-      state: "pending",
+      state: "processing",
     };
 
     // wrap in setTimeout to force new eventloop frame, to avoid dispatch-in-dispatch
     setTimeout(() => {
-      this.initReadFile().catch((error: Error) =>
+      this.readFile().catch((error: Error) =>
         this.context.myDispatch({
           type: "finish",
           result: {
@@ -122,7 +95,7 @@ export class GetFileTool implements StaticTool {
   }
 
   isPendingUserAction(): boolean {
-    return this.state.state === "pending-user-action";
+    return false;
   }
 
   abort(): ProviderToolResult {
@@ -150,92 +123,17 @@ export class GetFileTool implements StaticTool {
   }
 
   update(msg: Msg) {
-    switch (msg.type) {
-      case "finish":
-        this.state = {
-          state: "done",
-          result: {
-            type: "tool_result",
-            id: this.request.id,
-            result: msg.result,
-          },
-        };
-
-        return;
-      case "request-user-approval":
-        if (this.state.state == "pending") {
-          this.state = {
-            state: "pending-user-action",
-          };
-        }
-        return;
-      case "user-approval": {
-        if (this.state.state === "pending-user-action") {
-          if (msg.approved) {
-            this.state = {
-              state: "processing",
-              approved: true,
-            };
-
-            // wrap in setTimeout to force a new eventloop frame, to avoid dispatch-in-dispatch
-            setTimeout(() => {
-              this.readFile().catch((error: Error) =>
-                this.context.myDispatch({
-                  type: "finish",
-                  result: {
-                    status: "error",
-                    error: error.message + "\n" + error.stack,
-                  },
-                }),
-              );
-            });
-            return;
-          } else {
-            this.state = {
-              state: "done",
-              result: {
-                type: "tool_result",
-                id: this.request.id,
-                result: {
-                  status: "error",
-                  error: `The user did not allow the reading of this file.`,
-                },
-              },
-            };
-            return;
-          }
-        }
-        return;
-      }
-
-      case "automatic-approval": {
-        if (this.state.state == "pending") {
-          this.state = {
-            state: "processing",
-            approved: true,
-          };
-
-          // wrap in setTimeout to force a new eventloop frame, to avoid dispatch-in-dispatch
-          setTimeout(() => {
-            this.readFile().catch((error: Error) =>
-              this.context.myDispatch({
-                type: "finish",
-                result: {
-                  status: "error",
-                  error: error.message + "\n" + error.stack,
-                },
-              }),
-            );
-          });
-        }
-        return;
-      }
-      default:
-        assertUnreachable(msg);
-    }
+    this.state = {
+      state: "done",
+      result: {
+        type: "tool_result",
+        id: this.request.id,
+        result: msg.result,
+      },
+    };
   }
 
-  async initReadFile(): Promise<void> {
+  async readFile() {
     if (this.aborted) return;
 
     const filePath = this.request.input.filePath;
@@ -270,29 +168,6 @@ You already have the most up-to-date information about the contents of this file
       });
       return;
     }
-
-    if (this.state.state === "pending") {
-      const allowed = await canReadFile(absFilePath, this.context);
-
-      if (allowed) {
-        this.context.myDispatch({
-          type: "automatic-approval",
-        });
-      } else {
-        this.context.myDispatch({ type: "request-user-approval" });
-      }
-    }
-  }
-
-  async readFile() {
-    if (this.aborted) return;
-
-    const filePath = this.request.input.filePath;
-    const absFilePath = resolveFilePath(
-      this.context.cwd,
-      filePath,
-      this.context.homeDir,
-    );
 
     const fileTypeInfo = await detectFileType(absFilePath);
     if (!fileTypeInfo) {
@@ -337,30 +212,8 @@ You already have the most up-to-date information about the contents of this file
     let result: ProviderToolResultContent[];
 
     if (fileTypeInfo.category === FileCategory.TEXT) {
-      const bufferContents = await getBufferIfOpen({
-        unresolvedPath: filePath,
-        context: this.context,
-      });
-
-      let lines: string[];
-      if (bufferContents.status === "ok") {
-        lines = await bufferContents.buffer.getLines({
-          start: 0 as Row0Indexed,
-          end: -1 as Row0Indexed,
-        });
-      } else if (bufferContents.status == "not-found") {
-        const rawContent = await fs.promises.readFile(absFilePath, "utf-8");
-        lines = rawContent.split("\n");
-      } else {
-        this.context.myDispatch({
-          type: "finish",
-          result: {
-            status: "error",
-            error: bufferContents.error,
-          },
-        });
-        return;
-      }
+      const rawContent = await this.context.fileIO.readFile(absFilePath);
+      const lines = rawContent.split("\n");
 
       const totalLines = lines.length;
       const startLine = this.request.input.startLine ?? 1;
@@ -546,12 +399,11 @@ You already have the most up-to-date information about the contents of this file
       }
     } else {
       // Handle other binary files (images)
-      const buffer = await fs.promises.readFile(absFilePath);
+      const buffer = await this.context.fileIO.readBinaryFile(absFilePath);
       const base64Data = buffer.toString("base64");
 
-      // Get file modification time for binary files
-      const stats = await fs.promises.stat(absFilePath);
-      const mtime = stats.mtime.getTime();
+      const statResult = await this.context.fileIO.stat(absFilePath);
+      const mtime = statResult?.mtimeMs ?? Date.now();
 
       // Notify context manager of the binary file
       this.context.threadDispatch({
@@ -602,7 +454,6 @@ You already have the most up-to-date information about the contents of this file
 
   getToolResult(): ProviderToolResult {
     switch (this.state.state) {
-      case "pending":
       case "processing":
         return {
           type: "tool_result",
@@ -613,20 +464,6 @@ You already have the most up-to-date information about the contents of this file
               {
                 type: "text",
                 text: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
-              },
-            ],
-          },
-        };
-      case "pending-user-action":
-        return {
-          type: "tool_result",
-          id: this.request.id,
-          result: {
-            status: "ok",
-            value: [
-              {
-                type: "text",
-                text: `Waiting for user approval to finish processing this tool use.`,
               },
             ],
           },
@@ -712,35 +549,8 @@ You already have the most up-to-date information about the contents of this file
 
   renderSummary() {
     switch (this.state.state) {
-      case "pending":
       case "processing":
         return d`👀⚙️ ${this.formatFileDisplay()}`;
-      case "pending-user-action":
-        return d`👀⏳ May I read file ${this.formatFileDisplay()}?
-${withBindings(
-  withExtmark(d`> NO`, {
-    hl_group: ["ErrorMsg", "@markup.strong.markdown"],
-  }),
-  {
-    "<CR>": () =>
-      this.context.myDispatch({
-        type: "user-approval",
-        approved: false,
-      }),
-  },
-)}
-${withBindings(
-  withExtmark(d`> YES`, {
-    hl_group: ["String", "@markup.strong.markdown"],
-  }),
-  {
-    "<CR>": () =>
-      this.context.myDispatch({
-        type: "user-approval",
-        approved: true,
-      }),
-  },
-)}`;
       case "done":
         return renderCompletedSummary(
           {

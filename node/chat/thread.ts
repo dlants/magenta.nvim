@@ -48,7 +48,6 @@ import {
   type HomeDir,
   type NvimCwd,
   type UnresolvedFilePath,
-  MAGENTA_TEMP_DIR,
 } from "../utils/files.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import {
@@ -59,13 +58,16 @@ import {
 import type { Chat } from "./chat.ts";
 import type { ThreadId, ThreadType } from "./types.ts";
 import type { SystemPrompt } from "../providers/system-prompt.ts";
-import { readFileSync, mkdirSync, writeFileSync } from "fs";
+import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import player from "play-sound";
 import { CommandRegistry } from "./commands/registry.ts";
 import { getSubsequentReminder } from "../providers/system-reminders.ts";
 import type { EdlRegisters } from "../edl/index.ts";
+import { BufferAwareFileIO } from "../tools/buffer-file-io.ts";
+import { PermissionCheckingFileIO } from "../tools/permission-file-io.ts";
+import type { FileIO } from "../edl/file-io.ts";
 import { renderThreadToMarkdown } from "./compact-renderer.ts";
 import { renderStreamdedTool } from "../tools/helpers.ts";
 import { getContextWindowForModel } from "../providers/anthropic-agent.ts";
@@ -129,6 +131,9 @@ export type Msg =
   | {
       type: "compact-complete";
       summary: string;
+    }
+  | {
+      type: "permission-pending-change";
     };
 
 export type ThreadMsg = {
@@ -200,6 +205,8 @@ export class Thread {
   public contextManager: ContextManager;
   private commandRegistry: CommandRegistry;
   public agent: Agent;
+  public permissionFileIO: PermissionCheckingFileIO | undefined;
+  public fileIO: FileIO;
 
   constructor(
     public id: ThreadId,
@@ -220,6 +227,7 @@ export class Thread {
       getDisplayWidth: () => number;
     },
     clonedAgent?: Agent,
+    injectedFileIO?: FileIO,
   ) {
     this.myDispatch = (msg) =>
       this.context.dispatch({
@@ -229,6 +237,28 @@ export class Thread {
       });
 
     this.contextManager = this.context.contextManager;
+    if (injectedFileIO) {
+      this.fileIO = injectedFileIO;
+      this.permissionFileIO = undefined;
+    } else {
+      const permissionFileIO = new PermissionCheckingFileIO(
+        new BufferAwareFileIO({
+          nvim: this.context.nvim,
+          bufferTracker: this.context.bufferTracker,
+          cwd: this.context.cwd,
+          homeDir: this.context.homeDir,
+        }),
+        {
+          cwd: this.context.cwd,
+          homeDir: this.context.homeDir,
+          options: this.context.options,
+          nvim: this.context.nvim,
+        },
+        () => this.myDispatch({ type: "permission-pending-change" }),
+      );
+      this.permissionFileIO = permissionFileIO;
+      this.fileIO = permissionFileIO;
+    }
 
     this.commandRegistry = new CommandRegistry();
     // Register custom commands from options
@@ -398,6 +428,9 @@ export class Thread {
         }
       }
 
+      case "permission-pending-change":
+        // no-op: re-render is triggered by the dispatch itself
+        return;
       case "compact-complete": {
         const nextPrompt =
           this.state.mode.type === "compacting"
@@ -485,6 +518,7 @@ export class Thread {
         contextManager: this.contextManager,
         threadDispatch: this.myDispatch,
         edlRegisters: this.state.edlRegisters,
+        fileIO: this.fileIO,
       };
 
       // Create the dispatch function for this tool
@@ -600,17 +634,11 @@ export class Thread {
 
     const markdown = renderThreadToMarkdown(this.getProviderMessages());
 
-    const tempDir = join(MAGENTA_TEMP_DIR, "threads", this.id);
-    mkdirSync(tempDir, { recursive: true });
-    const tempFilePath = join(tempDir, "compact.md");
-    writeFileSync(tempFilePath, markdown, "utf-8");
-
     this.context.dispatch({
       type: "chat-msg",
       msg: {
         type: "spawn-compact-thread",
         parentThreadId: this.id,
-        tempFilePath,
         fileContents: markdown,
         ...(nextPrompt !== undefined && { nextPrompt }),
       },
@@ -1408,6 +1436,11 @@ ${thread.context.contextManager.view()}`;
     ? d`\n${thread.context.contextManager.view()}`
     : d``;
 
+  const permissionView =
+    thread.permissionFileIO &&
+    thread.permissionFileIO.getPendingPermissions().size > 0
+      ? d`\n${thread.permissionFileIO.view()}`
+      : d``;
   const pendingMessagesView =
     thread.state.pendingMessages.length > 0
       ? d`\n✉️  ${thread.state.pendingMessages.length.toString()} pending message${thread.state.pendingMessages.length === 1 ? "" : "s"}`
@@ -1494,6 +1527,7 @@ ${systemPromptView}
 ${messagesView}\
 ${streamingBlockView}\
 ${contextManagerView}\
+${permissionView}\
 ${pendingMessagesView}
 ${statusView}`;
 };

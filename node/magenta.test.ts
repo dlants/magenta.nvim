@@ -122,7 +122,7 @@ it("abort command should stop pending tool use", async () => {
     await driver.assertDisplayBufferContains("hello");
     await driver.assertDisplayBufferContains("# assistant:");
     await driver.assertDisplayBufferContains("ok, here goes");
-    await driver.assertDisplayBufferContains("👀⏳ May I read file `.secret`?");
+    await driver.assertDisplayBufferContains("👀 .secret");
 
     await driver.abort();
 

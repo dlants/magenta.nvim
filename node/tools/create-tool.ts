@@ -35,6 +35,7 @@ import type { ContextManager } from "../context/context-manager.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
 import type { StaticToolRequest } from "./toolManager.ts";
 import type { MCPToolManager } from "./mcp/manager.ts";
+import type { FileIO } from "../edl/file-io.ts";
 import { parseToolName, wrapMcpToolMsg } from "./mcp/types.ts";
 import { MCPTool, type Input as MCPInput } from "./mcp/tool.ts";
 
@@ -53,6 +54,7 @@ export type CreateToolContext = {
   contextManager: ContextManager;
   threadDispatch: Dispatch<ThreadMsg>;
   edlRegisters: EdlRegisters;
+  fileIO: FileIO;
 };
 
 export type ToolDispatch = (msg: {
@@ -109,7 +111,7 @@ export function createTool(
         nvim: context.nvim,
         cwd: context.cwd,
         homeDir: context.homeDir,
-        options: context.options,
+        fileIO: context.fileIO,
         contextManager: context.contextManager,
         threadDispatch: context.threadDispatch,
         myDispatch: wrapDispatch,
@@ -197,8 +199,8 @@ export function createTool(
         nvim: context.nvim,
         cwd: context.cwd,
         homeDir: context.homeDir,
-        options: context.options,
         myDispatch: wrapDispatch,
+        fileIO: context.fileIO,
         bufferTracker: context.bufferTracker,
         threadDispatch: context.threadDispatch,
         edlRegisters: context.edlRegisters,

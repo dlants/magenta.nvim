@@ -5,7 +5,8 @@ import type { Dispatch } from "../tea/tea";
 import { Thread, view as threadView, type InputMessage } from "./thread";
 import type { Lsp } from "../lsp";
 import { assertUnreachable } from "../utils/assertUnreachable";
-import { readFileSync, unlinkSync } from "fs";
+import type { FileIO } from "../edl/file-io.ts";
+import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import { d, withBindings, type VDOMNode } from "../tea/view";
 import { v7 as uuidv7 } from "uuid";
 import { ContextManager } from "../context/context-manager.ts";
@@ -43,7 +44,7 @@ type ThreadWrapper = (
     }
 ) & {
   parentThreadId: ThreadId | undefined;
-  compactTempFilePath?: string;
+  compactFileIO?: InMemoryFileIO;
 };
 
 type ChatState =
@@ -96,7 +97,6 @@ export type Msg =
   | {
       type: "spawn-compact-thread";
       parentThreadId: ThreadId;
-      tempFilePath: string;
       fileContents: string;
       nextPrompt?: string;
     };
@@ -199,16 +199,16 @@ export class Chat {
         }
         // Detect compact thread completion
         if (
-          threadState.compactTempFilePath &&
+          threadState.compactFileIO &&
           threadState.parentThreadId &&
           agentStatus.type === "stopped" &&
           agentStatus.stopReason === "end_turn"
         ) {
           this.handleCompactThreadComplete(
             threadState.parentThreadId,
-            threadState.compactTempFilePath,
+            threadState.compactFileIO,
           );
-          delete threadState.compactTempFilePath;
+          delete threadState.compactFileIO;
         }
       }
     }
@@ -223,8 +223,8 @@ export class Chat {
           thread: msg.thread,
           parentThreadId: prev.parentThreadId,
         };
-        if (prev.compactTempFilePath) {
-          wrapper.compactTempFilePath = prev.compactTempFilePath;
+        if (prev.compactFileIO) {
+          wrapper.compactFileIO = prev.compactFileIO;
         }
         this.threadWrappers[msg.thread.id] = wrapper;
 
@@ -408,6 +408,7 @@ export class Chat {
     switchToThread,
     inputMessages,
     threadType,
+    fileIO,
   }: {
     threadId: ThreadId;
     profile: Profile;
@@ -416,6 +417,7 @@ export class Chat {
     switchToThread: boolean;
     inputMessages?: InputMessage[];
     threadType: ThreadType;
+    fileIO?: FileIO;
   }) {
     this.threadWrappers[threadId] = {
       state: "pending",
@@ -453,13 +455,20 @@ export class Chat {
       await contextManager.addFiles(contextFiles);
     }
 
-    const thread = new Thread(threadId, threadType, systemPrompt, {
-      ...this.context,
-      contextManager,
-      mcpToolManager: this.mcpToolManager,
-      profile,
-      chat: this,
-    });
+    const thread = new Thread(
+      threadId,
+      threadType,
+      systemPrompt,
+      {
+        ...this.context,
+        contextManager,
+        mcpToolManager: this.mcpToolManager,
+        profile,
+        chat: this,
+      },
+      undefined,
+      fileIO,
+    );
 
     this.context.dispatch({
       type: "chat-msg",
@@ -787,24 +796,14 @@ ${threadViews.map((view) => d`${view}\n`)}`;
 
   private handleCompactThreadComplete(
     parentThreadId: ThreadId,
-    tempFilePath: string,
+    compactFileIO: InMemoryFileIO,
   ) {
-    let summary: string;
-    try {
-      summary = readFileSync(tempFilePath, "utf-8");
-    } catch {
+    const summary = compactFileIO.getFileContents("/thread.md");
+    if (summary === undefined) {
       this.context.nvim.logger.error(
-        `Failed to read compact temp file: ${tempFilePath}`,
+        "Failed to read compact result from in-memory file /thread.md",
       );
       return;
-    }
-
-    try {
-      unlinkSync(tempFilePath);
-    } catch {
-      this.context.nvim.logger.warn(
-        `Failed to clean up compact temp file: ${tempFilePath}`,
-      );
     }
 
     setTimeout(() => {
@@ -820,7 +819,6 @@ ${threadViews.map((view) => d`${view}\n`)}`;
   }
   async handleSpawnCompactThread({
     parentThreadId,
-    tempFilePath,
     fileContents,
     nextPrompt,
   }: Extract<Msg, { type: "spawn-compact-thread" }>) {
@@ -839,10 +837,12 @@ ${threadViews.map((view) => d`${view}\n`)}`;
       reasoning: undefined,
     };
 
+    const compactFileIO = new InMemoryFileIO({ "/thread.md": fileContents });
+
     const inputMessages: InputMessage[] = [
       {
         type: "user",
-        text: `Here is a conversation transcript that needs to be compacted. The file is at: ${tempFilePath}
+        text: `Here is a conversation transcript that needs to be compacted. The file is at: /thread.md
 
 <file_contents>
 ${fileContents}
@@ -855,7 +855,8 @@ Guidelines:
 - Remove verbose tool outputs, error messages, and stack traces that are no longer relevant
 - Remove sections that discuss completed tasks that don't affect future work
 - Preserve: the current state of what's being worked on, any pending tasks, key decisions made, and important context
-- Use the edl tool to edit the file at ${tempFilePath}
+- Use the edl tool to edit the file at /thread.md
+- You can use get_file to re-read /thread.md if needed
 - You may need to make multiple edl calls to reduce different sections${nextPrompt ? `\n\nThe user's next prompt after compaction will be:\n"${nextPrompt}"\n\nPrioritize retaining information relevant to this next prompt.` : ""}`,
       },
     ];
@@ -867,10 +868,10 @@ Guidelines:
       switchToThread: false,
       inputMessages,
       threadType: "compact",
+      fileIO: compactFileIO,
     });
 
-    // Store the temp file path so we can read it back when the compact thread finishes
-    this.threadWrappers[thread.id].compactTempFilePath = tempFilePath;
+    this.threadWrappers[thread.id].compactFileIO = compactFileIO;
   }
   async handleSpawnSubagentThread({
     parentThreadId,

@@ -361,7 +361,7 @@ it("forks a thread while waiting for tool use by aborting pending tools first", 
     });
 
     // Wait for approval dialog - we're now stopped waiting for tool use
-    await driver.assertDisplayBufferContains("👀⏳ May I read file `.secret`?");
+    await driver.assertDisplayBufferContains("👀 .secret");
 
     const originalThread = driver.magenta.chat.getActiveThread();
     const originalThreadId = originalThread.id;
@@ -2389,7 +2389,7 @@ it("inserts error tool results when aborting while stopped waiting for tool use"
     });
 
     // Wait for approval dialog to appear - we're now stopped waiting for tool use
-    await driver.assertDisplayBufferContains("👀⏳ May I read file `.secret`?");
+    await driver.assertDisplayBufferContains("👀 .secret");
 
     // Send a new message to abort - this should insert error tool result
     await driver.inputMagentaText("Never mind, do something else");
@@ -2466,7 +2466,7 @@ it("handles @async messages by queueing them and sending on next tool response",
     });
 
     // Wait for approval dialog to appear
-    await driver.assertDisplayBufferContains("👀⏳ May I read file `.secret`?");
+    await driver.assertDisplayBufferContains("👀 .secret");
 
     // Now send an @async message while the tool is waiting for approval
     await driver.inputMagentaText("@async This should be queued");
