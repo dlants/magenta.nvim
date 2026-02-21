@@ -160,7 +160,7 @@ export class MockProvider implements Provider {
         }
       }
       // Fall back to legacy requests
-      throw new Error(`No pending streams! ${options?.message ?? ""}
+      throw new Error(`No pending streams${options?.predicate ? " matching predicate" : ""}! ${options?.message ?? ""}
 Streams: ${this.mockClient.streams.length}`);
     });
   }

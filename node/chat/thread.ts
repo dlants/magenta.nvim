@@ -1001,7 +1001,11 @@ ${chunks[chunkIndex]}
     const mode = this.state.mode;
 
     if (mode.type !== "tool_use") {
-      throw new Error(`to handleToolMsg we have to be in tool_use mode`);
+      // notifyParent uses setTimeout to dispatch tool messages, so by the time
+      // the callback fires the parent thread may have already moved past
+      // tool_use mode (e.g. after processing the tool result and getting an
+      // end_turn response). This is expected and safe to ignore.
+      return;
     }
     const tool = mode.activeTools.get(id);
     if (!tool) {
