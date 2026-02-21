@@ -21,6 +21,12 @@ export function renderPendingApprovals(
     ) {
       parts.push(d`\n${wrapper.thread.permissionFileIO.view()}`);
     }
+    if (
+      wrapper.thread.permissionShell &&
+      wrapper.thread.permissionShell.getPendingPermissions().size > 0
+    ) {
+      parts.push(d`\n${wrapper.thread.permissionShell.view()}`);
+    }
   }
 
   if (parts.length === 0) return undefined;

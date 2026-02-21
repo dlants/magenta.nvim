@@ -36,6 +36,7 @@ import type { Msg as ThreadMsg } from "../chat/thread.ts";
 import type { StaticToolRequest } from "./toolManager.ts";
 import type { MCPToolManager } from "./mcp/manager.ts";
 import type { FileIO } from "../edl/file-io.ts";
+import type { Shell } from "./shell.ts";
 import { parseToolName, wrapMcpToolMsg } from "./mcp/types.ts";
 import { MCPTool, type Input as MCPInput } from "./mcp/tool.ts";
 
@@ -55,6 +56,7 @@ export type CreateToolContext = {
   threadDispatch: Dispatch<ThreadMsg>;
   edlRegisters: EdlRegisters;
   fileIO: FileIO;
+  shell: Shell;
 };
 
 export type ToolDispatch = (msg: {
@@ -143,7 +145,7 @@ export function createTool(
       return new BashCommand.BashCommandTool(staticRequest, {
         ...context,
         myDispatch: wrapDispatch,
-        rememberedCommands: context.chat.rememberedCommands,
+        shell: context.shell,
       });
     }
 

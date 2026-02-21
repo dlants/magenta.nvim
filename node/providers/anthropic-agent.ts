@@ -425,6 +425,7 @@ export class AnthropicAgent implements Agent {
   }
 
   private countTokensPostFlight(): void {
+    if (this.options.skipPostFlightTokenCount) return;
     if (typeof this.client.messages.countTokens !== "function") {
       return;
     }

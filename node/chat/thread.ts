@@ -25,7 +25,6 @@ import {
 import { createTool, type CreateToolContext } from "../tools/create-tool.ts";
 import type { StaticTool, ToolMsg, ToolName } from "../tools/types.ts";
 import { MCPToolManager } from "../tools/mcp/manager.ts";
-import * as BashCommand from "../tools/bashCommand.ts";
 
 import type { Nvim } from "../nvim/nvim-node";
 import type { Lsp } from "../lsp.ts";
@@ -68,6 +67,9 @@ import type { EdlRegisters } from "../edl/index.ts";
 import { BufferAwareFileIO } from "../tools/buffer-file-io.ts";
 import { PermissionCheckingFileIO } from "../tools/permission-file-io.ts";
 import type { FileIO } from "../edl/file-io.ts";
+import { BaseShell } from "../tools/base-shell.ts";
+import { PermissionCheckingShell } from "../tools/permission-shell.ts";
+import type { Shell } from "../tools/shell.ts";
 import {
   renderThreadToMarkdown,
   chunkMessages,
@@ -226,6 +228,8 @@ export class Thread {
   public agent: Agent;
   public permissionFileIO: PermissionCheckingFileIO | undefined;
   public fileIO: FileIO;
+  public permissionShell: PermissionCheckingShell | undefined;
+  public shell: Shell;
 
   constructor(
     public id: ThreadId,
@@ -247,6 +251,7 @@ export class Thread {
     },
     clonedAgent?: Agent,
     injectedFileIO?: FileIO,
+    injectedShell?: Shell,
   ) {
     this.myDispatch = (msg) =>
       this.context.dispatch({
@@ -277,6 +282,28 @@ export class Thread {
       );
       this.permissionFileIO = permissionFileIO;
       this.fileIO = permissionFileIO;
+    }
+
+    if (injectedShell) {
+      this.shell = injectedShell;
+      this.permissionShell = undefined;
+    } else {
+      const permissionShell = new PermissionCheckingShell(
+        new BaseShell({
+          cwd: this.context.cwd,
+          threadId: this.id,
+        }),
+        {
+          cwd: this.context.cwd,
+          homeDir: this.context.homeDir,
+          options: this.context.options,
+          nvim: this.context.nvim,
+          rememberedCommands: this.context.chat.rememberedCommands,
+        },
+        () => this.myDispatch({ type: "permission-pending-change" }),
+      );
+      this.permissionShell = permissionShell;
+      this.shell = permissionShell;
     }
 
     this.commandRegistry = new CommandRegistry();
@@ -365,7 +392,7 @@ export class Thread {
           // we aborted. Any further tool-msg stuff can be ignored
           return;
         }
-        this.handleToolMsg(msg.id, msg.toolName, msg.msg);
+        this.handleToolMsg(msg.id, msg.msg);
         const autoRespondResult = this.maybeAutoRespond();
         // Play chime if tool completed but we didn't autorespond
         if (autoRespondResult.type !== "did-autorespond") {
@@ -528,6 +555,7 @@ export class Thread {
         threadDispatch: this.myDispatch,
         edlRegisters: this.state.edlRegisters,
         fileIO: this.fileIO,
+        shell: this.shell,
       };
 
       // Create the dispatch function for this tool
@@ -673,7 +701,7 @@ export class Thread {
       compactEdlRegisters,
     };
 
-    this.sendCompactChunkToAgent(compactAgent, chunks, 0);
+    this.sendCompactChunkToAgent(compactAgent, chunks, 0, nextPrompt);
   }
 
   private createCompactAgent(): Agent {
@@ -684,6 +712,7 @@ export class Thread {
         systemPrompt:
           "You are a conversation compactor. Your job is to summarize conversation transcripts into concise summaries that preserve essential information.",
         tools: getToolSpecs("compact", this.context.mcpToolManager),
+        skipPostFlightTokenCount: true,
       },
       (msg) => this.myDispatch({ type: "compact-agent-msg", msg }),
     );
@@ -693,33 +722,50 @@ export class Thread {
     agent: Agent,
     chunks: string[],
     chunkIndex: number,
+    nextPrompt?: string,
   ): void {
+    const mode = this.state.mode;
+    if (mode.type !== "compacting") return;
+
+    // Write the chunk to /chunk.md so EDL can cut/paste from it into /summary.md
+    mode.compactFileIO.writeFileSync("/chunk.md", chunks[chunkIndex]);
+
     const isLastChunk = chunkIndex === chunks.length - 1;
     const chunkLabel = `chunk ${chunkIndex + 1} of ${chunks.length}`;
+
+    const summaryContent =
+      chunkIndex > 0
+        ? (mode.compactFileIO.getFileContents("/summary.md") ?? "")
+        : "";
 
     const prompt =
       chunkIndex === 0
         ? `You are compacting a conversation transcript in chunks. This is ${chunkLabel}.
 
-The file /summary.md is currently empty. Write a condensed summary of the following transcript chunk into /summary.md using the edl tool.
+The file /summary.md is currently empty. Write a condensed summary of the transcript chunk below into /summary.md using the edl tool.
 
 Guidelines:
 - Remove iterations where multiple attempts were made before arriving at a result — just keep the final result
 - Remove verbose tool outputs, error messages, and stack traces that are no longer relevant
 - Remove sections that discuss completed tasks that don't affect future work
 - Preserve: the current state of what's being worked on, any pending tasks, key decisions made, and important context
-- You can use get_file to read /summary.md if needed
-${isLastChunk ? "- This is the LAST chunk. Produce a final, complete summary.\n" : ""}
-<transcript_chunk>
+- The transcript chunk is also available at /chunk.md — use EDL to cut/paste sections from it into /summary.md
+- You can use get_file to read /summary.md or /chunk.md if needed
+${isLastChunk ? "- This is the LAST chunk. Produce a final, complete summary.\n" : ""}${nextPrompt ? `\nThe user's next prompt will be: "${nextPrompt}"\nPrioritize retaining information relevant to this next prompt.\n` : ""}
+<chunk>
 ${chunks[chunkIndex]}
-</transcript_chunk>`
-        : `This is ${chunkLabel}. The file /summary.md contains the running summary from previous chunks.
+</chunk>`
+        : `This is ${chunkLabel}. The summary so far is in /summary.md and the new chunk is in /chunk.md.
 
-Edit /summary.md using the edl tool to incorporate the essential information from the following new transcript chunk. Do NOT re-condense the existing summary — just fold in what's important from the new chunk.
-${isLastChunk ? "\nThis is the LAST chunk. Make sure the summary is complete and well-organized.\n" : ""}
-<transcript_chunk>
+Edit /summary.md using the edl tool to incorporate the essential information from the new transcript chunk below. Do NOT re-condense the existing summary — just fold in what's important from the new chunk.
+${isLastChunk ? "\nThis is the LAST chunk. Make sure the summary is complete and well-organized.\n" : ""}${nextPrompt ? `\nThe user's next prompt will be: "${nextPrompt}"\nPrioritize retaining information relevant to this next prompt.\n` : ""}
+<summary>
+${summaryContent}
+</summary>
+
+<chunk>
 ${chunks[chunkIndex]}
-</transcript_chunk>`;
+</chunk>`;
 
     agent.appendUserMessage([{ type: "text", text: prompt }]);
     agent.continueConversation();
@@ -799,6 +845,7 @@ ${chunks[chunkIndex]}
         threadDispatch: this.myDispatch,
         edlRegisters: mode.compactEdlRegisters,
         fileIO: mode.compactFileIO,
+        shell: this.shell,
       };
 
       const toolDispatch = ({
@@ -867,7 +914,12 @@ ${chunks[chunkIndex]}
       mode.compactAgent = newAgent;
       mode.currentChunkIndex = nextChunkIndex;
       mode.compactActiveTools = new Map();
-      this.sendCompactChunkToAgent(newAgent, mode.chunks, nextChunkIndex);
+      this.sendCompactChunkToAgent(
+        newAgent,
+        mode.chunks,
+        nextChunkIndex,
+        mode.nextPrompt,
+      );
     } else {
       // All chunks processed — read the final summary
       const summary = mode.compactFileIO.getFileContents("/summary.md");
@@ -945,11 +997,7 @@ ${chunks[chunkIndex]}
   }
 
   /** Handle a tool message by routing it to the appropriate tool */
-  private handleToolMsg(
-    id: ToolRequestId,
-    toolName: ToolName,
-    msg: ToolMsg,
-  ): void {
+  private handleToolMsg(id: ToolRequestId, msg: ToolMsg): void {
     const mode = this.state.mode;
 
     if (mode.type !== "tool_use") {
@@ -963,21 +1011,6 @@ ${chunks[chunkIndex]}
     // we know that the tool id <-> and msg type match
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
     (tool as any).update(msg);
-
-    // Handle bash_command remember logic
-    if (toolName === ("bash_command" as ToolName)) {
-      const bashMsg = msg as unknown as BashCommand.Msg;
-      if (
-        bashMsg.type === "user-approval" &&
-        bashMsg.approved &&
-        bashMsg.remember
-      ) {
-        this.context.chat.rememberedCommands.add(
-          (tool as unknown as BashCommand.BashCommandTool).request.input
-            .command,
-        );
-      }
-    }
   }
 
   /** Abort in-progress operations and wait for completion.
@@ -1680,11 +1713,17 @@ ${thread.context.contextManager.view()}`;
     ? d`\n${thread.context.contextManager.view()}`
     : d``;
 
-  const permissionView =
+  const filePermissionView =
     thread.permissionFileIO &&
     thread.permissionFileIO.getPendingPermissions().size > 0
       ? d`\n${thread.permissionFileIO.view()}`
       : d``;
+  const shellPermissionView =
+    thread.permissionShell &&
+    thread.permissionShell.getPendingPermissions().size > 0
+      ? d`\n${thread.permissionShell.view()}`
+      : d``;
+  const permissionView = d`${filePermissionView}${shellPermissionView}`;
   const pendingMessagesView =
     thread.state.pendingMessages.length > 0
       ? d`\n✉️  ${thread.state.pendingMessages.length.toString()} pending message${thread.state.pendingMessages.length === 1 ? "" : "s"}`

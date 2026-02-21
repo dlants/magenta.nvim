@@ -193,10 +193,7 @@ ${element}`;
     if (this.state.state !== "running") return false;
     for (const el of this.state.elements) {
       if (el.state.status === "running") {
-        if (
-          this.context.chat.getThreadPendingApprovalTools(el.state.threadId)
-            .length > 0
-        ) {
+        if (this.context.chat.threadHasPendingApprovals(el.state.threadId)) {
           return true;
         }
       }

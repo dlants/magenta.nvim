@@ -9,42 +9,21 @@ import {
   withBindings,
   withCode,
   withInlineCode,
-  withExtmark,
   type VDOMNode,
 } from "../tea/view.ts";
 import type { CompletedToolInfo } from "./types.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import { spawn, spawnSync } from "child_process";
+import { spawnSync } from "child_process";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { MagentaOptions } from "../options.ts";
-import { withTimeout } from "../utils/async.ts";
 import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
 import {
   type NvimCwd,
   type UnresolvedFilePath,
   type HomeDir,
-  MAGENTA_TEMP_DIR,
 } from "../utils/files.ts";
-import {
-  isCommandAllowedByConfig,
-  type PermissionCheckResult,
-} from "./bash-parser/permissions.ts";
-import type { ThreadId } from "../chat/types.ts";
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
-import * as fs from "fs";
-import * as path from "path";
-
-const MAX_OUTPUT_TOKENS_FOR_AGENT = 2000;
-const MAX_CHARS_PER_LINE = 800; // When abbreviating, truncate long lines
-const CHARACTERS_PER_TOKEN = 4;
-
-// Regex to match ANSI escape codes (colors, cursor movement, etc.)
-// eslint-disable-next-line no-control-regex
-const ANSI_ESCAPE_REGEX = /\x1B\[[0-9;]*[a-zA-Z]/g;
-
-function stripAnsiCodes(text: string): string {
-  return text.replace(ANSI_ESCAPE_REGEX, "");
-}
+import type { Shell, OutputLine } from "./shell.ts";
 
 let rgAvailable: boolean | undefined;
 let fdAvailable: boolean | undefined;
@@ -124,46 +103,6 @@ export type Input = {
 };
 
 export type ToolRequest = GenericToolRequest<"bash_command", Input>;
-
-type OutputLine = {
-  stream: "stdout" | "stderr";
-  text: string;
-};
-
-type State =
-  | {
-      state: "processing";
-      output: OutputLine[];
-      startTime: number;
-      approved: boolean;
-      childProcess: ReturnType<typeof spawn> | null;
-    }
-  | {
-      state: "pending-user-action";
-    }
-  | {
-      state: "done";
-      output: OutputLine[];
-      exitCode: number | undefined;
-      durationMs: number;
-      result: ProviderToolResult;
-    }
-  | {
-      state: "error";
-      error: string;
-      durationMs?: number;
-    };
-
-export type Msg =
-  | { type: "stdout"; text: string }
-  | { type: "stderr"; text: string }
-  | { type: "exit"; code: number | null; signal: NodeJS.Signals | null }
-  | { type: "error"; error: string }
-  | { type: "request-user-approval" }
-  | { type: "user-approval"; approved: boolean; remember?: boolean }
-  | { type: "terminate" }
-  | { type: "tick" };
-
 export function validateInput(args: { [key: string]: unknown }): Result<Input> {
   if (typeof args.command !== "string") {
     return {
@@ -180,43 +119,157 @@ export function validateInput(args: { [key: string]: unknown }): Result<Input> {
   };
 }
 
-/**
- * Check command permissions using the parser-based commandConfig.
- */
-export function checkCommandPermissions({
-  command,
-  options,
-  rememberedCommands,
-  cwd,
-  homeDir,
-}: {
-  command: string;
-  options: MagentaOptions;
-  rememberedCommands: Set<string>;
-  cwd: NvimCwd;
-  homeDir: HomeDir;
-}): PermissionCheckResult {
-  // First check remembered commands
-  if (rememberedCommands.has(command)) {
-    return { allowed: true };
+type State =
+  | {
+      state: "processing";
+      liveOutput: OutputLine[];
+      startTime: number;
+    }
+  | {
+      state: "done";
+      output: OutputLine[];
+      exitCode: number;
+      signal: NodeJS.Signals | undefined;
+      durationMs: number;
+      logFilePath: string | undefined;
+      result: ProviderToolResult;
+    }
+  | {
+      state: "error";
+      error: string;
+      durationMs?: number;
+    };
+
+const MAX_OUTPUT_TOKENS_FOR_AGENT = 2000;
+const MAX_CHARS_PER_LINE = 800;
+const CHARACTERS_PER_TOKEN = 4;
+
+function abbreviateLine(text: string): string {
+  if (text.length <= MAX_CHARS_PER_LINE) {
+    return text;
+  }
+  const halfLength = Math.floor(MAX_CHARS_PER_LINE / 2) - 3;
+  return (
+    text.substring(0, halfLength) +
+    "..." +
+    text.substring(text.length - halfLength)
+  );
+}
+
+function formatOutputForToolResult(
+  output: OutputLine[],
+  exitCode: number,
+  signal: NodeJS.Signals | undefined,
+  durationMs: number,
+  logFilePath: string | undefined,
+): string {
+  const totalLines = output.length;
+  const totalBudgetChars = MAX_OUTPUT_TOKENS_FOR_AGENT * CHARACTERS_PER_TOKEN;
+
+  let totalRawChars = 0;
+  for (const line of output) {
+    totalRawChars += line.text.length + 1;
   }
 
-  return isCommandAllowedByConfig(command, options.commandConfig, {
-    cwd,
-    homeDir,
-    skillsPaths: options.skillsPaths,
-    filePermissions: options.filePermissions,
-  });
+  if (totalRawChars <= totalBudgetChars) {
+    let formattedOutput = "";
+    let currentStream: "stdout" | "stderr" | null = null;
+
+    for (const line of output) {
+      if (currentStream !== line.stream) {
+        formattedOutput += line.stream === "stdout" ? "stdout:\n" : "stderr:\n";
+        currentStream = line.stream;
+      }
+      formattedOutput += line.text + "\n";
+    }
+
+    if (signal) {
+      formattedOutput += `terminated by signal ${signal} (${durationMs}ms)\n`;
+    } else {
+      formattedOutput += `exit code ${exitCode} (${durationMs}ms)\n`;
+    }
+
+    if (logFilePath) {
+      formattedOutput += `\nFull output (${totalLines} lines): ${logFilePath}`;
+    }
+
+    return formattedOutput;
+  }
+
+  const headBudgetChars = Math.floor(totalBudgetChars * 0.3);
+  const tailBudgetChars = Math.floor(totalBudgetChars * 0.7);
+
+  const headLines: { line: OutputLine; text: string }[] = [];
+  let headChars = 0;
+  for (let i = 0; i < output.length; i++) {
+    const text = abbreviateLine(output[i].text);
+    const lineLength = text.length + 1;
+    if (headChars + lineLength > headBudgetChars && headLines.length > 0) {
+      break;
+    }
+    headLines.push({ line: output[i], text });
+    headChars += lineLength;
+  }
+
+  const tailLines: { line: OutputLine; text: string }[] = [];
+  let tailChars = 0;
+  const tailStartIndex = headLines.length;
+  for (let i = output.length - 1; i >= tailStartIndex; i--) {
+    const text = abbreviateLine(output[i].text);
+    const lineLength = text.length + 1;
+    if (tailChars + lineLength > tailBudgetChars && tailLines.length > 0) {
+      break;
+    }
+    tailLines.unshift({ line: output[i], text });
+    tailChars += lineLength;
+  }
+
+  const firstTailIndex =
+    tailLines.length > 0 ? output.indexOf(tailLines[0].line) : output.length;
+  const omittedCount = firstTailIndex - headLines.length;
+
+  let formattedOutput = "";
+  let currentStream: "stdout" | "stderr" | null = null;
+
+  for (const { line, text } of headLines) {
+    if (currentStream !== line.stream) {
+      formattedOutput += line.stream === "stdout" ? "stdout:\n" : "stderr:\n";
+      currentStream = line.stream;
+    }
+    formattedOutput += text + "\n";
+  }
+
+  if (omittedCount > 0) {
+    formattedOutput += `\n... (${omittedCount} lines omitted) ...\n\n`;
+  }
+
+  for (const { line, text } of tailLines) {
+    if (currentStream !== line.stream) {
+      formattedOutput += line.stream === "stdout" ? "stdout:\n" : "stderr:\n";
+      currentStream = line.stream;
+    }
+    formattedOutput += text + "\n";
+  }
+
+  if (signal) {
+    formattedOutput += `terminated by signal ${signal} (${durationMs}ms)\n`;
+  } else {
+    formattedOutput += `exit code ${exitCode} (${durationMs}ms)\n`;
+  }
+
+  if (logFilePath) {
+    formattedOutput += `\nFull output (${totalLines} lines): ${logFilePath}`;
+  }
+
+  return formattedOutput;
 }
+export type Msg = { type: "tick" } | { type: "terminate" };
 
 export class BashCommandTool implements StaticTool {
   state: State;
   toolName = "bash_command" as const;
   aborted: boolean = false;
   private tickInterval: ReturnType<typeof setInterval> | undefined;
-  private logStream: fs.WriteStream | undefined;
-  private logFilePath: string | undefined;
-  private logCurrentStream: "stdout" | "stderr" | undefined;
 
   constructor(
     public request: ToolRequest,
@@ -226,431 +279,74 @@ export class BashCommandTool implements StaticTool {
       homeDir: HomeDir;
       options: MagentaOptions;
       myDispatch: Dispatch<Msg>;
-      rememberedCommands: Set<string>;
+      shell: Shell;
       getDisplayWidth(): number;
-      threadId: ThreadId;
     },
   ) {
-    // Check permissions synchronously
-    const permissionResult = checkCommandPermissions({
-      command: request.input.command,
-      options: this.context.options,
-      rememberedCommands: this.context.rememberedCommands,
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-    });
+    const liveOutput: OutputLine[] = [];
+    this.state = {
+      state: "processing",
+      liveOutput,
+      startTime: Date.now(),
+    };
 
-    if (permissionResult.allowed) {
-      this.state = {
-        state: "processing",
-        output: [],
-        startTime: Date.now(),
-        approved: true,
-        childProcess: null,
-      };
-      this.initLogFile();
-      // wrap in setTimeout to force a new eventloop frame, to avoid dispatch-in-dispatch
-      setTimeout(() => {
+    this.startTickInterval();
+
+    this.context.shell
+      .execute(request.input.command, {
+        toolRequestId: request.id,
+        onOutput: (line) => {
+          liveOutput.push(line);
+          this.context.myDispatch({ type: "tick" });
+        },
+      })
+      .then((result) => {
         if (this.aborted) return;
-        this.executeCommand().catch((err: Error) => {
-          if (this.aborted) return;
-          this.context.myDispatch({
-            type: "error",
-            error: err.message + "\n" + err.stack,
-          });
-        });
-      });
-    } else {
-      this.state = {
-        state: "pending-user-action",
-      };
-    }
-  }
+        this.stopTickInterval();
 
-  private initLogFile(): void {
-    const logDir = path.join(
-      MAGENTA_TEMP_DIR,
-      "threads",
-      this.context.threadId,
-      "tools",
-      this.request.id,
-    );
-    fs.mkdirSync(logDir, { recursive: true });
-    this.logFilePath = path.join(logDir, "bashCommand.log");
-    this.logStream = fs.createWriteStream(this.logFilePath, { flags: "w" });
-    this.logStream.write(`$ ${this.request.input.command}\n`);
-  }
-
-  private closeLogStream(): void {
-    if (this.logStream) {
-      this.logStream.end();
-      this.logStream = undefined;
-    }
-  }
-
-  private writeToLog(stream: "stdout" | "stderr", text: string): void {
-    if (!this.logStream) return;
-    if (this.logCurrentStream !== stream) {
-      this.logStream.write(`${stream}:\n`);
-      this.logCurrentStream = stream;
-    }
-    this.logStream.write(`${text}\n`);
-  }
-
-  private abbreviateLine(text: string): string {
-    if (text.length <= MAX_CHARS_PER_LINE) {
-      return text;
-    }
-    // Show first half and last portion with ellipsis in middle
-    const halfLength = Math.floor(MAX_CHARS_PER_LINE / 2) - 3; // -3 for "..."
-    return (
-      text.substring(0, halfLength) +
-      "..." +
-      text.substring(text.length - halfLength)
-    );
-  }
-
-  private formatOutputForToolResult(
-    output: OutputLine[],
-    exitCode: number | null,
-    signal: NodeJS.Signals | null,
-    durationMs: number,
-  ): string {
-    const totalLines = output.length;
-    const totalBudgetChars = MAX_OUTPUT_TOKENS_FOR_AGENT * CHARACTERS_PER_TOKEN;
-
-    // First, calculate total raw output size
-    let totalRawChars = 0;
-    for (const line of output) {
-      totalRawChars += line.text.length + 1; // +1 for newline
-    }
-
-    // If under budget, return as-is without any abbreviation
-    if (totalRawChars <= totalBudgetChars) {
-      let formattedOutput = "";
-      let currentStream: "stdout" | "stderr" | null = null;
-
-      for (const line of output) {
-        if (currentStream !== line.stream) {
-          formattedOutput +=
-            line.stream === "stdout" ? "stdout:\n" : "stderr:\n";
-          currentStream = line.stream;
-        }
-        formattedOutput += line.text + "\n";
-      }
-
-      if (signal) {
-        formattedOutput += `terminated by signal ${signal} (${durationMs}ms)\n`;
-      } else {
-        formattedOutput += `exit code ${exitCode} (${durationMs}ms)\n`;
-      }
-
-      if (this.logFilePath) {
-        formattedOutput += `\nFull output (${totalLines} lines): ${this.logFilePath}`;
-      }
-
-      return formattedOutput;
-    }
-
-    // Over budget - need to abbreviate lines and omit from the middle
-    const headBudgetChars = Math.floor(totalBudgetChars * 0.3);
-    const tailBudgetChars = Math.floor(totalBudgetChars * 0.7);
-
-    // Collect lines from the beginning (30% budget)
-    const headLines: { line: OutputLine; text: string }[] = [];
-    let headChars = 0;
-    for (let i = 0; i < output.length; i++) {
-      const text = this.abbreviateLine(output[i].text);
-      const lineLength = text.length + 1; // +1 for newline
-      if (headChars + lineLength > headBudgetChars && headLines.length > 0) {
-        break;
-      }
-      headLines.push({ line: output[i], text });
-      headChars += lineLength;
-    }
-
-    // Collect lines from the end (70% budget), starting after head lines
-    const tailLines: { line: OutputLine; text: string }[] = [];
-    let tailChars = 0;
-    const tailStartIndex = headLines.length;
-    for (let i = output.length - 1; i >= tailStartIndex; i--) {
-      const text = this.abbreviateLine(output[i].text);
-      const lineLength = text.length + 1;
-      if (tailChars + lineLength > tailBudgetChars && tailLines.length > 0) {
-        break;
-      }
-      tailLines.unshift({ line: output[i], text });
-      tailChars += lineLength;
-    }
-
-    // Calculate omitted lines
-    const firstTailIndex =
-      tailLines.length > 0 ? output.indexOf(tailLines[0].line) : output.length;
-    const omittedCount = firstTailIndex - headLines.length;
-
-    // Build formatted output
-    let formattedOutput = "";
-    let currentStream: "stdout" | "stderr" | null = null;
-
-    // Add head lines
-    for (const { line, text } of headLines) {
-      if (currentStream !== line.stream) {
-        formattedOutput += line.stream === "stdout" ? "stdout:\n" : "stderr:\n";
-        currentStream = line.stream;
-      }
-      formattedOutput += text + "\n";
-    }
-
-    // Add omission marker if needed
-    if (omittedCount > 0) {
-      formattedOutput += `\n... (${omittedCount} lines omitted) ...\n\n`;
-    }
-
-    // Add tail lines
-    for (const { line, text } of tailLines) {
-      if (currentStream !== line.stream) {
-        formattedOutput += line.stream === "stdout" ? "stdout:\n" : "stderr:\n";
-        currentStream = line.stream;
-      }
-      formattedOutput += text + "\n";
-    }
-
-    if (signal) {
-      formattedOutput += `terminated by signal ${signal} (${durationMs}ms)\n`;
-    } else {
-      formattedOutput += `exit code ${exitCode} (${durationMs}ms)\n`;
-    }
-
-    // Always include log file reference when we've abbreviated
-    if (this.logFilePath) {
-      formattedOutput += `\nFull output (${totalLines} lines): ${this.logFilePath}`;
-    }
-
-    return formattedOutput;
-  }
-
-  update(msg: Msg) {
-    if (this.state.state === "done" || this.state.state === "error") {
-      return;
-    }
-    if (this.aborted) {
-      return;
-    }
-
-    switch (msg.type) {
-      case "request-user-approval": {
-        if (this.state.state !== "pending-user-action") {
-          return;
-        }
-        return;
-      }
-
-      case "user-approval": {
-        if (this.state.state !== "pending-user-action") {
-          return;
-        }
-
-        if (msg.approved) {
-          this.state = {
-            state: "processing",
-            output: [],
-            startTime: Date.now(),
-            approved: true,
-            childProcess: null,
-          };
-          this.initLogFile();
-
-          // wrap in setTimeout to force a new eventloop frame to avoid dispatch-in-dispatch
-          setTimeout(() => {
-            if (this.aborted) return;
-            this.executeCommand().catch((err: Error) => {
-              if (this.aborted) return;
-              this.context.myDispatch({
-                type: "error",
-                error: err.message + "\n" + err.stack,
-              });
-            });
-          });
-          return;
-        } else {
-          const errorMessage = this.aborted
-            ? `Request was aborted by user.`
-            : `The user did not allow running this command.`;
-          this.state = {
-            state: "done",
-            exitCode: 1,
-            durationMs: 0,
-            output: [],
-            result: {
-              type: "tool_result",
-              id: this.request.id,
-              result: {
-                status: "error",
-                error: errorMessage,
-              },
-            },
-          };
-        }
-        return;
-      }
-
-      case "stdout": {
-        if (this.state.state !== "processing") {
-          return;
-        }
-
-        if (msg.text.trim() !== "") {
-          this.state.output.push({
-            stream: "stdout",
-            text: msg.text,
-          });
-          this.writeToLog("stdout", msg.text);
-        }
-        return;
-      }
-
-      case "stderr": {
-        if (this.state.state !== "processing") {
-          return;
-        }
-
-        if (msg.text.trim() !== "") {
-          this.state.output.push({
-            stream: "stderr",
-            text: msg.text,
-          });
-          this.writeToLog("stderr", msg.text);
-        }
-        return;
-      }
-
-      case "exit": {
-        if (this.state.state !== "processing") {
-          return;
-        }
-
-        const durationMs = Date.now() - this.state.startTime;
-
-        if (msg.signal) {
-          this.logStream?.write(`terminated by signal ${msg.signal}\n`);
-        } else {
-          this.logStream?.write(`exit code ${msg.code}\n`);
-        }
-        this.closeLogStream();
-
-        const formattedOutput = this.formatOutputForToolResult(
-          this.state.output,
-          msg.code,
-          msg.signal,
-          durationMs,
+        const formattedOutput = formatOutputForToolResult(
+          result.output,
+          result.exitCode,
+          result.signal,
+          result.durationMs,
+          result.logFilePath,
         );
-
-        // If aborted, include that context in the result
-        const resultText = this.aborted
-          ? `Request was aborted by user.\n${formattedOutput}`
-          : formattedOutput;
 
         this.state = {
           state: "done",
-          exitCode: msg.code != undefined ? msg.code : -1,
-          durationMs,
-          output: this.state.output,
+          output: result.output,
+          exitCode: result.exitCode,
+          signal: result.signal,
+          durationMs: result.durationMs,
+          logFilePath: result.logFilePath,
           result: {
             type: "tool_result",
             id: this.request.id,
             result: {
               status: "ok",
-              value: [{ type: "text", text: resultText }],
+              value: [{ type: "text", text: formattedOutput }],
             },
           },
         };
-        return;
-      }
+        // trigger re-render
+        this.context.myDispatch({ type: "tick" });
+      })
+      .catch((error: Error) => {
+        if (this.aborted) return;
+        this.stopTickInterval();
 
-      case "error": {
-        const durationMs =
-          this.state.state === "processing"
-            ? Date.now() - this.state.startTime
-            : undefined;
-        this.closeLogStream();
-        this.state =
-          durationMs !== undefined
-            ? {
-                state: "error",
-                error: msg.error,
-                durationMs,
-              }
-            : {
-                state: "error",
-                error: msg.error,
-              };
-        return;
-      }
-
-      case "terminate": {
-        this.terminate();
-        return;
-      }
-
-      case "tick": {
-        // Just triggers a re-render to update the timer display
-        return;
-      }
-
-      default:
-        assertUnreachable(msg);
-    }
-  }
-
-  private terminate() {
-    if (this.state.state === "processing" && this.state.childProcess) {
-      const childProcess = this.state.childProcess;
-      const pid = childProcess.pid;
-
-      // Kill the entire process group (negative PID) since we spawn with detached: true
-      // This ensures all child processes are also terminated
-      if (pid) {
-        try {
-          process.kill(-pid, "SIGTERM");
-        } catch {
-          // Process group may already be dead
-          childProcess.kill("SIGTERM");
-        }
-      } else {
-        childProcess.kill("SIGTERM");
-      }
-
-      this.state.output.push({
-        stream: "stderr",
-        text: "Process terminated by user with SIGTERM",
+        this.state = {
+          state: "error",
+          error: error.message,
+          durationMs:
+            Date.now() -
+            (this.state.state === "processing"
+              ? this.state.startTime
+              : Date.now()),
+        };
+        // trigger re-render
+        this.context.myDispatch({ type: "tick" });
       });
-      this.writeToLog("stderr", "Process terminated by user with SIGTERM");
-
-      // Escalate to SIGKILL after 1 second if process hasn't exited yet
-      setTimeout(() => {
-        // If still in processing state, the process hasn't exited from SIGTERM
-        if (this.state.state === "processing") {
-          if (pid) {
-            try {
-              process.kill(-pid, "SIGKILL");
-            } catch {
-              // Process group may already be dead
-              childProcess.kill("SIGKILL");
-            }
-          } else {
-            childProcess.kill("SIGKILL");
-          }
-          this.state.output.push({
-            stream: "stderr",
-            text: "Process killed with SIGKILL after 1s timeout",
-          });
-          this.writeToLog(
-            "stderr",
-            "Process killed with SIGKILL after 1s timeout",
-          );
-        }
-      }, 1000);
-    }
   }
 
   private startTickInterval() {
@@ -666,77 +362,15 @@ export class BashCommandTool implements StaticTool {
     }
   }
 
-  async executeCommand(): Promise<void> {
-    const { command } = this.request.input;
-
-    let childProcess: ReturnType<typeof spawn> | null = null;
-    this.startTickInterval();
-
-    try {
-      await withTimeout(
-        new Promise<void>((resolve, reject) => {
-          childProcess = spawn("bash", ["-c", command], {
-            stdio: ["ignore", "pipe", "pipe"],
-            cwd: this.context.cwd,
-            env: process.env,
-            detached: true,
-          });
-
-          if (this.state.state === "processing") {
-            this.state.childProcess = childProcess;
-          }
-
-          childProcess.stdout?.on("data", (data: Buffer) => {
-            const text = stripAnsiCodes(data.toString());
-            const lines = text.split("\n");
-            for (const line of lines) {
-              if (line.trim()) {
-                this.context.myDispatch({ type: "stdout", text: line });
-              }
-            }
-          });
-
-          childProcess.stderr?.on("data", (data: Buffer) => {
-            const text = stripAnsiCodes(data.toString());
-            const lines = text.split("\n");
-            for (const line of lines) {
-              if (line.trim()) {
-                this.context.myDispatch({ type: "stderr", text: line });
-              }
-            }
-          });
-
-          childProcess.on(
-            "close",
-            (code: number | null, signal: NodeJS.Signals | null) => {
-              this.context.myDispatch({ type: "exit", code, signal });
-              resolve();
-            },
-          );
-
-          childProcess.on("error", (error: Error) => {
-            reject(error);
-          });
-        }),
-        300000,
-      );
-    } catch (error) {
-      if (this.state.state == "processing" && this.state.childProcess) {
-        this.state.childProcess.kill();
-      }
-
-      const errorMessage =
-        error instanceof Error
-          ? error.message + "\n" + error.stack
-          : String(error);
-
-      this.context.myDispatch({
-        type: "stderr",
-        text: errorMessage,
-      });
-      this.context.myDispatch({ type: "exit", code: 1, signal: null });
-    } finally {
-      this.stopTickInterval();
+  update(msg: Msg) {
+    switch (msg.type) {
+      case "tick":
+        return;
+      case "terminate":
+        this.context.shell.terminate();
+        return;
+      default:
+        assertUnreachable(msg);
     }
   }
 
@@ -745,7 +379,7 @@ export class BashCommandTool implements StaticTool {
   }
 
   isPendingUserAction(): boolean {
-    return this.state.state === "pending-user-action";
+    return false;
   }
 
   abort(): ProviderToolResult {
@@ -755,13 +389,7 @@ export class BashCommandTool implements StaticTool {
 
     this.aborted = true;
     this.stopTickInterval();
-
-    if (this.state.state === "processing" && this.state.childProcess) {
-      // Kill the process but don't wait for exit handler
-      this.terminate();
-    }
-
-    this.closeLogStream();
+    this.context.shell.terminate();
 
     const result: ProviderToolResult = {
       type: "tool_result",
@@ -775,7 +403,9 @@ export class BashCommandTool implements StaticTool {
     this.state = {
       state: "done",
       exitCode: -1,
+      signal: undefined,
       durationMs: 0,
+      logFilePath: undefined,
       output: [],
       result,
     };
@@ -783,36 +413,12 @@ export class BashCommandTool implements StaticTool {
     return result;
   }
 
-  formatOutputPreview(output: OutputLine[]): string {
-    let formattedOutput = "";
-    let currentStream: "stdout" | "stderr" | null = null;
-    const lastTenLines = output.slice(-10);
-
-    for (const line of lastTenLines) {
-      // Add stream marker only when switching or at the beginning
-      if (currentStream !== line.stream) {
-        formattedOutput += line.stream === "stdout" ? "stdout:\n" : "stderr:\n";
-        currentStream = line.stream;
-      }
-      // Truncate line to WIDTH - 5 characters for display only
-      const displayWidth = this.context.getDisplayWidth() - 5;
-      const displayText =
-        line.text.length > displayWidth
-          ? line.text.substring(0, displayWidth) + "..."
-          : line.text;
-      formattedOutput += displayText + "\n";
-    }
-
-    return formattedOutput;
-  }
-
   getToolResult(): ProviderToolResult {
     const { state } = this;
 
     switch (state.state) {
-      case "done": {
+      case "done":
         return state.result;
-      }
 
       case "error": {
         const durationStr =
@@ -826,21 +432,6 @@ export class BashCommandTool implements StaticTool {
           },
         };
       }
-
-      case "pending-user-action":
-        return {
-          type: "tool_result",
-          id: this.request.id,
-          result: {
-            status: "ok",
-            value: [
-              {
-                type: "text",
-                text: `Waiting for user approval to run this command.`,
-              },
-            ],
-          },
-        };
 
       case "processing":
         return {
@@ -857,47 +448,29 @@ export class BashCommandTool implements StaticTool {
     }
   }
 
+  formatOutputPreview(output: OutputLine[]): string {
+    let formattedOutput = "";
+    let currentStream: "stdout" | "stderr" | null = null;
+    const lastTenLines = output.slice(-10);
+
+    for (const line of lastTenLines) {
+      if (currentStream !== line.stream) {
+        formattedOutput += line.stream === "stdout" ? "stdout:\n" : "stderr:\n";
+        currentStream = line.stream;
+      }
+      const displayWidth = this.context.getDisplayWidth() - 5;
+      const displayText =
+        line.text.length > displayWidth
+          ? line.text.substring(0, displayWidth) + "..."
+          : line.text;
+      formattedOutput += displayText + "\n";
+    }
+
+    return formattedOutput;
+  }
+
   renderSummary() {
     switch (this.state.state) {
-      case "pending-user-action":
-        return d`⚡⏳ May I run command ${withInlineCode(d`\`${this.request.input.command}\``)}?
-${withBindings(
-  withExtmark(d`> NO`, {
-    hl_group: ["ErrorMsg", "@markup.strong.markdown"],
-  }),
-  {
-    "<CR>": () =>
-      this.context.myDispatch({
-        type: "user-approval",
-        approved: false,
-      }),
-  },
-)}
-${withBindings(
-  withExtmark(d`> YES`, {
-    hl_group: ["String", "@markup.strong.markdown"],
-  }),
-  {
-    "<CR>": () =>
-      this.context.myDispatch({
-        type: "user-approval",
-        approved: true,
-      }),
-  },
-)}
-${withBindings(
-  withExtmark(d`> ALWAYS`, {
-    hl_group: ["WarningMsg", "@markup.strong.markdown"],
-  }),
-  {
-    "<CR>": () =>
-      this.context.myDispatch({
-        type: "user-approval",
-        approved: true,
-        remember: true,
-      }),
-  },
-)}`;
       case "processing": {
         const runningTime = Math.floor(
           (Date.now() - this.state.startTime) / 1000,
@@ -918,12 +491,11 @@ ${withBindings(
         assertUnreachable(this.state);
     }
   }
+
   renderPreview() {
     switch (this.state.state) {
-      case "pending-user-action":
-        return d``;
       case "processing": {
-        const formattedOutput = this.formatOutputPreview(this.state.output);
+        const formattedOutput = this.formatOutputPreview(this.state.liveOutput);
         return formattedOutput
           ? withCode(
               d`\`\`\`
@@ -958,12 +530,10 @@ ${formattedOutput}
     };
 
     switch (this.state.state) {
-      case "pending-user-action":
-        return d`command: ${withInlineCode(d`\`${this.request.input.command}\``)}`;
       case "processing": {
         return renderOutputDetail(
-          this.state.output,
-          this.logFilePath,
+          this.state.liveOutput,
+          undefined,
           renderContext,
         );
       }

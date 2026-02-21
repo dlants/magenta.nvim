@@ -970,6 +970,15 @@ ${threadViews.map((view) => d`${view}\n`)}`;
     }
   }
 
+  threadHasPendingApprovals(threadId: ThreadId): boolean {
+    if (this.getThreadPendingApprovalTools(threadId).length > 0) return true;
+    const wrapper = this.threadWrappers[threadId];
+    if (!wrapper || wrapper.state !== "initialized") return false;
+    return (
+      (wrapper.thread.permissionShell?.getPendingPermissions().size ?? 0) > 0 ||
+      (wrapper.thread.permissionFileIO?.getPendingPermissions().size ?? 0) > 0
+    );
+  }
   getThreadPendingApprovalTools(threadId: ThreadId): (Tool | StaticTool)[] {
     const wrapper = this.threadWrappers[threadId];
     if (!wrapper || wrapper.state !== "initialized") return [];
@@ -1035,13 +1044,8 @@ ${threadViews.map((view) => d`${view}\n`)}`;
             }
 
             if (mode.type === "tool_use") {
-              let hasPendingApproval = false;
-              for (const [, tool] of mode.activeTools) {
-                if (tool.isPendingUserAction()) {
-                  hasPendingApproval = true;
-                  break;
-                }
-              }
+              const hasPendingApproval =
+                this.threadHasPendingApprovals(threadId);
               return {
                 type: "running" as const,
                 activity: hasPendingApproval

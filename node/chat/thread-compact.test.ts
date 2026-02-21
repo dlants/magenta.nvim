@@ -87,13 +87,8 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
       "Prioritize retaining information relevant to this next prompt",
     );
 
-    // Find the temp file path from the subagent's user message
-    const tempFileMatch = textContent.match(/The file is at: ([^\n]+)/);
-    expect(tempFileMatch).toBeDefined();
-    const tempFilePath = tempFileMatch![1];
-
-    // Have the compact subagent use the real EDL tool to edit the temp file
-    const edlScript = `file \`${tempFilePath}\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked basic arithmetic: 2+2=4, 3+3=6\nCOMPACT_SUMMARY`;
+    // Have the compact subagent use the EDL tool to edit /summary.md in memory
+    const edlScript = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked basic arithmetic: 2+2=4, 3+3=6\nCOMPACT_SUMMARY`;
 
     compactSubagentStream.respond({
       stopReason: "tool_use",
@@ -234,14 +229,43 @@ it("compact flow without continuation: @compact with no next prompt", async () =
       message: "compact subagent stream",
     });
 
+    // The compact subagent must write to /summary.md via EDL
+    const edlScript = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nGreeting conversation: user said hello, assistant responded.\nCOMPACT_SUMMARY`;
+
     compactStream.respond({
+      stopReason: "tool_use",
+      text: "I'll compact this conversation.",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "edl_1" as ToolRequestId,
+            toolName: "edl" as ToolName,
+            input: { script: edlScript },
+          },
+        },
+      ],
+    });
+
+    const afterEdlStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact subagent after EDL",
+    });
+    afterEdlStream.respond({
       stopReason: "end_turn",
-      text: "Compacted.",
+      text: "Done compacting.",
       toolRequests: [],
     });
 
-    // Without a next prompt, the thread should just stop after compaction
-    // No continuation stream should be spawned
+    // Without a next prompt, the thread sends "Please continue from where you left off."
+    const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "after compact continuation",
+    });
+    afterCompactStream.respond({
+      stopReason: "end_turn",
+      text: "Ready to continue!",
+      toolRequests: [],
+    });
+
     await pollUntil(
       () => {
         const agentStatus = thread.agent.getState().status;
@@ -255,10 +279,9 @@ it("compact flow without continuation: @compact with no next prompt", async () =
       { timeout: 2000, message: "thread should stop after compaction" },
     );
 
-    // Verify messages have been compacted
+    // Verify messages have been compacted - fresh agent with summary + continuation
     const messages = thread.getMessages();
-    // Should have the summary as an assistant message
-    expect(messages.length).toBeLessThanOrEqual(2);
+    expect(messages.length).toBeLessThanOrEqual(4);
   });
 });
 
@@ -320,12 +343,8 @@ it("compact flow does not process @file commands in subagent or summary", async 
     const subagentText = textBlocks[0].text;
     expect(subagentText).toContain("@file:poem.txt");
 
-    // Have the compact subagent edit the temp file with a summary that also contains @file
-    const tempFileMatch = subagentText.match(/The file is at: ([^\n]+)/);
-    expect(tempFileMatch).toBeDefined();
-    const tempFilePath = tempFileMatch![1];
-
-    const edlScript = `file \`${tempFilePath}\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser discussed @file:poem.txt usage. Assistant explained the command.\nCOMPACT_SUMMARY`;
+    // Have the compact subagent edit /summary.md with a summary that also contains @file
+    const edlScript = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser discussed @file:poem.txt usage. Assistant explained the command.\nCOMPACT_SUMMARY`;
 
     compactStream.respond({
       stopReason: "tool_use",
@@ -466,12 +485,8 @@ it("forks a thread with @compact to clone and compact in one step", async () => 
       .join("");
     expect(textContent).toContain("2+2 equals 4");
 
-    // Use real EDL tool to edit the temp file
-    const tempFileMatch2 = textContent.match(/The file is at: ([^\n]+)/);
-    expect(tempFileMatch2).toBeDefined();
-    const tempFilePath2 = tempFileMatch2![1];
-
-    const edlScript2 = `file \`${tempFilePath2}\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nArithmetic conversation: 2+2=4, 3+3=6\nCOMPACT_SUMMARY`;
+    // Use real EDL tool to edit /summary.md in memory
+    const edlScript2 = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nArithmetic conversation: 2+2=4, 3+3=6\nCOMPACT_SUMMARY`;
 
     compactSubagentStream.respond({
       stopReason: "tool_use",
@@ -597,11 +612,7 @@ it("auto-compact triggers when inputTokenCount exceeds 80% of context window", a
       .join("");
     expect(textContent).toContain("2+2 equals 4");
 
-    const tempFileMatch = textContent.match(/The file is at: ([^\n]+)/);
-    expect(tempFileMatch).toBeDefined();
-    const tempFilePath = tempFileMatch![1];
-
-    const edlScript = `file \`${tempFilePath}\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked basic arithmetic: 2+2=4\nCOMPACT_SUMMARY`;
+    const edlScript = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked basic arithmetic: 2+2=4\nCOMPACT_SUMMARY`;
 
     compactSubagentStream.respond({
       stopReason: "tool_use",
@@ -729,25 +740,12 @@ it("auto-compact does not trigger on compact threads", async () => {
     expect(compactStream).toBeDefined();
 
     // Verify a compact thread was spawned
-    const chat = driver.magenta.chat;
-    const compactWrapper = Object.values(chat.threadWrappers).find(
-      (w) =>
-        w.state === "initialized" && w.thread.state.threadType === "compact",
-    );
-    expect(compactWrapper).toBeDefined();
+    // Verify the thread is in compacting mode with an internal compact agent
+    expect(originalThread.state.mode.type).toBe("compacting");
 
     // Clean up: respond to the compact subagent
-    const subagentMessages = compactStream.getProviderMessages();
-    const userMsg = subagentMessages.find((m) => m.role === "user");
-    const textContent = userMsg!.content
-      .filter(
-        (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
-      )
-      .map((c) => c.text)
-      .join("");
-    const tempFileMatch = textContent.match(/The file is at: ([^\n]+)/);
-    const tempFilePath = tempFileMatch![1];
-    const edlScript = `file \`${tempFilePath}\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nHello conversation\nCOMPACT_SUMMARY`;
+
+    const edlScript = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nHello conversation\nCOMPACT_SUMMARY`;
 
     compactStream.respond({
       stopReason: "tool_use",

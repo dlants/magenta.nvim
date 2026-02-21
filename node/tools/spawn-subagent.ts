@@ -118,10 +118,7 @@ export class SpawnSubagentTool implements StaticTool {
 
   isPendingUserAction(): boolean {
     if (this.state.state !== "waiting-for-subagent") return false;
-    return (
-      this.context.chat.getThreadPendingApprovalTools(this.state.threadId)
-        .length > 0
-    );
+    return this.context.chat.threadHasPendingApprovals(this.state.threadId);
   }
 
   abort(): ProviderToolResult {

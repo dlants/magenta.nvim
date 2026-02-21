@@ -128,9 +128,7 @@ ${results
   isPendingUserAction(): boolean {
     if (this.state.state !== "waiting") return false;
     for (const threadId of this.request.input.threadIds) {
-      if (
-        this.context.chat.getThreadPendingApprovalTools(threadId).length > 0
-      ) {
+      if (this.context.chat.threadHasPendingApprovals(threadId)) {
         return true;
       }
     }

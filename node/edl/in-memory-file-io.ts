@@ -29,6 +29,10 @@ export class InMemoryFileIO implements FileIO {
     return Promise.resolve();
   }
 
+  writeFileSync(path: string, content: string) {
+    this.files.set(path, content);
+  }
+
   fileExists(path: string): Promise<boolean> {
     return Promise.resolve(this.files.has(path));
   }

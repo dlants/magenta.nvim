@@ -301,4 +301,5 @@ export interface AgentOptions {
   tools: ProviderToolSpec[];
   thinking?: { enabled: boolean; budgetTokens?: number };
   reasoning?: { effort?: "low" | "medium" | "high"; summary?: string };
+  skipPostFlightTokenCount?: boolean;
 }
