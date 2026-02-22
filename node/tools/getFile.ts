@@ -1,13 +1,6 @@
-import { getBufferIfOpen } from "../utils/buffers.ts";
-import fs from "fs";
+import type { FileIO } from "../capabilities/file-io.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import {
-  d,
-  withBindings,
-  withInlineCode,
-  withExtmark,
-  type VDOMNode,
-} from "../tea/view.ts";
+
 import { type Result } from "../utils/result.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import type {
@@ -17,7 +10,6 @@ import type {
 import type { Dispatch } from "../tea/tea.ts";
 import {
   resolveFilePath,
-  displayPath,
   type UnresolvedFilePath,
   detectFileType,
   validateFileSize,
@@ -25,12 +17,7 @@ import {
   type NvimCwd,
   type HomeDir,
 } from "../utils/files.ts";
-import type {
-  StaticTool,
-  ToolName,
-  GenericToolRequest,
-  DisplayContext,
-} from "./types.ts";
+import type { ToolName, GenericToolRequest, ToolInvocation } from "./types.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
 import type { ContextManager } from "../context/context-manager.ts";
 import type { ProviderToolResultContent } from "../providers/provider-types.ts";
@@ -38,11 +25,8 @@ import {
   extractPDFPage,
   getSummaryAsProviderContent,
 } from "../utils/pdf-pages.ts";
-import type { MagentaOptions } from "../options.ts";
-import type { Row0Indexed } from "../nvim/window.ts";
-import { canReadFile } from "./permissions.ts";
+
 import { summarizeFile, formatSummary } from "../utils/file-summary.ts";
-import type { CompletedToolInfo } from "./types.ts";
 
 export type ToolRequest = GenericToolRequest<"get_file", Input>;
 
@@ -50,780 +34,411 @@ const MAX_FILE_CHARACTERS = 40000;
 const MAX_LINE_CHARACTERS = 2000;
 const DEFAULT_LINES_FOR_LARGE_FILE = 100;
 
-export type State =
-  | {
-      state: "pending";
-    }
-  | {
-      state: "processing";
-      approved: boolean;
-    }
-  | {
-      state: "pending-user-action";
-    }
-  | {
-      state: "done";
-      result: ProviderToolResult;
+function processTextContentStandalone(
+  lines: string[],
+  startIndex: number,
+  requestedNumLines: number | undefined,
+  summaryText?: string,
+): { text: string; isComplete: boolean; hasAbridgedLines: boolean } {
+  const totalLines = lines.length;
+  const totalChars = lines.reduce((sum, line) => sum + line.length + 1, 0);
+
+  const isLargeFile =
+    requestedNumLines === undefined && totalChars > MAX_FILE_CHARACTERS;
+
+  if (isLargeFile && summaryText) {
+    return {
+      text: summaryText,
+      isComplete: false,
+      hasAbridgedLines: false,
     };
+  }
 
-export type Msg =
-  | {
-      type: "finish";
-      result: Result<ProviderToolResultContent[]>;
+  let hasAbridgedLines = false;
+  const outputLines: string[] = [];
+
+  let effectiveNumLines: number | undefined;
+  if (isLargeFile) {
+    effectiveNumLines = DEFAULT_LINES_FOR_LARGE_FILE;
+  } else {
+    effectiveNumLines = requestedNumLines;
+  }
+
+  const maxLinesToProcess =
+    effectiveNumLines !== undefined
+      ? Math.min(startIndex + effectiveNumLines, totalLines)
+      : totalLines;
+
+  for (let i = startIndex; i < maxLinesToProcess; i++) {
+    let line = lines[i];
+
+    if (line.length > MAX_LINE_CHARACTERS) {
+      const halfMax = Math.floor(MAX_LINE_CHARACTERS / 2);
+      line = `${line.slice(0, halfMax)}... [${line.length - MAX_LINE_CHARACTERS} chars omitted] ...${line.slice(-halfMax)}`;
+      hasAbridgedLines = true;
     }
-  | {
-      type: "automatic-approval";
+
+    outputLines.push(line);
+  }
+
+  const endIndex = startIndex + outputLines.length;
+  const isComplete =
+    startIndex === 0 && endIndex === totalLines && !hasAbridgedLines;
+
+  let text = outputLines.join("\n");
+
+  if (!isComplete || startIndex > 0 || endIndex < totalLines) {
+    const header = `[Lines ${startIndex + 1}-${endIndex} of ${totalLines}]${hasAbridgedLines ? " (some lines abridged)" : ""}\n\n`;
+    text = header + text;
+
+    if (endIndex < totalLines) {
+      text += `\n\n[${totalLines - endIndex} more lines not shown. Use startLine=${endIndex + 1} to continue.]`;
     }
-  | {
-      type: "request-user-approval";
-    }
-  | {
-      type: "user-approval";
-      approved: boolean;
-    };
+  }
 
-export class GetFileTool implements StaticTool {
-  state: State;
-  toolName = "get_file" as const;
-  aborted: boolean = false;
+  return { text, isComplete, hasAbridgedLines };
+}
 
-  constructor(
-    public request: ToolRequest,
-    public context: {
-      nvim: Nvim;
-      cwd: NvimCwd;
-      homeDir: HomeDir;
-      contextManager: ContextManager;
-      threadDispatch: Dispatch<ThreadMsg>;
-      myDispatch: Dispatch<Msg>;
-      options: MagentaOptions;
-    },
-  ) {
-    this.state = {
-      state: "pending",
-    };
+export function execute(
+  request: ToolRequest,
+  context: {
+    nvim: Nvim;
+    cwd: NvimCwd;
+    homeDir: HomeDir;
+    fileIO: FileIO;
+    contextManager: ContextManager;
+    threadDispatch: Dispatch<ThreadMsg>;
+  },
+): ToolInvocation {
+  let aborted = false;
 
-    // wrap in setTimeout to force new eventloop frame, to avoid dispatch-in-dispatch
-    setTimeout(() => {
-      this.initReadFile().catch((error: Error) =>
-        this.context.myDispatch({
-          type: "finish",
-          result: {
-            status: "error",
-            error: error.message + "\n" + error.stack,
-          },
-        }),
+  const abortResult: ProviderToolResult = {
+    type: "tool_result",
+    id: request.id,
+    result: { status: "error", error: "Request was aborted by the user." },
+  };
+
+  const promise = (async (): Promise<ProviderToolResult> => {
+    try {
+      const filePath = request.input.filePath;
+      const absFilePath = resolveFilePath(
+        context.cwd,
+        filePath,
+        context.homeDir,
       );
-    });
-  }
 
-  isDone(): boolean {
-    return this.state.state === "done";
-  }
+      const hasLineParams =
+        request.input.startLine !== undefined ||
+        request.input.numLines !== undefined;
 
-  isPendingUserAction(): boolean {
-    return this.state.state === "pending-user-action";
-  }
-
-  abort(): ProviderToolResult {
-    if (this.state.state === "done") {
-      return this.state.result;
-    }
-
-    this.aborted = true;
-
-    const result: ProviderToolResult = {
-      type: "tool_result",
-      id: this.request.id,
-      result: {
-        status: "error",
-        error: "Request was aborted by the user.",
-      },
-    };
-
-    this.state = {
-      state: "done",
-      result,
-    };
-
-    return result;
-  }
-
-  update(msg: Msg) {
-    switch (msg.type) {
-      case "finish":
-        this.state = {
-          state: "done",
+      if (
+        context.contextManager.files[absFilePath] &&
+        !request.input.force &&
+        request.input.pdfPage === undefined &&
+        !hasLineParams
+      ) {
+        return {
+          type: "tool_result",
+          id: request.id,
           result: {
-            type: "tool_result",
-            id: this.request.id,
-            result: msg.result,
+            status: "ok",
+            value: [
+              {
+                type: "text",
+                text: `This file is already part of the thread context. \
+You already have the most up-to-date information about the contents of this file.`,
+              },
+            ],
           },
         };
-
-        return;
-      case "request-user-approval":
-        if (this.state.state == "pending") {
-          this.state = {
-            state: "pending-user-action",
-          };
-        }
-        return;
-      case "user-approval": {
-        if (this.state.state === "pending-user-action") {
-          if (msg.approved) {
-            this.state = {
-              state: "processing",
-              approved: true,
-            };
-
-            // wrap in setTimeout to force a new eventloop frame, to avoid dispatch-in-dispatch
-            setTimeout(() => {
-              this.readFile().catch((error: Error) =>
-                this.context.myDispatch({
-                  type: "finish",
-                  result: {
-                    status: "error",
-                    error: error.message + "\n" + error.stack,
-                  },
-                }),
-              );
-            });
-            return;
-          } else {
-            this.state = {
-              state: "done",
-              result: {
-                type: "tool_result",
-                id: this.request.id,
-                result: {
-                  status: "error",
-                  error: `The user did not allow the reading of this file.`,
-                },
-              },
-            };
-            return;
-          }
-        }
-        return;
       }
 
-      case "automatic-approval": {
-        if (this.state.state == "pending") {
-          this.state = {
-            state: "processing",
-            approved: true,
-          };
+      const fileTypeInfo = await detectFileType(absFilePath);
+      if (aborted) return abortResult;
 
-          // wrap in setTimeout to force a new eventloop frame, to avoid dispatch-in-dispatch
-          setTimeout(() => {
-            this.readFile().catch((error: Error) =>
-              this.context.myDispatch({
-                type: "finish",
-                result: {
-                  status: "error",
-                  error: error.message + "\n" + error.stack,
-                },
-              }),
-            );
-          });
-        }
-        return;
-      }
-      default:
-        assertUnreachable(msg);
-    }
-  }
-
-  async initReadFile(): Promise<void> {
-    if (this.aborted) return;
-
-    const filePath = this.request.input.filePath;
-    const absFilePath = resolveFilePath(
-      this.context.cwd,
-      filePath,
-      this.context.homeDir,
-    );
-
-    const hasLineParams =
-      this.request.input.startLine !== undefined ||
-      this.request.input.numLines !== undefined;
-
-    if (
-      this.context.contextManager.files[absFilePath] &&
-      !this.request.input.force &&
-      this.request.input.pdfPage === undefined &&
-      !hasLineParams
-    ) {
-      this.context.myDispatch({
-        type: "finish",
-        result: {
-          status: "ok",
-          value: [
-            {
-              type: "text",
-              text: `This file is already part of the thread context. \
-You already have the most up-to-date information about the contents of this file.`,
-            },
-          ],
-        },
-      });
-      return;
-    }
-
-    if (this.state.state === "pending") {
-      const allowed = await canReadFile(absFilePath, this.context);
-
-      if (allowed) {
-        this.context.myDispatch({
-          type: "automatic-approval",
-        });
-      } else {
-        this.context.myDispatch({ type: "request-user-approval" });
-      }
-    }
-  }
-
-  async readFile() {
-    if (this.aborted) return;
-
-    const filePath = this.request.input.filePath;
-    const absFilePath = resolveFilePath(
-      this.context.cwd,
-      filePath,
-      this.context.homeDir,
-    );
-
-    const fileTypeInfo = await detectFileType(absFilePath);
-    if (!fileTypeInfo) {
-      this.context.myDispatch({
-        type: "finish",
-        result: {
-          status: "error",
-          error: `File ${filePath} does not exist.`,
-        },
-      });
-      return;
-    }
-
-    if (fileTypeInfo.category === FileCategory.UNSUPPORTED) {
-      this.context.myDispatch({
-        type: "finish",
-        result: {
-          status: "error",
-          error: `Unsupported file type: ${fileTypeInfo.mimeType}. Supported types: text files, images (JPEG, PNG, GIF, WebP), and PDF documents.`,
-        },
-      });
-      return;
-    }
-
-    const sizeValidation = await validateFileSize(
-      absFilePath,
-      fileTypeInfo.category,
-    );
-    if (!sizeValidation.isValid) {
-      const sizeMB = (sizeValidation.actualSize / (1024 * 1024)).toFixed(2);
-      const maxSizeMB = (sizeValidation.maxSize / (1024 * 1024)).toFixed(2);
-      this.context.myDispatch({
-        type: "finish",
-        result: {
-          status: "error",
-          error: `File too large: ${sizeMB}MB (max ${maxSizeMB}MB for ${fileTypeInfo.category} files)`,
-        },
-      });
-      return;
-    }
-
-    let result: ProviderToolResultContent[];
-
-    if (fileTypeInfo.category === FileCategory.TEXT) {
-      const bufferContents = await getBufferIfOpen({
-        unresolvedPath: filePath,
-        context: this.context,
-      });
-
-      let lines: string[];
-      if (bufferContents.status === "ok") {
-        lines = await bufferContents.buffer.getLines({
-          start: 0 as Row0Indexed,
-          end: -1 as Row0Indexed,
-        });
-      } else if (bufferContents.status == "not-found") {
-        const rawContent = await fs.promises.readFile(absFilePath, "utf-8");
-        lines = rawContent.split("\n");
-      } else {
-        this.context.myDispatch({
-          type: "finish",
+      if (!fileTypeInfo) {
+        return {
+          type: "tool_result",
+          id: request.id,
           result: {
             status: "error",
-            error: bufferContents.error,
+            error: `File ${filePath} does not exist.`,
           },
-        });
-        return;
+        };
       }
 
-      const totalLines = lines.length;
-      const startLine = this.request.input.startLine ?? 1;
-      const startIndex = startLine - 1;
-
-      if (startIndex >= totalLines) {
-        this.context.myDispatch({
-          type: "finish",
+      if (fileTypeInfo.category === FileCategory.UNSUPPORTED) {
+        return {
+          type: "tool_result",
+          id: request.id,
           result: {
             status: "error",
-            error: `startLine ${startLine} is beyond end of file (${totalLines} lines)`,
+            error: `Unsupported file type: ${fileTypeInfo.mimeType}. Supported types: text files, images (JPEG, PNG, GIF, WebP), and PDF documents.`,
           },
-        });
-        return;
+        };
       }
 
-      // For large files, generate a file summary
-      const totalChars = lines.reduce((sum, line) => sum + line.length + 1, 0);
-      const isLargeFile =
-        this.request.input.numLines === undefined &&
-        totalChars > MAX_FILE_CHARACTERS;
-
-      let summaryText: string | undefined;
-      if (isLargeFile && startIndex === 0) {
-        const content = lines.join("\n");
-        const summary = summarizeFile(content, {
-          charBudget: MAX_FILE_CHARACTERS,
-        });
-        summaryText = formatSummary(summary);
-      }
-
-      const processedResult = this.processTextContent(
-        lines,
-        startIndex,
-        this.request.input.numLines,
-        summaryText,
+      const sizeValidation = await validateFileSize(
+        absFilePath,
+        fileTypeInfo.category,
       );
+      if (aborted) return abortResult;
 
-      // Only add to context manager if returning full, unabridged content
-      if (
-        processedResult.isComplete &&
-        !processedResult.hasAbridgedLines &&
-        startIndex === 0
-      ) {
-        this.context.threadDispatch({
-          type: "context-manager-msg",
-          msg: {
-            type: "tool-applied",
-            absFilePath,
-            tool: {
-              type: "get-file",
-              content: lines.join("\n"),
-            },
-            fileTypeInfo,
+      if (!sizeValidation.isValid) {
+        const sizeMB = (sizeValidation.actualSize / (1024 * 1024)).toFixed(2);
+        const maxSizeMB = (sizeValidation.maxSize / (1024 * 1024)).toFixed(2);
+        return {
+          type: "tool_result",
+          id: request.id,
+          result: {
+            status: "error",
+            error: `File too large: ${sizeMB}MB (max ${maxSizeMB}MB for ${fileTypeInfo.category} files)`,
           },
-        });
+        };
       }
 
-      result = [
-        {
-          type: "text",
-          text: processedResult.text,
-        },
-      ];
-    } else if (fileTypeInfo.category === FileCategory.PDF) {
-      // Check if we've already provided this PDF content to avoid redundant operations
-      const existingFileInfo = this.context.contextManager.files[absFilePath];
-      const agentView = existingFileInfo?.agentView;
+      let result: ProviderToolResultContent[];
 
-      if (this.request.input.pdfPage !== undefined) {
-        // Check if we've already sent this specific page
-        if (
-          agentView?.type === "pdf" &&
-          agentView.pages.includes(this.request.input.pdfPage)
-        ) {
-          this.context.myDispatch({
-            type: "finish",
+      if (fileTypeInfo.category === FileCategory.TEXT) {
+        const rawContent = await context.fileIO.readFile(absFilePath);
+        if (aborted) return abortResult;
+
+        const lines = rawContent.split("\n");
+        const totalLines = lines.length;
+        const startLine = request.input.startLine ?? 1;
+        const startIndex = startLine - 1;
+
+        if (startIndex >= totalLines) {
+          return {
+            type: "tool_result",
+            id: request.id,
             result: {
-              status: "ok",
-              value: [
-                {
-                  type: "text",
-                  text: `Page ${this.request.input.pdfPage} of ${filePath} has already been provided to you in this conversation.`,
-                },
-              ],
+              status: "error",
+              error: `startLine ${startLine} is beyond end of file (${totalLines} lines)`,
             },
-          });
-          return;
+          };
         }
 
-        // Extract specific page as binary PDF content
-        const pageResult = await extractPDFPage(
-          absFilePath,
-          this.request.input.pdfPage,
+        const totalChars = lines.reduce(
+          (sum, line) => sum + line.length + 1,
+          0,
         );
-        if (pageResult.status === "error") {
-          this.context.myDispatch({
-            type: "finish",
-            result: {
-              status: "error",
-              error: pageResult.error,
-            },
+        const isLargeFile =
+          request.input.numLines === undefined &&
+          totalChars > MAX_FILE_CHARACTERS;
+
+        let summaryText: string | undefined;
+        if (isLargeFile && startIndex === 0) {
+          const content = lines.join("\n");
+          const summary = summarizeFile(content, {
+            charBudget: MAX_FILE_CHARACTERS,
           });
-          return;
+          summaryText = formatSummary(summary);
         }
 
-        // For PDF pages, we use document content type
-        result = [
-          {
-            type: "document",
-            source: {
-              type: "base64",
-              media_type: "application/pdf",
-              data: Buffer.from(pageResult.value).toString("base64"),
-            },
-            title: `${filePath} - Page ${this.request.input.pdfPage}`,
-          },
-        ];
+        const processedResult = processTextContentStandalone(
+          lines,
+          startIndex,
+          request.input.numLines,
+          summaryText,
+        );
 
-        // Notify context manager about the PDF page extraction
-        this.context.threadDispatch({
-          type: "context-manager-msg",
-          msg: {
-            type: "tool-applied",
-            absFilePath,
-            tool: {
-              type: "get-file-pdf",
-              content: {
-                type: "page",
-                pdfPage: this.request.input.pdfPage,
+        if (
+          processedResult.isComplete &&
+          !processedResult.hasAbridgedLines &&
+          startIndex === 0
+        ) {
+          context.threadDispatch({
+            type: "context-manager-msg",
+            msg: {
+              type: "tool-applied",
+              absFilePath,
+              tool: {
+                type: "get-file",
+                content: lines.join("\n"),
               },
-            },
-            fileTypeInfo,
-          },
-        });
-      } else {
-        // Check if we've already sent the PDF summary
-        if (agentView?.type === "pdf" && agentView.summary) {
-          this.context.myDispatch({
-            type: "finish",
-            result: {
-              status: "ok",
-              value: [
-                {
-                  type: "text",
-                  text: `The summary information for ${filePath} has already been provided to you in this conversation.`,
-                },
-              ],
+              fileTypeInfo,
             },
           });
-          return;
         }
 
-        // Get basic PDF info without pdfPage parameter
-        const pageCountResult = await getSummaryAsProviderContent(absFilePath);
-        if (pageCountResult.status === "error") {
-          this.context.myDispatch({
-            type: "finish",
-            result: {
-              status: "error",
-              error: pageCountResult.error,
-            },
-          });
-          return;
-        }
+        result = [{ type: "text", text: processedResult.text }];
+      } else if (fileTypeInfo.category === FileCategory.PDF) {
+        const existingFileInfo = context.contextManager.files[absFilePath];
+        const agentView = existingFileInfo?.agentView;
 
-        this.context.threadDispatch({
-          type: "context-manager-msg",
-          msg: {
-            type: "tool-applied",
-            absFilePath,
-            tool: {
-              type: "get-file-pdf",
-              content: {
-                type: "summary",
+        if (request.input.pdfPage !== undefined) {
+          if (
+            agentView?.type === "pdf" &&
+            agentView.pages.includes(request.input.pdfPage)
+          ) {
+            return {
+              type: "tool_result",
+              id: request.id,
+              result: {
+                status: "ok",
+                value: [
+                  {
+                    type: "text",
+                    text: `Page ${request.input.pdfPage} of ${filePath} has already been provided to you in this conversation.`,
+                  },
+                ],
               },
-            },
-            fileTypeInfo,
-          },
-        });
+            };
+          }
 
-        result = pageCountResult.value;
-      }
-    } else {
-      // Handle other binary files (images)
-      const buffer = await fs.promises.readFile(absFilePath);
-      const base64Data = buffer.toString("base64");
+          const pageResult = await extractPDFPage(
+            absFilePath,
+            request.input.pdfPage,
+          );
+          if (aborted) return abortResult;
 
-      // Get file modification time for binary files
-      const stats = await fs.promises.stat(absFilePath);
-      const mtime = stats.mtime.getTime();
+          if (pageResult.status === "error") {
+            return {
+              type: "tool_result",
+              id: request.id,
+              result: { status: "error", error: pageResult.error },
+            };
+          }
 
-      // Notify context manager of the binary file
-      this.context.threadDispatch({
-        type: "context-manager-msg",
-        msg: {
-          type: "tool-applied",
-          absFilePath,
-          tool: {
-            type: "get-file-binary",
-            mtime,
-          },
-          fileTypeInfo,
-        },
-      });
-
-      switch (fileTypeInfo.category) {
-        case FileCategory.IMAGE:
           result = [
             {
-              type: "image",
+              type: "document",
               source: {
                 type: "base64",
-                media_type: fileTypeInfo.mimeType as
-                  | "image/jpeg"
-                  | "image/png"
-                  | "image/gif"
-                  | "image/webp",
-                data: base64Data,
+                media_type: "application/pdf",
+                data: Buffer.from(pageResult.value).toString("base64"),
               },
+              title: `${filePath} - Page ${request.input.pdfPage}`,
             },
           ];
-          break;
-        default:
-          assertUnreachable(fileTypeInfo.category);
+
+          context.threadDispatch({
+            type: "context-manager-msg",
+            msg: {
+              type: "tool-applied",
+              absFilePath,
+              tool: {
+                type: "get-file-pdf",
+                content: { type: "page", pdfPage: request.input.pdfPage },
+              },
+              fileTypeInfo,
+            },
+          });
+        } else {
+          if (agentView?.type === "pdf" && agentView.summary) {
+            return {
+              type: "tool_result",
+              id: request.id,
+              result: {
+                status: "ok",
+                value: [
+                  {
+                    type: "text",
+                    text: `The summary information for ${filePath} has already been provided to you in this conversation.`,
+                  },
+                ],
+              },
+            };
+          }
+
+          const pageCountResult =
+            await getSummaryAsProviderContent(absFilePath);
+          if (aborted) return abortResult;
+
+          if (pageCountResult.status === "error") {
+            return {
+              type: "tool_result",
+              id: request.id,
+              result: { status: "error", error: pageCountResult.error },
+            };
+          }
+
+          context.threadDispatch({
+            type: "context-manager-msg",
+            msg: {
+              type: "tool-applied",
+              absFilePath,
+              tool: {
+                type: "get-file-pdf",
+                content: { type: "summary" },
+              },
+              fileTypeInfo,
+            },
+          });
+
+          result = pageCountResult.value;
+        }
+      } else {
+        const buffer = await context.fileIO.readBinaryFile(absFilePath);
+        if (aborted) return abortResult;
+
+        const statResult = await context.fileIO.stat(absFilePath);
+        if (aborted) return abortResult;
+
+        const mtime = statResult?.mtimeMs ?? Date.now();
+
+        context.threadDispatch({
+          type: "context-manager-msg",
+          msg: {
+            type: "tool-applied",
+            absFilePath,
+            tool: {
+              type: "get-file-binary",
+              mtime,
+            },
+            fileTypeInfo,
+          },
+        });
+
+        const base64Data = buffer.toString("base64");
+
+        switch (fileTypeInfo.category) {
+          case FileCategory.IMAGE:
+            result = [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: fileTypeInfo.mimeType as
+                    | "image/jpeg"
+                    | "image/png"
+                    | "image/gif"
+                    | "image/webp",
+                  data: base64Data,
+                },
+              },
+            ];
+            break;
+          default:
+            assertUnreachable(fileTypeInfo.category);
+        }
       }
-    }
 
-    this.context.myDispatch({
-      type: "finish",
-      result: {
-        status: "ok",
-        value: result,
-      },
-    });
-
-    return;
-  }
-
-  getToolResult(): ProviderToolResult {
-    switch (this.state.state) {
-      case "pending":
-      case "processing":
-        return {
-          type: "tool_result",
-          id: this.request.id,
-          result: {
-            status: "ok",
-            value: [
-              {
-                type: "text",
-                text: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
-              },
-            ],
-          },
-        };
-      case "pending-user-action":
-        return {
-          type: "tool_result",
-          id: this.request.id,
-          result: {
-            status: "ok",
-            value: [
-              {
-                type: "text",
-                text: `Waiting for user approval to finish processing this tool use.`,
-              },
-            ],
-          },
-        };
-      case "done":
-        return this.state.result;
-      default:
-        assertUnreachable(this.state);
-    }
-  }
-
-  private processTextContent(
-    lines: string[],
-    startIndex: number,
-    requestedNumLines: number | undefined,
-    summaryText?: string,
-  ): { text: string; isComplete: boolean; hasAbridgedLines: boolean } {
-    const totalLines = lines.length;
-    const totalChars = lines.reduce((sum, line) => sum + line.length + 1, 0);
-
-    const isLargeFile =
-      requestedNumLines === undefined && totalChars > MAX_FILE_CHARACTERS;
-
-    if (isLargeFile && summaryText) {
       return {
-        text: summaryText,
-        isComplete: false,
-        hasAbridgedLines: false,
+        type: "tool_result",
+        id: request.id,
+        result: { status: "ok", value: result },
+      };
+    } catch (error) {
+      if (aborted) return abortResult;
+      return {
+        type: "tool_result",
+        id: request.id,
+        result: {
+          status: "error",
+          error: `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        },
       };
     }
+  })();
 
-    let hasAbridgedLines = false;
-    const outputLines: string[] = [];
-
-    let effectiveNumLines: number | undefined;
-    if (isLargeFile) {
-      effectiveNumLines = DEFAULT_LINES_FOR_LARGE_FILE;
-    } else {
-      effectiveNumLines = requestedNumLines;
-    }
-
-    const maxLinesToProcess =
-      effectiveNumLines !== undefined
-        ? Math.min(startIndex + effectiveNumLines, totalLines)
-        : totalLines;
-
-    for (let i = startIndex; i < maxLinesToProcess; i++) {
-      let line = lines[i];
-
-      if (line.length > MAX_LINE_CHARACTERS) {
-        const halfMax = Math.floor(MAX_LINE_CHARACTERS / 2);
-        line = `${line.slice(0, halfMax)}... [${line.length - MAX_LINE_CHARACTERS} chars omitted] ...${line.slice(-halfMax)}`;
-        hasAbridgedLines = true;
-      }
-
-      outputLines.push(line);
-    }
-
-    const endIndex = startIndex + outputLines.length;
-    const isComplete =
-      startIndex === 0 && endIndex === totalLines && !hasAbridgedLines;
-
-    let text = outputLines.join("\n");
-
-    if (!isComplete || startIndex > 0 || endIndex < totalLines) {
-      const header = `[Lines ${startIndex + 1}-${endIndex} of ${totalLines}]${hasAbridgedLines ? " (some lines abridged)" : ""}\n\n`;
-      text = header + text;
-
-      if (endIndex < totalLines) {
-        text += `\n\n[${totalLines - endIndex} more lines not shown. Use startLine=${endIndex + 1} to continue.]`;
-      }
-    }
-
-    return { text, isComplete, hasAbridgedLines };
-  }
-
-  private formatFileDisplay() {
-    return formatGetFileDisplay(this.request.input, {
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-    });
-  }
-
-  renderSummary() {
-    switch (this.state.state) {
-      case "pending":
-      case "processing":
-        return d`👀⚙️ ${this.formatFileDisplay()}`;
-      case "pending-user-action":
-        return d`👀⏳ May I read file ${this.formatFileDisplay()}?
-${withBindings(
-  withExtmark(d`> NO`, {
-    hl_group: ["ErrorMsg", "@markup.strong.markdown"],
-  }),
-  {
-    "<CR>": () =>
-      this.context.myDispatch({
-        type: "user-approval",
-        approved: false,
-      }),
-  },
-)}
-${withBindings(
-  withExtmark(d`> YES`, {
-    hl_group: ["String", "@markup.strong.markdown"],
-  }),
-  {
-    "<CR>": () =>
-      this.context.myDispatch({
-        type: "user-approval",
-        approved: true,
-      }),
-  },
-)}`;
-      case "done":
-        return renderCompletedSummary(
-          {
-            request: this.request as CompletedToolInfo["request"],
-            result: this.state.result,
-          },
-          { cwd: this.context.cwd, homeDir: this.context.homeDir },
-        );
-      default:
-        assertUnreachable(this.state);
-    }
-  }
-}
-
-function formatGetFileDisplay(
-  input: Input,
-  displayContext: DisplayContext,
-): VDOMNode {
-  const absFilePath = resolveFilePath(
-    displayContext.cwd,
-    input.filePath,
-    displayContext.homeDir,
-  );
-  const pathForDisplay = displayPath(
-    displayContext.cwd,
-    absFilePath,
-    displayContext.homeDir,
-  );
-  let extraInfo = "";
-  if (input.pdfPage !== undefined) {
-    extraInfo = ` (page ${input.pdfPage})`;
-  } else if (input.startLine !== undefined || input.numLines !== undefined) {
-    const start = input.startLine ?? 1;
-    const num = input.numLines;
-    extraInfo =
-      num !== undefined
-        ? ` (lines ${start}-${start + num - 1})`
-        : ` (from line ${start})`;
-  }
-  return withInlineCode(d`\`${pathForDisplay}\`${extraInfo}`);
-}
-
-export function renderCompletedSummary(
-  info: CompletedToolInfo,
-  displayContext: DisplayContext,
-): VDOMNode {
-  const input = info.request.input as Input;
-  const result = info.result.result;
-
-  if (result.status === "error") {
-    return d`👀❌ ${formatGetFileDisplay(input, displayContext)}`;
-  }
-
-  let lineCount = 0;
-  if (result.value.length > 0) {
-    const firstValue = result.value[0];
-    if (firstValue.type === "text") {
-      lineCount = firstValue.text.split("\n").length;
-    }
-  }
-  const lineCountStr = lineCount > 0 ? ` [+ ${lineCount}]` : "";
-  return d`👀✅ ${formatGetFileDisplay(input, displayContext)}${lineCountStr}`;
-}
-
-export function renderCompletedDetail(info: CompletedToolInfo): VDOMNode {
-  const result = info.result.result;
-
-  if (result.status === "error") {
-    return d`Error: ${result.error}`;
-  }
-
-  const parts: VDOMNode[] = [];
-  for (const content of result.value) {
-    if (content.type === "text") {
-      parts.push(d`${content.text}`);
-    } else if (content.type === "image") {
-      parts.push(d`[Image: ${content.source.media_type}]`);
-    } else if (content.type === "document") {
-      parts.push(d`[Document${content.title ? `: ${content.title}` : ""}]`);
-    }
-  }
-
-  return d`${parts}`;
+  return {
+    promise,
+    abort: () => {
+      aborted = true;
+    },
+  };
 }
 
 export const spec: ProviderToolSpec = {

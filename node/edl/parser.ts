@@ -14,7 +14,7 @@ export type Command =
   | { type: "file"; path: string }
   | { type: "newfile"; path: string }
   | { type: "narrow"; pattern: Pattern }
-  | { type: "narrow_one"; pattern: Pattern }
+  | { type: "narrow_multiple"; pattern: Pattern }
   | { type: "retain_first" }
   | { type: "retain_last" }
   | { type: "retain_nth"; n: number }
@@ -27,7 +27,7 @@ export type Command =
   | ({ type: "insert_before" } & MutationText)
   | ({ type: "insert_after" } & MutationText)
   | { type: "select"; pattern: Pattern }
-  | { type: "select_one"; pattern: Pattern }
+  | { type: "select_multiple"; pattern: Pattern }
   | { type: "cut"; register: string };
 
 export type MutationText = { text: string } | { register: string };
@@ -283,9 +283,9 @@ export function parse(script: string): Command[] {
         }
 
         case "narrow":
-        case "narrow_one":
+        case "narrow_multiple":
         case "select":
-        case "select_one":
+        case "select_multiple":
         case "select_next":
         case "select_prev":
         case "extend_forward":

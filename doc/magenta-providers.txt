@@ -4,10 +4,7 @@
 CONTENTS                                          *magenta-providers-contents*
 
     1. Anthropic ............................... |magenta-anthropic|
-    2. OpenAI .................................. |magenta-openai|
-    3. AWS Bedrock ............................. |magenta-bedrock|
-    4. Ollama .................................. |magenta-ollama|
-    5. GitHub Copilot .......................... |magenta-copilot|
+    2. Deprecated Providers .................... |magenta-deprecated-providers|
 
 ==============================================================================
 ANTHROPIC                                                 *magenta-anthropic*
@@ -67,124 +64,14 @@ How it works:~
   - Refresh tokens managed automatically
 
 ==============================================================================
-OPENAI                                                       *magenta-openai*
+DEPRECATED PROVIDERS                            *magenta-deprecated-providers*
+                                                             *magenta-openai*
+                                                           *magenta-bedrock*
+                                                            *magenta-ollama*
+                                                           *magenta-copilot*
 
-Uses the OpenAI Node SDK.
-https://github.com/openai/openai-node
+The following providers were removed in Jan 2026: OpenAI, AWS Bedrock,
+Ollama, and GitHub Copilot. The Anthropic provider is the only supported
+provider. Contributions to re-add providers are welcome.
 
-Supported models:~
-  - gpt-5
-  - gpt-5-mini
-  - o1
-
-Configuration:~
->lua
-    {
-      name = "gpt-5",
-      provider = "openai",
-      model = "gpt-5",
-      fastModel = "gpt-5-mini",
-      apiKeyEnvVar = "OPENAI_API_KEY"
-    }
-<
-
-==============================================================================
-AWS BEDROCK                                                 *magenta-bedrock*
-
-Uses the AWS SDK for Bedrock Runtime.
-https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-bedrock-runtime/
-
-Supported models:~
-  - anthropic.claude-3-5-sonnet-20241022-v2:0
-  - global.anthropic.claude-sonnet-4-5-20250929-v1:0
-  - global.anthropic.claude-haiku-4-5-20251001-v1:0
-
-Basic configuration:~
->lua
-    {
-      name = "bedrock",
-      provider = "bedrock",
-      model = "anthropic.claude-3-5-sonnet-20241022-v2:0",
-      fastModel = "anthropic.claude-3-5-haiku-20241022-v1:0"
-    }
-<
-
-With AWS profile:~
->lua
-    {
-      name = "bedrock",
-      provider = "bedrock",
-      model = "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-      fastModel = "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-      env = {
-        AWS_PROFILE = "dev.ai-inference",
-        AWS_REGION = "us-west-2"
-      }
-    }
-<
-
-Configuration options:~
-  - `env`: Environment variables to set
-      - `AWS_PROFILE`: AWS profile from credentials file
-      - `AWS_REGION`: AWS region for Bedrock API calls
-      - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`: Direct credentials
-  - `promptCaching`: Enable/disable prompt caching (default: true)
-
-Prerequisites:~
-  - AWS credentials configured
-  - Bedrock model access enabled in your AWS account
-  - IAM permissions: `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`
-
-==============================================================================
-OLLAMA                                                       *magenta-ollama*
-
-Uses the Ollama Node SDK for local models.
-https://github.com/ollama/ollama-js
-
-Models must be installed locally. See https://ollama.com/search
-
-Configuration:~
->lua
-    {
-      name = "ollama-qwen",
-      provider = "ollama",
-      model = "qwen3:14b"
-    }
-<
-
-==============================================================================
-GITHUB COPILOT                                              *magenta-copilot*
-
-Uses your existing GitHub Copilot subscription. No API key required.
-
-Supported models:~
-  - claude-3.7-sonnet
-  - claude-opus-4-6
-  - claude-haiku-4-5
-  - gpt-5
-
-Configuration:~
->lua
-    {
-      name = "copilot",
-      provider = "copilot",
-      model = "claude-3.7-sonnet"
-    }
-<
-
-Authentication sources:~
-  - `~/.config/github-copilot/hosts.json`
-  - `~/.config/github-copilot/apps.json`
-
-Prerequisites:~
-  - Active GitHub Copilot subscription
-  - GitHub Copilot CLI or VS Code extension installed and authenticated
-
-The provider handles token refresh automatically.
-
-⚠️ Note:~
-Copilot provides Claude access through OpenAI's chat completions API,
-which means some features (like web_search) don't work. Direct Anthropic
-API is recommended for full feature support.
-
-vim:tw=78:ts=8:noet:ft=help:norl:
+vim:tw=78:ts=8:noet:ft=help:norl::ts=8:noet:ft=help:norl:

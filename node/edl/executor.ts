@@ -1,4 +1,4 @@
-import { type FileIO, FsFileIO } from "./file-io.ts";
+import { type FileIO, FsFileIO } from "../capabilities/file-io.ts";
 import { Document } from "./document.ts";
 import type { Command, MutationText, Pattern } from "./parser.ts";
 import type {
@@ -91,6 +91,7 @@ export type FileState = {
 
 export class Executor {
   public trace: TraceEntry[] = [];
+  public warnings: string[] = [];
   public registers = new Map<string, string>();
   public fileDocs = new Map<string, FileState>();
   public currentFile: FileState | undefined;
@@ -273,6 +274,24 @@ export class Executor {
     }
   }
 
+  private warnIfLineNumber(pattern: Pattern, commandName: string): void {
+    switch (pattern.type) {
+      case "line":
+        this.warnings.push(
+          `⚠️ "${commandName}" used line number ${pattern.line}. Text/regex patterns are more reliable — line numbers shift after mutations.`,
+        );
+        break;
+      case "lineCol":
+        this.warnings.push(
+          `⚠️ "${commandName}" used line:col ${pattern.line}:${pattern.col}. Text/regex patterns are more reliable — line numbers shift after mutations.`,
+        );
+        break;
+      case "range":
+        this.warnIfLineNumber(pattern.from, commandName);
+        this.warnIfLineNumber(pattern.to, commandName);
+        break;
+    }
+  }
   addTrace(command: string, ranges: Range[], doc: Document): void {
     const texts = ranges.map((r) => doc.getText(r));
     const snippet =
@@ -411,8 +430,26 @@ export class Executor {
         break;
       }
 
+      case "narrow_multiple": {
+        const file = this.requireFile();
+        this.warnIfLineNumber(cmd.pattern, "narrow_multiple");
+        const matches = this.findAllMatches(
+          cmd.pattern,
+          file.doc,
+          this.selection,
+        );
+        if (matches.length === 0)
+          throw new ExecutionError(
+            `narrow_multiple: no matches for pattern ${formatPattern(cmd.pattern)}`,
+            this.trace,
+          );
+        this.selection = matches;
+        this.addTrace("narrow_multiple", this.selection, file.doc);
+        break;
+      }
       case "narrow": {
         const file = this.requireFile();
+        this.warnIfLineNumber(cmd.pattern, "narrow");
         const matches = this.findAllMatches(
           cmd.pattern,
           file.doc,
@@ -423,12 +460,37 @@ export class Executor {
             `narrow: no matches for pattern ${formatPattern(cmd.pattern)}`,
             this.trace,
           );
-        this.selection = matches;
+        if (matches.length > 1)
+          throw new ExecutionError(
+            `narrow: expected 1 match, got ${matches.length}`,
+            this.trace,
+          );
+        this.selection = [matches[0]];
         this.addTrace("narrow", this.selection, file.doc);
         break;
       }
+      case "select_multiple": {
+        const file = this.requireFile();
+        this.warnIfLineNumber(cmd.pattern, "select_multiple");
+        const matches = this.findInText(
+          cmd.pattern,
+          file.doc.content,
+          file.doc,
+          0,
+        );
+        if (matches.length === 0)
+          throw new ExecutionError(
+            `select_multiple: no matches for pattern ${formatPattern(cmd.pattern)}`,
+            this.trace,
+          );
+        this.selection = matches;
+        this.addTrace("select_multiple", this.selection, file.doc);
+        break;
+      }
+
       case "select": {
         const file = this.requireFile();
+        this.warnIfLineNumber(cmd.pattern, "select");
         const matches = this.findInText(
           cmd.pattern,
           file.doc.content,
@@ -440,31 +502,13 @@ export class Executor {
             `select: no matches for pattern ${formatPattern(cmd.pattern)}`,
             this.trace,
           );
-        this.selection = matches;
-        this.addTrace("select", this.selection, file.doc);
-        break;
-      }
-
-      case "select_one": {
-        const file = this.requireFile();
-        const matches = this.findInText(
-          cmd.pattern,
-          file.doc.content,
-          file.doc,
-          0,
-        );
-        if (matches.length === 0)
-          throw new ExecutionError(
-            `select_one: no matches for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
-          );
         if (matches.length > 1)
           throw new ExecutionError(
-            `select_one: expected 1 match, got ${matches.length}`,
+            `select: expected 1 match, got ${matches.length}`,
             this.trace,
           );
         this.selection = [matches[0]];
-        this.addTrace("select_one", this.selection, file.doc);
+        this.addTrace("select", this.selection, file.doc);
         break;
       }
 
@@ -486,31 +530,10 @@ export class Executor {
         break;
       }
 
-      case "narrow_one": {
-        const file = this.requireFile();
-        const matches = this.findAllMatches(
-          cmd.pattern,
-          file.doc,
-          this.selection,
-        );
-        if (matches.length === 0)
-          throw new ExecutionError(
-            `narrow_one: no matches for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
-          );
-        if (matches.length > 1)
-          throw new ExecutionError(
-            `narrow_one: expected 1 match, got ${matches.length}`,
-            this.trace,
-          );
-        this.selection = [matches[0]];
-        this.addTrace("narrow_one", this.selection, file.doc);
-        break;
-      }
-
       case "select_next": {
         const file = this.requireFile();
         const current = this.requireSingleSelect();
+        this.warnIfLineNumber(cmd.pattern, "select_next");
         const searchText = file.doc.content.slice(current.end);
         const matches = this.findInText(
           cmd.pattern,
@@ -531,6 +554,7 @@ export class Executor {
       case "select_prev": {
         const file = this.requireFile();
         const current = this.requireSingleSelect();
+        this.warnIfLineNumber(cmd.pattern, "select_prev");
         const searchText = file.doc.content.slice(0, current.start);
         const matches = this.findInText(cmd.pattern, searchText, file.doc, 0);
         if (matches.length === 0)
@@ -546,6 +570,7 @@ export class Executor {
       case "extend_forward": {
         const file = this.requireFile();
         const current = this.requireSingleSelect();
+        this.warnIfLineNumber(cmd.pattern, "extend_forward");
         const searchText = file.doc.content.slice(current.end);
         const matches = this.findInText(
           cmd.pattern,
@@ -566,6 +591,7 @@ export class Executor {
       case "extend_back": {
         const file = this.requireFile();
         const current = this.requireSingleSelect();
+        this.warnIfLineNumber(cmd.pattern, "extend_back");
         const searchText = file.doc.content.slice(0, current.start);
         const matches = this.findInText(cmd.pattern, searchText, file.doc, 0);
         if (matches.length === 0)
@@ -820,6 +846,7 @@ export class Executor {
     }
 
     return {
+      warnings: this.warnings,
       trace: this.trace,
       finalSelection,
       mutations,

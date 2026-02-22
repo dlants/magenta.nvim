@@ -14,6 +14,7 @@ import type { ToolRequestId } from "../tools/toolManager.ts";
 import { MockAnthropicClient } from "./mock-anthropic-client.ts";
 import type { ToolName } from "../tools/types.ts";
 import { delay } from "../utils/async.ts";
+import winston from "winston";
 
 type TrackedMessages = {
   messages: AgentMsg[];
@@ -51,6 +52,7 @@ const defaultAnthropicOptions: AnthropicAgentOptions = {
   authType: "max",
   includeWebSearch: true,
   disableParallelToolUseFlag: true,
+  logger: winston.createLogger(),
 };
 
 describe("appendUserMessage", () => {
@@ -869,48 +871,86 @@ describe("streaming block", () => {
   });
 });
 
-describe("error handling with cleanup", () => {
-  it("adds tool_result with error message when stream errors during tool_use", async () => {
+describe("web search result preservation", () => {
+  it("preserves encrypted_content in web_search_tool_result after stream completes", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([
+      { type: "text", text: "Search for Claude Shannon" },
+    ]);
     await delay(0);
     agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
-    // Stream a tool_use block
-    const toolUseId = "tool-error-test" as ToolRequestId;
-    stream.streamToolUse(toolUseId, "get_file" as ToolName, {
-      filePath: "test.ts",
+    // Stream: server_tool_use -> web_search_tool_result -> text with citations
+    stream.streamServerToolUse("srvtoolu_abc123", "web_search", {
+      query: "Claude Shannon biography",
     });
 
-    // Simulate a stream error
-    stream.respondWithError(new Error("Connection lost"));
+    const webSearchContent = [
+      {
+        type: "web_search_result",
+        url: "https://en.wikipedia.org/wiki/Claude_Shannon",
+        title: "Claude Shannon - Wikipedia",
+        encrypted_content:
+          "EqgfCioIARgBIiQ3YTAwMjY1Mi1mZjM5LTQ1NGUtODgxNC1kNjNjNTk1ZWI3Y...",
+        page_age: "April 30, 2025",
+      },
+      {
+        type: "web_search_result",
+        url: "https://example.com/shannon",
+        title: "Shannon Info Theory",
+        encrypted_content: "RmFrZUVuY3J5cHRlZENvbnRlbnQ...",
+        page_age: "May 1, 2025",
+      },
+    ];
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    stream.streamWebSearchToolResult("srvtoolu_abc123", webSearchContent);
+
+    stream.streamText(
+      "Claude Shannon was born on April 30, 1916, in Petoskey, Michigan.",
+    );
+
+    stream.finishResponse("end_turn", {
+      inputTokens: 100,
+      outputTokens: 200,
+      cacheHits: 0,
+      cacheMisses: 6000,
+    });
+
+    await stream.finalMessage();
+    await delay(0);
 
     const state = agent.getState();
+    expect(state.messages).toHaveLength(2);
 
-    // Should have: user message, assistant with tool_use, user with tool_result
-    expect(state.messages).toHaveLength(3);
-    expect(state.messages[2].role).toBe("user");
+    const assistantContent = state.messages[1].content;
+    expect(assistantContent).toHaveLength(3);
 
-    const toolResult = state.messages[2].content[0];
-    expect(toolResult.type).toBe("tool_result");
-    if (toolResult.type === "tool_result") {
-      expect(toolResult.id).toBe(toolUseId);
-      expect(toolResult.result.status).toBe("error");
-      if (toolResult.result.status === "error") {
-        expect(toolResult.result.error).toContain("Connection lost");
-      }
+    // server_tool_use block
+    expect(assistantContent[0].type).toBe("server_tool_use");
+
+    // web_search_tool_result block with encrypted_content preserved
+    expect(assistantContent[1].type).toBe("web_search_tool_result");
+    if (assistantContent[1].type === "web_search_tool_result") {
+      expect(assistantContent[1].content).toHaveLength(2);
+      expect((assistantContent[1].content as unknown[])[0]).toHaveProperty(
+        "encrypted_content",
+        "EqgfCioIARgBIiQ3YTAwMjY1Mi1mZjM5LTQ1NGUtODgxNC1kNjNjNTk1ZWI3Y...",
+      );
+      expect((assistantContent[1].content as unknown[])[1]).toHaveProperty(
+        "encrypted_content",
+        "RmFrZUVuY3J5cHRlZENvbnRlbnQ...",
+      );
     }
 
-    expect(state.status.type).toBe("error");
+    // text block
+    expect(assistantContent[2].type).toBe("text");
   });
 
-  it("removes server_tool_use block when stream errors during web search", async () => {
+  it("preserves web_search_tool_result in native messages for next turn", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
@@ -920,612 +960,786 @@ describe("error handling with cleanup", () => {
 
     const stream = await mockClient.awaitStream();
 
-    // Stream some text first
-    stream.streamText("Let me search for that.");
+    const webSearchContent = [
+      {
+        type: "web_search_result",
+        url: "https://example.com",
+        title: "Example",
+        encrypted_content: "SomeEncryptedData...",
+      },
+    ];
 
-    // Stream a server_tool_use block
-    stream.streamServerToolUse("server-tool-2", "web_search", {
-      query: "test query",
+    stream.streamServerToolUse("srvtoolu_001", "web_search", {
+      query: "test",
     });
-
-    // Simulate a stream error
-    stream.respondWithError(new Error("API timeout"));
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    const state = agent.getState();
-
-    // Should have: user message, assistant with just text (server_tool_use removed)
-    expect(state.messages).toHaveLength(2);
-    expect(state.messages[1].role).toBe("assistant");
-    expect(state.messages[1].content).toHaveLength(1);
-    expect(state.messages[1].content[0].type).toBe("text");
-
-    expect(state.status.type).toBe("error");
-  });
-});
-
-describe("latestUsage", () => {
-  it("tracks usage from successful responses", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
-
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
-    await delay(0);
-    agent.continueConversation();
-
-    const stream = await mockClient.awaitStream();
-    stream.streamText("Hello there!");
-    stream.finishResponse("end_turn", {
-      inputTokens: 100,
-      outputTokens: 50,
-      cacheHits: 10,
-      cacheMisses: 5,
-    });
+    stream.streamWebSearchToolResult("srvtoolu_001", webSearchContent);
+    stream.streamText("Here are the results.");
+    stream.finishResponse("end_turn");
 
     await stream.finalMessage();
     await delay(0);
 
-    const state = agent.getState();
-    expect(state.latestUsage).toEqual({
-      inputTokens: 100,
-      outputTokens: 50,
-      cacheHits: 10,
-      cacheMisses: 5,
-    });
-  });
-
-  it("preserves latestUsage when subsequent request is aborted", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
-
-    // First request - successful
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    // Append a follow-up user message
+    agent.appendUserMessage([{ type: "text", text: "Tell me more" }]);
     await delay(0);
     agent.continueConversation();
 
-    const stream1 = await mockClient.awaitStream();
-    stream1.streamText("Hello there!");
-    stream1.finishResponse("end_turn", {
-      inputTokens: 100,
-      outputTokens: 50,
-    });
-
-    await stream1.finalMessage();
-    await delay(0);
-
-    // Verify initial usage
-    expect(agent.getState().latestUsage).toEqual({
-      inputTokens: 100,
-      outputTokens: 50,
-    });
-
-    // Second request - will be aborted
-    agent.appendUserMessage([{ type: "text", text: "Follow up" }]);
-    await delay(0);
-    agent.continueConversation();
-
+    // Check that the native messages sent to the API contain the web search result
     const stream2 = await mockClient.awaitStream();
-    stream2.streamText("Starting to respond...");
+    const sentMessages = stream2.messages;
 
-    // Abort the second request
-    await agent.abort();
-    await delay(0);
+    // Messages: user, assistant (with server_tool_use + web_search_tool_result + text), user
+    expect(sentMessages).toHaveLength(3);
 
-    // latestUsage should still reflect the first successful request
-    const state = agent.getState();
-    expect(state.status).toEqual({ type: "stopped", stopReason: "aborted" });
-    expect(state.latestUsage).toEqual({
-      inputTokens: 100,
-      outputTokens: 50,
-    });
-  });
+    const assistantMsg = sentMessages[1];
+    expect(assistantMsg.role).toBe("assistant");
+    const blocks = assistantMsg.content as unknown as Record<string, unknown>[];
 
-  it("preserves latestUsage when subsequent request errors", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const webResultBlock = blocks.find(
+      (b) => b.type === "web_search_tool_result",
+    );
+    expect(webResultBlock).toBeDefined();
+    expect(
+      (webResultBlock!.content as Record<string, unknown>[])[0],
+    ).toHaveProperty("encrypted_content", "SomeEncryptedData...");
 
-    // First request - successful
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
-    await delay(0);
-    agent.continueConversation();
-
-    const stream1 = await mockClient.awaitStream();
-    stream1.streamText("Hello there!");
-    stream1.finishResponse("end_turn", {
-      inputTokens: 200,
-      outputTokens: 75,
-      cacheHits: 20,
-    });
-
-    await stream1.finalMessage();
-    await delay(0);
-
-    // Verify initial usage
-    expect(agent.getState().latestUsage).toEqual({
-      inputTokens: 200,
-      outputTokens: 75,
-      cacheHits: 20,
-    });
-
-    // Second request - will error
-    agent.appendUserMessage([{ type: "text", text: "Follow up" }]);
-    await delay(0);
-    agent.continueConversation();
-
-    const stream2 = await mockClient.awaitStream();
-    stream2.streamText("Starting to respond...");
-
-    // Simulate an error
-    stream2.respondWithError(new Error("Connection lost"));
-    await delay(0);
-
-    // latestUsage should still reflect the first successful request
-    const state = agent.getState();
-    expect(state.status.type).toBe("error");
-    expect(state.latestUsage).toEqual({
-      inputTokens: 200,
-      outputTokens: 75,
-      cacheHits: 20,
-    });
-  });
-
-  it("updates latestUsage only on successful responses", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
-
-    // Initially undefined
-    expect(agent.getState().latestUsage).toBeUndefined();
-
-    // First request - abort (should not set latestUsage)
-    agent.appendUserMessage([{ type: "text", text: "First" }]);
-    await delay(0);
-    agent.continueConversation();
-    const stream1 = await mockClient.awaitStream();
-    stream1.streamText("Partial...");
-    await agent.abort();
-    await delay(0);
-
-    expect(agent.getState().latestUsage).toBeUndefined();
-
-    // Second request - successful (should set latestUsage)
-    agent.appendUserMessage([{ type: "text", text: "Second" }]);
-    await delay(0);
-    agent.continueConversation();
-    const stream2 = await mockClient.awaitStream();
-    stream2.streamText("Complete response");
-    stream2.finishResponse("end_turn", {
-      inputTokens: 150,
-      outputTokens: 60,
-    });
-
+    // Clean up
+    stream2.streamText("More details.");
+    stream2.finishResponse("end_turn");
     await stream2.finalMessage();
-    await delay(0);
+  });
 
-    expect(agent.getState().latestUsage).toEqual({
-      inputTokens: 150,
-      outputTokens: 60,
+  describe("error handling with cleanup", () => {
+    it("adds tool_result with error message when stream errors during tool_use", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      await delay(0);
+      agent.continueConversation();
+
+      const stream = await mockClient.awaitStream();
+
+      // Stream a tool_use block
+      const toolUseId = "tool-error-test" as ToolRequestId;
+      stream.streamToolUse(toolUseId, "get_file" as ToolName, {
+        filePath: "test.ts",
+      });
+
+      // Simulate a stream error
+      stream.respondWithError(new Error("Connection lost"));
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const state = agent.getState();
+
+      // Should have: user message, assistant with tool_use, user with tool_result
+      expect(state.messages).toHaveLength(3);
+      expect(state.messages[2].role).toBe("user");
+
+      const toolResult = state.messages[2].content[0];
+      expect(toolResult.type).toBe("tool_result");
+      if (toolResult.type === "tool_result") {
+        expect(toolResult.id).toBe(toolUseId);
+        expect(toolResult.result.status).toBe("error");
+        if (toolResult.result.status === "error") {
+          expect(toolResult.result.error).toContain("Connection lost");
+        }
+      }
+
+      expect(state.status.type).toBe("error");
+    });
+
+    it("removes server_tool_use block when stream errors during web search", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Search for info" }]);
+      await delay(0);
+      agent.continueConversation();
+
+      const stream = await mockClient.awaitStream();
+
+      // Stream some text first
+      stream.streamText("Let me search for that.");
+
+      // Stream a server_tool_use block
+      stream.streamServerToolUse("server-tool-2", "web_search", {
+        query: "test query",
+      });
+
+      // Simulate a stream error
+      stream.respondWithError(new Error("API timeout"));
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const state = agent.getState();
+
+      // Should have: user message, assistant with just text (server_tool_use removed)
+      expect(state.messages).toHaveLength(2);
+      expect(state.messages[1].role).toBe("assistant");
+      expect(state.messages[1].content).toHaveLength(1);
+      expect(state.messages[1].content[0].type).toBe("text");
+
+      expect(state.status.type).toBe("error");
     });
   });
-});
 
-describe("context_update detection", () => {
-  it("converts text blocks with <context_update> tags to context_update type", () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+  describe("latestUsage", () => {
+    it("tracks usage from successful responses", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
 
-    const contextUpdateText = `<context_update>
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      await delay(0);
+      agent.continueConversation();
+
+      const stream = await mockClient.awaitStream();
+      stream.streamText("Hello there!");
+      stream.finishResponse("end_turn", {
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheHits: 10,
+        cacheMisses: 5,
+      });
+
+      await stream.finalMessage();
+      await delay(0);
+
+      const state = agent.getState();
+      expect(state.latestUsage).toEqual({
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheHits: 10,
+        cacheMisses: 5,
+      });
+    });
+
+    it("preserves latestUsage when subsequent request is aborted", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      // First request - successful
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      await delay(0);
+      agent.continueConversation();
+
+      const stream1 = await mockClient.awaitStream();
+      stream1.streamText("Hello there!");
+      stream1.finishResponse("end_turn", {
+        inputTokens: 100,
+        outputTokens: 50,
+      });
+
+      await stream1.finalMessage();
+      await delay(0);
+
+      // Verify initial usage
+      expect(agent.getState().latestUsage).toEqual({
+        inputTokens: 100,
+        outputTokens: 50,
+      });
+
+      // Second request - will be aborted
+      agent.appendUserMessage([{ type: "text", text: "Follow up" }]);
+      await delay(0);
+      agent.continueConversation();
+
+      const stream2 = await mockClient.awaitStream();
+      stream2.streamText("Starting to respond...");
+
+      // Abort the second request
+      await agent.abort();
+      await delay(0);
+
+      // latestUsage should still reflect the first successful request
+      const state = agent.getState();
+      expect(state.status).toEqual({ type: "stopped", stopReason: "aborted" });
+      expect(state.latestUsage).toEqual({
+        inputTokens: 100,
+        outputTokens: 50,
+      });
+    });
+
+    it("preserves latestUsage when subsequent request errors", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      // First request - successful
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      await delay(0);
+      agent.continueConversation();
+
+      const stream1 = await mockClient.awaitStream();
+      stream1.streamText("Hello there!");
+      stream1.finishResponse("end_turn", {
+        inputTokens: 200,
+        outputTokens: 75,
+        cacheHits: 20,
+      });
+
+      await stream1.finalMessage();
+      await delay(0);
+
+      // Verify initial usage
+      expect(agent.getState().latestUsage).toEqual({
+        inputTokens: 200,
+        outputTokens: 75,
+        cacheHits: 20,
+      });
+
+      // Second request - will error
+      agent.appendUserMessage([{ type: "text", text: "Follow up" }]);
+      await delay(0);
+      agent.continueConversation();
+
+      const stream2 = await mockClient.awaitStream();
+      stream2.streamText("Starting to respond...");
+
+      // Simulate an error
+      stream2.respondWithError(new Error("Connection lost"));
+      await delay(0);
+
+      // latestUsage should still reflect the first successful request
+      const state = agent.getState();
+      expect(state.status.type).toBe("error");
+      expect(state.latestUsage).toEqual({
+        inputTokens: 200,
+        outputTokens: 75,
+        cacheHits: 20,
+      });
+    });
+
+    it("updates latestUsage only on successful responses", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      // Initially undefined
+      expect(agent.getState().latestUsage).toBeUndefined();
+
+      // First request - abort (should not set latestUsage)
+      agent.appendUserMessage([{ type: "text", text: "First" }]);
+      await delay(0);
+      agent.continueConversation();
+      const stream1 = await mockClient.awaitStream();
+      stream1.streamText("Partial...");
+      await agent.abort();
+      await delay(0);
+
+      expect(agent.getState().latestUsage).toBeUndefined();
+
+      // Second request - successful (should set latestUsage)
+      agent.appendUserMessage([{ type: "text", text: "Second" }]);
+      await delay(0);
+      agent.continueConversation();
+      const stream2 = await mockClient.awaitStream();
+      stream2.streamText("Complete response");
+      stream2.finishResponse("end_turn", {
+        inputTokens: 150,
+        outputTokens: 60,
+      });
+
+      await stream2.finalMessage();
+      await delay(0);
+
+      expect(agent.getState().latestUsage).toEqual({
+        inputTokens: 150,
+        outputTokens: 60,
+      });
+    });
+  });
+
+  describe("malformed tool_use handling", () => {
+    it("produces error request for tool_use with invalid input", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      await delay(0);
+      agent.continueConversation();
+
+      const stream = await mockClient.awaitStream();
+      // Stream a tool_use with missing required field (filePath)
+      stream.streamToolUse(
+        "tool-malformed" as ToolRequestId,
+        "get_file" as ToolName,
+        {},
+      );
+      stream.finishResponse("tool_use");
+
+      await stream.finalMessage();
+      await delay(0);
+
+      const state = agent.getState();
+      expect(state.messages).toHaveLength(2);
+      const assistantContent = state.messages[1].content;
+      const toolUseBlock = assistantContent.find((b) => b.type === "tool_use");
+      expect(toolUseBlock).toBeDefined();
+      if (toolUseBlock?.type === "tool_use") {
+        expect(toolUseBlock.request.status).toBe("error");
+      }
+    });
+
+    it("accepts error tool_result for malformed tool_use block", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      await delay(0);
+      agent.continueConversation();
+
+      const stream = await mockClient.awaitStream();
+      const toolUseId = "tool-malformed" as ToolRequestId;
+      stream.streamToolUse(toolUseId, "get_file" as ToolName, {});
+      stream.finishResponse("tool_use");
+
+      await stream.finalMessage();
+      await delay(0);
+
+      // Send error tool_result for the malformed block
+      agent.toolResult(toolUseId, {
+        type: "tool_result",
+        id: toolUseId,
+        result: {
+          status: "error",
+          error: "Malformed tool_use block: missing filePath",
+        },
+      });
+
+      const state = agent.getState();
+      expect(state.messages).toHaveLength(3);
+      expect(state.messages[2].role).toBe("user");
+      expect(state.messages[2].content[0].type).toBe("tool_result");
+
+      // Should be able to continue the conversation
+      agent.continueConversation();
+      const stream2 = await mockClient.awaitStream();
+      stream2.streamText("OK, I'll fix that.");
+      stream2.finishResponse("end_turn");
+      await stream2.finalMessage();
+      await delay(0);
+
+      expect(agent.getState().messages).toHaveLength(4);
+    });
+  });
+  describe("context_update detection", () => {
+    it("converts text blocks with <context_update> tags to context_update type", () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      const contextUpdateText = `<context_update>
 These files are part of your context.
 File \`test.ts\`
 const x = 1;
 </context_update>`;
 
-    agent.appendUserMessage([{ type: "text", text: contextUpdateText }]);
+      agent.appendUserMessage([{ type: "text", text: contextUpdateText }]);
 
-    const state = agent.getState();
-    expect(state.messages).toHaveLength(1);
-    expect(state.messages[0].content[0].type).toBe("context_update");
-    if (state.messages[0].content[0].type === "context_update") {
-      expect(state.messages[0].content[0].text).toBe(contextUpdateText);
-    }
-  });
+      const state = agent.getState();
+      expect(state.messages).toHaveLength(1);
+      expect(state.messages[0].content[0].type).toBe("context_update");
+      if (state.messages[0].content[0].type === "context_update") {
+        expect(state.messages[0].content[0].text).toBe(contextUpdateText);
+      }
+    });
 
-  it("does not convert regular text to context_update type", () => {
-    const mockClient = {} as Anthropic;
-    const agent = createAgent(mockClient);
+    it("does not convert regular text to context_update type", () => {
+      const mockClient = {} as Anthropic;
+      const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
-      { type: "text", text: "Hello, this is regular text" },
-    ]);
+      agent.appendUserMessage([
+        { type: "text", text: "Hello, this is regular text" },
+      ]);
 
-    const state = agent.getState();
-    expect(state.messages[0].content[0].type).toBe("text");
-  });
+      const state = agent.getState();
+      expect(state.messages[0].content[0].type).toBe("text");
+    });
 
-  it("converts context_update in multi-content messages correctly", () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    it("converts context_update in multi-content messages correctly", () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
 
-    const contextUpdateText = `<context_update>
+      const contextUpdateText = `<context_update>
 File context here
 </context_update>`;
 
-    agent.appendUserMessage([
-      { type: "text", text: contextUpdateText },
-      { type: "text", text: "Now here is my question" },
-    ]);
+      agent.appendUserMessage([
+        { type: "text", text: contextUpdateText },
+        { type: "text", text: "Now here is my question" },
+      ]);
 
-    const state = agent.getState();
-    expect(state.messages).toHaveLength(1);
-    expect(state.messages[0].content).toHaveLength(2);
-    expect(state.messages[0].content[0].type).toBe("context_update");
-    expect(state.messages[0].content[1].type).toBe("text");
-  });
-});
-
-describe("clone", () => {
-  it("creates a deep copy of the agent with all messages", async () => {
-    const mockClient = new MockAnthropicClient();
-    const tracked = trackMessages();
-    const agent = createAgent(mockClient, undefined, tracked);
-
-    // Build up some conversation history
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
-    agent.continueConversation();
-
-    const stream = await mockClient.awaitStream();
-    stream.streamText("Hi there!");
-    stream.finishResponse("end_turn");
-    await stream.finalMessage();
-    await delay(0);
-
-    agent.appendUserMessage([{ type: "text", text: "How are you?" }]);
-    agent.continueConversation();
-
-    const stream2 = await mockClient.awaitStream();
-    stream2.streamText("I'm doing well!");
-    stream2.finishResponse("end_turn");
-    await stream2.finalMessage();
-    await delay(0);
-
-    // Clone the agent
-    const clonedTracked = trackMessages();
-    const cloned = agent.clone((msg) => clonedTracked.messages.push(msg));
-
-    // Verify cloned agent has same messages
-    expect(cloned.getState().messages).toHaveLength(4);
-    expect(cloned.getState().messages[0].role).toBe("user");
-    expect(cloned.getState().messages[1].role).toBe("assistant");
-    expect(cloned.getState().messages[2].role).toBe("user");
-    expect(cloned.getState().messages[3].role).toBe("assistant");
-
-    // Verify content is copied
-    const clonedState = cloned.getState();
-    expect(clonedState.messages[0].content[0]).toEqual({
-      type: "text",
-      text: "Hello",
-    });
-    expect(clonedState.messages[1].content[0]).toEqual({
-      type: "text",
-      text: "Hi there!",
+      const state = agent.getState();
+      expect(state.messages).toHaveLength(1);
+      expect(state.messages[0].content).toHaveLength(2);
+      expect(state.messages[0].content[0].type).toBe("context_update");
+      expect(state.messages[0].content[1].type).toBe("text");
     });
   });
 
-  it("creates independent copy - changes to original don't affect clone", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+  describe("clone", () => {
+    it("creates a deep copy of the agent with all messages", async () => {
+      const mockClient = new MockAnthropicClient();
+      const tracked = trackMessages();
+      const agent = createAgent(mockClient, undefined, tracked);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
-    agent.continueConversation();
+      // Build up some conversation history
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.continueConversation();
 
-    const stream = await mockClient.awaitStream();
-    stream.streamText("Hi!");
-    stream.finishResponse("end_turn");
-    await stream.finalMessage();
-    await delay(0);
+      const stream = await mockClient.awaitStream();
+      stream.streamText("Hi there!");
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
+      await delay(0);
 
-    // Clone the agent
-    const cloned = agent.clone(() => {});
+      agent.appendUserMessage([{ type: "text", text: "How are you?" }]);
+      agent.continueConversation();
 
-    // Add more messages to original
-    agent.appendUserMessage([{ type: "text", text: "Another message" }]);
-    await delay(0);
+      const stream2 = await mockClient.awaitStream();
+      stream2.streamText("I'm doing well!");
+      stream2.finishResponse("end_turn");
+      await stream2.finalMessage();
+      await delay(0);
 
-    // Clone should not be affected
-    expect(agent.getState().messages).toHaveLength(3);
-    expect(cloned.getState().messages).toHaveLength(2);
-  });
+      // Clone the agent
+      const clonedTracked = trackMessages();
+      const cloned = agent.clone((msg) => clonedTracked.messages.push(msg));
 
-  it("clone while streaming with only a partial text block drops the empty assistant message", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+      // Verify cloned agent has same messages
+      expect(cloned.getState().messages).toHaveLength(4);
+      expect(cloned.getState().messages[0].role).toBe("user");
+      expect(cloned.getState().messages[1].role).toBe("assistant");
+      expect(cloned.getState().messages[2].role).toBe("user");
+      expect(cloned.getState().messages[3].role).toBe("assistant");
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
-    agent.continueConversation();
-
-    const stream = await mockClient.awaitStream();
-    expect(agent.getState().status.type).toBe("streaming");
-
-    // Start a text block but don't finish it — stays in currentAnthropicBlock
-    const index = stream.nextBlockIndex();
-    stream.emitEvent({
-      type: "content_block_start",
-      index,
-      content_block: { type: "text", text: "", citations: null },
-    });
-    stream.emitEvent({
-      type: "content_block_delta",
-      index,
-      delta: { type: "text_delta", text: "partial" },
-    });
-
-    // Clone — currentAssistantMessage hasn't been created yet (no block-finished)
-    const cloned = agent.clone(() => {});
-    const clonedState = cloned.getState();
-
-    // Only the user message should be present (no assistant message)
-    expect(clonedState.messages).toHaveLength(1);
-    expect(clonedState.messages[0].role).toBe("user");
-    expect(clonedState.status).toEqual({
-      type: "stopped",
-      stopReason: "end_turn",
+      // Verify content is copied
+      const clonedState = cloned.getState();
+      expect(clonedState.messages[0].content[0]).toEqual({
+        type: "text",
+        text: "Hello",
+      });
+      expect(clonedState.messages[1].content[0]).toEqual({
+        type: "text",
+        text: "Hi there!",
+      });
     });
 
-    // Clean up source
-    stream.emitEvent({ type: "content_block_stop", index });
-    stream.finishResponse("end_turn");
-    await stream.finalMessage();
-  });
+    it("creates independent copy - changes to original don't affect clone", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
 
-  it("clone while streaming with finalized text and in-progress tool_use keeps the text", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.continueConversation();
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
-    agent.continueConversation();
+      const stream = await mockClient.awaitStream();
+      stream.streamText("Hi!");
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
+      await delay(0);
 
-    const stream = await mockClient.awaitStream();
+      // Clone the agent
+      const cloned = agent.clone(() => {});
 
-    // Finalize a text block
-    stream.streamText("Complete text");
+      // Add more messages to original
+      agent.appendUserMessage([{ type: "text", text: "Another message" }]);
+      await delay(0);
 
-    // Start a tool_use block but don't finish it
-    const toolIndex = stream.nextBlockIndex();
-    stream.emitEvent({
-      type: "content_block_start",
-      index: toolIndex,
-      content_block: {
-        type: "tool_use",
-        id: "tool-1" as ToolRequestId,
-        name: "get_file" as ToolName,
-        input: {},
-      },
+      // Clone should not be affected
+      expect(agent.getState().messages).toHaveLength(3);
+      expect(cloned.getState().messages).toHaveLength(2);
     });
 
-    // Clone while tool_use is in-progress (in currentAnthropicBlock)
-    const cloned = agent.clone(() => {});
-    const clonedState = cloned.getState();
+    it("clone while streaming with only a partial text block drops the empty assistant message", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
 
-    // Should have user + assistant with just the finalized text
-    expect(clonedState.messages[1].content).toHaveLength(1);
-    expect(clonedState.messages[1].content[0].type).toBe("text");
-    expect(clonedState.messages[1].content[0]).toHaveProperty(
-      "text",
-      "Complete text",
-    );
-    expect(clonedState.status).toEqual({
-      type: "stopped",
-      stopReason: "end_turn",
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.continueConversation();
+
+      const stream = await mockClient.awaitStream();
+      expect(agent.getState().status.type).toBe("streaming");
+
+      // Start a text block but don't finish it — stays in currentAnthropicBlock
+      const index = stream.nextBlockIndex();
+      stream.emitEvent({
+        type: "content_block_start",
+        index,
+        content_block: { type: "text", text: "", citations: null },
+      });
+      stream.emitEvent({
+        type: "content_block_delta",
+        index,
+        delta: { type: "text_delta", text: "partial" },
+      });
+
+      // Clone — currentAssistantMessage hasn't been created yet (no block-finished)
+      const cloned = agent.clone(() => {});
+      const clonedState = cloned.getState();
+
+      // Only the user message should be present (no assistant message)
+      expect(clonedState.messages).toHaveLength(1);
+      expect(clonedState.messages[0].role).toBe("user");
+      expect(clonedState.status).toEqual({
+        type: "stopped",
+        stopReason: "end_turn",
+      });
+
+      // Clean up source
+      stream.emitEvent({ type: "content_block_stop", index });
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
     });
 
-    // Clean up source
-    stream.emitEvent({ type: "content_block_stop", index: toolIndex });
-    stream.finishResponse("end_turn");
-    await stream.finalMessage();
-  });
+    it("clone while streaming with finalized text and in-progress tool_use keeps the text", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
 
-  it("clone while streaming with finalized server_tool_use drops it", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.continueConversation();
 
-    agent.appendUserMessage([{ type: "text", text: "Search for something" }]);
-    agent.continueConversation();
+      const stream = await mockClient.awaitStream();
 
-    const stream = await mockClient.awaitStream();
+      // Finalize a text block
+      stream.streamText("Complete text");
 
-    // Finalize a server_tool_use block
-    stream.streamServerToolUse("server-tool-1", "web_search", {
-      query: "test query",
+      // Start a tool_use block but don't finish it
+      const toolIndex = stream.nextBlockIndex();
+      stream.emitEvent({
+        type: "content_block_start",
+        index: toolIndex,
+        content_block: {
+          type: "tool_use",
+          id: "tool-1" as ToolRequestId,
+          name: "get_file" as ToolName,
+          input: {},
+        },
+      });
+
+      // Clone while tool_use is in-progress (in currentAnthropicBlock)
+      const cloned = agent.clone(() => {});
+      const clonedState = cloned.getState();
+
+      // Should have user + assistant with just the finalized text
+      expect(clonedState.messages[1].content).toHaveLength(1);
+      expect(clonedState.messages[1].content[0].type).toBe("text");
+      expect(clonedState.messages[1].content[0]).toHaveProperty(
+        "text",
+        "Complete text",
+      );
+      expect(clonedState.status).toEqual({
+        type: "stopped",
+        stopReason: "end_turn",
+      });
+
+      // Clean up source
+      stream.emitEvent({ type: "content_block_stop", index: toolIndex });
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
     });
 
-    expect(agent.getState().status.type).toBe("streaming");
+    it("clone while streaming with finalized server_tool_use drops it", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
 
-    // Clone — server_tool_use should be dropped, leaving empty assistant → removed
-    const cloned = agent.clone(() => {});
-    const clonedState = cloned.getState();
+      agent.appendUserMessage([{ type: "text", text: "Search for something" }]);
+      agent.continueConversation();
 
-    expect(clonedState.messages).toHaveLength(1);
-    expect(clonedState.messages[0].role).toBe("user");
-    expect(clonedState.status).toEqual({
-      type: "stopped",
-      stopReason: "end_turn",
+      const stream = await mockClient.awaitStream();
+
+      // Finalize a server_tool_use block
+      stream.streamServerToolUse("server-tool-1", "web_search", {
+        query: "test query",
+      });
+
+      expect(agent.getState().status.type).toBe("streaming");
+
+      // Clone — server_tool_use should be dropped, leaving empty assistant → removed
+      const cloned = agent.clone(() => {});
+      const clonedState = cloned.getState();
+
+      expect(clonedState.messages).toHaveLength(1);
+      expect(clonedState.messages[0].role).toBe("user");
+      expect(clonedState.status).toEqual({
+        type: "stopped",
+        stopReason: "end_turn",
+      });
+
+      // Clean up source
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
     });
 
-    // Clean up source
-    stream.finishResponse("end_turn");
-    await stream.finalMessage();
-  });
+    it("clone while stopped on tool_use adds error tool_results", async () => {
+      const mockClient = new MockAnthropicClient();
+      const tracked = trackMessages();
+      const agent = createAgent(mockClient, undefined, tracked);
 
-  it("clone while stopped on tool_use adds error tool_results", async () => {
-    const mockClient = new MockAnthropicClient();
-    const tracked = trackMessages();
-    const agent = createAgent(mockClient, undefined, tracked);
+      agent.appendUserMessage([{ type: "text", text: "Use a tool" }]);
+      agent.continueConversation();
 
-    agent.appendUserMessage([{ type: "text", text: "Use a tool" }]);
-    agent.continueConversation();
+      const stream = await mockClient.awaitStream();
+      stream.streamText("I'll use the tool.");
+      stream.streamToolUse(
+        "tool-req-1" as ToolRequestId,
+        "get_file" as ToolName,
+        { filePath: "test.ts" },
+      );
+      stream.finishResponse("tool_use");
+      await stream.finalMessage();
+      await delay(0);
 
-    const stream = await mockClient.awaitStream();
-    stream.streamText("I'll use the tool.");
-    stream.streamToolUse(
-      "tool-req-1" as ToolRequestId,
-      "get_file" as ToolName,
-      { filePath: "test.ts" },
-    );
-    stream.finishResponse("tool_use");
-    await stream.finalMessage();
-    await delay(0);
+      expect(agent.getState().status).toEqual({
+        type: "stopped",
+        stopReason: "tool_use",
+      });
 
-    expect(agent.getState().status).toEqual({
-      type: "stopped",
-      stopReason: "tool_use",
+      // Clone while stopped on tool_use
+      const clonedTracked = trackMessages();
+      const cloned = agent.clone((msg) => clonedTracked.messages.push(msg));
+      const clonedState = cloned.getState();
+
+      // Should have: user, assistant (text + tool_use), user (error tool_result)
+      expect(clonedState.messages).toHaveLength(3);
+      expect(clonedState.messages[1].role).toBe("assistant");
+      expect(clonedState.messages[1].content).toHaveLength(2);
+      expect(clonedState.messages[1].content[0].type).toBe("text");
+      expect(clonedState.messages[1].content[0]).toHaveProperty(
+        "text",
+        "I'll use the tool.",
+      );
+      expect(clonedState.messages[1].content[1].type).toBe("tool_use");
+      expect(clonedState.messages[1].content[1]).toHaveProperty(
+        "id",
+        "tool-req-1",
+      );
+      expect(clonedState.messages[1].content[1]).toHaveProperty(
+        "name",
+        "get_file",
+      );
+      expect(clonedState.messages[2].role).toBe("user");
+      expect(clonedState.messages[2].content).toHaveLength(1);
+      expect(clonedState.messages[2].content[0]).toEqual({
+        type: "tool_result",
+        id: "tool-req-1",
+        result: {
+          status: "error",
+          error: "The thread was forked before the tool could execute.",
+        },
+      });
+      expect(clonedState.status).toEqual({
+        type: "stopped",
+        stopReason: "end_turn",
+      });
+
+      // Source agent should be unchanged
+      expect(agent.getState().status).toEqual({
+        type: "stopped",
+        stopReason: "tool_use",
+      });
+      expect(agent.getState().messages).toHaveLength(2);
     });
 
-    // Clone while stopped on tool_use
-    const clonedTracked = trackMessages();
-    const cloned = agent.clone((msg) => clonedTracked.messages.push(msg));
-    const clonedState = cloned.getState();
+    it("source agent continues streaming unaffected after clone", async () => {
+      const mockClient = new MockAnthropicClient();
+      const tracked = trackMessages();
+      const agent = createAgent(mockClient, undefined, tracked);
 
-    // Should have: user, assistant (text + tool_use), user (error tool_result)
-    expect(clonedState.messages).toHaveLength(3);
-    expect(clonedState.messages[1].role).toBe("assistant");
-    expect(clonedState.messages[1].content).toHaveLength(2);
-    expect(clonedState.messages[1].content[0].type).toBe("text");
-    expect(clonedState.messages[1].content[0]).toHaveProperty(
-      "text",
-      "I'll use the tool.",
-    );
-    expect(clonedState.messages[1].content[1].type).toBe("tool_use");
-    expect(clonedState.messages[1].content[1]).toHaveProperty(
-      "id",
-      "tool-req-1",
-    );
-    expect(clonedState.messages[1].content[1]).toHaveProperty(
-      "name",
-      "get_file",
-    );
-    expect(clonedState.messages[2].role).toBe("user");
-    expect(clonedState.messages[2].content).toHaveLength(1);
-    expect(clonedState.messages[2].content[0]).toEqual({
-      type: "tool_result",
-      id: "tool-req-1",
-      result: {
-        status: "error",
-        error: "The thread was forked before the tool could execute.",
-      },
-    });
-    expect(clonedState.status).toEqual({
-      type: "stopped",
-      stopReason: "end_turn",
-    });
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.continueConversation();
 
-    // Source agent should be unchanged
-    expect(agent.getState().status).toEqual({
-      type: "stopped",
-      stopReason: "tool_use",
-    });
-    expect(agent.getState().messages).toHaveLength(2);
-  });
+      const stream = await mockClient.awaitStream();
+      stream.streamText("First part");
 
-  it("source agent continues streaming unaffected after clone", async () => {
-    const mockClient = new MockAnthropicClient();
-    const tracked = trackMessages();
-    const agent = createAgent(mockClient, undefined, tracked);
+      // Clone mid-stream
+      const cloned = agent.clone(() => {});
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
-    agent.continueConversation();
+      // Continue streaming on source
+      stream.streamText("Second part");
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
+      await delay(0);
 
-    const stream = await mockClient.awaitStream();
-    stream.streamText("First part");
+      // Source should have the complete response
+      const sourceState = agent.getState();
+      expect(sourceState.status).toEqual({
+        type: "stopped",
+        stopReason: "end_turn",
+      });
+      expect(sourceState.messages).toHaveLength(2);
+      expect(sourceState.messages[1].content).toHaveLength(2);
+      expect(sourceState.messages[1].content[0]).toHaveProperty(
+        "text",
+        "First part",
+      );
+      expect(sourceState.messages[1].content[1]).toHaveProperty(
+        "text",
+        "Second part",
+      );
 
-    // Clone mid-stream
-    const cloned = agent.clone(() => {});
-
-    // Continue streaming on source
-    stream.streamText("Second part");
-    stream.finishResponse("end_turn");
-    await stream.finalMessage();
-    await delay(0);
-
-    // Source should have the complete response
-    const sourceState = agent.getState();
-    expect(sourceState.status).toEqual({
-      type: "stopped",
-      stopReason: "end_turn",
-    });
-    expect(sourceState.messages).toHaveLength(2);
-    expect(sourceState.messages[1].content).toHaveLength(2);
-    expect(sourceState.messages[1].content[0]).toHaveProperty(
-      "text",
-      "First part",
-    );
-    expect(sourceState.messages[1].content[1]).toHaveProperty(
-      "text",
-      "Second part",
-    );
-
-    // Clone should only have the snapshot from before
-    const clonedState = cloned.getState();
-    expect(clonedState.messages).toHaveLength(2);
-    expect(clonedState.messages[1].content).toHaveLength(1);
-    expect(clonedState.messages[1].content[0]).toHaveProperty(
-      "text",
-      "First part",
-    );
-  });
-
-  it("preserves stop info for messages", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
-
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
-    agent.continueConversation();
-
-    const stream = await mockClient.awaitStream();
-    stream.streamText("Hi!");
-    stream.finishResponse("end_turn");
-    await stream.finalMessage();
-    await delay(0);
-
-    // Clone the agent
-    const cloned = agent.clone(() => {});
-
-    // Verify stop reason is preserved
-    const clonedState = cloned.getState();
-    expect(clonedState.messages[1].stopReason).toBe("end_turn");
-    expect(clonedState.status).toEqual({
-      type: "stopped",
-      stopReason: "end_turn",
-    });
-  });
-
-  it("cloned agent can append messages independently", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
-
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
-    agent.continueConversation();
-
-    const stream = await mockClient.awaitStream();
-    stream.streamText("Hi!");
-    stream.finishResponse("end_turn");
-    await stream.finalMessage();
-    await delay(0);
-
-    // Clone the agent
-    const cloned = agent.clone(() => {});
-
-    // Append message to cloned agent (without streaming)
-    cloned.appendUserMessage([{ type: "text", text: "From clone" }]);
-    await delay(0);
-
-    // Cloned agent has the new message
-    expect(cloned.getState().messages).toHaveLength(3);
-    expect(cloned.getState().messages[2].content[0]).toEqual({
-      type: "text",
-      text: "From clone",
+      // Clone should only have the snapshot from before
+      const clonedState = cloned.getState();
+      expect(clonedState.messages).toHaveLength(2);
+      expect(clonedState.messages[1].content).toHaveLength(1);
+      expect(clonedState.messages[1].content[0]).toHaveProperty(
+        "text",
+        "First part",
+      );
     });
 
-    // Original is unchanged
-    expect(agent.getState().messages).toHaveLength(2);
+    it("preserves stop info for messages", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.continueConversation();
+
+      const stream = await mockClient.awaitStream();
+      stream.streamText("Hi!");
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
+      await delay(0);
+
+      // Clone the agent
+      const cloned = agent.clone(() => {});
+
+      // Verify stop reason is preserved
+      const clonedState = cloned.getState();
+      expect(clonedState.messages[1].stopReason).toBe("end_turn");
+      expect(clonedState.status).toEqual({
+        type: "stopped",
+        stopReason: "end_turn",
+      });
+    });
+
+    it("cloned agent can append messages independently", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.continueConversation();
+
+      const stream = await mockClient.awaitStream();
+      stream.streamText("Hi!");
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
+      await delay(0);
+
+      // Clone the agent
+      const cloned = agent.clone(() => {});
+
+      // Append message to cloned agent (without streaming)
+      cloned.appendUserMessage([{ type: "text", text: "From clone" }]);
+      await delay(0);
+
+      // Cloned agent has the new message
+      expect(cloned.getState().messages).toHaveLength(3);
+      expect(cloned.getState().messages[2].content[0]).toEqual({
+        type: "text",
+        text: "From clone",
+      });
+
+      // Original is unchanged
+      expect(agent.getState().messages).toHaveLength(2);
+    });
   });
 });

@@ -117,7 +117,7 @@ retain_first`);
 
       const result = await runScript(`\
 file \`${filePath}\`
-select_one <<FIND
+select <<FIND
 FIND`);
 
       expect(result.status).toBe("ok");
@@ -138,7 +138,7 @@ describe("register persistence across invocations", () => {
 
       const result1 = await runScript(`\
 file \`${filePath}\`
-select_one /bbb/
+select /bbb/
 cut myReg`);
 
       expect(result1.status).toBe("ok");
@@ -150,7 +150,7 @@ cut myReg`);
       const result2 = await runScript(
         `\
 file \`${filePath}\`
-select_one /  /
+select /  /
 replace myReg`,
         undefined,
         result1.edlRegisters,
@@ -170,7 +170,7 @@ replace myReg`,
 
       const result1 = await runScript(`\
 file \`${filePath}\`
-select_one /nonexistent/
+select /nonexistent/
 replace <<END
 replacement text here
 END`);
@@ -186,7 +186,7 @@ END`);
       const result2 = await runScript(
         `\
 file \`${filePath}\`
-select_one /world/
+select /world/
 replace _saved_1`,
         undefined,
         result1.edlRegisters,
@@ -208,7 +208,7 @@ replace _saved_1`,
 
       const result1 = await runScript(`\
 file \`${file1}\`
-select_one / bar/
+select / bar/
 cut chunk`);
 
       expect(result1.status).toBe("ok");
@@ -218,7 +218,7 @@ cut chunk`);
       const result2 = await runScript(
         `\
 file \`${file2}\`
-select_one /start/
+select /start/
 insert_after chunk`,
         undefined,
         result1.edlRegisters,
@@ -238,7 +238,7 @@ insert_after chunk`,
 
       const result1 = await runScript(`\
 file \`${filePath}\`
-select_one /nonexistent/
+select /nonexistent/
 replace <<END
 text1
 END`);
@@ -253,7 +253,7 @@ END`);
       const result2 = await runScript(
         `\
 file \`${filePath}\`
-select_one /alsoNonexistent/
+select /alsoNonexistent/
 replace <<END
 text2
 END`,

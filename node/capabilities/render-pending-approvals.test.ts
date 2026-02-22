@@ -1,7 +1,7 @@
 import { withDriver } from "../test/preamble.ts";
 import { describe, it } from "vitest";
-import type { ToolRequestId } from "./toolManager.ts";
-import type { ToolName } from "./types.ts";
+import type { ToolRequestId } from "../tools/toolManager.ts";
+import type { ToolName } from "../tools/types.ts";
 
 describe("pending approvals surfaced in parent thread", () => {
   it("blocking spawn_subagent surfaces bash_command approval in parent view", async () => {
@@ -87,6 +87,54 @@ describe("pending approvals surfaced in parent thread", () => {
 
       // After approval, the approval dialog should disappear
       await driver.assertDisplayBufferDoesNotContain("> YES");
+
+      // After approval, the command should run and complete.
+      // The subagent gets a new stream to continue after the bash tool result.
+      const subagentStream2 = await driver.mockAnthropic.awaitPendingStream({
+        predicate: (stream) =>
+          stream.messages.some(
+            (m) =>
+              m.role === "user" &&
+              Array.isArray(m.content) &&
+              m.content.some(
+                (b) => b.type === "tool_result" && b.tool_use_id === "bash-1",
+              ),
+          ),
+        message: "waiting for subagent stream with bash-1 tool_result",
+      });
+
+      // Subagent yields its result to the parent
+      subagentStream2.respond({
+        stopReason: "tool_use",
+        text: "Directory created successfully.",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "yield-1" as ToolRequestId,
+              toolName: "yield_to_parent" as ToolName,
+              input: {
+                result: "Created test-approval-dir",
+              },
+            },
+          },
+        ],
+      });
+
+      // The blocking subagent completing should trigger the parent to continue
+      const parentStream2 =
+        await driver.mockAnthropic.awaitPendingStreamWithText(
+          "Created test-approval-dir",
+        );
+
+      // Verify the parent view shows the completed subagent
+      await driver.assertDisplayBufferContains("🤖✅ spawn_subagent");
+
+      parentStream2.respond({
+        stopReason: "end_turn",
+        text: "The subagent finished creating the directory.",
+        toolRequests: [],
+      });
     });
   });
 
@@ -183,6 +231,52 @@ describe("pending approvals surfaced in parent thread", () => {
 
       // After approval, it should disappear
       await driver.assertDisplayBufferDoesNotContain("> YES");
+
+      // After approval, the command runs. The subagent gets a new stream.
+      const subagentStream2 = await driver.mockAnthropic.awaitPendingStream({
+        predicate: (stream) =>
+          stream.messages.some(
+            (m) =>
+              m.role === "user" &&
+              Array.isArray(m.content) &&
+              m.content.some(
+                (b) => b.type === "tool_result" && b.tool_use_id === "bash-2",
+              ),
+          ),
+        message: "waiting for subagent stream with bash-2 tool_result",
+      });
+
+      // Subagent yields its result to parent
+      subagentStream2.respond({
+        stopReason: "tool_use",
+        text: "Directory created.",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "yield-1" as ToolRequestId,
+              toolName: "yield_to_parent" as ToolName,
+              input: {
+                result: "Created test-wait-dir",
+              },
+            },
+          },
+        ],
+      });
+
+      // wait_for_subagents resolves and parent continues
+      const stream3 = await driver.mockAnthropic.awaitPendingStreamWithText(
+        "Created test-wait-dir",
+      );
+
+      // Verify the wait completed
+      await driver.assertDisplayBufferDoesNotContain("⏸️⏳ Waiting");
+
+      stream3.respond({
+        stopReason: "end_turn",
+        text: "All done.",
+        toolRequests: [],
+      });
     });
   });
 
@@ -265,6 +359,53 @@ describe("pending approvals surfaced in parent thread", () => {
 
         // After approval, it should disappear
         await driver.assertDisplayBufferDoesNotContain("> YES");
+
+        // After approval, the command runs. The subagent gets a new stream.
+        const subagentStream2 = await driver.mockAnthropic.awaitPendingStream({
+          predicate: (stream) =>
+            stream.messages.some(
+              (m) =>
+                m.role === "user" &&
+                Array.isArray(m.content) &&
+                m.content.some(
+                  (b) => b.type === "tool_result" && b.tool_use_id === "bash-3",
+                ),
+            ),
+          message: "waiting for subagent stream with bash-3 tool_result",
+        });
+
+        // Subagent yields its result to parent
+        subagentStream2.respond({
+          stopReason: "tool_use",
+          text: "Directory created.",
+          toolRequests: [
+            {
+              status: "ok",
+              value: {
+                id: "yield-1" as ToolRequestId,
+                toolName: "yield_to_parent" as ToolName,
+                input: {
+                  result: "Created test-foreach-dir",
+                },
+              },
+            },
+          ],
+        });
+
+        // spawn_foreach completes and parent continues
+        const parentStream2 =
+          await driver.mockAnthropic.awaitPendingStreamWithText(
+            "Created test-foreach-dir",
+          );
+
+        // Verify foreach completed
+        await driver.assertDisplayBufferContains("🤖✅ Foreach subagents");
+
+        parentStream2.respond({
+          stopReason: "end_turn",
+          text: "All directories created.",
+          toolRequests: [],
+        });
       },
     );
   });

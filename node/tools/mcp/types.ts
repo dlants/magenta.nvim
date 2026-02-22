@@ -1,5 +1,4 @@
-import type { ToolMsg, ToolName } from "../types";
-import type { Msg } from "./tool";
+import type { ToolName } from "../types";
 
 /** The tool name wihtout the mcp_serverName prefix
  */
@@ -21,14 +20,6 @@ export function mcpToolNameToToolName(opts: {
   serverName: ServerName;
 }) {
   return `mcp_${opts.serverName}_${opts.mcpToolName}` as ToolName;
-}
-
-export function wrapMcpToolMsg(msg: Msg): ToolMsg {
-  return msg as unknown as ToolMsg;
-}
-
-export function unwrapMcpToolMsg(msg: ToolMsg): Msg {
-  return msg as unknown as Msg;
 }
 
 export function parseToolName(toolName: ToolName) {

@@ -1,6 +1,6 @@
-import { type Nvim } from "./nvim/nvim-node";
-import type { NvimBuffer } from "./nvim/buffer.ts";
-import type { PositionString } from "./nvim/window.ts";
+import { type Nvim } from "../nvim/nvim-node";
+import type { NvimBuffer } from "../nvim/buffer.ts";
+import type { PositionString } from "../nvim/window.ts";
 
 export class Lsp {
   private requestCounter = 0;

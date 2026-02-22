@@ -40,7 +40,7 @@ test("user-submitted messages should include system reminder", async () => {
 
     if (systemReminder) {
       expect(systemReminder.text).toContain("<system-reminder>");
-      expect(systemReminder.text).toContain("Remember to use the skills");
+      expect(systemReminder.text).toContain("Remember the skills");
     }
   });
 });
@@ -213,7 +213,7 @@ test("root thread should get base reminder", async () => {
     const systemReminder = findSystemReminderText(userMessage.content);
 
     expect(systemReminder).toBeDefined();
-    expect(systemReminder!.text).toContain("Remember to use the skills");
+    expect(systemReminder!.text).toContain("Remember the skills");
     // Root thread should NOT have yield_to_parent reminder
     expect(systemReminder!.text).not.toContain("yield_to_parent");
     expect(systemReminder!.text).not.toContain("notes/");
@@ -240,7 +240,7 @@ test("system reminder should be collapsed by default in UI", async () => {
 
     // Check that the full text is NOT shown initially
     const displayBuffer = await driver.getDisplayBufferText();
-    expect(displayBuffer).not.toContain("Remember to use skills");
+    expect(displayBuffer).not.toContain("Remember the skills");
   });
 });
 

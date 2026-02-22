@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderThreadToMarkdown } from "./compact-renderer.ts";
+import { renderThreadToMarkdown, chunkMessages } from "./compact-renderer.ts";
 import type { ProviderMessage } from "../providers/provider-types.ts";
 import type { ToolRequestId } from "../tools/toolManager.ts";
 import type { ToolName } from "../tools/types.ts";
@@ -17,7 +17,7 @@ describe("renderThreadToMarkdown", () => {
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("# user:");
     expect(result).toContain("Hello");
     expect(result).toContain("# assistant:");
@@ -35,7 +35,7 @@ describe("renderThreadToMarkdown", () => {
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).not.toContain("Let me think");
     expect(result).toContain("Here is my answer");
   });
@@ -51,7 +51,7 @@ describe("renderThreadToMarkdown", () => {
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).not.toContain("secret");
     expect(result).toContain("visible text");
   });
@@ -67,7 +67,7 @@ describe("renderThreadToMarkdown", () => {
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).not.toContain("Remember to be helpful");
     expect(result).toContain("My question");
   });
@@ -97,7 +97,7 @@ const x = 1;
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain(
       "[context update: `src/index.ts`, `src/utils.ts`]",
     );
@@ -129,7 +129,7 @@ File \`context.md\`
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("[context update: `context.md`]");
     expect(result).not.toContain("Controllers");
     expect(result).not.toContain("Msg/RootMsg");
@@ -150,7 +150,7 @@ File \`context.md\`
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("[context update]");
   });
 
@@ -176,7 +176,7 @@ File \`context.md\`
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("## tool_use: get_file");
     expect(result).toContain('"filePath": "src/index.ts"');
   });
@@ -200,7 +200,7 @@ File \`context.md\`
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("(parse error)");
   });
 
@@ -221,7 +221,7 @@ File \`context.md\`
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("## tool_result");
     expect(result).toContain("File contents here");
   });
@@ -243,7 +243,7 @@ File \`context.md\`
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("tool_result (error)");
     expect(result).toContain("File not found");
   });
@@ -274,7 +274,7 @@ File \`context.md\`
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("[Image]");
     expect(result).toContain("[Document: report.pdf]");
     expect(result).not.toContain("abc123");
@@ -320,7 +320,7 @@ File \`context.md\`
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("[web search: vitest documentation]");
     expect(result).toContain("[search results]");
     expect(result).toContain(
@@ -374,7 +374,7 @@ File \`context.md\`
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("## tool_use: get_file");
     expect(result).toContain("[file contents omitted]");
     // Should NOT include the actual file contents
@@ -417,7 +417,7 @@ File \`context.md\`
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("tool_result (error)");
     expect(result).toContain("File not found: nonexistent.ts");
   });
@@ -457,8 +457,126 @@ File \`context.md\`
       },
     ];
 
-    const result = renderThreadToMarkdown(messages);
+    const { markdown: result } = renderThreadToMarkdown(messages);
     expect(result).toContain("hello");
     expect(result).not.toContain("[file contents omitted]");
+  });
+
+  it("returns correct message boundaries", () => {
+    const messages: ProviderMessage[] = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hello" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Hi there!" }],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Goodbye" }],
+      },
+    ];
+
+    const { markdown, messageBoundaries } = renderThreadToMarkdown(messages);
+    expect(messageBoundaries).toHaveLength(3);
+    expect(messageBoundaries[0]).toBe(0);
+
+    // Each boundary should point to the start of "# role:"
+    for (const boundary of messageBoundaries) {
+      expect(markdown.substring(boundary, boundary + 2)).toBe("# ");
+    }
+  });
+
+  it("returns empty boundaries for empty messages", () => {
+    const { markdown, messageBoundaries } = renderThreadToMarkdown([]);
+    expect(markdown).toBe("");
+    expect(messageBoundaries).toEqual([]);
+  });
+});
+
+describe("chunkMessages", () => {
+  it("returns empty array for empty markdown + no boundaries", () => {
+    expect(chunkMessages("", [], 20, 5)).toEqual([]);
+  });
+
+  it("returns one chunk for a single small message", () => {
+    const md = "# user:\nHello\n";
+    const chunks = chunkMessages(md, [0], 100, 20);
+    expect(chunks).toEqual([md]);
+  });
+
+  it("returns one chunk when multiple small messages fit", () => {
+    const msg1 = "# user:\nHello\n";
+    const msg2 = "# assistant:\nHi\n";
+    const md = msg1 + msg2;
+    const chunks = chunkMessages(md, [0, msg1.length], 200, 50);
+    expect(chunks).toEqual([md]);
+  });
+
+  it("splits at message boundaries when messages exceed budget", () => {
+    const msg1 = "A".repeat(15);
+    const msg2 = "B".repeat(15);
+    const msg3 = "C".repeat(15);
+    const md = msg1 + msg2 + msg3;
+    // target=20, tolerance=5, so max=25
+    // msg1 (15) fits in chunk 1
+    // msg1+msg2 (30) > max(25), so msg1 is flushed? No, msg1 < target(20), so combined(30) > max(25), split
+    const chunks = chunkMessages(md, [0, 15, 30], 20, 5);
+    // All chunks concatenated should equal the original
+    expect(chunks.join("")).toBe(md);
+    expect(chunks.length).toBeGreaterThan(1);
+  });
+
+  it("keeps a single message within tolerance in one chunk", () => {
+    // target=20, tolerance=5, message=23 chars → within max(25), no split
+    const md = "X".repeat(23);
+    const chunks = chunkMessages(md, [0], 20, 5);
+    expect(chunks).toEqual([md]);
+  });
+
+  it("splits a single message that exceeds tolerance", () => {
+    // target=20, tolerance=5, message=26 chars → exceeds max(25)
+    const md = "X".repeat(26);
+    const chunks = chunkMessages(md, [0], 20, 5);
+    expect(chunks.length).toBe(2);
+    expect(chunks.join("")).toBe(md);
+  });
+
+  it("splits a very large single message into multiple chunks", () => {
+    // target=20, tolerance=5, message=55 chars
+    const md = "X".repeat(55);
+    const chunks = chunkMessages(md, [0], 20, 5);
+    // 55 / 20 = 2.75, so 3 chunks
+    expect(chunks.length).toBe(3);
+    expect(chunks.join("")).toBe(md);
+  });
+
+  it("handles mix of small messages then a giant message", () => {
+    const small1 = "A".repeat(8);
+    const small2 = "B".repeat(8);
+    const giant = "C".repeat(55);
+    const md = small1 + small2 + giant;
+    const chunks = chunkMessages(md, [0, 8, 16], 20, 5);
+    expect(chunks.join("")).toBe(md);
+    // small1+small2 = 16, fits in one chunk
+    // giant = 55, needs splitting
+    expect(chunks.length).toBeGreaterThan(1);
+  });
+
+  it("preserves all content: concatenated chunks equal original", () => {
+    const msgs = Array.from(
+      { length: 10 },
+      (_, i) => `msg${i}:${"x".repeat(12)}\n`,
+    );
+    const md = msgs.join("");
+    const boundaries = [];
+    let offset = 0;
+    for (const msg of msgs) {
+      boundaries.push(offset);
+      offset += msg.length;
+    }
+    const chunks = chunkMessages(md, boundaries, 40, 10);
+    expect(chunks.join("")).toBe(md);
   });
 });

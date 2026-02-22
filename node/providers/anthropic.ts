@@ -638,6 +638,7 @@ export class AnthropicProvider implements Provider {
       authType: this.authType,
       includeWebSearch: this.includeWebSearch,
       disableParallelToolUseFlag: this.disableParallelToolUseFlag,
+      logger: this.nvim.logger,
     });
   }
 }

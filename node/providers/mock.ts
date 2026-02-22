@@ -21,6 +21,7 @@ import type { ToolRequest } from "../tools/types.ts";
 import { AnthropicAgent } from "./anthropic-agent.ts";
 import { MockAnthropicClient, MockStream } from "./mock-anthropic-client.ts";
 import type Anthropic from "@anthropic-ai/sdk";
+import winston from "winston";
 
 function anthropicBlockIncludesText(
   block: Anthropic.Messages.ContentBlockParam,
@@ -159,7 +160,7 @@ export class MockProvider implements Provider {
         }
       }
       // Fall back to legacy requests
-      throw new Error(`No pending streams! ${options?.message ?? ""}
+      throw new Error(`No pending streams${options?.predicate ? " matching predicate" : ""}! ${options?.message ?? ""}
 Streams: ${this.mockClient.streams.length}`);
     });
   }
@@ -359,6 +360,7 @@ Streams: ${this.mockClient.streams.length}`);
         authType: "max",
         includeWebSearch: true,
         disableParallelToolUseFlag: true,
+        logger: winston.createLogger(),
       },
     );
   }

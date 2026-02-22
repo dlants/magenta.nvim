@@ -72,3 +72,10 @@ export type ToolManagerToolMsg = {
 /** Opaque tool message for external consumption
  */
 export type ToolMsg = { __toolMsg: true };
+
+// ===== New ToolInvocation types =====
+
+export type ToolInvocation = {
+  promise: Promise<ProviderToolResult>;
+  abort: () => void;
+};

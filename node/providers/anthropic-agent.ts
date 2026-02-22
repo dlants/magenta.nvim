@@ -15,6 +15,7 @@ import type {
 import type { Dispatch } from "../tea/tea.ts";
 import type { ToolRequestId } from "../tools/toolManager.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
+import type { Logger } from "winston";
 import type { ToolName } from "../tools/types.ts";
 import { validateInput } from "../tools/helpers.ts";
 
@@ -22,6 +23,7 @@ export type AnthropicAgentOptions = {
   authType: "key" | "max";
   includeWebSearch: boolean;
   disableParallelToolUseFlag: boolean;
+  logger: Logger;
 };
 
 // Internal streaming block type for all Anthropic block types
@@ -84,6 +86,8 @@ export class AnthropicAgent implements Agent {
   /** Stored for cloning */
   private anthropicOptions: AnthropicAgentOptions;
   /** Promise that resolves when streaming stops, and its resolver */
+  /** Token count for the full conversation, updated after each streaming completion */
+  private inputTokenCount: number | undefined;
   private streamingEndPromise: Promise<void> | undefined;
   private streamingEndResolver: (() => void) | undefined;
 
@@ -196,6 +200,7 @@ export class AnthropicAgent implements Agent {
               .content as Anthropic.Messages.ContentBlockParam[]
           ).push(this.responseBlockToParam(block));
         }
+
         this.updateCachedProviderMessages();
 
         const usage: Usage = {
@@ -210,6 +215,9 @@ export class AnthropicAgent implements Agent {
         }
 
         this.latestUsage = usage;
+        this.anthropicOptions.logger.info(
+          `Usage: inputTokens=${usage.inputTokens} outputTokens=${usage.outputTokens} cacheHits=${usage.cacheHits ?? 0} cacheMisses=${usage.cacheMisses ?? 0} stopReason=${response.stop_reason}`,
+        );
         const stopReason = response.stop_reason || "end_turn";
         const messageIndex = this.messages.indexOf(
           this.currentAssistantMessage,
@@ -219,6 +227,7 @@ export class AnthropicAgent implements Agent {
         this.currentAssistantMessage = undefined;
         this.status = { type: "stopped", stopReason };
         this.resolveStreamingEnd();
+        this.countTokensPostFlight();
         this.dispatchAsync({ type: "agent-stopped", stopReason, usage });
         break;
       }
@@ -229,6 +238,7 @@ export class AnthropicAgent implements Agent {
         this.currentAssistantMessage = undefined;
         this.status = { type: "error", error: action.error };
         this.resolveStreamingEnd();
+        this.countTokensPostFlight();
         this.dispatchAsync({ type: "agent-error", error: action.error });
         break;
       }
@@ -239,6 +249,7 @@ export class AnthropicAgent implements Agent {
         this.currentAssistantMessage = undefined;
         this.status = { type: "stopped", stopReason: "aborted" };
         this.resolveStreamingEnd();
+        this.countTokensPostFlight();
         this.dispatchAsync({ type: "agent-stopped", stopReason: "aborted" });
         break;
 
@@ -253,6 +264,7 @@ export class AnthropicAgent implements Agent {
       messages: this.cachedProviderMessages,
       streamingBlock: this.getStreamingBlock(),
       latestUsage: this.latestUsage,
+      inputTokenCount: this.inputTokenCount,
     };
   }
 
@@ -412,6 +424,34 @@ export class AnthropicAgent implements Agent {
       });
   }
 
+  private countTokensPostFlight(): void {
+    if (this.options.skipPostFlightTokenCount) return;
+    if (typeof this.client.messages.countTokens !== "function") {
+      return;
+    }
+    const messagesWithCache = withCacheControl(this.messages);
+    const countParams: Anthropic.Messages.MessageCountTokensParams = {
+      model: this.params.model,
+      messages: messagesWithCache,
+    };
+    if (this.params.system) countParams.system = this.params.system;
+    if (this.params.tools) countParams.tools = this.params.tools;
+    if (this.params.tool_choice)
+      countParams.tool_choice = this.params.tool_choice;
+    if (this.params.thinking) countParams.thinking = this.params.thinking;
+    this.client.messages
+      .countTokens(countParams)
+      .then((result) => {
+        this.inputTokenCount = result.input_tokens;
+        this.dispatchAsync({ type: "agent-content-updated" });
+      })
+      .catch((error: unknown) => {
+        this.anthropicOptions.logger.warn(
+          `countTokens post-flight failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+  }
+
   truncateMessages(messageIdx: NativeMessageIdx): void {
     // Keep messages 0..messageIdx (inclusive), remove everything after
     this.messages.length = messageIdx + 1;
@@ -456,10 +496,11 @@ export class AnthropicAgent implements Agent {
     // Cloned agent is always in stopped/end_turn state
     cloned.status = { type: "stopped", stopReason: "end_turn" };
 
-    // Copy latestUsage if present
+    // Copy latestUsage and inputTokenCount if present
     if (this.latestUsage) {
       cloned.latestUsage = { ...this.latestUsage };
     }
+    cloned.inputTokenCount = this.inputTokenCount;
 
     // Rebuild cached provider messages from the cloned data
     cloned.cachedProviderMessages = convertAnthropicMessagesToProvider(
@@ -1163,6 +1204,20 @@ export function withCacheControl(
   return messages;
 }
 
+export function getContextWindowForModel(model: string): number {
+  // Claude 3+ models all have 200K context windows
+  if (model.match(/^claude-(opus-4|sonnet-4|haiku-4|3|4)/)) {
+    return 200_000;
+  }
+
+  // Legacy Claude 2.x models - 100K context window
+  if (model.match(/^claude-2\./)) {
+    return 100_000;
+  }
+
+  // Default for unknown models - conservative 200K
+  return 200_000;
+}
 export function getMaxTokensForModel(model: string): number {
   // Claude 4.5 models (Opus, Sonnet, Haiku) - use high limits
   if (model.match(/^claude-(opus-4-5|opus-4-6|sonnet-4-5|haiku-4-5)/)) {

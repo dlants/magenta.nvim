@@ -15,20 +15,23 @@ import {
 } from "../tea/view.ts";
 import {
   type ToolRequestId,
-  type Tool,
   type CompletedToolInfo,
   getToolSpecs,
+} from "../tools/toolManager.ts";
+import {
   renderCompletedToolSummary,
   renderCompletedToolPreview,
   renderCompletedToolDetail,
-} from "../tools/toolManager.ts";
+  renderInFlightToolSummary,
+  renderInFlightToolPreview,
+  renderInFlightToolDetail,
+} from "../render-tools/index.ts";
 import { createTool, type CreateToolContext } from "../tools/create-tool.ts";
-import type { StaticTool, ToolMsg, ToolName } from "../tools/types.ts";
+import type { ToolInvocation, ToolName, ToolRequest } from "../tools/types.ts";
 import { MCPToolManager } from "../tools/mcp/manager.ts";
-import * as BashCommand from "../tools/bashCommand.ts";
 
 import type { Nvim } from "../nvim/nvim-node";
-import type { Lsp } from "../lsp.ts";
+import type { Lsp } from "../capabilities/lsp.ts";
 import {
   getProvider as getProvider,
   type ProviderMessage,
@@ -48,7 +51,6 @@ import {
   type HomeDir,
   type NvimCwd,
   type UnresolvedFilePath,
-  MAGENTA_TEMP_DIR,
 } from "../utils/files.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import {
@@ -59,15 +61,29 @@ import {
 import type { Chat } from "./chat.ts";
 import type { ThreadId, ThreadType } from "./types.ts";
 import type { SystemPrompt } from "../providers/system-prompt.ts";
-import { readFileSync, mkdirSync, writeFileSync } from "fs";
+import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import player from "play-sound";
 import { CommandRegistry } from "./commands/registry.ts";
 import { getSubsequentReminder } from "../providers/system-reminders.ts";
 import type { EdlRegisters } from "../edl/index.ts";
-import { renderThreadToMarkdown } from "./compact-renderer.ts";
+import { BufferAwareFileIO } from "../capabilities/buffer-file-io.ts";
+import { PermissionCheckingFileIO } from "../capabilities/permission-file-io.ts";
+import type { FileIO } from "../capabilities/file-io.ts";
+import { BaseShell } from "../capabilities/base-shell.ts";
+import { PermissionCheckingShell } from "../capabilities/permission-shell.ts";
+import type { Shell } from "../capabilities/shell.ts";
+import {
+  renderThreadToMarkdown,
+  chunkMessages,
+  CHARS_PER_TOKEN,
+  TARGET_CHUNK_TOKENS,
+  TOLERANCE_TOKENS,
+} from "./compact-renderer.ts";
+import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import { renderStreamdedTool } from "../tools/helpers.ts";
+import { getContextWindowForModel } from "../providers/anthropic-agent.ts";
 
 export type InputMessage =
   | {
@@ -88,12 +104,6 @@ export type Msg =
     }
   | {
       type: "abort";
-    }
-  | {
-      type: "tool-msg";
-      id: ToolRequestId;
-      toolName: ToolName;
-      msg: ToolMsg;
     }
   | {
       type: "context-manager-msg";
@@ -126,8 +136,14 @@ export type Msg =
       msg: AgentMsg;
     }
   | {
-      type: "compact-complete";
-      summary: string;
+      type: "compact-agent-msg";
+      msg: AgentMsg;
+    }
+  | {
+      type: "permission-pending-change";
+    }
+  | {
+      type: "tool-progress";
     };
 
 export type ThreadMsg = {
@@ -151,25 +167,31 @@ export type ToolViewState = {
   details: boolean;
 };
 
-/** Map of active tool instances, keyed by tool request ID */
-export type ActiveTools = Map<ToolRequestId, Tool>;
+export type ActiveToolEntry = {
+  handle: ToolInvocation;
+  progress: unknown;
+  toolName: ToolName;
+  request: ToolRequest;
+};
 
 /** Cached lookup maps for tool results */
 export type ToolCache = {
   results: Map<ToolRequestId, ProviderToolResult>;
 };
 
-/** Control flow operations that intercept normal tool processing */
-export type ControlFlowOp = { type: "yield"; response: string };
-
 /** Thread-specific conversation mode (agent status is read directly from agent) */
 export type ConversationMode =
   | { type: "normal" }
-  | { type: "tool_use"; activeTools: Map<ToolRequestId, Tool | StaticTool> }
-  | { type: "control_flow"; operation: ControlFlowOp }
+  | { type: "tool_use"; activeTools: Map<ToolRequestId, ActiveToolEntry> }
   | {
       type: "compacting";
       nextPrompt?: string;
+      chunks: string[];
+      currentChunkIndex: number;
+      compactFileIO: InMemoryFileIO;
+      compactAgent: Agent;
+      compactActiveTools: Map<ToolRequestId, ActiveToolEntry>;
+      compactEdlRegisters: EdlRegisters;
     };
 
 /** Minimum output tokens between system reminders during auto-respond loops */
@@ -193,12 +215,17 @@ export class Thread {
     toolCache: ToolCache;
     edlRegisters: EdlRegisters;
     outputTokensSinceLastReminder: number;
+    yieldedResponse?: string;
   };
 
   private myDispatch: Dispatch<Msg>;
   public contextManager: ContextManager;
   private commandRegistry: CommandRegistry;
   public agent: Agent;
+  public permissionFileIO: PermissionCheckingFileIO | undefined;
+  public fileIO: FileIO;
+  public permissionShell: PermissionCheckingShell | undefined;
+  public shell: Shell;
 
   constructor(
     public id: ThreadId,
@@ -219,6 +246,8 @@ export class Thread {
       getDisplayWidth: () => number;
     },
     clonedAgent?: Agent,
+    injectedFileIO?: FileIO,
+    injectedShell?: Shell,
   ) {
     this.myDispatch = (msg) =>
       this.context.dispatch({
@@ -228,6 +257,50 @@ export class Thread {
       });
 
     this.contextManager = this.context.contextManager;
+    if (injectedFileIO) {
+      this.fileIO = injectedFileIO;
+      this.permissionFileIO = undefined;
+    } else {
+      const permissionFileIO = new PermissionCheckingFileIO(
+        new BufferAwareFileIO({
+          nvim: this.context.nvim,
+          bufferTracker: this.context.bufferTracker,
+          cwd: this.context.cwd,
+          homeDir: this.context.homeDir,
+        }),
+        {
+          cwd: this.context.cwd,
+          homeDir: this.context.homeDir,
+          options: this.context.options,
+          nvim: this.context.nvim,
+        },
+        () => this.myDispatch({ type: "permission-pending-change" }),
+      );
+      this.permissionFileIO = permissionFileIO;
+      this.fileIO = permissionFileIO;
+    }
+
+    if (injectedShell) {
+      this.shell = injectedShell;
+      this.permissionShell = undefined;
+    } else {
+      const permissionShell = new PermissionCheckingShell(
+        new BaseShell({
+          cwd: this.context.cwd,
+          threadId: this.id,
+        }),
+        {
+          cwd: this.context.cwd,
+          homeDir: this.context.homeDir,
+          options: this.context.options,
+          nvim: this.context.nvim,
+          rememberedCommands: this.context.chat.rememberedCommands,
+        },
+        () => this.myDispatch({ type: "permission-pending-change" }),
+      );
+      this.permissionShell = permissionShell;
+      this.shell = permissionShell;
+    }
 
     this.commandRegistry = new CommandRegistry();
     // Register custom commands from options
@@ -306,30 +379,20 @@ export class Thread {
         break;
       }
 
-      case "tool-msg": {
-        const agentStatus = this.agent.getState().status;
-        if (
-          agentStatus.type === "stopped" &&
-          agentStatus.stopReason === "aborted"
-        ) {
-          // we aborted. Any further tool-msg stuff can be ignored
-          return;
-        }
-        this.handleToolMsg(msg.id, msg.toolName, msg.msg);
-        const autoRespondResult = this.maybeAutoRespond();
-        // Play chime if tool completed but we didn't autorespond
-        if (autoRespondResult.type !== "did-autorespond") {
-          this.playChimeIfNeeded();
-        }
-        return;
-      }
-
       case "context-manager-msg": {
         this.contextManager.update(msg.msg);
         return;
       }
 
       case "abort": {
+        // Synchronously mark all tool invocations as aborted BEFORE the async
+        // abortAndWait runs. This ensures the abort flag is set before
+        // resolveThreadWaiters can fire (from child thread abort in chat.update).
+        if (this.state.mode.type === "tool_use") {
+          for (const [, entry] of this.state.mode.activeTools) {
+            entry.handle.abort();
+          }
+        }
         this.abortAndWait().catch((e: Error) => {
           this.context.nvim.logger.error(`Error during abort: ${e.message}`);
         });
@@ -397,23 +460,13 @@ export class Thread {
         }
       }
 
-      case "compact-complete": {
-        const nextPrompt =
-          this.state.mode.type === "compacting"
-            ? this.state.mode.nextPrompt
-            : undefined;
-
-        this.state.mode = { type: "normal" };
-
-        this.handleCompactComplete(msg.summary, nextPrompt).catch(
-          (e: Error) => {
-            this.context.nvim.logger.error(
-              `Failed during compact-complete: ${e.message}`,
-            );
-          },
-        );
+      case "permission-pending-change":
+      case "tool-progress":
+        // no-op: re-render is triggered by the dispatch itself
         return;
-      }
+      case "compact-agent-msg":
+        this.handleCompactAgentMsg(msg.msg);
+        return;
 
       default:
         assertUnreachable(msg);
@@ -448,8 +501,7 @@ export class Thread {
       );
     }
 
-    const activeTools = new Map<ToolRequestId, Tool | StaticTool>();
-    let yieldResponse: string | undefined;
+    const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
 
     for (const block of lastMessage.content) {
       if (block.type !== "tool_use") {
@@ -457,20 +509,20 @@ export class Thread {
       }
 
       if (block.request.status !== "ok") {
+        this.agent.toolResult(block.id, {
+          type: "tool_result",
+          id: block.id,
+          result: {
+            status: "error",
+            error: `Malformed tool_use block: ${block.request.error}`,
+          },
+        });
         continue;
       }
 
       const request = block.request.value;
 
-      // Check for yield_to_parent
-      if (request.toolName === "yield_to_parent") {
-        yieldResponse = (request.input as { result: string }).result;
-        // Still create the tool so we can track it
-      }
-
-      // Create tool context for createTool
       const toolContext: CreateToolContext = {
-        dispatch: this.context.dispatch,
         mcpToolManager: this.context.mcpToolManager,
         bufferTracker: this.context.bufferTracker,
         getDisplayWidth: this.context.getDisplayWidth,
@@ -480,46 +532,51 @@ export class Thread {
         cwd: this.context.cwd,
         homeDir: this.context.homeDir,
         options: this.context.options,
-        chat: this.context.chat,
         contextManager: this.contextManager,
         threadDispatch: this.myDispatch,
         edlRegisters: this.state.edlRegisters,
+        fileIO: this.fileIO,
+        shell: this.shell,
+        threadManager: this.context.chat,
+        requestRender: () =>
+          this.context.dispatch({
+            type: "thread-msg",
+            id: this.id,
+            msg: { type: "tool-progress" },
+          }),
       };
 
-      // Create the dispatch function for this tool
-      const toolDispatch = ({
-        id,
-        toolName,
-        msg,
-      }: {
-        id: ToolRequestId;
-        toolName: ToolName;
-        msg: ToolMsg;
-      }) =>
-        this.myDispatch({
-          type: "tool-msg",
-          id,
-          toolName,
-          msg,
+      const invocation = createTool(request, toolContext);
+      activeTools.set(request.id, {
+        handle: invocation,
+        progress: "progress" in invocation ? invocation.progress : undefined,
+        toolName: request.toolName,
+        request,
+      });
+
+      void invocation.promise
+        .then((result) => {
+          this.state.toolCache.results.set(request.id, result);
+        })
+        .catch((err: Error) => {
+          this.state.toolCache.results.set(request.id, {
+            type: "tool_result",
+            id: request.id,
+            result: {
+              status: "error",
+              error: `Tool execution failed: ${err.message}`,
+            },
+          });
+        })
+        .then(() => {
+          this.maybeAutoRespond();
         });
-
-      // Create static tool
-      const tool = createTool(request, toolContext, toolDispatch);
-      activeTools.set(request.id, tool);
     }
 
-    // Set mode based on whether we found yield_to_parent
-    if (yieldResponse !== undefined) {
-      this.state.mode = {
-        type: "control_flow",
-        operation: { type: "yield", response: yieldResponse },
-      };
-    } else {
-      this.state.mode = {
-        type: "tool_use",
-        activeTools,
-      };
-    }
+    this.state.mode = {
+      type: "tool_use",
+      activeTools,
+    };
 
     const autoRespondResult = this.maybeAutoRespond();
 
@@ -583,29 +640,301 @@ export class Thread {
     this.context.contextManager = this.contextManager;
   }
 
+  private shouldAutoCompact(): boolean {
+    const inputTokenCount = this.agent.getState().inputTokenCount;
+    if (inputTokenCount === undefined) return false;
+    if (this.state.threadType === "compact") return false;
+
+    const contextWindow = getContextWindowForModel(this.state.profile.model);
+    return inputTokenCount >= contextWindow * 0.8;
+  }
+
   private startCompaction(nextPrompt?: string): void {
-    this.state.mode =
-      nextPrompt !== undefined
-        ? { type: "compacting", nextPrompt }
-        : { type: "compacting" };
+    const { markdown, messageBoundaries } = renderThreadToMarkdown(
+      this.getProviderMessages(),
+    );
 
-    const markdown = renderThreadToMarkdown(this.getProviderMessages());
+    const targetChunkChars = TARGET_CHUNK_TOKENS * CHARS_PER_TOKEN;
+    const toleranceChars = TOLERANCE_TOKENS * CHARS_PER_TOKEN;
+    const chunks = chunkMessages(
+      markdown,
+      messageBoundaries,
+      targetChunkChars,
+      toleranceChars,
+    );
 
-    const tempDir = join(MAGENTA_TEMP_DIR, "threads", this.id);
-    mkdirSync(tempDir, { recursive: true });
-    const tempFilePath = join(tempDir, "compact.md");
-    writeFileSync(tempFilePath, markdown, "utf-8");
+    if (chunks.length === 0) {
+      this.context.nvim.logger.warn("No chunks to compact");
+      return;
+    }
 
-    this.context.dispatch({
-      type: "chat-msg",
-      msg: {
-        type: "spawn-compact-thread",
-        parentThreadId: this.id,
-        tempFilePath,
-        fileContents: markdown,
-        ...(nextPrompt !== undefined && { nextPrompt }),
+    const compactFileIO = new InMemoryFileIO({ "/summary.md": "" });
+    const compactEdlRegisters: EdlRegisters = {
+      registers: new Map(),
+      nextSavedId: 0,
+    };
+    const compactAgent = this.createCompactAgent();
+
+    this.state.mode = {
+      type: "compacting",
+      ...(nextPrompt !== undefined && { nextPrompt }),
+      chunks,
+      currentChunkIndex: 0,
+      compactFileIO,
+      compactAgent,
+      compactActiveTools: new Map(),
+      compactEdlRegisters,
+    };
+
+    this.sendCompactChunkToAgent(compactAgent, chunks, 0, nextPrompt);
+  }
+
+  private createCompactAgent(): Agent {
+    const provider = getProvider(this.context.nvim, this.state.profile);
+    return provider.createAgent(
+      {
+        model: this.state.profile.fastModel,
+        systemPrompt:
+          "You are a conversation compactor. Summarize conversation transcripts into concise summaries that preserve essential information for continuing the work.",
+        tools: getToolSpecs("compact", this.context.mcpToolManager),
+        skipPostFlightTokenCount: true,
       },
-    });
+      (msg) => this.myDispatch({ type: "compact-agent-msg", msg }),
+    );
+  }
+
+  private sendCompactChunkToAgent(
+    agent: Agent,
+    chunks: string[],
+    chunkIndex: number,
+    nextPrompt?: string,
+  ): void {
+    const mode = this.state.mode;
+    if (mode.type !== "compacting") return;
+
+    // Write the chunk to /chunk.md so EDL can cut/paste from it into /summary.md
+    mode.compactFileIO.writeFileSync("/chunk.md", chunks[chunkIndex]);
+
+    const isLastChunk = chunkIndex === chunks.length - 1;
+    const chunkLabel = `chunk ${chunkIndex + 1} of ${chunks.length}`;
+
+    const statusParts = [`This is ${chunkLabel}.`];
+    if (chunkIndex === 0) {
+      statusParts.push(
+        "The file /summary.md is currently empty. Write the initial summary.",
+      );
+    } else {
+      statusParts.push(
+        "Fold the essential information from the new chunk into the existing /summary.md. Do NOT rewrite the summary from scratch.",
+      );
+    }
+    if (isLastChunk) {
+      statusParts.push(
+        "This is the LAST chunk. Make sure the summary is complete and well-organized.",
+      );
+    }
+
+    const nextPromptText = nextPrompt ?? "Continue from where you left off.";
+
+    const summaryContent =
+      chunkIndex > 0
+        ? (mode.compactFileIO.getFileContents("/summary.md") ?? "")
+        : "";
+
+    const prompt = COMPACT_PROMPT_TEMPLATE.replace(
+      "{{status}}",
+      statusParts.join(" "),
+    )
+      .replace("{{next_prompt}}", nextPromptText)
+      .replace("{{summary}}", summaryContent)
+      .replace("{{chunk}}", chunks[chunkIndex]);
+
+    agent.appendUserMessage([{ type: "text", text: prompt }]);
+    agent.continueConversation();
+  }
+
+  private handleCompactAgentMsg(msg: AgentMsg): void {
+    const mode = this.state.mode;
+    if (mode.type !== "compacting") {
+      this.context.nvim.logger.warn(
+        "Received compact-agent-msg while not in compacting mode",
+      );
+      return;
+    }
+
+    switch (msg.type) {
+      case "agent-content-updated":
+        return;
+
+      case "agent-error":
+        this.context.nvim.logger.error(
+          `Compact agent error: ${msg.error.message}`,
+        );
+        this.state.mode = { type: "normal" };
+        return;
+
+      case "agent-stopped": {
+        if (msg.stopReason === "tool_use") {
+          this.handleCompactAgentToolUse(mode);
+        } else if (msg.stopReason === "end_turn") {
+          this.handleCompactChunkComplete(mode);
+        } else {
+          this.context.nvim.logger.warn(
+            `Compact agent stopped with unexpected reason: ${msg.stopReason}`,
+          );
+          this.state.mode = { type: "normal" };
+        }
+        return;
+      }
+    }
+  }
+
+  private handleCompactAgentToolUse(
+    mode: Extract<ConversationMode, { type: "compacting" }>,
+  ): void {
+    const messages = mode.compactAgent.getState().messages;
+    const lastMessage = messages[messages.length - 1];
+
+    if (!lastMessage || lastMessage.role !== "assistant") {
+      this.context.nvim.logger.error(
+        "Compact agent tool_use but no assistant message",
+      );
+      this.state.mode = { type: "normal" };
+      return;
+    }
+
+    const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
+
+    for (const block of lastMessage.content) {
+      if (block.type !== "tool_use") {
+        continue;
+      }
+
+      if (block.request.status !== "ok") {
+        mode.compactAgent.toolResult(block.id, {
+          type: "tool_result",
+          id: block.id,
+          result: {
+            status: "error",
+            error: `Malformed tool_use block: ${block.request.error}`,
+          },
+        });
+        continue;
+      }
+
+      const request = block.request.value;
+      const toolContext: CreateToolContext = {
+        mcpToolManager: this.context.mcpToolManager,
+        bufferTracker: this.context.bufferTracker,
+        getDisplayWidth: this.context.getDisplayWidth,
+        threadId: this.id,
+        nvim: this.context.nvim,
+        lsp: this.context.lsp,
+        cwd: this.context.cwd,
+        homeDir: this.context.homeDir,
+        options: this.context.options,
+        contextManager: this.contextManager,
+        threadDispatch: this.myDispatch,
+        edlRegisters: mode.compactEdlRegisters,
+        fileIO: mode.compactFileIO,
+        shell: this.shell,
+        threadManager: this.context.chat,
+        requestRender: () =>
+          this.context.dispatch({
+            type: "thread-msg",
+            id: this.id,
+            msg: { type: "tool-progress" },
+          }),
+      };
+
+      const invocation = createTool(request, toolContext);
+      activeTools.set(request.id, {
+        handle: invocation,
+        progress: "progress" in invocation ? invocation.progress : undefined,
+        toolName: request.toolName,
+        request,
+      });
+
+      void invocation.promise
+        .then((result) => {
+          this.state.toolCache.results.set(request.id, result);
+        })
+        .catch((err: Error) => {
+          this.state.toolCache.results.set(request.id, {
+            type: "tool_result",
+            id: request.id,
+            result: {
+              status: "error",
+              error: `Tool execution failed: ${err.message}`,
+            },
+          });
+        })
+        .then(() => {
+          this.handleCompactToolCompletion();
+        });
+    }
+
+    mode.compactActiveTools = activeTools;
+  }
+
+  private handleCompactToolCompletion(): void {
+    const mode = this.state.mode;
+    if (mode.type !== "compacting") {
+      return;
+    }
+
+    // Check if all compact tools are done
+    for (const [, entry] of mode.compactActiveTools) {
+      if (!this.state.toolCache.results.has(entry.request.id)) return;
+    }
+
+    // All tools done — send results back to compact agent and continue
+    for (const [toolId, entry] of mode.compactActiveTools) {
+      const result = this.state.toolCache.results.get(entry.request.id);
+      if (result) {
+        mode.compactAgent.toolResult(toolId, result);
+      }
+    }
+    mode.compactActiveTools = new Map();
+    mode.compactAgent.continueConversation();
+  }
+
+  private handleCompactChunkComplete(
+    mode: Extract<ConversationMode, { type: "compacting" }>,
+  ): void {
+    const nextChunkIndex = mode.currentChunkIndex + 1;
+
+    if (nextChunkIndex < mode.chunks.length) {
+      // More chunks to process — create a new compact agent for the next chunk
+      const newAgent = this.createCompactAgent();
+      mode.compactAgent = newAgent;
+      mode.currentChunkIndex = nextChunkIndex;
+      mode.compactActiveTools = new Map();
+      this.sendCompactChunkToAgent(
+        newAgent,
+        mode.chunks,
+        nextChunkIndex,
+        mode.nextPrompt,
+      );
+    } else {
+      // All chunks processed — read the final summary
+      const summary = mode.compactFileIO.getFileContents("/summary.md");
+      if (summary === undefined || summary === "") {
+        this.context.nvim.logger.error(
+          "Compact agent finished but /summary.md is empty",
+        );
+        this.state.mode = { type: "normal" };
+        return;
+      }
+
+      const nextPrompt = mode.nextPrompt;
+      this.state.mode = { type: "normal" };
+      this.handleCompactComplete(summary, nextPrompt).catch((e: Error) => {
+        this.context.nvim.logger.error(
+          `Failed during compact-complete: ${e.message}`,
+        );
+      });
+    }
   }
 
   private handleProviderStopped(stopReason: StopReason): void {
@@ -621,11 +950,7 @@ export class Thread {
       return;
     }
 
-    // Reset mode to normal unless in control_flow (e.g. after compact-complete)
-    // where maybeAutoRespond needs to read the operation data
-    if (this.state.mode.type !== "control_flow") {
-      this.state.mode = { type: "normal" };
-    }
+    this.state.mode = { type: "normal" };
 
     // Handle stopped state - check for pending messages
     const autoRespondResult = this.maybeAutoRespond();
@@ -663,42 +988,6 @@ export class Thread {
     this.context.nvim.logger.error(error);
   }
 
-  /** Handle a tool message by routing it to the appropriate tool */
-  private handleToolMsg(
-    id: ToolRequestId,
-    toolName: ToolName,
-    msg: ToolMsg,
-  ): void {
-    const mode = this.state.mode;
-
-    if (mode.type !== "tool_use") {
-      throw new Error(`to handleToolMsg we have to be in tool_use mode`);
-    }
-    const tool = mode.activeTools.get(id);
-    if (!tool) {
-      throw new Error(`Could not find tool with request id ${id}`);
-    }
-
-    // we know that the tool id <-> and msg type match
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    (tool as any).update(msg);
-
-    // Handle bash_command remember logic
-    if (toolName === ("bash_command" as ToolName)) {
-      const bashMsg = msg as unknown as BashCommand.Msg;
-      if (
-        bashMsg.type === "user-approval" &&
-        bashMsg.approved &&
-        bashMsg.remember
-      ) {
-        this.context.chat.rememberedCommands.add(
-          (tool as unknown as BashCommand.BashCommandTool).request.input
-            .command,
-        );
-      }
-    }
-  }
-
   /** Abort in-progress operations and wait for completion.
    * Returns a promise that resolves when the agent is in a stable state.
    */
@@ -708,11 +997,17 @@ export class Thread {
 
     // If we're in tool_use mode, abort all active tools and insert their results
     if (this.state.mode.type === "tool_use") {
-      for (const [toolId, tool] of this.state.mode.activeTools) {
-        if (!tool.isDone()) {
-          // abort() returns the tool result synchronously
-          const result = tool.abort();
-          this.agent.toolResult(toolId, result);
+      for (const [toolId, entry] of this.state.mode.activeTools) {
+        entry.handle.abort();
+        if (!this.state.toolCache.results.has(toolId)) {
+          this.agent.toolResult(toolId, {
+            type: "tool_result",
+            id: toolId,
+            result: {
+              status: "error",
+              error: "Request was aborted by the user.",
+            },
+          });
         }
       }
 
@@ -720,6 +1015,10 @@ export class Thread {
       this.agent.abortToolUse();
       this.rebuildToolCache();
     }
+
+    // Clear any pending permission checks so they don't block after abort
+    this.permissionFileIO?.denyAll();
+    this.permissionShell?.denyAll();
 
     // Transition to normal mode (agent status already reflects aborted)
     this.state.mode = { type: "normal" };
@@ -817,7 +1116,7 @@ export class Thread {
     const agentStatus = this.agent.getState().status;
 
     // Don't auto-respond if yielded or aborted
-    if (mode.type === "control_flow" && mode.operation.type === "yield") {
+    if (this.state.yieldedResponse !== undefined) {
       return { type: "yielded-to-parent" };
     }
     if (
@@ -838,43 +1137,23 @@ export class Thread {
         id: ToolRequestId;
         result: ProviderToolResult;
       }> = [];
-      let hasAbortedTool = false;
-
-      for (const [toolId, tool] of mode.activeTools) {
-        if (tool.request.toolName === "yield_to_parent") {
+      for (const [toolId, entry] of mode.activeTools) {
+        if (entry.toolName === "yield_to_parent") {
+          this.state.yieldedResponse = (
+            entry.request.input as { result: string }
+          ).result;
           return { type: "yielded-to-parent" };
         }
 
-        if (!tool.isDone()) {
-          // terminate early if we have a blocking tool use
+        const cachedResult = this.state.toolCache.results.get(toolId);
+        if (!cachedResult) {
           return { type: "waiting-for-tool-input" };
         }
 
-        // Check if this tool was aborted
-        if (tool.aborted) {
-          hasAbortedTool = true;
-        }
-
-        // Collect completed tool result
         completedTools.push({
           id: toolId,
-          result: {
-            type: "tool_result",
-            id: toolId,
-            result: tool.getToolResult().result,
-          },
+          result: cachedResult,
         });
-      }
-
-      // If any tool was aborted, send tool results but don't auto-respond
-      if (hasAbortedTool) {
-        for (const { id, result } of completedTools) {
-          this.agent.toolResult(id, result);
-        }
-        // Reset to normal mode (agent status already reflects aborted)
-        this.state.mode = { type: "normal" };
-        this.rebuildToolCache();
-        return { type: "no-action-needed" };
       }
 
       const pendingMessages = this.state.pendingMessages;
@@ -969,6 +1248,12 @@ export class Thread {
       };
     }
 
+    // Auto-compact if approaching context window limit
+    if (this.shouldAutoCompact()) {
+      this.startCompaction();
+      return;
+    }
+
     if (contentToSend.length > 0) {
       this.agent.appendUserMessage(contentToSend);
     }
@@ -985,7 +1270,6 @@ export class Thread {
     // 1. Agent stopped with end_turn (user needs to respond)
     // 2. We're blocked on a tool use that requires user action
     const agentStatus = this.agent.getState().status;
-    const mode = this.state.mode;
 
     if (
       agentStatus.type === "stopped" &&
@@ -993,15 +1277,6 @@ export class Thread {
     ) {
       this.playChimeSound();
       return;
-    }
-
-    if (mode.type === "tool_use") {
-      for (const [, tool] of mode.activeTools) {
-        if (tool.isPendingUserAction()) {
-          this.playChimeSound();
-          return;
-        }
-      }
     }
   }
 
@@ -1137,6 +1412,16 @@ export class Thread {
       }
     }
 
+    // Auto-compact if approaching context window limit
+    if (this.shouldAutoCompact()) {
+      const rawText = inputMessages
+        ?.filter((m) => m.type === "user")
+        .map((m) => m.text)
+        .join("\n");
+      this.startCompaction(rawText || undefined);
+      return;
+    }
+
     // Send to provider thread and start response
     this.agent.appendUserMessage(contentToSend);
     this.agent.continueConversation();
@@ -1200,10 +1485,16 @@ Come up with a succinct thread title for this prompt. It should be less than 80 
   }
 
   getLastStopTokenCount(): number {
-    const latestUsage = this.agent.getState().latestUsage;
+    const state = this.agent.getState();
+    if (state.inputTokenCount != undefined) {
+      return state.inputTokenCount;
+    }
+
+    const latestUsage = state.latestUsage;
     if (!latestUsage) {
       return 0;
     }
+
     return (
       latestUsage.inputTokens +
       latestUsage.outputTokens +
@@ -1232,16 +1523,14 @@ const renderStatus = (
   agentStatus: AgentStatus,
   mode: ConversationMode,
   latestUsage: Usage | undefined,
+  yieldedResponse: string | undefined,
 ): VDOMNode => {
   // First check mode for thread-specific states
   if (mode.type === "tool_use") {
     return d`Executing tools...`;
   }
-  if (mode.type === "control_flow") {
-    switch (mode.operation.type) {
-      case "yield":
-        return d`↗️ yielded to parent: ${mode.operation.response}`;
-    }
+  if (yieldedResponse !== undefined) {
+    return d`↗️ yielded to parent: ${yieldedResponse}`;
   }
   if (mode.type === "compacting") {
     return d`📦 Compacting thread...`;
@@ -1368,7 +1657,12 @@ ${thread.context.contextManager.view()}`;
   }
 
   const latestUsage = thread.agent.getState().latestUsage;
-  const statusView = renderStatus(agentStatus, mode, latestUsage);
+  const statusView = renderStatus(
+    agentStatus,
+    mode,
+    latestUsage,
+    thread.state.yieldedResponse,
+  );
 
   const contextManagerView = shouldShowContextManager(
     agentStatus,
@@ -1377,6 +1671,17 @@ ${thread.context.contextManager.view()}`;
     ? d`\n${thread.context.contextManager.view()}`
     : d``;
 
+  const filePermissionView =
+    thread.permissionFileIO &&
+    thread.permissionFileIO.getPendingPermissions().size > 0
+      ? d`\n${thread.permissionFileIO.view()}`
+      : d``;
+  const shellPermissionView =
+    thread.permissionShell &&
+    thread.permissionShell.getPendingPermissions().size > 0
+      ? d`\n${thread.permissionShell.view()}`
+      : d``;
+  const permissionView = d`${filePermissionView}${shellPermissionView}`;
   const pendingMessagesView =
     thread.state.pendingMessages.length > 0
       ? d`\n✉️  ${thread.state.pendingMessages.length.toString()} pending message${thread.state.pendingMessages.length === 1 ? "" : "s"}`
@@ -1463,6 +1768,7 @@ ${systemPromptView}
 ${messagesView}\
 ${streamingBlockView}\
 ${contextManagerView}\
+${permissionView}\
 ${pendingMessagesView}
 ${statusView}`;
 };
@@ -1569,20 +1875,38 @@ function renderMessageContent(
           : d``;
 
       // Check if tool is active (still running)
-      const activeTool =
+      const activeEntry =
         thread.state.mode.type === "tool_use" &&
         thread.state.mode.activeTools.get(request.id);
 
-      if (activeTool) {
-        // Active tool - use the tool controller's render methods
-        // Don't add trailing newline - let the message template handle it
+      if (activeEntry) {
+        const displayContext = {
+          cwd: thread.context.cwd,
+          homeDir: thread.context.homeDir,
+        };
+        const renderContext = {
+          getDisplayWidth: thread.context.getDisplayWidth,
+          nvim: thread.context.nvim,
+          cwd: thread.context.cwd,
+          homeDir: thread.context.homeDir,
+          options: thread.context.options,
+          dispatch: thread.context.dispatch,
+          chat: thread.context.chat,
+        };
+
+        const inFlightPreview = renderInFlightToolPreview(
+          activeEntry.request,
+          activeEntry.progress,
+          renderContext,
+        );
+
         return withBindings(
-          d`${activeTool.renderSummary()}${
+          d`${renderInFlightToolSummary(activeEntry.request, displayContext, activeEntry.progress)}${
             showDetails
-              ? d`\n${activeTool.toolName}: ${activeTool.renderDetail ? activeTool.renderDetail() : JSON.stringify(activeTool.request.input, null, 2)}${usageInDetails}`
-              : activeTool.renderPreview
-                ? d`\n${activeTool.renderPreview()}`
-                : ""
+              ? d`\n${renderInFlightToolDetail(activeEntry.request, activeEntry.progress, renderContext)}${usageInDetails}`
+              : inFlightPreview
+                ? d`\n${inFlightPreview}`
+                : d``
           }\n`,
           {
             "<CR>": () =>
@@ -1590,6 +1914,7 @@ function renderMessageContent(
                 type: "toggle-tool-details",
                 toolRequestId: request.id,
               }),
+            t: () => activeEntry.handle.abort(),
           },
         );
       }
@@ -1653,31 +1978,53 @@ function renderMessageContent(
     case "server_tool_use":
       return d`🔍 Searching ${withExtmark(d`${content.input.query}`, { hl_group: "@string" })}...\n`;
 
-    case "web_search_tool_result":
+    case "web_search_tool_result": {
+      const viewState = thread.state.messageViewState[messageIdx];
+      const isExpanded = viewState?.expandedContent?.[contentIdx] || false;
+
       if (
         "type" in content.content &&
         content.content.type === "web_search_tool_result_error"
       ) {
         return d`🌐 Search error: ${withExtmark(d`${content.content.error_code}`, { hl_group: "ErrorMsg" })}\n`;
       }
-      // content.content is an array of web search results
       if (Array.isArray(content.content)) {
-        const results = content.content
-          .filter(
-            (
-              r,
-            ): r is Extract<
-              (typeof content.content)[number],
-              { type: "web_search_result" }
-            > => r.type === "web_search_result",
-          )
-          .map(
+        const searchResults = content.content.filter(
+          (
+            r,
+          ): r is Extract<
+            (typeof content.content)[number],
+            { type: "web_search_result" }
+          > => r.type === "web_search_result",
+        );
+        if (isExpanded) {
+          const results = searchResults.map(
             (r) =>
-              d`  [${r.title}](${r.url})${r.page_age ? ` (${r.page_age})` : ""}`,
+              d`  [${r.title}](${r.url})${r.page_age ? ` (${r.page_age})` : ""}\n`,
           );
-        return d`🌐 Search results\n${results}\n`;
+          return withBindings(d`🌐 Search results\n${results}\n`, {
+            "<CR>": () =>
+              dispatch({
+                type: "toggle-expand-content",
+                messageIdx,
+                contentIdx,
+              }),
+          });
+        }
+        return withBindings(
+          d`🌐 ${searchResults.length.toString()} search result${searchResults.length === 1 ? "" : "s"}\n`,
+          {
+            "<CR>": () =>
+              dispatch({
+                type: "toggle-expand-content",
+                messageIdx,
+                contentIdx,
+              }),
+          },
+        );
       }
       return d`🌐 Search results\n`;
+    }
 
     case "context_update":
       // Context updates are rendered via thread.state.messageViewState
@@ -1718,6 +2065,10 @@ function renderStreamingBlock(thread: Thread): string | VDOMNode {
   }
 }
 
+const COMPACT_PROMPT_TEMPLATE = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "compact-system-prompt.md"),
+  "utf-8",
+);
 export const LOGO = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "logo.txt"),
   "utf-8",

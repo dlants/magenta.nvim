@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import type { FileIO } from "../edl/file-io.ts";
+import type { FileIO } from "./file-io.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import { NvimBuffer, type Line } from "../nvim/buffer.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
@@ -43,6 +43,10 @@ export class BufferAwareFileIO implements FileIO {
     return undefined;
   }
 
+  async readBinaryFile(path: string): Promise<Buffer> {
+    const absPath = this.resolvePath(path);
+    return fs.readFile(absPath);
+  }
   async readFile(path: string): Promise<string> {
     const absPath = this.resolvePath(path);
 
@@ -101,5 +105,14 @@ export class BufferAwareFileIO implements FileIO {
   async mkdir(path: string): Promise<void> {
     const absPath = this.resolvePath(path);
     await fs.mkdir(absPath, { recursive: true });
+  }
+  async stat(path: string): Promise<{ mtimeMs: number } | undefined> {
+    const absPath = this.resolvePath(path);
+    try {
+      const stats = await fs.stat(absPath);
+      return { mtimeMs: stats.mtimeMs };
+    } catch {
+      return undefined;
+    }
   }
 }

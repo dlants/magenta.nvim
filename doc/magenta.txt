@@ -38,6 +38,7 @@ Features:~
   - Web search with citations
   - MCP (Model Context Protocol) support
   - Smart context tracking with automatic diffing
+  - Auto-compaction with chunked incremental summarization
   - Prompt caching for efficiency
 
 ==============================================================================
@@ -102,4 +103,27 @@ Basic workflow:~
 
 See |magenta-commands| for the full list of commands and keymaps.
 
+
+==============================================================================
+CHANGELOG                                                 *magenta-changelog*
+
+Feb 2026:~
+  - Refactored tool architecture: separated execution from rendering,
+    extracted shared capabilities (permissions, file I/O, shell) into a
+    `capabilities/` layer. Decouples tools from neovim, moving towards
+    dev container support.
+  - Auto-compaction with chunked incremental summarization and accurate
+    token counting via `countTokens` API.
+  - Edit Description Language (EDL) tool replaces insert and replace tools.
+  - Explore sub-agent type, blocking sub-agents for better token economy.
+  - Dropped next edit prediction and inline edits in favor of unsupervised
+    agent mode and multi-agent coordination.
+
+Jan 2026:~
+  - Messages stored in native provider format for better cache reliability.
+  - `@fork` now clones the thread; works during streaming/tool use.
+  - Bash output streams to temp files with abbreviated results to model.
+  - `@compact` command for manual thread compaction.
+  - Tree-sitter minimap for large files.
+  - Dropped non-Anthropic providers (openai, bedrock, ollama, copilot).
 vim:tw=78:ts=8:noet:ft=help:norl:

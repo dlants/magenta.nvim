@@ -273,6 +273,7 @@ describe("node/sidebar.test.ts", () => {
       const largeMessage = "Hello, this is a test message. ".repeat(500);
       await driver.inputMagentaText(largeMessage);
       await driver.send();
+      driver.mockAnthropic.mockClient.mockInputTokenCount = 3500;
       const request1 = await driver.mockAnthropic.awaitPendingStream();
       request1.respond({
         stopReason: "tool_use",
@@ -284,14 +285,13 @@ describe("node/sidebar.test.ts", () => {
         },
       });
 
-      // Wait for token count to update after the large message
+      // Wait for token count to update from countTokens post-flight
       await pollUntil(async () => {
         const updatedWinbar = await inputWindow.getOption("winbar");
         const updatedCount = extractTokenCount(updatedWinbar as string);
-        // Token count should be noticeably higher
-        if (updatedCount <= 2000) {
+        if (updatedCount < 3000) {
           throw new Error(
-            `Token count did not increase: 2K -> ${updatedCount}`,
+            `Token count did not reflect countTokens result: ${updatedCount}`,
           );
         }
       });

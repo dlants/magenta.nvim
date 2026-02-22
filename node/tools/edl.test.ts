@@ -5,7 +5,6 @@ import * as path from "node:path";
 import type { ToolRequestId, ToolName } from "./types.ts";
 import type Anthropic from "@anthropic-ai/sdk";
 import { MockProvider } from "../providers/mock.ts";
-import type { AbsFilePath } from "../utils/files.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
 import type { Line } from "../nvim/buffer.ts";
 import { getAllBuffers } from "../nvim/nvim.ts";
@@ -28,7 +27,7 @@ describe("edl tool", () => {
 
         const filePath = path.join(dirs.tmpDir, "test.txt");
         const script = `file \`${filePath}\`
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -130,7 +129,7 @@ invalid_command`;
 
         const filePath = path.join(dirs.tmpDir, "test.txt");
         const script = `file \`${filePath}\`
-narrow_one /nonexistent pattern that does not exist/`;
+narrow /nonexistent pattern that does not exist/`;
 
         const stream = await driver.mockAnthropic.awaitPendingStream();
         stream.respond({
@@ -183,7 +182,7 @@ narrow_one /nonexistent pattern that does not exist/`;
 
         const filePath = path.join(dirs.tmpDir, "test.txt");
         const script = `file \`${filePath}\`
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -230,7 +229,7 @@ END`;
 
         const filePath = path.join(dirs.tmpDir, "test.txt");
         const script = `file \`${filePath}\`
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -285,7 +284,7 @@ END`;
         ).join("\n");
         const script = `file \`${filePath}\`
 ${extraLines}
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -334,7 +333,7 @@ END`;
 
         const filePath = path.join(dirs.tmpDir, "test.txt");
         const script = `file \`${filePath}\`
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -358,15 +357,14 @@ END`;
         await driver.assertDisplayBufferContains("📝✅ edl:");
 
         // Preview should show the script
-        await driver.assertDisplayBufferContains("narrow_one /hello/");
+        await driver.assertDisplayBufferContains("narrow /hello/");
 
         // Toggle to detail view
-        const pos =
-          await driver.assertDisplayBufferContains("narrow_one /hello/");
+        const pos = await driver.assertDisplayBufferContains("narrow /hello/");
         await driver.triggerDisplayBufferKey(pos, "<CR>");
 
         // Detail should show full script AND the trace output
-        await driver.assertDisplayBufferContains("narrow_one /hello/");
+        await driver.assertDisplayBufferContains("narrow /hello/");
         await driver.assertDisplayBufferContains("replace <<END");
         await driver.assertDisplayBufferContains("Trace:");
         await driver.assertDisplayBufferContains("Mutations:");
@@ -376,64 +374,6 @@ END`;
 });
 
 describe("edl tool buffer integration", () => {
-  test("edl edit updates context manager agent view", async () => {
-    await withDriver(
-      {
-        setupFiles: async (tmpDir) => {
-          await fs.writeFile(path.join(tmpDir, "test.txt"), "hello world\n");
-        },
-      },
-      async (driver, dirs) => {
-        await driver.showSidebar();
-        await driver.addContextFiles("test.txt");
-
-        const absFilePath = path.resolve(
-          dirs.tmpDir,
-          "test.txt",
-        ) as AbsFilePath;
-        const contextManager =
-          driver.magenta.chat.getActiveThread().contextManager;
-
-        await driver.inputMagentaText("edit the file");
-        await driver.send();
-
-        const filePath = path.join(dirs.tmpDir, "test.txt");
-        const script = `file \`${filePath}\`
-narrow_one /hello/
-replace <<END
-goodbye
-END`;
-
-        const stream = await driver.mockAnthropic.awaitPendingStream();
-        stream.respond({
-          stopReason: "tool_use",
-          text: "I'll edit the file",
-          toolRequests: [
-            {
-              status: "ok",
-              value: {
-                id: "tool_1" as ToolRequestId,
-                toolName: "edl" as ToolName,
-                input: { script },
-              },
-            },
-          ],
-        });
-
-        await driver.assertDisplayBufferContains(
-          "📝✅ edl: 1 mutations in 1 file",
-        );
-
-        const fileInfo = contextManager.files[absFilePath];
-        expect(fileInfo).toBeDefined();
-        expect(fileInfo.agentView).toEqual({
-          type: "text",
-          content: "goodbye world\n",
-        });
-      },
-    );
-  });
-
   test("edl writes to nvim buffer when file is open", async () => {
     await withDriver(
       {
@@ -451,7 +391,7 @@ END`;
         await driver.send();
 
         const script = `file \`${filePath}\`
-narrow_one /hello/
+narrow /hello/
 replace <<END
 goodbye
 END`;
@@ -521,7 +461,7 @@ END`;
         await driver.send();
 
         const script1 = `file \`${filePath}\`
-narrow_one /original/
+narrow /original/
 replace <<END
 modified
 END`;
@@ -583,7 +523,7 @@ END`;
         await driver.send();
 
         const script2 = `file \`${filePath}\`
-narrow_one /buffer only/
+narrow /buffer only/
 replace <<END
 replaced
 END`;

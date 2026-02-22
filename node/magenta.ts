@@ -3,7 +3,7 @@ import * as TEA from "./tea/tea.ts";
 import { BINDING_KEYS, type BindingKey } from "./tea/bindings.ts";
 import { pos } from "./tea/view.ts";
 import type { Nvim } from "./nvim/nvim-node";
-import { Lsp } from "./lsp.ts";
+import { Lsp } from "./capabilities/lsp.ts";
 import { getCurrentBuffer, getcwd, getpos, notifyErr } from "./nvim/nvim.ts";
 import type { BufNr, Line } from "./nvim/buffer.ts";
 import { pos1col1to0, type Row0Indexed } from "./nvim/window.ts";
@@ -372,7 +372,7 @@ export class Magenta {
           this.homeDir,
         );
         const content = `
-Here is a snippet from the file \`${absFilePath}\`
+Here is a snippet from the file \`${absFilePath}\`, lines ${startPos.row}-${endPos.row}:
 \`\`\`${getMarkdownExt(absFilePath)}
 ${lines.join("\n")}
 \`\`\`

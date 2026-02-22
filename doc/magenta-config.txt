@@ -31,7 +31,7 @@ Profiles configure provider access. The first profile is the default.
 Each profile specifies:
 
   - `name`: identifier for the profile
-  - `provider`: "anthropic", "openai", "bedrock", "ollama", or "copilot"
+  - `provider`: "anthropic"
   - `model`: the specific model to use
   - `fastModel`: (optional) model for lightweight tasks
   - `authType`: (optional) "key" (default) or "max" for Anthropic OAuth
@@ -48,13 +48,7 @@ Example:~
         fastModel = "claude-haiku-4-5",
         apiKeyEnvVar = "ANTHROPIC_API_KEY"
       },
-      {
-        name = "gpt-5",
-        provider = "openai",
-        model = "gpt-5",
-        fastModel = "gpt-5-mini",
-        apiKeyEnvVar = "OPENAI_API_KEY"
-      }
+
     }
 <
 

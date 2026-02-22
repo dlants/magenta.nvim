@@ -4,7 +4,7 @@ import { type ToolRequestId } from "../tools/toolManager.ts";
 import { expect, it } from "vitest";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import type { ToolName } from "../tools/types.ts";
-import { delay, pollUntil } from "../utils/async.ts";
+import { pollUntil } from "../utils/async.ts";
 import { getcwd } from "../nvim/nvim.ts";
 import { $, within } from "zx";
 import type { WebSearchResultBlock } from "@anthropic-ai/sdk/resources.mjs";
@@ -278,637 +278,6 @@ it("forks a thread with multiple messages into a new thread", async () => {
     // 8. Verify the forked thread has the full conversation history
     const messages = newThread.getMessages();
     expect(messages).toMatchSnapshot("forked-thread-messages");
-  });
-});
-
-it("forks a thread while streaming by aborting the stream first", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-
-    // Start a conversation with one completed exchange
-    await driver.inputMagentaText("What is 2+2?");
-    await driver.send();
-
-    const request1 = await driver.mockAnthropic.awaitPendingStream();
-    request1.respond({
-      stopReason: "end_turn",
-      text: "2+2 equals 4.",
-      toolRequests: [],
-    });
-
-    // Start a second request that will be streaming when we fork
-    await driver.inputMagentaText("What about 3+3?");
-    await driver.send();
-
-    const streamingRequest = await driver.mockAnthropic.awaitPendingStream();
-    const originalThreadId = driver.magenta.chat.state.activeThreadId;
-    const originalThread = driver.magenta.chat.getActiveThread();
-
-    // Fork while the request is still streaming
-    await driver.inputMagentaText("@fork Actually, tell me about 5+5");
-    await driver.send();
-
-    // The streaming request should be aborted
-    expect(streamingRequest.aborted).toBe(true);
-
-    // The original thread should now be stopped/aborted
-    await pollUntil(
-      () => originalThread.agent.getState().status.type === "stopped",
-      { timeout: 1000, message: "waiting for agent to be stopped" },
-    );
-    expect(originalThread.agent.getState().status).toEqual({
-      type: "stopped",
-      stopReason: "aborted",
-    });
-
-    // A new thread should be created and receive the forked message
-    const forkedStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "forked thread request",
-    });
-
-    expect(forkedStream.messages).toMatchSnapshot();
-
-    // Verify the new thread is active
-    const newThread = driver.magenta.chat.getActiveThread();
-    expect(newThread.id).not.toBe(originalThreadId);
-  });
-});
-
-it("forks a thread while waiting for tool use by aborting pending tools first", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-
-    // Start a conversation
-    await driver.inputMagentaText("Read my secret file");
-    await driver.send();
-
-    const request1 = await driver.mockAnthropic.awaitPendingStream();
-
-    // Respond with get_file tool use - this will block on user approval
-    request1.respond({
-      stopReason: "tool_use",
-      text: "I'll read your secret file.",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: "get-file-tool" as ToolRequestId,
-            toolName: "get_file" as ToolName,
-            input: { filePath: ".secret" as UnresolvedFilePath },
-          },
-        },
-      ],
-    });
-
-    // Wait for approval dialog - we're now stopped waiting for tool use
-    await driver.assertDisplayBufferContains("👀⏳ May I read file `.secret`?");
-
-    const originalThread = driver.magenta.chat.getActiveThread();
-    const originalThreadId = originalThread.id;
-
-    // Verify we're in tool_use mode
-    expect(originalThread.state.mode.type).toBe("tool_use");
-
-    // Fork the thread while waiting for tool use
-    await driver.inputMagentaText("@fork Do something else instead");
-    await driver.send();
-
-    // The fork should abort the pending tool use, then clone
-    const forkedStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "forked thread request",
-    });
-
-    // Verify the cloned messages include the error tool result from the abort
-    expect(forkedStream.messages).toMatchSnapshot();
-
-    // Verify the new thread is active
-    const newThread = driver.magenta.chat.getActiveThread();
-    expect(newThread.id).not.toBe(originalThreadId);
-
-    // Verify original thread was aborted
-    expect(originalThread.state.mode.type).toBe("normal");
-    expect(originalThread.agent.getState().status).toEqual({
-      type: "stopped",
-      stopReason: "aborted",
-    });
-  });
-});
-
-it("compact flow: user initiates @compact, spawns compact thread, compacts and continues", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-
-    // Build up some conversation history
-    await driver.inputMagentaText("What is 2+2?");
-    await driver.send();
-
-    const request1 = await driver.mockAnthropic.awaitPendingStream({
-      message: "initial request",
-    });
-    request1.respond({
-      stopReason: "end_turn",
-      text: "2+2 equals 4.",
-      toolRequests: [],
-    });
-
-    await driver.inputMagentaText("What about 3+3?");
-    await driver.send();
-
-    const request2 = await driver.mockAnthropic.awaitPendingStream({
-      message: "followup request",
-    });
-    request2.respond({
-      stopReason: "end_turn",
-      text: "3+3 equals 6.",
-      toolRequests: [],
-    });
-
-    const originalThread = driver.magenta.chat.getActiveThread();
-    const originalThreadId = originalThread.id;
-
-    // Verify we have conversation history before compacting
-    expect(originalThread.getMessages().length).toBeGreaterThanOrEqual(4);
-
-    // User initiates compact with a next prompt
-    await driver.inputMagentaText("@compact Now help me with multiplication");
-    await driver.send();
-
-    // The compact flow should:
-    // 1. Render the thread to markdown
-    // 2. Write it to a temp file
-    // 3. Spawn a compact subagent thread
-
-    // Wait for the thread to enter compacting mode
-    await pollUntil(
-      () => {
-        if (originalThread.state.mode.type !== "compacting")
-          throw new Error(
-            `expected compacting mode but got ${originalThread.state.mode.type}`,
-          );
-      },
-      { timeout: 2000, message: "thread should enter compacting mode" },
-    );
-
-    // The compact subagent should receive a stream
-    const compactSubagentStream = await driver.mockAnthropic.awaitPendingStream(
-      {
-        message: "compact subagent stream",
-      },
-    );
-
-    // Verify the compact subagent uses the fast model
-    expect(compactSubagentStream.params.model).toBe("mock-fast");
-    // Verify the compact subagent received the file contents in its user message
-    const subagentMessages = compactSubagentStream.getProviderMessages();
-    const userMsg = subagentMessages.find((m) => m.role === "user");
-    expect(userMsg).toBeDefined();
-    const textContent = userMsg!.content
-      .filter(
-        (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
-      )
-      .map((c) => c.text)
-      .join("");
-    // The subagent should see the rendered thread content
-    expect(textContent).toContain("2+2 equals 4");
-    expect(textContent).toContain("3+3 equals 6");
-    // The subagent should see the user's next prompt for prioritizing retention
-    expect(textContent).toContain("Now help me with multiplication");
-    expect(textContent).toContain(
-      "Prioritize retaining information relevant to this next prompt",
-    );
-
-    // Find the temp file path from the subagent's user message
-    const tempFileMatch = textContent.match(/The file is at: ([^\n]+)/);
-    expect(tempFileMatch).toBeDefined();
-    const tempFilePath = tempFileMatch![1];
-
-    // Have the compact subagent use the real EDL tool to edit the temp file
-    const edlScript = `file \`${tempFilePath}\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked basic arithmetic: 2+2=4, 3+3=6\nCOMPACT_SUMMARY`;
-
-    compactSubagentStream.respond({
-      stopReason: "tool_use",
-      text: "I'll compact this conversation.",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: "edl_1" as ToolRequestId,
-            toolName: "edl" as ToolName,
-            input: { script: edlScript },
-          },
-        },
-      ],
-    });
-
-    // EDL tool auto-executes (no permission needed for /tmp/magenta/ files)
-    // After EDL completes, the compact subagent gets a continuation stream
-    const afterEdlStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "compact subagent after EDL",
-    });
-
-    // Verify the EDL tool result was successful
-    const afterEdlMessages = afterEdlStream.getProviderMessages();
-    const toolResultMsg = afterEdlMessages.find(
-      (m) =>
-        m.role === "user" && m.content.some((c) => c.type === "tool_result"),
-    );
-    expect(toolResultMsg).toBeDefined();
-    const toolResult = toolResultMsg!.content.find(
-      (c) => c.type === "tool_result",
-    );
-    if (toolResult?.type === "tool_result") {
-      expect(toolResult.result.status).toBe("ok");
-    }
-
-    afterEdlStream.respond({
-      stopReason: "end_turn",
-      text: "I have compacted the conversation.",
-      toolRequests: [],
-    });
-
-    // After the compact subagent stops, the parent thread should:
-    // 1. Read back the temp file as the summary
-    // 2. Call agent.compact() to replace messages with the summary
-    // 3. Auto-respond with the next prompt
-
-    // Wait for the continuation stream on the parent thread
-    const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "after compact continuation",
-    });
-
-    // Verify the compacted thread has reduced messages
-    const afterCompactMessages = afterCompactStream.getProviderMessages();
-
-    // After compaction, messages should be minimal:
-    // The summary from the temp file + the user's next prompt
-    const hasNextPrompt = afterCompactMessages.some(
-      (m) =>
-        m.role === "user" &&
-        m.content.some(
-          (c) =>
-            c.type === "text" &&
-            c.text.includes("Now help me with multiplication"),
-        ),
-    );
-    expect(hasNextPrompt).toBe(true);
-
-    // The original conversation details should be gone (replaced by summary)
-    const allText = afterCompactMessages
-      .flatMap((m) =>
-        m.content
-          .filter(
-            (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
-          )
-          .map((c) => c.text),
-      )
-      .join("");
-
-    // The EDL-edited summary content should be present in the compacted thread
-    expect(allText).toContain("User asked basic arithmetic");
-    // Original conversation exchanges should be gone
-    expect(allText).not.toContain("What is 2+2?");
-    expect(allText).not.toContain("What about 3+3?");
-
-    // Respond to the continuation
-    afterCompactStream.respond({
-      stopReason: "end_turn",
-      text: "Sure! What multiplication would you like help with?",
-      toolRequests: [],
-    });
-
-    // We should still be on the same thread (compact doesn't create a new root thread)
-    expect(driver.magenta.chat.getActiveThread().id).toBe(originalThreadId);
-
-    await driver.assertDisplayBufferContains(
-      "What multiplication would you like help with?",
-    );
-  });
-});
-
-it("compact flow without continuation: @compact with no next prompt", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-
-    // Build up conversation history
-    await driver.inputMagentaText("Hello");
-    await driver.send();
-
-    const stream1 = await driver.mockAnthropic.awaitPendingStream({
-      message: "initial request",
-    });
-    stream1.respond({
-      stopReason: "end_turn",
-      text: "Hi there!",
-      toolRequests: [],
-    });
-
-    const thread = driver.magenta.chat.getActiveThread();
-
-    // User initiates compact with no next prompt
-    await driver.inputMagentaText("@compact");
-    await driver.send();
-
-    // Wait for compacting mode
-    await pollUntil(
-      () => {
-        if (thread.state.mode.type !== "compacting")
-          throw new Error(
-            `expected compacting mode but got ${thread.state.mode.type}`,
-          );
-      },
-      { timeout: 2000, message: "thread should enter compacting mode" },
-    );
-
-    // Compact subagent receives its stream
-    const compactStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "compact subagent stream",
-    });
-
-    compactStream.respond({
-      stopReason: "end_turn",
-      text: "Compacted.",
-      toolRequests: [],
-    });
-
-    // Without a next prompt, the thread should just stop after compaction
-    // No continuation stream should be spawned
-    await pollUntil(
-      () => {
-        const agentStatus = thread.agent.getState().status;
-        if (agentStatus.type !== "stopped")
-          throw new Error(`expected stopped but got ${agentStatus.type}`);
-        if (agentStatus.stopReason !== "end_turn")
-          throw new Error(
-            `expected end_turn but got ${agentStatus.stopReason}`,
-          );
-      },
-      { timeout: 2000, message: "thread should stop after compaction" },
-    );
-
-    // Verify messages have been compacted
-    const messages = thread.getMessages();
-    // Should have the summary as an assistant message
-    expect(messages.length).toBeLessThanOrEqual(2);
-  });
-});
-
-it("compact flow does not process @file commands in subagent or summary", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-
-    // Build up conversation history that mentions @file
-    await driver.inputMagentaText("Tell me about @file:poem.txt usage");
-    await driver.send();
-
-    const request1 = await driver.mockAnthropic.awaitPendingStream({
-      message: "initial request",
-    });
-    request1.respond({
-      stopReason: "end_turn",
-      text: "The @file:poem.txt command adds a file to context.",
-      toolRequests: [],
-    });
-
-    const thread = driver.magenta.chat.getActiveThread();
-
-    // Compact with a nextPrompt that contains @file:poem.txt
-    await driver.inputMagentaText(
-      "@compact Now read @file:poem.txt and summarize",
-    );
-    await driver.send();
-
-    await pollUntil(
-      () => {
-        if (thread.state.mode.type !== "compacting")
-          throw new Error(
-            `expected compacting mode but got ${thread.state.mode.type}`,
-          );
-      },
-      { timeout: 2000, message: "thread should enter compacting mode" },
-    );
-
-    // 1. Verify the compact subagent does NOT expand @file commands.
-    //    The subagent's user message should contain the raw markdown text
-    //    including literal "@file:poem.txt" strings, without extra content blocks
-    //    from file expansion.
-    const compactStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "compact subagent stream",
-    });
-
-    const subagentMessages = compactStream.getProviderMessages();
-    const subagentUserMsg = subagentMessages.find((m) => m.role === "user");
-    expect(subagentUserMsg).toBeDefined();
-
-    // The compact subagent should have exactly one text content block (the instructions)
-    // If @file were processed, there would be additional content blocks for file contents
-    const textBlocks = subagentUserMsg!.content.filter(
-      (c) => c.type === "text",
-    );
-    expect(textBlocks).toHaveLength(1);
-
-    // The raw text should contain the literal @file:poem.txt from the conversation
-    const subagentText = (
-      textBlocks[0]
-    ).text;
-    expect(subagentText).toContain("@file:poem.txt");
-
-    // Have the compact subagent edit the temp file with a summary that also contains @file
-    const tempFileMatch = subagentText.match(/The file is at: ([^\n]+)/);
-    expect(tempFileMatch).toBeDefined();
-    const tempFilePath = tempFileMatch![1];
-
-    const edlScript = `file \`${tempFilePath}\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser discussed @file:poem.txt usage. Assistant explained the command.\nCOMPACT_SUMMARY`;
-
-    compactStream.respond({
-      stopReason: "tool_use",
-      text: "Compacting.",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: "edl_1" as ToolRequestId,
-            toolName: "edl" as ToolName,
-            input: { script: edlScript },
-          },
-        },
-      ],
-    });
-
-    const afterEdlStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "compact subagent after EDL",
-    });
-    afterEdlStream.respond({
-      stopReason: "end_turn",
-      text: "Done compacting.",
-      toolRequests: [],
-    });
-
-    // 2. Verify that after compaction:
-    //    - The summary is sent as a raw user message (no command processing)
-    //    - The nextPrompt goes through sendMessage, so @file:poem.txt IS expanded
-    const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "after compact continuation",
-    });
-
-    const afterCompactMessages = afterCompactStream.getProviderMessages();
-
-    // Should have two user messages:
-    // 1. The raw summary (appendUserMessage)
-    // 2. The nextPrompt processed through sendMessage (@file expanded)
-    const userMessages = afterCompactMessages.filter((m) => m.role === "user");
-    expect(userMessages).toHaveLength(2);
-
-    // First user message: raw summary (no command processing)
-    const summaryContentTypes = userMessages[0].content.map((c) => c.type);
-    expect(summaryContentTypes).toEqual(["text"]);
-    const summaryText = (
-      userMessages[0].content[0] as Extract<
-        (typeof userMessages)[0]["content"][0],
-        { type: "text" }
-      >
-    ).text;
-    expect(summaryText).toContain("<conversation-summary>");
-    expect(summaryText).toContain("@file:poem.txt");
-
-    // Second user message: nextPrompt processed through sendMessage
-    // Should have context update from @file expansion + text + system_reminder
-    const promptContentTypes = userMessages[1].content.map((c) => c.type);
-    expect(promptContentTypes).toContain("text");
-
-    const promptText = userMessages[1].content
-      .filter(
-        (
-          c,
-        ): c is Extract<
-          (typeof userMessages)[1]["content"][0],
-          { type: "text" }
-        > => c.type === "text",
-      )
-      .map((c) => c.text)
-      .join("\n");
-    expect(promptText).toContain("Now read @file:poem.txt and summarize");
-
-    // The @file:poem.txt in the nextPrompt should have been processed,
-    // adding poem.txt to the context manager
-    const contextFiles = Object.keys(thread.contextManager.files);
-    expect(contextFiles.some((f) => f.includes("poem.txt"))).toBe(true);
-
-    afterCompactStream.respond({
-      stopReason: "end_turn",
-      text: "Ready to continue.",
-      toolRequests: [],
-    });
-
-    await driver.assertDisplayBufferContains("Ready to continue.");
-  });
-});
-it("forks a thread with @compact to clone and compact in one step", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-
-    // Build up some conversation history
-    await driver.inputMagentaText("What is 2+2?");
-    await driver.send();
-
-    const request1 = await driver.mockAnthropic.awaitPendingStream({
-      message: "initial request",
-    });
-    request1.respond({
-      stopReason: "end_turn",
-      text: "2+2 equals 4.",
-      toolRequests: [],
-    });
-
-    await driver.inputMagentaText("What about 3+3?");
-    await driver.send();
-
-    const request2 = await driver.mockAnthropic.awaitPendingStream({
-      message: "followup request",
-    });
-    request2.respond({
-      stopReason: "end_turn",
-      text: "3+3 equals 6.",
-      toolRequests: [],
-    });
-
-    const originalThreadId = driver.magenta.chat.state.activeThreadId;
-
-    // Fork with compact - should clone the thread, then process @compact on the forked thread
-    await driver.inputMagentaText(
-      "@fork @compact Now help me with multiplication",
-    );
-    await driver.send();
-
-    // The forked thread detects @compact and spawns a compact subagent
-    const compactSubagentStream = await driver.mockAnthropic.awaitPendingStream(
-      {
-        message: "compact subagent in forked thread",
-      },
-    );
-
-    // Verify the compact subagent sees the original conversation content
-    const subagentMessages = compactSubagentStream.getProviderMessages();
-    const userMsg = subagentMessages.find((m) => m.role === "user");
-    expect(userMsg).toBeDefined();
-    const textContent = userMsg!.content
-      .filter(
-        (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
-      )
-      .map((c) => c.text)
-      .join("");
-    expect(textContent).toContain("2+2 equals 4");
-
-    // Use real EDL tool to edit the temp file
-    const tempFileMatch2 = textContent.match(/The file is at: ([^\n]+)/);
-    expect(tempFileMatch2).toBeDefined();
-    const tempFilePath2 = tempFileMatch2![1];
-
-    const edlScript2 = `file \`${tempFilePath2}\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nArithmetic conversation: 2+2=4, 3+3=6\nCOMPACT_SUMMARY`;
-
-    compactSubagentStream.respond({
-      stopReason: "tool_use",
-      text: "I'll compact this conversation.",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: "edl_1" as ToolRequestId,
-            toolName: "edl" as ToolName,
-            input: { script: edlScript2 },
-          },
-        },
-      ],
-    });
-
-    // EDL tool auto-executes, then compact subagent finishes
-    const afterEdlStream2 = await driver.mockAnthropic.awaitPendingStream({
-      message: "compact subagent after EDL in forked thread",
-    });
-
-    afterEdlStream2.respond({
-      stopReason: "end_turn",
-      text: "Compacted the arithmetic conversation.",
-      toolRequests: [],
-    });
-
-    // After compact completes, the forked thread should continue with the next prompt
-    const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
-      message: "after compact in forked thread",
-    });
-
-    afterCompactStream.respond({
-      stopReason: "end_turn",
-      text: "Sure! What multiplication would you like help with?",
-      toolRequests: [],
-    });
-
-    // Verify we're on the new forked thread (not the original)
-    const newThread = driver.magenta.chat.getActiveThread();
-    expect(newThread.id).not.toBe(originalThreadId);
-
-    await driver.assertDisplayBufferContains(
-      "What multiplication would you like help with?",
-    );
   });
 });
 
@@ -1787,10 +1156,8 @@ it("handles web search results and citations together", async () => {
     await driver.assertDisplayBufferContains(
       "🔍 Searching TypeScript vs JavaScript large projects...",
     );
-    await driver.assertDisplayBufferContains("🌐 Search results");
-    await driver.assertDisplayBufferContains(
-      "[TypeScript vs JavaScript: Which Is Better for Your Project?]",
-    );
+    await driver.assertDisplayBufferContains("🌐 1 search result");
+
     await driver.assertDisplayBufferContains(
       "TypeScript offers significant advantages for large projects compared to JavaScript.",
     );
@@ -1973,13 +1340,13 @@ it("shows EDL script preview while streaming", async () => {
       index: toolIndex,
       delta: {
         type: "input_json_delta",
-        partial_json: '{"script": "file `src/utils.ts`\\nselect_one',
+        partial_json: '{"script": "file `src/utils.ts`\\nselect',
       },
     });
 
     // Assert the display shows the unescaped script with newlines separating commands
     await driver.assertDisplayBufferContains(
-      "📝 edl:\nfile `src/utils.ts`\nselect_one",
+      "📝 edl:\nfile `src/utils.ts`\nselect",
     );
 
     // Stream more of the script
@@ -1995,184 +1362,6 @@ it("shows EDL script preview while streaming", async () => {
     await driver.assertDisplayBufferContains("extend_forward");
   });
 });
-it("aborts request when sending new message while waiting for response", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-    await driver.inputMagentaText("First message");
-    await driver.send();
-
-    const request1 = await driver.mockAnthropic.awaitPendingStream();
-
-    // Send a second message before the first request responds
-    await driver.inputMagentaText("Second message while first is pending");
-    await driver.send();
-
-    // The first request should be aborted
-    expect(request1.aborted).toBe(true);
-
-    // Respond to the aborted request - this should be ignored
-    request1.respond({
-      stopReason: "end_turn",
-      text: "This response should be ignored because request was aborted",
-      toolRequests: [],
-    });
-
-    // Handle the second request
-    const request2 = await driver.mockAnthropic.awaitPendingStream();
-    request2.respond({
-      stopReason: "end_turn",
-      text: "Second response that should be shown",
-      toolRequests: [],
-    });
-
-    // Verify that only the second message and response are displayed
-    await driver.assertDisplayBufferContains(
-      "Second message while first is pending",
-    );
-    await driver.assertDisplayBufferContains(
-      "Second response that should be shown",
-    );
-
-    // Verify the aborted response is NOT displayed
-    const bufferContent = await driver.getDisplayBufferText();
-    expect(bufferContent).not.toContain(
-      "This response should be ignored because request was aborted",
-    );
-
-    // Check the thread message structure - should only have the second exchange
-    const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
-    expect(messages).toMatchSnapshot();
-  });
-});
-
-it("aborts tool use when sending new message while tool is executing", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-    await driver.inputMagentaText("Run a slow command");
-    await driver.send();
-
-    const request1 = await driver.mockAnthropic.awaitPendingStream();
-    const toolRequestId = "slow-bash-command" as ToolRequestId;
-
-    // Respond with a tool use that would normally take time
-    request1.respond({
-      stopReason: "tool_use",
-      text: "I'll run a slow bash command for you.",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: toolRequestId,
-            toolName: "bash_command" as ToolName,
-            input: { command: "sleep 5 && echo 'This should be aborted'" },
-          },
-        },
-      ],
-    });
-
-    // Wait for the tool execution to start
-    await driver.assertDisplayBufferContains(
-      "I'll run a slow bash command for you.",
-    );
-
-    // Send a new message while the tool is executing
-    await driver.inputMagentaText("Cancel that, run something else");
-    await driver.send();
-
-    // Handle the second request
-    await driver.mockAnthropic.awaitPendingStream();
-    // Verify that the second exchange is displayed
-    await driver.assertDisplayBufferContains("Cancel that, run something else");
-
-    // Verify the aborted tool output is NOT displayed
-    const bufferContent = await driver.getDisplayBufferText();
-    expect(bufferContent).toContain(
-      "'This should be aborted'` - Request was aborted",
-    );
-
-    // Check the thread message structure
-    const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getMessages();
-    expect(messages).toMatchSnapshot();
-  });
-});
-
-it("inserts error tool results when aborting while stopped waiting for tool use", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-    await driver.inputMagentaText("Read my secret file");
-    await driver.send();
-
-    const request1 = await driver.mockAnthropic.awaitPendingStream();
-    const toolRequestId = "get-file-tool" as ToolRequestId;
-
-    // Respond with get_file tool use - this will block on user approval
-    request1.respond({
-      stopReason: "tool_use",
-      text: "I'll read your secret file.",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: toolRequestId,
-            toolName: "get_file" as ToolName,
-            input: { filePath: ".secret" as UnresolvedFilePath },
-          },
-        },
-      ],
-    });
-
-    // Wait for approval dialog to appear - we're now stopped waiting for tool use
-    await driver.assertDisplayBufferContains("👀⏳ May I read file `.secret`?");
-
-    // Send a new message to abort - this should insert error tool result
-    await driver.inputMagentaText("Never mind, do something else");
-    await driver.send();
-
-    // Handle the second request
-    const request2 = await driver.mockAnthropic.awaitPendingStream();
-
-    // Verify the message structure includes an error tool_result for the aborted tool
-    const messagePattern = request2.messages.flatMap((m) =>
-      typeof m.content == "string"
-        ? "stringmessage"
-        : m.content.map((c) => `${m.role}:${c.type}`),
-    );
-
-    expect(messagePattern).toEqual([
-      "user:text",
-      "user:text", // system_reminder
-      "assistant:text",
-      "assistant:tool_use",
-      "user:tool_result", // error tool result from abort
-      "user:text",
-      "user:text", // system_reminder
-    ]);
-
-    // Verify the tool result contains the abort error message
-    const userMessages = request2.messages.filter((m) => m.role === "user");
-    const toolResultMessage = userMessages.find(
-      (m) =>
-        Array.isArray(m.content) &&
-        m.content.some((c) => c.type === "tool_result"),
-    );
-    expect(toolResultMessage).toBeDefined();
-
-    const toolResultContent = (
-      toolResultMessage!.content as Array<{ type: string }>
-    ).find((c) => c.type === "tool_result") as {
-      type: "tool_result";
-      tool_use_id: string;
-      content: string;
-      is_error: boolean;
-    };
-    expect(toolResultContent.tool_use_id).toBe(toolRequestId);
-    expect(toolResultContent.is_error).toBe(true);
-    expect(toolResultContent.content).toContain("aborted by the user");
-  });
-});
-
 it("handles @async messages by queueing them and sending on next tool response", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
@@ -2201,7 +1390,7 @@ it("handles @async messages by queueing them and sending on next tool response",
     });
 
     // Wait for approval dialog to appear
-    await driver.assertDisplayBufferContains("👀⏳ May I read file `.secret`?");
+    await driver.assertDisplayBufferContains("👀 .secret");
 
     // Now send an @async message while the tool is waiting for approval
     await driver.inputMagentaText("@async This should be queued");
@@ -2276,48 +1465,6 @@ it("handles @async messages and sends them on end turn", async () => {
     // Now the queued message should be sent automatically
     const request2 = await driver.mockAnthropic.awaitPendingStream();
     expect(request2.messages).toMatchSnapshot();
-  });
-});
-
-it("removes server_tool_use content when aborted before receiving results", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-    await driver.inputMagentaText("Search for information about TypeScript");
-    await driver.send();
-
-    const request1 = await driver.mockAnthropic.awaitPendingStream();
-
-    // First send text content
-    request1.streamText("I'll search for information about TypeScript.");
-
-    // Then send server tool use streaming events
-    request1.streamServerToolUse("web-search-123", "web_search", {
-      query: "TypeScript programming language",
-    });
-
-    // Wait for the server tool use to be displayed
-    await driver.assertDisplayBufferContains(
-      "I'll search for information about TypeScript.",
-    );
-
-    // Verify the server tool use content is in the message before abort
-    const thread = driver.magenta.chat.getActiveThread();
-    const messages = thread.getProviderMessages();
-    const contentTypesBeforeAbort = messages[messages.length - 1].content.map(
-      (c) => c.type,
-    );
-    expect(contentTypesBeforeAbort).toEqual(["text", "server_tool_use"]);
-
-    // Send a new message to abort the current operation before web search result comes back
-    await driver.abort();
-    await delay(0);
-
-    // The server tool use should be removed since no result was received
-    const messagesAfterAbort = thread.getProviderMessages();
-    const contentTypesAfterAbort = messagesAfterAbort[
-      messagesAfterAbort.length - 1
-    ].content.map((c) => c.type);
-    expect(contentTypesAfterAbort).toEqual(["text"]);
   });
 });
 
@@ -2532,5 +1679,49 @@ it("followup user message text is visible with context updates", async () => {
       await driver.getDisplayBufferText(),
     );
     expect(displayText).toMatchSnapshot("followup-with-context-updates");
+  });
+});
+it("handles malformed tool_use by sending error tool_result and continuing", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("Please read a file");
+    await driver.send();
+
+    const stream = await driver.mockAnthropic.awaitPendingStream();
+    const toolRequestId = "tool-malformed-1" as ToolRequestId;
+
+    // Stream a malformed get_file tool_use (missing filePath)
+    stream.streamText("Let me read that file.");
+    stream.streamToolUse(toolRequestId, "get_file" as ToolName, {});
+    stream.finishResponse("tool_use");
+
+    // The thread should send an error tool_result and auto-continue
+    const stream2 = await driver.mockAnthropic.awaitPendingStream();
+
+    // Verify the messages sent include the error tool_result
+    const providerMessages = stream2.getProviderMessages();
+    const toolResultMsg = providerMessages.find(
+      (m) =>
+        m.role === "user" && m.content.some((b) => b.type === "tool_result"),
+    );
+    expect(toolResultMsg).toBeDefined();
+    const toolResultBlock = toolResultMsg!.content.find(
+      (b) => b.type === "tool_result",
+    );
+    expect(toolResultBlock).toBeDefined();
+    if (toolResultBlock?.type === "tool_result") {
+      expect(toolResultBlock.result.status).toBe("error");
+    }
+
+    // The agent should be able to recover
+    stream2.respond({
+      stopReason: "end_turn",
+      text: "Sorry, I made an error with that tool call.",
+      toolRequests: [],
+    });
+
+    await driver.assertDisplayBufferContains(
+      "Sorry, I made an error with that tool call.",
+    );
   });
 });

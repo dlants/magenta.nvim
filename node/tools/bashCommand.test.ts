@@ -8,7 +8,6 @@ import type { ToolName } from "./types";
 import { MockProvider } from "../providers/mock";
 import type { Row0Indexed } from "../nvim/window";
 import { pollUntil } from "../utils/async.ts";
-import { BashCommandTool } from "./bashCommand.ts";
 import { spawnSync } from "child_process";
 
 describe("node/tools/bashCommand.test.ts", () => {
@@ -82,7 +81,7 @@ describe("node/tools/bashCommand.test.ts", () => {
       });
 
       await driver.assertDisplayBufferContains(
-        "⚡⏳ May I run command `nonexistentcommand`?",
+        "⚡ May I run command `nonexistentcommand`?",
       );
       const pos = await driver.assertDisplayBufferContains("> YES");
       await driver.triggerDisplayBufferKey(pos, "<CR>");
@@ -124,7 +123,7 @@ describe("node/tools/bashCommand.test.ts", () => {
 
       // Since this command is not in the allowlist, it should require approval
       await driver.assertDisplayBufferContains(
-        '⚡⏳ May I run command `true && echo "hello, world"`?',
+        '⚡ May I run command `true && echo "hello, world"`?',
       );
 
       // Verify approval UI is fully displayed
@@ -173,7 +172,7 @@ describe("node/tools/bashCommand.test.ts", () => {
 
       // Wait for the user approval prompt
       await driver.assertDisplayBufferContains(
-        "⚡⏳ May I run command `true && ls -la`?",
+        "⚡ May I run command `true && ls -la`?",
       );
 
       // Find approval text position and trigger key on NO button
@@ -213,7 +212,7 @@ describe("node/tools/bashCommand.test.ts", () => {
 
       // Wait for the user approval prompt
       await driver.assertDisplayBufferContains(
-        "⚡⏳ May I run command `dangerous-command`?",
+        "⚡ May I run command `dangerous-command`?",
       );
 
       // Verify the vertical button layout is displayed correctly
@@ -258,24 +257,20 @@ describe("node/tools/bashCommand.test.ts", () => {
       });
 
       await driver.assertDisplayBufferContains(
-        "⚡⏳ May I run command `sleep 30`?",
+        "⚡ May I run command `sleep 30`?",
       );
       const approvePos = await driver.assertDisplayBufferContains("> YES");
       await driver.triggerDisplayBufferKey(approvePos, "<CR>");
 
       const pos = await driver.assertDisplayBufferContains("⚡⚙️ (");
 
-      // Press 't' to terminate the command
+      // Press 't' to abort the command
       await driver.triggerDisplayBufferKey(pos, "t");
 
-      // Verify that the command was terminated
-      await driver.assertDisplayBufferContains("terminated by signal SIGTERM");
-
-      // Ensure the command prompt is updated to show completion
+      // Verify that the command was aborted
       await driver.assertDisplayBufferContains(
-        "⚡❌ `sleep 30` - Terminated by SIGTERM",
+        "⚡❌ `sleep 30` - Request was aborted by the user.",
       );
-      await driver.assertDisplayBufferContains("```");
     });
   });
 
@@ -308,7 +303,7 @@ describe("node/tools/bashCommand.test.ts", () => {
       });
 
       await driver.assertDisplayBufferContains(
-        "⚡⏳ May I run command `true && echo 'tada'`?",
+        "⚡ May I run command `true && echo 'tada'`?",
       );
 
       const alwaysPos = await driver.assertDisplayBufferContains("> ALWAYS");
@@ -387,7 +382,7 @@ describe("node/tools/bashCommand.test.ts", () => {
       });
 
       // Wait for the approval prompt
-      await driver.assertDisplayBufferContains("⚡⏳ May I run command");
+      await driver.assertDisplayBufferContains("⚡ May I run command");
 
       // Click the YES button to approve the command
       const yesPos = await driver.assertDisplayBufferContains("> YES");
@@ -743,7 +738,7 @@ describe("commandConfig integration tests", () => {
 
         // Should require approval since args don't match
         await driver.assertDisplayBufferContains(
-          "⚡⏳ May I run command `npx tsc --watch --noEmit`?",
+          "⚡ May I run command `npx tsc --watch --noEmit`?",
         );
         await driver.assertDisplayBufferContains("> YES");
       },
@@ -841,7 +836,7 @@ describe("commandConfig integration tests", () => {
 
         // Should require approval since file is outside project
         await driver.assertDisplayBufferContains(
-          "⚡⏳ May I run command `cat /etc/passwd`?",
+          "⚡ May I run command `cat /etc/passwd`?",
         );
         await driver.assertDisplayBufferContains("> YES");
       },
@@ -948,7 +943,7 @@ describe("commandConfig integration tests", () => {
         });
 
         // Should require approval since one file is outside project
-        await driver.assertDisplayBufferContains("⚡⏳ May I run command");
+        await driver.assertDisplayBufferContains("⚡ May I run command");
         await driver.assertDisplayBufferContains("> YES");
       },
     );
@@ -1048,7 +1043,7 @@ describe("commandConfig integration tests", () => {
         });
 
         // Should require approval since cd navigates outside project
-        await driver.assertDisplayBufferContains("⚡⏳ May I run command");
+        await driver.assertDisplayBufferContains("⚡ May I run command");
         await driver.assertDisplayBufferContains("> YES");
       },
     );
@@ -1083,7 +1078,7 @@ describe("commandConfig integration tests", () => {
 
       // Should require approval since rm is not in builtin config
       await driver.assertDisplayBufferContains(
-        "⚡⏳ May I run command `rm -rf /tmp/test`?",
+        "⚡ May I run command `rm -rf /tmp/test`?",
       );
       await driver.assertDisplayBufferContains("> YES");
     });
@@ -1131,7 +1126,7 @@ describe("commandConfig integration tests", () => {
         });
 
         // Should require approval for hidden files
-        await driver.assertDisplayBufferContains("⚡⏳ May I run command");
+        await driver.assertDisplayBufferContains("⚡ May I run command");
         await driver.assertDisplayBufferContains("> YES");
       },
     );
@@ -1640,7 +1635,7 @@ describe("bash command output logging", () => {
       });
 
       await driver.assertDisplayBufferContains(
-        "⚡⏳ May I run command `exit 1`?",
+        "⚡ May I run command `exit 1`?",
       );
       const pos = await driver.assertDisplayBufferContains("> YES");
       await driver.triggerDisplayBufferKey(pos, "<CR>");
@@ -1722,14 +1717,20 @@ describe("bash command output logging", () => {
           ],
         });
 
-        // Wait for PID to appear in output
-        await driver.assertDisplayBufferContains("pid:");
-
-        // Extract PID from the display buffer
-        const displayText = await driver.getDisplayBufferText();
-        const pidMatch = displayText.match(/pid: (\d+)/);
-        expect(pidMatch).not.toBeNull();
-        const pid = parseInt(pidMatch![1], 10);
+        // Wait for PID number to appear in output
+        let pid = 0;
+        await pollUntil(
+          async () => {
+            const text = await driver.getDisplayBufferText();
+            const match = text.match(/pid: (\d+)/);
+            if (match) {
+              pid = parseInt(match[1], 10);
+              return true;
+            }
+            throw new Error("PID not found in display buffer");
+          },
+          { timeout: 5000 },
+        );
 
         // Verify process is running
         const isRunning = (p: number) => {
@@ -1746,13 +1747,15 @@ describe("bash command output logging", () => {
         if (mode.type !== "tool_use") {
           throw new Error(`Expected tool_use mode, got ${mode.type}`);
         }
-        const tool = mode.activeTools.get(
+        const entry = mode.activeTools.get(
           "test-bash-sigterm" as ToolRequestId,
-        ) as BashCommandTool;
-        expect(tool).toBeDefined();
+        );
+        if (!entry) {
+          throw new Error("Expected tool entry");
+        }
 
-        // Dispatch terminate message
-        tool.update({ type: "terminate" });
+        // Abort the tool execution
+        entry.handle.abort();
 
         // Wait for process to be gone
         await pollUntil(
@@ -1764,8 +1767,10 @@ describe("bash command output logging", () => {
           { timeout: 3000 },
         );
 
-        // Verify the tool shows SIGTERM message
-        await driver.assertDisplayBufferContains("SIGTERM");
+        // Verify the request was aborted
+        await driver.assertDisplayBufferContains(
+          "Request was aborted by the user.",
+        );
       },
     );
   });
@@ -1813,14 +1818,20 @@ describe("bash command output logging", () => {
           ],
         });
 
-        // Wait for PID to appear in output
-        await driver.assertDisplayBufferContains("pid:");
-
-        // Extract PID from the display buffer
-        const displayText = await driver.getDisplayBufferText();
-        const pidMatch = displayText.match(/pid: (\d+)/);
-        expect(pidMatch).not.toBeNull();
-        const pid = parseInt(pidMatch![1], 10);
+        // Wait for PID number to appear in output
+        let pid = 0;
+        await pollUntil(
+          async () => {
+            const text = await driver.getDisplayBufferText();
+            const match = text.match(/pid: (\d+)/);
+            if (match) {
+              pid = parseInt(match[1], 10);
+              return true;
+            }
+            throw new Error("PID not found in display buffer");
+          },
+          { timeout: 5000 },
+        );
 
         // Verify process is running
         const isRunning = (p: number) => {
@@ -1837,13 +1848,15 @@ describe("bash command output logging", () => {
         if (mode.type !== "tool_use") {
           throw new Error(`Expected tool_use mode, got ${mode.type}`);
         }
-        const tool = mode.activeTools.get(
+        const entry = mode.activeTools.get(
           "test-bash-sigkill" as ToolRequestId,
-        ) as BashCommandTool;
-        expect(tool).toBeDefined();
+        );
+        if (!entry) {
+          throw new Error("Expected tool entry");
+        }
 
-        // Dispatch terminate message
-        tool.update({ type: "terminate" });
+        // Abort the invocation
+        entry.handle.abort();
 
         // Process should survive SIGTERM (for ~1 second) then die from SIGKILL
         // Wait a bit and verify process is still running (SIGTERM ignored)
@@ -1860,8 +1873,10 @@ describe("bash command output logging", () => {
           { timeout: 5000 },
         );
 
-        // Verify the tool shows SIGKILL message
-        await driver.assertDisplayBufferContains("SIGKILL");
+        // Verify the request was aborted
+        await driver.assertDisplayBufferContains(
+          "Request was aborted by the user.",
+        );
       },
     );
   });
@@ -1916,23 +1931,25 @@ wait
         });
 
         // Wait for all PIDs to appear in output
-        await driver.assertDisplayBufferContains("parent:");
-        await driver.assertDisplayBufferContains("child1:");
-        await driver.assertDisplayBufferContains("child2:");
-
-        // Extract PIDs from the display buffer
-        const displayText = await driver.getDisplayBufferText();
-        const parentMatch = displayText.match(/parent: (\d+)/);
-        const child1Match = displayText.match(/child1: (\d+)/);
-        const child2Match = displayText.match(/child2: (\d+)/);
-
-        expect(parentMatch).not.toBeNull();
-        expect(child1Match).not.toBeNull();
-        expect(child2Match).not.toBeNull();
-
-        const parentPid = parseInt(parentMatch![1], 10);
-        const child1Pid = parseInt(child1Match![1], 10);
-        const child2Pid = parseInt(child2Match![1], 10);
+        let parentPid = 0;
+        let child1Pid = 0;
+        let child2Pid = 0;
+        await pollUntil(
+          async () => {
+            const text = await driver.getDisplayBufferText();
+            const pm = text.match(/parent: (\d+)/);
+            const c1 = text.match(/child1: (\d+)/);
+            const c2 = text.match(/child2: (\d+)/);
+            if (pm && c1 && c2) {
+              parentPid = parseInt(pm[1], 10);
+              child1Pid = parseInt(c1[1], 10);
+              child2Pid = parseInt(c2[1], 10);
+              return true;
+            }
+            throw new Error("PID not found in display buffer");
+          },
+          { timeout: 5000 },
+        );
 
         // Verify all processes are running
         const isRunning = (p: number) => {
@@ -1952,13 +1969,13 @@ wait
         if (mode.type !== "tool_use") {
           throw new Error(`Expected tool_use mode, got ${mode.type}`);
         }
-        const tool = mode.activeTools.get(
-          "test-bash-tree" as ToolRequestId,
-        ) as BashCommandTool;
-        expect(tool).toBeDefined();
+        const entry = mode.activeTools.get("test-bash-tree" as ToolRequestId);
+        if (!entry) {
+          throw new Error("Expected tool entry");
+        }
 
-        // Dispatch terminate message
-        tool.update({ type: "terminate" });
+        // Abort the command
+        entry.handle.abort();
 
         // Wait for ALL processes to be gone
         await pollUntil(
@@ -1976,8 +1993,10 @@ wait
           { timeout: 5000 },
         );
 
-        // Verify the tool shows termination message
-        await driver.assertDisplayBufferContains("SIGTERM");
+        // Verify the request was aborted
+        await driver.assertDisplayBufferContains(
+          "Request was aborted by the user.",
+        );
       },
     );
   });
@@ -2095,7 +2114,7 @@ describe("bash command filePermissions tests", () => {
         });
 
         // Should require approval since no filePermissions for this path
-        await driver.assertDisplayBufferContains("⚡⏳ May I run command");
+        await driver.assertDisplayBufferContains("⚡ May I run command");
         await driver.assertDisplayBufferContains("> YES");
       },
     );
@@ -2211,7 +2230,7 @@ describe("bash command filePermissions tests", () => {
         });
 
         // Should require approval since only read permission, not write
-        await driver.assertDisplayBufferContains("⚡⏳ May I run command");
+        await driver.assertDisplayBufferContains("⚡ May I run command");
         await driver.assertDisplayBufferContains("> YES");
       },
     );
@@ -2273,7 +2292,7 @@ describe("bash command filePermissions tests", () => {
         });
 
         // Should require approval since hidden file needs readSecret
-        await driver.assertDisplayBufferContains("⚡⏳ May I run command");
+        await driver.assertDisplayBufferContains("⚡ May I run command");
         await driver.assertDisplayBufferContains("> YES");
       },
     );
@@ -2458,7 +2477,7 @@ describe("bash command filePermissions tests", () => {
         });
 
         // Should require approval since hidden file needs writeSecret
-        await driver.assertDisplayBufferContains("⚡⏳ May I run command");
+        await driver.assertDisplayBufferContains("⚡ May I run command");
         await driver.assertDisplayBufferContains("> YES");
       },
     );

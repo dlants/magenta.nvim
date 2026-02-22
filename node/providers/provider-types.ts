@@ -236,6 +236,7 @@ export interface AgentState {
   messages: ReadonlyArray<ProviderMessage>;
   streamingBlock?: AgentStreamingBlock | undefined;
   latestUsage?: Usage | undefined;
+  inputTokenCount?: number | undefined;
 }
 
 export type AgentInput =
@@ -300,4 +301,5 @@ export interface AgentOptions {
   tools: ProviderToolSpec[];
   thinking?: { enabled: boolean; budgetTokens?: number };
   reasoning?: { effort?: "low" | "medium" | "high"; summary?: string };
+  skipPostFlightTokenCount?: boolean;
 }

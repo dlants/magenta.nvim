@@ -339,15 +339,76 @@ export class MockStream implements MockMessageStream {
   }
 }
 
+/** Validate that the Anthropic API constraint is satisfied:
+ * every assistant message containing tool_use blocks must be immediately
+ * followed by a user message with a tool_result for each tool_use.id.
+ */
+function validateToolUseConstraint(messages: Anthropic.MessageParam[]): void {
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg.role !== "assistant") continue;
+    if (typeof msg.content === "string") continue;
+
+    const toolUseIds = msg.content
+      .filter(
+        (block): block is Anthropic.ToolUseBlockParam =>
+          block.type === "tool_use",
+      )
+      .map((block) => block.id);
+
+    if (toolUseIds.length === 0) continue;
+
+    const nextMsg = messages[i + 1];
+    if (!nextMsg || nextMsg.role !== "user") {
+      throw new Error(
+        `MockAnthropicClient: assistant message at index ${i} contains tool_use blocks [${toolUseIds.join(", ")}] ` +
+          `but is not followed by a user message with tool_results.`,
+      );
+    }
+
+    if (typeof nextMsg.content === "string") {
+      throw new Error(
+        `MockAnthropicClient: user message at index ${i + 1} should contain tool_results for [${toolUseIds.join(", ")}] ` +
+          `but has string content.`,
+      );
+    }
+
+    const toolResultIds = new Set(
+      (nextMsg.content as Anthropic.ToolResultBlockParam[])
+        .filter(
+          (block): block is Anthropic.ToolResultBlockParam =>
+            block.type === "tool_result",
+        )
+        .map((block) => block.tool_use_id),
+    );
+
+    for (const id of toolUseIds) {
+      if (!toolResultIds.has(id)) {
+        throw new Error(
+          `MockAnthropicClient: missing tool_result for tool_use id "${id}" in user message at index ${i + 1}.`,
+        );
+      }
+    }
+  }
+}
 /** Mock Anthropic client that creates MockStreams for testing */
 export class MockAnthropicClient {
   public streams: MockStream[] = [];
 
+  /** If set, countTokens will return this value as input_tokens */
+  public mockInputTokenCount: number | undefined;
+
   messages = {
     stream: (params: Anthropic.Messages.MessageStreamParams): MockStream => {
+      validateToolUseConstraint(params.messages);
       const stream = new MockStream(params);
       this.streams.push(stream);
       return stream;
+    },
+    countTokens: (
+      _params: Anthropic.Messages.MessageCountTokensParams,
+    ): Promise<{ input_tokens: number }> => {
+      return Promise.resolve({ input_tokens: this.mockInputTokenCount ?? 0 });
     },
   };
 
