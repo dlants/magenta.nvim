@@ -53,6 +53,8 @@ I sometimes write about AI, neovim and magenta specifically:
 
 ## Feb 2026
 
+- Refactored tool architecture: separated tool execution from rendering, extracted shared capabilities (permissions, file I/O, shell) into a `capabilities/` layer. This decouples tools from neovim, moving towards being able to run it via server/client architecture, and dev container support.
+- Auto-compaction with chunked incremental summarization and accurate token counting via `countTokens` API.
 - Introduced the edit description language (edl) tool, which subsumes the insert and replace tools.
 - Introduced explore subagent, blocking subagents for better token economy and exploration speed.
 - I decided to drop next edit prediciton and inline edits. I think I'm going to pivot this in a slightly different direction - for more power around unsupervised agent mode and managing teams of agents.
