@@ -1,6 +1,6 @@
 import type { FileIO } from "../edl/file-io.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { d, withInlineCode, type VDOMNode } from "../tea/view.ts";
+
 import { type Result } from "../utils/result.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import type {
@@ -10,7 +10,6 @@ import type {
 import type { Dispatch } from "../tea/tea.ts";
 import {
   resolveFilePath,
-  displayPath,
   type UnresolvedFilePath,
   detectFileType,
   validateFileSize,
@@ -18,13 +17,7 @@ import {
   type NvimCwd,
   type HomeDir,
 } from "../utils/files.ts";
-import type {
-  ToolName,
-  GenericToolRequest,
-  DisplayContext,
-  ToolInvocation,
-  ToolRequest as UnionToolRequest,
-} from "./types.ts";
+import type { ToolName, GenericToolRequest, ToolInvocation } from "./types.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
 import type { ContextManager } from "../context/context-manager.ts";
 import type { ProviderToolResultContent } from "../providers/provider-types.ts";
@@ -34,7 +27,6 @@ import {
 } from "../utils/pdf-pages.ts";
 
 import { summarizeFile, formatSummary } from "../utils/file-summary.ts";
-import type { CompletedToolInfo } from "./types.ts";
 
 export type ToolRequest = GenericToolRequest<"get_file", Input>;
 
@@ -447,84 +439,6 @@ You already have the most up-to-date information about the contents of this file
       aborted = true;
     },
   };
-}
-
-function formatGetFileDisplay(
-  input: Input,
-  displayContext: DisplayContext,
-): VDOMNode {
-  const absFilePath = resolveFilePath(
-    displayContext.cwd,
-    input.filePath,
-    displayContext.homeDir,
-  );
-  const pathForDisplay = displayPath(
-    displayContext.cwd,
-    absFilePath,
-    displayContext.homeDir,
-  );
-  let extraInfo = "";
-  if (input.pdfPage !== undefined) {
-    extraInfo = ` (page ${input.pdfPage})`;
-  } else if (input.startLine !== undefined || input.numLines !== undefined) {
-    const start = input.startLine ?? 1;
-    const num = input.numLines;
-    extraInfo =
-      num !== undefined
-        ? ` (lines ${start}-${start + num - 1})`
-        : ` (from line ${start})`;
-  }
-  return withInlineCode(d`\`${pathForDisplay}\`${extraInfo}`);
-}
-
-export function renderInFlightSummary(
-  request: UnionToolRequest,
-  displayContext: DisplayContext,
-): VDOMNode {
-  const input = request.input as Input;
-  return d`👀⚙️ ${formatGetFileDisplay(input, displayContext)}`;
-}
-export function renderCompletedSummary(
-  info: CompletedToolInfo,
-  displayContext: DisplayContext,
-): VDOMNode {
-  const input = info.request.input as Input;
-  const result = info.result.result;
-
-  if (result.status === "error") {
-    return d`👀❌ ${formatGetFileDisplay(input, displayContext)}`;
-  }
-
-  let lineCount = 0;
-  if (result.value.length > 0) {
-    const firstValue = result.value[0];
-    if (firstValue.type === "text") {
-      lineCount = firstValue.text.split("\n").length;
-    }
-  }
-  const lineCountStr = lineCount > 0 ? ` [+ ${lineCount}]` : "";
-  return d`👀✅ ${formatGetFileDisplay(input, displayContext)}${lineCountStr}`;
-}
-
-export function renderCompletedDetail(info: CompletedToolInfo): VDOMNode {
-  const result = info.result.result;
-
-  if (result.status === "error") {
-    return d`Error: ${result.error}`;
-  }
-
-  const parts: VDOMNode[] = [];
-  for (const content of result.value) {
-    if (content.type === "text") {
-      parts.push(d`${content.text}`);
-    } else if (content.type === "image") {
-      parts.push(d`[Image: ${content.source.media_type}]`);
-    } else if (content.type === "document") {
-      parts.push(d`[Document${content.title ? `: ${content.title}` : ""}]`);
-    }
-  }
-
-  return d`${parts}`;
 }
 
 export const spec: ProviderToolSpec = {

@@ -1,13 +1,5 @@
 import type { ProviderToolResult } from "../../providers/provider.ts";
-import { d, withInlineCode, type VDOMNode } from "../../tea/view.ts";
-import type {
-  ToolInvocation,
-  ToolRequest as UnionToolRequest,
-  ToolRequestId,
-  ToolName,
-  DisplayContext,
-  CompletedToolInfo,
-} from "../types.ts";
+import type { ToolInvocation, ToolRequestId, ToolName } from "../types.ts";
 import type { MCPClient } from "./client.ts";
 import { parseToolName, type MCPToolRequestParams } from "./types.ts";
 
@@ -94,27 +86,4 @@ export function execute(
       clearInterval(tickInterval);
     },
   };
-}
-
-export function renderInFlightSummary(
-  request: UnionToolRequest,
-  _displayContext: DisplayContext,
-  progress?: MCPProgress,
-): VDOMNode {
-  if (progress) {
-    const runningTime = Math.floor((Date.now() - progress.startTime) / 1000);
-    return d`🔨⚙️ (${String(runningTime)}s) MCP tool ${withInlineCode(d`\`${request.toolName}\``)}`;
-  }
-  return d`🔨⚙️ MCP tool ${withInlineCode(d`\`${request.toolName}\``)} processing...`;
-}
-
-function getStatusEmoji(result: ProviderToolResult): string {
-  return result.result.status === "error" ? "❌" : "✅";
-}
-
-export function renderCompletedSummary(
-  info: CompletedToolInfo,
-  _displayContext: DisplayContext,
-): VDOMNode {
-  return d`🔨${getStatusEmoji(info.result)} MCP tool ${withInlineCode(d`\`${info.request.toolName}\``)}`;
 }

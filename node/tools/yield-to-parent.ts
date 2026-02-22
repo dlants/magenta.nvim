@@ -1,10 +1,5 @@
-import { d, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type {
-  ProviderToolResult,
-  ProviderToolSpec,
-} from "../providers/provider.ts";
-import type { CompletedToolInfo } from "./types.ts";
+import type { ProviderToolSpec } from "../providers/provider.ts";
 import type { ToolName, GenericToolRequest, ToolInvocation } from "./types.ts";
 
 export type Input = {
@@ -25,35 +20,6 @@ export function execute(request: ToolRequest): ToolInvocation {
     }),
     abort: () => {},
   };
-}
-
-export function renderInFlightSummary(
-  request: import("./types.ts").ToolRequest,
-  _displayContext: import("./types.ts").DisplayContext,
-): VDOMNode {
-  const input = request.input as Input;
-  const resultPreview =
-    input.result?.length > 50
-      ? input.result.substring(0, 50) + "..."
-      : (input.result ?? "");
-  return d`↩️⚙️ yield_to_parent: ${resultPreview}`;
-}
-function isError(result: ProviderToolResult): boolean {
-  return result.result.status === "error";
-}
-
-function getStatusEmoji(result: ProviderToolResult): string {
-  return isError(result) ? "❌" : "✅";
-}
-
-export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
-  const input = info.request.input as Input;
-  const status = getStatusEmoji(info.result);
-  const resultPreview =
-    input.result?.length > 50
-      ? input.result.substring(0, 50) + "..."
-      : (input.result ?? "");
-  return d`↩️${status} yield_to_parent: ${resultPreview}`;
 }
 
 export const spec: ProviderToolSpec = {

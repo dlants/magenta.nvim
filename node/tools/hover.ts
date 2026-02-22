@@ -1,6 +1,5 @@
-import { d, withInlineCode, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type { CompletedToolInfo } from "./types.ts";
+
 import { getOrOpenBuffer } from "../utils/buffers.ts";
 import type { NvimBuffer } from "../nvim/buffer.ts";
 import type { Nvim } from "../nvim/nvim-node";
@@ -12,20 +11,13 @@ import type {
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import {
-  resolveFilePath,
   displayPath,
   type AbsFilePath,
   type HomeDir,
   type NvimCwd,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
-import type {
-  GenericToolRequest,
-  ToolName,
-  DisplayContext,
-  ToolInvocation,
-  ToolRequest as UnionToolRequest,
-} from "./types.ts";
+import type { GenericToolRequest, ToolName, ToolInvocation } from "./types.ts";
 
 export type ToolRequest = GenericToolRequest<"hover", Input>;
 
@@ -262,41 +254,6 @@ export function execute(
       aborted = true;
     },
   };
-}
-export function renderInFlightSummary(
-  request: UnionToolRequest,
-  displayContext: DisplayContext,
-): VDOMNode {
-  const input = request.input as Input;
-  const absFilePath = resolveFilePath(
-    displayContext.cwd,
-    input.filePath,
-    displayContext.homeDir,
-  );
-  const pathForDisplay = displayPath(
-    displayContext.cwd,
-    absFilePath,
-    displayContext.homeDir,
-  );
-  return d`🔍⚙️ hover ${withInlineCode(d`\`${input.symbol}\``)} in ${withInlineCode(d`\`${pathForDisplay}\``)}`;
-}
-export function renderCompletedSummary(
-  info: CompletedToolInfo,
-  displayContext: DisplayContext,
-): VDOMNode {
-  const input = info.request.input as Input;
-  const status = info.result.result.status === "error" ? "❌" : "✅";
-  const absFilePath = resolveFilePath(
-    displayContext.cwd,
-    input.filePath,
-    displayContext.homeDir,
-  );
-  const pathForDisplay = displayPath(
-    displayContext.cwd,
-    absFilePath,
-    displayContext.homeDir,
-  );
-  return d`🔍${status} hover ${withInlineCode(d`\`${input.symbol}\``)} in ${withInlineCode(d`\`${pathForDisplay}\``)}`;
 }
 
 export const spec: ProviderToolSpec = {

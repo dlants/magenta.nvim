@@ -17,13 +17,15 @@ import {
   type ToolRequestId,
   type CompletedToolInfo,
   getToolSpecs,
+} from "../tools/toolManager.ts";
+import {
   renderCompletedToolSummary,
   renderCompletedToolPreview,
   renderCompletedToolDetail,
   renderInFlightToolSummary,
   renderInFlightToolPreview,
   renderInFlightToolDetail,
-} from "../tools/toolManager.ts";
+} from "../render-tools/index.ts";
 import { createTool, type CreateToolContext } from "../tools/create-tool.ts";
 import type { ToolInvocation, ToolName, ToolRequest } from "../tools/types.ts";
 import { MCPToolManager } from "../tools/mcp/manager.ts";

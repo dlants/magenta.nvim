@@ -1,17 +1,11 @@
-import { d, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type {
-  CompletedToolInfo,
-  ToolInvocation,
-  DisplayContext,
-} from "./types.ts";
+import type { ToolInvocation } from "./types.ts";
 import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import type { ToolName, GenericToolRequest } from "./types.ts";
-import type { ToolRequest as UnionToolRequest } from "./types.ts";
 
 export function execute(
   request: ToolRequest,
@@ -70,22 +64,6 @@ export function execute(
       aborted = true;
     },
   };
-}
-function getStatusEmoji(result: ProviderToolResult): string {
-  return result.result.status === "error" ? "❌" : "✅";
-}
-
-export function renderInFlightSummary(
-  request: UnionToolRequest,
-  _displayContext: DisplayContext,
-): VDOMNode {
-  const input = request.input as Input;
-  return d`📝⚙️ Setting thread title: "${input.title}"`;
-}
-export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
-  const input = info.request.input as Input;
-  const status = getStatusEmoji(info.result);
-  return d`📝${status} thread_title: ${input.title ?? ""}`;
 }
 
 export const spec: ProviderToolSpec = {

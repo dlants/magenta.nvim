@@ -1,21 +1,12 @@
-import { d, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
-import type {
-  CompletedToolInfo,
-  ToolInvocation,
-  DisplayContext,
-} from "./types.ts";
+import type { ToolInvocation } from "./types.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import { getDiagnostics } from "../utils/diagnostics.ts";
 import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
-import type {
-  ToolName,
-  GenericToolRequest,
-  ToolRequest as UnionToolRequest,
-} from "./types.ts";
+import type { ToolName, GenericToolRequest } from "./types.ts";
 import type { NvimCwd, HomeDir } from "../utils/files.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -86,23 +77,6 @@ export function execute(
       aborted = true;
     },
   };
-}
-
-export function renderInFlightSummary(
-  _request: UnionToolRequest,
-  _displayContext: DisplayContext,
-): VDOMNode {
-  return d`🔍⚙️ diagnostics`;
-}
-
-export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
-  const result = info.result.result;
-
-  if (result.status === "error") {
-    return d`🔍❌ diagnostics - ${result.error}`;
-  }
-
-  return d`🔍✅ diagnostics - Diagnostics retrieved`;
 }
 
 export const spec: ProviderToolSpec = {
