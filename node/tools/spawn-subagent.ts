@@ -5,7 +5,7 @@ import type {
 } from "../providers/provider.ts";
 import type { ToolName, GenericToolRequest, ToolInvocation } from "./types.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
-import type { ThreadManager } from "./thread-manager.ts";
+import type { ThreadManager } from "../capabilities/thread-manager.ts";
 
 import { AGENT_TYPES, type AgentType } from "../providers/system-prompt.ts";
 import type { ThreadId, ThreadType } from "../chat/types.ts";

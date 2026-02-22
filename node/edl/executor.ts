@@ -1,4 +1,4 @@
-import { type FileIO, FsFileIO } from "./file-io.ts";
+import { type FileIO, FsFileIO } from "../capabilities/file-io.ts";
 import { Document } from "./document.ts";
 import type { Command, MutationText, Pattern } from "./parser.ts";
 import type {

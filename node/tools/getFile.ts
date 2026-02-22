@@ -1,4 +1,4 @@
-import type { FileIO } from "../edl/file-io.ts";
+import type { FileIO } from "../capabilities/file-io.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 
 import { type Result } from "../utils/result.ts";

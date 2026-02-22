@@ -8,7 +8,7 @@ import { spawnSync } from "child_process";
 import type { MagentaOptions } from "../options.ts";
 import type { ToolName, GenericToolRequest, ToolInvocation } from "./types.ts";
 
-import type { Shell, OutputLine } from "./shell.ts";
+import type { Shell, OutputLine } from "../capabilities/shell.ts";
 
 let rgAvailable: boolean | undefined;
 let fdAvailable: boolean | undefined;

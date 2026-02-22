@@ -13,7 +13,7 @@ import type {
 import type { Nvim } from "../nvim/nvim-node";
 import type { NvimCwd, UnresolvedFilePath, HomeDir } from "../utils/files.ts";
 import type { MagentaOptions } from "../options.ts";
-import type { OutputLine } from "../tools/shell.ts";
+import type { OutputLine } from "../capabilities/shell.ts";
 import type { BashProgress } from "../tools/bashCommand.ts";
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
 

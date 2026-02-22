@@ -9,7 +9,7 @@ import type { ToolName, GenericToolRequest, ToolInvocation } from "./types.ts";
 import type { ThreadId } from "../chat/types";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 
-import type { ThreadManager } from "./thread-manager.ts";
+import type { ThreadManager } from "../capabilities/thread-manager.ts";
 
 export type Input = {
   threadIds: ThreadId[];

@@ -11,7 +11,7 @@ import type { Chat } from "../chat/chat.ts";
 import type { AgentType } from "../providers/system-prompt.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { renderPendingApprovals } from "../tools/render-pending-approvals.ts";
+import { renderPendingApprovals } from "../capabilities/render-pending-approvals.ts";
 import type { SpawnSubagentProgress } from "../tools/spawn-subagent.ts";
 
 type Input = {

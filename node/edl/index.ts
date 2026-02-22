@@ -1,6 +1,6 @@
 import { parse, ParseError } from "./parser.ts";
 import { Executor, ExecutionError } from "./executor.ts";
-import type { FileIO } from "./file-io.ts";
+import type { FileIO } from "../capabilities/file-io.ts";
 import type {
   ScriptResult,
   TraceEntry,

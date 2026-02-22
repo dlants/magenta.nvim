@@ -10,7 +10,7 @@ import type { ThreadId } from "../chat/types.ts";
 import type { Chat } from "../chat/chat.ts";
 import type { WaitForSubagentsProgress } from "../tools/wait-for-subagents.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { renderPendingApprovals } from "../tools/render-pending-approvals.ts";
+import { renderPendingApprovals } from "../capabilities/render-pending-approvals.ts";
 
 type Input = {
   threadIds: ThreadId[];

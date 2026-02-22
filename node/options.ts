@@ -9,7 +9,7 @@ import {
   BUILTIN_COMMAND_PERMISSIONS,
   type ArgSpec,
   type CommandPermissions,
-} from "./tools/bash-parser/permissions";
+} from "./capabilities/bash-parser/permissions";
 
 // Get the path to the built-in skills directory
 const __filename = fileURLToPath(import.meta.url);

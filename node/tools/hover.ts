@@ -3,7 +3,11 @@ import { type Result } from "../utils/result.ts";
 import { getOrOpenBuffer } from "../utils/buffers.ts";
 import type { NvimBuffer } from "../nvim/buffer.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { Lsp, LspDefinitionResponse, LspRange } from "../lsp.ts";
+import type {
+  Lsp,
+  LspDefinitionResponse,
+  LspRange,
+} from "../capabilities/lsp.ts";
 import { calculateStringPosition } from "../tea/util.ts";
 import type { PositionString, Row0Indexed, StringIdx } from "../nvim/window.ts";
 import type {

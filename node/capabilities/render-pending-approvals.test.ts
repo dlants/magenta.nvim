@@ -1,7 +1,7 @@
 import { withDriver } from "../test/preamble.ts";
 import { describe, it } from "vitest";
-import type { ToolRequestId } from "./toolManager.ts";
-import type { ToolName } from "./types.ts";
+import type { ToolRequestId } from "../tools/toolManager.ts";
+import type { ToolName } from "../tools/types.ts";
 
 describe("pending approvals surfaced in parent thread", () => {
   it("blocking spawn_subagent surfaces bash_command approval in parent view", async () => {

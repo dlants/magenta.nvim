@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { execute, type Input } from "./edl.ts";
-import { FsFileIO } from "../edl/file-io.ts";
+import { FsFileIO } from "../capabilities/file-io.ts";
 import type { ToolRequestId } from "./types.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";

@@ -23,9 +23,7 @@ import type {
   CompletedToolInfo,
   DisplayContext,
 } from "../tools/types.ts";
-import type {
-  ProviderToolResult,
-} from "../providers/provider-types.ts";
+import type { ProviderToolResult } from "../providers/provider-types.ts";
 import type { StaticToolName } from "../tools/tool-registry.ts";
 import { isMCPTool } from "../tools/mcp/manager.ts";
 import type { Dispatch } from "../tea/tea.ts";

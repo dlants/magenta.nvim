@@ -5,7 +5,6 @@ import type {
   ToolRequest as UnionToolRequest,
 } from "../tools/types.ts";
 
-
 export function renderInFlightSummary(
   _request: UnionToolRequest,
   _displayContext: DisplayContext,

@@ -1,4 +1,4 @@
-import type { FileIO } from "../edl/file-io.ts";
+import type { FileIO } from "./file-io.ts";
 import { canReadFile, canWriteFile } from "./permissions.ts";
 import {
   displayPath,

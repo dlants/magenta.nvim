@@ -31,7 +31,7 @@ import type { ToolInvocation, ToolName, ToolRequest } from "../tools/types.ts";
 import { MCPToolManager } from "../tools/mcp/manager.ts";
 
 import type { Nvim } from "../nvim/nvim-node";
-import type { Lsp } from "../lsp.ts";
+import type { Lsp } from "../capabilities/lsp.ts";
 import {
   getProvider as getProvider,
   type ProviderMessage,
@@ -68,12 +68,12 @@ import player from "play-sound";
 import { CommandRegistry } from "./commands/registry.ts";
 import { getSubsequentReminder } from "../providers/system-reminders.ts";
 import type { EdlRegisters } from "../edl/index.ts";
-import { BufferAwareFileIO } from "../tools/buffer-file-io.ts";
-import { PermissionCheckingFileIO } from "../tools/permission-file-io.ts";
-import type { FileIO } from "../edl/file-io.ts";
-import { BaseShell } from "../tools/base-shell.ts";
-import { PermissionCheckingShell } from "../tools/permission-shell.ts";
-import type { Shell } from "../tools/shell.ts";
+import { BufferAwareFileIO } from "../capabilities/buffer-file-io.ts";
+import { PermissionCheckingFileIO } from "../capabilities/permission-file-io.ts";
+import type { FileIO } from "../capabilities/file-io.ts";
+import { BaseShell } from "../capabilities/base-shell.ts";
+import { PermissionCheckingShell } from "../capabilities/permission-shell.ts";
+import type { Shell } from "../capabilities/shell.ts";
 import {
   renderThreadToMarkdown,
   chunkMessages,

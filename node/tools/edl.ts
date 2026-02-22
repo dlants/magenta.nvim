@@ -18,7 +18,7 @@ import type { FileMutationSummary } from "../edl/types.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
-import type { FileIO } from "../edl/file-io.ts";
+import type { FileIO } from "../capabilities/file-io.ts";
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";

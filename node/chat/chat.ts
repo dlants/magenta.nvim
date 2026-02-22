@@ -3,9 +3,9 @@ import type { MagentaOptions, Profile } from "../options";
 import type { RootMsg } from "../root-msg";
 import type { Dispatch } from "../tea/tea";
 import { Thread, view as threadView, type InputMessage } from "./thread";
-import type { Lsp } from "../lsp";
+import type { Lsp } from "../capabilities/lsp";
 import { assertUnreachable } from "../utils/assertUnreachable";
-import type { FileIO } from "../edl/file-io.ts";
+import type { FileIO } from "../capabilities/file-io.ts";
 
 import { d, withBindings, type VDOMNode } from "../tea/view";
 import { v7 as uuidv7 } from "uuid";
@@ -18,7 +18,7 @@ import {
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
-import type { ThreadManager } from "../tools/thread-manager.ts";
+import type { ThreadManager } from "../capabilities/thread-manager.ts";
 
 import { MCPToolManager } from "../tools/mcp/manager.ts";
 import type { ThreadId, ThreadType } from "./types.ts";

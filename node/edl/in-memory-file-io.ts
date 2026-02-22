@@ -1,4 +1,4 @@
-import type { FileIO } from "./file-io.ts";
+import type { FileIO } from "../capabilities/file-io.ts";
 
 export class InMemoryFileIO implements FileIO {
   private files: Map<string, string>;

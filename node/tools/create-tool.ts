@@ -15,7 +15,7 @@ import type { EdlRegisters } from "../edl/index.ts";
 
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Nvim } from "../nvim/nvim-node";
-import type { Lsp } from "../lsp.ts";
+import type { Lsp } from "../capabilities/lsp.ts";
 import type { MagentaOptions } from "../options.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import type { ToolRequest, ToolInvocation } from "./types.ts";
@@ -27,9 +27,9 @@ import type { Dispatch } from "../tea/tea.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
 import type { StaticToolRequest } from "./toolManager.ts";
 import type { MCPToolManager } from "./mcp/manager.ts";
-import type { FileIO } from "../edl/file-io.ts";
-import type { Shell } from "./shell.ts";
-import type { ThreadManager } from "./thread-manager.ts";
+import type { FileIO } from "../capabilities/file-io.ts";
+import type { Shell } from "../capabilities/shell.ts";
+import type { ThreadManager } from "../capabilities/thread-manager.ts";
 import { parseToolName } from "./mcp/types.ts";
 import * as MCPTool from "./mcp/tool.ts";
 
