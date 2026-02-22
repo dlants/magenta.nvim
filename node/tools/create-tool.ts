@@ -17,31 +17,23 @@ import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import type { Lsp } from "../lsp.ts";
 import type { MagentaOptions } from "../options.ts";
-import type { RootMsg } from "../root-msg.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
-import type { Chat } from "../chat/chat.ts";
-import type {
-  ToolRequest,
-  ToolMsg,
-  Tool,
-  ToolName,
-  ToolRequestId,
-  StaticTool,
-} from "./types.ts";
+import type { ToolRequest, ToolInvocation } from "./types.ts";
 import type { ThreadId } from "../chat/types.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
-import type { Dispatch } from "../tea/tea.ts";
+
 import type { ContextManager } from "../context/context-manager.ts";
+import type { Dispatch } from "../tea/tea.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
 import type { StaticToolRequest } from "./toolManager.ts";
 import type { MCPToolManager } from "./mcp/manager.ts";
 import type { FileIO } from "../edl/file-io.ts";
 import type { Shell } from "./shell.ts";
-import { parseToolName, wrapMcpToolMsg } from "./mcp/types.ts";
-import { MCPTool, type Input as MCPInput } from "./mcp/tool.ts";
+import type { ThreadManager } from "./thread-manager.ts";
+import { parseToolName } from "./mcp/types.ts";
+import * as MCPTool from "./mcp/tool.ts";
 
 export type CreateToolContext = {
-  dispatch: Dispatch<RootMsg>;
   bufferTracker: BufferTracker;
   getDisplayWidth: () => number;
   threadId: ThreadId;
@@ -51,25 +43,19 @@ export type CreateToolContext = {
   cwd: NvimCwd;
   homeDir: HomeDir;
   options: MagentaOptions;
-  chat: Chat;
   contextManager: ContextManager;
   threadDispatch: Dispatch<ThreadMsg>;
   edlRegisters: EdlRegisters;
   fileIO: FileIO;
   shell: Shell;
+  threadManager: ThreadManager;
+  requestRender: () => void;
 };
-
-export type ToolDispatch = (msg: {
-  id: ToolRequestId;
-  toolName: ToolName;
-  msg: ToolMsg;
-}) => void;
 
 export function createTool(
   request: ToolRequest,
   context: CreateToolContext,
-  myDispatch: ToolDispatch,
-): Tool | StaticTool {
+): ToolInvocation {
   if (request.toolName.startsWith("mcp_")) {
     const { serverName } = parseToolName(request.toolName);
 
@@ -78,130 +64,106 @@ export function createTool(
       throw new Error(`${request.toolName} not found in any connected server`);
     }
 
-    return new MCPTool(
+    return MCPTool.execute(
       {
         id: request.id,
         toolName: request.toolName,
-        input: request.input as MCPInput,
+        input: request.input as MCPTool.Input,
       },
       {
-        nvim: context.nvim,
         mcpClient,
-        myDispatch: (msg) =>
-          myDispatch({
-            id: request.id,
-            toolName: request.toolName,
-            msg: wrapMcpToolMsg(msg),
-          }),
+        requestRender: context.requestRender,
       },
     );
   }
 
   const staticRequest = request as StaticToolRequest;
 
-  const wrapDispatch = <M>(msg: M): void => {
-    myDispatch({
-      id: request.id,
-      toolName: request.toolName,
-      msg: msg as unknown as ToolMsg,
-    });
-  };
-
   switch (staticRequest.toolName) {
     case "get_file": {
-      return new GetFile.GetFileTool(staticRequest, {
+      return GetFile.execute(staticRequest, {
         nvim: context.nvim,
         cwd: context.cwd,
         homeDir: context.homeDir,
         fileIO: context.fileIO,
         contextManager: context.contextManager,
         threadDispatch: context.threadDispatch,
-        myDispatch: wrapDispatch,
       });
     }
 
     case "hover": {
-      return new Hover.HoverTool(staticRequest, {
-        ...context,
-        myDispatch: wrapDispatch,
+      return Hover.execute(staticRequest, {
+        nvim: context.nvim,
+        cwd: context.cwd,
+        homeDir: context.homeDir,
+        lsp: context.lsp,
       });
     }
 
     case "find_references": {
-      return new FindReferences.FindReferencesTool(staticRequest, {
-        ...context,
-        myDispatch: wrapDispatch,
+      return FindReferences.execute(staticRequest, {
+        nvim: context.nvim,
+        cwd: context.cwd,
+        homeDir: context.homeDir,
+        lsp: context.lsp,
       });
     }
 
     case "diagnostics": {
-      return new Diagnostics.DiagnosticsTool(staticRequest, {
-        ...context,
-        myDispatch: wrapDispatch,
+      return Diagnostics.execute(staticRequest, {
+        nvim: context.nvim,
+        cwd: context.cwd,
+        homeDir: context.homeDir,
       });
     }
 
     case "bash_command": {
-      return new BashCommand.BashCommandTool(staticRequest, {
-        ...context,
-        myDispatch: wrapDispatch,
+      return BashCommand.execute(staticRequest, {
         shell: context.shell,
+        requestRender: context.requestRender,
+        options: context.options,
       });
     }
 
     case "thread_title": {
-      return new ThreadTitle.ThreadTitleTool(staticRequest, {
+      return ThreadTitle.execute(staticRequest, {
         nvim: context.nvim,
-        myDispatch: wrapDispatch,
       });
     }
 
     case "spawn_subagent": {
-      return new SpawnSubagent.SpawnSubagentTool(staticRequest, {
-        nvim: context.nvim,
-        dispatch: context.dispatch,
-        chat: context.chat,
+      return SpawnSubagent.execute(staticRequest, {
+        threadManager: context.threadManager,
         threadId: context.threadId,
-        myDispatch: wrapDispatch,
+        requestRender: context.requestRender,
       });
     }
 
     case "spawn_foreach": {
-      return new SpawnForeach.SpawnForeachTool(staticRequest, {
-        nvim: context.nvim,
-        chat: context.chat,
-        dispatch: context.dispatch,
+      return SpawnForeach.execute(staticRequest, {
+        threadManager: context.threadManager,
         threadId: context.threadId,
-        myDispatch: wrapDispatch,
         maxConcurrentSubagents: context.options.maxConcurrentSubagents || 3,
+        requestRender: context.requestRender,
       });
     }
 
     case "wait_for_subagents": {
-      return new WaitForSubagents.WaitForSubagentsTool(staticRequest, {
-        nvim: context.nvim,
-        dispatch: context.dispatch,
-        threadId: context.threadId,
-        chat: context.chat,
-        myDispatch: wrapDispatch,
+      return WaitForSubagents.execute(staticRequest, {
+        threadManager: context.threadManager,
+        requestRender: context.requestRender,
       });
     }
 
     case "yield_to_parent": {
-      return new YieldToParent.YieldToParentTool(staticRequest, {
-        nvim: context.nvim,
-        dispatch: context.dispatch,
-        threadId: context.threadId,
-        myDispatch: wrapDispatch,
-      });
+      return YieldToParent.execute(staticRequest);
     }
 
     case "edl": {
-      return new Edl.EdlTool(staticRequest, {
+      return Edl.execute(staticRequest, {
         nvim: context.nvim,
         cwd: context.cwd,
         homeDir: context.homeDir,
-        myDispatch: wrapDispatch,
         fileIO: context.fileIO,
         bufferTracker: context.bufferTracker,
         threadDispatch: context.threadDispatch,

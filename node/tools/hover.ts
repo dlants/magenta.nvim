@@ -1,7 +1,6 @@
 import { d, withInlineCode, type VDOMNode } from "../tea/view.ts";
 import { type Result } from "../utils/result.ts";
 import type { CompletedToolInfo } from "./types.ts";
-import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { getOrOpenBuffer } from "../utils/buffers.ts";
 import type { NvimBuffer } from "../nvim/buffer.ts";
 import type { Nvim } from "../nvim/nvim-node";
@@ -10,7 +9,6 @@ import { calculateStringPosition } from "../tea/util.ts";
 import type { PositionString, Row0Indexed, StringIdx } from "../nvim/window.ts";
 import type {
   ProviderToolResult,
-  ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import {
@@ -23,221 +21,153 @@ import {
 } from "../utils/files.ts";
 import type {
   GenericToolRequest,
-  StaticTool,
   ToolName,
   DisplayContext,
+  ToolInvocation,
+  ToolRequest as UnionToolRequest,
 } from "./types.ts";
 
 export type ToolRequest = GenericToolRequest<"hover", Input>;
 
-export type State =
-  | {
-      state: "processing";
-    }
-  | {
-      state: "done";
-      result: ProviderToolResult;
-    };
+export function execute(
+  request: ToolRequest,
+  context: {
+    nvim: Nvim;
+    cwd: NvimCwd;
+    homeDir: HomeDir;
+    lsp: Lsp;
+  },
+): ToolInvocation {
+  let aborted = false;
 
-export type Msg = {
-  type: "finish";
-  result: Result<ProviderToolResultContent[]>;
-};
+  const promise = (async (): Promise<ProviderToolResult> => {
+    try {
+      const filePath = request.input.filePath;
+      const bufferResult = await getOrOpenBuffer({
+        unresolvedPath: filePath,
+        context: {
+          nvim: context.nvim,
+          cwd: context.cwd,
+          homeDir: context.homeDir,
+        },
+      });
 
-export class HoverTool implements StaticTool {
-  state: State;
-  toolName = "hover" as const;
-  aborted: boolean = false;
+      let buffer: NvimBuffer;
+      let bufferContent: string;
+      if (bufferResult.status == "ok") {
+        bufferContent = (
+          await bufferResult.buffer.getLines({
+            start: 0 as Row0Indexed,
+            end: -1 as Row0Indexed,
+          })
+        ).join("\n");
+        buffer = bufferResult.buffer;
+      } else {
+        return {
+          type: "tool_result",
+          id: request.id,
+          result: { status: "error", error: bufferResult.error },
+        };
+      }
 
-  constructor(
-    public request: ToolRequest,
-    public context: {
-      nvim: Nvim;
-      cwd: NvimCwd;
-      homeDir: HomeDir;
-      lsp: Lsp;
-      myDispatch: (msg: Msg) => void;
-    },
-  ) {
-    this.state = {
-      state: "processing",
-    };
-    this.requestHover().catch((error) => {
-      this.context.nvim.logger.error(
-        `Error requesting hover: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    });
-  }
+      if (aborted) {
+        return {
+          type: "tool_result",
+          id: request.id,
+          result: {
+            status: "error",
+            error: "Request was aborted by the user.",
+          },
+        };
+      }
 
-  update(msg: Msg) {
-    switch (msg.type) {
-      case "finish":
-        if (this.state.state == "processing") {
-          this.state = {
-            state: "done",
+      // Find the symbol bounded by non-alphanumeric characters
+      let symbolStart: StringIdx;
+
+      if (request.input.context) {
+        const contextIndex = bufferContent.indexOf(request.input.context);
+        if (contextIndex === -1) {
+          return {
+            type: "tool_result",
+            id: request.id,
             result: {
-              type: "tool_result",
-              id: this.request.id,
-              result: msg.result,
+              status: "error",
+              error: `Context "${request.input.context}" not found in file.`,
             },
           };
         }
-        return;
-      default:
-        assertUnreachable(msg.type);
-    }
-  }
 
-  isDone(): boolean {
-    return this.state.state === "done";
-  }
-
-  isPendingUserAction(): boolean {
-    return false;
-  }
-
-  abort(): ProviderToolResult {
-    if (this.state.state === "done") {
-      return this.getToolResult();
-    }
-
-    this.aborted = true;
-
-    const result: ProviderToolResult = {
-      type: "tool_result",
-      id: this.request.id,
-      result: {
-        status: "error",
-        error: "Request was aborted by the user.",
-      },
-    };
-
-    this.state = {
-      state: "done",
-      result,
-    };
-
-    return result;
-  }
-
-  async requestHover() {
-    const { lsp } = this.context;
-    const filePath = this.request.input.filePath;
-    const bufferResult = await getOrOpenBuffer({
-      unresolvedPath: filePath,
-      context: {
-        nvim: this.context.nvim,
-        cwd: this.context.cwd,
-        homeDir: this.context.homeDir,
-      },
-    });
-
-    let buffer: NvimBuffer;
-    let bufferContent: string;
-    if (bufferResult.status == "ok") {
-      bufferContent = (
-        await bufferResult.buffer.getLines({
-          start: 0 as Row0Indexed,
-          end: -1 as Row0Indexed,
-        })
-      ).join("\n");
-      buffer = bufferResult.buffer;
-    } else {
-      if (this.aborted) return;
-      this.context.myDispatch({
-        type: "finish",
-        result: {
-          status: "error",
-          error: bufferResult.error,
-        },
-      });
-      return;
-    }
-
-    // Find the symbol bounded by non-alphanumeric characters
-    let symbolStart: StringIdx;
-
-    if (this.request.input.context) {
-      // If context is provided, find the context first
-      const contextIndex = bufferContent.indexOf(this.request.input.context);
-      if (contextIndex === -1) {
-        if (this.aborted) return;
-        this.context.myDispatch({
-          type: "finish",
-          result: {
-            status: "error",
-            error: `Context "${this.request.input.context}" not found in file.`,
-          },
-        });
-        return;
+        const contextContent = bufferContent.substring(
+          contextIndex,
+          contextIndex + request.input.context.length,
+        );
+        const symbolRegex = new RegExp(
+          `(?<![a-zA-Z0-9_])${request.input.symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-zA-Z0-9_])`,
+        );
+        const match = contextContent.match(symbolRegex);
+        if (!match || match.index === undefined) {
+          return {
+            type: "tool_result",
+            id: request.id,
+            result: {
+              status: "error",
+              error: `Symbol "${request.input.symbol}" not found within the provided context.`,
+            },
+          };
+        }
+        symbolStart = (contextIndex + match.index) as StringIdx;
+      } else {
+        const symbolRegex = new RegExp(
+          `(?<![a-zA-Z0-9_])${request.input.symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-zA-Z0-9_])`,
+        );
+        const match = bufferContent.match(symbolRegex);
+        if (!match || match.index === undefined) {
+          return {
+            type: "tool_result",
+            id: request.id,
+            result: {
+              status: "error",
+              error: `Symbol "${request.input.symbol}" not found in file.`,
+            },
+          };
+        }
+        symbolStart = match.index as StringIdx;
       }
 
-      // Find the symbol within the context
-      const contextContent = bufferContent.substring(
-        contextIndex,
-        contextIndex + this.request.input.context.length,
+      const symbolPos = calculateStringPosition(
+        { row: 0, col: 0 } as PositionString,
+        bufferContent,
+        (symbolStart + request.input.symbol.length - 1) as StringIdx,
       );
-      const symbolRegex = new RegExp(
-        `(?<![a-zA-Z0-9_])${this.request.input.symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-zA-Z0-9_])`,
-      );
-      const match = contextContent.match(symbolRegex);
-      if (!match || match.index === undefined) {
-        if (this.aborted) return;
-        this.context.myDispatch({
-          type: "finish",
-          result: {
-            status: "error",
-            error: `Symbol "${this.request.input.symbol}" not found within the provided context.`,
-          },
-        });
-        return;
-      }
-      symbolStart = (contextIndex + match.index) as StringIdx;
-    } else {
-      // Original behavior - find first occurrence
-      const symbolRegex = new RegExp(
-        `(?<![a-zA-Z0-9_])${this.request.input.symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-zA-Z0-9_])`,
-      );
-      const match = bufferContent.match(symbolRegex);
-      if (!match || match.index === undefined) {
-        if (this.aborted) return;
-        this.context.myDispatch({
-          type: "finish",
-          result: {
-            status: "error",
-            error: `Symbol "${this.request.input.symbol}" not found in file.`,
-          },
-        });
-        return;
-      }
-      symbolStart = match.index as StringIdx;
-    }
 
-    const symbolPos = calculateStringPosition(
-      { row: 0, col: 0 } as PositionString,
-      bufferContent,
-      (symbolStart + this.request.input.symbol.length - 1) as StringIdx,
-    );
-
-    try {
       const [hoverResult, definitionResult, typeDefinitionResult] =
         await Promise.all([
-          lsp.requestHover(buffer, symbolPos),
-          lsp.requestDefinition(buffer, symbolPos).catch(() => null),
-          lsp.requestTypeDefinition(buffer, symbolPos).catch(() => null),
+          context.lsp.requestHover(buffer, symbolPos),
+          context.lsp.requestDefinition(buffer, symbolPos).catch(() => null),
+          context.lsp
+            .requestTypeDefinition(buffer, symbolPos)
+            .catch(() => null),
         ]);
+
+      if (aborted) {
+        return {
+          type: "tool_result",
+          id: request.id,
+          result: {
+            status: "error",
+            error: "Request was aborted by the user.",
+          },
+        };
+      }
 
       let content = "";
 
-      // Add hover information
       for (const lspResult of hoverResult) {
         if (lspResult != null) {
-          content += `${lspResult.result.contents.value}
-`;
+          content += `${lspResult.result.contents.value}\n`;
         }
       }
 
-      // Helper function to extract location info from different LSP response formats
       const extractLocationInfo = (
         def: NonNullable<LspDefinitionResponse[number]>["result"][number],
       ): {
@@ -253,7 +183,6 @@ export class HoverTool implements StaticTool {
         return null;
       };
 
-      // Add definition locations
       if (definitionResult) {
         const definitions = definitionResult
           .filter((result) => result != null)
@@ -266,11 +195,10 @@ export class HoverTool implements StaticTool {
           for (const def of definitions) {
             const absolutePath = def.uri.replace(/^file:\/\//, "");
             const pathForDisplay = displayPath(
-              this.context.cwd,
+              context.cwd,
               absolutePath as AbsFilePath,
-              this.context.homeDir,
+              context.homeDir,
             );
-
             const line = def.range.start.line + 1;
             const char = def.range.start.character + 1;
             content += `  ${pathForDisplay}:${line}:${char}\n`;
@@ -278,7 +206,6 @@ export class HoverTool implements StaticTool {
         }
       }
 
-      // Add type definition locations
       if (typeDefinitionResult) {
         const typeDefinitions = typeDefinitionResult
           .filter((result) => result != null)
@@ -291,11 +218,10 @@ export class HoverTool implements StaticTool {
           for (const typeDef of typeDefinitions) {
             const absolutePath = typeDef.uri.replace(/^file:\/\//, "");
             const pathForDisplay = displayPath(
-              this.context.cwd,
+              context.cwd,
               absolutePath as AbsFilePath,
-              this.context.homeDir,
+              context.homeDir,
             );
-
             const line = typeDef.range.start.line + 1;
             const char = typeDef.range.start.character + 1;
             content += `  ${pathForDisplay}:${line}:${char}\n`;
@@ -303,78 +229,57 @@ export class HoverTool implements StaticTool {
         }
       }
 
-      if (this.aborted) return;
-      this.context.myDispatch({
-        type: "finish",
-        result: {
-          status: "ok",
-          value: [{ type: "text", text: content }],
-        },
-      });
+      return {
+        type: "tool_result",
+        id: request.id,
+        result: { status: "ok", value: [{ type: "text", text: content }] },
+      };
     } catch (error) {
-      if (this.aborted) return;
-      this.context.myDispatch({
-        type: "finish",
-        result: {
-          status: "error",
-          error: `Error requesting hover: ${(error as Error).message}`,
-        },
-      });
-    }
-  }
-
-  getToolResult(): ProviderToolResult {
-    switch (this.state.state) {
-      case "processing":
+      if (aborted) {
         return {
           type: "tool_result",
-          id: this.request.id,
+          id: request.id,
           result: {
-            status: "ok",
-            value: [
-              { type: "text", text: `This tool use is being processed.` },
-            ],
+            status: "error",
+            error: "Request was aborted by the user.",
           },
         };
-      case "done":
-        return this.state.result;
-      default:
-        assertUnreachable(this.state);
+      }
+      return {
+        type: "tool_result",
+        id: request.id,
+        result: {
+          status: "error",
+          error: `Error requesting hover: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      };
     }
-  }
+  })();
 
-  renderSummary() {
-    const displayContext = {
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-    };
-    const absFilePath = resolveFilePath(
-      this.context.cwd,
-      this.request.input.filePath,
-      this.context.homeDir,
-    );
-    const pathForDisplay = displayPath(
-      this.context.cwd,
-      absFilePath,
-      this.context.homeDir,
-    );
-    switch (this.state.state) {
-      case "processing":
-        return d`🔍⚙️ hover ${withInlineCode(d`\`${this.request.input.symbol}\``)} in ${withInlineCode(d`\`${pathForDisplay}\``)}`;
-      case "done":
-        return renderCompletedSummary(
-          {
-            request: this.request as CompletedToolInfo["request"],
-            result: this.state.result,
-          },
-          displayContext,
-        );
-      default:
-        assertUnreachable(this.state);
-    }
-  }
+  return {
+    promise,
+    abort: () => {
+      aborted = true;
+    },
+  };
 }
-
+export function renderInFlightSummary(
+  request: UnionToolRequest,
+  displayContext: DisplayContext,
+): VDOMNode {
+  const input = request.input as Input;
+  const absFilePath = resolveFilePath(
+    displayContext.cwd,
+    input.filePath,
+    displayContext.homeDir,
+  );
+  const pathForDisplay = displayPath(
+    displayContext.cwd,
+    absFilePath,
+    displayContext.homeDir,
+  );
+  return d`🔍⚙️ hover ${withInlineCode(d`\`${input.symbol}\``)} in ${withInlineCode(d`\`${pathForDisplay}\``)}`;
+}
 export function renderCompletedSummary(
   info: CompletedToolInfo,
   displayContext: DisplayContext,

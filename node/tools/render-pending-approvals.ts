@@ -8,11 +8,6 @@ export function renderPendingApprovals(
 ): VDOMNode | undefined {
   const parts: VDOMNode[] = [];
 
-  const tools = chat.getThreadPendingApprovalTools(threadId);
-  for (const t of tools) {
-    parts.push(d`\n${t.renderSummary()}`);
-  }
-
   const wrapper = chat.threadWrappers[threadId];
   if (wrapper?.state === "initialized") {
     if (

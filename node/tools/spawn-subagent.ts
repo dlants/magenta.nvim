@@ -5,9 +5,16 @@ import type {
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { CompletedToolInfo } from "./types.ts";
-import type { Nvim } from "../nvim/nvim-node";
-import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
+
+import type {
+  ToolName,
+  GenericToolRequest,
+  ToolInvocation,
+  DisplayContext,
+  ToolRequest as UnionToolRequest,
+} from "./types.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
+import type { ThreadManager } from "./thread-manager.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import { AGENT_TYPES, type AgentType } from "../providers/system-prompt.ts";
@@ -29,28 +36,6 @@ const SPAWN_SUBAGENT_DESCRIPTION = readFileSync(
 
 export type ToolRequest = GenericToolRequest<"spawn_subagent", Input>;
 
-export type Msg =
-  | {
-      type: "subagent-created";
-      result: Result<ThreadId>;
-    }
-  | {
-      type: "check-thread";
-    };
-
-export type State =
-  | {
-      state: "preparing";
-    }
-  | {
-      state: "waiting-for-subagent";
-      threadId: ThreadId;
-    }
-  | {
-      state: "done";
-      result: ProviderToolResult;
-    };
-
 function truncate(text: string, maxLen: number = 50): string {
   const singleLine = text.replace(/\n/g, " ");
   return singleLine.length > maxLen
@@ -61,283 +46,170 @@ function truncate(text: string, maxLen: number = 50): string {
 function agentTypeLabel(agentType: AgentType | undefined): string {
   return agentType && agentType !== "default" ? ` (${agentType})` : "";
 }
-export class SpawnSubagentTool implements StaticTool {
-  toolName = "spawn_subagent" as const;
-  public state: State;
-  public aborted: boolean = false;
 
-  constructor(
-    public request: ToolRequest,
-    public context: {
-      nvim: Nvim;
-      dispatch: Dispatch<RootMsg>;
-      chat: Chat;
-      threadId: ThreadId;
-      myDispatch: Dispatch<Msg>;
-    },
-  ) {
-    this.state = {
-      state: "preparing",
-    };
+export type SpawnSubagentProgress = {
+  threadId?: ThreadId;
+};
 
-    // Start the process of spawning a sub-agent
-    // Wrap in setTimeout to force new eventloop frame, to avoid dispatch-in-dispatch
-    setTimeout(() => {
-      if (this.aborted) return;
-      this.spawnSubagent();
-    });
-  }
+export function execute(
+  request: ToolRequest,
+  context: {
+    threadManager: ThreadManager;
+    threadId: ThreadId;
+    requestRender: () => void;
+  },
+): ToolInvocation & { progress: SpawnSubagentProgress } {
+  const progress: SpawnSubagentProgress = {};
 
-  private spawnSubagent(): void {
-    const input = this.request.input;
-    const prompt = input.prompt;
-    const contextFiles = input.contextFiles || [];
-    const threadType: ThreadType =
-      input.agentType === "fast"
-        ? "subagent_fast"
-        : input.agentType === "explore"
-          ? "subagent_explore"
-          : "subagent_default";
+  const promise = (async (): Promise<ProviderToolResult> => {
+    try {
+      const input = request.input;
+      const threadType: ThreadType =
+        input.agentType === "fast"
+          ? "subagent_fast"
+          : input.agentType === "explore"
+            ? "subagent_explore"
+            : "subagent_default";
 
-    this.context.dispatch({
-      type: "chat-msg",
-      msg: {
-        type: "spawn-subagent-thread",
-        parentThreadId: this.context.threadId,
-        spawnToolRequestId: this.request.id,
-        inputMessages: [{ type: "system", text: prompt }],
+      const threadId = await context.threadManager.spawnThread({
+        parentThreadId: context.threadId,
+        prompt: input.prompt,
         threadType,
-        contextFiles,
-      },
-    });
-  }
+        ...(input.contextFiles ? { contextFiles: input.contextFiles } : {}),
+      });
 
-  isDone(): boolean {
-    return this.state.state === "done";
-  }
+      progress.threadId = threadId;
+      context.requestRender();
 
-  isPendingUserAction(): boolean {
-    if (this.state.state !== "waiting-for-subagent") return false;
-    return this.context.chat.threadHasPendingApprovals(this.state.threadId);
-  }
-
-  abort(): ProviderToolResult {
-    if (this.state.state === "done") {
-      return this.getToolResult();
-    }
-
-    this.aborted = true;
-
-    const result: ProviderToolResult = {
-      type: "tool_result",
-      id: this.request.id,
-      result: {
-        status: "error",
-        error: "Request was aborted by the user.",
-      },
-    };
-
-    this.state = {
-      state: "done",
-      result,
-    };
-
-    return result;
-  }
-
-  update(msg: Msg): void {
-    if (this.aborted) return;
-
-    switch (msg.type) {
-      case "subagent-created":
-        switch (msg.result.status) {
-          case "ok": {
-            const threadId = msg.result.value;
-            const isBlocking = this.request.input.blocking === true;
-
-            if (isBlocking) {
-              this.state = {
-                state: "waiting-for-subagent",
-                threadId,
-              };
-              this.checkThread();
-            } else {
-              this.state = {
-                state: "done",
-                result: {
-                  type: "tool_result",
-                  id: this.request.id,
-                  result: {
-                    status: "ok",
-                    value: [
-                      {
-                        type: "text",
-                        text: `Sub-agent started with threadId: ${threadId}`,
-                      },
-                    ],
-                  },
-                },
-              };
-            }
-            break;
-          }
-
-          case "error":
-            this.state = {
-              state: "done",
-              result: {
-                type: "tool_result",
-                id: this.request.id,
-                result: {
-                  status: "error",
-                  error: `Failed to create sub-agent thread: ${msg.result.error}`,
-                },
-              },
-            };
-            return;
-        }
-        return;
-
-      case "check-thread":
-        this.checkThread();
-        return;
-
-      default:
-        assertUnreachable(msg);
-    }
-  }
-
-  private checkThread(): void {
-    if (this.state.state !== "waiting-for-subagent" || this.aborted) {
-      return;
-    }
-
-    const threadId = this.state.threadId;
-    const threadResult = this.context.chat.getThreadResult(threadId);
-
-    switch (threadResult.status) {
-      case "done": {
-        const result = threadResult.result;
-        this.state = {
-          state: "done",
+      if (!input.blocking) {
+        return {
+          type: "tool_result",
+          id: request.id,
           result: {
-            type: "tool_result",
-            id: this.request.id,
-            result:
-              result.status === "ok"
-                ? {
-                    status: "ok",
-                    value: [
-                      {
-                        type: "text",
-                        text: `Sub-agent (${threadId}) completed:\n${result.value}`,
-                      },
-                    ],
-                  }
-                : {
-                    status: "error",
-                    error: `Sub-agent (${threadId}) failed: ${result.error}`,
-                  },
+            status: "ok",
+            value: [
+              {
+                type: "text",
+                text: `Sub-agent started with threadId: ${threadId}`,
+              },
+            ],
           },
         };
-        break;
       }
 
-      case "pending":
-        // Still waiting, will be checked again when thread state changes
-        return;
+      const result = await context.threadManager.waitForThread(threadId);
 
-      default:
-        assertUnreachable(threadResult);
-    }
-  }
-
-  getToolResult(): ProviderToolResult {
-    if (this.state.state !== "done") {
       return {
         type: "tool_result",
-        id: this.request.id,
+        id: request.id,
+        result:
+          result.status === "ok"
+            ? {
+                status: "ok",
+                value: [
+                  {
+                    type: "text",
+                    text: `Sub-agent (${threadId}) completed:\n${result.value}`,
+                  },
+                ],
+              }
+            : {
+                status: "error",
+                error: `Sub-agent (${threadId}) failed: ${result.error}`,
+              },
+      };
+    } catch (e) {
+      return {
+        type: "tool_result",
+        id: request.id,
         result: {
-          status: "ok",
-          value: [
-            { type: "text", text: `Waiting for subagent to finish running...` },
-          ],
+          status: "error",
+          error: `Failed to create sub-agent thread: ${e instanceof Error ? e.message : String(e)}`,
         },
       };
     }
+  })();
 
-    return this.state.result;
+  return { promise, abort: () => {}, progress };
+}
+
+export function renderInFlightSummary(
+  request: UnionToolRequest,
+  _displayContext: DisplayContext,
+  progress?: SpawnSubagentProgress,
+): VDOMNode {
+  const input = request.input as Input;
+  const typeLabel = agentTypeLabel(input.agentType);
+
+  if (progress?.threadId) {
+    return d`🚀⏳ spawn_subagent${typeLabel} (blocking): spawned ${progress.threadId}`;
   }
 
-  renderSummary(): VDOMNode {
-    const input = this.request.input;
-    const typeLabel = agentTypeLabel(input.agentType);
+  return d`🚀⚙️ spawn_subagent${typeLabel}: ${truncate(input.prompt)}`;
+}
 
-    switch (this.state.state) {
-      case "preparing":
-        return d`🚀⚙️ spawn_subagent${typeLabel}: ${truncate(input.prompt)}`;
-      case "waiting-for-subagent": {
-        const summary = this.context.chat.getThreadSummary(this.state.threadId);
-        const displayName = this.context.chat.getThreadDisplayName(
-          this.state.threadId,
-        );
-        let statusText: string;
+export function renderInFlightPreview(
+  _request: UnionToolRequest,
+  progress: SpawnSubagentProgress | undefined,
+  context: {
+    dispatch: Dispatch<RootMsg>;
+    chat?: Chat;
+  },
+): VDOMNode {
+  if (!context.chat || !progress?.threadId) {
+    return d``;
+  }
 
-        switch (summary.status.type) {
-          case "missing":
-            statusText = "❓ not found";
-            break;
-          case "pending":
-            statusText = "⏳ initializing";
-            break;
-          case "running":
-            statusText = `⏳ ${summary.status.activity}`;
-            break;
-          case "stopped":
-            statusText = `⏹️ stopped (${summary.status.reason})`;
-            break;
-          case "yielded":
-            statusText = "✅ yielded";
-            break;
-          case "error":
-            statusText = `❌ error`;
-            break;
-          default:
-            assertUnreachable(summary.status);
-        }
+  const threadId = progress.threadId;
+  const summary = context.chat.getThreadSummary(threadId);
+  const displayName = context.chat.getThreadDisplayName(threadId);
 
-        const pendingApprovals = renderPendingApprovals(
-          this.context.chat,
-          this.state.threadId,
-        );
-        return withBindings(
-          d`🚀⏳ spawn_subagent${typeLabel} (blocking) ${displayName}: ${statusText}${pendingApprovals ? d`${pendingApprovals}` : d``}`,
-          {
-            "<CR>": () =>
-              this.context.dispatch({
-                type: "chat-msg",
-                msg: {
-                  type: "select-thread",
-                  id:
-                    this.state.state === "waiting-for-subagent"
-                      ? this.state.threadId
-                      : (undefined as unknown as ThreadId),
-                },
-              }),
-          },
-        );
-      }
-      case "done":
-        return renderCompletedSummary(
-          {
-            request: this.request as CompletedToolInfo["request"],
-            result: this.state.result,
-          },
-          this.context.dispatch,
-          this.context.chat,
-        );
+  let statusText: string;
+  switch (summary.status.type) {
+    case "missing":
+      statusText = "❓ not found";
+      break;
+    case "pending":
+      statusText = "⏳ initializing";
+      break;
+    case "running":
+      statusText = `⏳ ${summary.status.activity}`;
+      break;
+    case "stopped":
+      statusText = `⏹️ stopped (${summary.status.reason})`;
+      break;
+    case "yielded": {
+      const lineCount = summary.status.response.split("\n").length;
+      statusText = `✅ ${lineCount.toString()} lines`;
+      break;
     }
+    case "error": {
+      const truncatedError =
+        summary.status.message.length > 50
+          ? summary.status.message.substring(0, 47) + "..."
+          : summary.status.message;
+      statusText = `❌ error: ${truncatedError}`;
+      break;
+    }
+    default:
+      assertUnreachable(summary.status);
   }
+
+  const pendingApprovals = renderPendingApprovals(context.chat, threadId);
+
+  return withBindings(
+    d`${displayName}: ${statusText}${pendingApprovals ? d`${pendingApprovals}` : d``}`,
+    {
+      "<CR>": () =>
+        context.dispatch({
+          type: "chat-msg",
+          msg: {
+            type: "select-thread",
+            id: threadId,
+          },
+        }),
+    },
+  );
 }
 
 export function renderCompletedSummary(

@@ -5,11 +5,7 @@ import type {
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { CompletedToolInfo } from "./types.ts";
-import type { Nvim } from "../nvim/nvim-node";
-import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
-import type { Dispatch } from "../tea/tea.ts";
-import type { RootMsg } from "../root-msg.ts";
-import type { ThreadId } from "../chat/types";
+import type { ToolName, GenericToolRequest, ToolInvocation } from "./types.ts";
 
 export type Input = {
   result: string;
@@ -17,116 +13,31 @@ export type Input = {
 
 export type ToolRequest = GenericToolRequest<"yield_to_parent", Input>;
 
-export type Msg = {
-  type: "finish";
-  result: Result<string>;
-};
-
-export type State = {
-  state: "done";
-  result: ProviderToolResult;
-};
-
-export class YieldToParentTool implements StaticTool {
-  toolName = "yield_to_parent" as const;
-  public state: State;
-  public aborted: boolean = false;
-
-  constructor(
-    public request: ToolRequest,
-    public context: {
-      nvim: Nvim;
-      dispatch: Dispatch<RootMsg>;
-      threadId: ThreadId;
-      myDispatch: Dispatch<Msg>;
-    },
-  ) {
-    this.state = {
-      state: "done",
+export function execute(request: ToolRequest): ToolInvocation {
+  return {
+    promise: Promise.resolve({
+      type: "tool_result" as const,
+      id: request.id,
       result: {
-        type: "tool_result",
-        id: this.request.id,
-        result: {
-          status: "ok",
-          value: [{ type: "text", text: request.input.result }],
-        },
+        status: "ok" as const,
+        value: [{ type: "text" as const, text: request.input.result }],
       },
-    };
-  }
-
-  isDone(): boolean {
-    return this.state.state === "done";
-  }
-
-  isPendingUserAction(): boolean {
-    return false;
-  }
-
-  abort(): ProviderToolResult {
-    if (this.state.state === "done") {
-      return this.getToolResult();
-    }
-
-    this.aborted = true;
-
-    const result: ProviderToolResult = {
-      type: "tool_result",
-      id: this.request.id,
-      result: {
-        status: "error",
-        error: "Request was aborted by the user.",
-      },
-    };
-
-    this.state = {
-      state: "done",
-      result,
-    };
-
-    return result;
-  }
-
-  update(msg: Msg): void {
-    switch (msg.type) {
-      case "finish":
-        // Handle finish message if needed
-        if (msg.result.status === "ok") {
-          // No additional handling needed for successful finish
-        } else {
-          this.state = {
-            state: "done",
-            result: {
-              type: "tool_result",
-              id: this.request.id,
-              result: {
-                status: "error",
-                error: msg.result.error,
-              },
-            },
-          };
-        }
-        return;
-      default:
-        // No other message types expected
-        return;
-    }
-  }
-
-  getToolResult(): ProviderToolResult {
-    if (this.state.state !== "done") {
-      throw new Error("Cannot get tool result before tool is done");
-    }
-    return this.state.result;
-  }
-
-  renderSummary() {
-    return renderCompletedSummary({
-      request: this.request as CompletedToolInfo["request"],
-      result: this.state.result,
-    });
-  }
+    }),
+    abort: () => {},
+  };
 }
 
+export function renderInFlightSummary(
+  request: import("./types.ts").ToolRequest,
+  _displayContext: import("./types.ts").DisplayContext,
+): VDOMNode {
+  const input = request.input as Input;
+  const resultPreview =
+    input.result?.length > 50
+      ? input.result.substring(0, 50) + "..."
+      : (input.result ?? "");
+  return d`↩️⚙️ yield_to_parent: ${resultPreview}`;
+}
 function isError(result: ProviderToolResult): boolean {
   return result.result.status === "error";
 }

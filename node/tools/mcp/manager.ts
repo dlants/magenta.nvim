@@ -2,7 +2,7 @@ import type { MagentaOptions } from "../../options.ts";
 import type { Nvim } from "../../nvim/nvim-node";
 import type { ProviderToolSpec } from "../../providers/provider-types.ts";
 import { MCPClient } from "./client.ts";
-import { MCPTool } from "./tool.ts";
+
 import type { ToolName } from "../types.ts";
 import { type ServerName } from "./types.ts";
 
@@ -66,19 +66,6 @@ export class MCPToolManager {
     }
 
     return allToolSpecs;
-  }
-
-  renderToolResult(tool: MCPTool): string {
-    if (!tool) {
-      return "";
-    }
-
-    const result = tool.getToolResult();
-    if (result.result.status === "error") {
-      return `\nError: ${result.result.error}`;
-    } else {
-      return `\nResult:\n${JSON.stringify(result.result.value, null, 2)}\n`;
-    }
   }
 
   async disconnect(): Promise<void> {

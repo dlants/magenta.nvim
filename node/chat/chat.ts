@@ -18,17 +18,11 @@ import {
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
-import { wrapStaticToolMsg, type ToolRequestId } from "../tools/toolManager.ts";
-import type { Tool, StaticTool, ToolName } from "../tools/types.ts";
+import type { ThreadManager } from "../tools/thread-manager.ts";
+
 import { MCPToolManager } from "../tools/mcp/manager.ts";
-import type { WaitForSubagentsTool } from "../tools/wait-for-subagents.ts";
-import type { SpawnSubagentTool } from "../tools/spawn-subagent.ts";
 import type { ThreadId, ThreadType } from "./types.ts";
 import { createSystemPrompt } from "../providers/system-prompt.ts";
-import type {
-  ForEachElement,
-  SpawnForeachTool,
-} from "../tools/spawn-foreach.ts";
 
 type ThreadWrapper = (
   | {
@@ -75,15 +69,6 @@ export type Msg =
       strippedMessages: InputMessage[];
     }
   | {
-      type: "spawn-subagent-thread";
-      parentThreadId: ThreadId;
-      spawnToolRequestId: ToolRequestId;
-      inputMessages: InputMessage[];
-      threadType: ThreadType;
-      contextFiles?: UnresolvedFilePath[];
-      foreachElement?: ForEachElement;
-    }
-  | {
       type: "select-thread";
       id: ThreadId;
     }
@@ -99,11 +84,12 @@ export type ChatMsg = {
   msg: Msg;
 };
 
-export class Chat {
+export class Chat implements ThreadManager {
   state: ChatState;
   public threadWrappers: { [id: ThreadId]: ThreadWrapper };
   public rememberedCommands: Set<string>;
   private mcpToolManager: MCPToolManager;
+  private threadWaiters: Map<ThreadId, Array<(result: Result<string>) => void>>;
 
   constructor(
     private context: {
@@ -119,6 +105,7 @@ export class Chat {
   ) {
     this.threadWrappers = {};
     this.rememberedCommands = new Set();
+    this.threadWaiters = new Map();
     this.state = {
       state: "thread-overview",
       activeThreadId: undefined,
@@ -172,23 +159,27 @@ export class Chat {
 
         // it's ok to do this on every dispatch. After the initial yielded/error message, the thread should be dormant
         // and should not generate any more thread messages. As such, this won't be terribly inefficient.
-        const mode = thread.state.mode;
         const agentStatus = thread.agent.getState().status;
 
-        if (threadState.parentThreadId) {
-          if (mode.type === "control_flow" && mode.operation.type === "yield") {
-            this.notifyParent({
-              threadId: thread.id,
-              parentThreadId: threadState.parentThreadId,
-              result: { status: "ok", value: mode.operation.response },
-            });
-          } else if (agentStatus.type === "error") {
-            this.notifyParent({
-              threadId: thread.id,
-              parentThreadId: threadState.parentThreadId,
-              result: { status: "error", error: agentStatus.error.message },
-            });
-          }
+        if (thread.state.yieldedResponse !== undefined) {
+          this.resolveThreadWaiters(thread.id, {
+            status: "ok",
+            value: thread.state.yieldedResponse,
+          });
+        } else if (agentStatus.type === "error") {
+          const result: Result<string> = {
+            status: "error",
+            error: agentStatus.error.message,
+          };
+          this.resolveThreadWaiters(thread.id, result);
+        } else if (
+          agentStatus.type === "stopped" &&
+          agentStatus.stopReason === "aborted"
+        ) {
+          this.resolveThreadWaiters(thread.id, {
+            status: "error",
+            error: "Thread was aborted",
+          });
         }
       }
     }
@@ -241,16 +232,11 @@ export class Chat {
         }
 
         if (thread) {
-          if (thread.parentThreadId) {
-            this.notifyParent({
-              threadId: msg.id,
-              parentThreadId: thread.parentThreadId,
-              result: {
-                status: "error",
-                error: msg.error.message,
-              },
-            });
-          }
+          const errorResult: Result<string> = {
+            status: "error",
+            error: msg.error.message,
+          };
+          this.resolveThreadWaiters(msg.id, errorResult);
         }
 
         return;
@@ -323,15 +309,6 @@ export class Chat {
         this.handleForkThread(msg).catch((e: Error) => {
           this.context.nvim.logger.error(
             "Failed to handle thread fork: " + e.message + "\n" + e.stack,
-          );
-        });
-        return;
-      }
-
-      case "spawn-subagent-thread": {
-        this.handleSpawnSubagentThread(msg).catch((e: Error) => {
-          this.context.nvim.logger.error(
-            `Failed to spawn sub-agent thread: ${e.message} ${e.stack}`,
           );
         });
         return;
@@ -763,140 +740,6 @@ ${threadViews.map((view) => d`${view}\n`)}`;
     }
   }
 
-  async handleSpawnSubagentThread({
-    parentThreadId,
-    spawnToolRequestId,
-    inputMessages,
-    contextFiles,
-    threadType,
-    foreachElement,
-  }: {
-    parentThreadId: ThreadId;
-    spawnToolRequestId: ToolRequestId;
-    inputMessages: InputMessage[];
-    contextFiles?: UnresolvedFilePath[];
-    threadType: ThreadType;
-    foreachElement?: ForEachElement;
-  }) {
-    const parentThreadWrapper = this.threadWrappers[parentThreadId];
-    if (!parentThreadWrapper || parentThreadWrapper.state !== "initialized") {
-      throw new Error(`Parent thread ${parentThreadId} not available`);
-    }
-
-    const parentThread = parentThreadWrapper.thread;
-    const subagentThreadId = uuidv7() as ThreadId;
-
-    // Create profile for subagent - use fast model if threadType is "subagent_fast"
-    const subagentProfile: Profile =
-      threadType === "subagent_fast"
-        ? {
-            ...parentThread.state.profile,
-            model: parentThread.state.profile.fastModel,
-            // Disable reasoning/thinking for fast model since it often doesn't support it
-            thinking: undefined,
-            reasoning: undefined,
-          }
-        : parentThread.state.profile;
-
-    if (foreachElement) {
-      try {
-        const thread = await this.createThreadWithContext({
-          threadId: subagentThreadId,
-          profile: subagentProfile,
-          contextFiles: contextFiles || [],
-          parent: parentThreadId,
-          switchToThread: false,
-          inputMessages,
-          threadType,
-        });
-
-        this.context.dispatch({
-          type: "thread-msg",
-          id: parentThreadId,
-          msg: {
-            type: "tool-msg",
-            id: spawnToolRequestId,
-            toolName: "spawn_foreach" as ToolName,
-            msg: wrapStaticToolMsg({
-              type: "foreach-subagent-created",
-              result: {
-                status: "ok" as const,
-                value: thread.id,
-              },
-              element: foreachElement,
-            }),
-          },
-        });
-      } catch (e) {
-        this.context.dispatch({
-          type: "thread-msg",
-          id: parentThreadId,
-          msg: {
-            type: "tool-msg",
-            id: spawnToolRequestId,
-            toolName: "spawn_foreach" as ToolName,
-            msg: wrapStaticToolMsg({
-              type: "foreach-subagent-created",
-              result: {
-                status: "error" as const,
-                error:
-                  e instanceof Error ? e.message + "\n" + e.stack : String(e),
-              },
-              element: foreachElement,
-            }),
-          },
-        });
-      }
-    } else {
-      try {
-        const thread = await this.createThreadWithContext({
-          threadId: subagentThreadId,
-          profile: subagentProfile,
-          contextFiles: contextFiles || [],
-          parent: parentThreadId,
-          switchToThread: false,
-          inputMessages,
-          threadType,
-        });
-
-        this.context.dispatch({
-          type: "thread-msg",
-          id: parentThreadId,
-          msg: {
-            type: "tool-msg",
-            id: spawnToolRequestId,
-            toolName: "spawn_subagent" as ToolName,
-            msg: wrapStaticToolMsg({
-              type: "subagent-created",
-              result: {
-                status: "ok" as const,
-                value: thread.id,
-              },
-            }),
-          },
-        });
-      } catch (e) {
-        this.context.dispatch({
-          type: "thread-msg",
-          id: parentThreadId,
-          msg: {
-            type: "tool-msg",
-            id: spawnToolRequestId,
-            toolName: "spawn_subagent" as ToolName,
-            msg: wrapStaticToolMsg({
-              type: "subagent-created",
-              result: {
-                status: "error" as const,
-                error:
-                  e instanceof Error ? e.message + "\n" + e.stack : String(e),
-              },
-            }),
-          },
-        });
-      }
-    }
-  }
-
   getThreadResult(
     threadId: ThreadId,
   ): { status: "done"; result: Result<string> } | { status: "pending" } {
@@ -922,16 +765,16 @@ ${threadViews.map((view) => d`${view}\n`)}`;
 
       case "initialized": {
         const thread = threadWrapper.thread;
-        const mode = thread.state.mode;
+
         const agentStatus = thread.agent.getState().status;
 
         // Check for yielded state first
-        if (mode.type === "control_flow" && mode.operation.type === "yield") {
+        if (thread.state.yieldedResponse !== undefined) {
           return {
             status: "done",
             result: {
               status: "ok",
-              value: mode.operation.response,
+              value: thread.state.yieldedResponse,
             },
           };
         }
@@ -979,18 +822,8 @@ ${threadViews.map((view) => d`${view}\n`)}`;
       (wrapper.thread.permissionFileIO?.getPendingPermissions().size ?? 0) > 0
     );
   }
-  getThreadPendingApprovalTools(threadId: ThreadId): (Tool | StaticTool)[] {
-    const wrapper = this.threadWrappers[threadId];
-    if (!wrapper || wrapper.state !== "initialized") return [];
-    const mode = wrapper.thread.state.mode;
-    if (mode.type !== "tool_use") return [];
-    const result: (Tool | StaticTool)[] = [];
-    for (const [, tool] of mode.activeTools) {
-      if (tool.isPendingUserAction()) {
-        result.push(tool);
-      }
-    }
-    return result;
+  getThreadPendingApprovalTools(_threadId: ThreadId): never[] {
+    return [];
   }
 
   getThreadSummary(threadId: ThreadId): {
@@ -1033,13 +866,10 @@ ${threadViews.map((view) => d`${view}\n`)}`;
           title: thread.state.title,
           status: (() => {
             // Check mode for thread-specific states first
-            if (
-              mode.type === "control_flow" &&
-              mode.operation.type === "yield"
-            ) {
+            if (thread.state.yieldedResponse !== undefined) {
               return {
                 type: "yielded" as const,
-                response: mode.operation.response,
+                response: thread.state.yieldedResponse,
               };
             }
 
@@ -1088,86 +918,82 @@ ${threadViews.map((view) => d`${view}\n`)}`;
     }
   }
 
-  notifyParent({
-    threadId,
-    parentThreadId,
-    result,
-  }: {
-    threadId: ThreadId;
-    parentThreadId: ThreadId;
-    result: Result<string>;
-  }) {
-    const parentThreadWrapper = this.threadWrappers[parentThreadId];
-    if (parentThreadWrapper && parentThreadWrapper.state === "initialized") {
-      const parentThread = parentThreadWrapper.thread;
-      const mode = parentThread.state.mode;
-
-      if (mode.type !== "tool_use") {
-        return;
+  private resolveThreadWaiters(
+    threadId: ThreadId,
+    result: Result<string>,
+  ): void {
+    const waiters = this.threadWaiters.get(threadId);
+    if (waiters && waiters.length > 0) {
+      for (const resolve of waiters) {
+        resolve(result);
       }
-
-      for (const [, tool] of mode.activeTools) {
-        if (
-          tool.toolName === "wait_for_subagents" &&
-          (tool as WaitForSubagentsTool).state.state === "waiting"
-        ) {
-          setTimeout(() => {
-            this.context.dispatch({
-              type: "thread-msg",
-              id: parentThread.id,
-              msg: {
-                type: "tool-msg",
-                id: tool.request.id,
-                toolName: "wait_for_subagents" as ToolName,
-                msg: wrapStaticToolMsg({
-                  type: "check-threads",
-                }),
-              },
-            });
-          });
-        } else if (
-          tool.toolName === "spawn_foreach" &&
-          (tool as SpawnForeachTool).state.state === "running"
-        ) {
-          setTimeout(() => {
-            this.context.dispatch({
-              type: "thread-msg",
-              id: parentThread.id,
-              msg: {
-                type: "tool-msg",
-                id: tool.request.id,
-                toolName: "spawn_foreach" as ToolName,
-                msg: wrapStaticToolMsg({
-                  type: "subagent-completed",
-                  threadId,
-                  result,
-                }),
-              },
-            });
-          });
-        } else if (
-          tool.toolName === "spawn_subagent" &&
-          (tool as SpawnSubagentTool).state.state === "waiting-for-subagent"
-        ) {
-          setTimeout(() => {
-            this.context.dispatch({
-              type: "thread-msg",
-              id: parentThread.id,
-              msg: {
-                type: "tool-msg",
-                id: tool.request.id,
-                toolName: "spawn_subagent" as ToolName,
-                msg: wrapStaticToolMsg({
-                  type: "check-thread",
-                }),
-              },
-            });
-          });
-        }
-      }
+      this.threadWaiters.delete(threadId);
     }
   }
 
+  async spawnThread(opts: {
+    parentThreadId: ThreadId;
+    prompt: string;
+    threadType: ThreadType;
+    contextFiles?: UnresolvedFilePath[];
+  }): Promise<ThreadId> {
+    const parentThreadId = opts.parentThreadId;
+    const parentThreadWrapper = this.threadWrappers[parentThreadId];
+    if (!parentThreadWrapper || parentThreadWrapper.state !== "initialized") {
+      throw new Error(`Parent thread ${parentThreadId} not available`);
+    }
+
+    const parentThread = parentThreadWrapper.thread;
+    const subagentThreadId = uuidv7() as ThreadId;
+
+    const subagentProfile: Profile =
+      opts.threadType === "subagent_fast"
+        ? {
+            ...parentThread.state.profile,
+            model: parentThread.state.profile.fastModel,
+            thinking: undefined,
+            reasoning: undefined,
+          }
+        : parentThread.state.profile;
+
+    const thread = await this.createThreadWithContext({
+      threadId: subagentThreadId,
+      profile: subagentProfile,
+      contextFiles: opts.contextFiles || [],
+      parent: parentThreadId,
+      switchToThread: false,
+      inputMessages: [{ type: "system", text: opts.prompt }],
+      threadType: opts.threadType,
+    });
+
+    return thread.id;
+  }
+
+  waitForThread(threadId: ThreadId): Promise<Result<string>> {
+    const threadResult = this.getThreadResult(threadId);
+    if (threadResult.status === "done") {
+      return Promise.resolve(threadResult.result);
+    }
+
+    return new Promise<Result<string>>((resolve) => {
+      let waiters = this.threadWaiters.get(threadId);
+      if (!waiters) {
+        waiters = [];
+        this.threadWaiters.set(threadId, waiters);
+      }
+      waiters.push(resolve);
+    });
+  }
+
+  yieldResult(threadId: ThreadId, result: Result<string>): void {
+    const threadWrapper = this.threadWrappers[threadId];
+    if (threadWrapper && threadWrapper.state === "initialized") {
+      if (result.status === "ok") {
+        threadWrapper.thread.state.yieldedResponse = result.value;
+      }
+    }
+    this.resolveThreadWaiters(threadId, result);
+  }
   renderActiveThread() {
     const threadWrapper =
       this.state.activeThreadId &&

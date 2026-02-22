@@ -1,7 +1,7 @@
-import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d, withCode, type VDOMNode } from "../tea/view.ts";
 import type { Result } from "../utils/result.ts";
 import type { CompletedToolInfo } from "./types.ts";
+import type { DisplayContext } from "./types.ts";
 
 import type { Nvim } from "../nvim/nvim-node";
 import {
@@ -13,10 +13,14 @@ import {
 
 import type {
   ProviderToolResult,
-  ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider.ts";
-import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
+import type {
+  ToolName,
+  GenericToolRequest,
+  ToolInvocation,
+  ToolRequest as UnionToolRequest,
+} from "./types.ts";
 import { runScript, type EdlRegisters } from "../edl/index.ts";
 import type { FileMutationSummary } from "../edl/types.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
@@ -41,119 +45,51 @@ type EdlDisplayData = {
 const EDL_DISPLAY_PREFIX = "__EDL_DISPLAY__";
 export type ToolRequest = GenericToolRequest<"edl", Input>;
 
-export type State =
-  | {
-      state: "processing";
-    }
-  | {
-      state: "done";
-      result: ProviderToolResult;
-    };
+export function execute(
+  request: ToolRequest,
+  context: {
+    nvim: Nvim;
+    cwd: NvimCwd;
+    homeDir: HomeDir;
+    fileIO: FileIO;
+    bufferTracker: BufferTracker;
+    threadDispatch: Dispatch<ThreadMsg>;
+    edlRegisters: EdlRegisters;
+  },
+): ToolInvocation {
+  let aborted = false;
 
-export type Msg = {
-  type: "finish";
-  result: Result<ProviderToolResultContent[]>;
-};
-
-export class EdlTool implements StaticTool {
-  state: State;
-  toolName = "edl" as const;
-  autoRespond = true;
-  aborted: boolean = false;
-
-  constructor(
-    public request: ToolRequest,
-    public context: {
-      nvim: Nvim;
-      cwd: NvimCwd;
-      homeDir: HomeDir;
-      myDispatch: (msg: Msg) => void;
-      fileIO: FileIO;
-      bufferTracker: BufferTracker;
-      threadDispatch: Dispatch<ThreadMsg>;
-      edlRegisters: EdlRegisters;
-    },
-  ) {
-    this.state = {
-      state: "processing",
-    };
-
-    setTimeout(() => {
-      this.executeScript().catch((error) => {
-        this.context.nvim.logger.error(
-          `Error executing EDL script: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
-    });
-  }
-
-  isDone(): boolean {
-    return this.state.state === "done";
-  }
-
-  isPendingUserAction(): boolean {
-    return false;
-  }
-
-  abort(): ProviderToolResult {
-    if (this.state.state === "done") {
-      return this.getToolResult();
-    }
-
-    this.aborted = true;
-
-    const result: ProviderToolResult = {
-      type: "tool_result",
-      id: this.request.id,
-      result: {
-        status: "error",
-        error: "Request was aborted by the user.",
-      },
-    };
-
-    this.state = {
-      state: "done",
-      result,
-    };
-
-    return result;
-  }
-
-  update(msg: Msg) {
-    if (this.state.state == "processing") {
-      this.state = {
-        state: "done",
-        result: {
-          type: "tool_result",
-          id: this.request.id,
-          result: msg.result,
-        },
-      };
-    }
-  }
-
-  async executeScript() {
+  const promise = (async (): Promise<ProviderToolResult> => {
     try {
-      const script = this.request.input.script;
+      const script = request.input.script;
       const result = await runScript(
         script,
-        this.context.fileIO,
-        this.context.edlRegisters,
+        context.fileIO,
+        context.edlRegisters,
       );
 
-      if (this.aborted) return;
+      if (aborted) {
+        return {
+          type: "tool_result",
+          id: request.id,
+          result: {
+            status: "error",
+            error: "Request was aborted by the user.",
+          },
+        };
+      }
 
       if (result.status === "ok") {
-        this.context.edlRegisters.registers = result.edlRegisters.registers;
-        this.context.edlRegisters.nextSavedId = result.edlRegisters.nextSavedId;
+        context.edlRegisters.registers = result.edlRegisters.registers;
+        context.edlRegisters.nextSavedId = result.edlRegisters.nextSavedId;
 
         for (const mutation of result.data.mutations) {
           const absFilePath = resolveFilePath(
-            this.context.cwd,
+            context.cwd,
             mutation.path as Parameters<typeof resolveFilePath>[1],
-            this.context.homeDir,
+            context.homeDir,
           );
-          this.context.threadDispatch({
+          context.threadDispatch({
             type: "context-manager-msg",
             msg: {
               type: "tool-applied",
@@ -182,8 +118,9 @@ export class EdlTool implements StaticTool {
             : undefined,
         };
 
-        this.context.myDispatch({
-          type: "finish",
+        return {
+          type: "tool_result",
+          id: request.id,
           result: {
             status: "ok",
             value: [
@@ -194,108 +131,46 @@ export class EdlTool implements StaticTool {
               { type: "text", text: result.formatted },
             ],
           },
-        });
+        };
       } else {
-        this.context.myDispatch({
-          type: "finish",
+        return {
+          type: "tool_result",
+          id: request.id,
           result: {
             status: "error",
             error: result.error,
           },
-        });
+        };
       }
     } catch (error) {
-      if (this.aborted) return;
-      this.context.myDispatch({
-        type: "finish",
-        result: {
-          status: "error",
-          error: `Failed to execute EDL script: ${(error as Error).message}`,
-        },
-      });
-    }
-  }
-
-  getToolResult(): ProviderToolResult {
-    switch (this.state.state) {
-      case "processing":
+      if (aborted) {
         return {
           type: "tool_result",
-          id: this.request.id,
+          id: request.id,
           result: {
-            status: "ok",
-            value: [
-              {
-                type: "text",
-                text: `This tool use is being processed. Please proceed with your answer or address other parts of the question.`,
-              },
-            ],
+            status: "error",
+            error: "Request was aborted by the user.",
           },
         };
-      case "done":
-        return this.state.result;
-      default:
-        assertUnreachable(this.state);
+      }
+      return {
+        type: "tool_result",
+        id: request.id,
+        result: {
+          status: "error",
+          error: `Failed to execute EDL script: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      };
     }
-  }
+  })();
 
-  renderSummary() {
-    switch (this.state.state) {
-      case "processing":
-        return d`📝⚙️ edl script executing...`;
-      case "done":
-        return renderCompletedSummary({
-          request: this.request as CompletedToolInfo["request"],
-          result: this.state.result,
-        });
-      default:
-        assertUnreachable(this.state);
-    }
-  }
-  renderPreview() {
-    const abridged = abridgeScript(this.request.input.script);
-    switch (this.state.state) {
-      case "processing":
-        return withCode(d`\`\`\`
-${abridged}
-\`\`\``);
-      case "done":
-        return renderCompletedPreview({
-          request: this.request as CompletedToolInfo["request"],
-          result: this.state.result,
-        });
-      default:
-        assertUnreachable(this.state);
-    }
-  }
-
-  renderDetail() {
-    const scriptBlock = withCode(d`\`\`\`
-${this.request.input.script}
-\`\`\``);
-    switch (this.state.state) {
-      case "processing":
-        return scriptBlock;
-      case "done":
-        return d`${scriptBlock}
-${renderCompletedDetail({
-  request: this.request as CompletedToolInfo["request"],
-  result: this.state.result,
-})}`;
-      default:
-        assertUnreachable(this.state);
-    }
-  }
-  displayInput() {
-    const script = this.request.input.script;
-    const preview =
-      script.length > 100 ? script.substring(0, 100) + "..." : script;
-    return `edl: {
-    script: ${preview}
-}`;
-  }
+  return {
+    promise,
+    abort: () => {
+      aborted = true;
+    },
+  };
 }
-
 const PREVIEW_MAX_LINES = 10;
 const PREVIEW_MAX_LINE_LENGTH = 80;
 
@@ -352,6 +227,12 @@ function extractFormattedResult(info: CompletedToolInfo): string {
   return "";
 }
 
+export function renderInFlightSummary(
+  _request: UnionToolRequest,
+  _displayContext: DisplayContext,
+): VDOMNode {
+  return d`📝⚙️ edl script executing...`;
+}
 export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {
   const status = getStatusEmoji(info.result);
   const data = extractEdlDisplayData(info);

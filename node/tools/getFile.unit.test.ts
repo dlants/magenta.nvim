@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import { GetFileTool, type Input, type Msg } from "./getFile.ts";
+import { execute, type Input } from "./getFile.ts";
 import { FsFileIO } from "../edl/file-io.ts";
 import type { ToolRequestId } from "./types.ts";
 
@@ -16,6 +16,7 @@ import type {
 } from "../utils/files.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import type { ContextManager } from "../context/context-manager.ts";
+import type { ProviderToolResult } from "../providers/provider-types.ts";
 
 describe("GetFileTool unit tests", () => {
   let tmpDir: string;
@@ -34,7 +35,6 @@ describe("GetFileTool unit tests", () => {
       contextFiles?: Record<string, unknown>;
     } = {},
   ) {
-    const myDispatch = vi.fn<(msg: Msg) => void>();
     const threadDispatch = vi.fn<Dispatch<ThreadMsg>>();
     const mockNvim = {
       logger: { error: vi.fn(), info: vi.fn() },
@@ -43,7 +43,7 @@ describe("GetFileTool unit tests", () => {
       files: opts.contextFiles ?? {},
     } as unknown as ContextManager;
 
-    const tool = new GetFileTool(
+    const invocation = execute(
       {
         id: "tool_1" as ToolRequestId,
         toolName: "get_file" as const,
@@ -56,23 +56,17 @@ describe("GetFileTool unit tests", () => {
         fileIO: new FsFileIO(),
         contextManager: mockContextManager,
         threadDispatch,
-        myDispatch,
       },
     );
 
-    return { tool, myDispatch, threadDispatch };
+    return { invocation, threadDispatch };
   }
 
-  async function waitForDispatch(
-    myDispatch: ReturnType<typeof vi.fn>,
-  ): Promise<Msg> {
-    await vi.waitFor(
-      () => {
-        expect(myDispatch).toHaveBeenCalled();
-      },
-      { timeout: 5000 },
-    );
-    return myDispatch.mock.calls[0][0] as Msg;
+  async function getResult(invocation: {
+    promise: Promise<ProviderToolResult>;
+  }) {
+    const result = await invocation.promise;
+    return result;
   }
 
   it("returns early when file is already in context", async () => {
@@ -80,7 +74,7 @@ describe("GetFileTool unit tests", () => {
     await fs.writeFile(filePath, "file content here", "utf-8");
 
     const absFilePath = filePath as AbsFilePath;
-    const { myDispatch } = createTool(
+    const { invocation } = createTool(
       { filePath: "existing.txt" as UnresolvedFilePath },
       {
         contextFiles: {
@@ -97,11 +91,12 @@ describe("GetFileTool unit tests", () => {
       },
     );
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("ok");
-    if (msg.result.status === "ok") {
-      const text = (msg.result.value[0] as { type: "text"; text: string }).text;
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[0] as { type: "text"; text: string })
+        .text;
       expect(text).toContain("already part of the thread context");
     }
   });
@@ -111,7 +106,7 @@ describe("GetFileTool unit tests", () => {
     await fs.writeFile(filePath, "Moonlight whispers", "utf-8");
 
     const absFilePath = filePath as AbsFilePath;
-    const { myDispatch, threadDispatch } = createTool(
+    const { invocation, threadDispatch } = createTool(
       { filePath: "existing.txt" as UnresolvedFilePath, force: true },
       {
         contextFiles: {
@@ -128,11 +123,12 @@ describe("GetFileTool unit tests", () => {
       },
     );
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("ok");
-    if (msg.result.status === "ok") {
-      const text = (msg.result.value[0] as { type: "text"; text: string }).text;
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[0] as { type: "text"; text: string })
+        .text;
       expect(text).toContain("Moonlight whispers");
     }
     // Should also dispatch context-manager-msg
@@ -150,15 +146,15 @@ describe("GetFileTool unit tests", () => {
     jpegHeader.copy(largeBuffer);
     await fs.writeFile(filePath, largeBuffer);
 
-    const { myDispatch } = createTool({
+    const { invocation } = createTool({
       filePath: "large.jpg" as UnresolvedFilePath,
     });
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("error");
-    if (msg.result.status === "error") {
-      expect(msg.result.error).toContain("File too large");
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("error");
+    if (result.result.status === "error") {
+      expect(result.result.error).toContain("File too large");
     }
   });
 
@@ -171,15 +167,16 @@ describe("GetFileTool unit tests", () => {
     }
     await fs.writeFile(filePath, lines.join("\n"), "utf-8");
 
-    const { myDispatch, threadDispatch } = createTool({
+    const { invocation, threadDispatch } = createTool({
       filePath: "large.txt" as UnresolvedFilePath,
     });
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("ok");
-    if (msg.result.status === "ok") {
-      const text = (msg.result.value[0] as { type: "text"; text: string }).text;
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[0] as { type: "text"; text: string })
+        .text;
       // Should contain summary info (file summary header)
       expect(text).toContain("File summary:");
     }
@@ -200,15 +197,16 @@ describe("GetFileTool unit tests", () => {
       "utf-8",
     );
 
-    const { myDispatch, threadDispatch } = createTool({
+    const { invocation, threadDispatch } = createTool({
       filePath: "longlines.txt" as UnresolvedFilePath,
     });
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("ok");
-    if (msg.result.status === "ok") {
-      const text = (msg.result.value[0] as { type: "text"; text: string }).text;
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[0] as { type: "text"; text: string })
+        .text;
       expect(text).toContain("chars omitted");
     }
     // Should NOT dispatch context-manager-msg since lines were abridged
@@ -222,17 +220,18 @@ describe("GetFileTool unit tests", () => {
     const filePath = path.join(tmpDir, "lines.txt");
     await fs.writeFile(filePath, "line1\nline2\nline3\nline4\nline5", "utf-8");
 
-    const { myDispatch, threadDispatch } = createTool({
+    const { invocation, threadDispatch } = createTool({
       filePath: "lines.txt" as UnresolvedFilePath,
       startLine: 2,
       numLines: 2,
     });
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("ok");
-    if (msg.result.status === "ok") {
-      const text = (msg.result.value[0] as { type: "text"; text: string }).text;
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[0] as { type: "text"; text: string })
+        .text;
       expect(text).toContain("[Lines 2-3 of");
       expect(text).toContain("line2");
       expect(text).toContain("line3");
@@ -249,16 +248,17 @@ describe("GetFileTool unit tests", () => {
     const filePath = path.join(tmpDir, "lines.txt");
     await fs.writeFile(filePath, "line1\nline2\nline3\nline4\nline5", "utf-8");
 
-    const { myDispatch } = createTool({
+    const { invocation } = createTool({
       filePath: "lines.txt" as UnresolvedFilePath,
       startLine: 3,
     });
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("ok");
-    if (msg.result.status === "ok") {
-      const text = (msg.result.value[0] as { type: "text"; text: string }).text;
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[0] as { type: "text"; text: string })
+        .text;
       expect(text).toContain("[Lines 3-");
       expect(text).toContain("line3");
       expect(text).toContain("line4");
@@ -271,7 +271,7 @@ describe("GetFileTool unit tests", () => {
     await fs.writeFile(filePath, "line1\nline2\nline3\nline4", "utf-8");
 
     const absFilePath = filePath as AbsFilePath;
-    const { myDispatch } = createTool(
+    const { invocation } = createTool(
       {
         filePath: "inctx.txt" as UnresolvedFilePath,
         startLine: 2,
@@ -292,11 +292,12 @@ describe("GetFileTool unit tests", () => {
       },
     );
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("ok");
-    if (msg.result.status === "ok") {
-      const text = (msg.result.value[0] as { type: "text"; text: string }).text;
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[0] as { type: "text"; text: string })
+        .text;
       // Should NOT return "already in context" — should return actual lines
       expect(text).not.toContain("already part of the thread context");
       expect(text).toContain("line2");
@@ -309,7 +310,7 @@ describe("GetFileTool unit tests", () => {
     await fs.writeFile(filePath, "alpha\nbeta\ngamma\ndelta\nepsilon", "utf-8");
 
     const absFilePath = filePath as AbsFilePath;
-    const { myDispatch } = createTool(
+    const { invocation } = createTool(
       {
         filePath: "forced.txt" as UnresolvedFilePath,
         force: true,
@@ -334,11 +335,12 @@ describe("GetFileTool unit tests", () => {
       },
     );
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("ok");
-    if (msg.result.status === "ok") {
-      const text = (msg.result.value[0] as { type: "text"; text: string }).text;
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[0] as { type: "text"; text: string })
+        .text;
       expect(text).toContain("beta");
       expect(text).toContain("gamma");
       expect(text).toContain("[Lines 2-3 of");
@@ -349,16 +351,18 @@ describe("GetFileTool unit tests", () => {
     const filePath = path.join(tmpDir, "small.txt");
     await fs.writeFile(filePath, "one\ntwo\nthree", "utf-8");
 
-    const { myDispatch } = createTool({
+    const { invocation } = createTool({
       filePath: "small.txt" as UnresolvedFilePath,
       startLine: 100,
     });
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("error");
-    if (msg.result.status === "error") {
-      expect(msg.result.error).toContain("startLine 100 is beyond end of file");
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("error");
+    if (result.result.status === "error") {
+      expect(result.result.error).toContain(
+        "startLine 100 is beyond end of file",
+      );
     }
   });
 
@@ -367,31 +371,32 @@ describe("GetFileTool unit tests", () => {
     const longLine = "b".repeat(3000);
     await fs.writeFile(filePath, `short1\n${longLine}\nshort3`, "utf-8");
 
-    const { myDispatch } = createTool({
+    const { invocation } = createTool({
       filePath: "longrange.txt" as UnresolvedFilePath,
       startLine: 1,
       numLines: 3,
     });
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("ok");
-    if (msg.result.status === "ok") {
-      const text = (msg.result.value[0] as { type: "text"; text: string }).text;
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[0] as { type: "text"; text: string })
+        .text;
       expect(text).toContain("chars omitted");
     }
   });
 
   it("file does not exist returns error", async () => {
-    const { myDispatch } = createTool({
+    const { invocation } = createTool({
       filePath: "nonexistent.txt" as UnresolvedFilePath,
     });
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
-    expect(msg.result.status).toBe("error");
-    if (msg.result.status === "error") {
-      expect(msg.result.error).toContain("does not exist");
+    const result = await getResult(invocation);
+
+    expect(result.result.status).toBe("error");
+    if (result.result.status === "error") {
+      expect(result.result.error).toContain("does not exist");
     }
   });
 
@@ -405,17 +410,17 @@ describe("GetFileTool unit tests", () => {
     }
     await fs.writeFile(filePath, buf);
 
-    const { myDispatch } = createTool({
+    const { invocation } = createTool({
       filePath: "data.bin" as UnresolvedFilePath,
     });
 
-    const msg = await waitForDispatch(myDispatch);
-    expect(msg.type).toBe("finish");
+    const result = await getResult(invocation);
+
     // Binary files with unrecognized content may be detected as text via isLikelyTextFile
     // or as unsupported. Either way, verify it doesn't crash.
-    expect(msg.result.status).toBeDefined();
-    if (msg.result.status === "error") {
-      expect(msg.result.error).toContain("Unsupported file type");
+    expect(result.result.status).toBeDefined();
+    if (result.result.status === "error") {
+      expect(result.result.error).toContain("Unsupported file type");
     }
   });
 });

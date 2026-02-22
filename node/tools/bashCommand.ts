@@ -1,5 +1,4 @@
 import type { Result } from "../utils/result.ts";
-import type { Dispatch } from "../tea/tea.ts";
 import type {
   ProviderToolResult,
   ProviderToolSpec,
@@ -14,9 +13,14 @@ import {
 import type { CompletedToolInfo } from "./types.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import { spawnSync } from "child_process";
-import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { MagentaOptions } from "../options.ts";
-import type { StaticTool, ToolName, GenericToolRequest } from "./types.ts";
+import type {
+  ToolName,
+  GenericToolRequest,
+  ToolInvocation,
+  ToolRequest as UnionToolRequest,
+  DisplayContext,
+} from "./types.ts";
 import {
   type NvimCwd,
   type UnresolvedFilePath,
@@ -118,27 +122,6 @@ export function validateInput(args: { [key: string]: unknown }): Result<Input> {
     },
   };
 }
-
-type State =
-  | {
-      state: "processing";
-      liveOutput: OutputLine[];
-      startTime: number | undefined;
-    }
-  | {
-      state: "done";
-      output: OutputLine[];
-      exitCode: number;
-      signal: NodeJS.Signals | undefined;
-      durationMs: number;
-      logFilePath: string | undefined;
-      result: ProviderToolResult;
-    }
-  | {
-      state: "error";
-      error: string;
-      durationMs?: number;
-    };
 
 const MAX_OUTPUT_TOKENS_FOR_AGENT = 2000;
 const MAX_CHARS_PER_LINE = 800;
@@ -263,303 +246,179 @@ function formatOutputForToolResult(
 
   return formattedOutput;
 }
-export type Msg = { type: "tick" } | { type: "terminate" };
 
-export class BashCommandTool implements StaticTool {
-  state: State;
-  toolName = "bash_command" as const;
-  aborted: boolean = false;
-  private tickInterval: ReturnType<typeof setInterval> | undefined;
+// ===== New function-based ToolInvocation =====
 
-  constructor(
-    public request: ToolRequest,
-    public context: {
-      nvim: Nvim;
-      cwd: NvimCwd;
-      homeDir: HomeDir;
-      options: MagentaOptions;
-      myDispatch: Dispatch<Msg>;
-      shell: Shell;
-      getDisplayWidth(): number;
-    },
-  ) {
-    const liveOutput: OutputLine[] = [];
-    this.state = {
-      state: "processing",
-      liveOutput,
-      startTime: undefined,
-    };
+export type BashProgress = {
+  liveOutput: OutputLine[];
+  startTime: number | undefined;
+};
 
-    this.context.shell
-      .execute(request.input.command, {
-        toolRequestId: request.id,
-        onOutput: (line) => {
-          liveOutput.push(line);
-          this.context.myDispatch({ type: "tick" });
-        },
-        onStart: () => {
-          if (this.state.state === "processing") {
-            this.state.startTime = Date.now();
-            this.startTickInterval();
-          }
-        },
-      })
-      .then((result) => {
-        if (this.aborted) return;
-        this.stopTickInterval();
+export function execute(
+  request: ToolRequest,
+  context: {
+    shell: Shell;
+    requestRender: () => void;
+    options: MagentaOptions;
+  },
+): ToolInvocation & { progress: BashProgress } {
+  const progress: BashProgress = {
+    liveOutput: [],
+    startTime: undefined,
+  };
 
-        const formattedOutput = formatOutputForToolResult(
-          result.output,
-          result.exitCode,
-          result.signal,
-          result.durationMs,
-          result.logFilePath,
-        );
+  let aborted = false;
+  let tickInterval: ReturnType<typeof setInterval> | undefined;
 
-        this.state = {
-          state: "done",
-          output: result.output,
-          exitCode: result.exitCode,
-          signal: result.signal,
-          durationMs: result.durationMs,
-          logFilePath: result.logFilePath,
-          result: {
-            type: "tool_result",
-            id: this.request.id,
-            result: {
-              status: "ok",
-              value: [{ type: "text", text: formattedOutput }],
-            },
-          },
-        };
-        // trigger re-render
-        this.context.myDispatch({ type: "tick" });
-      })
-      .catch((error: Error) => {
-        if (this.aborted) return;
-        this.stopTickInterval();
-
-        const durationMs =
-          this.state.state === "processing" && this.state.startTime
-            ? Date.now() - this.state.startTime
-            : 0;
-
-        this.state = {
-          state: "error",
-          error: error.message,
-          durationMs,
-        };
-        // trigger re-render
-        this.context.myDispatch({ type: "tick" });
-      });
-  }
-
-  private startTickInterval() {
-    this.tickInterval = setInterval(() => {
-      this.context.myDispatch({ type: "tick" });
-    }, 1000);
-  }
-
-  private stopTickInterval() {
-    if (this.tickInterval) {
-      clearInterval(this.tickInterval);
-      this.tickInterval = undefined;
+  function stopTickInterval() {
+    if (tickInterval) {
+      clearInterval(tickInterval);
+      tickInterval = undefined;
     }
   }
 
-  update(msg: Msg) {
-    switch (msg.type) {
-      case "tick":
-        return;
-      case "terminate":
-        this.context.shell.terminate();
-        return;
-      default:
-        assertUnreachable(msg);
-    }
-  }
-
-  isDone(): boolean {
-    return this.state.state === "done" || this.state.state === "error";
-  }
-
-  isPendingUserAction(): boolean {
-    return false;
-  }
-
-  abort(): ProviderToolResult {
-    if (this.state.state === "done" || this.state.state === "error") {
-      return this.getToolResult();
-    }
-
-    this.aborted = true;
-    this.stopTickInterval();
-    this.context.shell.terminate();
-
-    const result: ProviderToolResult = {
-      type: "tool_result",
-      id: this.request.id,
-      result: {
-        status: "error",
-        error: "Request was aborted by the user.",
+  const promise = context.shell
+    .execute(request.input.command, {
+      toolRequestId: request.id,
+      onOutput: (line) => {
+        progress.liveOutput.push(line);
+        context.requestRender();
       },
-    };
-
-    const durationMs = this.state.startTime
-      ? Date.now() - this.state.startTime
-      : 0;
-
-    this.state = {
-      state: "done",
-      exitCode: -1,
-      signal: undefined,
-      durationMs,
-      logFilePath: undefined,
-      output: [],
-      result,
-    };
-
-    return result;
-  }
-
-  getToolResult(): ProviderToolResult {
-    const { state } = this;
-
-    switch (state.state) {
-      case "done":
-        return state.result;
-
-      case "error": {
-        const durationStr =
-          state.durationMs !== undefined ? ` (${state.durationMs}ms)` : "";
+      onStart: () => {
+        progress.startTime = Date.now();
+        tickInterval = setInterval(() => {
+          context.requestRender();
+        }, 1000);
+      },
+    })
+    .then((result): ProviderToolResult => {
+      if (aborted) {
         return {
           type: "tool_result",
-          id: this.request.id,
+          id: request.id,
           result: {
             status: "error",
-            error: `Error: ${state.error}${durationStr}`,
+            error: "Request was aborted by the user.",
           },
         };
       }
+      stopTickInterval();
 
-      case "processing":
+      const formattedOutput = formatOutputForToolResult(
+        result.output,
+        result.exitCode,
+        result.signal,
+        result.durationMs,
+        result.logFilePath,
+      );
+
+      return {
+        type: "tool_result",
+        id: request.id,
+        result: {
+          status: "ok",
+          value: [{ type: "text", text: formattedOutput }],
+        },
+      };
+    })
+    .catch((error: Error): ProviderToolResult => {
+      if (aborted) {
         return {
           type: "tool_result",
-          id: this.request.id,
+          id: request.id,
           result: {
-            status: "ok",
-            value: [{ type: "text", text: "Command still running" }],
+            status: "error",
+            error: "Request was aborted by the user.",
           },
         };
-
-      default:
-        assertUnreachable(state);
-    }
-  }
-
-  formatOutputPreview(output: OutputLine[]): string {
-    let formattedOutput = "";
-    let currentStream: "stdout" | "stderr" | null = null;
-    const lastTenLines = output.slice(-10);
-
-    for (const line of lastTenLines) {
-      if (currentStream !== line.stream) {
-        formattedOutput += line.stream === "stdout" ? "stdout:\n" : "stderr:\n";
-        currentStream = line.stream;
       }
-      const displayWidth = this.context.getDisplayWidth() - 5;
-      const displayText =
-        line.text.length > displayWidth
-          ? line.text.substring(0, displayWidth) + "..."
-          : line.text;
-      formattedOutput += displayText + "\n";
-    }
+      stopTickInterval();
 
-    return formattedOutput;
-  }
+      const durationMs = progress.startTime
+        ? Date.now() - progress.startTime
+        : 0;
+      const durationStr = durationMs > 0 ? ` (${durationMs}ms)` : "";
 
-  renderSummary() {
-    switch (this.state.state) {
-      case "processing": {
-        const content = this.state.startTime
-          ? d`⚡⚙️ (${String(Math.floor((Date.now() - this.state.startTime) / 1000))}s / 300s) ${withInlineCode(d`\`${this.request.input.command}\``)}`
-          : d`⚡⏳ ${withInlineCode(d`\`${this.request.input.command}\``)}`;
-        return withBindings(content, {
-          t: () => this.context.myDispatch({ type: "terminate" }),
-        });
-      }
-      case "done":
-        return renderCompletedSummary({
-          request: this.request as CompletedToolInfo["request"],
-          result: this.state.result,
-        });
-      case "error":
-        return d`⚡❌ ${withInlineCode(d`\`${this.request.input.command}\``)} - ${this.state.error}`;
-      default:
-        assertUnreachable(this.state);
-    }
-  }
+      return {
+        type: "tool_result",
+        id: request.id,
+        result: {
+          status: "error",
+          error: `Error: ${error.message}${durationStr}`,
+        },
+      };
+    });
 
-  renderPreview() {
-    switch (this.state.state) {
-      case "processing": {
-        const formattedOutput = this.formatOutputPreview(this.state.liveOutput);
-        return formattedOutput
-          ? withCode(
-              d`\`\`\`
+  return {
+    promise,
+    abort: () => {
+      aborted = true;
+      stopTickInterval();
+      context.shell.terminate();
+    },
+    progress,
+  };
+}
+
+// ===== In-flight rendering =====
+
+export function renderInFlightSummary(
+  request: UnionToolRequest,
+  _displayContext: DisplayContext,
+  progress?: BashProgress,
+): VDOMNode {
+  const input = request.input as Input;
+  return progress?.startTime !== undefined
+    ? d`⚡⚙️ (${String(Math.floor((Date.now() - progress.startTime) / 1000))}s / 300s) ${withInlineCode(d`\`${input.command}\``)}`
+    : d`⚡⏳ ${withInlineCode(d`\`${input.command}\``)}`;
+}
+
+export function renderInFlightPreview(
+  progress: BashProgress,
+  getDisplayWidth: () => number,
+): VDOMNode {
+  const formattedOutput = formatOutputPreview(
+    progress.liveOutput,
+    getDisplayWidth,
+  );
+  return formattedOutput
+    ? withCode(
+        d`\`\`\`
 ${formattedOutput}
 \`\`\``,
-            )
-          : d``;
-      }
-      case "done": {
-        return renderCompletedPreview(
-          {
-            request: this.request as CompletedToolInfo["request"],
-            result: this.state.result,
-          },
-          this.context,
-        );
-      }
-      case "error":
-        return d`❌ ${this.state.error}`;
-      default:
-        assertUnreachable(this.state);
+      )
+    : d``;
+}
+
+export function renderInFlightDetail(
+  progress: BashProgress,
+  context: RenderContext,
+): VDOMNode {
+  return renderOutputDetail(progress.liveOutput, undefined, context);
+}
+
+function formatOutputPreview(
+  output: OutputLine[],
+  getDisplayWidth: () => number,
+): string {
+  let formattedOutput = "";
+  let currentStream: "stdout" | "stderr" | null = null;
+  const lastTenLines = output.slice(-10);
+
+  for (const line of lastTenLines) {
+    if (currentStream !== line.stream) {
+      formattedOutput += line.stream === "stdout" ? "stdout:\n" : "stderr:\n";
+      currentStream = line.stream;
     }
+    const displayWidth = getDisplayWidth() - 5;
+    const displayText =
+      line.text.length > displayWidth
+        ? line.text.substring(0, displayWidth) + "..."
+        : line.text;
+    formattedOutput += displayText + "\n";
   }
 
-  renderDetail(): VDOMNode {
-    const renderContext: RenderContext = {
-      getDisplayWidth: this.context.getDisplayWidth.bind(this.context),
-      nvim: this.context.nvim,
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-      options: this.context.options,
-    };
-
-    switch (this.state.state) {
-      case "processing": {
-        return renderOutputDetail(
-          this.state.liveOutput,
-          undefined,
-          renderContext,
-        );
-      }
-      case "done": {
-        return renderCompletedDetail(
-          {
-            request: this.request as CompletedToolInfo["request"],
-            result: this.state.result,
-          },
-          renderContext,
-        );
-      }
-      case "error":
-        return d`command: ${withInlineCode(d`\`${this.request.input.command}\``)}\n❌ ${this.state.error}`;
-      default:
-        assertUnreachable(this.state);
-    }
-  }
+  return formattedOutput;
 }
 
 export function renderCompletedSummary(info: CompletedToolInfo): VDOMNode {

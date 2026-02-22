@@ -4,8 +4,15 @@ import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
-import type { Nvim } from "../nvim/nvim-node";
-import type { GenericToolRequest, StaticTool, ToolName } from "./types.ts";
+
+import type {
+  GenericToolRequest,
+  ToolName,
+  ToolInvocation,
+  DisplayContext,
+  ToolRequest as UnionToolRequest,
+} from "./types.ts";
+import type { ThreadManager } from "./thread-manager.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
@@ -18,548 +25,363 @@ import type { CompletedToolInfo } from "./types.ts";
 
 export type ForEachElement = string & { __forEachElement: true };
 
-export type Msg =
-  | {
-      type: "foreach-subagent-created";
-      result: Result<ThreadId>;
-      element: ForEachElement;
-    }
-  | {
-      type: "subagent-completed";
-      threadId: ThreadId;
-      result: Result<string>;
-    }
-  | {
-      type: "abort";
+export type SpawnForeachElementProgress =
+  | { status: "pending" }
+  | { status: "running"; threadId: ThreadId }
+  | { status: "completed"; threadId?: ThreadId; result: Result<string> };
+
+export type SpawnForeachProgress = {
+  elements: Array<{
+    element: ForEachElement;
+    state: SpawnForeachElementProgress;
+  }>;
+};
+
+export function execute(
+  request: ToolRequest,
+  context: {
+    threadManager: ThreadManager;
+    threadId: ThreadId;
+    maxConcurrentSubagents: number;
+    requestRender: () => void;
+  },
+): ToolInvocation & { progress: SpawnForeachProgress } {
+  const validationResult = validateInput(
+    request.input as Record<string, unknown>,
+  );
+
+  if (validationResult.status === "error") {
+    const errorResult: ProviderToolResult = {
+      type: "tool_result",
+      id: request.id,
+      result: { status: "error", error: validationResult.error },
     };
-
-type ElementState =
-  | {
-      status: "pending";
-    }
-  | {
-      status: "spawning";
-    }
-  | {
-      status: "running";
-      threadId: ThreadId;
-    }
-  | {
-      status: "completed";
-      threadId?: ThreadId;
-      result: Result<string>;
+    return {
+      promise: Promise.resolve(errorResult),
+      abort: () => {},
+      progress: { elements: [] },
     };
+  }
 
-export type State =
-  | {
-      state: "running";
-      elements: Array<{
-        element: ForEachElement;
-        state: ElementState;
-      }>;
-    }
-  | {
-      state: "done";
-      result: ProviderToolResult;
-    };
+  const input = validationResult.value;
+  const progress: SpawnForeachProgress = {
+    elements: input.elements.map((element) => ({
+      element,
+      state: { status: "pending" as const },
+    })),
+  };
 
-export class SpawnForeachTool implements StaticTool {
-  toolName = "spawn_foreach" as const;
-  public state: State;
-  public aborted: boolean = false;
+  const abortController = { aborted: false };
 
-  constructor(
-    public request: ToolRequest,
-    public context: {
-      nvim: Nvim;
-      dispatch: Dispatch<RootMsg>;
-      chat: Chat;
-      threadId: ThreadId;
-      myDispatch: Dispatch<Msg>;
-      maxConcurrentSubagents: number;
-    },
-  ) {
-    // Validate the input first
-    const validationResult = validateInput(
-      this.request.input as Record<string, unknown>,
-    );
-    if (validationResult.status === "error") {
-      // If validation fails, initialize with error state
-      this.state = {
-        state: "done",
+  const processElement = async (
+    entry: SpawnForeachProgress["elements"][0],
+    threadType: ThreadType,
+    contextFiles: UnresolvedFilePath[],
+  ): Promise<void> => {
+    if (abortController.aborted) return;
+
+    const enhancedPrompt = `${input.prompt}\n\nYou are one of several agents working in parallel on this prompt. Your task is to complete this prompt for this specific case:\n\n${entry.element}`;
+
+    try {
+      entry.state = { status: "running", threadId: "" as ThreadId };
+      context.requestRender();
+
+      const threadId = await context.threadManager.spawnThread({
+        parentThreadId: context.threadId,
+        prompt: enhancedPrompt,
+        threadType,
+        ...(contextFiles.length > 0 ? { contextFiles } : {}),
+      });
+
+      entry.state = { status: "running", threadId };
+      context.requestRender();
+
+      const result = await context.threadManager.waitForThread(threadId);
+
+      entry.state = { status: "completed", threadId, result };
+      context.requestRender();
+    } catch (e) {
+      entry.state = {
+        status: "completed",
         result: {
-          type: "tool_result",
-          id: this.request.id,
-          result: {
-            status: "error",
-            error: validationResult.error,
-          },
+          status: "error",
+          error: e instanceof Error ? e.message : String(e),
         },
       };
-      return;
+      context.requestRender();
     }
+  };
 
-    const input = validationResult.value;
-    this.state = {
-      state: "running",
-      elements: input.elements.map((element) => ({
-        element,
-        state: { status: "pending" },
-      })),
-    };
+  const promise = (async (): Promise<ProviderToolResult> => {
+    try {
+      const threadType: ThreadType =
+        input.agentType === "fast" ? "subagent_fast" : "subagent_default";
+      const contextFiles = input.contextFiles || [];
+      const maxConcurrent = context.maxConcurrentSubagents;
 
-    // Start the process of spawning foreach subagents
-    setTimeout(() => {
-      this.startNextBatch();
-    });
-  }
+      // Slot-based concurrency: start next element as soon as any slot opens
+      let nextIdx = 0;
+      const inFlight = new Set<Promise<void>>();
 
-  private startNextBatch(): void {
-    if (this.aborted) return;
-    if (this.state.state !== "running") {
-      return;
-    }
+      const startNext = (): void => {
+        if (nextIdx >= progress.elements.length || abortController.aborted)
+          return;
+        const entry = progress.elements[nextIdx++];
+        const p = processElement(entry, threadType, contextFiles).then(() => {
+          inFlight.delete(p);
+        });
+        inFlight.add(p);
+      };
 
-    const maxConcurrent = this.context.maxConcurrentSubagents;
-    const currentRunning = this.state.elements.filter(
-      (el) => el.state.status === "running" || el.state.status === "spawning",
-    ).length;
-    const pendingElements = this.state.elements.filter(
-      (el) => el.state.status === "pending",
-    );
+      // Fill initial slots
+      while (
+        nextIdx < progress.elements.length &&
+        inFlight.size < maxConcurrent
+      ) {
+        startNext();
+      }
 
-    const slotsAvailable = maxConcurrent - currentRunning;
-
-    if (slotsAvailable <= 0 || pendingElements.length === 0) {
-      return;
-    }
-
-    // Start as many subagents as we have slots and pending elements
-    const elementsToStart = pendingElements.slice(0, slotsAvailable);
-
-    for (const elementWrapper of elementsToStart) {
-      // Mark element as spawning
-      elementWrapper.state = { status: "spawning" };
-      this.spawnSubagentForElement(elementWrapper.element);
-    }
-  }
-
-  private spawnSubagentForElement(element: ForEachElement): void {
-    if (this.state.state !== "running") {
-      return;
-    }
-
-    // Re-validate input to get proper typing
-    const validationResult = validateInput(
-      this.request.input as Record<string, unknown>,
-    );
-    if (validationResult.status === "error") {
-      this.context.nvim.logger.error(
-        `Input validation failed: ${validationResult.error}`,
-      );
-      return;
-    }
-
-    const input = validationResult.value;
-    const enhancedPrompt = `${input.prompt}
-
-You are one of several agents working in parallel on this prompt. Your task is to complete this prompt for this specific case:
-
-${element}`;
-
-    const contextFiles = input.contextFiles || [];
-    const threadType: ThreadType =
-      input.agentType === "fast" ? "subagent_fast" : "subagent_default";
-
-    this.context.dispatch({
-      type: "chat-msg",
-      msg: {
-        type: "spawn-subagent-thread",
-        parentThreadId: this.context.threadId,
-        spawnToolRequestId: this.request.id,
-        inputMessages: [{ type: "system", text: enhancedPrompt }],
-        threadType,
-        contextFiles,
-        foreachElement: element,
-      },
-    });
-  }
-
-  isDone(): boolean {
-    return this.state.state === "done";
-  }
-
-  isPendingUserAction(): boolean {
-    if (this.state.state !== "running") return false;
-    for (const el of this.state.elements) {
-      if (el.state.status === "running") {
-        if (this.context.chat.threadHasPendingApprovals(el.state.threadId)) {
-          return true;
+      // As each completes, start the next
+      while (inFlight.size > 0) {
+        await Promise.race(inFlight);
+        if (!abortController.aborted) {
+          startNext();
         }
       }
-    }
-    return false;
-  }
 
-  abort(): ProviderToolResult {
-    if (this.state.state === "done") {
-      return this.getToolResult();
-    }
-
-    this.aborted = true;
-
-    const result: ProviderToolResult = {
-      type: "tool_result",
-      id: this.request.id,
-      result: {
-        status: "error",
-        error: "Request was aborted by the user.",
-      },
-    };
-
-    this.state = {
-      state: "done",
-      result,
-    };
-
-    return result;
-  }
-
-  update(msg: Msg): void {
-    switch (msg.type) {
-      case "foreach-subagent-created":
-        this.handleForeachSubagentCreated(msg);
-        return;
-
-      case "subagent-completed":
-        this.handleSubagentCompleted(msg);
-        return;
-
-      case "abort":
-        if (this.state.state === "done") {
-          return;
-        }
-        this.state = {
-          state: "done",
-          result: {
-            type: "tool_result",
-            id: this.request.id,
-            result: {
-              status: "error",
-              error: "Foreach sub-agent execution was aborted",
-            },
-          },
-        };
-        return;
-
-      default:
-        assertUnreachable(msg);
-    }
-  }
-
-  private handleForeachSubagentCreated(msg: {
-    result: Result<ThreadId>;
-    element: ForEachElement;
-  }): void {
-    if (this.state.state !== "running") {
-      return;
-    }
-
-    const elementWrapper = this.state.elements.find(
-      (el) => el.element === msg.element,
-    );
-
-    if (!elementWrapper) {
-      this.context.nvim.logger.error(
-        `Received subagent-created for unknown element: ${msg.element}`,
-      );
-      return;
-    }
-
-    switch (msg.result.status) {
-      case "ok":
-        elementWrapper.state = {
-          status: "running",
-          threadId: msg.result.value,
-        };
-        break;
-
-      case "error":
-        elementWrapper.state = {
-          status: "completed",
+      if (abortController.aborted) {
+        return {
+          type: "tool_result",
+          id: request.id,
           result: {
             status: "error",
-            error: `Failed to create sub-agent thread: ${msg.result.error}`,
+            error: "Foreach sub-agent execution was aborted",
           },
         };
-        // Try to start next batch
-        setTimeout(() => this.startNextBatch());
-        break;
-    }
-  }
-
-  private handleSubagentCompleted(msg: {
-    threadId: ThreadId;
-    result: Result<string>;
-  }): void {
-    if (this.state.state !== "running") {
-      return;
-    }
-
-    // Find the element and update its state
-    const elementWrapper = this.state.elements.find(
-      (el) =>
-        el.state.status == "running" && el.state.threadId === msg.threadId,
-    );
-    if (elementWrapper) {
-      elementWrapper.state = {
-        status: "completed",
-        threadId: msg.threadId,
-        result: msg.result,
-      };
-    }
-
-    // Check if all subagents are done
-    const allCompleted = this.state.elements.every(
-      (el) => el.state.status === "completed",
-    );
-    const anyPending = this.state.elements.some(
-      (el) => el.state.status === "pending",
-    );
-
-    if (allCompleted) {
-      // All done, transition to done state
-      this.state = {
-        state: "done",
-        result: this.buildResult(),
-      };
-    } else if (anyPending) {
-      // Start next batch if there are pending elements
-      setTimeout(() => this.startNextBatch());
-    }
-  }
-
-  private buildResult(): ProviderToolResult {
-    if (this.state.state !== "running") {
-      throw new Error("buildResult called when not in running state");
-    }
-
-    const completedElements = this.state.elements.filter(
-      (el) => el.state.status === "completed",
-    );
-    const successful = completedElements.filter(
-      (el) =>
-        el.state.status === "completed" && el.state.result.status === "ok",
-    );
-    const failed = completedElements.filter(
-      (el) =>
-        el.state.status === "completed" && el.state.result.status === "error",
-    );
-
-    let resultText = `Foreach subagent execution completed:\n\n`;
-    resultText += `Total elements: ${this.state.elements.length}\n`;
-    resultText += `Successful: ${successful.length}\n`;
-    resultText += `Failed: ${failed.length}\n\n`;
-
-    // Include element -> threadId mappings for detail view navigation
-    resultText += `ElementThreads:\n`;
-    for (const item of completedElements) {
-      if (item.state.status === "completed" && item.state.threadId) {
-        const status = item.state.result.status === "ok" ? "ok" : "error";
-        resultText += `${item.element}::${item.state.threadId}::${status}\n`;
       }
-    }
-    resultText += `\n`;
 
-    if (successful.length > 0) {
-      resultText += `Successful results:\n`;
-      for (const item of successful) {
-        const result =
-          item.state.status === "completed" && item.state.result.status === "ok"
-            ? item.state.result.value
-            : "";
-        resultText += `- ${item.element}: ${result}\n`;
-      }
-      resultText += `\n`;
-    }
-
-    if (failed.length > 0) {
-      resultText += `Failed results:\n`;
-      for (const item of failed) {
-        const error =
-          item.state.status === "completed" &&
-          item.state.result.status === "error"
-            ? item.state.result.error
-            : "";
-        resultText += `- ${item.element}: ${error}\n`;
-      }
-    }
-
-    return {
-      type: "tool_result",
-      id: this.request.id,
-      result: {
-        status: "ok",
-        value: [
-          {
-            type: "text",
-            text: resultText,
-          },
-        ],
-      },
-    };
-  }
-
-  getToolResult(): ProviderToolResult {
-    if (this.state.state !== "done") {
-      const completed = this.state.elements.filter(
-        (el) => el.state.status === "completed",
-      ).length;
-      const total = this.state.elements.length;
-      const running = this.state.elements.filter(
-        (el) => el.state.status === "running" || el.state.status === "spawning",
-      ).length;
-
+      return buildForeachResult(request.id, progress);
+    } catch (e) {
       return {
         type: "tool_result",
-        id: this.request.id,
+        id: request.id,
         result: {
-          status: "ok",
-          value: [
-            {
-              type: "text",
-              text: `Foreach subagents progress: ${completed}/${total} completed, ${running} running...`,
-            },
-          ],
+          status: "error",
+          error: e instanceof Error ? e.message : String(e),
         },
       };
     }
+  })();
 
-    return this.state.result;
-  }
-
-  private renderElementWithThread(element: ForEachElement, threadId: ThreadId) {
-    const summary = this.context.chat.getThreadSummary(threadId);
-
-    let statusText: string;
-    switch (summary.status.type) {
-      case "missing":
-        statusText = `  - ${element}: ❓ not found`;
-        break;
-
-      case "pending":
-        statusText = `  - ${element}: ⏳ initializing`;
-        break;
-
-      case "running":
-        statusText = `  - ${element}: ⏳ ${summary.status.activity}`;
-        break;
-
-      case "stopped":
-        statusText = `  - ${element}: ⏹️ stopped (${summary.status.reason})`;
-        break;
-
-      case "yielded": {
-        const lineCount = summary.status.response.split("\n").length;
-        statusText = `  - ${element}: ✅ ${lineCount.toString()} lines`;
-        break;
-      }
-
-      case "error": {
-        const truncatedError =
-          summary.status.message.length > 50
-            ? summary.status.message.substring(0, 47) + "..."
-            : summary.status.message;
-        statusText = `  - ${element}: ❌ error: ${truncatedError}`;
-        break;
-      }
-
-      default:
-        return assertUnreachable(summary.status);
-    }
-
-    const pendingApprovals = renderPendingApprovals(
-      this.context.chat,
-      threadId,
-    );
-    return withBindings(
-      d`${statusText}\n${pendingApprovals ? d`${pendingApprovals}` : d``}`,
-      {
-        "<CR>": () => {
-          this.context.dispatch({
-            type: "chat-msg",
-            msg: {
-              type: "select-thread",
-              id: threadId,
-            },
-          });
-        },
-      },
-    );
-  }
-
-  renderSummary() {
-    // Re-validate input to get proper typing
-    const validationResult = validateInput(
-      this.request.input as Record<string, unknown>,
-    );
-    const agentTypeText =
-      validationResult.status === "ok" &&
-      validationResult.value.agentType &&
-      validationResult.value.agentType !== "default"
-        ? ` (${validationResult.value.agentType})`
-        : "";
-
-    switch (this.state.state) {
-      case "running": {
-        const completed = this.state.elements.filter(
-          (el) => el.state.status === "completed",
-        ).length;
-        const total = this.state.elements.length;
-
-        const elementViews = this.state.elements.map((elementWrapper) => {
-          const element = elementWrapper.element;
-          const state = elementWrapper.state;
-
-          switch (state.status) {
-            case "completed": {
-              const status = state.result.status === "ok" ? "✅" : "❌";
-              if (state.threadId) {
-                return this.renderElementWithThread(element, state.threadId);
-              } else {
-                return d`  - ${element}: ${status}\n`;
-              }
-            }
-            case "running": {
-              return this.renderElementWithThread(element, state.threadId);
-            }
-            case "spawning": {
-              return d`  - ${element}: 🚀\n`;
-            }
-            case "pending": {
-              return d`  - ${element}: ⏸️\n`;
-            }
-            default:
-              return assertUnreachable(state);
-          }
-        });
-
-        return d`🤖⏳ Foreach subagents${agentTypeText} (${completed.toString()}/${total.toString()}):
-${elementViews}`;
-      }
-
-      case "done":
-        return renderCompletedSummary(
-          {
-            request: this.request as CompletedToolInfo["request"],
-            result: this.state.result,
-          },
-          this.context.dispatch,
-        );
-    }
-  }
+  return {
+    promise,
+    abort: () => {
+      abortController.aborted = true;
+    },
+    progress,
+  };
 }
 
+function buildForeachResult(
+  requestId: ToolRequest["id"],
+  progress: SpawnForeachProgress,
+): ProviderToolResult {
+  const completedElements = progress.elements.filter(
+    (el) => el.state.status === "completed",
+  );
+  const successful = completedElements.filter(
+    (el) => el.state.status === "completed" && el.state.result.status === "ok",
+  );
+  const failed = completedElements.filter(
+    (el) =>
+      el.state.status === "completed" && el.state.result.status === "error",
+  );
+
+  let resultText = `Foreach subagent execution completed:\n\n`;
+  resultText += `Total elements: ${progress.elements.length}\n`;
+  resultText += `Successful: ${successful.length}\n`;
+  resultText += `Failed: ${failed.length}\n\n`;
+
+  resultText += `ElementThreads:\n`;
+  for (const item of completedElements) {
+    if (item.state.status === "completed" && item.state.threadId) {
+      const status = item.state.result.status === "ok" ? "ok" : "error";
+      resultText += `${item.element}::${item.state.threadId}::${status}\n`;
+    }
+  }
+  resultText += `\n`;
+
+  if (successful.length > 0) {
+    resultText += `Successful results:\n`;
+    for (const item of successful) {
+      const result =
+        item.state.status === "completed" && item.state.result.status === "ok"
+          ? item.state.result.value
+          : "";
+      resultText += `- ${item.element}: ${result}\n`;
+    }
+    resultText += `\n`;
+  }
+
+  if (failed.length > 0) {
+    resultText += `Failed results:\n`;
+    for (const item of failed) {
+      const error =
+        item.state.status === "completed" &&
+        item.state.result.status === "error"
+          ? item.state.result.error
+          : "";
+      resultText += `- ${item.element}: ${error}\n`;
+    }
+  }
+
+  return {
+    type: "tool_result",
+    id: requestId,
+    result: {
+      status: "ok",
+      value: [{ type: "text", text: resultText }],
+    },
+  };
+}
+
+export function renderInFlightSummary(
+  request: UnionToolRequest,
+  _displayContext: DisplayContext,
+  progress?: SpawnForeachProgress,
+): VDOMNode {
+  const input = request.input as Input;
+  const agentTypeText =
+    input.agentType && input.agentType !== "default"
+      ? ` (${input.agentType})`
+      : "";
+
+  if (!progress || progress.elements.length === 0) {
+    return d`🤖⚙️ Foreach subagents${agentTypeText}: preparing...`;
+  }
+
+  const completed = progress.elements.filter(
+    (el) => el.state.status === "completed",
+  ).length;
+  const total = progress.elements.length;
+
+  const elementViews = progress.elements.map((entry) => {
+    switch (entry.state.status) {
+      case "completed": {
+        const status = entry.state.result.status === "ok" ? "✅" : "❌";
+        return d`  - ${entry.element}: ${status}\n`;
+      }
+      case "running":
+        return d`  - ${entry.element}: ⏳\n`;
+      case "pending":
+        return d`  - ${entry.element}: ⏸️\n`;
+      default:
+        return assertUnreachable(entry.state);
+    }
+  });
+
+  return d`🤖⏳ Foreach subagents${agentTypeText} (${completed.toString()}/${total.toString()}):
+${elementViews}`;
+}
+
+export function renderInFlightPreview(
+  _request: UnionToolRequest,
+  progress: SpawnForeachProgress | undefined,
+  context: {
+    dispatch: Dispatch<RootMsg>;
+    chat?: Chat;
+  },
+): VDOMNode {
+  if (!context.chat || !progress || progress.elements.length === 0) {
+    return d``;
+  }
+
+  const elementViews = progress.elements.map((entry) => {
+    switch (entry.state.status) {
+      case "completed": {
+        const status = entry.state.result.status === "ok" ? "✅" : "❌";
+        if (entry.state.threadId) {
+          return withBindings(d`  - ${entry.element}: ${status}\n`, {
+            "<CR>": () =>
+              context.dispatch({
+                type: "chat-msg",
+                msg: {
+                  type: "select-thread",
+                  id:
+                    entry.state.status === "completed"
+                      ? entry.state.threadId!
+                      : ("" as ThreadId),
+                },
+              }),
+          });
+        }
+        return d`  - ${entry.element}: ${status}\n`;
+      }
+      case "running": {
+        if (!entry.state.threadId) {
+          return d`  - ${entry.element}: 🚀\n`;
+        }
+        const summary = context.chat!.getThreadSummary(entry.state.threadId);
+        let statusText: string;
+        switch (summary.status.type) {
+          case "missing":
+            statusText = "❓ not found";
+            break;
+          case "pending":
+            statusText = "⏳ initializing";
+            break;
+          case "running":
+            statusText = `⏳ ${summary.status.activity}`;
+            break;
+          case "stopped":
+            statusText = `⏹️ stopped (${summary.status.reason})`;
+            break;
+          case "yielded": {
+            const lineCount = summary.status.response.split("\n").length;
+            statusText = `✅ ${lineCount.toString()} lines`;
+            break;
+          }
+          case "error": {
+            const truncatedError =
+              summary.status.message.length > 50
+                ? summary.status.message.substring(0, 47) + "..."
+                : summary.status.message;
+            statusText = `❌ error: ${truncatedError}`;
+            break;
+          }
+          default:
+            return assertUnreachable(summary.status);
+        }
+        const pendingApprovals = renderPendingApprovals(
+          context.chat!,
+          entry.state.threadId,
+        );
+        return withBindings(
+          d`  - ${entry.element}: ${statusText}\n${pendingApprovals ? d`${pendingApprovals}` : d``}`,
+          {
+            "<CR>": () =>
+              context.dispatch({
+                type: "chat-msg",
+                msg: {
+                  type: "select-thread",
+                  id:
+                    entry.state.status === "running"
+                      ? entry.state.threadId
+                      : ("" as ThreadId),
+                },
+              }),
+          },
+        );
+      }
+      case "pending":
+        return d`  - ${entry.element}: ⏸️\n`;
+      default:
+        return assertUnreachable(entry.state);
+    }
+  });
+
+  return d`${elementViews}`;
+}
 export function renderCompletedSummary(
   info: CompletedToolInfo,
   _dispatch: Dispatch<RootMsg>,

@@ -8,7 +8,6 @@ import type { ToolName } from "./types";
 import { MockProvider } from "../providers/mock";
 import type { Row0Indexed } from "../nvim/window";
 import { pollUntil } from "../utils/async.ts";
-import { BashCommandTool } from "./bashCommand.ts";
 import { spawnSync } from "child_process";
 
 describe("node/tools/bashCommand.test.ts", () => {
@@ -265,17 +264,13 @@ describe("node/tools/bashCommand.test.ts", () => {
 
       const pos = await driver.assertDisplayBufferContains("⚡⚙️ (");
 
-      // Press 't' to terminate the command
+      // Press 't' to abort the command
       await driver.triggerDisplayBufferKey(pos, "t");
 
-      // Verify that the command was terminated
-      await driver.assertDisplayBufferContains("terminated by signal SIGTERM");
-
-      // Ensure the command prompt is updated to show completion
+      // Verify that the command was aborted
       await driver.assertDisplayBufferContains(
-        "⚡❌ `sleep 30` - Terminated by SIGTERM",
+        "⚡❌ `sleep 30` - Request was aborted by the user.",
       );
-      await driver.assertDisplayBufferContains("```");
     });
   });
 
@@ -1752,13 +1747,15 @@ describe("bash command output logging", () => {
         if (mode.type !== "tool_use") {
           throw new Error(`Expected tool_use mode, got ${mode.type}`);
         }
-        const tool = mode.activeTools.get(
+        const entry = mode.activeTools.get(
           "test-bash-sigterm" as ToolRequestId,
-        ) as BashCommandTool;
-        expect(tool).toBeDefined();
+        );
+        if (!entry) {
+          throw new Error("Expected tool entry");
+        }
 
-        // Dispatch terminate message
-        tool.update({ type: "terminate" });
+        // Abort the tool execution
+        entry.handle.abort();
 
         // Wait for process to be gone
         await pollUntil(
@@ -1770,8 +1767,10 @@ describe("bash command output logging", () => {
           { timeout: 3000 },
         );
 
-        // Verify the tool shows SIGTERM message
-        await driver.assertDisplayBufferContains("SIGTERM");
+        // Verify the request was aborted
+        await driver.assertDisplayBufferContains(
+          "Request was aborted by the user.",
+        );
       },
     );
   });
@@ -1849,13 +1848,15 @@ describe("bash command output logging", () => {
         if (mode.type !== "tool_use") {
           throw new Error(`Expected tool_use mode, got ${mode.type}`);
         }
-        const tool = mode.activeTools.get(
+        const entry = mode.activeTools.get(
           "test-bash-sigkill" as ToolRequestId,
-        ) as BashCommandTool;
-        expect(tool).toBeDefined();
+        );
+        if (!entry) {
+          throw new Error("Expected tool entry");
+        }
 
-        // Dispatch terminate message
-        tool.update({ type: "terminate" });
+        // Abort the invocation
+        entry.handle.abort();
 
         // Process should survive SIGTERM (for ~1 second) then die from SIGKILL
         // Wait a bit and verify process is still running (SIGTERM ignored)
@@ -1872,8 +1873,10 @@ describe("bash command output logging", () => {
           { timeout: 5000 },
         );
 
-        // Verify the tool shows SIGKILL message
-        await driver.assertDisplayBufferContains("SIGKILL");
+        // Verify the request was aborted
+        await driver.assertDisplayBufferContains(
+          "Request was aborted by the user.",
+        );
       },
     );
   });
@@ -1966,13 +1969,13 @@ wait
         if (mode.type !== "tool_use") {
           throw new Error(`Expected tool_use mode, got ${mode.type}`);
         }
-        const tool = mode.activeTools.get(
-          "test-bash-tree" as ToolRequestId,
-        ) as BashCommandTool;
-        expect(tool).toBeDefined();
+        const entry = mode.activeTools.get("test-bash-tree" as ToolRequestId);
+        if (!entry) {
+          throw new Error("Expected tool entry");
+        }
 
-        // Dispatch terminate message
-        tool.update({ type: "terminate" });
+        // Abort the command
+        entry.handle.abort();
 
         // Wait for ALL processes to be gone
         await pollUntil(
@@ -1990,8 +1993,10 @@ wait
           { timeout: 5000 },
         );
 
-        // Verify the tool shows termination message
-        await driver.assertDisplayBufferContains("SIGTERM");
+        // Verify the request was aborted
+        await driver.assertDisplayBufferContains(
+          "Request was aborted by the user.",
+        );
       },
     );
   });

@@ -16,10 +16,8 @@ import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d, type VDOMNode } from "../tea/view.ts";
 import type { HomeDir } from "../utils/files.ts";
 import type {
-  ToolMsg,
   ToolRequestId,
   ToolRequest,
-  ToolManagerToolMsg,
   CompletedToolInfo,
   DisplayContext,
 } from "./types.ts";
@@ -35,78 +33,23 @@ import {
 } from "./tool-registry.ts";
 import type { ThreadId, ThreadType } from "../chat/types.ts";
 import { isMCPTool, type MCPToolManager } from "./mcp/manager.ts";
+import * as MCPTool from "./mcp/tool.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
-export type { Tool, ToolRequestId, CompletedToolInfo } from "./types.ts";
+export type { ToolRequestId, CompletedToolInfo } from "./types.ts";
 
 export type StaticToolMap = {
-  get_file: {
-    controller: GetFile.GetFileTool;
-    input: GetFile.Input;
-    msg: GetFile.Msg;
-    spec: typeof GetFile.spec;
-  };
-
-  hover: {
-    controller: Hover.HoverTool;
-    input: Hover.Input;
-    msg: Hover.Msg;
-    spec: typeof Hover.spec;
-  };
-  find_references: {
-    controller: FindReferences.FindReferencesTool;
-    input: FindReferences.Input;
-    msg: FindReferences.Msg;
-    spec: typeof FindReferences.spec;
-  };
-  diagnostics: {
-    controller: Diagnostics.DiagnosticsTool;
-    input: Diagnostics.Input;
-    msg: Diagnostics.Msg;
-    spec: typeof Diagnostics.spec;
-  };
-  bash_command: {
-    controller: BashCommand.BashCommandTool;
-    input: BashCommand.Input;
-    msg: BashCommand.Msg;
-    spec: typeof BashCommand.spec;
-  };
-  thread_title: {
-    controller: ThreadTitle.ThreadTitleTool;
-    input: ThreadTitle.Input;
-    msg: ThreadTitle.Msg;
-    spec: typeof ThreadTitle.spec;
-  };
-  spawn_subagent: {
-    controller: SpawnSubagent.SpawnSubagentTool;
-    input: SpawnSubagent.Input;
-    msg: SpawnSubagent.Msg;
-    spec: typeof SpawnSubagent.spec;
-  };
-  spawn_foreach: {
-    controller: SpawnForeach.SpawnForeachTool;
-    input: SpawnForeach.Input;
-    msg: SpawnForeach.Msg;
-    spec: typeof SpawnForeach.spec;
-  };
-  wait_for_subagents: {
-    controller: WaitForSubagents.WaitForSubagentsTool;
-    input: WaitForSubagents.Input;
-    msg: WaitForSubagents.Msg;
-    spec: typeof WaitForSubagents.spec;
-  };
-  yield_to_parent: {
-    controller: YieldToParent.YieldToParentTool;
-    input: YieldToParent.Input;
-    msg: YieldToParent.Msg;
-    spec: typeof YieldToParent.spec;
-  };
-  edl: {
-    controller: Edl.EdlTool;
-    input: Edl.Input;
-    msg: Edl.Msg;
-    spec: typeof Edl.spec;
-  };
+  get_file: { input: GetFile.Input };
+  hover: { input: Hover.Input };
+  find_references: { input: FindReferences.Input };
+  diagnostics: { input: Diagnostics.Input };
+  bash_command: { input: BashCommand.Input };
+  thread_title: { input: ThreadTitle.Input };
+  spawn_subagent: { input: SpawnSubagent.Input };
+  spawn_foreach: { input: SpawnForeach.Input };
+  wait_for_subagents: { input: WaitForSubagents.Input };
+  yield_to_parent: { input: YieldToParent.Input };
+  edl: { input: Edl.Input };
 };
 
 export type StaticToolRequest = {
@@ -117,25 +60,11 @@ export type StaticToolRequest = {
   };
 }[keyof StaticToolMap];
 
-export function wrapStaticToolMsg(
-  msg: StaticToolMap[keyof StaticToolMap]["msg"],
-): ToolMsg {
-  return msg as unknown as ToolMsg;
-}
-
-export function unwrapStaticToolMsg<
-  StaticToolName extends keyof StaticToolMap = keyof StaticToolMap,
->(msg: ToolMsg): StaticToolMap[StaticToolName]["msg"] {
-  return msg as unknown as StaticToolMap[StaticToolName]["msg"];
-}
-
-export type Msg =
-  | {
-      type: "init-tool-use";
-      threadId: ThreadId;
-      request: ToolRequest;
-    }
-  | ToolManagerToolMsg;
+export type Msg = {
+  type: "init-tool-use";
+  threadId: ThreadId;
+  request: ToolRequest;
+};
 
 const TOOL_SPEC_MAP: {
   [K in StaticToolName]: ProviderToolSpec;
@@ -193,14 +122,122 @@ type RenderContext = {
   homeDir: HomeDir;
   options: import("../options.ts").MagentaOptions;
   dispatch: Dispatch<RootMsg>;
+  chat?: import("../chat/chat.ts").Chat;
 };
 
 function isError(result: ProviderToolResult): boolean {
   return result.result.status === "error";
 }
 
-function getStatusEmoji(result: ProviderToolResult): string {
-  return isError(result) ? "❌" : "✅";
+export function renderInFlightToolSummary(
+  request: ToolRequest,
+  displayContext: DisplayContext,
+  progress?: unknown,
+): VDOMNode {
+  const toolName = request.toolName as StaticToolName;
+
+  if (isMCPTool(toolName)) {
+    return MCPTool.renderInFlightSummary(
+      request,
+      displayContext,
+      progress as MCPTool.MCPProgress | undefined,
+    );
+  }
+
+  switch (toolName) {
+    case "get_file":
+      return GetFile.renderInFlightSummary(request, displayContext);
+    case "hover":
+      return Hover.renderInFlightSummary(request, displayContext);
+    case "find_references":
+      return FindReferences.renderInFlightSummary(request, displayContext);
+    case "diagnostics":
+      return Diagnostics.renderInFlightSummary(request, displayContext);
+    case "thread_title":
+      return ThreadTitle.renderInFlightSummary(request, displayContext);
+    case "edl":
+      return Edl.renderInFlightSummary(request, displayContext);
+    case "bash_command":
+      return BashCommand.renderInFlightSummary(
+        request,
+        displayContext,
+        progress as BashCommand.BashProgress | undefined,
+      );
+    case "spawn_subagent":
+      return SpawnSubagent.renderInFlightSummary(
+        request,
+        displayContext,
+        progress as SpawnSubagent.SpawnSubagentProgress | undefined,
+      );
+    case "spawn_foreach":
+      return SpawnForeach.renderInFlightSummary(
+        request,
+        displayContext,
+        progress as SpawnForeach.SpawnForeachProgress | undefined,
+      );
+    case "wait_for_subagents":
+      return WaitForSubagents.renderInFlightSummary(
+        request,
+        displayContext,
+        progress as WaitForSubagents.WaitForSubagentsProgress | undefined,
+      );
+    case "yield_to_parent":
+      return YieldToParent.renderInFlightSummary(request, displayContext);
+    default:
+      assertUnreachable(toolName);
+  }
+}
+
+export function renderInFlightToolPreview(
+  request: ToolRequest,
+  progress: unknown,
+  context: RenderContext,
+): VDOMNode {
+  const toolName = request.toolName as StaticToolName;
+  switch (toolName) {
+    case "bash_command":
+      return BashCommand.renderInFlightPreview(
+        progress as BashCommand.BashProgress,
+        context.getDisplayWidth,
+      );
+    case "spawn_subagent":
+      return SpawnSubagent.renderInFlightPreview(
+        request,
+        progress as SpawnSubagent.SpawnSubagentProgress | undefined,
+        context,
+      );
+    case "spawn_foreach":
+      return SpawnForeach.renderInFlightPreview(
+        request,
+        progress as SpawnForeach.SpawnForeachProgress | undefined,
+        context,
+      );
+    case "wait_for_subagents":
+      return WaitForSubagents.renderInFlightPreview(
+        request,
+        progress as WaitForSubagents.WaitForSubagentsProgress | undefined,
+        context,
+      );
+    default:
+      return d``;
+  }
+}
+
+export function renderInFlightToolDetail(
+  request: ToolRequest,
+  progress: unknown,
+  context: RenderContext,
+): VDOMNode {
+  const toolName = request.toolName as StaticToolName;
+  switch (toolName) {
+    case "bash_command":
+      return BashCommand.renderInFlightDetail(
+        progress as BashCommand.BashProgress,
+        context,
+      );
+    default:
+      return d`${JSON.stringify(request.input, null, 2)}`;
+  }
 }
 
 export function renderCompletedToolSummary(
@@ -212,7 +249,7 @@ export function renderCompletedToolSummary(
   const toolName = info.request.toolName as StaticToolName;
 
   if (isMCPTool(toolName)) {
-    return d`🔨${getStatusEmoji(info.result)} MCP tool \`${info.request.toolName}\``;
+    return MCPTool.renderCompletedSummary(info, displayContext);
   }
 
   switch (toolName) {

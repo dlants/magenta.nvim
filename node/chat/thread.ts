@@ -15,15 +15,17 @@ import {
 } from "../tea/view.ts";
 import {
   type ToolRequestId,
-  type Tool,
   type CompletedToolInfo,
   getToolSpecs,
   renderCompletedToolSummary,
   renderCompletedToolPreview,
   renderCompletedToolDetail,
+  renderInFlightToolSummary,
+  renderInFlightToolPreview,
+  renderInFlightToolDetail,
 } from "../tools/toolManager.ts";
 import { createTool, type CreateToolContext } from "../tools/create-tool.ts";
-import type { StaticTool, ToolMsg, ToolName } from "../tools/types.ts";
+import type { ToolInvocation, ToolName, ToolRequest } from "../tools/types.ts";
 import { MCPToolManager } from "../tools/mcp/manager.ts";
 
 import type { Nvim } from "../nvim/nvim-node";
@@ -102,12 +104,6 @@ export type Msg =
       type: "abort";
     }
   | {
-      type: "tool-msg";
-      id: ToolRequestId;
-      toolName: ToolName;
-      msg: ToolMsg;
-    }
-  | {
       type: "context-manager-msg";
       msg: ContextManagerMsg;
     }
@@ -142,13 +138,10 @@ export type Msg =
       msg: AgentMsg;
     }
   | {
-      type: "compact-tool-msg";
-      id: ToolRequestId;
-      toolName: ToolName;
-      msg: ToolMsg;
+      type: "permission-pending-change";
     }
   | {
-      type: "permission-pending-change";
+      type: "tool-progress";
     };
 
 export type ThreadMsg = {
@@ -172,22 +165,22 @@ export type ToolViewState = {
   details: boolean;
 };
 
-/** Map of active tool instances, keyed by tool request ID */
-export type ActiveTools = Map<ToolRequestId, Tool>;
+export type ActiveToolEntry = {
+  handle: ToolInvocation;
+  progress: unknown;
+  toolName: ToolName;
+  request: ToolRequest;
+};
 
 /** Cached lookup maps for tool results */
 export type ToolCache = {
   results: Map<ToolRequestId, ProviderToolResult>;
 };
 
-/** Control flow operations that intercept normal tool processing */
-export type ControlFlowOp = { type: "yield"; response: string };
-
 /** Thread-specific conversation mode (agent status is read directly from agent) */
 export type ConversationMode =
   | { type: "normal" }
-  | { type: "tool_use"; activeTools: Map<ToolRequestId, Tool | StaticTool> }
-  | { type: "control_flow"; operation: ControlFlowOp }
+  | { type: "tool_use"; activeTools: Map<ToolRequestId, ActiveToolEntry> }
   | {
       type: "compacting";
       nextPrompt?: string;
@@ -195,7 +188,7 @@ export type ConversationMode =
       currentChunkIndex: number;
       compactFileIO: InMemoryFileIO;
       compactAgent: Agent;
-      compactActiveTools: Map<ToolRequestId, Tool | StaticTool>;
+      compactActiveTools: Map<ToolRequestId, ActiveToolEntry>;
       compactEdlRegisters: EdlRegisters;
     };
 
@@ -220,6 +213,7 @@ export class Thread {
     toolCache: ToolCache;
     edlRegisters: EdlRegisters;
     outputTokensSinceLastReminder: number;
+    yieldedResponse?: string;
   };
 
   private myDispatch: Dispatch<Msg>;
@@ -383,30 +377,20 @@ export class Thread {
         break;
       }
 
-      case "tool-msg": {
-        const agentStatus = this.agent.getState().status;
-        if (
-          agentStatus.type === "stopped" &&
-          agentStatus.stopReason === "aborted"
-        ) {
-          // we aborted. Any further tool-msg stuff can be ignored
-          return;
-        }
-        this.handleToolMsg(msg.id, msg.msg);
-        const autoRespondResult = this.maybeAutoRespond();
-        // Play chime if tool completed but we didn't autorespond
-        if (autoRespondResult.type !== "did-autorespond") {
-          this.playChimeIfNeeded();
-        }
-        return;
-      }
-
       case "context-manager-msg": {
         this.contextManager.update(msg.msg);
         return;
       }
 
       case "abort": {
+        // Synchronously mark all tool invocations as aborted BEFORE the async
+        // abortAndWait runs. This ensures the abort flag is set before
+        // resolveThreadWaiters can fire (from child thread abort in chat.update).
+        if (this.state.mode.type === "tool_use") {
+          for (const [, entry] of this.state.mode.activeTools) {
+            entry.handle.abort();
+          }
+        }
         this.abortAndWait().catch((e: Error) => {
           this.context.nvim.logger.error(`Error during abort: ${e.message}`);
         });
@@ -475,14 +459,11 @@ export class Thread {
       }
 
       case "permission-pending-change":
+      case "tool-progress":
         // no-op: re-render is triggered by the dispatch itself
         return;
       case "compact-agent-msg":
         this.handleCompactAgentMsg(msg.msg);
-        return;
-
-      case "compact-tool-msg":
-        this.handleCompactToolMsg(msg.id, msg.msg);
         return;
 
       default:
@@ -518,8 +499,7 @@ export class Thread {
       );
     }
 
-    const activeTools = new Map<ToolRequestId, Tool | StaticTool>();
-    let yieldResponse: string | undefined;
+    const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
 
     for (const block of lastMessage.content) {
       if (block.type !== "tool_use") {
@@ -532,15 +512,7 @@ export class Thread {
 
       const request = block.request.value;
 
-      // Check for yield_to_parent
-      if (request.toolName === "yield_to_parent") {
-        yieldResponse = (request.input as { result: string }).result;
-        // Still create the tool so we can track it
-      }
-
-      // Create tool context for createTool
       const toolContext: CreateToolContext = {
-        dispatch: this.context.dispatch,
         mcpToolManager: this.context.mcpToolManager,
         bufferTracker: this.context.bufferTracker,
         getDisplayWidth: this.context.getDisplayWidth,
@@ -550,48 +522,38 @@ export class Thread {
         cwd: this.context.cwd,
         homeDir: this.context.homeDir,
         options: this.context.options,
-        chat: this.context.chat,
         contextManager: this.contextManager,
         threadDispatch: this.myDispatch,
         edlRegisters: this.state.edlRegisters,
         fileIO: this.fileIO,
         shell: this.shell,
+        threadManager: this.context.chat,
+        requestRender: () =>
+          this.context.dispatch({
+            type: "thread-msg",
+            id: this.id,
+            msg: { type: "tool-progress" },
+          }),
       };
 
-      // Create the dispatch function for this tool
-      const toolDispatch = ({
-        id,
-        toolName,
-        msg,
-      }: {
-        id: ToolRequestId;
-        toolName: ToolName;
-        msg: ToolMsg;
-      }) =>
-        this.myDispatch({
-          type: "tool-msg",
-          id,
-          toolName,
-          msg,
-        });
+      const invocation = createTool(request, toolContext);
+      activeTools.set(request.id, {
+        handle: invocation,
+        progress: "progress" in invocation ? invocation.progress : undefined,
+        toolName: request.toolName,
+        request,
+      });
 
-      // Create static tool
-      const tool = createTool(request, toolContext, toolDispatch);
-      activeTools.set(request.id, tool);
+      void invocation.promise.then((result) => {
+        this.state.toolCache.results.set(request.id, result);
+        this.maybeAutoRespond();
+      });
     }
 
-    // Set mode based on whether we found yield_to_parent
-    if (yieldResponse !== undefined) {
-      this.state.mode = {
-        type: "control_flow",
-        operation: { type: "yield", response: yieldResponse },
-      };
-    } else {
-      this.state.mode = {
-        type: "tool_use",
-        activeTools,
-      };
-    }
+    this.state.mode = {
+      type: "tool_use",
+      activeTools,
+    };
 
     const autoRespondResult = this.maybeAutoRespond();
 
@@ -821,7 +783,7 @@ ${chunks[chunkIndex]}
       return;
     }
 
-    const activeTools = new Map<ToolRequestId, Tool | StaticTool>();
+    const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
 
     for (const block of lastMessage.content) {
       if (block.type !== "tool_use" || block.request.status !== "ok") {
@@ -830,7 +792,6 @@ ${chunks[chunkIndex]}
 
       const request = block.request.value;
       const toolContext: CreateToolContext = {
-        dispatch: this.context.dispatch,
         mcpToolManager: this.context.mcpToolManager,
         bufferTracker: this.context.bufferTracker,
         getDisplayWidth: this.context.getDisplayWidth,
@@ -840,64 +801,54 @@ ${chunks[chunkIndex]}
         cwd: this.context.cwd,
         homeDir: this.context.homeDir,
         options: this.context.options,
-        chat: this.context.chat,
         contextManager: this.contextManager,
         threadDispatch: this.myDispatch,
         edlRegisters: mode.compactEdlRegisters,
         fileIO: mode.compactFileIO,
         shell: this.shell,
+        threadManager: this.context.chat,
+        requestRender: () =>
+          this.context.dispatch({
+            type: "thread-msg",
+            id: this.id,
+            msg: { type: "tool-progress" },
+          }),
       };
 
-      const toolDispatch = ({
-        id,
-        toolName,
-        msg,
-      }: {
-        id: ToolRequestId;
-        toolName: ToolName;
-        msg: ToolMsg;
-      }) =>
-        this.myDispatch({
-          type: "compact-tool-msg",
-          id,
-          toolName,
-          msg,
-        });
+      const invocation = createTool(request, toolContext);
+      activeTools.set(request.id, {
+        handle: invocation,
+        progress: "progress" in invocation ? invocation.progress : undefined,
+        toolName: request.toolName,
+        request,
+      });
 
-      const tool = createTool(request, toolContext, toolDispatch);
-      activeTools.set(request.id, tool);
+      void invocation.promise.then((result) => {
+        this.state.toolCache.results.set(request.id, result);
+        this.handleCompactToolCompletion();
+      });
     }
 
     mode.compactActiveTools = activeTools;
   }
 
-  private handleCompactToolMsg(id: ToolRequestId, msg: ToolMsg): void {
+  private handleCompactToolCompletion(): void {
     const mode = this.state.mode;
     if (mode.type !== "compacting") {
       return;
     }
 
-    const tool = mode.compactActiveTools.get(id);
-    if (!tool) {
-      this.context.nvim.logger.error(`Compact tool not found for id ${id}`);
-      return;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    (tool as any).update(msg);
-
     // Check if all compact tools are done
-    for (const [, t] of mode.compactActiveTools) {
-      if (!t.isDone()) return;
+    for (const [, entry] of mode.compactActiveTools) {
+      if (!this.state.toolCache.results.has(entry.request.id)) return;
     }
 
     // All tools done — send results back to compact agent and continue
-    for (const [toolId, t] of mode.compactActiveTools) {
-      mode.compactAgent.toolResult(toolId, {
-        type: "tool_result",
-        id: toolId,
-        result: t.getToolResult().result,
-      });
+    for (const [toolId, entry] of mode.compactActiveTools) {
+      const result = this.state.toolCache.results.get(entry.request.id);
+      if (result) {
+        mode.compactAgent.toolResult(toolId, result);
+      }
     }
     mode.compactActiveTools = new Map();
     mode.compactAgent.continueConversation();
@@ -954,11 +905,7 @@ ${chunks[chunkIndex]}
       return;
     }
 
-    // Reset mode to normal unless in control_flow (e.g. after compact-complete)
-    // where maybeAutoRespond needs to read the operation data
-    if (this.state.mode.type !== "control_flow") {
-      this.state.mode = { type: "normal" };
-    }
+    this.state.mode = { type: "normal" };
 
     // Handle stopped state - check for pending messages
     const autoRespondResult = this.maybeAutoRespond();
@@ -996,27 +943,6 @@ ${chunks[chunkIndex]}
     this.context.nvim.logger.error(error);
   }
 
-  /** Handle a tool message by routing it to the appropriate tool */
-  private handleToolMsg(id: ToolRequestId, msg: ToolMsg): void {
-    const mode = this.state.mode;
-
-    if (mode.type !== "tool_use") {
-      // notifyParent uses setTimeout to dispatch tool messages, so by the time
-      // the callback fires the parent thread may have already moved past
-      // tool_use mode (e.g. after processing the tool result and getting an
-      // end_turn response). This is expected and safe to ignore.
-      return;
-    }
-    const tool = mode.activeTools.get(id);
-    if (!tool) {
-      throw new Error(`Could not find tool with request id ${id}`);
-    }
-
-    // we know that the tool id <-> and msg type match
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    (tool as any).update(msg);
-  }
-
   /** Abort in-progress operations and wait for completion.
    * Returns a promise that resolves when the agent is in a stable state.
    */
@@ -1026,11 +952,17 @@ ${chunks[chunkIndex]}
 
     // If we're in tool_use mode, abort all active tools and insert their results
     if (this.state.mode.type === "tool_use") {
-      for (const [toolId, tool] of this.state.mode.activeTools) {
-        if (!tool.isDone()) {
-          // abort() returns the tool result synchronously
-          const result = tool.abort();
-          this.agent.toolResult(toolId, result);
+      for (const [toolId, entry] of this.state.mode.activeTools) {
+        entry.handle.abort();
+        if (!this.state.toolCache.results.has(toolId)) {
+          this.agent.toolResult(toolId, {
+            type: "tool_result",
+            id: toolId,
+            result: {
+              status: "error",
+              error: "Request was aborted by the user.",
+            },
+          });
         }
       }
 
@@ -1139,7 +1071,7 @@ ${chunks[chunkIndex]}
     const agentStatus = this.agent.getState().status;
 
     // Don't auto-respond if yielded or aborted
-    if (mode.type === "control_flow" && mode.operation.type === "yield") {
+    if (this.state.yieldedResponse !== undefined) {
       return { type: "yielded-to-parent" };
     }
     if (
@@ -1160,43 +1092,23 @@ ${chunks[chunkIndex]}
         id: ToolRequestId;
         result: ProviderToolResult;
       }> = [];
-      let hasAbortedTool = false;
-
-      for (const [toolId, tool] of mode.activeTools) {
-        if (tool.request.toolName === "yield_to_parent") {
+      for (const [toolId, entry] of mode.activeTools) {
+        if (entry.toolName === "yield_to_parent") {
+          this.state.yieldedResponse = (
+            entry.request.input as { result: string }
+          ).result;
           return { type: "yielded-to-parent" };
         }
 
-        if (!tool.isDone()) {
-          // terminate early if we have a blocking tool use
+        const cachedResult = this.state.toolCache.results.get(toolId);
+        if (!cachedResult) {
           return { type: "waiting-for-tool-input" };
         }
 
-        // Check if this tool was aborted
-        if (tool.aborted) {
-          hasAbortedTool = true;
-        }
-
-        // Collect completed tool result
         completedTools.push({
           id: toolId,
-          result: {
-            type: "tool_result",
-            id: toolId,
-            result: tool.getToolResult().result,
-          },
+          result: cachedResult,
         });
-      }
-
-      // If any tool was aborted, send tool results but don't auto-respond
-      if (hasAbortedTool) {
-        for (const { id, result } of completedTools) {
-          this.agent.toolResult(id, result);
-        }
-        // Reset to normal mode (agent status already reflects aborted)
-        this.state.mode = { type: "normal" };
-        this.rebuildToolCache();
-        return { type: "no-action-needed" };
       }
 
       const pendingMessages = this.state.pendingMessages;
@@ -1313,7 +1225,6 @@ ${chunks[chunkIndex]}
     // 1. Agent stopped with end_turn (user needs to respond)
     // 2. We're blocked on a tool use that requires user action
     const agentStatus = this.agent.getState().status;
-    const mode = this.state.mode;
 
     if (
       agentStatus.type === "stopped" &&
@@ -1321,15 +1232,6 @@ ${chunks[chunkIndex]}
     ) {
       this.playChimeSound();
       return;
-    }
-
-    if (mode.type === "tool_use") {
-      for (const [, tool] of mode.activeTools) {
-        if (tool.isPendingUserAction()) {
-          this.playChimeSound();
-          return;
-        }
-      }
     }
   }
 
@@ -1576,16 +1478,14 @@ const renderStatus = (
   agentStatus: AgentStatus,
   mode: ConversationMode,
   latestUsage: Usage | undefined,
+  yieldedResponse: string | undefined,
 ): VDOMNode => {
   // First check mode for thread-specific states
   if (mode.type === "tool_use") {
     return d`Executing tools...`;
   }
-  if (mode.type === "control_flow") {
-    switch (mode.operation.type) {
-      case "yield":
-        return d`↗️ yielded to parent: ${mode.operation.response}`;
-    }
+  if (yieldedResponse !== undefined) {
+    return d`↗️ yielded to parent: ${yieldedResponse}`;
   }
   if (mode.type === "compacting") {
     return d`📦 Compacting thread...`;
@@ -1712,7 +1612,12 @@ ${thread.context.contextManager.view()}`;
   }
 
   const latestUsage = thread.agent.getState().latestUsage;
-  const statusView = renderStatus(agentStatus, mode, latestUsage);
+  const statusView = renderStatus(
+    agentStatus,
+    mode,
+    latestUsage,
+    thread.state.yieldedResponse,
+  );
 
   const contextManagerView = shouldShowContextManager(
     agentStatus,
@@ -1925,20 +1830,38 @@ function renderMessageContent(
           : d``;
 
       // Check if tool is active (still running)
-      const activeTool =
+      const activeEntry =
         thread.state.mode.type === "tool_use" &&
         thread.state.mode.activeTools.get(request.id);
 
-      if (activeTool) {
-        // Active tool - use the tool controller's render methods
-        // Don't add trailing newline - let the message template handle it
+      if (activeEntry) {
+        const displayContext = {
+          cwd: thread.context.cwd,
+          homeDir: thread.context.homeDir,
+        };
+        const renderContext = {
+          getDisplayWidth: thread.context.getDisplayWidth,
+          nvim: thread.context.nvim,
+          cwd: thread.context.cwd,
+          homeDir: thread.context.homeDir,
+          options: thread.context.options,
+          dispatch: thread.context.dispatch,
+          chat: thread.context.chat,
+        };
+
+        const inFlightPreview = renderInFlightToolPreview(
+          activeEntry.request,
+          activeEntry.progress,
+          renderContext,
+        );
+
         return withBindings(
-          d`${activeTool.renderSummary()}${
+          d`${renderInFlightToolSummary(activeEntry.request, displayContext, activeEntry.progress)}${
             showDetails
-              ? d`\n${activeTool.toolName}: ${activeTool.renderDetail ? activeTool.renderDetail() : JSON.stringify(activeTool.request.input, null, 2)}${usageInDetails}`
-              : activeTool.renderPreview
-                ? d`\n${activeTool.renderPreview()}`
-                : ""
+              ? d`\n${renderInFlightToolDetail(activeEntry.request, activeEntry.progress, renderContext)}${usageInDetails}`
+              : inFlightPreview
+                ? d`\n${inFlightPreview}`
+                : d``
           }\n`,
           {
             "<CR>": () =>
@@ -1946,6 +1869,7 @@ function renderMessageContent(
                 type: "toggle-tool-details",
                 toolRequestId: request.id,
               }),
+            t: () => activeEntry.handle.abort(),
           },
         );
       }
