@@ -1681,3 +1681,47 @@ it("followup user message text is visible with context updates", async () => {
     expect(displayText).toMatchSnapshot("followup-with-context-updates");
   });
 });
+it("handles malformed tool_use by sending error tool_result and continuing", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("Please read a file");
+    await driver.send();
+
+    const stream = await driver.mockAnthropic.awaitPendingStream();
+    const toolRequestId = "tool-malformed-1" as ToolRequestId;
+
+    // Stream a malformed get_file tool_use (missing filePath)
+    stream.streamText("Let me read that file.");
+    stream.streamToolUse(toolRequestId, "get_file" as ToolName, {});
+    stream.finishResponse("tool_use");
+
+    // The thread should send an error tool_result and auto-continue
+    const stream2 = await driver.mockAnthropic.awaitPendingStream();
+
+    // Verify the messages sent include the error tool_result
+    const providerMessages = stream2.getProviderMessages();
+    const toolResultMsg = providerMessages.find(
+      (m) =>
+        m.role === "user" && m.content.some((b) => b.type === "tool_result"),
+    );
+    expect(toolResultMsg).toBeDefined();
+    const toolResultBlock = toolResultMsg!.content.find(
+      (b) => b.type === "tool_result",
+    );
+    expect(toolResultBlock).toBeDefined();
+    if (toolResultBlock?.type === "tool_result") {
+      expect(toolResultBlock.result.status).toBe("error");
+    }
+
+    // The agent should be able to recover
+    stream2.respond({
+      stopReason: "end_turn",
+      text: "Sorry, I made an error with that tool call.",
+      toolRequests: [],
+    });
+
+    await driver.assertDisplayBufferContains(
+      "Sorry, I made an error with that tool call.",
+    );
+  });
+});

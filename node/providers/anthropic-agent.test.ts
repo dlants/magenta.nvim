@@ -1249,6 +1249,79 @@ describe("web search result preservation", () => {
     });
   });
 
+  describe("malformed tool_use handling", () => {
+    it("produces error request for tool_use with invalid input", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      await delay(0);
+      agent.continueConversation();
+
+      const stream = await mockClient.awaitStream();
+      // Stream a tool_use with missing required field (filePath)
+      stream.streamToolUse(
+        "tool-malformed" as ToolRequestId,
+        "get_file" as ToolName,
+        {},
+      );
+      stream.finishResponse("tool_use");
+
+      await stream.finalMessage();
+      await delay(0);
+
+      const state = agent.getState();
+      expect(state.messages).toHaveLength(2);
+      const assistantContent = state.messages[1].content;
+      const toolUseBlock = assistantContent.find((b) => b.type === "tool_use");
+      expect(toolUseBlock).toBeDefined();
+      if (toolUseBlock?.type === "tool_use") {
+        expect(toolUseBlock.request.status).toBe("error");
+      }
+    });
+
+    it("accepts error tool_result for malformed tool_use block", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      await delay(0);
+      agent.continueConversation();
+
+      const stream = await mockClient.awaitStream();
+      const toolUseId = "tool-malformed" as ToolRequestId;
+      stream.streamToolUse(toolUseId, "get_file" as ToolName, {});
+      stream.finishResponse("tool_use");
+
+      await stream.finalMessage();
+      await delay(0);
+
+      // Send error tool_result for the malformed block
+      agent.toolResult(toolUseId, {
+        type: "tool_result",
+        id: toolUseId,
+        result: {
+          status: "error",
+          error: "Malformed tool_use block: missing filePath",
+        },
+      });
+
+      const state = agent.getState();
+      expect(state.messages).toHaveLength(3);
+      expect(state.messages[2].role).toBe("user");
+      expect(state.messages[2].content[0].type).toBe("tool_result");
+
+      // Should be able to continue the conversation
+      agent.continueConversation();
+      const stream2 = await mockClient.awaitStream();
+      stream2.streamText("OK, I'll fix that.");
+      stream2.finishResponse("end_turn");
+      await stream2.finalMessage();
+      await delay(0);
+
+      expect(agent.getState().messages).toHaveLength(4);
+    });
+  });
   describe("context_update detection", () => {
     it("converts text blocks with <context_update> tags to context_update type", () => {
       const mockClient = new MockAnthropicClient();

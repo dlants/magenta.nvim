@@ -509,6 +509,14 @@ export class Thread {
       }
 
       if (block.request.status !== "ok") {
+        this.agent.toolResult(block.id, {
+          type: "tool_result",
+          id: block.id,
+          result: {
+            status: "error",
+            error: `Malformed tool_use block: ${block.request.error}`,
+          },
+        });
         continue;
       }
 
@@ -546,10 +554,23 @@ export class Thread {
         request,
       });
 
-      void invocation.promise.then((result) => {
-        this.state.toolCache.results.set(request.id, result);
-        this.maybeAutoRespond();
-      });
+      void invocation.promise
+        .then((result) => {
+          this.state.toolCache.results.set(request.id, result);
+        })
+        .catch((err: Error) => {
+          this.state.toolCache.results.set(request.id, {
+            type: "tool_result",
+            id: request.id,
+            result: {
+              status: "error",
+              error: `Tool execution failed: ${err.message}`,
+            },
+          });
+        })
+        .then(() => {
+          this.maybeAutoRespond();
+        });
     }
 
     this.state.mode = {
@@ -785,7 +806,19 @@ export class Thread {
     const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
 
     for (const block of lastMessage.content) {
-      if (block.type !== "tool_use" || block.request.status !== "ok") {
+      if (block.type !== "tool_use") {
+        continue;
+      }
+
+      if (block.request.status !== "ok") {
+        mode.compactAgent.toolResult(block.id, {
+          type: "tool_result",
+          id: block.id,
+          result: {
+            status: "error",
+            error: `Malformed tool_use block: ${block.request.error}`,
+          },
+        });
         continue;
       }
 
@@ -822,10 +855,23 @@ export class Thread {
         request,
       });
 
-      void invocation.promise.then((result) => {
-        this.state.toolCache.results.set(request.id, result);
-        this.handleCompactToolCompletion();
-      });
+      void invocation.promise
+        .then((result) => {
+          this.state.toolCache.results.set(request.id, result);
+        })
+        .catch((err: Error) => {
+          this.state.toolCache.results.set(request.id, {
+            type: "tool_result",
+            id: request.id,
+            result: {
+              status: "error",
+              error: `Tool execution failed: ${err.message}`,
+            },
+          });
+        })
+        .then(() => {
+          this.handleCompactToolCompletion();
+        });
     }
 
     mode.compactActiveTools = activeTools;
