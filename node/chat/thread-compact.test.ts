@@ -83,9 +83,6 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
     expect(textContent).toContain("3+3 equals 6");
     // The subagent should see the user's next prompt for prioritizing retention
     expect(textContent).toContain("Now help me with multiplication");
-    expect(textContent).toContain(
-      "Prioritize retaining information relevant to this next prompt",
-    );
 
     // Have the compact subagent use the EDL tool to edit /summary.md in memory
     const edlScript = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked basic arithmetic: 2+2=4, 3+3=6\nCOMPACT_SUMMARY`;

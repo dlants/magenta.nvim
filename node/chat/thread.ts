@@ -674,7 +674,7 @@ export class Thread {
       {
         model: this.state.profile.fastModel,
         systemPrompt:
-          "You are a conversation compactor. Your job is to summarize conversation transcripts into concise summaries that preserve essential information.",
+          "You are a conversation compactor. Summarize conversation transcripts into concise summaries that preserve essential information for continuing the work.",
         tools: getToolSpecs("compact", this.context.mcpToolManager),
         skipPostFlightTokenCount: true,
       },
@@ -697,39 +697,36 @@ export class Thread {
     const isLastChunk = chunkIndex === chunks.length - 1;
     const chunkLabel = `chunk ${chunkIndex + 1} of ${chunks.length}`;
 
+    const statusParts = [`This is ${chunkLabel}.`];
+    if (chunkIndex === 0) {
+      statusParts.push(
+        "The file /summary.md is currently empty. Write the initial summary.",
+      );
+    } else {
+      statusParts.push(
+        "Fold the essential information from the new chunk into the existing /summary.md. Do NOT rewrite the summary from scratch.",
+      );
+    }
+    if (isLastChunk) {
+      statusParts.push(
+        "This is the LAST chunk. Make sure the summary is complete and well-organized.",
+      );
+    }
+
+    const nextPromptText = nextPrompt ?? "Continue from where you left off.";
+
     const summaryContent =
       chunkIndex > 0
         ? (mode.compactFileIO.getFileContents("/summary.md") ?? "")
         : "";
 
-    const prompt =
-      chunkIndex === 0
-        ? `You are compacting a conversation transcript in chunks. This is ${chunkLabel}.
-
-The file /summary.md is currently empty. Write a condensed summary of the transcript chunk below into /summary.md using the edl tool.
-
-Guidelines:
-- Remove iterations where multiple attempts were made before arriving at a result — just keep the final result
-- Remove verbose tool outputs, error messages, and stack traces that are no longer relevant
-- Remove sections that discuss completed tasks that don't affect future work
-- Preserve: the current state of what's being worked on, any pending tasks, key decisions made, and important context
-- The transcript chunk is also available at /chunk.md — use EDL to cut/paste sections from it into /summary.md
-- You can use get_file to read /summary.md or /chunk.md if needed
-${isLastChunk ? "- This is the LAST chunk. Produce a final, complete summary.\n" : ""}${nextPrompt ? `\nThe user's next prompt will be: "${nextPrompt}"\nPrioritize retaining information relevant to this next prompt.\n` : ""}
-<chunk>
-${chunks[chunkIndex]}
-</chunk>`
-        : `This is ${chunkLabel}. The summary so far is in /summary.md and the new chunk is in /chunk.md.
-
-Edit /summary.md using the edl tool to incorporate the essential information from the new transcript chunk below. Do NOT re-condense the existing summary — just fold in what's important from the new chunk.
-${isLastChunk ? "\nThis is the LAST chunk. Make sure the summary is complete and well-organized.\n" : ""}${nextPrompt ? `\nThe user's next prompt will be: "${nextPrompt}"\nPrioritize retaining information relevant to this next prompt.\n` : ""}
-<summary>
-${summaryContent}
-</summary>
-
-<chunk>
-${chunks[chunkIndex]}
-</chunk>`;
+    const prompt = COMPACT_PROMPT_TEMPLATE.replace(
+      "{{status}}",
+      statusParts.join(" "),
+    )
+      .replace("{{next_prompt}}", nextPromptText)
+      .replace("{{summary}}", summaryContent)
+      .replace("{{chunk}}", chunks[chunkIndex]);
 
     agent.appendUserMessage([{ type: "text", text: prompt }]);
     agent.continueConversation();
@@ -2022,6 +2019,10 @@ function renderStreamingBlock(thread: Thread): string | VDOMNode {
   }
 }
 
+const COMPACT_PROMPT_TEMPLATE = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "compact-system-prompt.md"),
+  "utf-8",
+);
 export const LOGO = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "logo.txt"),
   "utf-8",
