@@ -1579,9 +1579,14 @@ function renderUsage(usage: Usage): VDOMNode {
  */
 const shouldShowContextManager = (
   agentStatus: AgentStatus,
+  mode: ConversationMode,
   contextManager: ContextManager,
 ): boolean => {
-  return agentStatus.type !== "streaming" && !contextManager.isContextEmpty();
+  return (
+    agentStatus.type === "stopped" &&
+    mode.type === "normal" &&
+    !contextManager.isContextEmpty()
+  );
 };
 
 /**
@@ -1666,6 +1671,7 @@ ${thread.context.contextManager.view()}`;
 
   const contextManagerView = shouldShowContextManager(
     agentStatus,
+    mode,
     thread.context.contextManager,
   )
     ? d`\n${thread.context.contextManager.view()}`

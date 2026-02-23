@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { ContextManager, type DiffUpdate } from "./context-manager";
 import { InMemoryFileIO } from "../edl/in-memory-file-io";
-import { FileCategory, type AbsFilePath, type RelFilePath } from "../utils/files";
+import {
+  FileCategory,
+  type AbsFilePath,
+  type RelFilePath,
+} from "../utils/files";
 import type { NvimCwd, HomeDir } from "../utils/files";
 import type { Nvim } from "../nvim/nvim-node";
 import type { MagentaOptions } from "../options";
@@ -18,17 +22,16 @@ function createTestContextManager(files: Record<string, string>) {
     },
   } as unknown as Nvim;
 
-  const cm = new ContextManager(
-    () => {},
-    {
-      cwd: "/test" as NvimCwd,
-      homeDir: "/home" as HomeDir,
-      dispatch: (msg: RootMsg) => { dispatched.push(msg); },
-      fileIO,
-      nvim: mockNvim,
-      options: {} as MagentaOptions,
+  const cm = new ContextManager(() => {}, {
+    cwd: "/test" as NvimCwd,
+    homeDir: "/home" as HomeDir,
+    dispatch: (msg: RootMsg) => {
+      dispatched.push(msg);
     },
-  );
+    fileIO,
+    nvim: mockNvim,
+    options: {} as MagentaOptions,
+  });
 
   return { cm, fileIO, dispatched };
 }

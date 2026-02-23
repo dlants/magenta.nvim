@@ -45,9 +45,7 @@ export async function resolveAutoContext(context: {
 
     return await filterSupportedFiles(matchedFiles, nvim);
   } catch (err) {
-    nvim.logger.error(
-      `Error loading auto context: ${(err as Error).message}`,
-    );
+    nvim.logger.error(`Error loading auto context: ${(err as Error).message}`);
     return [];
   }
 }

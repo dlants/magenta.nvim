@@ -142,4 +142,3 @@ Checks `bufferTracker.isBufferModifiedSinceSync` — if buffer has unsaved chang
   - [x] Fix any failures
   - [x] `npx vitest run` — full test suite
   - [x] Iterate until all tests pass
-
