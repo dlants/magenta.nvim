@@ -53,6 +53,7 @@ I sometimes write about AI, neovim and magenta specifically:
 
 ## Feb 2026
 
+- Type-checking now uses `tsgo` (TypeScript native Go compiler from `@typescript/native-preview`) for ~5x faster checks.
 - Refactored tool architecture: separated tool execution from rendering, extracted shared capabilities (permissions, file I/O, shell) into a `capabilities/` layer. This decouples tools from neovim, moving towards being able to run it via server/client architecture, and dev container support.
 - Auto-compaction with chunked incremental summarization and accurate token counting via `countTokens` API.
 - Introduced the edit description language (edl) tool, which subsumes the insert and replace tools.

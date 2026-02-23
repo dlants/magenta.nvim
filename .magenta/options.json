@@ -2,6 +2,7 @@
   "commandConfig": {
     "commands": [
       ["npx", "tsc", "--noEmit"],
+      ["npx", "tsgo", "--noEmit"],
       ["npx", "vitest", "run", { "type": "restAny" }]
     ]
   }
