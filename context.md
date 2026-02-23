@@ -9,6 +9,18 @@ The node code is organized as npm workspaces:
 - Root project — neovim-specific code (sidebar, tea, buffer-tracker, nvim bindings)
 
 The root `tsconfig.json` uses TypeScript project references to enforce the boundary: core cannot import from the root project.
+
+### Migration status
+
+Moved to `@magenta/core`:
+
+- `edl/` — EDL script parser, executor, document model
+- `capabilities/file-io.ts` — FileIO interface and FsFileIO implementation
+
+Still in root (neovim-dependent or not yet migrated):
+
+- `auth/`, `capabilities/` (remaining), `chat/`, `context/`, `nvim/`, `providers/`, `render-tools/`, `skills/`, `tea/`, `test/`, `tools/`, `utils/`
+
 options are configured in `lua/magenta/options.lua`
 neovim keymaps are configured in `lua/magenta/keymaps.lua`
 `node/sidebar.ts` manages the sidebar. This is where we create the chat and input buffers, and initialize keymaps on them.
