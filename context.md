@@ -138,7 +138,7 @@ Quick reference:
 
 # Type checks
 
-use `npx tsc --noEmit` to run type checking, from the project root. Once again, I remind you, you do not need to cd into any subdirectory.
+use `npx tsgo --noEmit` to run type checking, from the project root (this uses the native Go-based TypeScript compiler from `@typescript/native-preview`). Once again, I remind you, you do not need to cd into any subdirectory.
 
 # Worktrees
 
