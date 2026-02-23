@@ -130,6 +130,53 @@ it("returns diff when file is edited in a buffer", async () => {
   });
 });
 
+it("returns error when both buffer and disk change after agentView set", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    const contextManager =
+      driver.magenta.chat.getActiveThread().context.contextManager;
+
+    const cwd = await getcwd(driver.nvim);
+    const absFilePath = resolveFilePath(
+      cwd,
+      "poem.txt" as UnresolvedFilePath,
+      os.homedir() as HomeDir,
+    );
+
+    await driver.addContextFiles("poem.txt");
+    await driver.editFile("poem.txt");
+
+    // Initial read to establish agentView and buffer tracking
+    await contextManager.getContextUpdate();
+
+    // Edit the buffer (without saving)
+    const window = await driver.findWindow(async (w) => {
+      const buffer = await w.buffer();
+      const bufName = await buffer.getName();
+      return bufName.indexOf("poem.txt") > -1;
+    });
+    const buffer = await window.buffer();
+    await buffer.setLines({
+      start: 0 as Row0Indexed,
+      end: 1 as Row0Indexed,
+      lines: ["Buffer edit" as Line],
+    });
+
+    // Also modify the file on disk directly
+    const filePath = `${cwd}/poem.txt`;
+    fs.writeFileSync(filePath, "Disk edit\n");
+
+    // Context update should return an error for this file
+    const updates = await contextManager.getContextUpdate();
+    const update = updates[absFilePath];
+    expect(update).toBeDefined();
+    expect(update.update.status).toBe("error");
+    if (update.update.status === "error") {
+      expect(update.update.error).toContain("Both");
+    }
+  });
+});
 it("returns diff when file is edited on disk", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
@@ -177,234 +224,6 @@ it("returns diff when file is edited on disk", async () => {
     Paint their stories in the night.
       `;
     await fs.promises.writeFile(absFilePath, originalContent);
-  });
-});
-
-it.skip("avoids sending redundant context updates after tool application (no buffer)", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-
-    // Add file to context using the helper method
-    await driver.addContextFiles("poem.txt");
-
-    // Start a conversation and send a message requesting a modification
-    await driver.inputMagentaText(`Add a new line to the poem.txt file`);
-    await driver.send();
-
-    // Respond with a tool call that will modify the file
-    const request1 = await driver.mockAnthropic.awaitPendingStream();
-    request1.respond({
-      stopReason: "tool_use",
-      text: "I'll add a new line to the poem",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: "tool1" as ToolRequestId,
-            toolName: "insert" as ToolName,
-            input: {
-              filePath: "poem.txt" as UnresolvedFilePath,
-              insertAfter: "Paint their stories in the night.",
-              content: "\nAdded by Magenta tool call",
-            },
-          },
-        },
-      ],
-    });
-
-    await driver.assertDisplayBufferContains("✅ Insert [[ +2 ]]");
-
-    {
-      const request = await driver.mockAnthropic.awaitPendingStream();
-      const providerMessages = request.getProviderMessages();
-      // Tool result is in second-to-last message, system reminder is last
-      expect(
-        providerMessages[providerMessages.length - 2],
-        "auto-respond request has tool result",
-      ).toEqual({
-        content: [
-          {
-            id: "tool1",
-            result: {
-              status: "ok",
-              value: [
-                {
-                  type: "text",
-                  text: "Successfully applied edits.",
-                },
-              ],
-            },
-            type: "tool_result",
-          },
-        ],
-        role: "user",
-      });
-      // System reminder is in the last message
-      expect(
-        providerMessages[providerMessages.length - 1],
-        "auto-respond request has system reminder",
-      ).toEqual({
-        content: [
-          {
-            type: "system_reminder",
-
-            text: expect.stringContaining("Remember the skills") as string,
-          },
-        ],
-        role: "user",
-      });
-    }
-    {
-      const request2 = await driver.mockAnthropic.awaitPendingStream();
-      request2.respond({
-        stopReason: "end_turn",
-        text: "I did it!",
-        toolRequests: [],
-      });
-
-      const request = await driver.mockAnthropic.awaitStopped();
-      const providerMessages = request.getProviderMessages();
-      // After end_turn, the system reminder is still the last message
-      expect(
-        providerMessages[providerMessages.length - 1],
-        "end_turn request stopped agent",
-      ).toEqual({
-        content: [
-          {
-            type: "system_reminder",
-
-            text: expect.stringContaining("Remember the skills") as string,
-          },
-        ],
-        role: "user",
-      });
-    }
-
-    await driver.inputMagentaText(`testing`);
-    await driver.send();
-
-    const userRequest = await driver.mockAnthropic.awaitPendingUserRequest();
-    const providerMessages = userRequest.getProviderMessages();
-
-    expect(
-      providerMessages[providerMessages.length - 1],
-      "next user message does not have context update",
-    ).toEqual({
-      content: [
-        {
-          type: "text",
-          citations: undefined,
-          text: "testing",
-        },
-        {
-          type: "system_reminder",
-
-          text: expect.stringContaining("Remember the skills") as string,
-        },
-      ],
-      role: "user",
-    });
-  });
-});
-
-it.skip("sends update if the file was edited pre-insert", async () => {
-  await withDriver({}, async (driver) => {
-    await driver.showSidebar();
-
-    await driver.addContextFiles("poem.txt");
-
-    const pos = await driver.assertDisplayBufferContains(`- \`poem.txt\``);
-    await driver.triggerDisplayBufferKey(pos, "<CR>");
-
-    const poemWindow = await driver.findWindow(async (w) => {
-      const winBuffer = await w.buffer();
-      const bufferName = await winBuffer.getName();
-      return bufferName.includes("poem.txt");
-    });
-    const poemBuffer = await poemWindow.buffer();
-    await driver.inputMagentaText(`Add a new line to the poem.txt file`);
-    await driver.send();
-
-    const request3 = await driver.mockAnthropic.awaitPendingStream();
-
-    // Set up intercept BEFORE responding, so we catch the auto-respond
-    const autoRespondCatcher = driver.interceptAutoRespond();
-
-    request3.respond({
-      stopReason: "tool_use",
-      text: "I'll add a new line to the poem",
-      toolRequests: [
-        {
-          status: "ok",
-          value: {
-            id: "tool1" as ToolRequestId,
-            toolName: "insert" as ToolName,
-            input: {
-              filePath: "poem.txt" as UnresolvedFilePath,
-              insertAfter: "Paint their stories in the night.",
-              content: "\nAdded by Magenta tool call",
-            },
-          },
-        },
-      ],
-    });
-
-    await driver.assertDisplayBufferContains(
-      "✏️✅ Insert [[ +2 ]] in `poem.txt`",
-    );
-
-    // Wait for maybeAutoRespond to be called
-    await autoRespondCatcher.promise;
-
-    // edit the buffer before the auto-respond fires
-    await poemBuffer.setLines({
-      start: 0 as Row0Indexed,
-      end: 1 as Row0Indexed,
-      lines: ["changed first line" as Line],
-    });
-
-    // Now execute the auto-respond
-    autoRespondCatcher.execute();
-
-    {
-      const stream = await driver.mockAnthropic.awaitPendingStream();
-      const providerMessages = stream.getProviderMessages();
-      expect(
-        providerMessages[providerMessages.length - 2],
-        "auto-respond request goes out",
-      ).toEqual({
-        content: [
-          {
-            id: "tool1",
-            result: {
-              status: "ok",
-              value: [
-                {
-                  type: "text",
-                  text: "Successfully applied edits.",
-                },
-              ],
-            },
-            type: "tool_result",
-          },
-        ],
-        role: "user",
-      });
-
-      // Check the context update message contains the expected diff
-      const lastMsg = providerMessages[providerMessages.length - 1];
-      expect(lastMsg.role).toBe("user");
-      const contextContent = lastMsg.content.find(
-        (c: { type: string }) => c.type === "context_update",
-      );
-      expect(contextContent).toBeDefined();
-      if (contextContent && "text" in contextContent) {
-        expect(contextContent.text).toContain("<context_update>");
-        expect(contextContent.text).toContain("poem.txt");
-        expect(contextContent.text).toContain("```diff");
-        expect(contextContent.text).toContain("changed first line");
-      }
-    }
   });
 });
 

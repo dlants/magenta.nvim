@@ -10,6 +10,11 @@ import type { FileIO } from "../capabilities/file-io.ts";
 import { d, withBindings, type VDOMNode } from "../tea/view";
 import { v7 as uuidv7 } from "uuid";
 import { ContextManager } from "../context/context-manager.ts";
+import {
+  resolveAutoContext,
+  autoContextFilesToInitialFiles,
+} from "../context/auto-context.ts";
+import { BufferAwareFileIO } from "../capabilities/buffer-file-io.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import {
   type AbsFilePath,
@@ -370,32 +375,37 @@ export class Chat implements ThreadManager {
       parentThreadId: parent,
     };
 
-    const [contextManager, systemPrompt] = await Promise.all([
-      ContextManager.create(
-        (msg) =>
-          this.context.dispatch({
-            type: "thread-msg",
-            id: threadId,
-            msg: {
-              type: "context-manager-msg",
-              msg,
-            },
-          }),
-        {
-          dispatch: this.context.dispatch,
-          bufferTracker: this.context.bufferTracker,
-          cwd: this.context.cwd,
-          homeDir: this.context.homeDir,
-          nvim: this.context.nvim,
-          options: this.context.options,
-        },
-      ),
+    const [autoContextFiles, systemPrompt] = await Promise.all([
+      resolveAutoContext(this.context),
       createSystemPrompt(threadType, {
         nvim: this.context.nvim,
         cwd: this.context.cwd,
         options: this.context.options,
       }),
     ]);
+
+    const initialFiles = autoContextFilesToInitialFiles(autoContextFiles);
+
+    const contextManager = new ContextManager(
+      (msg) =>
+        this.context.dispatch({
+          type: "thread-msg",
+          id: threadId,
+          msg: {
+            type: "context-manager-msg",
+            msg,
+          },
+        }),
+      {
+        dispatch: this.context.dispatch,
+        fileIO: new BufferAwareFileIO(this.context),
+        cwd: this.context.cwd,
+        homeDir: this.context.homeDir,
+        nvim: this.context.nvim,
+        options: this.context.options,
+      },
+      initialFiles,
+    );
 
     if (contextFiles.length > 0) {
       await contextManager.addFiles(contextFiles);
@@ -658,26 +668,8 @@ ${threadViews.map((view) => d`${view}\n`)}`;
       parentThreadId: undefined,
     };
 
-    const [contextManager, systemPrompt] = await Promise.all([
-      ContextManager.create(
-        (msg) =>
-          this.context.dispatch({
-            type: "thread-msg",
-            id: newThreadId,
-            msg: {
-              type: "context-manager-msg",
-              msg,
-            },
-          }),
-        {
-          dispatch: this.context.dispatch,
-          bufferTracker: this.context.bufferTracker,
-          cwd: this.context.cwd,
-          homeDir: this.context.homeDir,
-          nvim: this.context.nvim,
-          options: this.context.options,
-        },
-      ),
+    const [autoContextFiles, systemPrompt] = await Promise.all([
+      resolveAutoContext(this.context),
       createSystemPrompt("root", {
         nvim: this.context.nvim,
         cwd: this.context.cwd,
@@ -685,17 +677,39 @@ ${threadViews.map((view) => d`${view}\n`)}`;
       }),
     ]);
 
+    const initialFiles = autoContextFilesToInitialFiles(autoContextFiles);
+
     // Copy context files from source thread
     for (const [absFilePath, fileContext] of Object.entries(
       sourceThread.contextManager.files,
     )) {
-      contextManager.update({
-        type: "add-file-context",
-        absFilePath: absFilePath as AbsFilePath,
+      initialFiles[absFilePath as AbsFilePath] = {
         relFilePath: fileContext.relFilePath,
         fileTypeInfo: fileContext.fileTypeInfo,
-      });
+        agentView: undefined,
+      };
     }
+
+    const contextManager = new ContextManager(
+      (msg) =>
+        this.context.dispatch({
+          type: "thread-msg",
+          id: newThreadId,
+          msg: {
+            type: "context-manager-msg",
+            msg,
+          },
+        }),
+      {
+        dispatch: this.context.dispatch,
+        fileIO: new BufferAwareFileIO(this.context),
+        cwd: this.context.cwd,
+        homeDir: this.context.homeDir,
+        nvim: this.context.nvim,
+        options: this.context.options,
+      },
+      initialFiles,
+    );
 
     const thread = new Thread(
       newThreadId,

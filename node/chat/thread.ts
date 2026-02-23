@@ -616,7 +616,7 @@ export class Thread {
 
   /** Reset the context manager, optionally adding specified files */
   private async resetContextManager(contextFiles?: string[]): Promise<void> {
-    this.contextManager = await ContextManager.create(
+    this.contextManager = new ContextManager(
       (msg) =>
         this.context.dispatch({
           type: "thread-msg",
@@ -625,11 +625,11 @@ export class Thread {
         }),
       {
         dispatch: this.context.dispatch,
+        fileIO: this.fileIO,
         cwd: this.context.cwd,
         homeDir: this.context.homeDir,
         nvim: this.context.nvim,
         options: this.context.options,
-        bufferTracker: this.context.bufferTracker,
       },
     );
 

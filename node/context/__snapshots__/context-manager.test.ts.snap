@@ -58,19 +58,19 @@ exports[`context-files multiple, weird path names 1`] = `
       {
         "text": "<context_update>
 <file_paths>
-poem.txt (5 lines)
 poem 3.txt (2 lines)
+poem.txt (5 lines)
 </file_paths>
 These files are part of your context. This is the latest information about the content of each file.
 From now on, whenever any of these files are updated by the user, you will get a message letting you know.
+File \`poem 3.txt\`
+poem3
+
 File \`poem.txt\`
 Moonlight whispers through the trees,
 Silver shadows dance with ease.
 Stars above like diamonds bright,
 Paint their stories in the night.
-
-File \`poem 3.txt\`
-poem3
 
 </context_update>",
         "type": "text",
