@@ -21,7 +21,7 @@ import {
 } from "../utils/files";
 import type { Result } from "../utils/result";
 import * as diff from "diff";
-import type { FileIO } from "../capabilities/file-io";
+import type { FileIO } from "@magenta/core";
 import { d, withBindings, withExtmark, withInlineCode } from "../tea/view";
 import type { ProviderMessageContent } from "../providers/provider-types";
 import open from "open";

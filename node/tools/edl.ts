@@ -13,12 +13,15 @@ import type {
   ProviderToolSpec,
 } from "../providers/provider.ts";
 import type { ToolName, GenericToolRequest, ToolInvocation } from "./types.ts";
-import { runScript, type EdlRegisters } from "../edl/index.ts";
-import type { FileMutationSummary } from "../edl/types.ts";
+import {
+  runScript,
+  type EdlRegisters,
+  type FileMutationSummary,
+} from "@magenta/core";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
-import type { FileIO } from "../capabilities/file-io.ts";
+import type { FileIO } from "@magenta/core";
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";

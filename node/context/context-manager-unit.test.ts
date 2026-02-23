@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { ContextManager, type DiffUpdate } from "./context-manager";
-import { InMemoryFileIO } from "../edl/in-memory-file-io";
+import { InMemoryFileIO } from "@magenta/core";
 import {
   FileCategory,
   type AbsFilePath,

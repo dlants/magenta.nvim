@@ -10,6 +10,7 @@ export default [
       "**/node/test/tmp/**",
       "**/eslint.config.mjs",
       "node/nvim/nvim-node/cli/**",
+      "**/node/core/dist/**",
     ],
   },
   { files: ["**/*.{js,mjs,cjs,ts}"] },

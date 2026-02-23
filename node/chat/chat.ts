@@ -5,7 +5,7 @@ import type { Dispatch } from "../tea/tea";
 import { Thread, view as threadView, type InputMessage } from "./thread";
 import type { Lsp } from "../capabilities/lsp";
 import { assertUnreachable } from "../utils/assertUnreachable";
-import type { FileIO } from "../capabilities/file-io.ts";
+import type { FileIO } from "@magenta/core";
 
 import { d, withBindings, type VDOMNode } from "../tea/view";
 import { v7 as uuidv7 } from "uuid";

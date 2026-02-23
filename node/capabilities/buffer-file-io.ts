@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import type { FileIO } from "./file-io.ts";
+import type { FileIO } from "@magenta/core";
 import type { Nvim } from "../nvim/nvim-node";
 import { NvimBuffer, type Line } from "../nvim/buffer.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";

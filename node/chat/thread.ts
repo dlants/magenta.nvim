@@ -67,10 +67,10 @@ import { fileURLToPath } from "url";
 import player from "play-sound";
 import { CommandRegistry } from "./commands/registry.ts";
 import { getSubsequentReminder } from "../providers/system-reminders.ts";
-import type { EdlRegisters } from "../edl/index.ts";
+import type { EdlRegisters } from "@magenta/core";
 import { BufferAwareFileIO } from "../capabilities/buffer-file-io.ts";
 import { PermissionCheckingFileIO } from "../capabilities/permission-file-io.ts";
-import type { FileIO } from "../capabilities/file-io.ts";
+import type { FileIO } from "@magenta/core";
 import { BaseShell } from "../capabilities/base-shell.ts";
 import { PermissionCheckingShell } from "../capabilities/permission-shell.ts";
 import type { Shell } from "../capabilities/shell.ts";
@@ -81,7 +81,7 @@ import {
   TARGET_CHUNK_TOKENS,
   TOLERANCE_TOKENS,
 } from "./compact-renderer.ts";
-import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
+import { InMemoryFileIO } from "@magenta/core";
 import { renderStreamdedTool } from "../tools/helpers.ts";
 import { getContextWindowForModel } from "../providers/anthropic-agent.ts";
 

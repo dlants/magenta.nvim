@@ -11,7 +11,7 @@ import * as WaitForSubagents from "./wait-for-subagents.ts";
 import * as YieldToParent from "./yield-to-parent.ts";
 import * as Edl from "./edl.ts";
 
-import type { EdlRegisters } from "../edl/index.ts";
+import type { EdlRegisters } from "@magenta/core";
 
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Nvim } from "../nvim/nvim-node";
@@ -27,7 +27,7 @@ import type { Dispatch } from "../tea/tea.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
 import type { StaticToolRequest } from "./toolManager.ts";
 import type { MCPToolManager } from "./mcp/manager.ts";
-import type { FileIO } from "../capabilities/file-io.ts";
+import type { FileIO } from "@magenta/core";
 import type { Shell } from "../capabilities/shell.ts";
 import type { ThreadManager } from "../capabilities/thread-manager.ts";
 import { parseToolName } from "./mcp/types.ts";

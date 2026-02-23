@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { execute, type Input } from "./edl.ts";
-import { FsFileIO } from "../capabilities/file-io.ts";
+import { FsFileIO } from "@magenta/core";
 import type { ToolRequestId } from "./types.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
@@ -11,7 +11,7 @@ import type { Msg as ThreadMsg } from "../chat/thread.ts";
 import type { NvimCwd, HomeDir } from "../utils/files.ts";
 import type { Nvim } from "../nvim/nvim-node";
 import type { BufferTracker } from "../buffer-tracker.ts";
-import type { EdlRegisters } from "../edl/index.ts";
+import type { EdlRegisters } from "@magenta/core";
 
 describe("EdlTool unit tests", () => {
   let tmpDir: string;

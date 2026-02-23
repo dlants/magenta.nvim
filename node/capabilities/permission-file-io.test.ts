@@ -1,6 +1,6 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import { PermissionCheckingFileIO } from "./permission-file-io.ts";
-import type { FileIO } from "./file-io.ts";
+import type { FileIO } from "@magenta/core";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import { MAGENTA_TEMP_DIR } from "../utils/files.ts";
 import type { MagentaOptions, FilePermission } from "../options.ts";

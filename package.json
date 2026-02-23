@@ -2,6 +2,9 @@
   "name": "magenta.nvim",
   "module": "magenta.ts",
   "type": "module",
+  "workspaces": [
+    "node/core"
+  ],
   "devDependencies": {
     "@types/mime-types": "^3.0.1",
     "@types/node": "^22.10.5",
