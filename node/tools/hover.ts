@@ -136,13 +136,28 @@ export function execute(
         (symbolStart + request.input.symbol.length - 1) as StringIdx,
       );
 
+      const lspTimeout = <T>(p: Promise<T>, label: string): Promise<T> =>
+        Promise.race([
+          p,
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`LSP ${label} request timed out`)),
+              10_000,
+            ),
+          ),
+        ]);
+
       const [hoverResult, definitionResult, typeDefinitionResult] =
         await Promise.all([
-          context.lsp.requestHover(buffer, symbolPos),
-          context.lsp.requestDefinition(buffer, symbolPos).catch(() => null),
-          context.lsp
-            .requestTypeDefinition(buffer, symbolPos)
-            .catch(() => null),
+          lspTimeout(context.lsp.requestHover(buffer, symbolPos), "hover"),
+          lspTimeout(
+            context.lsp.requestDefinition(buffer, symbolPos),
+            "definition",
+          ).catch(() => null),
+          lspTimeout(
+            context.lsp.requestTypeDefinition(buffer, symbolPos),
+            "typeDefinition",
+          ).catch(() => null),
         ]);
 
       if (aborted) {

@@ -329,17 +329,23 @@ export class ContextManager {
       return {};
     }
 
-    const results: FileUpdates = {};
-    await Promise.all(
-      Object.keys(this.files).map(async (absFilePath) => {
+    const keys = Object.keys(this.files) as AbsFilePath[];
+    const entries = await Promise.all(
+      keys.map(async (absFilePath) => {
         const result = await this.getFileMessageAndUpdateAgentViewOfFile({
-          absFilePath: absFilePath as AbsFilePath,
+          absFilePath,
         });
-        if (result?.update) {
-          results[absFilePath as AbsFilePath] = result;
-        }
+        return { absFilePath, result };
       }),
     );
+
+    // Build results in insertion order of this.files
+    const results: FileUpdates = {};
+    for (const { absFilePath, result } of entries) {
+      if (result?.update) {
+        results[absFilePath] = result;
+      }
+    }
 
     return results;
   }

@@ -8,7 +8,7 @@ import fs from "fs";
 
 it("hover end-to-end", async () => {
   await withDriver({}, async (driver) => {
-    await driver.editFile("test.ts");
+    await driver.editFileAndWaitForLsp("test.ts");
     await driver.showSidebar();
 
     await driver.inputMagentaText(`Try hovering a symbol`);
@@ -82,6 +82,7 @@ it("hover with word boundaries", async () => {
         "const at: AutoTransport = { id: '2', auto: true };",
     );
 
+    await driver.editFileAndWaitForLsp("test.ts");
     await driver.showSidebar();
 
     await driver.inputMagentaText(`Try hovering Transport`);
@@ -153,6 +154,7 @@ it("hover with context disambiguation", async () => {
         "}\n",
     );
 
+    await driver.editFileAndWaitForLsp("test.ts");
     await driver.showSidebar();
 
     await driver.inputMagentaText(`Try hovering res with context`);
