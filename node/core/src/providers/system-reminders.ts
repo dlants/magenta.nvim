@@ -47,7 +47,10 @@ export function getSubsequentReminder(threadType: ThreadType): string {
     case "subagent_fast":
       return SUBAGENT_REMINDER;
     case "compact":
-      return "";
+      return `<system-reminder>
+${EDL_REMINDER}
+CRITICAL: You MUST write the summary to /summary.md using the edl tool.
+</system-reminder>`;
     case "subagent_explore":
       return `<system-reminder>
 ${SKILLS_REMINDER}

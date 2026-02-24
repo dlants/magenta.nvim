@@ -680,6 +680,215 @@ it("auto-compact triggers when inputTokenCount exceeds 80% of context window", a
   });
 });
 
+it("compaction history records steps from multi-chunk compaction", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    // Build up a very large conversation to produce multiple chunks.
+    // TARGET_CHUNK_TOKENS=25000, CHARS_PER_TOKEN=4 → targetChunkChars=100000
+    // We need >100K chars total for 2+ chunks.
+    const longText = "x".repeat(60_000);
+
+    await driver.inputMagentaText("First question");
+    await driver.send();
+
+    const r1 = await driver.mockAnthropic.awaitPendingStream({
+      message: "r1",
+    });
+    r1.respond({
+      stopReason: "end_turn",
+      text: `Answer 1: ${longText}`,
+      toolRequests: [],
+    });
+
+    await driver.inputMagentaText("Second question");
+    await driver.send();
+
+    const r2 = await driver.mockAnthropic.awaitPendingStream({
+      message: "r2",
+    });
+    r2.respond({
+      stopReason: "end_turn",
+      text: `Answer 2: ${longText}`,
+      toolRequests: [],
+    });
+
+    const thread = driver.magenta.chat.getActiveThread();
+    expect(thread.state.compactionHistory).toHaveLength(0);
+
+    // Trigger compaction
+    await driver.inputMagentaText("@compact Continue with next task");
+    await driver.send();
+
+    await pollUntil(
+      () => {
+        if (thread.state.mode.type !== "compacting")
+          throw new Error(
+            `expected compacting mode but got ${thread.state.mode.type}`,
+          );
+      },
+      { timeout: 2000, message: "thread should enter compacting mode" },
+    );
+
+    // Verify we got multiple chunks
+    if (thread.state.mode.type !== "compacting")
+      throw new Error("not compacting");
+    expect(thread.state.mode.chunks.length).toBeGreaterThanOrEqual(2);
+    const totalChunks = thread.state.mode.chunks.length;
+
+    // === Process chunk 1 ===
+    const chunk1Stream = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact chunk 1",
+    });
+
+    // Verify chunk 1 prompt contains the chunk content
+    const chunk1Messages = chunk1Stream.getProviderMessages();
+    const chunk1UserMsg = chunk1Messages.find((m) => m.role === "user");
+    expect(chunk1UserMsg).toBeDefined();
+    const chunk1Text = chunk1UserMsg!.content
+      .filter(
+        (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
+      )
+      .map((c) => c.text)
+      .join("");
+    expect(chunk1Text).toContain("chunk 1 of");
+
+    const edlScript1 = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nFirst chunk processed: user asked two questions about large texts.\nCOMPACT_SUMMARY`;
+
+    chunk1Stream.respond({
+      stopReason: "tool_use",
+      text: "Processing chunk 1.",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "edl_chunk1" as ToolRequestId,
+            toolName: "edl" as ToolName,
+            input: { script: edlScript1 },
+          },
+        },
+      ],
+    });
+
+    const afterEdl1 = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact after EDL chunk 1",
+    });
+    afterEdl1.respond({
+      stopReason: "end_turn",
+      text: "Chunk 1 summarized.",
+      toolRequests: [],
+    });
+
+    // === Process chunk 2 ===
+    const chunk2Stream = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact chunk 2",
+    });
+
+    // Verify chunk 2 prompt references the existing summary
+    const chunk2Messages = chunk2Stream.getProviderMessages();
+    const chunk2UserMsg = chunk2Messages.find((m) => m.role === "user");
+    expect(chunk2UserMsg).toBeDefined();
+    const chunk2Text = chunk2UserMsg!.content
+      .filter(
+        (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
+      )
+      .map((c) => c.text)
+      .join("");
+    expect(chunk2Text).toContain("chunk 2 of");
+
+    const edlScript2 = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked two questions. Both answers were very long.\nCOMPACT_SUMMARY`;
+
+    chunk2Stream.respond({
+      stopReason: "tool_use",
+      text: "Processing chunk 2.",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "edl_chunk2" as ToolRequestId,
+            toolName: "edl" as ToolName,
+            input: { script: edlScript2 },
+          },
+        },
+      ],
+    });
+
+    const afterEdl2 = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact after EDL chunk 2",
+    });
+    afterEdl2.respond({
+      stopReason: "end_turn",
+      text: "Chunk 2 summarized.",
+      toolRequests: [],
+    });
+
+    // If there are more chunks, process them the same way
+    // For safety, drain any remaining chunks
+    for (let i = 2; i < totalChunks; i++) {
+      const extraStream = await driver.mockAnthropic.awaitPendingStream({
+        message: `compact chunk ${i + 1}`,
+      });
+      const edlExtra = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked two questions. Both answers were very long.\nCOMPACT_SUMMARY`;
+      extraStream.respond({
+        stopReason: "tool_use",
+        text: `Processing chunk ${i + 1}.`,
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: `edl_chunk${i + 1}` as ToolRequestId,
+              toolName: "edl" as ToolName,
+              input: { script: edlExtra },
+            },
+          },
+        ],
+      });
+      const afterEdlExtra = await driver.mockAnthropic.awaitPendingStream({
+        message: `compact after EDL chunk ${i + 1}`,
+      });
+      afterEdlExtra.respond({
+        stopReason: "end_turn",
+        text: `Chunk ${i + 1} summarized.`,
+        toolRequests: [],
+      });
+    }
+
+    // After all chunks, the parent thread should resume
+    const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "after compact continuation",
+    });
+    afterCompactStream.respond({
+      stopReason: "end_turn",
+      text: "Ready for the next task!",
+      toolRequests: [],
+    });
+
+    await driver.assertDisplayBufferContains("Ready for the next task!");
+
+    // === Verify compaction history ===
+    expect(thread.state.compactionHistory).toHaveLength(1);
+    const record = thread.state.compactionHistory[0];
+    expect(record.steps).toHaveLength(totalChunks);
+    expect(record.finalSummary).toBeDefined();
+    expect(record.finalSummary).toContain("Summary");
+
+    // Each step should have the correct chunk index and messages from its agent
+    for (let i = 0; i < totalChunks; i++) {
+      const step = record.steps[i];
+      expect(step.chunkIndex).toBe(i);
+      expect(step.totalChunks).toBe(totalChunks);
+      // Each step should have messages (at least user + assistant exchanges)
+      expect(step.messages.length).toBeGreaterThanOrEqual(2);
+      // The assistant should have produced text and tool_use
+      const assistantMsgs = step.messages.filter((m) => m.role === "assistant");
+      expect(assistantMsgs.length).toBeGreaterThanOrEqual(1);
+    }
+
+    // Verify the compaction history view is renderable in the display
+    await driver.assertDisplayBufferContains("📦 [Compaction 1");
+  });
+});
+
 it("auto-compact does not trigger on compact threads", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();

@@ -144,6 +144,15 @@ export type Msg =
     }
   | {
       type: "tool-progress";
+    }
+  | {
+      type: "toggle-compaction-record";
+      recordIdx: number;
+    }
+  | {
+      type: "toggle-compaction-step";
+      recordIdx: number;
+      stepIdx: number;
     };
 
 export type ThreadMsg = {
@@ -179,6 +188,16 @@ export type ToolCache = {
   results: Map<ToolRequestId, ProviderToolResult>;
 };
 
+export type CompactionStep = {
+  chunkIndex: number;
+  totalChunks: number;
+  messages: ProviderMessage[];
+};
+
+export type CompactionRecord = {
+  steps: CompactionStep[];
+  finalSummary: string | undefined;
+};
 /** Thread-specific conversation mode (agent status is read directly from agent) */
 export type ConversationMode =
   | { type: "normal" }
@@ -192,6 +211,7 @@ export type ConversationMode =
       compactAgent: Agent;
       compactActiveTools: Map<ToolRequestId, ActiveToolEntry>;
       compactEdlRegisters: EdlRegisters;
+      steps: CompactionStep[];
     };
 
 /** Minimum output tokens between system reminders during auto-respond loops */
@@ -216,6 +236,13 @@ export class Thread {
     edlRegisters: EdlRegisters;
     outputTokensSinceLastReminder: number;
     yieldedResponse?: string;
+    compactionHistory: CompactionRecord[];
+    compactionViewState: {
+      [recordIdx: number]: {
+        expanded: boolean;
+        expandedSteps: { [stepIdx: number]: boolean };
+      };
+    };
   };
 
   private myDispatch: Dispatch<Msg>;
@@ -322,6 +349,8 @@ export class Thread {
       toolCache: { results: new Map() },
       edlRegisters: { registers: new Map(), nextSavedId: 0 },
       outputTokensSinceLastReminder: 0,
+      compactionHistory: [],
+      compactionViewState: {},
     };
 
     if (clonedAgent) {
@@ -468,6 +497,26 @@ export class Thread {
         this.handleCompactAgentMsg(msg.msg);
         return;
 
+      case "toggle-compaction-record": {
+        const vs = this.state.compactionViewState[msg.recordIdx] || {
+          expanded: false,
+          expandedSteps: {},
+        };
+        vs.expanded = !vs.expanded;
+        this.state.compactionViewState[msg.recordIdx] = vs;
+        return;
+      }
+
+      case "toggle-compaction-step": {
+        const vs = this.state.compactionViewState[msg.recordIdx] || {
+          expanded: false,
+          expandedSteps: {},
+        };
+        vs.expandedSteps[msg.stepIdx] = !vs.expandedSteps[msg.stepIdx];
+        this.state.compactionViewState[msg.recordIdx] = vs;
+        return;
+      }
+
       default:
         assertUnreachable(msg);
     }
@@ -588,7 +637,9 @@ export class Thread {
   private async handleCompactComplete(
     summary: string,
     nextPrompt: string | undefined,
+    steps: CompactionStep[],
   ): Promise<void> {
+    this.state.compactionHistory.push({ steps, finalSummary: summary });
     await this.resetContextManager();
 
     this.agent = this.createFreshAgent();
@@ -684,6 +735,7 @@ export class Thread {
       compactAgent,
       compactActiveTools: new Map(),
       compactEdlRegisters,
+      steps: [],
     };
 
     this.sendCompactChunkToAgent(compactAgent, chunks, 0, nextPrompt);
@@ -770,6 +822,10 @@ export class Thread {
         this.context.nvim.logger.error(
           `Compact agent error: ${msg.error.message}`,
         );
+        this.state.compactionHistory.push({
+          steps: mode.steps,
+          finalSummary: undefined,
+        });
         this.state.mode = { type: "normal" };
         return;
 
@@ -782,6 +838,10 @@ export class Thread {
           this.context.nvim.logger.warn(
             `Compact agent stopped with unexpected reason: ${msg.stopReason}`,
           );
+          this.state.compactionHistory.push({
+            steps: mode.steps,
+            finalSummary: undefined,
+          });
           this.state.mode = { type: "normal" };
         }
         return;
@@ -904,6 +964,13 @@ export class Thread {
   ): void {
     const nextChunkIndex = mode.currentChunkIndex + 1;
 
+    // Snapshot the current agent's messages as a completed step
+    mode.steps.push({
+      chunkIndex: mode.currentChunkIndex,
+      totalChunks: mode.chunks.length,
+      messages: [...mode.compactAgent.getState().messages],
+    });
+
     if (nextChunkIndex < mode.chunks.length) {
       // More chunks to process — create a new compact agent for the next chunk
       const newAgent = this.createCompactAgent();
@@ -923,17 +990,24 @@ export class Thread {
         this.context.nvim.logger.error(
           "Compact agent finished but /summary.md is empty",
         );
+        this.state.compactionHistory.push({
+          steps: mode.steps,
+          finalSummary: undefined,
+        });
         this.state.mode = { type: "normal" };
         return;
       }
 
       const nextPrompt = mode.nextPrompt;
+      const { steps } = mode;
       this.state.mode = { type: "normal" };
-      this.handleCompactComplete(summary, nextPrompt).catch((e: Error) => {
-        this.context.nvim.logger.error(
-          `Failed during compact-complete: ${e.message}`,
-        );
-      });
+      this.handleCompactComplete(summary, nextPrompt, steps).catch(
+        (e: Error) => {
+          this.context.nvim.logger.error(
+            `Failed during compact-complete: ${e.message}`,
+          );
+        },
+      );
     }
   }
 
@@ -1628,6 +1702,65 @@ const renderSystemPrompt = (
   }
 };
 
+function renderCompactionHistory(
+  history: CompactionRecord[],
+  viewState: Thread["state"]["compactionViewState"],
+  dispatch: Dispatch<Msg>,
+): VDOMNode {
+  if (history.length === 0) return d``;
+
+  return d`${history.map((record, recordIdx) => {
+    const rv = viewState[recordIdx];
+    const isExpanded = rv?.expanded || false;
+    const summaryLen = record.finalSummary?.length ?? 0;
+    const status =
+      record.finalSummary !== undefined
+        ? `summary: ${summaryLen} chars`
+        : "⚠️ failed";
+
+    const header = withBindings(
+      withExtmark(
+        d`📦 [Compaction ${(recordIdx + 1).toString()} — ${record.steps.length.toString()} step${record.steps.length === 1 ? "" : "s"}, ${status}]\n`,
+        { hl_group: "@comment" },
+      ),
+      {
+        "<CR>": () => dispatch({ type: "toggle-compaction-record", recordIdx }),
+      },
+    );
+
+    if (!isExpanded) return header;
+
+    const stepsView = record.steps.map((step, stepIdx) => {
+      const stepExpanded = rv?.expandedSteps[stepIdx] || false;
+      const stepHeader = withBindings(
+        withExtmark(
+          d`  📄 [Step ${(step.chunkIndex + 1).toString()} of ${step.totalChunks.toString()}]\n`,
+          { hl_group: "@comment" },
+        ),
+        {
+          "<CR>": () =>
+            dispatch({
+              type: "toggle-compaction-step",
+              recordIdx,
+              stepIdx,
+            }),
+        },
+      );
+
+      if (!stepExpanded) return stepHeader;
+
+      const { markdown } = renderThreadToMarkdown(step.messages);
+      return d`${stepHeader}${withExtmark(d`${markdown}\n`, { hl_group: "@comment" })}`;
+    });
+
+    const summaryView =
+      record.finalSummary !== undefined
+        ? d`  📋 Final Summary:\n${withExtmark(d`${record.finalSummary}\n`, { hl_group: "@comment" })}`
+        : d`  ⚠️ Compaction failed — no summary produced\n`;
+
+    return d`${header}${stepsView}${summaryView}`;
+  })}`;
+}
 export const view: View<{
   thread: Thread;
   dispatch: Dispatch<Msg>;
@@ -1688,6 +1821,11 @@ ${thread.context.contextManager.view()}`;
       ? d`\n${thread.permissionShell.view()}`
       : d``;
   const permissionView = d`${filePermissionView}${shellPermissionView}`;
+  const compactionHistoryView = renderCompactionHistory(
+    thread.state.compactionHistory,
+    thread.state.compactionViewState,
+    dispatch,
+  );
   const pendingMessagesView =
     thread.state.pendingMessages.length > 0
       ? d`\n✉️  ${thread.state.pendingMessages.length.toString()} pending message${thread.state.pendingMessages.length === 1 ? "" : "s"}`
@@ -1770,7 +1908,7 @@ ${contentView}`;
   return d`\
 ${titleView}
 ${systemPromptView}
-
+${compactionHistoryView}
 ${messagesView}\
 ${streamingBlockView}\
 ${contextManagerView}\
