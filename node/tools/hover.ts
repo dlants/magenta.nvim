@@ -2,7 +2,7 @@ import { type Result } from "../utils/result.ts";
 
 import { getOrOpenBuffer } from "../utils/buffers.ts";
 import type { NvimBuffer } from "../nvim/buffer.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type {
   Lsp,
   LspDefinitionResponse,

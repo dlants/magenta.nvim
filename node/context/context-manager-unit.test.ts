@@ -1,15 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
-import { ContextManager, type DiffUpdate } from "./context-manager";
+import { ContextManager, type DiffUpdate } from "./context-manager.ts";
 import { InMemoryFileIO } from "@magenta/core";
 import {
   FileCategory,
   type AbsFilePath,
   type RelFilePath,
-} from "../utils/files";
-import type { NvimCwd, HomeDir } from "../utils/files";
-import type { Nvim } from "../nvim/nvim-node";
-import type { MagentaOptions } from "../options";
-import type { RootMsg } from "../root-msg";
+} from "../utils/files.ts";
+import type { NvimCwd, HomeDir } from "../utils/files.ts";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
+import type { MagentaOptions } from "../options.ts";
+import type { RootMsg } from "../root-msg.ts";
 
 function createTestContextManager(files: Record<string, string>) {
   const fileIO = new InMemoryFileIO(files);

@@ -10,7 +10,7 @@ import {
   type ProviderOptions,
 } from "@magenta/core";
 import type { ThreadType } from "../chat/types.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { NvimCwd } from "../utils/files.ts";
 import { platform } from "os";
 

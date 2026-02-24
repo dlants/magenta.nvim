@@ -15,7 +15,7 @@
 //   ProviderThread,
 //   ProviderThreadOptions,
 // } from "./provider-types.ts";
-// import type { Nvim } from "../nvim/nvim-node";
+// import type { Nvim } from "../nvim/nvim-node/index.ts";
 // import { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.ts";
 // import { validateInput } from "../tools/helpers.ts";
 // import type { Result } from "../utils/result.ts";

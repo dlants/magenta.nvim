@@ -1,4 +1,4 @@
-import type { Nvim } from "./nvim-node";
+import type { Nvim } from "./nvim-node/index.ts";
 import { NvimBuffer, type BufNr } from "./buffer.ts";
 
 export type Row0Indexed = number & { __row0Indexed: true };

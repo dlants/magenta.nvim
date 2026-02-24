@@ -1,8 +1,8 @@
 import { glob } from "glob";
 import path from "node:path";
 import fs from "node:fs";
-import type { Nvim } from "../nvim/nvim-node";
-import type { MagentaOptions } from "../options";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
+import type { MagentaOptions } from "../options.ts";
 import {
   relativePath,
   resolveFilePath,
@@ -14,8 +14,8 @@ import {
   type RelFilePath,
   type UnresolvedFilePath,
   type FileTypeInfo,
-} from "../utils/files";
-import type { Files } from "./context-manager";
+} from "../utils/files.ts";
+import type { Files } from "./context-manager.ts";
 
 export type AutoContextFile = {
   absFilePath: AbsFilePath;

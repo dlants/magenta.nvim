@@ -1,9 +1,13 @@
-import type { ThreadType } from "../chat-types";
+import type { ThreadType } from "../chat-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Logger } from "../logger.ts";
 import type { Cwd } from "../paths.ts";
 import type { ProviderOptions } from "../provider-options.ts";
-import { loadSkills, formatSkillsIntroduction, type SkillsMap } from "./skills";
+import {
+  loadSkills,
+  formatSkillsIntroduction,
+  type SkillsMap,
+} from "./skills.ts";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import path from "path";

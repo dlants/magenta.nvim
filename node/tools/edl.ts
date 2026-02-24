@@ -1,6 +1,6 @@
 import type { Result } from "../utils/result.ts";
 
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import {
   resolveFilePath,
   FileCategory,

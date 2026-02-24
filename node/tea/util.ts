@@ -1,4 +1,4 @@
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { Line, NvimBuffer } from "../nvim/buffer.ts";
 import type {
   PositionString,

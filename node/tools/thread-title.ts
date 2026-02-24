@@ -4,7 +4,7 @@ import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { ToolName, GenericToolRequest } from "./types.ts";
 
 export function execute(

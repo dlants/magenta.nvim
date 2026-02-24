@@ -2,7 +2,7 @@ import path from "path";
 import { glob } from "glob";
 import type { AbsFilePath, HomeDir, NvimCwd } from "../utils/files.ts";
 import type { FilePermission, MagentaOptions } from "../options.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import { relativePath, MAGENTA_TEMP_DIR, expandTilde } from "../utils/files.ts";
 
 export type EffectivePermissions = {

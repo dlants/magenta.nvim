@@ -1,6 +1,6 @@
 import { type ToolRequestId } from "./toolManager.ts";
 import { describe, it, expect } from "vitest";
-import { withDriver, normalizePaths } from "../test/preamble";
+import { withDriver, normalizePaths } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import type { ToolName } from "./types.ts";

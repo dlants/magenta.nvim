@@ -119,7 +119,7 @@ I sometimes write about AI, neovim and magenta specifically:
 
 # Installation
 
-**Requirements:** Node.js v20+ (`node --version`), [nvim-cmp](https://github.com/hrsh7th/nvim-cmp)
+**Requirements:** Node.js v24+ (`node --version`), [nvim-cmp](https://github.com/hrsh7th/nvim-cmp)
 
 **Recommended:** [fd](https://github.com/sharkdp/fd) and [ripgrep](https://github.com/BurntSushi/ripgrep) for better file discovery
 

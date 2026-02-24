@@ -7,9 +7,9 @@ import {
   isLikelyTextFile,
   validateFileSize,
   FileCategory,
-} from "./files";
-import { withNvimClient } from "../test/preamble";
-import { getcwd } from "../nvim/nvim";
+} from "./files.ts";
+import { withNvimClient } from "../test/preamble.ts";
+import { getcwd } from "../nvim/nvim.ts";
 
 describe("categorizeFileType", () => {
   it("should categorize text MIME types correctly", () => {

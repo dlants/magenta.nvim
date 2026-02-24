@@ -1,4 +1,4 @@
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { AuthUI } from "@magenta/core";
 import open from "open";
 

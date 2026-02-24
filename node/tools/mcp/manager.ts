@@ -1,5 +1,5 @@
 import type { MagentaOptions } from "../../options.ts";
-import type { Nvim } from "../../nvim/nvim-node";
+import type { Nvim } from "../../nvim/nvim-node/index.ts";
 import type { ProviderToolSpec } from "../../providers/provider-types.ts";
 import { MCPClient } from "./client.ts";
 

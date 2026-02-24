@@ -4,7 +4,7 @@ import {
   pollForToolResult,
   withDriver,
   normalizePaths,
-} from "../test/preamble";
+} from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
 import type { ToolName } from "./types.ts";
 

@@ -6,7 +6,7 @@ import type {
 
 import type { ToolName, GenericToolRequest, ToolInvocation } from "./types.ts";
 
-import type { ThreadId } from "../chat/types";
+import type { ThreadId } from "../chat/types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 
 import type { ThreadManager } from "../capabilities/thread-manager.ts";

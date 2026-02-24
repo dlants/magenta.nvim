@@ -1,6 +1,6 @@
 import { type ToolRequestId } from "./toolManager.ts";
 import { it, expect } from "vitest";
-import { pollForToolResult, withDriver } from "../test/preamble";
+import { pollForToolResult, withDriver } from "../test/preamble.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import type { ToolName } from "./types.ts";
 import path from "path";

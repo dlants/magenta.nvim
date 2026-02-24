@@ -1,10 +1,10 @@
-import { assertUnreachable } from "../utils/assertUnreachable";
-import type { Nvim } from "../nvim/nvim-node";
+import { assertUnreachable } from "../utils/assertUnreachable.ts";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 
-import type { MagentaOptions } from "../options";
-import type { Dispatch } from "../tea/tea";
-import type { RootMsg } from "../root-msg";
-import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow";
+import type { MagentaOptions } from "../options.ts";
+import type { Dispatch } from "../tea/tea.ts";
+import type { RootMsg } from "../root-msg.ts";
+import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
 
 import {
   relativePath,
@@ -18,14 +18,14 @@ import {
   detectFileType,
   FileCategory,
   type FileTypeInfo,
-} from "../utils/files";
-import type { Result } from "../utils/result";
+} from "../utils/files.ts";
+import type { Result } from "../utils/result.ts";
 import * as diff from "diff";
 import type { FileIO } from "@magenta/core";
-import { d, withBindings, withExtmark, withInlineCode } from "../tea/view";
-import type { ProviderMessageContent } from "../providers/provider-types";
+import { d, withBindings, withExtmark, withInlineCode } from "../tea/view.ts";
+import type { ProviderMessageContent } from "../providers/provider-types.ts";
 import open from "open";
-import { getSummaryAsProviderContent } from "../utils/pdf-pages";
+import { getSummaryAsProviderContent } from "../utils/pdf-pages.ts";
 
 export type ToolApplication =
   | {

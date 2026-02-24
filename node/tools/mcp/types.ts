@@ -1,4 +1,4 @@
-import type { ToolName } from "../types";
+import type { ToolName } from "../types.ts";
 
 /** The tool name wihtout the mcp_serverName prefix
  */

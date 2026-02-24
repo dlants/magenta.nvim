@@ -10,7 +10,7 @@ import type {
   ToolRequest as UnionToolRequest,
   DisplayContext,
 } from "../tools/types.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { NvimCwd, UnresolvedFilePath, HomeDir } from "../utils/files.ts";
 import type { MagentaOptions } from "../options.ts";
 import type { OutputLine } from "../capabilities/shell.ts";

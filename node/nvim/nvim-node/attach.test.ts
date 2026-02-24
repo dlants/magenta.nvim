@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withNvimClient } from "../../test/preamble";
+import { withNvimClient } from "../../test/preamble.ts";
 
 describe("src/attach.test.ts", () => {
   it("nvim_buf_set_lines with a large file", async () => {

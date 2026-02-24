@@ -1,5 +1,5 @@
-import type { ThreadMsg } from "./chat/thread";
-import type { ChatMsg } from "./chat/chat";
+import type { ThreadMsg } from "./chat/thread.ts";
+import type { ChatMsg } from "./chat/chat.ts";
 
 export type SidebarMsg =
   | {

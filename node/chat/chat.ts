@@ -1,13 +1,13 @@
-import type { Nvim } from "../nvim/nvim-node";
-import type { MagentaOptions, Profile } from "../options";
-import type { RootMsg } from "../root-msg";
-import type { Dispatch } from "../tea/tea";
-import { Thread, view as threadView, type InputMessage } from "./thread";
-import type { Lsp } from "../capabilities/lsp";
-import { assertUnreachable } from "../utils/assertUnreachable";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
+import type { MagentaOptions, Profile } from "../options.ts";
+import type { RootMsg } from "../root-msg.ts";
+import type { Dispatch } from "../tea/tea.ts";
+import { Thread, view as threadView, type InputMessage } from "./thread.ts";
+import type { Lsp } from "../capabilities/lsp.ts";
+import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { FileIO } from "@magenta/core";
 
-import { d, withBindings, type VDOMNode } from "../tea/view";
+import { d, withBindings, type VDOMNode } from "../tea/view.ts";
 import { v7 as uuidv7 } from "uuid";
 import { ContextManager } from "../context/context-manager.ts";
 import {

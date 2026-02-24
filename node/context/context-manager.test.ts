@@ -1,24 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { withDriver } from "../test/preamble";
-import { pollUntil } from "../utils/async";
-import { getAllWindows, getcwd } from "../nvim/nvim";
+import { withDriver } from "../test/preamble.ts";
+import { pollUntil } from "../utils/async.ts";
+import { getAllWindows, getcwd } from "../nvim/nvim.ts";
 import {
   resolveFilePath,
   type UnresolvedFilePath,
   type HomeDir,
-} from "../utils/files";
-import type { Line } from "../nvim/buffer";
-import type { Row0Indexed } from "../nvim/window";
-import type { DiffUpdate, WholeFileUpdate } from "./context-manager";
-import type { ToolRequestId } from "../tools/toolManager";
+} from "../utils/files.ts";
+import type { Line } from "../nvim/buffer.ts";
+import type { Row0Indexed } from "../nvim/window.ts";
+import type { DiffUpdate, WholeFileUpdate } from "./context-manager.ts";
+import type { ToolRequestId } from "../tools/toolManager.ts";
 import fs from "node:fs";
 import * as os from "node:os";
-import type { ToolName } from "../tools/types";
+import type { ToolName } from "../tools/types.ts";
 import {
   type ProviderImageContent,
   type ProviderMessage,
   type ProviderMessageContent,
-} from "../providers/provider-types";
+} from "../providers/provider-types.ts";
 
 it("returns full file contents on first getContextUpdate and no updates on second call when file hasn't changed", async () => {
   await withDriver({}, async (driver) => {

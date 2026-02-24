@@ -14,7 +14,7 @@ import type {
   HomeDir,
   AbsFilePath,
 } from "../utils/files.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { ContextManager } from "../context/context-manager.ts";
 import type { ProviderToolResult } from "../providers/provider-types.ts";
 

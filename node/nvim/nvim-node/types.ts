@@ -142,25 +142,26 @@ export type AttachParams = {
   };
 };
 
-export enum MessageType {
-  REQUEST = 0,
-  RESPONSE = 1,
-  NOTIFY = 2,
-}
+export const MessageType = {
+  REQUEST: 0,
+  RESPONSE: 1,
+  NOTIFY: 2,
+} as const;
+export type MessageType = (typeof MessageType)[keyof typeof MessageType];
 
 export type RPCRequest = [
-  MessageType.REQUEST,
+  typeof MessageType.REQUEST,
   id: number,
   method: string,
   args: unknown[],
 ];
 export type RPCNotification = [
-  MessageType.NOTIFY,
+  typeof MessageType.NOTIFY,
   notification: string,
   args: unknown[],
 ];
 export type RPCResponse = [
-  MessageType.RESPONSE,
+  typeof MessageType.RESPONSE,
   id: number,
   error: string | null,
   result: unknown,

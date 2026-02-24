@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { withDriver } from "./test/preamble";
-import { pollUntil } from "./utils/async";
+import { withDriver } from "./test/preamble.ts";
+import { pollUntil } from "./utils/async.ts";
 
 describe("node/sidebar.test.ts", () => {
   it("should create empty window when hiding sidebar if only magenta windows remain", async () => {

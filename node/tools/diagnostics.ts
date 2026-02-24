@@ -1,6 +1,6 @@
 import { type Result } from "../utils/result.ts";
 import type { ToolInvocation } from "./types.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import { getDiagnostics } from "../utils/diagnostics.ts";
 import type {
   ProviderToolResult,
