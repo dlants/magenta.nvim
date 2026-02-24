@@ -593,6 +593,35 @@ vim.rpcnotify(${this.nvim.channelId}, "magentaKey", "${key}")
   async editFile(filePath: string): Promise<void> {
     await this.nvim.call("nvim_exec2", [`edit ${filePath}`, {}]);
   }
+  /** Open a file and wait for LSP to attach with hover capability.
+   *  Useful for tests that depend on LSP being ready before proceeding.
+   */
+  async editFileAndWaitForLsp(
+    filePath: string,
+    timeout = 15_000,
+  ): Promise<void> {
+    await this.editFile(filePath);
+    const buf = await this.nvim.call("nvim_get_current_buf", []);
+    await pollUntil(
+      async () => {
+        const result = await this.nvim.call("nvim_exec_lua", [
+          `local clients = vim.lsp.get_clients({ bufnr = ... })
+           for _, client in ipairs(clients) do
+             if client.server_capabilities.hoverProvider then
+               return true
+             end
+           end
+           return false`,
+          [buf],
+        ]);
+        if (!result) {
+          throw new Error("LSP not attached yet");
+        }
+        return result;
+      },
+      { timeout },
+    );
+  }
 
   // For compatibility with tests using nvim.command
   async command(cmd: string): Promise<void> {
