@@ -12,7 +12,7 @@ describe.skip("CopilotProvider", () => {
 //   ProviderStreamEvent,
 // } from "./provider-types.ts";
 // import type { ToolName } from "../tools/types.ts";
-// import type { Nvim } from "../nvim/nvim-node";
+// import type { Nvim } from "../nvim/nvim-node/index.ts";
 // import path from "path";
 // import os from "os";
 // import nock from "nock";

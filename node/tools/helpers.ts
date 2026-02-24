@@ -1,20 +1,20 @@
-import * as GetFile from "./getFile";
+import * as GetFile from "./getFile.ts";
 
-import * as Hover from "./hover";
-import * as FindReferences from "./findReferences";
-import * as Diagnostics from "./diagnostics";
-import * as BashCommand from "./bashCommand";
-import * as ThreadTitle from "./thread-title";
-import * as SpawnSubagent from "./spawn-subagent";
-import * as SpawnForeach from "./spawn-foreach";
-import * as WaitForSubagents from "./wait-for-subagents";
-import * as YieldToParent from "./yield-to-parent";
+import * as Hover from "./hover.ts";
+import * as FindReferences from "./findReferences.ts";
+import * as Diagnostics from "./diagnostics.ts";
+import * as BashCommand from "./bashCommand.ts";
+import * as ThreadTitle from "./thread-title.ts";
+import * as SpawnSubagent from "./spawn-subagent.ts";
+import * as SpawnForeach from "./spawn-foreach.ts";
+import * as WaitForSubagents from "./wait-for-subagents.ts";
+import * as YieldToParent from "./yield-to-parent.ts";
 
-import * as Edl from "./edl";
-import { d, withCode, type VDOMNode } from "../tea/view";
-import type { StaticToolName } from "./tool-registry";
-import { assertUnreachable } from "../utils/assertUnreachable";
-import type { AgentStreamingBlock } from "../providers/provider-types";
+import * as Edl from "./edl.ts";
+import { d, withCode, type VDOMNode } from "../tea/view.ts";
+import type { StaticToolName } from "./tool-registry.ts";
+import { assertUnreachable } from "../utils/assertUnreachable.ts";
+import type { AgentStreamingBlock } from "../providers/provider-types.ts";
 
 export function validateInput(
   toolName: unknown,

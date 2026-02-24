@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { withNvimClient } from "../../test/preamble";
+import { withNvimClient } from "../../test/preamble.ts";
 
 describe("src/logger.test.ts", () => {
   const logFilePath = resolve(`/tmp/magenta-test/test-logging.log`);

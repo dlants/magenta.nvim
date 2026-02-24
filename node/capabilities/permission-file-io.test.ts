@@ -4,7 +4,7 @@ import type { FileIO } from "@magenta/core";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import { MAGENTA_TEMP_DIR } from "../utils/files.ts";
 import type { MagentaOptions, FilePermission } from "../options.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import * as fs from "node:fs/promises";
 import * as path from "path";
 import os from "os";

@@ -28,7 +28,7 @@ import type { StaticToolName } from "../tools/tool-registry.ts";
 import { isMCPTool } from "../tools/mcp/manager.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { NvimCwd, HomeDir } from "../utils/files.ts";
 import type { MagentaOptions } from "../options.ts";
 import type { Chat } from "../chat/chat.ts";

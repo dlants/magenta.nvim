@@ -1,15 +1,15 @@
-import { PROVIDER_NAMES, type ProviderName } from "./providers/provider";
+import { PROVIDER_NAMES, type ProviderName } from "./providers/provider.ts";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import type { ServerName } from "./tools/mcp/types";
-import { validateServerName } from "./tools/mcp/types";
-import type { NvimCwd } from "./utils/files";
+import type { ServerName } from "./tools/mcp/types.ts";
+import { validateServerName } from "./tools/mcp/types.ts";
+import type { NvimCwd } from "./utils/files.ts";
 import {
   BUILTIN_COMMAND_PERMISSIONS,
   type ArgSpec,
   type CommandPermissions,
-} from "./capabilities/bash-parser/permissions";
+} from "./capabilities/bash-parser/permissions.ts";
 
 // Get the path to the built-in skills directory
 const __filename = fileURLToPath(import.meta.url);

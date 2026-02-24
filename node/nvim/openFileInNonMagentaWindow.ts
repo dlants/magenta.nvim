@@ -1,15 +1,15 @@
-import type { Nvim } from "./nvim-node";
-import { getAllWindows } from "../nvim/nvim";
-import { NvimBuffer } from "../nvim/buffer";
-import type { WindowId } from "../nvim/window";
-import type { MagentaOptions } from "../options";
+import type { Nvim } from "./nvim-node/index.ts";
+import { getAllWindows } from "../nvim/nvim.ts";
+import { NvimBuffer } from "../nvim/buffer.ts";
+import type { WindowId } from "../nvim/window.ts";
+import type { MagentaOptions } from "../options.ts";
 import {
   resolveFilePath,
   type AbsFilePath,
   type HomeDir,
   type NvimCwd,
   type UnresolvedFilePath,
-} from "../utils/files";
+} from "../utils/files.ts";
 
 export async function openFileInNonMagentaWindow(
   filePath: UnresolvedFilePath | AbsFilePath,

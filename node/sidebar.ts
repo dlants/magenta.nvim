@@ -1,4 +1,4 @@
-import type { Nvim } from "./nvim/nvim-node";
+import type { Nvim } from "./nvim/nvim-node/index.ts";
 import { NvimBuffer, type Line } from "./nvim/buffer.ts";
 import { getOption } from "./nvim/nvim.ts";
 import {

@@ -1,8 +1,12 @@
-import type { Nvim } from "./nvim-node";
-import type { Position0Indexed, Position1Indexed, Row0Indexed } from "./window";
-import { withTimeout } from "../utils/async";
-import type { AbsFilePath, UnresolvedFilePath } from "../utils/files";
-import type { ExtmarkId, ExtmarkOptions } from "./extmarks";
+import type { Nvim } from "./nvim-node/index.ts";
+import type {
+  Position0Indexed,
+  Position1Indexed,
+  Row0Indexed,
+} from "./window.ts";
+import { withTimeout } from "../utils/async.ts";
+import type { AbsFilePath, UnresolvedFilePath } from "../utils/files.ts";
+import type { ExtmarkId, ExtmarkOptions } from "./extmarks.ts";
 
 export type Line = string & { __line: true };
 export type BufNr = number & { __bufnr: true };

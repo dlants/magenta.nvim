@@ -14,7 +14,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { MCPServerConfig } from "../../options.ts";
-import type { Nvim } from "../../nvim/nvim-node";
+import type { Nvim } from "../../nvim/nvim-node/index.ts";
 import type {
   ProviderToolResultContent,
   ProviderToolSpec,

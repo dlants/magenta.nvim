@@ -1,7 +1,7 @@
-import type { ProviderToolResult } from "../providers/provider-types";
-import type { VDOMNode } from "../tea/view";
-import type { StaticToolName } from "./tool-registry";
-import type { NvimCwd, HomeDir } from "../utils/files";
+import type { ProviderToolResult } from "../providers/provider-types.ts";
+import type { VDOMNode } from "../tea/view.ts";
+import type { StaticToolName } from "./tool-registry.ts";
+import type { NvimCwd, HomeDir } from "../utils/files.ts";
 
 export type DisplayContext = {
   cwd: NvimCwd;

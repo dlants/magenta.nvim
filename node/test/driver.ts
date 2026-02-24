@@ -1,20 +1,20 @@
-import { type Nvim } from "../nvim/nvim-node";
-import type { Magenta } from "../magenta";
-import type { Line, NvimBuffer } from "../nvim/buffer";
-import type { MockProvider } from "../providers/mock";
+import { type Nvim } from "../nvim/nvim-node/index.ts";
+import type { Magenta } from "../magenta.ts";
+import type { Line, NvimBuffer } from "../nvim/buffer.ts";
+import type { MockProvider } from "../providers/mock.ts";
 import {
   NvimWindow,
   pos0to1,
   type ByteIdx,
   type Position0Indexed,
   type Row0Indexed,
-} from "../nvim/window";
-import { Defer, pollUntil } from "../utils/async";
-import { calculatePosition } from "../tea/util";
-import type { BindingKey } from "../tea/bindings";
-import { getAllWindows, getCurrentWindow } from "../nvim/nvim";
+} from "../nvim/window.ts";
+import { Defer, pollUntil } from "../utils/async.ts";
+import { calculatePosition } from "../tea/util.ts";
+import type { BindingKey } from "../tea/bindings.ts";
+import { getAllWindows, getCurrentWindow } from "../nvim/nvim.ts";
 import { expect, vi } from "vitest";
-import type { ThreadId } from "../chat/types";
+import type { ThreadId } from "../chat/types.ts";
 import { CompletionsInteraction } from "./driver/completions.ts";
 import { SidebarInteraction } from "./driver/sidebar.ts";
 

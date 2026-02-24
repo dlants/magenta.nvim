@@ -16,12 +16,13 @@ export const MAGENTA_TEMP_DIR = "/tmp/magenta" as AbsFilePath;
  */
 export type NvimCwd = AbsFilePath & { __nvim_cwd: true };
 
-export enum FileCategory {
-  TEXT = "text",
-  IMAGE = "image",
-  PDF = "pdf",
-  UNSUPPORTED = "unsupported",
-}
+export const FileCategory = {
+  TEXT: "text",
+  IMAGE: "image",
+  PDF: "pdf",
+  UNSUPPORTED: "unsupported",
+} as const;
+export type FileCategory = (typeof FileCategory)[keyof typeof FileCategory];
 
 export interface FileTypeInfo {
   category: FileCategory;

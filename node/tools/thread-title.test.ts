@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { withDriver } from "../test/preamble";
-import type { ToolRequestId } from "./toolManager";
-import type { ToolName } from "./types";
+import { withDriver } from "../test/preamble.ts";
+import type { ToolRequestId } from "./toolManager.ts";
+import type { ToolName } from "./types.ts";
 
 describe("node/tools/thread-title.test.ts", () => {
   it("sets thread title after user message", async () => {

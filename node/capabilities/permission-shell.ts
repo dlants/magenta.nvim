@@ -5,7 +5,7 @@ import {
 } from "./bash-parser/permissions.ts";
 import type { MagentaOptions } from "../options.ts";
 import type { NvimCwd, HomeDir } from "../utils/files.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import { d, withBindings, withExtmark, withInlineCode } from "../tea/view.ts";
 import type { VDOMNode } from "../tea/view.ts";
 

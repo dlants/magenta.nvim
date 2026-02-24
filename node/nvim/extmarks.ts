@@ -1,4 +1,4 @@
-import type { Nvim } from "./nvim-node";
+import type { Nvim } from "./nvim-node/index.ts";
 
 /**
  * Highlight group names used by magenta

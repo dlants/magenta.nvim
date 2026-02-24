@@ -7,7 +7,7 @@ import {
   type HomeDir,
   type NvimCwd,
   type RelFilePath,
-} from "../utils/files";
+} from "../utils/files.ts";
 
 export type Gitignore = ignore.Ignore;
 

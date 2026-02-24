@@ -1,12 +1,12 @@
-import { withDriver } from "../test/preamble";
-import type { ToolRequestId } from "./toolManager";
+import { withDriver } from "../test/preamble.ts";
+import type { ToolRequestId } from "./toolManager.ts";
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { getcwd } from "../nvim/nvim";
-import type { ToolName } from "./types";
-import { MockProvider } from "../providers/mock";
-import type { Row0Indexed } from "../nvim/window";
+import { getcwd } from "../nvim/nvim.ts";
+import type { ToolName } from "./types.ts";
+import { MockProvider } from "../providers/mock.ts";
+import type { Row0Indexed } from "../nvim/window.ts";
 import { pollUntil } from "../utils/async.ts";
 import { spawnSync } from "child_process";
 

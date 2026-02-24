@@ -14,7 +14,7 @@ import * as Edl from "./edl.ts";
 import type { EdlRegisters } from "@magenta/core";
 
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { Lsp } from "../capabilities/lsp.ts";
 import type { MagentaOptions } from "../options.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";

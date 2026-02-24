@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { CommandRegistry } from "./registry.ts";
 import type { MessageContext } from "./types.ts";
-import type { Nvim } from "../../nvim/nvim-node";
+import type { Nvim } from "../../nvim/nvim-node/index.ts";
 import type { NvimCwd, HomeDir } from "../../utils/files.ts";
 import type { ContextManager } from "../../context/context-manager.ts";
 import type { MagentaOptions } from "../../options.ts";

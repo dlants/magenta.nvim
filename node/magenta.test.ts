@@ -1,12 +1,12 @@
 import { expect, it } from "vitest";
-import { withDriver } from "./test/preamble";
-import type { Position0Indexed } from "./nvim/window";
-import { LOGO } from "./chat/thread";
-import type { ToolRequestId } from "./tools/toolManager";
-import type { UnresolvedFilePath } from "./utils/files";
+import { withDriver } from "./test/preamble.ts";
+import type { Position0Indexed } from "./nvim/window.ts";
+import { LOGO } from "./chat/thread.ts";
+import type { ToolRequestId } from "./tools/toolManager.ts";
+import type { UnresolvedFilePath } from "./utils/files.ts";
 import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { ToolName } from "./tools/types";
+import type { ToolName } from "./tools/types.ts";
 
 it("new-thread command should work", async () => {
   await withDriver({}, async (driver) => {

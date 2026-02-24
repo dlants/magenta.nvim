@@ -1,6 +1,6 @@
-import type { Nvim } from "./nvim/nvim-node";
-import type { AbsFilePath } from "./utils/files";
-import { NvimBuffer, type BufNr } from "./nvim/buffer";
+import type { Nvim } from "./nvim/nvim-node/index.ts";
+import type { AbsFilePath } from "./utils/files.ts";
+import { NvimBuffer, type BufNr } from "./nvim/buffer.ts";
 import fs from "node:fs";
 
 interface BufferSyncInfo {

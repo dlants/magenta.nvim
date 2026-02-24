@@ -2,7 +2,7 @@ import type { FileIO } from "@magenta/core";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 
 import { type Result } from "../utils/result.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type {
   ProviderToolResult,
   ProviderToolSpec,

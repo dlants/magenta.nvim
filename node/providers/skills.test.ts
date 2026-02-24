@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { withDriver } from "../test/preamble";
+import { withDriver } from "../test/preamble.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
 

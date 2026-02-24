@@ -9,7 +9,7 @@ import type { Dispatch } from "../tea/tea.ts";
 import type { Msg as ThreadMsg } from "../chat/thread.ts";
 
 import type { NvimCwd, HomeDir } from "../utils/files.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
 import type { EdlRegisters } from "@magenta/core";
 

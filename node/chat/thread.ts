@@ -30,7 +30,7 @@ import { createTool, type CreateToolContext } from "../tools/create-tool.ts";
 import type { ToolInvocation, ToolName, ToolRequest } from "../tools/types.ts";
 import { MCPToolManager } from "../tools/mcp/manager.ts";
 
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { Lsp } from "../capabilities/lsp.ts";
 import {
   getProvider as getProvider,

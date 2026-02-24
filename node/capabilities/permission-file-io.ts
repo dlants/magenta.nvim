@@ -8,7 +8,7 @@ import {
   type NvimCwd,
 } from "../utils/files.ts";
 import type { MagentaOptions } from "../options.ts";
-import type { Nvim } from "../nvim/nvim-node";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
 import { d, withBindings, withExtmark, type VDOMNode } from "../tea/view.ts";
 
 export type AccessType = "read" | "write";

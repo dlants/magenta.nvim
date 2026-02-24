@@ -6,14 +6,14 @@ describe.skip("OpenAIProvider", () => {
 
 /*
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { getProvider, setMockProvider } from "./provider";
+import { getProvider, setMockProvider } from "./provider.ts";
 import type {
   ProviderMessage,
   ProviderName,
   ProviderStreamEvent,
-} from "./provider-types";
-import { withNvimClient } from "../test/preamble";
-import { OpenAIProvider } from "./openai";
+} from "./provider-types.ts";
+import { withNvimClient } from "../test/preamble.ts";
+import { OpenAIProvider } from "./openai.ts";
 import type { ResponseInput } from "openai/resources/responses/responses.mjs";
 
 interface MockOpenAIConfig {
