@@ -42,3 +42,5 @@ The user's next prompt will be:
 <next_prompt>
 {{next_prompt}}
 </next_prompt>
+
+CRITICAL: You MUST write your summary to the `/summary.md` file using the edl tool. Do NOT place the summary in your text response — it will be ignored. The only output that is captured is the contents of `/summary.md` after you finish.

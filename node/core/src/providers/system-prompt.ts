@@ -50,7 +50,7 @@ export const DEFAULT_SUBAGENT_SYSTEM_PROMPT =
 
 export const EXPLORE_SUBAGENT_SYSTEM_PROMPT = loadPrompt("explore-subagent.md");
 export const COMPACT_SYSTEM_PROMPT =
-  "You are a compaction agent that reduces conversation transcripts using the edl tool.";
+  "You are a compaction agent that reduces conversation transcripts using the edl tool. You MUST write your summary to the `/summary.md` file using the edl tool. Do NOT place the summary in your text response — only the contents of `/summary.md` are captured.";
 
 function getBaseSystemPrompt(type: ThreadType): string {
   switch (type) {
