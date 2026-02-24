@@ -10,6 +10,7 @@ import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "./provider-types.ts";
+import { validateInput } from "../tools/helpers.ts";
 import type { ToolRequestId } from "../tools/toolManager.ts";
 import { MockAnthropicClient } from "./mock-anthropic-client.ts";
 import type { ToolName } from "../tools/types.ts";
@@ -53,6 +54,7 @@ const defaultAnthropicOptions: AnthropicAgentOptions = {
   includeWebSearch: true,
   disableParallelToolUseFlag: true,
   logger: winston.createLogger(),
+  validateInput,
 };
 
 describe("appendUserMessage", () => {

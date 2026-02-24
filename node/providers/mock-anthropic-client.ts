@@ -5,6 +5,7 @@ import type { ToolName, ToolRequest } from "../tools/types.ts";
 import type { ProviderMessage, StopReason, Usage } from "./provider-types.ts";
 import type { Result } from "../utils/result.ts";
 import { convertAnthropicMessagesToProvider } from "./anthropic-agent.ts";
+import { validateInput } from "../tools/helpers.ts";
 
 type StreamEventCallback = (
   event: Anthropic.Messages.MessageStreamEvent,
@@ -34,7 +35,10 @@ export class MockStream implements MockMessageStream {
 
   /** Access messages converted to ProviderMessage format (for easier test assertions) */
   getProviderMessages(): ProviderMessage[] {
-    return convertAnthropicMessagesToProvider(this.params.messages);
+    return convertAnthropicMessagesToProvider(
+      validateInput,
+      this.params.messages,
+    );
   }
 
   /** Access the system prompt that was sent in the request */

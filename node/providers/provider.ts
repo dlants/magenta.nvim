@@ -1,57 +1,23 @@
+import {
+  getProvider as coreGetProvider,
+  setMockProvider,
+  type Provider,
+  type ProviderProfile,
+} from "@magenta/core";
 import type { Nvim } from "../nvim/nvim-node";
-import { assertUnreachable } from "../utils/assertUnreachable.ts";
-import { AnthropicProvider } from "./anthropic.ts";
-import { BedrockProvider } from "./bedrock.ts";
-// import { OpenAIProvider } from "./openai.ts";
-import type { Provider } from "./provider-types.ts";
-import { type Profile } from "../options.ts";
-// import { OllamaProvider } from "./ollama.ts";
-// import { CopilotProvider } from "./copilot.ts";
+import { validateInput } from "../tools/helpers.ts";
+import { NvimAuthUI } from "../auth/auth-ui.ts";
+import * as AnthropicAuthImpl from "../auth/anthropic.ts";
 
+export { setMockProvider };
 export * from "./provider-types.ts";
 
-const clients: { [key: string]: Provider } = {};
-
-// lazy load so we have a chance to init context before constructing the class
-export function getProvider(nvim: Nvim, profile: Profile): Provider {
-  const clientKey = profile.name;
-
-  if (!clients[clientKey]) {
-    switch (profile.provider) {
-      case "anthropic":
-        return new AnthropicProvider(nvim, {
-          baseUrl: profile.baseUrl,
-          apiKeyEnvVar: profile.apiKeyEnvVar,
-          authType: profile.authType,
-        });
-      case "bedrock":
-        return new BedrockProvider(nvim, {
-          env: profile.env,
-        });
-      case "openai":
-        // return new OpenAIProvider(nvim, {
-        //   baseUrl: profile.baseUrl,
-        //   apiKeyEnvVar: profile.apiKeyEnvVar,
-        // });
-        throw new Error("Not implemented");
-      case "ollama":
-        // return new OllamaProvider(nvim);
-        throw new Error("Not implemented");
-      case "copilot":
-        // return new CopilotProvider(nvim);
-        throw new Error("Not implemented");
-      case "mock":
-        return mockProvider!;
-      default:
-        assertUnreachable(profile.provider);
-    }
-  }
-
-  return clients[clientKey];
-}
-
-let mockProvider: Provider | undefined;
-
-export function setMockProvider(provider: Provider | undefined) {
-  mockProvider = provider;
+export function getProvider(nvim: Nvim, profile: ProviderProfile): Provider {
+  return coreGetProvider(
+    nvim.logger,
+    new NvimAuthUI(nvim),
+    validateInput,
+    AnthropicAuthImpl,
+    profile,
+  );
 }
