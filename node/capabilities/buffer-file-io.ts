@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import type { FileIO } from "./file-io.ts";
+import type { FileIO } from "@magenta/core";
 import type { Nvim } from "../nvim/nvim-node";
 import { NvimBuffer, type Line } from "../nvim/buffer.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
@@ -53,18 +53,37 @@ export class BufferAwareFileIO implements FileIO {
     const syncInfo = this.context.bufferTracker.getSyncInfo(absPath);
     if (syncInfo) {
       const buffer = new NvimBuffer(syncInfo.bufnr, this.context.nvim);
-      const isModified =
-        await this.context.bufferTracker.isBufferModifiedSinceSync(
+      const currentChangeTick = await buffer.getChangeTick();
+      const bufferChanged = syncInfo.changeTick !== currentChangeTick;
+
+      let fileChanged = false;
+      try {
+        const stats = await fs.stat(absPath);
+        const diskMtime = stats.mtime.getTime();
+        fileChanged = syncInfo.mtime < diskMtime;
+      } catch {
+        // If we can't stat, treat as unchanged
+      }
+
+      if (bufferChanged && fileChanged) {
+        throw new Error(
+          `Both the buffer ${syncInfo.bufnr} and the file on disk for ${absPath} have changed. Cannot determine which version to use.`,
+        );
+      }
+
+      if (fileChanged && !bufferChanged) {
+        await buffer.attemptEdit();
+        await this.context.bufferTracker.trackBufferSync(
           absPath,
           syncInfo.bufnr,
         );
-      if (isModified) {
-        const lines = await buffer.getLines({
-          start: 0 as Row0Indexed,
-          end: -1 as Row0Indexed,
-        });
-        return lines.join("\n");
       }
+
+      const lines = await buffer.getLines({
+        start: 0 as Row0Indexed,
+        end: -1 as Row0Indexed,
+      });
+      return lines.join("\n");
     }
 
     return fs.readFile(absPath, "utf-8");

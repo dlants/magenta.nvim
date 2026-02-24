@@ -48,6 +48,9 @@ export class InMemoryFileIO implements FileIO {
     return Promise.resolve(undefined);
   }
 
+  deleteFile(path: string): void {
+    this.files.delete(path);
+  }
   getFileContents(path: string): string | undefined {
     return this.files.get(path);
   }

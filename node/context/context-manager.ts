@@ -1,13 +1,11 @@
 import { assertUnreachable } from "../utils/assertUnreachable";
 import type { Nvim } from "../nvim/nvim-node";
-import { glob } from "glob";
-import path from "node:path";
-import fs from "node:fs";
+
 import type { MagentaOptions } from "../options";
 import type { Dispatch } from "../tea/tea";
 import type { RootMsg } from "../root-msg";
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow";
-import type { Row0Indexed } from "../nvim/window";
+
 import {
   relativePath,
   resolveFilePath,
@@ -23,8 +21,7 @@ import {
 } from "../utils/files";
 import type { Result } from "../utils/result";
 import * as diff from "diff";
-import type { BufferTracker } from "../buffer-tracker";
-import { NvimBuffer } from "../nvim/buffer";
+import type { FileIO } from "@magenta/core";
 import { d, withBindings, withExtmark, withInlineCode } from "../tea/view";
 import type { ProviderMessageContent } from "../providers/provider-types";
 import open from "open";
@@ -77,7 +74,7 @@ export type Msg =
       fileTypeInfo: FileTypeInfo;
     };
 
-type Files = {
+export type Files = {
   [absFilePath: AbsFilePath]: {
     relFilePath: RelFilePath;
     fileTypeInfo: FileTypeInfo;
@@ -127,39 +124,19 @@ export type FileUpdates = {
 export class ContextManager {
   public files: Files;
 
-  private constructor(
+  constructor(
     public myDispatch: Dispatch<Msg>,
     private context: {
       cwd: NvimCwd;
       homeDir: HomeDir;
       dispatch: Dispatch<RootMsg>;
-      bufferTracker: BufferTracker;
+      fileIO: FileIO;
       nvim: Nvim;
       options: MagentaOptions;
     },
     initialFiles: Files = {},
   ) {
     this.files = initialFiles;
-  }
-
-  static async create(
-    myDispatch: Dispatch<Msg>,
-    context: {
-      dispatch: Dispatch<RootMsg>;
-      cwd: NvimCwd;
-      homeDir: HomeDir;
-      nvim: Nvim;
-      options: MagentaOptions;
-      bufferTracker: BufferTracker;
-    },
-  ): Promise<ContextManager> {
-    const initialFiles = await ContextManager.loadAutoContext(
-      context.nvim,
-      context.cwd,
-      context.homeDir,
-      context.options,
-    );
-    return new ContextManager(myDispatch, context, initialFiles);
   }
 
   /** Add files to the context manager.
@@ -352,17 +329,23 @@ export class ContextManager {
       return {};
     }
 
-    const results: FileUpdates = {};
-    await Promise.all(
-      Object.keys(this.files).map(async (absFilePath) => {
+    const keys = Object.keys(this.files) as AbsFilePath[];
+    const entries = await Promise.all(
+      keys.map(async (absFilePath) => {
         const result = await this.getFileMessageAndUpdateAgentViewOfFile({
-          absFilePath: absFilePath as AbsFilePath,
+          absFilePath,
         });
-        if (result?.update) {
-          results[absFilePath as AbsFilePath] = result;
-        }
+        return { absFilePath, result };
       }),
     );
+
+    // Build results in insertion order of this.files
+    const results: FileUpdates = {};
+    for (const { absFilePath, result } of entries) {
+      if (result?.update) {
+        results[absFilePath] = result;
+      }
+    }
 
     return results;
   }
@@ -385,7 +368,7 @@ export class ContextManager {
     }
 
     // Check if file exists first
-    if (!fs.existsSync(absFilePath)) {
+    if (!(await this.context.fileIO.fileExists(absFilePath))) {
       // File has been deleted or moved, remove it from context
       delete this.files[absFilePath];
 
@@ -418,74 +401,30 @@ export class ContextManager {
     fileInfo: Files[AbsFilePath],
   ): Promise<FileUpdates[keyof FileUpdates] | undefined> {
     let currentFileContent: string;
-    // Handle text files (with potential buffer tracking)
-    const bufSyncInfo = this.context.bufferTracker.getSyncInfo(absFilePath);
-
-    if (bufSyncInfo) {
-      // This file is open in a buffer
-      try {
-        const fileStats = fs.statSync(absFilePath);
-        const diskMtime = fileStats.mtime.getTime();
-
-        const buffer = new NvimBuffer(bufSyncInfo.bufnr, this.context.nvim);
-        const currentChangeTick = await buffer.getChangeTick();
-
-        const bufferChanged = bufSyncInfo.changeTick !== currentChangeTick;
-        const fileChanged = bufSyncInfo.mtime < diskMtime;
-
-        if (bufferChanged && fileChanged) {
-          // Both buffer and file on disk have changed - conflict situation
-          return {
-            absFilePath,
-            relFilePath,
-            update: {
-              status: "error",
-              error: `Both the buffer ${bufSyncInfo.bufnr} and the file on disk for ${absFilePath} have changed. Cannot determine which version to use.`,
-            },
-          };
-        }
-
-        if (fileChanged && !bufferChanged) {
-          await buffer.attemptEdit();
-        }
-
-        // now the buffer should have the latest version of the file
-        const lines = await buffer.getLines({
-          start: 0 as Row0Indexed,
-          end: -1 as Row0Indexed,
-        });
-        currentFileContent = lines.join("\n");
-      } catch (err) {
+    try {
+      currentFileContent = await this.context.fileIO.readFile(absFilePath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        delete this.files[absFilePath];
         return {
           absFilePath,
           relFilePath,
           update: {
-            status: "error",
-            error: `Error when trying to grab the context of the file ${absFilePath}: ${(err as Error).message}\n${(err as Error).stack}`,
+            status: "ok",
+            value: {
+              type: "file-deleted",
+            },
           },
         };
       }
-    } else {
-      // This file is only on disk. We need to read the latest version of it and send the diff along to the agent
-      try {
-        currentFileContent = fs.readFileSync(absFilePath).toString();
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-          // File has been deleted or moved, remove it from context
-          delete this.files[absFilePath];
-          return {
-            absFilePath,
-            relFilePath,
-            update: {
-              status: "ok",
-              value: {
-                type: "file-deleted",
-              },
-            },
-          };
-        }
-        throw err;
-      }
+      return {
+        absFilePath,
+        relFilePath,
+        update: {
+          status: "error",
+          error: `Error reading file ${absFilePath}: ${(err as Error).message}\n${(err as Error).stack}`,
+        },
+      };
     }
 
     // For text files, track the agent's view and generate diffs
@@ -652,7 +591,8 @@ export class ContextManager {
         } else if (fileInfo.fileTypeInfo.category == FileCategory.IMAGE) {
           // Handle other binary files (images) with base64
           try {
-            const buffer = fs.readFileSync(absFilePath);
+            const buffer =
+              await this.context.fileIO.readBinaryFile(absFilePath);
 
             fileInfo.agentView = {
               type: "binary",
@@ -704,157 +644,6 @@ export class ContextManager {
         },
       };
     }
-  }
-
-  private static async loadAutoContext(
-    nvim: Nvim,
-    cwd: NvimCwd,
-    homeDir: HomeDir,
-    options: MagentaOptions,
-  ): Promise<Files> {
-    const files: Files = {};
-
-    if (!options.autoContext || options.autoContext.length === 0) {
-      return files;
-    }
-
-    try {
-      const matchedFiles = await this.findFilesCrossPlatform(
-        options.autoContext,
-        cwd,
-        nvim,
-        homeDir,
-      );
-
-      const filteredFiles = await this.filterSupportedFiles(matchedFiles, nvim);
-
-      // Convert to the expected format
-      for (const matchInfo of filteredFiles) {
-        files[matchInfo.absFilePath] = {
-          relFilePath: matchInfo.relFilePath,
-          fileTypeInfo: matchInfo.fileTypeInfo,
-          agentView: undefined,
-        };
-      }
-    } catch (err) {
-      nvim.logger.error(
-        `Error loading auto context: ${(err as Error).message}`,
-      );
-    }
-
-    return files;
-  }
-
-  private static async findFilesCrossPlatform(
-    globPatterns: string[],
-    cwd: NvimCwd,
-    nvim: Nvim,
-    homeDir: HomeDir,
-  ): Promise<Array<{ absFilePath: AbsFilePath; relFilePath: RelFilePath }>> {
-    const allMatchedPaths: Array<{
-      absFilePath: AbsFilePath;
-      relFilePath: RelFilePath;
-    }> = [];
-
-    await Promise.all(
-      globPatterns.map(async (pattern) => {
-        try {
-          // Use nocase: true for cross-platform case-insensitivity
-          const matches = await glob(pattern, {
-            cwd,
-            nocase: true,
-            nodir: true,
-          });
-
-          for (const match of matches) {
-            const absFilePath = resolveFilePath(
-              cwd,
-              match as UnresolvedFilePath,
-              homeDir,
-            );
-            if (fs.existsSync(absFilePath)) {
-              allMatchedPaths.push({
-                absFilePath,
-                relFilePath: relativePath(cwd, absFilePath, homeDir),
-              });
-            }
-          }
-        } catch (err) {
-          nvim.logger.error(
-            `Error processing glob pattern "${pattern}": ${(err as Error).message}`,
-          );
-        }
-      }),
-    );
-
-    const uniqueFiles = new Map<
-      string,
-      { absFilePath: AbsFilePath; relFilePath: RelFilePath }
-    >();
-
-    for (const fileInfo of allMatchedPaths) {
-      try {
-        // Get canonical path to handle symlinks and case differences
-        const canonicalPath = fs.realpathSync(fileInfo.absFilePath);
-        // Use normalized path as the deduplication key
-        const normalizedPath = path.normalize(canonicalPath);
-
-        if (!uniqueFiles.has(normalizedPath)) {
-          uniqueFiles.set(normalizedPath, fileInfo);
-        }
-      } catch {
-        // Fallback if realpathSync fails
-        const normalizedPath = path.normalize(fileInfo.absFilePath);
-        if (!uniqueFiles.has(normalizedPath)) {
-          uniqueFiles.set(normalizedPath, fileInfo);
-        }
-      }
-    }
-
-    return Array.from(uniqueFiles.values());
-  }
-
-  private static async filterSupportedFiles(
-    matchedFiles: Array<{ absFilePath: AbsFilePath; relFilePath: RelFilePath }>,
-    nvim: Nvim,
-  ): Promise<
-    Array<{
-      absFilePath: AbsFilePath;
-      relFilePath: RelFilePath;
-      fileTypeInfo: FileTypeInfo;
-    }>
-  > {
-    const supportedFiles: Array<{
-      absFilePath: AbsFilePath;
-      relFilePath: RelFilePath;
-      fileTypeInfo: FileTypeInfo;
-    }> = [];
-
-    await Promise.all(
-      matchedFiles.map(async (fileInfo) => {
-        try {
-          const fileTypeInfo = await detectFileType(fileInfo.absFilePath);
-          if (!fileTypeInfo) {
-            nvim.logger.error(`File ${fileInfo.relFilePath} does not exist.`);
-            return;
-          }
-          if (fileTypeInfo.category !== FileCategory.UNSUPPORTED) {
-            supportedFiles.push({ ...fileInfo, fileTypeInfo });
-          } else {
-            // Log informational message about skipped unsupported files
-            nvim.logger.warn(
-              `Skipping ${fileInfo.relFilePath} from auto-context: ${fileTypeInfo.category} files are not supported in context (detected MIME type: ${fileTypeInfo.mimeType})`,
-            );
-          }
-        } catch (error) {
-          nvim.logger.error(
-            `Failed to detect file type for ${fileInfo.relFilePath} during auto-context loading: ${(error as Error).message}`,
-          );
-        }
-      }),
-    );
-
-    return supportedFiles;
   }
 
   /** renders a summary of all the files we're tracking, with the ability to delete or navigate to each file.

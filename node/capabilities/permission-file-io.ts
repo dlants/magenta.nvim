@@ -1,4 +1,4 @@
-import type { FileIO } from "./file-io.ts";
+import type { FileIO } from "@magenta/core";
 import { canReadFile, canWriteFile } from "./permissions.ts";
 import {
   displayPath,

@@ -52,7 +52,7 @@ jobs:
       matrix:
         command:
           - name: "typecheck"
-            run: "npx tsgo --noEmit"
+            run: "npx tsgo -b"
           - name: "eslint"
             run: "npx eslint ."
           - name: "prettier"

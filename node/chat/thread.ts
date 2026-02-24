@@ -67,10 +67,10 @@ import { fileURLToPath } from "url";
 import player from "play-sound";
 import { CommandRegistry } from "./commands/registry.ts";
 import { getSubsequentReminder } from "../providers/system-reminders.ts";
-import type { EdlRegisters } from "../edl/index.ts";
+import type { EdlRegisters } from "@magenta/core";
 import { BufferAwareFileIO } from "../capabilities/buffer-file-io.ts";
 import { PermissionCheckingFileIO } from "../capabilities/permission-file-io.ts";
-import type { FileIO } from "../capabilities/file-io.ts";
+import type { FileIO } from "@magenta/core";
 import { BaseShell } from "../capabilities/base-shell.ts";
 import { PermissionCheckingShell } from "../capabilities/permission-shell.ts";
 import type { Shell } from "../capabilities/shell.ts";
@@ -81,7 +81,7 @@ import {
   TARGET_CHUNK_TOKENS,
   TOLERANCE_TOKENS,
 } from "./compact-renderer.ts";
-import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
+import { InMemoryFileIO } from "@magenta/core";
 import { renderStreamdedTool } from "../tools/helpers.ts";
 import { getContextWindowForModel } from "../providers/anthropic-agent.ts";
 
@@ -616,7 +616,7 @@ export class Thread {
 
   /** Reset the context manager, optionally adding specified files */
   private async resetContextManager(contextFiles?: string[]): Promise<void> {
-    this.contextManager = await ContextManager.create(
+    this.contextManager = new ContextManager(
       (msg) =>
         this.context.dispatch({
           type: "thread-msg",
@@ -625,11 +625,11 @@ export class Thread {
         }),
       {
         dispatch: this.context.dispatch,
+        fileIO: this.fileIO,
         cwd: this.context.cwd,
         homeDir: this.context.homeDir,
         nvim: this.context.nvim,
         options: this.context.options,
-        bufferTracker: this.context.bufferTracker,
       },
     );
 
@@ -1579,9 +1579,14 @@ function renderUsage(usage: Usage): VDOMNode {
  */
 const shouldShowContextManager = (
   agentStatus: AgentStatus,
+  mode: ConversationMode,
   contextManager: ContextManager,
 ): boolean => {
-  return agentStatus.type !== "streaming" && !contextManager.isContextEmpty();
+  return (
+    agentStatus.type === "stopped" &&
+    mode.type === "normal" &&
+    !contextManager.isContextEmpty()
+  );
 };
 
 /**
@@ -1666,6 +1671,7 @@ ${thread.context.contextManager.view()}`;
 
   const contextManagerView = shouldShowContextManager(
     agentStatus,
+    mode,
     thread.context.contextManager,
   )
     ? d`\n${thread.context.contextManager.view()}`

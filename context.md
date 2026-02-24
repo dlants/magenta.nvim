@@ -3,6 +3,24 @@
 this is a neovim plugin for agentic tool use
 the entrypoint is in `lua/magenta/init.lua`. When the plugin starts up, it will kick off the `node/magenta.ts` node process. That will reach back out and establish the bridge, which will grab the options from lua and establish bidirectional communication between the two halves of the plugin.
 
+The node code is organized as npm workspaces:
+
+- `node/core/` (`@magenta/core`) — standalone logic with no neovim dependency (tools, providers, edl, etc.)
+- Root project — neovim-specific code (sidebar, tea, buffer-tracker, nvim bindings)
+
+The root `tsconfig.json` uses TypeScript project references to enforce the boundary: core cannot import from the root project.
+
+### Migration status
+
+Moved to `@magenta/core`:
+
+- `edl/` — EDL script parser, executor, document model
+- `capabilities/file-io.ts` — FileIO interface and FsFileIO implementation
+
+Still in root (neovim-dependent or not yet migrated):
+
+- `auth/`, `capabilities/` (remaining), `chat/`, `context/`, `nvim/`, `providers/`, `render-tools/`, `skills/`, `tea/`, `test/`, `tools/`, `utils/`
+
 options are configured in `lua/magenta/options.lua`
 neovim keymaps are configured in `lua/magenta/keymaps.lua`
 `node/sidebar.ts` manages the sidebar. This is where we create the chat and input buffers, and initialize keymaps on them.
@@ -138,7 +156,11 @@ Quick reference:
 
 # Type checks
 
-use `npx tsgo --noEmit` to run type checking, from the project root (this uses the native Go-based TypeScript compiler from `@typescript/native-preview`). Once again, I remind you, you do not need to cd into any subdirectory.
+Use `npx tsgo -b` to run type checking, from the project root. This uses build mode which handles the workspace project references (building `node/core` declarations first, then checking the root project). You do not need to cd into any subdirectory.
+
+To type-check just the core package: `npx tsgo -p node/core/tsconfig.json --noEmit`
+
+To run just the core tests: `npx vitest run node/core/`
 
 # Worktrees
 
