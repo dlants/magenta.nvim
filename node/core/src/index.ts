@@ -134,6 +134,9 @@ export {
   CHAT_STATIC_TOOL_NAMES,
   COMPACT_STATIC_TOOL_NAMES,
   SUBAGENT_STATIC_TOOL_NAMES,
+  TOOL_CAPABILITIES,
+  type ToolCapability,
+  TOOL_REQUIRED_CAPABILITIES,
 } from "./tools/tool-registry.ts";
 export {
   type MCPToolName,
