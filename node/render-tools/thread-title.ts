@@ -3,7 +3,7 @@ import type {
   DisplayContext,
   CompletedToolInfo,
   ToolRequest as UnionToolRequest,
-} from "../tools/types.ts";
+} from "@magenta/core";
 import type { ProviderToolResult } from "../providers/provider-types.ts";
 
 type Input = {

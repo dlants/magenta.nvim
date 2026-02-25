@@ -1,8 +1,10 @@
 import { withDriver } from "../test/preamble.ts";
-import { type ToolRequestId } from "../tools/toolManager.ts";
 import { expect, it } from "vitest";
-import type { UnresolvedFilePath } from "../utils/files.ts";
-import type { ToolName } from "../tools/types.ts";
+import type {
+  ToolRequestId,
+  ToolName,
+  UnresolvedFilePath,
+} from "@magenta/core";
 import { delay, pollUntil } from "../utils/async.ts";
 
 it("forks a thread while streaming by aborting the stream first", async () => {

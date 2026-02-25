@@ -9,11 +9,14 @@ import { Magenta } from "../magenta.ts";
 import { withMockClient } from "../providers/mock.ts";
 import { NvimDriver } from "./driver.ts";
 import { type MagentaOptions } from "../options.ts";
-import { type MockMCPServer, mockServers } from "../tools/mcp/mock-server.ts";
-import type { ServerName } from "../tools/mcp/types.ts";
+import {
+  type MockMCPServer,
+  mockServers,
+  type ServerName,
+} from "@magenta/core";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ProviderToolResult } from "../providers/provider-types.ts";
-import type { ToolRequestId } from "../tools/types.ts";
+import type { ToolRequestId } from "@magenta/core";
 
 type ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;
 

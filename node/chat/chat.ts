@@ -25,7 +25,7 @@ import {
 import type { Result } from "../utils/result.ts";
 import type { ThreadManager } from "../capabilities/thread-manager.ts";
 
-import { MCPToolManager } from "../tools/mcp/manager.ts";
+import { MCPToolManagerImpl } from "@magenta/core";
 import type { ThreadId, ThreadType } from "./types.ts";
 import { createSystemPrompt } from "../providers/system-prompt.ts";
 
@@ -93,7 +93,7 @@ export class Chat implements ThreadManager {
   state: ChatState;
   public threadWrappers: { [id: ThreadId]: ThreadWrapper };
   public rememberedCommands: Set<string>;
-  private mcpToolManager: MCPToolManager;
+  private mcpToolManager: MCPToolManagerImpl;
   private threadWaiters: Map<ThreadId, Array<(result: Result<string>) => void>>;
 
   constructor(
@@ -116,9 +116,9 @@ export class Chat implements ThreadManager {
       activeThreadId: undefined,
     };
 
-    this.mcpToolManager = new MCPToolManager(
+    this.mcpToolManager = new MCPToolManagerImpl(
       this.context.options.mcpServers,
-      this.context,
+      { logger: this.context.nvim.logger },
     );
 
     setTimeout(() => {

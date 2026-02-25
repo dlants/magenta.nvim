@@ -1,8 +1,7 @@
 import { withDriver } from "../test/preamble.ts";
 import { describe, it } from "vitest";
 import { LOGO } from "./thread.ts";
-import type { ToolRequestId } from "../tools/toolManager.ts";
-import type { ToolName } from "../tools/types.ts";
+import type { ToolRequestId, ToolName } from "@magenta/core";
 import { pollUntil } from "../utils/async.ts";
 
 describe("node/chat/chat.test.ts", () => {

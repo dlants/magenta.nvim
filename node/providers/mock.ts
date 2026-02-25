@@ -17,8 +17,7 @@ import type {
 import type { Dispatch } from "../tea/tea.ts";
 import { setMockProvider } from "./provider.ts";
 import { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.ts";
-import type { ToolRequest } from "../tools/types.ts";
-import { validateInput } from "../tools/helpers.ts";
+import { type ToolRequest, validateInput } from "@magenta/core";
 import { AnthropicAgent } from "./anthropic-agent.ts";
 import { MockAnthropicClient, MockStream } from "./mock-anthropic-client.ts";
 import type Anthropic from "@anthropic-ai/sdk";

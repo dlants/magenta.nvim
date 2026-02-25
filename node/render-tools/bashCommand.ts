@@ -9,12 +9,13 @@ import type {
   CompletedToolInfo,
   ToolRequest as UnionToolRequest,
   DisplayContext,
-} from "../tools/types.ts";
+  BashCommand,
+} from "@magenta/core";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { NvimCwd, UnresolvedFilePath, HomeDir } from "../utils/files.ts";
 import type { MagentaOptions } from "../options.ts";
 import type { OutputLine } from "../capabilities/shell.ts";
-import type { BashProgress } from "../tools/bashCommand.ts";
+type BashProgress = BashCommand.BashProgress;
 import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
 
 type Input = {

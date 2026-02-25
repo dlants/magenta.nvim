@@ -1,7 +1,7 @@
 import type { ThreadType } from "../chat-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Logger } from "../logger.ts";
-import type { Cwd } from "../paths.ts";
+import type { NvimCwd } from "../utils/files.ts";
 import type { ProviderOptions } from "../provider-options.ts";
 import {
   loadSkills,
@@ -21,7 +21,7 @@ export interface SystemInfo {
   timestamp: string;
   platform: string;
   neovimVersion: string;
-  cwd: Cwd;
+  cwd: NvimCwd;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -74,7 +74,7 @@ export function createSystemPrompt(
   context: {
     systemInfo: SystemInfo;
     logger: Logger;
-    cwd: Cwd;
+    cwd: NvimCwd;
     options: ProviderOptions;
   },
 ): SystemPrompt {

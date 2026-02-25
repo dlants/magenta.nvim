@@ -3,7 +3,7 @@ import type {
   DisplayContext,
   CompletedToolInfo,
   ToolRequest as UnionToolRequest,
-} from "../tools/types.ts";
+} from "@magenta/core";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { ThreadId } from "../chat/types.ts";

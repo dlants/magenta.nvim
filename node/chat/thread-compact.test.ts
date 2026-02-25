@@ -1,8 +1,7 @@
 import { withDriver } from "../test/preamble.ts";
-import { type ToolRequestId } from "../tools/toolManager.ts";
 import { expect, it } from "vitest";
-import type { ToolName } from "../tools/types.ts";
 import { pollUntil } from "../utils/async.ts";
+import type { ToolRequestId, ToolName } from "@magenta/core";
 
 it("compact flow: user initiates @compact, spawns compact thread, compacts and continues", async () => {
   await withDriver({}, async (driver) => {

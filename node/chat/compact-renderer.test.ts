@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderThreadToMarkdown, chunkMessages } from "./compact-renderer.ts";
-import type { ProviderMessage } from "../providers/provider-types.ts";
-import type { ToolRequestId } from "../tools/toolManager.ts";
-import type { ToolName } from "../tools/types.ts";
+import type { ProviderMessage, ToolRequestId, ToolName } from "@magenta/core";
 
 describe("renderThreadToMarkdown", () => {
   it("renders a simple text conversation", () => {

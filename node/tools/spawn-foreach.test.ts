@@ -1,9 +1,8 @@
 import { withDriver } from "../test/preamble.ts";
 import { it, expect } from "vitest";
-import type { ToolRequestId } from "./toolManager.ts";
-import type { ToolName } from "./types.ts";
+import type { ToolRequestId, ToolName } from "@magenta/core";
 import type Anthropic from "@anthropic-ai/sdk";
-import { pollUntil } from "../utils/async.ts";
+import { pollUntil } from "@magenta/core";
 
 type ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;
 

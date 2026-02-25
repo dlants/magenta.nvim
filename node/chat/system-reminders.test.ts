@@ -1,6 +1,6 @@
 import { test, expect } from "vitest";
 import { withDriver } from "../test/preamble.ts";
-import type { ToolName, ToolRequestId } from "../tools/types.ts";
+import type { ToolName, ToolRequestId } from "@magenta/core";
 import type Anthropic from "@anthropic-ai/sdk";
 import { MockProvider } from "../providers/mock.ts";
 

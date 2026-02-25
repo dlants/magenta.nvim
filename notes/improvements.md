@@ -26,3 +26,4 @@
 
 - context manager flicker messes with scrolling
 - tools briefly flash as having no response when they complete
+- newline issues, double-render of foreach

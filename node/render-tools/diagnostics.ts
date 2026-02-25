@@ -3,7 +3,7 @@ import type {
   DisplayContext,
   CompletedToolInfo,
   ToolRequest as UnionToolRequest,
-} from "../tools/types.ts";
+} from "@magenta/core";
 
 export function renderInFlightSummary(
   _request: UnionToolRequest,

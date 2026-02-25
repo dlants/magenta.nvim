@@ -2,8 +2,7 @@ import { PROVIDER_NAMES, type ProviderName } from "./providers/provider.ts";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import type { ServerName } from "./tools/mcp/types.ts";
-import { validateServerName } from "./tools/mcp/types.ts";
+import { type ServerName, validateServerName } from "@magenta/core";
 import type { NvimCwd } from "./utils/files.ts";
 import {
   BUILTIN_COMMAND_PERMISSIONS,

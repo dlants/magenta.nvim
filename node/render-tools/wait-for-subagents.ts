@@ -3,12 +3,12 @@ import type {
   DisplayContext,
   CompletedToolInfo,
   ToolRequest as UnionToolRequest,
-} from "../tools/types.ts";
+  WaitForSubagents,
+} from "@magenta/core";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { ThreadId } from "../chat/types.ts";
 import type { Chat } from "../chat/chat.ts";
-import type { WaitForSubagentsProgress } from "../tools/wait-for-subagents.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { renderPendingApprovals } from "../capabilities/render-pending-approvals.ts";
 
@@ -19,7 +19,7 @@ type Input = {
 export function renderInFlightSummary(
   request: UnionToolRequest,
   _displayContext: DisplayContext,
-  progress?: WaitForSubagentsProgress,
+  progress?: WaitForSubagents.WaitForSubagentsProgress,
 ): VDOMNode {
   const input = request.input as Input;
   const count = input.threadIds.length;
@@ -29,7 +29,7 @@ export function renderInFlightSummary(
 
 export function renderInFlightPreview(
   request: UnionToolRequest,
-  _progress: WaitForSubagentsProgress | undefined,
+  _progress: WaitForSubagents.WaitForSubagentsProgress | undefined,
   context: {
     dispatch: Dispatch<RootMsg>;
     chat?: Chat;

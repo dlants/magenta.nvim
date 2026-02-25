@@ -8,7 +8,7 @@ import type {
   DisplayContext,
   CompletedToolInfo,
   ToolRequest as UnionToolRequest,
-} from "../tools/types.ts";
+} from "@magenta/core";
 
 type Input = {
   filePath: UnresolvedFilePath;

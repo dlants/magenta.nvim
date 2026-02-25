@@ -1,7 +1,6 @@
 import { withDriver } from "../test/preamble.ts";
 import { describe, it } from "vitest";
-import type { ToolRequestId } from "../tools/toolManager.ts";
-import type { ToolName } from "../tools/types.ts";
+import type { ToolRequestId, ToolName } from "@magenta/core";
 
 describe("pending approvals surfaced in parent thread", () => {
   it("blocking spawn_subagent surfaces bash_command approval in parent view", async () => {

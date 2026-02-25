@@ -16,10 +16,25 @@ Moved to `@magenta/core`:
 
 - `edl/` — EDL script parser, executor, document model
 - `capabilities/file-io.ts` — FileIO interface and FsFileIO implementation
+- `utils/files.ts` — branded file path types and utilities
+- `utils/pdf-pages.ts` — PDF page extraction
+- `utils/file-summary.ts` — file summarization
+- `utils/string-position.ts` — string position calculation (from `tea/util.ts`)
+- `tools/` — all tool specs, validation, and execution logic
+- `tools/mcp/` — MCP client, manager, mock server, types
+- `tools/tool-registry.ts` — static tool name constants
+- `tools/toolManager.ts` — tool spec map and getToolSpecs
+- `tools/create-tool.ts` — tool factory using core interfaces
+- `tools/helpers.ts` — validateInput dispatcher, extractPartialJsonStringValue
+- `capabilities/shell.ts` — Shell interface
+- `capabilities/thread-manager.ts` — ThreadManager interface
+- `capabilities/lsp-client.ts` — LspClient interface (new, abstracts nvim LSP)
+- `capabilities/diagnostics-provider.ts` — DiagnosticsProvider interface (new)
+- `capabilities/context-tracker.ts` — ContextTracker interface (new)
 
 Still in root (neovim-dependent or not yet migrated):
 
-- `auth/`, `capabilities/` (remaining), `chat/`, `context/`, `nvim/`, `providers/`, `render-tools/`, `skills/`, `tea/`, `test/`, `tools/`, `utils/`
+- `auth/`, `capabilities/` (remaining nvim-specific implementations), `chat/`, `context/`, `nvim/`, `render-tools/`, `skills/`, `tea/`, `test/`, `utils/` (remaining)
 
 options are configured in `lua/magenta/options.lua`
 neovim keymaps are configured in `lua/magenta/keymaps.lua`

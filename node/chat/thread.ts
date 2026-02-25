@@ -17,7 +17,18 @@ import {
   type ToolRequestId,
   type CompletedToolInfo,
   getToolSpecs,
-} from "../tools/toolManager.ts";
+  createTool,
+  type CreateToolContext,
+  type ToolInvocation,
+  type ToolName,
+  type ToolRequest,
+  MCPToolManagerImpl,
+  ThreadTitle,
+  type EdlRegisters,
+  type FileIO,
+  InMemoryFileIO,
+  type ContextTracker,
+} from "@magenta/core";
 import {
   renderCompletedToolSummary,
   renderCompletedToolPreview,
@@ -26,9 +37,6 @@ import {
   renderInFlightToolPreview,
   renderInFlightToolDetail,
 } from "../render-tools/index.ts";
-import { createTool, type CreateToolContext } from "../tools/create-tool.ts";
-import type { ToolInvocation, ToolName, ToolRequest } from "../tools/types.ts";
-import { MCPToolManager } from "../tools/mcp/manager.ts";
 
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { Lsp } from "../capabilities/lsp.ts";
@@ -53,10 +61,6 @@ import {
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 import type { BufferTracker } from "../buffer-tracker.ts";
-import {
-  type Input as ThreadTitleInput,
-  spec as threadTitleToolSpec,
-} from "../tools/thread-title.ts";
 
 import type { Chat } from "./chat.ts";
 import type { ThreadId, ThreadType } from "./types.ts";
@@ -67,10 +71,12 @@ import { fileURLToPath } from "url";
 import player from "play-sound";
 import { CommandRegistry } from "./commands/registry.ts";
 import { getSubsequentReminder } from "../providers/system-reminders.ts";
-import type { EdlRegisters } from "@magenta/core";
+
+import { NvimLspClient } from "../capabilities/lsp-client-adapter.ts";
+import { getDiagnostics } from "../utils/diagnostics.ts";
 import { BufferAwareFileIO } from "../capabilities/buffer-file-io.ts";
 import { PermissionCheckingFileIO } from "../capabilities/permission-file-io.ts";
-import type { FileIO } from "@magenta/core";
+
 import { BaseShell } from "../capabilities/base-shell.ts";
 import { PermissionCheckingShell } from "../capabilities/permission-shell.ts";
 import type { Shell } from "../capabilities/shell.ts";
@@ -81,8 +87,8 @@ import {
   TARGET_CHUNK_TOKENS,
   TOLERANCE_TOKENS,
 } from "./compact-renderer.ts";
-import { InMemoryFileIO } from "@magenta/core";
-import { renderStreamdedTool } from "../tools/helpers.ts";
+
+import { renderStreamdedTool } from "../render-tools/streaming.ts";
 import { getContextWindowForModel } from "../providers/anthropic-agent.ts";
 
 export type InputMessage =
@@ -261,7 +267,7 @@ export class Thread {
     public context: {
       dispatch: Dispatch<RootMsg>;
       chat: Chat;
-      mcpToolManager: MCPToolManager;
+      mcpToolManager: MCPToolManagerImpl;
       bufferTracker: BufferTracker;
       profile: Profile;
       nvim: Nvim;
@@ -573,16 +579,35 @@ export class Thread {
 
       const toolContext: CreateToolContext = {
         mcpToolManager: this.context.mcpToolManager,
-        bufferTracker: this.context.bufferTracker,
-        getDisplayWidth: this.context.getDisplayWidth,
         threadId: this.id,
-        nvim: this.context.nvim,
-        lsp: this.context.lsp,
+        logger: this.context.nvim.logger,
+        lspClient: new NvimLspClient(
+          this.context.lsp,
+          this.context.nvim,
+          this.context.cwd,
+          this.context.homeDir,
+        ),
         cwd: this.context.cwd,
         homeDir: this.context.homeDir,
-        options: this.context.options,
-        contextManager: this.contextManager,
-        threadDispatch: this.myDispatch,
+        maxConcurrentSubagents:
+          this.context.options.maxConcurrentSubagents || 3,
+        contextTracker: this.contextManager as ContextTracker,
+        onToolApplied: (absFilePath, tool, fileTypeInfo) => {
+          this.contextManager.update({
+            type: "tool-applied",
+            absFilePath,
+            tool,
+            fileTypeInfo,
+          });
+        },
+        diagnosticsProvider: {
+          getDiagnostics: () =>
+            getDiagnostics(
+              this.context.nvim,
+              this.context.cwd,
+              this.context.homeDir,
+            ),
+        },
         edlRegisters: this.state.edlRegisters,
         fileIO: this.fileIO,
         shell: this.shell,
@@ -885,16 +910,35 @@ export class Thread {
       const request = block.request.value;
       const toolContext: CreateToolContext = {
         mcpToolManager: this.context.mcpToolManager,
-        bufferTracker: this.context.bufferTracker,
-        getDisplayWidth: this.context.getDisplayWidth,
         threadId: this.id,
-        nvim: this.context.nvim,
-        lsp: this.context.lsp,
+        logger: this.context.nvim.logger,
+        lspClient: new NvimLspClient(
+          this.context.lsp,
+          this.context.nvim,
+          this.context.cwd,
+          this.context.homeDir,
+        ),
         cwd: this.context.cwd,
         homeDir: this.context.homeDir,
-        options: this.context.options,
-        contextManager: this.contextManager,
-        threadDispatch: this.myDispatch,
+        maxConcurrentSubagents:
+          this.context.options.maxConcurrentSubagents || 3,
+        contextTracker: this.contextManager as ContextTracker,
+        onToolApplied: (absFilePath, tool, fileTypeInfo) => {
+          this.contextManager.update({
+            type: "tool-applied",
+            absFilePath,
+            tool,
+            fileTypeInfo,
+          });
+        },
+        diagnosticsProvider: {
+          getDiagnostics: () =>
+            getDiagnostics(
+              this.context.nvim,
+              this.context.cwd,
+              this.context.homeDir,
+            ),
+        },
         edlRegisters: mode.compactEdlRegisters,
         fileIO: mode.compactFileIO,
         shell: this.shell,
@@ -1545,7 +1589,7 @@ Come up with a succinct thread title for this prompt. It should be less than 80 
 `,
         },
       ],
-      spec: threadTitleToolSpec,
+      spec: ThreadTitle.spec,
       systemPrompt: this.state.systemPrompt,
       disableCaching: true,
     });
@@ -1553,7 +1597,7 @@ Come up with a succinct thread title for this prompt. It should be less than 80 
     if (result.toolRequest.status == "ok") {
       this.myDispatch({
         type: "set-title",
-        title: (result.toolRequest.value.input as ThreadTitleInput).title,
+        title: (result.toolRequest.value.input as ThreadTitle.Input).title,
       });
     }
   }

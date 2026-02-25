@@ -1,11 +1,10 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { Defer, pollUntil } from "../utils/async.ts";
-import type { ToolRequestId } from "../tools/toolManager.ts";
-import type { ToolName, ToolRequest } from "../tools/types.ts";
+import type { ToolRequestId, ToolName, ToolRequest } from "@magenta/core";
+import { validateInput } from "@magenta/core";
 import type { ProviderMessage, StopReason, Usage } from "./provider-types.ts";
 import type { Result } from "../utils/result.ts";
 import { convertAnthropicMessagesToProvider } from "./anthropic-agent.ts";
-import { validateInput } from "../tools/helpers.ts";
 
 type StreamEventCallback = (
   event: Anthropic.Messages.MessageStreamEvent,

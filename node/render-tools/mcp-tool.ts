@@ -4,8 +4,8 @@ import type {
   DisplayContext,
   CompletedToolInfo,
   ToolRequest as UnionToolRequest,
-} from "../tools/types.ts";
-import type { MCPProgress } from "../tools/mcp/tool.ts";
+  MCPProgress,
+} from "@magenta/core";
 export type { MCPProgress };
 
 export function renderInFlightSummary(

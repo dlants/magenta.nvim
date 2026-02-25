@@ -4,6 +4,15 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "file-type": "^21.0.0",
+    "mime-types": "^3.0.1",
+    "pdf-lib": "^1.17.1",
+    "@modelcontextprotocol/sdk": "^1.15.1",
+    "openai": "^5.12.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/mime-types": "^3.0.1"
+  }
 }

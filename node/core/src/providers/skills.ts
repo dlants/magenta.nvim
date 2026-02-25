@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { Logger } from "../logger.ts";
-import type { Cwd, AbsFilePath } from "../paths.ts";
+import type { AbsFilePath, NvimCwd } from "../utils/files.ts";
 import type { ProviderOptions } from "../provider-options.ts";
 
 export type SkillInfo = {
@@ -22,7 +22,7 @@ type YamlFrontmatter = {
 };
 
 export function loadSkills(context: {
-  cwd: Cwd;
+  cwd: NvimCwd;
   logger: Logger;
   options: ProviderOptions;
 }): SkillsMap {
@@ -77,7 +77,7 @@ function expandTilde(filepath: string): string {
 function findSkillFilesInDirectory(
   skillsDir: string,
   context: {
-    cwd: Cwd;
+    cwd: NvimCwd;
     logger: Logger;
   },
 ): AbsFilePath[] {
@@ -199,7 +199,10 @@ function extractYamlFrontmatter(content: string): YamlFrontmatter | undefined {
   }
 }
 
-export function formatSkillsIntroduction(skills: SkillsMap, cwd: Cwd): string {
+export function formatSkillsIntroduction(
+  skills: SkillsMap,
+  cwd: NvimCwd,
+): string {
   if (Object.keys(skills).length === 0) {
     return "";
   }

@@ -17,11 +17,11 @@
 // } from "./provider-types.ts";
 // import type { Nvim } from "../nvim/nvim-node/index.ts";
 // import { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.ts";
-// import { validateInput } from "../tools/helpers.ts";
+// import { validateInput } from "@magenta/core";
 // import type { Result } from "../utils/result.ts";
-// import type { ToolRequestId } from "../tools/toolManager.ts";
+// import type { ToolRequestId } from "@magenta/core";
 // import { assertUnreachable } from "../utils/assertUnreachable.ts";
-// import type { ToolRequest } from "../tools/types.ts";
+// import type { ToolRequest } from "@magenta/core";
 // import type {
 //   JSONSchemaObject,
 //   JSONSchemaType,

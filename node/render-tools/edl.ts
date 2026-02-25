@@ -1,10 +1,10 @@
 import { d, withCode, type VDOMNode } from "../tea/view.ts";
-import type {
-  CompletedToolInfo,
-  DisplayContext,
-  ToolRequest as UnionToolRequest,
-} from "../tools/types.ts";
-import { EDL_DISPLAY_PREFIX, type EdlDisplayData } from "../tools/edl.ts";
+import {
+  Edl,
+  type CompletedToolInfo,
+  type DisplayContext,
+  type ToolRequest as UnionToolRequest,
+} from "@magenta/core";
 
 type Input = {
   script: string;
@@ -38,15 +38,15 @@ function getStatusEmoji(result: CompletedToolInfo["result"]): string {
 
 function extractEdlDisplayData(
   info: CompletedToolInfo,
-): EdlDisplayData | undefined {
+): Edl.EdlDisplayData | undefined {
   if (info.result.result.status !== "ok") return undefined;
   const content = info.result.result.value;
   for (const item of content) {
-    if (item.type === "text" && item.text.startsWith(EDL_DISPLAY_PREFIX)) {
+    if (item.type === "text" && item.text.startsWith(Edl.EDL_DISPLAY_PREFIX)) {
       try {
         return JSON.parse(
-          item.text.slice(EDL_DISPLAY_PREFIX.length),
-        ) as EdlDisplayData;
+          item.text.slice(Edl.EDL_DISPLAY_PREFIX.length),
+        ) as Edl.EdlDisplayData;
       } catch {
         return undefined;
       }
@@ -61,7 +61,7 @@ function extractFormattedResult(info: CompletedToolInfo): string {
   }
   const content = info.result.result.value;
   for (const item of content) {
-    if (item.type === "text" && !item.text.startsWith(EDL_DISPLAY_PREFIX)) {
+    if (item.type === "text" && !item.text.startsWith(Edl.EDL_DISPLAY_PREFIX)) {
       return item.text;
     }
   }

@@ -1,9 +1,11 @@
-import { type ToolRequestId } from "./toolManager.ts";
+import {
+  type ToolRequestId,
+  pollUntil,
+  type UnresolvedFilePath,
+  type ToolName,
+} from "@magenta/core";
 import { describe, it, expect } from "vitest";
 import { withDriver, normalizePaths } from "../test/preamble.ts";
-import { pollUntil } from "../utils/async.ts";
-import type { UnresolvedFilePath } from "../utils/files.ts";
-import type { ToolName } from "./types.ts";
 import { findToolResult } from "../chat/thread.ts";
 
 describe("node/tools/findReferences.test.ts", () => {

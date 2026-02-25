@@ -1,12 +1,10 @@
-import { type ToolRequestId } from "./toolManager.ts";
 import { describe, it, expect } from "vitest";
 import {
   pollForToolResult,
   withDriver,
   normalizePaths,
 } from "../test/preamble.ts";
-import { pollUntil } from "../utils/async.ts";
-import type { ToolName } from "./types.ts";
+import { type ToolRequestId, type ToolName, pollUntil } from "@magenta/core";
 
 describe("node/tools/diagnostics.test.ts", () => {
   it("diagnostics end-to-end", { timeout: 10000 }, async () => {

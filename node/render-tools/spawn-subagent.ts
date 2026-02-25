@@ -3,7 +3,7 @@ import type {
   DisplayContext,
   CompletedToolInfo,
   ToolRequest as UnionToolRequest,
-} from "../tools/types.ts";
+} from "@magenta/core";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { ThreadId } from "../chat/types.ts";
@@ -12,7 +12,7 @@ import type { AgentType } from "../providers/system-prompt.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { renderPendingApprovals } from "../capabilities/render-pending-approvals.ts";
-import type { SpawnSubagentProgress } from "../tools/spawn-subagent.ts";
+import type { SpawnSubagent } from "@magenta/core";
 
 type Input = {
   prompt: string;
@@ -35,7 +35,7 @@ function agentTypeLabel(agentType: AgentType | undefined): string {
 export function renderInFlightSummary(
   request: UnionToolRequest,
   _displayContext: DisplayContext,
-  progress?: SpawnSubagentProgress,
+  progress?: SpawnSubagent.SpawnSubagentProgress,
 ): VDOMNode {
   const input = request.input as Input;
   const typeLabel = agentTypeLabel(input.agentType);
@@ -49,7 +49,7 @@ export function renderInFlightSummary(
 
 export function renderInFlightPreview(
   _request: UnionToolRequest,
-  progress: SpawnSubagentProgress | undefined,
+  progress: SpawnSubagent.SpawnSubagentProgress | undefined,
   context: {
     dispatch: Dispatch<RootMsg>;
     chat?: Chat;

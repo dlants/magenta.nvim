@@ -10,10 +10,9 @@ import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "./provider-types.ts";
-import { validateInput } from "../tools/helpers.ts";
-import type { ToolRequestId } from "../tools/toolManager.ts";
+import type { ToolRequestId, ToolName } from "@magenta/core";
+import { validateInput } from "@magenta/core";
 import { MockAnthropicClient } from "./mock-anthropic-client.ts";
-import type { ToolName } from "../tools/types.ts";
 import { delay } from "../utils/async.ts";
 import winston from "winston";
 

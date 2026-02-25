@@ -1,8 +1,6 @@
 import { withDriver } from "../test/preamble.ts";
 import { describe, expect, it } from "vitest";
-import type { ToolRequestId } from "./toolManager.ts";
-import type { ToolName } from "./types.ts";
-import { pollUntil } from "../utils/async.ts";
+import { type ToolRequestId, type ToolName, pollUntil } from "@magenta/core";
 import { EXPLORE_SUBAGENT_SYSTEM_PROMPT } from "../providers/system-prompt.ts";
 import type Anthropic from "@anthropic-ai/sdk";
 

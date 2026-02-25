@@ -11,21 +11,21 @@ import * as YieldToParentRender from "./yield-to-parent.ts";
 import * as EdlRender from "./edl.ts";
 import * as MCPToolRender from "./mcp-tool.ts";
 
-import * as BashCommand from "../tools/bashCommand.ts";
-import * as SpawnSubagent from "../tools/spawn-subagent.ts";
-import * as SpawnForeach from "../tools/spawn-foreach.ts";
-import * as WaitForSubagents from "../tools/wait-for-subagents.ts";
+import {
+  BashCommand,
+  SpawnSubagent,
+  SpawnForeach,
+  WaitForSubagents,
+  isMCPTool,
+  type ToolRequest,
+  type CompletedToolInfo,
+  type DisplayContext,
+  type StaticToolName,
+} from "@magenta/core";
 
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { d, type VDOMNode } from "../tea/view.ts";
-import type {
-  ToolRequest,
-  CompletedToolInfo,
-  DisplayContext,
-} from "../tools/types.ts";
 import type { ProviderToolResult } from "../providers/provider-types.ts";
-import type { StaticToolName } from "../tools/tool-registry.ts";
-import { isMCPTool } from "../tools/mcp/manager.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import type { RootMsg } from "../root-msg.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";

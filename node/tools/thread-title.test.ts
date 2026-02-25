@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { withDriver } from "../test/preamble.ts";
-import type { ToolRequestId } from "./toolManager.ts";
-import type { ToolName } from "./types.ts";
+import type { ToolRequestId, ToolName } from "@magenta/core";
 
 describe("node/tools/thread-title.test.ts", () => {
   it("sets thread title after user message", async () => {

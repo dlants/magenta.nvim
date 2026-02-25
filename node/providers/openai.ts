@@ -1,6 +1,6 @@
 // import OpenAI from "openai";
 // import { type Result } from "../utils/result.ts";
-// import type { ToolRequestId } from "../tools/toolManager.ts";
+// import type { ToolRequestId } from "@magenta/core";
 // import type {
 //   StopReason,
 //   Provider,
@@ -17,8 +17,8 @@
 // import { assertUnreachable } from "../utils/assertUnreachable.ts";
 // import type { Stream } from "openai/streaming.mjs";
 // import { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.ts";
-// import { validateInput } from "../tools/helpers.ts";
-// import type { ToolRequest } from "../tools/types.ts";
+// import { validateInput } from "@magenta/core";
+// import type { ToolRequest } from "@magenta/core";
 // import type {
 //   JSONSchemaObject,
 //   JSONSchemaType,

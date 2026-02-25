@@ -1,9 +1,8 @@
 import { withDriver } from "../test/preamble.ts";
 import { LOGO } from "./thread.ts";
-import { type ToolRequestId } from "../tools/toolManager.ts";
+import { type ToolRequestId, type ToolName } from "@magenta/core";
 import { expect, it } from "vitest";
 import type { UnresolvedFilePath } from "../utils/files.ts";
-import type { ToolName } from "../tools/types.ts";
 import { pollUntil } from "../utils/async.ts";
 import { getcwd } from "../nvim/nvim.ts";
 import { $, within } from "zx";

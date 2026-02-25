@@ -1,12 +1,6 @@
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { Line, NvimBuffer } from "../nvim/buffer.ts";
-import type {
-  PositionString,
-  ByteIdx,
-  Position0Indexed,
-  StringIdx,
-  Row0Indexed,
-} from "../nvim/window.ts";
+import type { ByteIdx, Position0Indexed, Row0Indexed } from "../nvim/window.ts";
 
 export async function replaceBetweenPositions({
   buffer,
@@ -65,27 +59,7 @@ export function calculatePosition(
   return { row, col };
 }
 
-export function calculateStringPosition(
-  startPos: PositionString,
-  content: string,
-  indexInText: StringIdx,
-): PositionString {
-  let { row, col } = startPos;
-  let currentIndex = 0 as StringIdx;
-
-  while (currentIndex < indexInText) {
-    // 10 == '\n' in hex
-    if (content[currentIndex] == "\n") {
-      row++;
-      col = 0 as StringIdx;
-    } else {
-      col++;
-    }
-    currentIndex++;
-  }
-
-  return { row, col };
-}
+export { calculateStringPosition } from "@magenta/core";
 
 export async function logBuffer(buffer: NvimBuffer, context: { nvim: Nvim }) {
   const lines = await buffer.getLines({

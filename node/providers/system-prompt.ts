@@ -6,12 +6,11 @@ import {
   EXPLORE_SUBAGENT_SYSTEM_PROMPT,
   COMPACT_SYSTEM_PROMPT,
   type SystemPrompt,
-  type Cwd,
+  type NvimCwd,
   type ProviderOptions,
 } from "@magenta/core";
 import type { ThreadType } from "../chat/types.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
-import type { NvimCwd } from "../utils/files.ts";
 import { platform } from "os";
 
 export {
@@ -41,10 +40,10 @@ export async function createSystemPrompt(
       timestamp: new Date().toString(),
       platform: platform(),
       neovimVersion,
-      cwd: context.cwd as unknown as Cwd,
+      cwd: context.cwd,
     },
     logger: context.nvim.logger,
-    cwd: context.cwd as unknown as Cwd,
+    cwd: context.cwd,
     options: context.options,
   });
 }
