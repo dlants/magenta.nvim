@@ -39,7 +39,7 @@ import {
 } from "../render-tools/index.ts";
 
 import type { Nvim } from "../nvim/nvim-node/index.ts";
-import type { Lsp } from "../capabilities/lsp.ts";
+
 import {
   getProvider as getProvider,
   type ProviderMessage,
@@ -60,7 +60,6 @@ import {
   type NvimCwd,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
-import type { BufferTracker } from "../buffer-tracker.ts";
 
 import type { Chat } from "./chat.ts";
 import type { ThreadId, ThreadType } from "./types.ts";
@@ -72,14 +71,10 @@ import player from "play-sound";
 import { CommandRegistry } from "./commands/registry.ts";
 import { getSubsequentReminder } from "../providers/system-reminders.ts";
 
-import { NvimLspClient } from "../capabilities/lsp-client-adapter.ts";
-import { getDiagnostics } from "../utils/diagnostics.ts";
-import { BufferAwareFileIO } from "../capabilities/buffer-file-io.ts";
-import { PermissionCheckingFileIO } from "../capabilities/permission-file-io.ts";
-
-import { BaseShell } from "../capabilities/base-shell.ts";
-import { PermissionCheckingShell } from "../capabilities/permission-shell.ts";
+import type { PermissionCheckingFileIO } from "../capabilities/permission-file-io.ts";
+import type { PermissionCheckingShell } from "../capabilities/permission-shell.ts";
 import type { Shell } from "../capabilities/shell.ts";
+import type { Environment } from "../environment.ts";
 import {
   renderThreadToMarkdown,
   chunkMessages,
@@ -268,19 +263,16 @@ export class Thread {
       dispatch: Dispatch<RootMsg>;
       chat: Chat;
       mcpToolManager: MCPToolManagerImpl;
-      bufferTracker: BufferTracker;
       profile: Profile;
       nvim: Nvim;
       cwd: NvimCwd;
       homeDir: HomeDir;
-      lsp: Lsp;
       contextManager: ContextManager;
       options: MagentaOptions;
       getDisplayWidth: () => number;
+      environment: Environment;
     },
     clonedAgent?: Agent,
-    injectedFileIO?: FileIO,
-    injectedShell?: Shell,
   ) {
     this.myDispatch = (msg) =>
       this.context.dispatch({
@@ -290,50 +282,11 @@ export class Thread {
       });
 
     this.contextManager = this.context.contextManager;
-    if (injectedFileIO) {
-      this.fileIO = injectedFileIO;
-      this.permissionFileIO = undefined;
-    } else {
-      const permissionFileIO = new PermissionCheckingFileIO(
-        new BufferAwareFileIO({
-          nvim: this.context.nvim,
-          bufferTracker: this.context.bufferTracker,
-          cwd: this.context.cwd,
-          homeDir: this.context.homeDir,
-        }),
-        {
-          cwd: this.context.cwd,
-          homeDir: this.context.homeDir,
-          options: this.context.options,
-          nvim: this.context.nvim,
-        },
-        () => this.myDispatch({ type: "permission-pending-change" }),
-      );
-      this.permissionFileIO = permissionFileIO;
-      this.fileIO = permissionFileIO;
-    }
-
-    if (injectedShell) {
-      this.shell = injectedShell;
-      this.permissionShell = undefined;
-    } else {
-      const permissionShell = new PermissionCheckingShell(
-        new BaseShell({
-          cwd: this.context.cwd,
-          threadId: this.id,
-        }),
-        {
-          cwd: this.context.cwd,
-          homeDir: this.context.homeDir,
-          options: this.context.options,
-          nvim: this.context.nvim,
-          rememberedCommands: this.context.chat.rememberedCommands,
-        },
-        () => this.myDispatch({ type: "permission-pending-change" }),
-      );
-      this.permissionShell = permissionShell;
-      this.shell = permissionShell;
-    }
+    const env = this.context.environment;
+    this.fileIO = env.fileIO;
+    this.permissionFileIO = env.permissionFileIO;
+    this.shell = env.shell;
+    this.permissionShell = env.permissionShell;
 
     this.commandRegistry = new CommandRegistry();
     // Register custom commands from options
@@ -581,12 +534,7 @@ export class Thread {
         mcpToolManager: this.context.mcpToolManager,
         threadId: this.id,
         logger: this.context.nvim.logger,
-        lspClient: new NvimLspClient(
-          this.context.lsp,
-          this.context.nvim,
-          this.context.cwd,
-          this.context.homeDir,
-        ),
+        lspClient: this.context.environment.lspClient,
         cwd: this.context.cwd,
         homeDir: this.context.homeDir,
         maxConcurrentSubagents:
@@ -600,14 +548,7 @@ export class Thread {
             fileTypeInfo,
           });
         },
-        diagnosticsProvider: {
-          getDiagnostics: () =>
-            getDiagnostics(
-              this.context.nvim,
-              this.context.cwd,
-              this.context.homeDir,
-            ),
-        },
+        diagnosticsProvider: this.context.environment.diagnosticsProvider,
         edlRegisters: this.state.edlRegisters,
         fileIO: this.fileIO,
         shell: this.shell,
@@ -912,12 +853,7 @@ export class Thread {
         mcpToolManager: this.context.mcpToolManager,
         threadId: this.id,
         logger: this.context.nvim.logger,
-        lspClient: new NvimLspClient(
-          this.context.lsp,
-          this.context.nvim,
-          this.context.cwd,
-          this.context.homeDir,
-        ),
+        lspClient: this.context.environment.lspClient,
         cwd: this.context.cwd,
         homeDir: this.context.homeDir,
         maxConcurrentSubagents:
@@ -931,14 +867,7 @@ export class Thread {
             fileTypeInfo,
           });
         },
-        diagnosticsProvider: {
-          getDiagnostics: () =>
-            getDiagnostics(
-              this.context.nvim,
-              this.context.cwd,
-              this.context.homeDir,
-            ),
-        },
+        diagnosticsProvider: this.context.environment.diagnosticsProvider,
         edlRegisters: mode.compactEdlRegisters,
         fileIO: mode.compactFileIO,
         shell: this.shell,
