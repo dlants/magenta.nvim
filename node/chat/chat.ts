@@ -4,6 +4,7 @@ import type { RootMsg } from "../root-msg.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import { Thread, view as threadView, type InputMessage } from "./thread.ts";
 import type { Lsp } from "../capabilities/lsp.ts";
+import { createLocalEnvironment } from "../environment.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { FileIO } from "@magenta/core";
 
@@ -411,20 +412,36 @@ export class Chat implements ThreadManager {
       await contextManager.addFiles(contextFiles);
     }
 
-    const thread = new Thread(
+    const environment = createLocalEnvironment({
+      nvim: this.context.nvim,
+      lsp: this.context.lsp,
+      bufferTracker: this.context.bufferTracker,
+      cwd: this.context.cwd,
+      homeDir: this.context.homeDir,
+      options: this.context.options,
       threadId,
-      threadType,
-      systemPrompt,
-      {
-        ...this.context,
-        contextManager,
-        mcpToolManager: this.mcpToolManager,
-        profile,
-        chat: this,
-      },
-      undefined,
-      fileIO,
-    );
+      rememberedCommands: this.rememberedCommands,
+      onPendingChange: () =>
+        this.context.dispatch({
+          type: "thread-msg",
+          id: threadId,
+          msg: { type: "permission-pending-change" },
+        }),
+    });
+
+    if (fileIO) {
+      environment.fileIO = fileIO;
+      environment.permissionFileIO = undefined;
+    }
+
+    const thread = new Thread(threadId, threadType, systemPrompt, {
+      ...this.context,
+      contextManager,
+      mcpToolManager: this.mcpToolManager,
+      profile,
+      chat: this,
+      environment,
+    });
 
     this.context.dispatch({
       type: "chat-msg",
@@ -711,6 +728,23 @@ ${threadViews.map((view) => d`${view}\n`)}`;
       initialFiles,
     );
 
+    const forkEnvironment = createLocalEnvironment({
+      nvim: this.context.nvim,
+      lsp: this.context.lsp,
+      bufferTracker: this.context.bufferTracker,
+      cwd: this.context.cwd,
+      homeDir: this.context.homeDir,
+      options: this.context.options,
+      threadId: newThreadId,
+      rememberedCommands: this.rememberedCommands,
+      onPendingChange: () =>
+        this.context.dispatch({
+          type: "thread-msg",
+          id: newThreadId,
+          msg: { type: "permission-pending-change" },
+        }),
+    });
+
     const thread = new Thread(
       newThreadId,
       "root",
@@ -721,6 +755,7 @@ ${threadViews.map((view) => d`${view}\n`)}`;
         mcpToolManager: this.mcpToolManager,
         profile: sourceThread.state.profile,
         chat: this,
+        environment: forkEnvironment,
       },
       clonedAgent,
     );
