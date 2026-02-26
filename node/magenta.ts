@@ -31,6 +31,12 @@ import {
   detectFileType,
 } from "./utils/files.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
+import {
+  provisionContainer,
+  teardownContainer,
+  type ProvisionResult,
+  type ContainerConfig,
+} from "@magenta/core";
 import { initializeMagentaHighlightGroups } from "./nvim/extmarks.ts";
 import { MAGENTA_HIGHLIGHT_NAMESPACE } from "./nvim/buffer.ts";
 
@@ -48,6 +54,10 @@ export class Magenta {
   public chat: Chat;
   public dispatch: Dispatch<RootMsg>;
   public bufferTracker: BufferTracker;
+  public dockerProvisions: Map<
+    string,
+    ProvisionResult & { containerConfig: ContainerConfig }
+  > = new Map();
 
   constructor(
     public nvim: Nvim,
@@ -393,6 +403,129 @@ ${lines.join("\n")}
           lines: content.split("\n") as Line[],
         });
 
+        break;
+      }
+
+      case "docker": {
+        const branch = rest[0];
+        if (!branch) {
+          await notifyErr(
+            this.nvim,
+            "docker",
+            new Error("Usage: :Magenta docker <branch>"),
+          );
+          break;
+        }
+
+        const containerConfig = this.options.container;
+        if (!containerConfig) {
+          await notifyErr(
+            this.nvim,
+            "docker",
+            new Error("No container config found in .magenta/options.json"),
+          );
+          break;
+        }
+
+        if (this.dockerProvisions.has(branch)) {
+          await notifyErr(
+            this.nvim,
+            "docker",
+            new Error(
+              `Container for branch "${branch}" is already running. Use :Magenta docker-stop ${branch} first.`,
+            ),
+          );
+          break;
+        }
+
+        this.nvim.logger.info(
+          `Provisioning dev container for branch "${branch}"...`,
+        );
+
+        try {
+          const result = await provisionContainer({
+            repoPath: this.cwd,
+            branch,
+            containerConfig,
+          });
+
+          this.dockerProvisions.set(branch, {
+            ...result,
+            containerConfig,
+          });
+
+          this.nvim.logger.info(
+            `Container "${result.containerName}" provisioned. Creating thread...`,
+          );
+
+          if (!this.sidebar.isVisible()) {
+            await this.command("toggle");
+          }
+
+          this.dispatch({
+            type: "chat-msg",
+            msg: {
+              type: "new-docker-thread",
+              branch,
+              container: result.containerName,
+              cwd: containerConfig.workspacePath,
+            },
+          });
+        } catch (e) {
+          await notifyErr(
+            this.nvim,
+            "docker",
+            e instanceof Error ? e : new Error(String(e)),
+          );
+        }
+        break;
+      }
+
+      case "docker-stop": {
+        const branch = rest[0];
+        if (!branch) {
+          await notifyErr(
+            this.nvim,
+            "docker-stop",
+            new Error("Usage: :Magenta docker-stop <branch>"),
+          );
+          break;
+        }
+
+        const provision = this.dockerProvisions.get(branch);
+        if (!provision) {
+          await notifyErr(
+            this.nvim,
+            "docker-stop",
+            new Error(`No running container found for branch "${branch}".`),
+          );
+          break;
+        }
+
+        this.nvim.logger.info(
+          `Tearing down container for branch "${branch}"...`,
+        );
+
+        try {
+          await teardownContainer({
+            containerName: provision.containerName,
+            repoPath: this.cwd,
+            branch,
+            tempDir: provision.tempDir,
+            volumeOverlays: provision.containerConfig.volumeOverlays,
+          });
+
+          this.dockerProvisions.delete(branch);
+          this.nvim.logger.info(
+            `Container for branch "${branch}" torn down and branch fetched back.`,
+          );
+        } catch (e) {
+          await notifyErr(
+            this.nvim,
+            "docker-stop",
+            e instanceof Error ? e : new Error(String(e)),
+          );
+        }
         break;
       }
 

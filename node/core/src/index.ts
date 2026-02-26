@@ -229,3 +229,7 @@ export * as WaitForSubagents from "./tools/wait-for-subagents.ts";
 export * as YieldToParent from "./tools/yield-to-parent.ts";
 export * as Edl from "./tools/edl.ts";
 export { createTool, type CreateToolContext } from "./tools/create-tool.ts";
+
+export type { ContainerConfig, ProvisionResult } from "./container/types.ts";
+export { provisionContainer } from "./container/provision.ts";
+export { teardownContainer } from "./container/teardown.ts";

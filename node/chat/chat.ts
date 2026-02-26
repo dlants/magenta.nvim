@@ -4,7 +4,11 @@ import type { RootMsg } from "../root-msg.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import { Thread, view as threadView, type InputMessage } from "./thread.ts";
 import type { Lsp } from "../capabilities/lsp.ts";
-import { createLocalEnvironment } from "../environment.ts";
+import {
+  createLocalEnvironment,
+  createDockerEnvironment,
+  type EnvironmentConfig,
+} from "../environment.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { FileIO } from "@magenta/core";
 
@@ -83,6 +87,12 @@ export type Msg =
     }
   | {
       type: "threads-overview";
+    }
+  | {
+      type: "new-docker-thread";
+      branch: string;
+      container: string;
+      cwd: string;
     };
 
 export type ChatMsg = {
@@ -311,6 +321,14 @@ export class Chat implements ThreadManager {
         };
         return;
 
+      case "new-docker-thread": {
+        this.handleNewDockerThread(msg).catch((e: Error) => {
+          this.context.nvim.logger.error(
+            "Failed to create docker thread: " + e.message + "\n" + e.stack,
+          );
+        });
+        return;
+      }
       case "fork-thread": {
         this.handleForkThread(msg).catch((e: Error) => {
           this.context.nvim.logger.error(
@@ -361,6 +379,7 @@ export class Chat implements ThreadManager {
     inputMessages,
     threadType,
     fileIO,
+    environmentConfig,
   }: {
     threadId: ThreadId;
     profile: Profile;
@@ -370,6 +389,7 @@ export class Chat implements ThreadManager {
     inputMessages?: InputMessage[];
     threadType: ThreadType;
     fileIO?: FileIO;
+    environmentConfig?: EnvironmentConfig;
   }) {
     this.threadWrappers[threadId] = {
       state: "pending",
@@ -412,22 +432,32 @@ export class Chat implements ThreadManager {
       await contextManager.addFiles(contextFiles);
     }
 
-    const environment = createLocalEnvironment({
-      nvim: this.context.nvim,
-      lsp: this.context.lsp,
-      bufferTracker: this.context.bufferTracker,
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-      options: this.context.options,
-      threadId,
-      rememberedCommands: this.rememberedCommands,
-      onPendingChange: () =>
-        this.context.dispatch({
-          type: "thread-msg",
-          id: threadId,
-          msg: { type: "permission-pending-change" },
-        }),
-    });
+    const resolvedConfig: EnvironmentConfig = environmentConfig ?? {
+      type: "local",
+    };
+    const environment =
+      resolvedConfig.type === "docker"
+        ? await createDockerEnvironment({
+            container: resolvedConfig.container,
+            cwd: resolvedConfig.cwd,
+            threadId,
+          })
+        : createLocalEnvironment({
+            nvim: this.context.nvim,
+            lsp: this.context.lsp,
+            bufferTracker: this.context.bufferTracker,
+            cwd: this.context.cwd,
+            homeDir: this.context.homeDir,
+            options: this.context.options,
+            threadId,
+            rememberedCommands: this.rememberedCommands,
+            onPendingChange: () =>
+              this.context.dispatch({
+                type: "thread-msg",
+                id: threadId,
+                msg: { type: "permission-pending-change" },
+              }),
+          });
 
     if (fileIO) {
       environment.fileIO = fileIO;
@@ -489,6 +519,29 @@ export class Chat implements ThreadManager {
     });
   }
 
+  private async handleNewDockerThread(msg: {
+    type: "new-docker-thread";
+    branch: string;
+    container: string;
+    cwd: string;
+  }) {
+    const id = uuidv7() as ThreadId;
+
+    await this.createThreadWithContext({
+      threadId: id,
+      profile: getActiveProfile(
+        this.context.options.profiles,
+        this.context.options.activeProfile,
+      ),
+      switchToThread: true,
+      threadType: "root",
+      environmentConfig: {
+        type: "docker",
+        container: msg.container,
+        cwd: msg.cwd,
+      },
+    });
+  }
   private buildThreadHierarchy(): {
     rootThreads: ThreadId[];
     childrenMap: Map<ThreadId, ThreadId[]>;
@@ -1013,6 +1066,7 @@ ${threadViews.map((view) => d`${view}\n`)}`;
       switchToThread: false,
       inputMessages: [{ type: "system", text: opts.prompt }],
       threadType: opts.threadType,
+      environmentConfig: parentThread.context.environment.environmentConfig,
     });
 
     return thread.id;
