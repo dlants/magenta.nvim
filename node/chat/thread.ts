@@ -39,7 +39,7 @@ import {
 } from "../render-tools/index.ts";
 
 import type { Nvim } from "../nvim/nvim-node/index.ts";
-import type { Lsp } from "../capabilities/lsp.ts";
+
 import {
   getProvider as getProvider,
   type ProviderMessage,
@@ -60,7 +60,6 @@ import {
   type NvimCwd,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
-import type { BufferTracker } from "../buffer-tracker.ts";
 
 import type { Chat } from "./chat.ts";
 import type { ThreadId, ThreadType } from "./types.ts";
@@ -72,14 +71,10 @@ import player from "play-sound";
 import { CommandRegistry } from "./commands/registry.ts";
 import { getSubsequentReminder } from "../providers/system-reminders.ts";
 
-import { NvimLspClient } from "../capabilities/lsp-client-adapter.ts";
-import { getDiagnostics } from "../utils/diagnostics.ts";
-import { BufferAwareFileIO } from "../capabilities/buffer-file-io.ts";
-import { PermissionCheckingFileIO } from "../capabilities/permission-file-io.ts";
-
-import { BaseShell } from "../capabilities/base-shell.ts";
-import { PermissionCheckingShell } from "../capabilities/permission-shell.ts";
+import type { PermissionCheckingFileIO } from "../capabilities/permission-file-io.ts";
+import type { PermissionCheckingShell } from "../capabilities/permission-shell.ts";
 import type { Shell } from "../capabilities/shell.ts";
+import type { Environment } from "../environment.ts";
 import {
   renderThreadToMarkdown,
   chunkMessages,
@@ -268,19 +263,16 @@ export class Thread {
       dispatch: Dispatch<RootMsg>;
       chat: Chat;
       mcpToolManager: MCPToolManagerImpl;
-      bufferTracker: BufferTracker;
       profile: Profile;
       nvim: Nvim;
       cwd: NvimCwd;
       homeDir: HomeDir;
-      lsp: Lsp;
       contextManager: ContextManager;
       options: MagentaOptions;
       getDisplayWidth: () => number;
+      environment: Environment;
     },
     clonedAgent?: Agent,
-    injectedFileIO?: FileIO,
-    injectedShell?: Shell,
   ) {
     this.myDispatch = (msg) =>
       this.context.dispatch({
@@ -290,50 +282,11 @@ export class Thread {
       });
 
     this.contextManager = this.context.contextManager;
-    if (injectedFileIO) {
-      this.fileIO = injectedFileIO;
-      this.permissionFileIO = undefined;
-    } else {
-      const permissionFileIO = new PermissionCheckingFileIO(
-        new BufferAwareFileIO({
-          nvim: this.context.nvim,
-          bufferTracker: this.context.bufferTracker,
-          cwd: this.context.cwd,
-          homeDir: this.context.homeDir,
-        }),
-        {
-          cwd: this.context.cwd,
-          homeDir: this.context.homeDir,
-          options: this.context.options,
-          nvim: this.context.nvim,
-        },
-        () => this.myDispatch({ type: "permission-pending-change" }),
-      );
-      this.permissionFileIO = permissionFileIO;
-      this.fileIO = permissionFileIO;
-    }
-
-    if (injectedShell) {
-      this.shell = injectedShell;
-      this.permissionShell = undefined;
-    } else {
-      const permissionShell = new PermissionCheckingShell(
-        new BaseShell({
-          cwd: this.context.cwd,
-          threadId: this.id,
-        }),
-        {
-          cwd: this.context.cwd,
-          homeDir: this.context.homeDir,
-          options: this.context.options,
-          nvim: this.context.nvim,
-          rememberedCommands: this.context.chat.rememberedCommands,
-        },
-        () => this.myDispatch({ type: "permission-pending-change" }),
-      );
-      this.permissionShell = permissionShell;
-      this.shell = permissionShell;
-    }
+    const env = this.context.environment;
+    this.fileIO = env.fileIO;
+    this.permissionFileIO = env.permissionFileIO;
+    this.shell = env.shell;
+    this.permissionShell = env.permissionShell;
 
     this.commandRegistry = new CommandRegistry();
     // Register custom commands from options
@@ -372,7 +325,11 @@ export class Thread {
       {
         model: this.state.profile.model,
         systemPrompt: this.state.systemPrompt,
-        tools: getToolSpecs(this.state.threadType, this.context.mcpToolManager),
+        tools: getToolSpecs(
+          this.state.threadType,
+          this.context.mcpToolManager,
+          this.context.environment.availableCapabilities,
+        ),
         ...(this.state.profile.thinking &&
           (this.state.profile.provider === "anthropic" ||
             this.state.profile.provider === "mock") && {
@@ -581,14 +538,9 @@ export class Thread {
         mcpToolManager: this.context.mcpToolManager,
         threadId: this.id,
         logger: this.context.nvim.logger,
-        lspClient: new NvimLspClient(
-          this.context.lsp,
-          this.context.nvim,
-          this.context.cwd,
-          this.context.homeDir,
-        ),
-        cwd: this.context.cwd,
-        homeDir: this.context.homeDir,
+        lspClient: this.context.environment.lspClient,
+        cwd: this.context.environment.cwd,
+        homeDir: this.context.environment.homeDir,
         maxConcurrentSubagents:
           this.context.options.maxConcurrentSubagents || 3,
         contextTracker: this.contextManager as ContextTracker,
@@ -600,14 +552,7 @@ export class Thread {
             fileTypeInfo,
           });
         },
-        diagnosticsProvider: {
-          getDiagnostics: () =>
-            getDiagnostics(
-              this.context.nvim,
-              this.context.cwd,
-              this.context.homeDir,
-            ),
-        },
+        diagnosticsProvider: this.context.environment.diagnosticsProvider,
         edlRegisters: this.state.edlRegisters,
         fileIO: this.fileIO,
         shell: this.shell,
@@ -692,6 +637,8 @@ export class Thread {
 
   /** Reset the context manager, optionally adding specified files */
   private async resetContextManager(contextFiles?: string[]): Promise<void> {
+    const env = this.context.environment;
+    const isDocker = env.environmentConfig.type === "docker";
     this.contextManager = new ContextManager(
       (msg) =>
         this.context.dispatch({
@@ -702,8 +649,8 @@ export class Thread {
       {
         dispatch: this.context.dispatch,
         fileIO: this.fileIO,
-        cwd: this.context.cwd,
-        homeDir: this.context.homeDir,
+        cwd: isDocker ? env.cwd : this.context.cwd,
+        homeDir: isDocker ? env.homeDir : this.context.homeDir,
         nvim: this.context.nvim,
         options: this.context.options,
       },
@@ -773,7 +720,11 @@ export class Thread {
         model: this.state.profile.fastModel,
         systemPrompt:
           "You are a conversation compactor. Summarize conversation transcripts into concise summaries that preserve essential information for continuing the work.",
-        tools: getToolSpecs("compact", this.context.mcpToolManager),
+        tools: getToolSpecs(
+          "compact",
+          this.context.mcpToolManager,
+          this.context.environment.availableCapabilities,
+        ),
         skipPostFlightTokenCount: true,
       },
       (msg) => this.myDispatch({ type: "compact-agent-msg", msg }),
@@ -912,14 +863,9 @@ export class Thread {
         mcpToolManager: this.context.mcpToolManager,
         threadId: this.id,
         logger: this.context.nvim.logger,
-        lspClient: new NvimLspClient(
-          this.context.lsp,
-          this.context.nvim,
-          this.context.cwd,
-          this.context.homeDir,
-        ),
-        cwd: this.context.cwd,
-        homeDir: this.context.homeDir,
+        lspClient: this.context.environment.lspClient,
+        cwd: this.context.environment.cwd,
+        homeDir: this.context.environment.homeDir,
         maxConcurrentSubagents:
           this.context.options.maxConcurrentSubagents || 3,
         contextTracker: this.contextManager as ContextTracker,
@@ -931,14 +877,7 @@ export class Thread {
             fileTypeInfo,
           });
         },
-        diagnosticsProvider: {
-          getDiagnostics: () =>
-            getDiagnostics(
-              this.context.nvim,
-              this.context.cwd,
-              this.context.homeDir,
-            ),
-        },
+        diagnosticsProvider: this.context.environment.diagnosticsProvider,
         edlRegisters: mode.compactEdlRegisters,
         fileIO: mode.compactFileIO,
         shell: this.shell,
@@ -1451,8 +1390,8 @@ export class Thread {
         const { processedText, additionalContent } =
           await this.commandRegistry.processMessage(m.text, {
             nvim: this.context.nvim,
-            cwd: this.context.cwd,
-            homeDir: this.context.homeDir,
+            cwd: this.context.environment.cwd,
+            homeDir: this.context.environment.homeDir,
             contextManager: this.contextManager,
             options: this.context.options,
           });

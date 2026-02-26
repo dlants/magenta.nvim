@@ -62,6 +62,8 @@ local normal_commands = {
   "toggle",
   "new-thread",
   "threads-overview",
+  "docker",
+  "docker-stop",
 }
 
 local visual_commands = {

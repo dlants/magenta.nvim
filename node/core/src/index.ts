@@ -25,6 +25,7 @@ export {
   displayPath,
   expandTilde,
   detectFileType,
+  detectFileTypeViaFileIO,
   isLikelyTextFile,
   categorizeFileType,
   validateFileSize,
@@ -134,6 +135,9 @@ export {
   CHAT_STATIC_TOOL_NAMES,
   COMPACT_STATIC_TOOL_NAMES,
   SUBAGENT_STATIC_TOOL_NAMES,
+  TOOL_CAPABILITIES,
+  type ToolCapability,
+  TOOL_REQUIRED_CAPABILITIES,
 } from "./tools/tool-registry.ts";
 export {
   type MCPToolName,
@@ -226,3 +230,7 @@ export * as WaitForSubagents from "./tools/wait-for-subagents.ts";
 export * as YieldToParent from "./tools/yield-to-parent.ts";
 export * as Edl from "./tools/edl.ts";
 export { createTool, type CreateToolContext } from "./tools/create-tool.ts";
+
+export type { ContainerConfig, ProvisionResult } from "./container/types.ts";
+export { provisionContainer } from "./container/provision.ts";
+export { teardownContainer } from "./container/teardown.ts";

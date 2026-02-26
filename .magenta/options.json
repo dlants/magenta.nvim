@@ -1,4 +1,10 @@
 {
+  "container": {
+    "devcontainer": "docker/Dockerfile",
+    "workspacePath": "/workspace",
+    "installCommand": "npm ci",
+    "volumeOverlays": ["node_modules"]
+  },
   "commandConfig": {
     "commands": [
       ["npx", "tsc", "--noEmit"],

@@ -2,7 +2,11 @@ import { PROVIDER_NAMES, type ProviderName } from "./providers/provider.ts";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { type ServerName, validateServerName } from "@magenta/core";
+import {
+  type ServerName,
+  validateServerName,
+  type ContainerConfig,
+} from "@magenta/core";
 import type { NvimCwd } from "./utils/files.ts";
 import {
   BUILTIN_COMMAND_PERMISSIONS,
@@ -159,7 +163,8 @@ export type MagentaOptions = {
   customCommands: CustomCommand[];
   lspDebounceMs?: number;
   debug?: boolean;
-  chimeVolume?: number; // Volume from 0.0 (silent) to 1.0 (full), defaults to 0.3
+  chimeVolume?: number;
+  container?: ContainerConfig | undefined;
 };
 
 // Reusable parsing helpers
@@ -1177,6 +1182,48 @@ export function parseOptions(
   return options;
 }
 
+function parseContainerConfig(
+  input: unknown,
+  logger: { warn: (msg: string) => void },
+): ContainerConfig | undefined {
+  if (typeof input !== "object" || input === null) {
+    logger.warn("container config must be an object");
+    return undefined;
+  }
+  const obj = input as { [key: string]: unknown };
+
+  if (typeof obj["devcontainer"] !== "string") {
+    logger.warn("container.devcontainer must be a string");
+    return undefined;
+  }
+  if (typeof obj["workspacePath"] !== "string") {
+    logger.warn("container.workspacePath must be a string");
+    return undefined;
+  }
+  if (typeof obj["installCommand"] !== "string") {
+    logger.warn("container.installCommand must be a string");
+    return undefined;
+  }
+
+  const config: ContainerConfig = {
+    devcontainer: obj["devcontainer"],
+    workspacePath: obj["workspacePath"],
+    installCommand: obj["installCommand"],
+  };
+
+  if ("volumeOverlays" in obj) {
+    if (
+      Array.isArray(obj["volumeOverlays"]) &&
+      obj["volumeOverlays"].every((v) => typeof v === "string")
+    ) {
+      config.volumeOverlays = obj["volumeOverlays"];
+    } else {
+      logger.warn("container.volumeOverlays must be an array of strings");
+    }
+  }
+
+  return config;
+}
 export function parseProjectOptions(
   inputOptions: unknown,
   logger: { warn: (msg: string) => void },
@@ -1311,6 +1358,13 @@ export function parseProjectOptions(
   if ("customCommands" in inputOptionsObj) {
     options.customCommands = parseCustomCommands(
       inputOptionsObj["customCommands"],
+      logger,
+    );
+  }
+
+  if ("container" in inputOptionsObj) {
+    options.container = parseContainerConfig(
+      inputOptionsObj["container"],
       logger,
     );
   }
@@ -1454,6 +1508,10 @@ export function mergeOptions(
       ...baseOptions.customCommands,
       ...projectSettings.customCommands,
     ];
+  }
+
+  if (projectSettings.container !== undefined) {
+    merged.container = projectSettings.container;
   }
 
   return merged;

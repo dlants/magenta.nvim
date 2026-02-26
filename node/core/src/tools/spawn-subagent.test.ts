@@ -147,14 +147,18 @@ describe("spawn-subagent unit tests", () => {
 
     for (const { agentType, expectedThreadType } of cases) {
       const threadManager = createMockThreadManager();
-      SpawnSubagent.execute(
-        makeRequest({ prompt: "do something", agentType, blocking: false }),
-        {
-          threadManager,
-          threadId: "parent-1" as ThreadId,
-          requestRender: vi.fn(),
-        },
-      );
+      const input: SpawnSubagent.Input = {
+        prompt: "do something",
+        blocking: false,
+      };
+      if (agentType !== undefined) {
+        input.agentType = agentType;
+      }
+      SpawnSubagent.execute(makeRequest(input), {
+        threadManager,
+        threadId: "parent-1" as ThreadId,
+        requestRender: vi.fn(),
+      });
 
       await vi.waitFor(() => {
         // eslint-disable-next-line @typescript-eslint/unbound-method

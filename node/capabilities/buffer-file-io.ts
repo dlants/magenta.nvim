@@ -125,11 +125,13 @@ export class BufferAwareFileIO implements FileIO {
     const absPath = this.resolvePath(path);
     await fs.mkdir(absPath, { recursive: true });
   }
-  async stat(path: string): Promise<{ mtimeMs: number } | undefined> {
+  async stat(
+    path: string,
+  ): Promise<{ mtimeMs: number; size: number } | undefined> {
     const absPath = this.resolvePath(path);
     try {
       const stats = await fs.stat(absPath);
-      return { mtimeMs: stats.mtimeMs };
+      return { mtimeMs: stats.mtimeMs, size: stats.size };
     } catch {
       return undefined;
     }

@@ -41,9 +41,9 @@ export class InMemoryFileIO implements FileIO {
     return Promise.resolve();
   }
 
-  stat(path: string): Promise<{ mtimeMs: number } | undefined> {
+  stat(path: string): Promise<{ mtimeMs: number; size: number } | undefined> {
     if (this.files.has(path)) {
-      return Promise.resolve({ mtimeMs: Date.now() });
+      return Promise.resolve({ mtimeMs: Date.now(), size: 0 });
     }
     return Promise.resolve(undefined);
   }

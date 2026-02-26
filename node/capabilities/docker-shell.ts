@@ -1,6 +1,5 @@
 import { spawn } from "child_process";
 import type { Shell, ShellResult, OutputLine } from "./shell.ts";
-import type { NvimCwd } from "../utils/files.ts";
 import type { ThreadId } from "../chat/types.ts";
 import { withTimeout } from "../utils/async.ts";
 import {
@@ -10,12 +9,13 @@ import {
   escalateToSigkill,
 } from "./shell-utils.ts";
 
-export class BaseShell implements Shell {
+export class DockerShell implements Shell {
   private runningProcess: ReturnType<typeof spawn> | undefined;
 
   constructor(
     private context: {
-      cwd: NvimCwd;
+      container: string;
+      cwd: string;
       threadId: ThreadId;
     },
   ) {}
@@ -26,7 +26,6 @@ export class BaseShell implements Shell {
 
     terminateProcess(childProcess);
 
-    // Escalate to SIGKILL after 1 second
     setTimeout(() => {
       if (this.runningProcess === childProcess) {
         escalateToSigkill(childProcess);
@@ -57,12 +56,22 @@ export class BaseShell implements Shell {
           code: number | null;
           signal: NodeJS.Signals | null;
         }>((resolve, reject) => {
-          const childProcess = spawn("bash", ["-c", command], {
-            stdio: ["ignore", "pipe", "pipe"],
-            cwd: this.context.cwd,
-            env: process.env,
-            detached: true,
-          });
+          const childProcess = spawn(
+            "docker",
+            [
+              "exec",
+              "-w",
+              this.context.cwd,
+              this.context.container,
+              "bash",
+              "-c",
+              command,
+            ],
+            {
+              stdio: ["ignore", "pipe", "pipe"],
+              detached: true,
+            },
+          );
           this.runningProcess = childProcess;
           opts.onStart?.();
 
