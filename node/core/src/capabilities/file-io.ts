@@ -6,7 +6,7 @@ export interface FileIO {
   writeFile(path: string, content: string): Promise<void>;
   fileExists(path: string): Promise<boolean>;
   mkdir(path: string): Promise<void>;
-  stat(path: string): Promise<{ mtimeMs: number } | undefined>;
+  stat(path: string): Promise<{ mtimeMs: number; size: number } | undefined>;
 }
 
 export class FsFileIO implements FileIO {
@@ -33,10 +33,12 @@ export class FsFileIO implements FileIO {
   async mkdir(path: string): Promise<void> {
     await fs.mkdir(path, { recursive: true });
   }
-  async stat(path: string): Promise<{ mtimeMs: number } | undefined> {
+  async stat(
+    path: string,
+  ): Promise<{ mtimeMs: number; size: number } | undefined> {
     try {
       const stats = await fs.stat(path);
-      return { mtimeMs: stats.mtimeMs };
+      return { mtimeMs: stats.mtimeMs, size: stats.size };
     } catch {
       return undefined;
     }

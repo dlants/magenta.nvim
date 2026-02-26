@@ -225,6 +225,64 @@ export async function isLikelyTextFile(filePath: string): Promise<boolean> {
     }
   }
 }
+/**
+ * FileIO-aware file type detection. Uses the FileIO abstraction instead of
+ * direct filesystem access, so it works in docker environments.
+ */
+export async function detectFileTypeViaFileIO(
+  filePath: string,
+  fileIO: {
+    fileExists: (path: string) => Promise<boolean>;
+    readBinaryFile: (path: string) => Promise<Buffer>;
+  },
+): Promise<FileTypeInfo | undefined> {
+  const exists = await fileIO.fileExists(filePath);
+  if (!exists) return undefined;
+
+  const extension = path.extname(filePath).toLowerCase();
+  let mimeType: string | undefined;
+  let category: FileCategory;
+
+  try {
+    const buffer = await fileIO.readBinaryFile(filePath);
+    const { fileTypeFromBuffer } = await import("file-type");
+    const fileType = await fileTypeFromBuffer(buffer);
+    if (fileType) {
+      mimeType = fileType.mime;
+      category = categorizeFileType(mimeType);
+    } else {
+      mimeType = lookup(filePath) || "application/octet-stream";
+      category = categorizeFileType(mimeType);
+
+      if (category === FileCategory.UNSUPPORTED) {
+        // Check if content looks like text
+        const sample = buffer.subarray(0, Math.min(buffer.length, 8192));
+        if (!sample.includes(0)) {
+          const text = sample.toString("utf8");
+          const printableChars = text.split("").filter((char) => {
+            const code = char.charCodeAt(0);
+            return (
+              (code >= 32 && code <= 126) ||
+              code === 9 ||
+              code === 10 ||
+              code === 13 ||
+              code > 126
+            );
+          }).length;
+          if (printableChars / text.length > 0.95) {
+            mimeType = "text/plain";
+            category = FileCategory.TEXT;
+          }
+        }
+      }
+    }
+  } catch {
+    mimeType = lookup(filePath) || "application/octet-stream";
+    category = categorizeFileType(mimeType);
+  }
+
+  return { category, mimeType, extension };
+}
 export async function detectFileType(
   filePath: string,
 ): Promise<FileTypeInfo | undefined> {

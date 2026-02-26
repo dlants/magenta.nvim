@@ -407,31 +407,6 @@ export class Chat implements ThreadManager {
 
     const initialFiles = autoContextFilesToInitialFiles(autoContextFiles);
 
-    const contextManager = new ContextManager(
-      (msg) =>
-        this.context.dispatch({
-          type: "thread-msg",
-          id: threadId,
-          msg: {
-            type: "context-manager-msg",
-            msg,
-          },
-        }),
-      {
-        dispatch: this.context.dispatch,
-        fileIO: new BufferAwareFileIO(this.context),
-        cwd: this.context.cwd,
-        homeDir: this.context.homeDir,
-        nvim: this.context.nvim,
-        options: this.context.options,
-      },
-      initialFiles,
-    );
-
-    if (contextFiles.length > 0) {
-      await contextManager.addFiles(contextFiles);
-    }
-
     const resolvedConfig: EnvironmentConfig = environmentConfig ?? {
       type: "local",
     };
@@ -462,6 +437,46 @@ export class Chat implements ThreadManager {
     if (fileIO) {
       environment.fileIO = fileIO;
       environment.permissionFileIO = undefined;
+    }
+
+    // For Docker environments, use the container's fileIO/cwd/homeDir so the
+    // context manager checks file existence inside the container, not on the host.
+    const cmFileIO =
+      environment.environmentConfig.type === "docker"
+        ? environment.fileIO
+        : new BufferAwareFileIO(this.context);
+    const cmCwd =
+      environment.environmentConfig.type === "docker"
+        ? environment.cwd
+        : this.context.cwd;
+    const cmHomeDir =
+      environment.environmentConfig.type === "docker"
+        ? environment.homeDir
+        : this.context.homeDir;
+
+    const contextManager = new ContextManager(
+      (msg) =>
+        this.context.dispatch({
+          type: "thread-msg",
+          id: threadId,
+          msg: {
+            type: "context-manager-msg",
+            msg,
+          },
+        }),
+      {
+        dispatch: this.context.dispatch,
+        fileIO: cmFileIO,
+        cwd: cmCwd,
+        homeDir: cmHomeDir,
+        nvim: this.context.nvim,
+        options: this.context.options,
+      },
+      initialFiles,
+    );
+
+    if (contextFiles.length > 0) {
+      await contextManager.addFiles(contextFiles);
     }
 
     const thread = new Thread(threadId, threadType, systemPrompt, {

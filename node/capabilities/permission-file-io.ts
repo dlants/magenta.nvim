@@ -112,7 +112,9 @@ export class PermissionCheckingFileIO implements FileIO {
     return this.inner.mkdir(path);
   }
 
-  async stat(path: string): Promise<{ mtimeMs: number } | undefined> {
+  async stat(
+    path: string,
+  ): Promise<{ mtimeMs: number; size: number } | undefined> {
     return this.inner.stat(path);
   }
 

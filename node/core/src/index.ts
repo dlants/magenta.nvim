@@ -25,6 +25,7 @@ export {
   displayPath,
   expandTilde,
   detectFileType,
+  detectFileTypeViaFileIO,
   isLikelyTextFile,
   categorizeFileType,
   validateFileSize,

@@ -1,13 +1,24 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { execFile as execFileCb } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs";
 import { DockerFileIO } from "./docker-file-io.ts";
 import { DockerShell } from "./docker-shell.ts";
 import { createDockerEnvironment } from "../environment.ts";
-import { getToolSpecs } from "@magenta/core";
+import { ContextManager } from "../context/context-manager.ts";
+import { getToolSpecs, GetFile, FileCategory } from "@magenta/core";
 import type { ThreadId } from "../chat/types.ts";
-import type { MCPToolManager } from "@magenta/core";
+import type { Nvim } from "../nvim/nvim-node/index.ts";
+import type { MagentaOptions } from "../options.ts";
+
+import type {
+  MCPToolManager,
+  ToolRequestId,
+  UnresolvedFilePath,
+  NvimCwd,
+  HomeDir,
+  AbsFilePath,
+} from "@magenta/core";
 
 const execFile = promisify(execFileCb);
 
@@ -248,6 +259,149 @@ describe.skipIf(!dockerAvailable)("Docker Environment", () => {
       expect(toolNames).not.toContain("hover");
       expect(toolNames).not.toContain("find_references");
       expect(toolNames).not.toContain("diagnostics");
+    });
+
+    describe("GetFile through DockerFileIO", () => {
+      it("can read a file inside the container", async () => {
+        const fileIO = new DockerFileIO({ container: containerId });
+
+        // Create a test file in the container
+        await execFile("docker", [
+          "exec",
+          containerId,
+          "sh",
+          "-c",
+          'echo "hello from container" > /tmp/test-read.txt',
+        ]);
+
+        const request: GetFile.ToolRequest = {
+          id: "test-get-file" as ToolRequestId,
+          toolName: "get_file",
+          input: {
+            filePath: "/tmp/test-read.txt" as UnresolvedFilePath,
+          },
+        };
+
+        const invocation = GetFile.execute(request, {
+          cwd: "/tmp" as NvimCwd,
+          homeDir: "/root" as HomeDir,
+          fileIO,
+          contextTracker: { files: {} },
+          onToolApplied: () => {},
+        });
+
+        const result = await invocation.promise;
+        expect(result.result.status).toBe("ok");
+        if (result.result.status === "ok") {
+          const text = result.result.value
+            .filter(
+              (c): c is { type: "text"; text: string } => c.type === "text",
+            )
+            .map((c) => c.text)
+            .join("");
+          expect(text).toContain("hello from container");
+        }
+      });
+    });
+  });
+
+  describe("ContextManager with DockerFileIO", () => {
+    const CONTAINER_FILE = "/tmp/context-test.txt" as AbsFilePath;
+
+    const TEXT_FILE_TYPE = {
+      category: FileCategory.TEXT,
+      mimeType: "text/plain",
+      extension: ".txt",
+    };
+
+    function createDockerContextManager(fileIO: DockerFileIO) {
+      const mockNvim = {
+        logger: {
+          error: vi.fn(),
+          warn: vi.fn(),
+          info: vi.fn(),
+        },
+      } as unknown as Nvim;
+
+      const cm = new ContextManager(() => {}, {
+        cwd: "/tmp" as NvimCwd,
+        homeDir: "/root" as HomeDir,
+        dispatch: () => {},
+        fileIO,
+        nvim: mockNvim,
+        options: {} as MagentaOptions,
+      });
+
+      return cm;
+    }
+
+    it("does not report container files as deleted", async () => {
+      const fileIO = new DockerFileIO({ container: containerId });
+
+      await fileIO.writeFile(CONTAINER_FILE, "container content");
+
+      const cm = createDockerContextManager(fileIO);
+
+      cm.update({
+        type: "tool-applied",
+        absFilePath: CONTAINER_FILE,
+        tool: { type: "get-file", content: "container content" },
+        fileTypeInfo: TEXT_FILE_TYPE,
+      });
+
+      const updates = await cm.getContextUpdate();
+      expect(Object.keys(updates).length).toBe(0);
+    });
+
+    it("detects content changes inside the container", async () => {
+      const fileIO = new DockerFileIO({ container: containerId });
+
+      await fileIO.writeFile(CONTAINER_FILE, "original content");
+
+      const cm = createDockerContextManager(fileIO);
+
+      cm.update({
+        type: "tool-applied",
+        absFilePath: CONTAINER_FILE,
+        tool: { type: "get-file", content: "original content" },
+        fileTypeInfo: TEXT_FILE_TYPE,
+      });
+
+      // Modify the file inside the container
+      await fileIO.writeFile(CONTAINER_FILE, "modified content");
+
+      const updates = await cm.getContextUpdate();
+      const update = updates[CONTAINER_FILE];
+      expect(update).toBeDefined();
+      expect(update.update.status).toBe("ok");
+      if (update.update.status !== "ok") throw new Error("Expected ok");
+      expect(update.update.value.type).toBe("diff");
+    });
+
+    it("detects actual deletion inside the container", async () => {
+      const fileIO = new DockerFileIO({ container: containerId });
+
+      await fileIO.writeFile(CONTAINER_FILE, "soon to be deleted");
+
+      const cm = createDockerContextManager(fileIO);
+
+      cm.update({
+        type: "tool-applied",
+        absFilePath: CONTAINER_FILE,
+        tool: { type: "get-file", content: "soon to be deleted" },
+        fileTypeInfo: TEXT_FILE_TYPE,
+      });
+
+      // Actually delete the file inside the container
+      await execFile("docker", ["exec", containerId, "rm", CONTAINER_FILE]);
+
+      const updates = await cm.getContextUpdate();
+      const update = updates[CONTAINER_FILE];
+      expect(update).toBeDefined();
+      expect(update.update.status).toBe("ok");
+      if (update.update.status !== "ok") throw new Error("Expected ok");
+      expect(update.update.value.type).toBe("file-deleted");
+      expect(cm.files[CONTAINER_FILE]).toBeUndefined();
     });
   });
 });

@@ -9,8 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Neovim stable
-RUN curl -fsSL https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.tar.gz \
+# Install Neovim stable (arch-aware)
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "arm64" ]; then NVIM_ARCH="arm64"; else NVIM_ARCH="x86_64"; fi && \
+    curl -fsSL "https://github.com/neovim/neovim/releases/download/stable/nvim-linux-${NVIM_ARCH}.tar.gz" \
     | tar xz -C /usr/local --strip-components=1
 
 # Install typescript-language-server globally

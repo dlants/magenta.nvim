@@ -539,8 +539,8 @@ export class Thread {
         threadId: this.id,
         logger: this.context.nvim.logger,
         lspClient: this.context.environment.lspClient,
-        cwd: this.context.cwd,
-        homeDir: this.context.homeDir,
+        cwd: this.context.environment.cwd,
+        homeDir: this.context.environment.homeDir,
         maxConcurrentSubagents:
           this.context.options.maxConcurrentSubagents || 3,
         contextTracker: this.contextManager as ContextTracker,
@@ -637,6 +637,8 @@ export class Thread {
 
   /** Reset the context manager, optionally adding specified files */
   private async resetContextManager(contextFiles?: string[]): Promise<void> {
+    const env = this.context.environment;
+    const isDocker = env.environmentConfig.type === "docker";
     this.contextManager = new ContextManager(
       (msg) =>
         this.context.dispatch({
@@ -647,8 +649,8 @@ export class Thread {
       {
         dispatch: this.context.dispatch,
         fileIO: this.fileIO,
-        cwd: this.context.cwd,
-        homeDir: this.context.homeDir,
+        cwd: isDocker ? env.cwd : this.context.cwd,
+        homeDir: isDocker ? env.homeDir : this.context.homeDir,
         nvim: this.context.nvim,
         options: this.context.options,
       },
@@ -862,8 +864,8 @@ export class Thread {
         threadId: this.id,
         logger: this.context.nvim.logger,
         lspClient: this.context.environment.lspClient,
-        cwd: this.context.cwd,
-        homeDir: this.context.homeDir,
+        cwd: this.context.environment.cwd,
+        homeDir: this.context.environment.homeDir,
         maxConcurrentSubagents:
           this.context.options.maxConcurrentSubagents || 3,
         contextTracker: this.contextManager as ContextTracker,
@@ -1388,8 +1390,8 @@ export class Thread {
         const { processedText, additionalContent } =
           await this.commandRegistry.processMessage(m.text, {
             nvim: this.context.nvim,
-            cwd: this.context.cwd,
-            homeDir: this.context.homeDir,
+            cwd: this.context.environment.cwd,
+            homeDir: this.context.environment.homeDir,
             contextManager: this.contextManager,
             options: this.context.options,
           });

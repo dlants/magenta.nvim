@@ -10,9 +10,9 @@ import type {
 import {
   resolveFilePath,
   type UnresolvedFilePath,
-  detectFileType,
-  validateFileSize,
+  detectFileTypeViaFileIO,
   FileCategory,
+  FILE_SIZE_LIMITS,
   type NvimCwd,
   type HomeDir,
 } from "../utils/files.ts";
@@ -157,7 +157,10 @@ You already have the most up-to-date information about the contents of this file
         };
       }
 
-      const fileTypeInfo = await detectFileType(absFilePath);
+      const fileTypeInfo = await detectFileTypeViaFileIO(
+        absFilePath,
+        context.fileIO,
+      );
       if (aborted) return abortResult;
 
       if (!fileTypeInfo) {
@@ -182,15 +185,21 @@ You already have the most up-to-date information about the contents of this file
         };
       }
 
-      const sizeValidation = await validateFileSize(
-        absFilePath,
-        fileTypeInfo.category,
-      );
+      const statResult = await context.fileIO.stat(absFilePath);
       if (aborted) return abortResult;
+      const actualSize = statResult?.size ?? 0;
+      const maxSize =
+        fileTypeInfo.category === FileCategory.TEXT
+          ? Infinity
+          : fileTypeInfo.category === FileCategory.IMAGE
+            ? FILE_SIZE_LIMITS.IMAGE
+            : fileTypeInfo.category === FileCategory.PDF
+              ? FILE_SIZE_LIMITS.PDF
+              : 0;
 
-      if (!sizeValidation.isValid) {
-        const sizeMB = (sizeValidation.actualSize / (1024 * 1024)).toFixed(2);
-        const maxSizeMB = (sizeValidation.maxSize / (1024 * 1024)).toFixed(2);
+      if (actualSize > maxSize) {
+        const sizeMB = (actualSize / (1024 * 1024)).toFixed(2);
+        const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(2);
         return {
           type: "tool_result",
           id: request.id,

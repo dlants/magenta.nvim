@@ -4,7 +4,13 @@ import { BINDING_KEYS, type BindingKey } from "./tea/bindings.ts";
 import { pos } from "./tea/view.ts";
 import type { Nvim } from "./nvim/nvim-node/index.ts";
 import { Lsp } from "./capabilities/lsp.ts";
-import { getCurrentBuffer, getcwd, getpos, notifyErr } from "./nvim/nvim.ts";
+import {
+  getCurrentBuffer,
+  getcwd,
+  getpos,
+  notify,
+  notifyErr,
+} from "./nvim/nvim.ts";
 import type { BufNr, Line } from "./nvim/buffer.ts";
 import { pos1col1to0, type Row0Indexed } from "./nvim/window.ts";
 import { getMarkdownExt } from "./utils/markdown.ts";
@@ -447,6 +453,9 @@ ${lines.join("\n")}
             repoPath: this.cwd,
             branch,
             containerConfig,
+            onProgress: (message) => {
+              void notify(this.nvim, `[docker] ${message}`);
+            },
           });
 
           this.dockerProvisions.set(branch, {
@@ -454,8 +463,9 @@ ${lines.join("\n")}
             containerConfig,
           });
 
-          this.nvim.logger.info(
-            `Container "${result.containerName}" provisioned. Creating thread...`,
+          void notify(
+            this.nvim,
+            `[docker] Container provisioned. Creating thread...`,
           );
 
           if (!this.sidebar.isVisible()) {
@@ -516,8 +526,9 @@ ${lines.join("\n")}
           });
 
           this.dockerProvisions.delete(branch);
-          this.nvim.logger.info(
-            `Container for branch "${branch}" torn down and branch fetched back.`,
+          void notify(
+            this.nvim,
+            `[docker] Container for "${branch}" torn down. Branch fetched back.`,
           );
         } catch (e) {
           await notifyErr(

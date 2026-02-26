@@ -76,18 +76,22 @@ export class DockerFileIO implements FileIO {
     await execFile("docker", ["exec", this.container, "mkdir", "-p", path]);
   }
 
-  async stat(path: string): Promise<{ mtimeMs: number } | undefined> {
+  async stat(
+    path: string,
+  ): Promise<{ mtimeMs: number; size: number } | undefined> {
     try {
       const { stdout } = await execFile("docker", [
         "exec",
         this.container,
         "stat",
         "-c",
-        "%Y",
+        "%Y %s",
         path,
       ]);
-      const seconds = parseInt(stdout.trim(), 10);
-      return { mtimeMs: seconds * 1000 };
+      const parts = stdout.trim().split(" ");
+      const seconds = parseInt(parts[0], 10);
+      const size = parseInt(parts[1], 10);
+      return { mtimeMs: seconds * 1000, size };
     } catch {
       return undefined;
     }

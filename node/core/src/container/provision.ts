@@ -12,14 +12,17 @@ const TEMP_BASE = "/tmp/magenta-dev-containers";
 export async function provisionContainer({
   repoPath,
   branch,
-  baseBranch = "main",
+  baseBranch = "HEAD",
   containerConfig,
+  onProgress,
 }: {
   repoPath: string;
   branch: string;
   baseBranch?: string;
   containerConfig: ContainerConfig;
+  onProgress?: (message: string) => void;
 }): Promise<ProvisionResult> {
+  const progress = onProgress ?? (() => {});
   const shortHash = crypto.randomBytes(4).toString("hex");
   const safeBranch = branch.replace(/[^a-zA-Z0-9_-]/g, "-");
   const containerName = `magenta-${safeBranch}-${shortHash}`;
@@ -28,7 +31,7 @@ export async function provisionContainer({
 
   await fs.promises.mkdir(repoDir, { recursive: true });
 
-  // Clone the repo locally (hardlinks for speed)
+  progress("Cloning repository...");
   await execFile("git", ["clone", "--local", repoPath, repoDir]);
 
   // Check if branch exists in the clone
@@ -59,7 +62,7 @@ export async function provisionContainer({
   // Remove remote so the agent can't push
   await execFile("git", ["-C", repoDir, "remote", "remove", "origin"]);
 
-  // Build the Docker image
+  progress("Building Docker image...");
   const dockerfilePath = path.join(repoPath, containerConfig.devcontainer);
   const dockerContext = path.dirname(dockerfilePath);
   const imageName = `magenta-dev-${safeBranch}`;
@@ -90,9 +93,10 @@ export async function provisionContainer({
   }
 
   runArgs.push(imageName);
+  progress("Starting container...");
   await execFile("docker", runArgs);
 
-  // Run install command inside the container
+  progress(`Running install command: ${containerConfig.installCommand}`);
   await execFile(
     "docker",
     [
