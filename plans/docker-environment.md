@@ -36,7 +36,7 @@
 
 ## Architecture decisions
 
-1. **Environment config location**: Top-level in `MagentaOptions` (not per-profile), since environment (where tools execute) is orthogonal to profile (which AI provider to use). Also settable via `.magenta/options.json` for per-project config.
+1. **Environment config location**: Per-thread, not global. Each thread is created with an optional `EnvironmentConfig`. Default is local. Docker threads are created ad-hoc by passing a container ID. Subagent threads inherit their parent's environment config.
 
 2. **Docker implementations location**: In `node/capabilities/` (root project), alongside `BaseShell` and `BufferAwareFileIO`. They use `child_process.spawn` to run `docker exec` commands on the host.
 
@@ -44,7 +44,7 @@
 
 4. **Docker Shell approach**: `DockerShell` implements `Shell` by spawning `docker exec -w <cwd> <container> bash -c <command>` as a local child process. Output capture, log file writing, and timeouts happen on the host (similar to `BaseShell`). **Not** wrapped in `PermissionCheckingShell` — all commands inside the container are auto-allowed.
 
-5. **LSP tool exclusion**: `getToolSpecs` gains an optional `excludedTools` parameter (a `Set<StaticToolName>`). The Thread/Chat layer passes the Docker-excluded set (`hover`, `find_references`, `diagnostics`) when in Docker mode. No-op stubs are provided for `LspClient` and `DiagnosticsProvider` so `CreateToolContext` remains fully populated (avoiding type gymnastics). If a tool somehow gets invoked despite not being in the spec list, it returns an error message.
+5. **LSP tool exclusion**: `getToolSpecs` accepts `availableCapabilities` (from pre-work A). Docker environments omit `"lsp"` and `"diagnostics"` capabilities, so those tools are automatically filtered out. No-op stubs are provided for `LspClient` and `DiagnosticsProvider` so `CreateToolContext` remains fully populated (avoiding type gymnastics).
 
 6. **cwd / homeDir**: In Docker mode, `cwd` is the working directory inside the container (configurable, defaults to container's `$HOME` or `/`). `homeDir` is the home directory inside the container. These are branded string types so they work with existing path resolution. They can either be specified in config or queried from the container at startup.
 
@@ -54,31 +54,31 @@
 
 Currently tool lists are hardcoded per thread type. Instead, make `getToolSpecs` accept a set of available capabilities and only include tools whose dependencies are satisfied. This is useful independently — e.g., users without LSP configured shouldn't see hover/find_references/diagnostics offered to the LLM.
 
-- [ ] **A1: Map tools to required capabilities**
-  - [ ] Define a `ToolCapability` type in `tool-registry.ts` (e.g., `"lsp"`, `"shell"`, `"diagnostics"`, `"threads"`, `"file-io"`)
-  - [ ] Add a `TOOL_REQUIRED_CAPABILITIES` map from `StaticToolName` to `Set<ToolCapability>`:
+- [x] **A1: Map tools to required capabilities**
+  - [x] Define a `ToolCapability` type in `tool-registry.ts` (e.g., `"lsp"`, `"shell"`, `"diagnostics"`, `"threads"`, `"file-io"`)
+  - [x] Add a `TOOL_REQUIRED_CAPABILITIES` map from `StaticToolName` to `Set<ToolCapability>`:
     - `hover`, `find_references` → `{"lsp"}`
     - `diagnostics` → `{"diagnostics"}`
     - `bash_command` → `{"shell"}`
     - `spawn_subagent`, `spawn_foreach`, `wait_for_subagents` → `{"threads"}`
     - `get_file`, `edl` → `{"file-io"}` (always available)
     - `thread_title`, `yield_to_parent` → no requirements
-  - [ ] Type-check: `npx tsgo -b`
+  - [x] Type-check: `npx tsgo -b`
 
-- [ ] **A2: Update `getToolSpecs` to filter by capabilities**
-  - [ ] Add an optional `availableCapabilities?: Set<ToolCapability>` parameter to `getToolSpecs`
-  - [ ] When provided, filter the static tool names to only those whose required capabilities are all present in the set
-  - [ ] When not provided, include all tools for the thread type (backward compatible)
-  - [ ] Update call sites to pass capabilities (for now, all local capabilities — no behavior change)
-  - [ ] Type-check: `npx tsgo -b`
-  - [ ] Run tests: `npx vitest run`
+- [x] **A2: Update `getToolSpecs` to filter by capabilities**
+  - [x] Add an optional `availableCapabilities?: Set<ToolCapability>` parameter to `getToolSpecs`
+  - [x] When provided, filter the static tool names to only those whose required capabilities are all present in the set
+  - [x] When not provided, include all tools for the thread type (backward compatible)
+  - [x] Update call sites to pass capabilities (for now, all local capabilities — no behavior change)
+  - [x] Type-check: `npx tsgo -b`
+  - [x] Run tests: `npx vitest run`
 
 ## Pre-work B: Extract capability assembly from Thread into an Environment abstraction
 
 Thread's constructor currently hardcodes the local capability chain (BufferAwareFileIO → PermissionCheckingFileIO, BaseShell → PermissionCheckingShell, real LSP adapter). Extract this into an `Environment` interface so Thread just consumes pre-assembled capabilities.
 
-- [ ] **B1: Define the `Environment` interface**
-  - [ ] Create a type (in root, e.g. `node/environment.ts`) that bundles the capabilities an environment provides:
+- [x] **B1: Define the `Environment` interface**
+  - [x] Create a type (in root, e.g. `node/environment.ts`) that bundles the capabilities an environment provides:
     ```
     interface Environment {
       fileIO: FileIO;
@@ -92,56 +92,55 @@ Thread's constructor currently hardcodes the local capability chain (BufferAware
       homeDir: HomeDir;
     }
     ```
-  - [ ] Type-check: `npx tsgo -b`
+  - [x] Type-check: `npx tsgo -b`
 
-- [ ] **B2: Create `LocalEnvironment` factory**
-  - [ ] Extract the existing capability assembly logic from Thread's constructor into a `createLocalEnvironment(...)` function
-  - [ ] This produces the current behavior: BufferAwareFileIO → PermissionCheckingFileIO, BaseShell → PermissionCheckingShell, real LSP, real diagnostics, all capabilities available
-  - [ ] Type-check: `npx tsgo -b`
+- [x] **B2: Create `LocalEnvironment` factory**
+  - [x] Extract the existing capability assembly logic from Thread's constructor into a `createLocalEnvironment(...)` function
+  - [x] This produces the current behavior: BufferAwareFileIO → PermissionCheckingFileIO, BaseShell → PermissionCheckingShell, real LSP, real diagnostics, all capabilities available
+  - [x] Type-check: `npx tsgo -b`
 
-- [ ] **B3: Refactor Thread to consume Environment**
-  - [ ] Thread constructor receives an `Environment` instead of assembling capabilities itself
-  - [ ] Thread reads `fileIO`, `shell`, `lspClient`, etc. from the environment
-  - [ ] Thread passes `environment.availableCapabilities` to `getToolSpecs`
-  - [ ] Existing tests continue to work (they can inject capabilities or use `createLocalEnvironment`)
-  - [ ] Type-check: `npx tsgo -b`
-  - [ ] Run tests: `npx vitest run`
+- [x] **B3: Refactor Thread to consume Environment**
+  - [x] Thread constructor receives an `Environment` instead of assembling capabilities itself
+  - [x] Thread reads `fileIO`, `shell`, `lspClient`, etc. from the environment
+  - [x] Thread passes `environment.availableCapabilities` to `getToolSpecs`
+  - [x] Existing tests continue to work (they can inject capabilities or use `createLocalEnvironment`)
+  - [x] Type-check: `npx tsgo -b`
+  - [x] Run tests: `npx vitest run`
 
 ## Pre-work C: Extract reusable shell utilities from BaseShell
 
 `BaseShell` contains output capture, ANSI stripping, timeout, and log file writing logic that `DockerShell` will also need. Extract these into shared utilities so both implementations can reuse them.
 
-- [ ] **C1: Extract shared utilities**
-  - [ ] Move ANSI stripping (`stripAnsiCodes`) to a shared module (e.g., `node/capabilities/shell-utils.ts`)
-  - [ ] Extract the output capture loop (stdout/stderr line buffering, `onOutput` callbacks) into a reusable helper
-  - [ ] Extract the timeout wrapper logic
-  - [ ] Extract log file writing into a pluggable function (takes a write strategy — local fs vs DockerFileIO)
-  - [ ] Type-check: `npx tsgo -b`
+- [x] **C1: Extract shared utilities**
+  - [x] Move ANSI stripping (`stripAnsiCodes`) to a shared module (e.g., `node/capabilities/shell-utils.ts`)
+  - [x] Extract the output capture loop (stdout/stderr line buffering, `onOutput` callbacks) into a reusable helper
+  - [x] Extract the timeout wrapper logic
+  - [x] Extract log file writing into a pluggable function (takes a write strategy — local fs vs DockerFileIO)
+  - [x] Type-check: `npx tsgo -b`
 
-- [ ] **C2: Refactor BaseShell to use extracted utilities**
-  - [ ] BaseShell delegates to the shared utilities instead of inlining the logic
-  - [ ] Behavior is identical — this is a pure refactor
-  - [ ] Type-check: `npx tsgo -b`
-  - [ ] Run tests: `npx vitest run`
+- [x] **C2: Refactor BaseShell to use extracted utilities**
+  - [x] BaseShell delegates to the shared utilities instead of inlining the logic
+  - [x] Behavior is identical — this is a pure refactor
+  - [x] Type-check: `npx tsgo -b`
+  - [x] Run tests: `npx vitest run`
 
 # Docker implementation (depends on pre-work)
 
-With the pre-work in place, adding Docker is straightforward: implement a new `Environment` and wire it up.
+With the pre-work in place, adding Docker is straightforward: implement Docker capability classes, a `createDockerEnvironment` factory, and wire it into thread creation.
 
-- [ ] **Step 1: Define environment config in options**
-  - [ ] In `node/options.ts`, define `EnvironmentConfig` type:
+Environment is per-thread: each thread is created with an `EnvironmentConfig` (defaults to local). Docker threads are created ad-hoc by specifying a container ID. Subagent threads inherit their parent's environment.
+
+- [x] **Step 1: Define `EnvironmentConfig` type**
+  - [ ] In `node/environment.ts`, define:
     ```
     type EnvironmentConfig =
       | { type: "local" }
       | { type: "docker"; container: string; cwd?: string }
     ```
-  - [ ] Add `environment?: EnvironmentConfig` field to `MagentaOptions` (defaults to `{ type: "local" }`)
-  - [ ] Add parsing logic in `parseOptions` and `parseProjectOptions`
-  - [ ] Add merge logic in `mergeOptions` (project overrides base)
-  - [ ] Update `lua/magenta/options.lua` with the default
+  - [ ] Add `environmentConfig` field to `Environment` interface so threads can access their config (e.g. for subagent inheritance)
   - [ ] Type-check: `npx tsgo -b`
 
-- [ ] **Step 2: Create `DockerFileIO`**
+- [x] **Step 2: Create `DockerFileIO`**
   - [ ] Create `node/capabilities/docker-file-io.ts`
   - [ ] Implement `FileIO` interface using `child_process.execFile` to run `docker exec` commands:
     - `readFile(path)` → `docker exec <container> cat <path>`
@@ -153,37 +152,117 @@ With the pre-work in place, adding Docker is straightforward: implement a new `E
   - [ ] Write unit tests
   - [ ] Type-check: `npx tsgo -b`
 
-- [ ] **Step 3: Create `DockerShell`**
+- [x] **Step 3: Create `DockerShell`**
   - [ ] Create `node/capabilities/docker-shell.ts`
   - [ ] Implement `Shell` interface:
-    - `execute(command, opts)`: spawn `docker exec -w <cwd> <container> bash -c <command>` as a local child process. Reuse output capture / log file / timeout patterns from `BaseShell`.
-    - `terminate()`: must cleanly kill the command and all its children inside the container. Approach: run commands via `docker exec <container> setsid bash -c '<command>'` so they get their own process group inside the container. On terminate, issue `docker exec <container> kill -- -<pgid>` to kill the entire group, then kill the local `docker exec` process. This mirrors how `BaseShell` uses detached process groups locally.
-  - [ ] Extract shared utilities from `BaseShell` if there's significant duplication
-  - [ ] Log files must be written inside the container (so the agent can read them via `DockerFileIO`). After capturing output locally, write the log via `DockerFileIO.writeFile()` to a container path like `/tmp/magenta-logs/<threadId>/<toolRequestId>.log`.
+    - `execute(command, opts)`: spawn `docker exec -w <cwd> <container> bash -c <command>` as a local child process. Reuse shell-utils for output capture, log writing, ANSI stripping.
+    - `terminate()`: kill the local `docker exec` process (which propagates signal into the container). Use `terminateProcess`/`escalateToSigkill` from shell-utils.
+  - [ ] Log files written locally (host-side) via `createLogWriter` — same as `BaseShell`. Agent can read them via `get_file` since log paths are on the host filesystem.
   - [ ] Write unit tests
   - [ ] Type-check: `npx tsgo -b`
 
-- [ ] **Step 4: Create no-op LSP/diagnostics stubs**
+- [x] **Step 4: Create no-op LSP/diagnostics stubs**
   - [ ] `node/capabilities/noop-lsp-client.ts`: implements `LspClient`, all methods return empty arrays
-  - [ ] `node/capabilities/noop-diagnostics-provider.ts`: implements `DiagnosticsProvider`, returns "not available in Docker"
+  - [ ] `node/capabilities/noop-diagnostics-provider.ts`: implements `DiagnosticsProvider`, returns "not available in Docker environment"
   - [ ] Type-check: `npx tsgo -b`
 
-- [ ] **Step 5: Create `DockerEnvironment` factory**
-  - [ ] Create `createDockerEnvironment(config)` that assembles:
+- [x] **Step 5: Create `createDockerEnvironment` factory**
+  - [ ] In `node/environment.ts`, add `createDockerEnvironment(config)` that assembles:
     - `DockerFileIO` directly (no permission wrapping)
     - `DockerShell` directly (no permission wrapping)
     - No-op LSP client and diagnostics provider
     - `availableCapabilities`: `{"file-io", "shell", "threads"}` (no `"lsp"`, no `"diagnostics"`)
     - `cwd` from config or queried via `docker exec <container> pwd`
     - `homeDir` queried via `docker exec <container> sh -c 'echo $HOME'`
+    - `environmentConfig` stored on the environment for subagent inheritance
   - [ ] Type-check: `npx tsgo -b`
 
-- [ ] **Step 6: Wire up in Chat/Thread creation**
-  - [ ] In `createThreadWithContext`, check `options.environment` and call `createLocalEnvironment` or `createDockerEnvironment` accordingly
-  - [ ] Pass the resulting `Environment` to Thread
+- [x] **Step 6: Wire up per-thread environment in Chat/Thread creation**
+  - [ ] Add optional `environmentConfig?: EnvironmentConfig` to `createThreadWithContext` params
+  - [ ] When creating a thread, call `createLocalEnvironment` or `createDockerEnvironment` based on the config
+  - [ ] Subagent thread creation inherits `environmentConfig` from parent thread's environment
+  - [ ] Pass the resulting `Environment` (with `availableCapabilities`) to Thread
+  - [ ] Thread passes `availableCapabilities` to `getToolSpecs`
   - [ ] Type-check: `npx tsgo -b`
   - [ ] Run tests: `npx vitest run`
 
 - [ ] **Step 7: Integration testing & documentation**
   - [ ] Write integration test verifying Docker environment tool filtering and capability wiring
+  - [ ] Test subagent environment inheritance
   - [ ] Update `context.md`
+
+## Integration Test Plan for Docker Environment
+
+### Test File
+
+`node/capabilities/docker-environment.test.ts`
+
+### Test Structure
+
+**Setup/Teardown:**
+
+- `beforeAll`: Start a container (`docker run -d bash:latest tail -f /dev/null`) and store the container ID. Skip the entire suite with `describe.skipIf` if `docker` CLI is unavailable.
+- `afterAll`: `docker rm -f <containerId>`
+
+### Test Cases
+
+**Layer 1: DockerFileIO (single test, real Docker)**
+
+One test exercises the full FileIO surface sequentially:
+
+- `mkdir("/tmp/test-dir/nested")` — create nested directory
+- `fileExists("/tmp/test-dir/nested")` → `true`
+- `fileExists("/tmp/nonexistent")` → `false`
+- `writeFile("/tmp/test-dir/hello.txt", "hello world")` then `readFile` → assert content matches
+- `writeFile` with binary-like content, `readBinaryFile` → verify Buffer
+- `stat("/tmp/test-dir/hello.txt")` → `mtimeMs` is a reasonable recent timestamp
+- `stat("/tmp/nonexistent")` → `undefined`
+
+**Layer 2: DockerShell (single test, real Docker)**
+
+One test exercises the full Shell surface sequentially:
+
+- `execute("echo hello")` → `exitCode: 0`, output contains "hello"
+- `execute("exit 42")` → `exitCode: 42`
+- `execute("pwd")` → output matches configured `cwd`
+- After a command, verify `logFilePath` exists on host and contains the command + output
+- Start `sleep 60`, call `terminate()`, verify it resolves within a few seconds with a signal
+
+**Layer 3: createDockerEnvironment factory**
+
+11. **Resolves cwd/homeDir from container**: Call `createDockerEnvironment` without `cwd`, verify `cwd` and `homeDir` are reasonable paths from inside the container.
+12. **Uses provided cwd**: Call with explicit `cwd: "/tmp"`, verify `environment.cwd` is `/tmp`.
+13. **Correct capabilities**: Verify `availableCapabilities` contains `file-io`, `shell`, `threads` and does NOT contain `lsp`, `diagnostics`.
+14. **environmentConfig stored**: Verify `environmentConfig` is `{ type: "docker", container, cwd }`.
+15. **No permission wrappers**: Verify `permissionFileIO` and `permissionShell` are `undefined`.
+
+**Layer 4: Tool filtering integration**
+
+16. **getToolSpecs filters correctly**: Call `getToolSpecs("root", mockMcpToolManager, environment.availableCapabilities)` and verify `hover`, `find_references`, `diagnostics` are excluded while `get_file`, `edl`, `bash_command`, `spawn_subagent`, etc. are included.
+
+**Layer 5: Full driver integration (agent flow)**
+
+17. **End-to-end Docker thread**: Use `withDriver` + mock provider. This requires wiring `environmentConfig` into the thread creation path accessible from the driver. Since `createNewThread` doesn't accept an `environmentConfig` yet, this test would:
+    - Directly call `createDockerEnvironment` to create the environment
+    - Call `getToolSpecs` with its capabilities
+    - Verify the tool list excludes LSP tools
+    - Exercise `DockerFileIO` and `DockerShell` through the environment's `fileIO` and `shell` interfaces
+
+### Docker Availability Check
+
+```typescript
+async function isDockerAvailable(): Promise<boolean> {
+  try {
+    await execFile("docker", ["info"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+```
+
+Use `describe.skipIf(!dockerAvailable)` at the top level.
+
+### Container Image
+
+Use `bash:latest` — small image that includes bash out of the box (needed since `DockerShell` runs `bash -c`).

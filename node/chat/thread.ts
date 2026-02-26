@@ -325,7 +325,11 @@ export class Thread {
       {
         model: this.state.profile.model,
         systemPrompt: this.state.systemPrompt,
-        tools: getToolSpecs(this.state.threadType, this.context.mcpToolManager),
+        tools: getToolSpecs(
+          this.state.threadType,
+          this.context.mcpToolManager,
+          this.context.environment.availableCapabilities,
+        ),
         ...(this.state.profile.thinking &&
           (this.state.profile.provider === "anthropic" ||
             this.state.profile.provider === "mock") && {
@@ -714,7 +718,11 @@ export class Thread {
         model: this.state.profile.fastModel,
         systemPrompt:
           "You are a conversation compactor. Summarize conversation transcripts into concise summaries that preserve essential information for continuing the work.",
-        tools: getToolSpecs("compact", this.context.mcpToolManager),
+        tools: getToolSpecs(
+          "compact",
+          this.context.mcpToolManager,
+          this.context.environment.availableCapabilities,
+        ),
         skipPostFlightTokenCount: true,
       },
       (msg) => this.myDispatch({ type: "compact-agent-msg", msg }),

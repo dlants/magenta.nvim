@@ -73,9 +73,7 @@ export function processStreamData(
   }
 }
 
-export function terminateProcess(
-  childProcess: ReturnType<typeof spawn>,
-): void {
+export function terminateProcess(childProcess: ReturnType<typeof spawn>): void {
   const pid = childProcess.pid;
   if (pid) {
     try {
