@@ -13,12 +13,14 @@ function createMockThreadManager(
 ): ThreadManager {
   return {
     spawnThread: vi.fn(),
-    waitForThread: vi.fn((threadId: ThreadId) => {
+    waitForThread: vi.fn((threadId: ThreadId): Promise<Result<string>> => {
       const result = results[threadId];
       if (!result) {
-        throw new Error(`No mock result for thread ${threadId}`);
+        return Promise.reject(
+          new Error(`No mock result for thread ${threadId}`),
+        );
       }
-      return result;
+      return Promise.resolve(result);
     }),
     yieldResult: vi.fn(),
   };

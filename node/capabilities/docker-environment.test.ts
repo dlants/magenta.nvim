@@ -130,30 +130,19 @@ describe.skipIf(!dockerAvailable)("Docker Environment", () => {
         threadId: mockThreadId,
       });
 
-      const startedPromise = new Promise<void>((resolve) => {
-        const executePromise = shell.execute("sleep 60", {
-          toolRequestId: "test-terminate",
-          onStart: () => resolve(),
-        });
-        startedPromise.then(() => {
-          // Give the process a moment to fully start, then terminate
+      const executePromise = shell.execute("sleep 60", {
+        toolRequestId: "test-terminate",
+        onStart: () => {
           setTimeout(() => shell.terminate(), 100);
-        });
-
-        // The execute should resolve within a few seconds after termination
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("terminate timed out")), 10_000),
-        );
-
-        Promise.race([executePromise, timeoutPromise]).then((result) => {
-          // It should have been killed
-          expect(result.signal !== undefined || result.exitCode !== 0).toBe(
-            true,
-          );
-        });
+        },
       });
 
-      await startedPromise;
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("terminate timed out")), 10_000),
+      );
+
+      const result = await Promise.race([executePromise, timeoutPromise]);
+      expect(result.signal !== undefined || result.exitCode !== 0).toBe(true);
     });
   });
 

@@ -7,31 +7,31 @@ import type {
 import type { AbsFilePath } from "@magenta/core";
 
 export class NoopLspClient implements LspClient {
-  async requestHover(
+  requestHover(
     _filePath: AbsFilePath,
     _position: { line: number; character: number },
   ): Promise<LspHoverResponse> {
-    return [];
+    return Promise.resolve([]);
   }
 
-  async requestReferences(
+  requestReferences(
     _filePath: AbsFilePath,
     _position: { line: number; character: number },
   ): Promise<LspReferencesResponse> {
-    return [];
+    return Promise.resolve([]);
   }
 
-  async requestDefinition(
+  requestDefinition(
     _filePath: AbsFilePath,
     _position: { line: number; character: number },
   ): Promise<LspDefinitionResponse> {
-    return [];
+    return Promise.resolve([]);
   }
 
-  async requestTypeDefinition(
+  requestTypeDefinition(
     _filePath: AbsFilePath,
     _position: { line: number; character: number },
   ): Promise<LspDefinitionResponse> {
-    return [];
+    return Promise.resolve([]);
   }
 }
