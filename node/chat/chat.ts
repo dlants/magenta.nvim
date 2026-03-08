@@ -616,7 +616,12 @@ export class Chat implements ThreadManager {
     const marker = threadId === activeThreadId ? "*" : "-";
     const indent = "  ".repeat(depth);
 
-    const displayLine = `${indent}${marker} ${displayName}: ${status}`;
+    const threadWrapper = this.threadWrappers[threadId];
+    const isDocker =
+      threadWrapper?.state === "initialized" &&
+      threadWrapper.thread.core.state.threadType === "docker_root";
+    const prefix = isDocker ? "🐳 " : "";
+    const displayLine = `${indent}${marker} ${prefix}${displayName}: ${status}`;
 
     return withBindings(d`${displayLine}`, {
       "<CR>": () =>
