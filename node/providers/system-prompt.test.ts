@@ -2,6 +2,23 @@ import { it, expect } from "vitest";
 import { createSystemPrompt } from "./system-prompt.ts";
 import { withDriver } from "../test/preamble.ts";
 
+it("applies systemInfoOverrides for docker environments", async () => {
+  await withDriver({}, async (driver) => {
+    const systemPrompt = await createSystemPrompt("docker_root", {
+      nvim: driver.magenta.nvim,
+      cwd: driver.magenta.cwd,
+      options: driver.magenta.options,
+      systemInfoOverrides: {
+        platform: "linux (docker)",
+        cwd: "/workspace" as typeof driver.magenta.cwd,
+      },
+    });
+
+    expect(systemPrompt).toContain("- Operating system: linux (docker)");
+    expect(systemPrompt).toContain("- Current working directory: /workspace");
+    expect(systemPrompt).toContain("# Docker Environment");
+  });
+});
 it("includes system information in the prompt", async () => {
   await withDriver({}, async (driver) => {
     const systemPrompt = await createSystemPrompt("root", {

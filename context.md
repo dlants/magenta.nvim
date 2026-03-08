@@ -180,7 +180,7 @@ When given a task:
 2. **Ask about planning** — Ask the user whether a planning step is needed before implementation.
 3. **Work in docker subagents** — All work should be done using `docker_unsupervised` subagents, unless otherwise requested:
    - If a planning step is requested, spawn a separate docker subagent to produce the plan, then present it to the user for feedback before proceeding.
-   - All implementation work must be done in `docker_unsupervised` subagents (not `dev-in-docker`).
+   - All implementation work must be done in `docker_unsupervised` subagents.
    - Pass the branch name and have the prompt include the plan location to the docker subagent so it checks out the correct branch.
 
 # Notes

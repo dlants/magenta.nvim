@@ -392,48 +392,58 @@ export class Chat implements ThreadManager {
       depth: parent ? (this.threadWrappers[parent]?.depth ?? 0) + 1 : 0,
     };
 
-    const [autoContextFiles, systemPrompt] = await Promise.all([
-      resolveAutoContext(this.context),
-      createSystemPrompt(threadType, {
-        nvim: this.context.nvim,
-        cwd: this.context.cwd,
-        options: this.context.options,
-      }),
-    ]);
-
-    const initialFiles = autoContextFilesToInitialFiles(autoContextFiles);
-
     const resolvedConfig: EnvironmentConfig = environmentConfig ?? {
       type: "local",
     };
-    const environment =
+
+    const [autoContextFiles, environment] = await Promise.all([
+      resolveAutoContext(this.context),
       resolvedConfig.type === "docker"
-        ? await createDockerEnvironment({
+        ? createDockerEnvironment({
             container: resolvedConfig.container,
             cwd: resolvedConfig.cwd,
             threadId,
           })
-        : createLocalEnvironment({
-            nvim: this.context.nvim,
-            lsp: this.context.lsp,
-            bufferTracker: this.context.bufferTracker,
-            cwd: this.context.cwd,
-            homeDir: this.context.homeDir,
-            options: this.context.options,
-            threadId,
-            rememberedCommands: this.rememberedCommands,
-            onPendingChange: () =>
-              this.context.dispatch({
-                type: "thread-msg",
-                id: threadId,
-                msg: { type: "permission-pending-change" },
-              }),
-          });
+        : Promise.resolve(
+            createLocalEnvironment({
+              nvim: this.context.nvim,
+              lsp: this.context.lsp,
+              bufferTracker: this.context.bufferTracker,
+              cwd: this.context.cwd,
+              homeDir: this.context.homeDir,
+              options: this.context.options,
+              threadId,
+              rememberedCommands: this.rememberedCommands,
+              onPendingChange: () =>
+                this.context.dispatch({
+                  type: "thread-msg",
+                  id: threadId,
+                  msg: { type: "permission-pending-change" },
+                }),
+            }),
+          ),
+    ]);
+
+    const initialFiles = autoContextFilesToInitialFiles(autoContextFiles);
 
     if (fileIO) {
       environment.fileIO = fileIO;
       environment.permissionFileIO = undefined;
     }
+
+    const systemPrompt = await createSystemPrompt(threadType, {
+      nvim: this.context.nvim,
+      cwd: environment.cwd,
+      options: this.context.options,
+      ...(resolvedConfig.type === "docker"
+        ? {
+            systemInfoOverrides: {
+              platform: "linux (docker)",
+              cwd: environment.cwd,
+            },
+          }
+        : {}),
+    });
 
     const thread = new Thread(threadId, threadType, systemPrompt, {
       ...this.context,
