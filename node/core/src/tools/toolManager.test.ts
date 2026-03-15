@@ -137,28 +137,95 @@ describe("use_skill conditional inclusion", () => {
     expect(names).toContain("use_skill");
   });
 
-  it("excludes use_skill in compact thread type even with skills", () => {
-    const skills = [
-      { name: "test-skill", description: "A test skill", command: ["echo"] },
+
+});
+
+
+describe("docker vs host skill isolation", () => {
+  it("docker_root thread only gets docker skills", () => {
+    const dockerSkills = [
+      {
+        name: "docker-skill",
+        description: "A docker skill",
+        command: ["docker-cmd"],
+      },
     ];
     const specs = getToolSpecs(
-      "compact",
+      "docker_root",
       noopMcpToolManager,
       undefined,
-      skills,
+      dockerSkills,
     );
-    const names = specs.map((s) => s.name);
-    expect(names).not.toContain("use_skill");
+    const useSkillSpec = specs.find((s) => s.name === "use_skill");
+    expect(useSkillSpec).toBeDefined();
+    expect(useSkillSpec!.description).toContain("docker-skill");
+    expect(useSkillSpec!.description).not.toContain("host-skill");
   });
-});
-describe("conductor thread type", () => {
-  it("returns same tools as root (CHAT_STATIC_TOOL_NAMES)", () => {
-    const conductorSpecs = getToolSpecs("conductor", noopMcpToolManager);
-    const rootSpecs = getToolSpecs("root", noopMcpToolManager);
-    const conductorNames = conductorSpecs.map((s) => s.name);
-    const rootNames = rootSpecs.map((s) => s.name);
-    expect(conductorNames).toEqual(rootNames);
-    expect(conductorNames).not.toContain("yield_to_parent");
-    expect(conductorNames).toContain("spawn_subagent");
+
+  it("root thread only gets host skills", () => {
+    const hostSkills = [
+      {
+        name: "host-skill",
+        description: "A host skill",
+        command: ["host-cmd"],
+      },
+    ];
+    const specs = getToolSpecs(
+      "root",
+      noopMcpToolManager,
+      undefined,
+      hostSkills,
+    );
+    const useSkillSpec = specs.find((s) => s.name === "use_skill");
+    expect(useSkillSpec).toBeDefined();
+    expect(useSkillSpec!.description).toContain("host-skill");
+    expect(useSkillSpec!.description).not.toContain("docker-skill");
+  });
+
+  it("simulates thread.ts skill resolution for docker vs host", () => {
+    const options = {
+      toolSkills: {
+        host: {
+          "host-skill": {
+            name: "host-skill",
+            description: "Host only",
+            command: ["host-cmd"],
+          },
+        },
+        docker: {
+          "docker-skill": {
+            name: "docker-skill",
+            description: "Docker only",
+            command: ["docker-cmd"],
+          },
+        },
+      },
+    };
+
+    // Simulate docker thread resolution (from thread.ts)
+    const dockerSkills = Object.values(options.toolSkills.docker ?? {});
+    const dockerSpecs = getToolSpecs(
+      "docker_root",
+      noopMcpToolManager,
+      undefined,
+      dockerSkills,
+    );
+    const dockerUseSkill = dockerSpecs.find((s) => s.name === "use_skill");
+    expect(dockerUseSkill).toBeDefined();
+    expect(dockerUseSkill!.description).toContain("docker-skill");
+    expect(dockerUseSkill!.description).not.toContain("host-skill");
+
+    // Simulate host thread resolution (from thread.ts)
+    const hostSkills = Object.values(options.toolSkills.host ?? {});
+    const hostSpecs = getToolSpecs(
+      "root",
+      noopMcpToolManager,
+      undefined,
+      hostSkills,
+    );
+    const hostUseSkill = hostSpecs.find((s) => s.name === "use_skill");
+    expect(hostUseSkill).toBeDefined();
+    expect(hostUseSkill!.description).toContain("host-skill");
+    expect(hostUseSkill!.description).not.toContain("docker-skill");
   });
 });

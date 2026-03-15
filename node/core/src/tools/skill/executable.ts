@@ -19,6 +19,7 @@ export function executeSkill(
     try {
       proc = spawn(command[0], args, {
         stdio: ["ignore", "pipe", "pipe"],
+        detached: true,
       });
     } catch (err) {
       resolve({
@@ -57,7 +58,27 @@ export function executeSkill(
       opts.signal.addEventListener(
         "abort",
         () => {
-          proc.kill("SIGTERM");
+          const pid = proc.pid;
+          if (pid) {
+            try {
+              process.kill(-pid, "SIGTERM");
+            } catch {
+              proc.kill("SIGTERM");
+            }
+          } else {
+            proc.kill("SIGTERM");
+          }
+          setTimeout(() => {
+            if (pid) {
+              try {
+                process.kill(-pid, "SIGKILL");
+              } catch {
+                proc.kill("SIGKILL");
+              }
+            } else {
+              proc.kill("SIGKILL");
+            }
+          }, 5000);
         },
         { once: true },
       );

@@ -70,9 +70,8 @@ describe("executeSkill", () => {
     expect(result.status).toBe("error");
     expect(result.output).toContain("partial output");
     expect(result.output).toContain("something broke");
-    if (result.status === "error") {
-      expect(result.error).toContain("exited with code 1");
-    }
+    if (result.status !== "error") throw new Error("Expected error status");
+    expect(result.error).toContain("exited with code 1");
   });
 
   it("returns raw stdout as output", async () => {
@@ -84,19 +83,23 @@ describe("executeSkill", () => {
   it("returns error for non-existent command", async () => {
     const result = await executeSkill(["/nonexistent/path"], {});
     expect(result.status).toBe("error");
-    if (result.status === "error") {
-      expect(result.error).toContain("Failed to spawn");
-    }
+    if (result.status !== "error") throw new Error("Expected error status");
+    expect(result.error).toContain("Failed to spawn");
   });
 
   it("interleaves stdout and stderr in arrival order", async () => {
     const result = await executeSkill([stderrScript], {});
     expect(result.status).toBe("ok");
-    expect(result.output).toContain("stdout:");
-    expect(result.output).toContain("stderr:");
-    expect(result.output).toContain("line1");
-    expect(result.output).toContain("err1");
-    expect(result.output).toContain("line2");
+    expect(result.output).toMatchInlineSnapshot(`
+      "stdout:
+      line1
+      line2
+
+      stderr:
+      err1
+
+      "
+    `);
   });
 
   it("calls onOutput callback for each line", async () => {
