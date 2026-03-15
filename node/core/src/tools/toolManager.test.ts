@@ -136,10 +136,7 @@ describe("use_skill conditional inclusion", () => {
     const names = specs.map((s) => s.name);
     expect(names).toContain("use_skill");
   });
-
-
 });
-
 
 describe("docker vs host skill isolation", () => {
   it("docker_root thread only gets docker skills", () => {

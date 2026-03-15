@@ -93,6 +93,7 @@ describe("executeSkill", () => {
     expect(result.output).toMatchInlineSnapshot(`
       "stdout:
       line1
+
       line2
 
       stderr:

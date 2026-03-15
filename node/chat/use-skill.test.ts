@@ -1,7 +1,8 @@
-import type { ToolName, ToolRequestId } from "@magenta/core";
 import type Anthropic from "@anthropic-ai/sdk";
+import type { ToolName, ToolRequestId } from "@magenta/core";
 import { expect, it } from "vitest";
-import { withDriver } from "../test/preamble.ts";
+
+import { type TestOptions, withDriver } from "../test/preamble.ts";
 
 type ContentBlockParam = Anthropic.Messages.ContentBlockParam;
 type ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;
@@ -15,11 +16,11 @@ it("use_skill e2e: host thread executes skill and returns output", async () => {
             {
               name: "echo-skill",
               description: "Echoes input back",
-              command: ["bash", "-c", "echo \"skill got: $0\""],
+              command: ["bash", "-c", 'echo "skill got: $0"'],
             },
           ],
         },
-      },
+      } as unknown as TestOptions,
     },
     async (driver) => {
       await driver.showSidebar();
@@ -31,9 +32,7 @@ it("use_skill e2e: host thread executes skill and returns output", async () => {
 
       // Verify use_skill is available in tool specs
       const tools = stream.params.tools ?? [];
-      const toolNames = tools.map(
-        (s) => s.name,
-      );
+      const toolNames = tools.map((s) => s.name);
       expect(toolNames).toContain("use_skill");
 
       // Respond with a use_skill tool request
@@ -107,7 +106,7 @@ it("use_skill e2e: returns error for unknown skill", async () => {
             },
           ],
         },
-      },
+      } as unknown as TestOptions,
     },
     async (driver) => {
       await driver.showSidebar();
@@ -186,7 +185,7 @@ it("use_skill: docker thread does not see host skills", async () => {
             },
           ],
         },
-      },
+      } as unknown as TestOptions,
     },
     async (driver) => {
       await driver.showSidebar();
@@ -197,9 +196,7 @@ it("use_skill: docker thread does not see host skills", async () => {
 
       // In a host thread, only host skills should be available
       const tools = stream.params.tools ?? [];
-      const useSkillSpec = tools.find(
-        (s) => s.name === "use_skill",
-      );
+      const useSkillSpec = tools.find((s) => s.name === "use_skill");
       expect(useSkillSpec).toBeDefined();
       if (!useSkillSpec || !("description" in useSkillSpec))
         throw new Error("Expected use_skill with description");
