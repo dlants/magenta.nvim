@@ -8,7 +8,7 @@
 - Tool description is dynamically assembled from config (name + description per skill)
 - Each skill is an executable: receives JSON via stdin, writes JSON result to stdout
 - Execution via `child_process.spawn` (no shell) with command array for flexibility
-- Configuration via options.json:
+- Configuration via ~/.magenta/options.json or .magenta/options.json:
   ```json
   {
     "toolSkills": {
@@ -63,13 +63,11 @@
     - `executeSkill(command: string[], input: Record<string, unknown>): Promise<SkillResult>` — spawns process, pipes JSON to stdin, reads stdout, parses result
   - [ ] Run type checks
 
-- [ ] **Step 3: SkillToolManager**
-  - [ ] Create `node/core/src/tools/skill/manager.ts`:
-    - Constructor takes `{ host: ToolSkillConfig[], docker: ToolSkillConfig[] }` config + logger
-    - Stores mapping from skill name → command + config
-    - `getDescription(context: "host" | "docker"): string` — assembles combined description from relevant skill configs
-    - `execute(skillName: string, input: Record<string, unknown>): ToolInvocation` — finds command by name and calls `executeSkill`
-    - `hasSkills(context: "host" | "docker"): boolean` — whether any skills are configured for the context
+- [ ] **Step 3: Skill helper functions**
+  - [ ] In `node/core/src/tools/skill/manager.ts`, export pure functions (no class needed):
+    - `buildSkillDescription(skills: ToolSkillConfig[]): string` — assembles combined description listing available skills
+    - `findSkill(skills: ToolSkillConfig[], name: string): ToolSkillConfig | undefined` — lookup by name
+  - [ ] These operate on the `ToolSkillConfig[]` from current options — no cached state
   - [ ] Run type checks
 
 - [ ] **Step 4: use_skill tool module**
@@ -87,10 +85,11 @@
   - [ ] Run type checks (`npx tsgo -b`)
 
 - [ ] **Step 5: Thread/Chat wiring**
-  - [ ] Create `SkillToolManager` in `Chat` constructor from options
-  - [ ] Add `skillToolManager` to `CreateToolContext`
-  - [ ] Pass through `createThreadWithContext` → `Thread` → thread-core
-  - [ ] Pass "host" or "docker" context so the right skills are exposed per thread type
+  - [ ] Add `toolSkills: ToolSkillConfig[]` to `CreateToolContext` (the resolved list for this thread)
+  - [ ] In `createThreadWithContext`: read `getOptions().toolSkills`, pick host or docker list based on environment, pass into thread context
+  - [ ] `getToolSpecs()` uses the list to build the dynamic `use_skill` description; omits `use_skill` if list is empty
+  - [ ] `createTool()` uses the list to find the right executable when `use_skill` is called
+  - [ ] Options are re-read per thread creation since `getOptions()` checks mtimes (already handled by `DynamicOptionsLoader`)
   - [ ] Run type checks
 
 - [ ] **Step 6: Tests**
