@@ -4,9 +4,11 @@
 
 **Design:**
 
-- Single static tool `use_skill` with input `{ skill: string, input: Record<string, unknown> }`
+- Single static tool `use_skill` with input `{ toolName: string, params?: Record<string, unknown> }`
+- If `params` omitted, returns usage docs (from config description or by calling executable with no args)
 - Tool description is dynamically assembled from config (name + description per skill)
-- Each skill is an executable: receives JSON via stdin, writes JSON result to stdout
+- Each skill is an executable: receives JSON as argv (last argument), writes JSON result to stdout
+- No args → prints usage docs; with JSON arg → executes and returns result
 - Execution via `child_process.spawn` (no shell) with command array for flexibility
 - Configuration via ~/.magenta/options.json or .magenta/options.json:
   ```json
@@ -60,7 +62,7 @@
     - `ToolSkillConfig` type (re-export or define for core): `{ name: string, description: string, command: string[] }`
     - `SkillResult` type: `{ status: "ok" | "error", value?: string, error?: string }`
   - [ ] Create `node/core/src/tools/skill/executable.ts`:
-    - `executeSkill(command: string[], input: Record<string, unknown>): Promise<SkillResult>` — spawns process, pipes JSON to stdin, reads stdout, parses result
+    - `executeSkill(command: string[], input: Record<string, unknown>): Promise<SkillResult>` — spawns process with `JSON.stringify(input)` as last argv, reads stdout, parses result
   - [ ] Run type checks
 
 - [ ] **Step 3: Skill helper functions**
