@@ -68,6 +68,53 @@ describe("getToolSpecs capability filtering", () => {
   });
 });
 
+describe("use_skill conditional inclusion", () => {
+  it("excludes use_skill when no toolSkills provided", () => {
+    const specs = getToolSpecs("root", noopMcpToolManager);
+    const names = specs.map((s) => s.name);
+    expect(names).not.toContain("use_skill");
+  });
+
+  it("excludes use_skill when toolSkills is empty array", () => {
+    const specs = getToolSpecs("root", noopMcpToolManager, undefined, []);
+    const names = specs.map((s) => s.name);
+    expect(names).not.toContain("use_skill");
+  });
+
+  it("includes use_skill when toolSkills are provided", () => {
+    const skills = [
+      { name: "test-skill", description: "A test skill", command: ["echo"] },
+    ];
+    const specs = getToolSpecs("root", noopMcpToolManager, undefined, skills);
+    const names = specs.map((s) => s.name);
+    expect(names).toContain("use_skill");
+  });
+
+  it("uses dynamic description with skill names", () => {
+    const skills = [
+      { name: "my-skill", description: "Does things", command: ["cmd"] },
+    ];
+    const specs = getToolSpecs("root", noopMcpToolManager, undefined, skills);
+    const useSkillSpec = specs.find((s) => s.name === "use_skill");
+    expect(useSkillSpec).toBeDefined();
+    expect(useSkillSpec!.description).toContain("my-skill");
+    expect(useSkillSpec!.description).toContain("Does things");
+  });
+
+  it("excludes use_skill in compact thread type even with skills", () => {
+    const skills = [
+      { name: "test-skill", description: "A test skill", command: ["echo"] },
+    ];
+    const specs = getToolSpecs(
+      "compact",
+      noopMcpToolManager,
+      undefined,
+      skills,
+    );
+    const names = specs.map((s) => s.name);
+    expect(names).not.toContain("use_skill");
+  });
+});
 describe("conductor thread type", () => {
   it("returns same tools as root (CHAT_STATIC_TOOL_NAMES)", () => {
     const conductorSpecs = getToolSpecs("conductor", noopMcpToolManager);

@@ -194,6 +194,9 @@ export class Thread {
         environmentConfig: env.environmentConfig,
         maxConcurrentSubagents: context.options.maxConcurrentSubagents || 3,
         container: context.options.container,
+        toolSkills: isDocker
+          ? (context.options.toolSkills?.docker ?? [])
+          : (context.options.toolSkills?.host ?? []),
         getProvider: (profile) => getProvider(context.nvim, profile),
         ...(context.initialFiles ? { initialFiles: context.initialFiles } : {}),
       },

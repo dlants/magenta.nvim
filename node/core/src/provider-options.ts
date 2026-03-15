@@ -36,6 +36,18 @@ export type ProviderProfile = {
     | undefined;
 };
 
+export type ToolSkillConfig = {
+  name: string;
+  description: string;
+  command: string[];
+};
+
 export type ProviderOptions = {
   skillsPaths: string[];
+  toolSkills?:
+    | {
+        host?: ToolSkillConfig[];
+        docker?: ToolSkillConfig[];
+      }
+    | undefined;
 };

@@ -17,7 +17,7 @@ import { ContextManager, type Files } from "./context/context-manager.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import { Emitter } from "./emitter.ts";
 import type { Logger } from "./logger.ts";
-import type { ProviderProfile } from "./provider-options.ts";
+import type { ProviderProfile, ToolSkillConfig } from "./provider-options.ts";
 import { getContextWindowForModel } from "./providers/anthropic-agent.ts";
 import type {
   Agent,
@@ -110,6 +110,7 @@ export interface ThreadCoreContext {
   environmentConfig: EnvironmentConfig;
   maxConcurrentSubagents: number;
   container?: ContainerConfig | undefined;
+  toolSkills: ToolSkillConfig[];
   getProvider: (profile: ProviderProfile) => Provider;
   initialFiles?: Files;
 }
@@ -265,6 +266,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         this.state.threadType,
         this.context.mcpToolManager,
         this.context.availableCapabilities,
+        this.context.toolSkills,
       ),
       ...(this.context.profile.thinking &&
         (this.context.profile.provider === "anthropic" ||
@@ -403,6 +405,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         fileIO: this.context.fileIO,
         shell: this.context.shell,
         threadManager: this.context.threadManager,
+        toolSkills: this.context.toolSkills,
         containerProvisioner: this.context.container
           ? {
               containerConfig: this.context.container,
@@ -864,6 +867,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       shell: this.context.shell,
       threadManager: this.context.threadManager,
       maxConcurrentSubagents: this.context.maxConcurrentSubagents,
+      toolSkills: this.context.toolSkills,
       getProvider: this.context.getProvider,
       requestRender: () => this.emit("update"),
     });

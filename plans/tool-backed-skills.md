@@ -49,7 +49,7 @@
 
 # Implementation
 
-- [ ] **Step 1: Options layer**
+- [x] **Step 1: Options layer**
   - [ ] Add `ToolSkillConfig` type: `{ name: string, description: string, command: string[] }`
   - [ ] Add `toolSkills?: { host?: ToolSkillConfig[], docker?: ToolSkillConfig[] }` to `MagentaOptions` in `node/options.ts`
   - [ ] Add parsing in `parseProjectOptions` for the new field
@@ -57,7 +57,7 @@
   - [ ] Add `toolSkills` to `ProviderOptions` in `node/core/src/provider-options.ts`
   - [ ] Run type checks (`npx tsgo -b`)
 
-- [ ] **Step 2: Skill executable protocol**
+- [x] **Step 2: Skill executable protocol**
   - [ ] Create `node/core/src/tools/skill/types.ts`:
     - `ToolSkillConfig` type (re-export or define for core): `{ name: string, description: string, command: string[] }`
     - `SkillResult` type: `{ status: "ok" | "error", value?: string, error?: string }`
@@ -65,14 +65,14 @@
     - `executeSkill(command: string[], input: Record<string, unknown>): Promise<SkillResult>` — spawns process with `JSON.stringify(input)` as last argv, reads stdout, parses result
   - [ ] Run type checks
 
-- [ ] **Step 3: Skill helper functions**
+- [x] **Step 3: Skill helper functions**
   - [ ] In `node/core/src/tools/skill/manager.ts`, export pure functions (no class needed):
     - `buildSkillDescription(skills: ToolSkillConfig[]): string` — assembles combined description listing available skills
     - `findSkill(skills: ToolSkillConfig[], name: string): ToolSkillConfig | undefined` — lookup by name
   - [ ] These operate on the `ToolSkillConfig[]` from current options — no cached state
   - [ ] Run type checks
 
-- [ ] **Step 4: use_skill tool module**
+- [x] **Step 4: use_skill tool module**
   - [ ] Create `node/core/src/tools/useSkill.ts`:
     - `Input` type: `{ skill: string, input: Record<string, unknown> }`
     - `validateInput(input: unknown): Result<Input>`
@@ -86,7 +86,7 @@
   - [ ] Only include `use_skill` in tool specs when skills are configured (via capability filtering or conditional logic)
   - [ ] Run type checks (`npx tsgo -b`)
 
-- [ ] **Step 5: Thread/Chat wiring**
+- [x] **Step 5: Thread/Chat wiring**
   - [ ] Add `toolSkills: ToolSkillConfig[]` to `CreateToolContext` (the resolved list for this thread)
   - [ ] In `createThreadWithContext`: read `getOptions().toolSkills`, pick host or docker list based on environment, pass into thread context
   - [ ] `getToolSpecs()` uses the list to build the dynamic `use_skill` description; omits `use_skill` if list is empty
@@ -94,12 +94,12 @@
   - [ ] Options are re-read per thread creation since `getOptions()` checks mtimes (already handled by `DynamicOptionsLoader`)
   - [ ] Run type checks
 
-- [ ] **Step 6: Tests**
+- [x] **Step 6: Tests**
   - [ ] Unit tests for `executable.ts` (mock shell scripts that return spec/result JSON)
   - [ ] Unit tests for `manager.ts` (init, getDescription, execute, host vs docker filtering)
   - [ ] Integration test: create a real skill script, configure via options, verify the tool works end-to-end
   - [ ] Run all tests (`npx vitest run`)
 
-- [ ] **Step 7: Documentation**
+- [ ] **Step 7: Documentation** (deferred)
   - [ ] Update `node/skills/create-skill/skill.md` to document tool-backed skills
 

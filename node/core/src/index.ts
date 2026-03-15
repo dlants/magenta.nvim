@@ -78,6 +78,7 @@ export type {
   ProviderName,
   ProviderOptions,
   ProviderProfile,
+  ToolSkillConfig,
 } from "./provider-options.ts";
 export { AnthropicProvider } from "./providers/anthropic.ts";
 export type { AnthropicAgentOptions } from "./providers/anthropic-agent.ts";

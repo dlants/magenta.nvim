@@ -8,6 +8,7 @@ import * as SpawnForeach from "./spawn-foreach.ts";
 import * as SpawnSubagent from "./spawn-subagent.ts";
 import * as ThreadTitle from "./thread-title.ts";
 import type { StaticToolName } from "./tool-registry.ts";
+import * as UseSkill from "./useSkill.ts";
 import * as WaitForSubagents from "./wait-for-subagents.ts";
 import * as YieldToParent from "./yield-to-parent.ts";
 
@@ -47,6 +48,8 @@ export function validateInput(
       return YieldToParent.validateInput(input);
     case "edl":
       return Edl.validateInput(input);
+    case "use_skill":
+      return UseSkill.validateInput(input);
     default:
       throw new Error(`Unexpected toolName: ${toolName as string}`);
   }

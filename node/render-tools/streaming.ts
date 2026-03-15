@@ -25,6 +25,7 @@ export function renderStreamdedTool(
     case "wait_for_subagents":
     case "yield_to_parent":
     case "spawn_foreach":
+    case "use_skill":
       break;
     case "edl": {
       const script = extractPartialJsonStringValue(

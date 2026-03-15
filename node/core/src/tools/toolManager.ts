@@ -1,4 +1,5 @@
 import type { ThreadId, ThreadType } from "../chat-types.ts";
+import type { ToolSkillConfig } from "../provider-options.ts";
 import type {
   ProviderToolSpec as MCPProviderToolSpec,
   ProviderToolSpec,
@@ -23,6 +24,7 @@ import {
   TOOL_REQUIRED_CAPABILITIES,
   type ToolCapability,
 } from "./tool-registry.ts";
+import * as UseSkill from "./useSkill.ts";
 import * as WaitForSubagents from "./wait-for-subagents.ts";
 import * as YieldToParent from "./yield-to-parent.ts";
 
@@ -44,6 +46,7 @@ export type StaticToolMap = {
   wait_for_subagents: { input: WaitForSubagents.Input };
   yield_to_parent: { input: YieldToParent.Input };
   edl: { input: Edl.Input };
+  use_skill: { input: UseSkill.Input };
 };
 
 export type StaticToolRequest = {
@@ -77,12 +80,14 @@ const TOOL_SPEC_MAP: {
   wait_for_subagents: WaitForSubagents.spec,
 
   edl: Edl.spec,
+  use_skill: UseSkill.spec,
 };
 
 export function getToolSpecs(
   threadType: ThreadType,
   mcpToolManager: MCPToolManager,
   availableCapabilities?: Set<ToolCapability>,
+  toolSkills?: ToolSkillConfig[],
 ): ProviderToolSpec[] {
   let staticToolNames: StaticToolName[] = [];
   switch (threadType) {
@@ -104,9 +109,15 @@ export function getToolSpecs(
     default:
       assertUnreachable(threadType);
   }
+
+  const hasSkills = toolSkills !== undefined && toolSkills.length > 0;
+
   const filteredToolNames =
     availableCapabilities !== undefined
       ? staticToolNames.filter((toolName) => {
+          if (toolName === "use_skill" && !hasSkills) {
+            return false;
+          }
           const required = TOOL_REQUIRED_CAPABILITIES[toolName];
           for (const cap of required) {
             if (!availableCapabilities.has(cap)) {
@@ -115,9 +126,17 @@ export function getToolSpecs(
           }
           return true;
         })
-      : staticToolNames;
+      : hasSkills
+        ? staticToolNames
+        : staticToolNames.filter((n) => n !== "use_skill");
+
   return [
-    ...filteredToolNames.map((toolName) => TOOL_SPEC_MAP[toolName]),
+    ...filteredToolNames.map((toolName) => {
+      if (toolName === "use_skill" && hasSkills) {
+        return UseSkill.getSpec(toolSkills);
+      }
+      return TOOL_SPEC_MAP[toolName];
+    }),
     ...mcpToolManager.getToolSpecs(),
   ];
 }

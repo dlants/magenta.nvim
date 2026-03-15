@@ -102,6 +102,8 @@ export function renderInFlightToolSummary(
       );
     case "yield_to_parent":
       return YieldToParentRender.renderInFlightSummary(request, displayContext);
+    case "use_skill":
+      return d`🔧 use_skill`;
     default:
       assertUnreachable(toolName);
   }
@@ -194,6 +196,8 @@ export function renderCompletedToolSummary(
       return ThreadTitleRender.renderCompletedSummary(info);
     case "edl":
       return EdlRender.renderCompletedSummary(info);
+    case "use_skill":
+      return d`🔧 use_skill`;
     default:
       assertUnreachable(toolName);
   }

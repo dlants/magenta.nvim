@@ -23,7 +23,7 @@ import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import { Emitter } from "./emitter.ts";
 import type { Logger } from "./logger.ts";
-import type { ProviderProfile } from "./provider-options.ts";
+import type { ProviderProfile, ToolSkillConfig } from "./provider-options.ts";
 import type {
   Agent,
   Provider,
@@ -105,6 +105,7 @@ export interface CompactionManagerContext {
   shell: Shell;
   threadManager: ThreadManager;
   maxConcurrentSubagents: number;
+  toolSkills: ToolSkillConfig[];
   getProvider: (profile: ProviderProfile) => Provider;
   requestRender: () => void;
 }
@@ -383,6 +384,7 @@ export class CompactionManager extends Emitter<CompactionEvents> {
         fileIO: this.fileIO,
         shell: this.context.shell,
         threadManager: this.context.threadManager,
+        toolSkills: this.context.toolSkills,
         requestRender: () => this.context.requestRender(),
       };
 

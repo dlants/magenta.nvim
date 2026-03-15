@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import {
   type ContainerConfig,
   type ServerName,
+  type ToolSkillConfig,
   validateServerName,
 } from "@magenta/core";
 import {
@@ -177,6 +178,12 @@ export type MagentaOptions = {
   debug?: boolean;
   chimeVolume?: number;
   container?: ContainerConfig | undefined;
+  toolSkills?:
+    | {
+        host?: ToolSkillConfig[];
+        docker?: ToolSkillConfig[];
+      }
+    | undefined;
 };
 
 // Reusable parsing helpers
@@ -657,6 +664,86 @@ function parseFilePermissions(
   return permissions;
 }
 
+function parseToolSkillConfigs(
+  input: unknown,
+  logger: { warn: (msg: string) => void },
+): ToolSkillConfig[] {
+  if (!Array.isArray(input)) {
+    logger.warn("toolSkills entries must be arrays");
+    return [];
+  }
+
+  const configs: ToolSkillConfig[] = [];
+  for (const item of input) {
+    if (typeof item !== "object" || item === null) {
+      logger.warn(
+        `Skipping invalid tool skill config: ${JSON.stringify(item)}`,
+      );
+      continue;
+    }
+
+    const obj = item as { [key: string]: unknown };
+
+    if (typeof obj.name !== "string" || obj.name.length === 0) {
+      logger.warn("Tool skill config must have a non-empty 'name' string");
+      continue;
+    }
+
+    if (typeof obj.description !== "string" || obj.description.length === 0) {
+      logger.warn(
+        `Tool skill config '${obj.name}' must have a non-empty 'description' string`,
+      );
+      continue;
+    }
+
+    if (
+      !Array.isArray(obj.command) ||
+      obj.command.length === 0 ||
+      !obj.command.every((c: unknown) => typeof c === "string")
+    ) {
+      logger.warn(
+        `Tool skill config '${obj.name}' must have a non-empty 'command' string array`,
+      );
+      continue;
+    }
+
+    configs.push({
+      name: obj.name,
+      description: obj.description,
+      command: obj.command as string[],
+    });
+  }
+
+  return configs;
+}
+
+function parseToolSkills(
+  input: unknown,
+  logger: { warn: (msg: string) => void },
+):
+  | {
+      host?: ToolSkillConfig[];
+      docker?: ToolSkillConfig[];
+    }
+  | undefined {
+  if (typeof input !== "object" || input === null) {
+    logger.warn("toolSkills must be an object");
+    return undefined;
+  }
+
+  const obj = input as { [key: string]: unknown };
+  const result: { host?: ToolSkillConfig[]; docker?: ToolSkillConfig[] } = {};
+
+  if ("host" in obj) {
+    result.host = parseToolSkillConfigs(obj.host, logger);
+  }
+
+  if ("docker" in obj) {
+    result.docker = parseToolSkillConfigs(obj.docker, logger);
+  }
+
+  return result;
+}
 function parseCustomCommands(
   input: unknown,
   logger: { warn: (msg: string) => void },
@@ -1411,6 +1498,10 @@ export function parseOptions(
         logger,
       );
     }
+
+    if ("toolSkills" in inputOptionsObj) {
+      options.toolSkills = parseToolSkills(inputOptionsObj.toolSkills, logger);
+    }
   }
 
   return options;
@@ -1594,6 +1685,10 @@ export function parseProjectOptions(
     options.container = parseContainerConfig(inputOptionsObj.container, logger);
   }
 
+  if ("toolSkills" in inputOptionsObj) {
+    options.toolSkills = parseToolSkills(inputOptionsObj.toolSkills, logger);
+  }
+
   return options;
 }
 
@@ -1738,7 +1833,27 @@ export function mergeOptions(
     merged.container = projectSettings.container;
   }
 
+  if (projectSettings.toolSkills) {
+    const base = baseOptions.toolSkills ?? {};
+    const proj = projectSettings.toolSkills;
+    merged.toolSkills = {
+      host: deduplicateToolSkills([...(base.host ?? []), ...(proj.host ?? [])]),
+      docker: deduplicateToolSkills([
+        ...(base.docker ?? []),
+        ...(proj.docker ?? []),
+      ]),
+    };
+  }
+
   return merged;
+}
+
+function deduplicateToolSkills(skills: ToolSkillConfig[]): ToolSkillConfig[] {
+  const seen = new Map<string, ToolSkillConfig>();
+  for (const skill of skills) {
+    seen.set(skill.name, skill);
+  }
+  return [...seen.values()];
 }
 
 export function getActiveProfile(profiles: Profile[], activeProfile: string) {

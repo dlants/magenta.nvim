@@ -11,6 +11,7 @@ import type { ThreadId } from "../chat-types.ts";
 import type { ContainerConfig, ProvisionResult } from "../container/types.ts";
 import type { EdlRegisters } from "../edl/index.ts";
 import type { Logger } from "../logger.ts";
+import type { ToolSkillConfig } from "../provider-options.ts";
 import type { ToolInvocation, ToolRequest } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
@@ -27,6 +28,7 @@ import * as SpawnForeach from "./spawn-foreach.ts";
 import * as SpawnSubagent from "./spawn-subagent.ts";
 import * as ThreadTitle from "./thread-title.ts";
 import type { StaticToolRequest } from "./toolManager.ts";
+import * as UseSkill from "./useSkill.ts";
 import * as WaitForSubagents from "./wait-for-subagents.ts";
 import * as YieldToParent from "./yield-to-parent.ts";
 
@@ -46,6 +48,7 @@ export type CreateToolContext = {
   shell: Shell;
   threadManager: ThreadManager;
   requestRender: () => void;
+  toolSkills: ToolSkillConfig[];
   containerProvisioner?:
     | {
         containerConfig: ContainerConfig;
@@ -169,6 +172,13 @@ export function createTool(
         fileIO: context.fileIO,
         edlRegisters: context.edlRegisters,
         onToolApplied: context.onToolApplied,
+      });
+    }
+
+    case "use_skill": {
+      return UseSkill.execute(staticRequest, {
+        toolSkills: context.toolSkills,
+        requestRender: context.requestRender,
       });
     }
 
