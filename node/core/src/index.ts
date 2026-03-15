@@ -236,6 +236,7 @@ export {
   type StaticToolMap,
   type StaticToolRequest,
 } from "./tools/toolManager.ts";
+export * as UseSkill from "./tools/useSkill.ts";
 export * as WaitForSubagents from "./tools/wait-for-subagents.ts";
 export * as YieldToParent from "./tools/yield-to-parent.ts";
 export { assertUnreachable } from "./utils/assertUnreachable.ts";

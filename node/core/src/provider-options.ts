@@ -46,8 +46,8 @@ export type ProviderOptions = {
   skillsPaths: string[];
   toolSkills?:
     | {
-        host?: ToolSkillConfig[];
-        docker?: ToolSkillConfig[];
+        host?: Record<string, ToolSkillConfig>;
+        docker?: Record<string, ToolSkillConfig>;
       }
     | undefined;
 };

@@ -7,6 +7,7 @@ import {
   type SpawnSubagent,
   type StaticToolName,
   type ToolRequest,
+  type UseSkill,
   type WaitForSubagents,
 } from "@magenta/core";
 import type { Chat } from "../chat/chat.ts";
@@ -28,6 +29,7 @@ import * as MCPToolRender from "./mcp-tool.ts";
 import * as SpawnForeachRender from "./spawn-foreach.ts";
 import * as SpawnSubagentRender from "./spawn-subagent.ts";
 import * as ThreadTitleRender from "./thread-title.ts";
+import * as UseSkillRender from "./useSkill.ts";
 import * as WaitForSubagentsRender from "./wait-for-subagents.ts";
 import * as YieldToParentRender from "./yield-to-parent.ts";
 
@@ -103,7 +105,11 @@ export function renderInFlightToolSummary(
     case "yield_to_parent":
       return YieldToParentRender.renderInFlightSummary(request, displayContext);
     case "use_skill":
-      return d`🔧 use_skill`;
+      return UseSkillRender.renderInFlightSummary(
+        request,
+        displayContext,
+        progress as UseSkill.UseSkillProgress | undefined,
+      );
     default:
       assertUnreachable(toolName);
   }
@@ -139,6 +145,11 @@ export function renderInFlightToolPreview(
         progress as WaitForSubagents.WaitForSubagentsProgress | undefined,
         context,
       );
+    case "use_skill":
+      return UseSkillRender.renderInFlightPreview(
+        progress as UseSkill.UseSkillProgress,
+        context.getDisplayWidth,
+      );
     default:
       return d``;
   }
@@ -155,6 +166,10 @@ export function renderInFlightToolDetail(
       return BashCommandRender.renderInFlightDetail(
         progress as BashCommand.BashProgress,
         context,
+      );
+    case "use_skill":
+      return UseSkillRender.renderInFlightDetail(
+        progress as UseSkill.UseSkillProgress,
       );
     default:
       return d`${JSON.stringify(request.input, null, 2)}`;
@@ -197,7 +212,7 @@ export function renderCompletedToolSummary(
     case "edl":
       return EdlRender.renderCompletedSummary(info);
     case "use_skill":
-      return d`🔧 use_skill`;
+      return UseSkillRender.renderCompletedSummary(info);
     default:
       assertUnreachable(toolName);
   }
@@ -222,6 +237,11 @@ export function renderCompletedToolPreview(
       return SpawnForeachRender.renderCompletedPreview(info);
     case "edl":
       return EdlRender.renderCompletedPreview(info);
+    case "use_skill":
+      return UseSkillRender.renderCompletedPreview(
+        info,
+        context.getDisplayWidth,
+      );
     default:
       return d``;
   }
@@ -244,6 +264,8 @@ export function renderCompletedToolDetail(
       return SpawnForeachRender.renderCompletedDetail(info, context.dispatch);
     case "edl":
       return EdlRender.renderCompletedDetail(info);
+    case "use_skill":
+      return UseSkillRender.renderCompletedDetail(info);
     default:
       return d`${JSON.stringify(info.request.input, null, 2)}`;
   }

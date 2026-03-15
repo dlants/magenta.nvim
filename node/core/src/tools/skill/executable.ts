@@ -1,90 +1,103 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
+import type { OutputLine } from "../../capabilities/shell.ts";
 
-export type SkillResult = {
-  status: "ok" | "error";
-  value?: string | undefined;
-  error?: string | undefined;
-};
+export type SkillResult =
+  | { status: "ok"; output: string }
+  | { status: "error"; output: string; error: string };
 
 export function executeSkill(
   command: string[],
   input: Record<string, unknown>,
+  opts?: {
+    signal?: AbortSignal;
+    onOutput?: (line: OutputLine) => void;
+  },
 ): Promise<SkillResult> {
   return new Promise((resolve) => {
     const args = [...command.slice(1), JSON.stringify(input)];
-    const proc = spawn(command[0], args, {
-      stdio: ["ignore", "pipe", "pipe"],
+    let proc: ChildProcess;
+    try {
+      proc = spawn(command[0], args, {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (err) {
+      resolve({
+        status: "error",
+        output: "",
+        error: `Failed to spawn skill process: ${(err as Error).message}`,
+      });
+      return;
+    }
+
+    const output: OutputLine[] = [];
+
+    proc.stdout?.on("data", (data: Buffer) => {
+      const text = data.toString();
+      for (const line of text.split("\n")) {
+        if (line.length > 0 || text.endsWith("\n")) {
+          const outputLine: OutputLine = { stream: "stdout", text: line };
+          output.push(outputLine);
+          opts?.onOutput?.(outputLine);
+        }
+      }
     });
 
-    let stdout = "";
-    let stderr = "";
-
-    proc.stdout.on("data", (data: Buffer) => {
-      stdout += data.toString();
+    proc.stderr?.on("data", (data: Buffer) => {
+      const text = data.toString();
+      for (const line of text.split("\n")) {
+        if (line.length > 0 || text.endsWith("\n")) {
+          const outputLine: OutputLine = { stream: "stderr", text: line };
+          output.push(outputLine);
+          opts?.onOutput?.(outputLine);
+        }
+      }
     });
 
-    proc.stderr.on("data", (data: Buffer) => {
-      stderr += data.toString();
-    });
+    if (opts?.signal) {
+      opts.signal.addEventListener(
+        "abort",
+        () => {
+          proc.kill("SIGTERM");
+        },
+        { once: true },
+      );
+    }
 
     proc.on("error", (err: Error) => {
       resolve({
         status: "error",
+        output: formatOutput(output),
         error: `Failed to spawn skill process: ${err.message}`,
       });
     });
 
     proc.on("close", (code: number | null) => {
+      const outputStr = formatOutput(output);
       if (code !== 0) {
         resolve({
           status: "error",
-          error: `Skill process exited with code ${code ?? "unknown"}${stderr ? `\nstderr: ${stderr}` : ""}`,
+          output: outputStr,
+          error: `Skill process exited with code ${code ?? "unknown"}`,
         });
         return;
       }
-
-      try {
-        const parsed = JSON.parse(stdout) as Record<string, unknown>;
-        if (parsed.status === "ok" || parsed.status === "error") {
-          resolve({
-            status: parsed.status,
-            value: typeof parsed.value === "string" ? parsed.value : undefined,
-            error: typeof parsed.error === "string" ? parsed.error : undefined,
-          });
-        } else {
-          resolve({
-            status: "ok",
-            value: stdout.trim(),
-          });
-        }
-      } catch {
-        resolve({
-          status: "ok",
-          value: stdout.trim(),
-        });
-      }
+      resolve({
+        status: "ok",
+        output: outputStr,
+      });
     });
   });
 }
 
-export function getSkillDocs(command: string[]): Promise<string> {
-  return new Promise((resolve) => {
-    const proc = spawn(command[0], command.slice(1), {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-
-    proc.stdout.on("data", (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    proc.on("error", (err: Error) => {
-      resolve(`Failed to get skill docs: ${err.message}`);
-    });
-
-    proc.on("close", () => {
-      resolve(stdout.trim());
-    });
-  });
+function formatOutput(output: OutputLine[]): string {
+  let formatted = "";
+  let currentStream: "stdout" | "stderr" | null = null;
+  for (const line of output) {
+    if (currentStream !== line.stream) {
+      formatted += line.stream === "stdout" ? "stdout:\n" : "stderr:\n";
+      currentStream = line.stream;
+    }
+    formatted += `${line.text}\n`;
+  }
+  return formatted;
 }

@@ -2,13 +2,13 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { executeSkill, getSkillDocs } from "./executable.ts";
+import { executeSkill } from "./executable.ts";
 
 let tempDir: string;
 let echoScript: string;
 let failScript: string;
-let docsScript: string;
 let rawOutputScript: string;
+let stderrScript: string;
 
 beforeAll(() => {
   tempDir = mkdtempSync(join(tmpdir(), "skill-test-"));
@@ -17,7 +17,7 @@ beforeAll(() => {
   writeFileSync(
     echoScript,
     `#!/bin/bash
-echo '{"status":"ok","value":"got: '$1'"}'
+echo "got: $1"
 `,
   );
   chmodSync(echoScript, 0o755);
@@ -26,21 +26,12 @@ echo '{"status":"ok","value":"got: '$1'"}'
   writeFileSync(
     failScript,
     `#!/bin/bash
-echo '{"status":"error","error":"something broke"}' >&2
+echo "partial output"
+echo "something broke" >&2
 exit 1
 `,
   );
   chmodSync(failScript, 0o755);
-
-  docsScript = join(tempDir, "docs-skill.sh");
-  writeFileSync(
-    docsScript,
-    `#!/bin/bash
-echo "Usage: my-skill <params>"
-echo "Params: { foo: string }"
-`,
-  );
-  chmodSync(docsScript, 0o755);
 
   rawOutputScript = join(tempDir, "raw-output.sh");
   writeFileSync(
@@ -50,6 +41,17 @@ echo "just plain text"
 `,
   );
   chmodSync(rawOutputScript, 0o755);
+
+  stderrScript = join(tempDir, "stderr-skill.sh");
+  writeFileSync(
+    stderrScript,
+    `#!/bin/bash
+echo "line1"
+echo "err1" >&2
+echo "line2"
+`,
+  );
+  chmodSync(stderrScript, 0o755);
 });
 
 afterAll(() => {
@@ -57,35 +59,58 @@ afterAll(() => {
 });
 
 describe("executeSkill", () => {
-  it("executes a skill and returns parsed JSON result", async () => {
+  it("executes a skill and returns output including the input params", async () => {
     const result = await executeSkill([echoScript], { foo: "bar" });
     expect(result.status).toBe("ok");
-    expect(result.value).toContain("got:");
+    expect(result.output).toContain('got: {"foo":"bar"}');
   });
 
-  it("returns error for non-zero exit code", async () => {
+  it("returns error with output for non-zero exit code", async () => {
     const result = await executeSkill([failScript], { foo: "bar" });
     expect(result.status).toBe("error");
-    expect(result.error).toContain("exited with code 1");
+    expect(result.output).toContain("partial output");
+    expect(result.output).toContain("something broke");
+    if (result.status === "error") {
+      expect(result.error).toContain("exited with code 1");
+    }
   });
 
-  it("returns raw stdout as value when output is not JSON", async () => {
+  it("returns raw stdout as output", async () => {
     const result = await executeSkill([rawOutputScript], {});
     expect(result.status).toBe("ok");
-    expect(result.value).toBe("just plain text");
+    expect(result.output).toContain("just plain text");
   });
 
   it("returns error for non-existent command", async () => {
     const result = await executeSkill(["/nonexistent/path"], {});
     expect(result.status).toBe("error");
-    expect(result.error).toContain("Failed to spawn");
+    if (result.status === "error") {
+      expect(result.error).toContain("Failed to spawn");
+    }
   });
-});
 
-describe("getSkillDocs", () => {
-  it("returns stdout from the command called with no args", async () => {
-    const docs = await getSkillDocs([docsScript]);
-    expect(docs).toContain("Usage: my-skill");
-    expect(docs).toContain("Params: { foo: string }");
+  it("interleaves stdout and stderr in arrival order", async () => {
+    const result = await executeSkill([stderrScript], {});
+    expect(result.status).toBe("ok");
+    expect(result.output).toContain("stdout:");
+    expect(result.output).toContain("stderr:");
+    expect(result.output).toContain("line1");
+    expect(result.output).toContain("err1");
+    expect(result.output).toContain("line2");
+  });
+
+  it("calls onOutput callback for each line", async () => {
+    const lines: { stream: string; text: string }[] = [];
+    await executeSkill(
+      [stderrScript],
+      {},
+      {
+        onOutput: (line) => lines.push(line),
+      },
+    );
+    const stdoutLines = lines.filter((l) => l.stream === "stdout");
+    const stderrLines = lines.filter((l) => l.stream === "stderr");
+    expect(stdoutLines.length).toBeGreaterThan(0);
+    expect(stderrLines.length).toBeGreaterThan(0);
   });
 });

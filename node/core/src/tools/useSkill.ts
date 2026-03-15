@@ -1,3 +1,4 @@
+import type { OutputLine } from "../capabilities/shell.ts";
 import type { ToolSkillConfig } from "../provider-options.ts";
 import type {
   ProviderToolResult,
@@ -9,7 +10,7 @@ import type {
   ToolName,
 } from "../tool-types.ts";
 import type { Result } from "../utils/result.ts";
-import { executeSkill, getSkillDocs } from "./skill/executable.ts";
+import { executeSkill } from "./skill/executable.ts";
 import { buildSkillDescription, findSkill } from "./skill/helpers.ts";
 
 export type Input = {
@@ -19,6 +20,12 @@ export type Input = {
 
 export type ToolRequest = GenericToolRequest<"use_skill", Input>;
 
+export type UseSkillProgress = {
+  skillName: string;
+  liveOutput: OutputLine[];
+  startTime: number | undefined;
+};
+
 export function validateInput(args: { [key: string]: unknown }): Result<Input> {
   if (typeof args.skill !== "string" || args.skill.length === 0) {
     return {
@@ -26,9 +33,7 @@ export function validateInput(args: { [key: string]: unknown }): Result<Input> {
       error: `Expected 'skill' to be a non-empty string but got ${typeof args.skill}`,
     };
   }
-
   const result: Input = { skill: args.skill };
-
   if (args.input !== undefined) {
     if (typeof args.input !== "object" || args.input === null) {
       return {
@@ -38,7 +43,6 @@ export function validateInput(args: { [key: string]: unknown }): Result<Input> {
     }
     result.input = args.input as Record<string, unknown>;
   }
-
   return {
     status: "ok",
     value: result,
@@ -75,7 +79,23 @@ export function execute(
     toolSkills: ToolSkillConfig[];
     requestRender: () => void;
   },
-): ToolInvocation {
+): ToolInvocation & { progress: UseSkillProgress } {
+  const progress: UseSkillProgress = {
+    skillName: request.input.skill,
+    liveOutput: [],
+    startTime: undefined,
+  };
+
+  const abortController = new AbortController();
+  let tickInterval: ReturnType<typeof setInterval> | undefined;
+
+  function stopTickInterval() {
+    if (tickInterval) {
+      clearInterval(tickInterval);
+      tickInterval = undefined;
+    }
+  }
+
   const promise = (async (): Promise<ProviderToolResult> => {
     const skill = findSkill(context.toolSkills, request.input.skill);
     if (!skill) {
@@ -90,26 +110,32 @@ export function execute(
       };
     }
 
-    if (request.input.input === undefined) {
-      const docs = await getSkillDocs(skill.command);
-      return {
-        type: "tool_result",
-        id: request.id,
-        result: {
-          status: "ok",
-          value: [{ type: "text", text: docs }],
-        },
-      };
-    }
+    progress.startTime = Date.now();
+    tickInterval = setInterval(() => {
+      context.requestRender();
+    }, 1000);
 
-    const result = await executeSkill(skill.command, request.input.input);
+    const result = await executeSkill(
+      skill.command,
+      request.input.input ?? {},
+      {
+        signal: abortController.signal,
+        onOutput: (line) => {
+          progress.liveOutput.push(line);
+          context.requestRender();
+        },
+      },
+    );
+
+    stopTickInterval();
+
     if (result.status === "error") {
       return {
         type: "tool_result",
         id: request.id,
         result: {
           status: "error",
-          error: result.error ?? "Skill execution failed",
+          error: `${result.output}\n${result.error}`,
         },
       };
     }
@@ -119,7 +145,7 @@ export function execute(
       id: request.id,
       result: {
         status: "ok",
-        value: [{ type: "text", text: result.value ?? "" }],
+        value: [{ type: "text", text: result.output }],
       },
     };
   })();
@@ -127,7 +153,9 @@ export function execute(
   return {
     promise,
     abort: () => {
-      // Skills are short-lived processes; aborting is a no-op
+      abortController.abort();
+      stopTickInterval();
     },
+    progress,
   };
 }

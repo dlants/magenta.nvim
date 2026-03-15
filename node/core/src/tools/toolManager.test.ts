@@ -100,6 +100,42 @@ describe("use_skill conditional inclusion", () => {
     expect(useSkillSpec!.description).toContain("my-skill");
     expect(useSkillSpec!.description).toContain("Does things");
   });
+  it("produces different descriptions for different skill lists", () => {
+    const skills1 = [
+      { name: "skill-a", description: "Does A", command: ["cmdA"] },
+    ];
+    const skills2 = [
+      { name: "skill-b", description: "Does B", command: ["cmdB"] },
+    ];
+    const specs1 = getToolSpecs("root", noopMcpToolManager, undefined, skills1);
+    const specs2 = getToolSpecs("root", noopMcpToolManager, undefined, skills2);
+    const useSkill1 = specs1.find((s) => s.name === "use_skill");
+    const useSkill2 = specs2.find((s) => s.name === "use_skill");
+    expect(useSkill1).toBeDefined();
+    expect(useSkill2).toBeDefined();
+    expect(useSkill1!.description).toContain("skill-a");
+    expect(useSkill1!.description).not.toContain("skill-b");
+    expect(useSkill2!.description).toContain("skill-b");
+    expect(useSkill2!.description).not.toContain("skill-a");
+  });
+
+  it("includes use_skill for docker_root thread type with skills", () => {
+    const skills = [
+      {
+        name: "docker-skill",
+        description: "Docker skill",
+        command: ["docker-cmd"],
+      },
+    ];
+    const specs = getToolSpecs(
+      "docker_root",
+      noopMcpToolManager,
+      undefined,
+      skills,
+    );
+    const names = specs.map((s) => s.name);
+    expect(names).toContain("use_skill");
+  });
 
   it("excludes use_skill in compact thread type even with skills", () => {
     const skills = [

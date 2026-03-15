@@ -180,8 +180,8 @@ export type MagentaOptions = {
   container?: ContainerConfig | undefined;
   toolSkills?:
     | {
-        host?: ToolSkillConfig[];
-        docker?: ToolSkillConfig[];
+        host?: Record<string, ToolSkillConfig>;
+        docker?: Record<string, ToolSkillConfig>;
       }
     | undefined;
 };
@@ -667,13 +667,13 @@ function parseFilePermissions(
 function parseToolSkillConfigs(
   input: unknown,
   logger: { warn: (msg: string) => void },
-): ToolSkillConfig[] {
+): Record<string, ToolSkillConfig> {
   if (!Array.isArray(input)) {
     logger.warn("toolSkills entries must be arrays");
-    return [];
+    return {};
   }
 
-  const configs: ToolSkillConfig[] = [];
+  const configs: Record<string, ToolSkillConfig> = {};
   for (const item of input) {
     if (typeof item !== "object" || item === null) {
       logger.warn(
@@ -707,11 +707,11 @@ function parseToolSkillConfigs(
       continue;
     }
 
-    configs.push({
+    configs[obj.name] = {
       name: obj.name,
       description: obj.description,
       command: obj.command as string[],
-    });
+    };
   }
 
   return configs;
@@ -722,8 +722,8 @@ function parseToolSkills(
   logger: { warn: (msg: string) => void },
 ):
   | {
-      host?: ToolSkillConfig[];
-      docker?: ToolSkillConfig[];
+      host?: Record<string, ToolSkillConfig>;
+      docker?: Record<string, ToolSkillConfig>;
     }
   | undefined {
   if (typeof input !== "object" || input === null) {
@@ -732,7 +732,10 @@ function parseToolSkills(
   }
 
   const obj = input as { [key: string]: unknown };
-  const result: { host?: ToolSkillConfig[]; docker?: ToolSkillConfig[] } = {};
+  const result: {
+    host?: Record<string, ToolSkillConfig>;
+    docker?: Record<string, ToolSkillConfig>;
+  } = {};
 
   if ("host" in obj) {
     result.host = parseToolSkillConfigs(obj.host, logger);
@@ -1837,23 +1840,12 @@ export function mergeOptions(
     const base = baseOptions.toolSkills ?? {};
     const proj = projectSettings.toolSkills;
     merged.toolSkills = {
-      host: deduplicateToolSkills([...(base.host ?? []), ...(proj.host ?? [])]),
-      docker: deduplicateToolSkills([
-        ...(base.docker ?? []),
-        ...(proj.docker ?? []),
-      ]),
+      host: { ...(base.host ?? {}), ...(proj.host ?? {}) },
+      docker: { ...(base.docker ?? {}), ...(proj.docker ?? {}) },
     };
   }
 
   return merged;
-}
-
-function deduplicateToolSkills(skills: ToolSkillConfig[]): ToolSkillConfig[] {
-  const seen = new Map<string, ToolSkillConfig>();
-  for (const skill of skills) {
-    seen.set(skill.name, skill);
-  }
-  return [...seen.values()];
 }
 
 export function getActiveProfile(profiles: Profile[], activeProfile: string) {
