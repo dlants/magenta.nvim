@@ -185,14 +185,6 @@ export class Chat implements ThreadManager {
             error: agentStatus.error.message,
           };
           this.resolveThreadWaiters(thread.id, result);
-        } else if (
-          agentStatus.type === "stopped" &&
-          agentStatus.stopReason === "aborted"
-        ) {
-          this.resolveThreadWaiters(thread.id, {
-            status: "error",
-            error: "Thread was aborted",
-          });
         }
       }
     }
@@ -890,21 +882,8 @@ ${threadViews.map((view) => d`${view}\n`)}`;
           };
         }
 
-        // Check for aborted state
-        if (
-          agentStatus.type === "stopped" &&
-          agentStatus.stopReason === "aborted"
-        ) {
-          return {
-            status: "done",
-            result: {
-              status: "error",
-              error: "Thread was aborted",
-            },
-          };
-        }
-
-        // All other states are considered pending
+        // All other states (including aborted) are considered pending.
+        // An aborted thread can still be resumed and eventually yield.
         return { status: "pending" };
       }
 
