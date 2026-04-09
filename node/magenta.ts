@@ -32,6 +32,12 @@ import { Sidebar } from "./sidebar.ts";
 import { BINDING_KEYS, type BindingKey } from "./tea/bindings.ts";
 import type { Dispatch } from "./tea/tea.ts";
 import * as TEA from "./tea/tea.ts";
+import {
+  createTmuxInterface,
+  type ThreadSource,
+  type TmuxInterface,
+  TmuxNotifier,
+} from "./tmux-notifier.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import type { HomeDir } from "./utils/files.ts";
 import {
@@ -49,6 +55,7 @@ const MAGENTA_ON_WINDOW_CLOSED = "magentaWindowClosed";
 const MAGENTA_KEY = "magentaKey";
 const MAGENTA_LSP_RESPONSE = "magentaLspResponse";
 const MAGENTA_BUF_ENTER = "magentaBufEnter";
+const MAGENTA_FOCUS_CHANGED = "magentaFocusChanged";
 
 export class Magenta {
   public sidebar: Sidebar;
@@ -57,6 +64,7 @@ export class Magenta {
   public dispatch: Dispatch<RootMsg>;
   public commandRegistry: CommandRegistry;
   public optionsLoader: DynamicOptionsLoader;
+  public tmuxNotifier: TmuxNotifier;
   public activeBuffers: { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer };
 
   constructor(
@@ -107,6 +115,8 @@ export class Magenta {
             `Error rendering sidebar input header: ${e instanceof Error ? `${e.message}\n${e.stack}` : JSON.stringify(e)}`,
           );
         });
+
+        this.tmuxNotifier.update(this.threadSource);
       } catch (e) {
         nvim.logger.error(e as Error);
       }
@@ -146,6 +156,7 @@ export class Magenta {
         }),
     );
 
+    this.tmuxNotifier = new TmuxNotifier(createTmuxInterface());
     this.sidebar = new Sidebar(
       this.nvim,
       () => this.getActiveProfile(),
@@ -163,6 +174,16 @@ export class Magenta {
       this.bufferManager,
       () => this.getActiveKey(),
     );
+  }
+
+  get threadSource(): ThreadSource {
+    return {
+      threadIds: () =>
+        Object.keys(
+          this.chat.threadWrappers,
+        ) as import("@magenta/core").ThreadId[],
+      getThreadSummary: (id) => this.chat.getThreadSummary(id),
+    };
   }
 
   get options(): MagentaOptions {
@@ -671,6 +692,20 @@ ${lines.join("\n")}
         lsp.onLspResponse(args);
       } catch (err) {
         nvim.logger.error(JSON.stringify(err));
+      }
+    });
+
+    nvim.onNotification(MAGENTA_FOCUS_CHANGED, (args) => {
+      try {
+        const data = (args as unknown as { focused: boolean }[])[0];
+        if (data.focused) {
+          magenta.tmuxNotifier.onFocusGained();
+        } else {
+          magenta.tmuxNotifier.onFocusLost(magenta.threadSource);
+        }
+        magenta.tmuxNotifier.update(magenta.threadSource);
+      } catch (err) {
+        nvim.logger.error(err as Error);
       }
     });
 

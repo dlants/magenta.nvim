@@ -14,12 +14,14 @@ CONTENTS                                                    *magenta-contents*
     6. Commands ................................ |magenta-commands|
     7. Tools ................................... |magenta-tools|
     8. Providers ............................... |magenta-providers|
+    9. Tmux Integration ........................ |magenta-tmux|
     9. Changelog ............................... |magenta-changelog|
 
 For detailed configuration options, see |magenta-config.txt|
 For commands and keymaps, see |magenta-commands.txt|
 For tools and MCP support, see |magenta-tools.txt|
 For provider configuration, see |magenta-providers.txt|
+For tmux integration, see |magenta-tmux.txt|
 
                                                             *magenta-config*
                                                           *magenta-commands*

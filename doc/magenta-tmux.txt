@@ -1,0 +1,70 @@
+*magenta-tmux.txt*       Tmux integration for magenta.nvim
+
+==============================================================================
+CONTENTS                                               *magenta-tmux-contents*
+
+    1. Overview ................................ |magenta-tmux-overview|
+    2. Setup ................................... |magenta-tmux-setup|
+    3. Pane Title Notifications ................ |magenta-tmux-notifications|
+
+==============================================================================
+OVERVIEW                                                *magenta-tmux-overview*
+
+When running Neovim inside tmux, magenta.nvim can update the tmux pane title
+to show thread status notifications. This lets you see at a glance whether
+any threads need your attention — even when you're in a different tmux
+session or window.
+
+The pane title shows:
+  - Count of threads waiting for approval
+  - Count of threads that stopped while you were away
+
+Example titles:
+>
+    nvim                              (no notifications)
+    🔴 2 approval · nvim              (2 threads need approval)
+    🔴 1 approval · 3 stopped · nvim  (mixed notifications)
+<
+
+==============================================================================
+SETUP                                                     *magenta-tmux-setup*
+
+1. Enable focus events in tmux. Add to your `~/.tmux.conf`:
+>tmux
+    set -g focus-events on
+<
+
+2. That's it. Magenta detects tmux automatically via the `$TMUX` and
+   `$TMUX_PANE` environment variables. No plugin configuration needed.
+
+Focus events are required so magenta knows when you switch away from the
+pane. Stopped thread notifications only accumulate while you're in a
+different pane; they clear automatically when you return.
+
+==============================================================================
+PANE TITLE NOTIFICATIONS                           *magenta-tmux-notifications*
+
+Approval count~
+
+Threads enter the "waiting for approval" state when a tool needs your
+permission to proceed (e.g., sandbox violations, write approvals). The
+approval count reflects how many threads are currently blocked.
+
+This count updates in real-time regardless of focus state.
+
+Stopped count~
+
+The stopped count only shows threads that finished *after* you left the
+pane. Threads that were already stopped when you switched away are not
+counted.
+
+When you return to the pane (triggering |FocusGained|), the stopped count
+resets to zero.
+
+Pane title caching~
+
+Magenta caches the last title it set and only issues a `tmux select-pane`
+command when the title actually changes, avoiding unnecessary process
+spawns during rapid state updates.
+
+vim:tw=78:ts=8:ft=help:norl:

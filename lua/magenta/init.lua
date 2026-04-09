@@ -117,6 +117,24 @@ M.bridge = function(channelId)
   )
 
   vim.api.nvim_create_autocmd(
+    "FocusGained",
+    {
+      callback = function()
+        vim.rpcnotify(channelId, "magentaFocusChanged", { focused = true })
+      end
+    }
+  )
+
+  vim.api.nvim_create_autocmd(
+    "FocusLost",
+    {
+      callback = function()
+        vim.rpcnotify(channelId, "magentaFocusChanged", { focused = false })
+      end
+    }
+  )
+
+  vim.api.nvim_create_autocmd(
     "BufEnter",
     {
       pattern = "*",
