@@ -155,7 +155,10 @@ export {
   COMPACT_SYSTEM_PROMPT,
   createSystemPrompt,
 } from "./providers/system-prompt.ts";
-export { getSubsequentReminder } from "./providers/system-reminders.ts";
+export {
+  buildSystemReminder,
+  type ReminderKind,
+} from "./providers/system-reminders.ts";
 export {
   type ActiveToolEntry,
   type EnvironmentConfig,

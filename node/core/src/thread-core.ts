@@ -32,8 +32,8 @@ import type {
 } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import {
-  getBashSummaryReminder,
-  getSubsequentReminder,
+  buildSystemReminder,
+  type ReminderKind,
 } from "./providers/system-reminders.ts";
 import type { ThreadSupervisor } from "./thread-supervisor.ts";
 import type {
@@ -1007,36 +1007,33 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
 
     const contentToSend: AgentInput[] = [...contextContent];
 
-    if (
+    const reminderKinds: ReminderKind[] = [];
+    const subsequentReminderFires =
       this.state.outputTokensSinceLastReminder >=
-      SYSTEM_REMINDER_MIN_TOKEN_INTERVAL
-    ) {
-      const reminder = getSubsequentReminder(
-        this.state.threadType,
-        this.context.subagentConfig,
-      );
-      if (reminder) {
-        contentToSend.push({
-          type: "text",
-          text: reminder,
-        });
-      }
-      this.update({ type: "reset-output-tokens" }, { silent: true });
-    }
-
-    if (
+      SYSTEM_REMINDER_MIN_TOKEN_INTERVAL;
+    const bashReminderFires =
       this.state.pendingBashReminder &&
       (this.state.firstBashReminderPending ||
-        this.state.bashTokensSinceLastReminder >= BASH_REMINDER_TOKEN_INTERVAL)
-    ) {
-      const bashReminder = getBashSummaryReminder(this.state.threadType);
-      if (bashReminder) {
-        contentToSend.push({
-          type: "text",
-          text: bashReminder,
-        });
+        this.state.bashTokensSinceLastReminder >= BASH_REMINDER_TOKEN_INTERVAL);
+
+    if (subsequentReminderFires) reminderKinds.push("subsequent");
+    if (bashReminderFires) reminderKinds.push("bashSummary");
+
+    if (reminderKinds.length > 0) {
+      const reminder = buildSystemReminder({
+        threadType: this.state.threadType,
+        subagentConfig: this.context.subagentConfig,
+        kinds: reminderKinds,
+      });
+      if (reminder) {
+        contentToSend.push({ type: "text", text: reminder });
       }
-      this.update({ type: "reset-bash-reminder" }, { silent: true });
+      if (subsequentReminderFires) {
+        this.update({ type: "reset-output-tokens" }, { silent: true });
+      }
+      if (bashReminderFires) {
+        this.update({ type: "reset-bash-reminder" }, { silent: true });
+      }
     }
 
     if (contextUpdates) {
@@ -1073,10 +1070,11 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
 
     if (inputMessages?.length) {
       this.update({ type: "reset-output-tokens" }, { silent: true });
-      const reminder = getSubsequentReminder(
-        this.state.threadType,
-        this.context.subagentConfig,
-      );
+      const reminder = buildSystemReminder({
+        threadType: this.state.threadType,
+        subagentConfig: this.context.subagentConfig,
+        kinds: ["subsequent"],
+      });
       if (reminder) {
         messageContent.push({
           type: "system_reminder",

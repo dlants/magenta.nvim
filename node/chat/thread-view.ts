@@ -344,11 +344,16 @@ ${thread.core.state.pendingMessages.map(
 )}`
       : d``;
 
-  // Helper to check if a message is a tool-result-only user message
+  // Helper to check if a message is composed entirely of auto-generated content
+  // (tool results, system reminders, context updates) — used to suppress the
+  // "# user:" header for messages that contain no user-authored text.
   const isToolResultOnlyMessage = (msg: ProviderMessage): boolean =>
     msg.role === "user" &&
     msg.content.every(
-      (c) => c.type === "tool_result" || c.type === "system_reminder",
+      (c) =>
+        c.type === "tool_result" ||
+        c.type === "system_reminder" ||
+        c.type === "context_update",
     );
 
   // Render messages from provider thread
@@ -361,12 +366,16 @@ ${thread.core.state.pendingMessages.map(
       return d``;
     }
 
-    // For user messages with only tool_result and system_reminder,
-    // skip the header but show the system reminder inline
+    // For user messages composed only of auto-generated content (tool_result,
+    // system_reminder, context_update) that include at least one system_reminder,
+    // skip the user header and inline the reminder.
     const isToolResultWithReminder =
       message.role === "user" &&
       message.content.every(
-        (c) => c.type === "tool_result" || c.type === "system_reminder",
+        (c) =>
+          c.type === "tool_result" ||
+          c.type === "system_reminder" ||
+          c.type === "context_update",
       ) &&
       message.content.some((c) => c.type === "system_reminder");
 

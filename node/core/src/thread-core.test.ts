@@ -566,16 +566,6 @@ function makeAbbreviatedShellResult(): ShellResult {
   };
 }
 
-function makeShortShellResult(): ShellResult {
-  return {
-    exitCode: 0,
-    signal: undefined,
-    output: [{ stream: "stdout", text: "ok" }],
-    logFilePath: "/tmp/test.log",
-    durationMs: 10,
-  };
-}
-
 describe("ThreadCore bash summary reminder", () => {
   it("fires the bash reminder on the first abbreviated bash output", async () => {
     const { shell } = createMockShell(makeAbbreviatedShellResult());
@@ -600,6 +590,53 @@ describe("ThreadCore bash summary reminder", () => {
 
     const reminderText = findBashReminderText(nextStream.messages);
     expect(reminderText).toBeDefined();
+  });
+
+  it("combines subsequent and bash reminders into a single <system-reminder> block when both gates fire", async () => {
+    const { shell } = createMockShell(makeAbbreviatedShellResult());
+    const { core, mockClient } = createThreadCoreWithMock({
+      shell: shell as unknown as ThreadCoreContext["shell"],
+    });
+
+    await core.sendMessage([{ type: "user", text: "run a thing" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "tool-bash-1" as ToolRequestId,
+      "bash_command" as ToolName,
+      { command: "echo hi" },
+    );
+    // High output tokens to also fire the subsequent reminder gate.
+    stream.finishResponse("tool_use", { inputTokens: 1, outputTokens: 5000 });
+
+    const nextStream = await pollUntil(() => {
+      const s = mockClient.streams[mockClient.streams.length - 1];
+      if (s && s !== stream) return s;
+      throw new Error("waiting for next stream");
+    });
+
+    const lastUserMsg = nextStream.messages[nextStream.messages.length - 1];
+    if (
+      lastUserMsg.role !== "user" ||
+      typeof lastUserMsg.content === "string"
+    ) {
+      throw new Error("expected structured user message");
+    }
+
+    const reminderBlocks = (
+      lastUserMsg.content as Anthropic.ContentBlockParam[]
+    ).filter(
+      (b): b is Anthropic.TextBlockParam =>
+        b.type === "text" && b.text.includes("<system-reminder>"),
+    );
+
+    // Exactly one combined system-reminder block should appear
+    expect(reminderBlocks.length).toBe(1);
+    const combinedText = reminderBlocks[0].text;
+    expect((combinedText.match(/<system-reminder>/g) ?? []).length).toBe(1);
+    expect((combinedText.match(/<\/system-reminder>/g) ?? []).length).toBe(1);
+    // Both bodies are present in the combined block
+    expect(combinedText).toContain("Remember the skills");
+    expect(combinedText).toContain("bash_summarizer");
   });
 
   it("does not fire again below the token threshold, but fires after the threshold is crossed", async () => {

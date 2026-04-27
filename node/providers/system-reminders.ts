@@ -1,1 +1,1 @@
-export { getSubsequentReminder } from "@magenta/core";
+export { buildSystemReminder, type ReminderKind } from "@magenta/core";

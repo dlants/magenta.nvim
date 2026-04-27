@@ -1,5 +1,8 @@
+import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
+import { validateInput } from "../tools/helpers.ts";
 import {
+  convertAnthropicMessagesToProvider,
   getContextWindowForModel,
   getMaxTokensForModel,
 } from "./anthropic-agent.ts";
@@ -27,6 +30,29 @@ describe("getMaxTokensForModel", () => {
 
   it("should return default for unknown models", () => {
     expect(getMaxTokensForModel("gpt-4")).toBe(4096);
+  });
+});
+
+describe("convertAnthropicMessagesToProvider system reminder detection", () => {
+  it("converts a text block containing a single combined <system-reminder> into one system_reminder content block", () => {
+    const combined = `<system-reminder>
+First reminder body
+Second reminder body
+</system-reminder>`;
+    const messages: Anthropic.MessageParam[] = [
+      {
+        role: "user",
+        content: [{ type: "text", text: combined }],
+      },
+    ];
+
+    const result = convertAnthropicMessagesToProvider(validateInput, messages);
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toHaveLength(1);
+    const block = result[0].content[0];
+    expect(block.type).toBe("system_reminder");
+    if (block.type !== "system_reminder") throw new Error("type narrow");
+    expect(block.text).toBe(combined);
   });
 });
 

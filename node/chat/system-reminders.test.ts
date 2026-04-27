@@ -301,6 +301,72 @@ test("system reminder content appears after context updates", async () => {
   });
 });
 
+test("auto-respond combines subsequent and bash reminders into a single system_reminder block", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    await driver.inputMagentaText("Run a long command");
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+
+    // 15000 X's exceeds the 8000-char abbreviation budget so wasAbbreviated=true,
+    // setting `pendingBashReminder` for the next stream.
+    const longArg = "X".repeat(15000);
+
+    request.respond({
+      stopReason: "tool_use",
+      text: "I'll run that command",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "tool_long" as ToolRequestId,
+            toolName: "bash_command" as ToolName,
+            input: { command: `echo "${longArg}"` },
+          },
+        },
+      ],
+      // 5000 outputTokens >= SYSTEM_REMINDER_MIN_TOKEN_INTERVAL fires the subsequent gate.
+      usage: { inputTokens: 1000, outputTokens: 5000 },
+    });
+
+    const autoRespondRequest = await driver.mockAnthropic.awaitPendingStream();
+
+    const lastMessage =
+      autoRespondRequest.messages[autoRespondRequest.messages.length - 1];
+    expect(lastMessage.role).toBe("user");
+    if (typeof lastMessage.content === "string") {
+      throw new Error("Expected array content");
+    }
+
+    const reminderBlocks = lastMessage.content.filter(
+      (c): c is TextBlockParam =>
+        c.type === "text" && c.text.includes("<system-reminder>"),
+    );
+    expect(reminderBlocks.length).toBe(1);
+    const combinedText = reminderBlocks[0].text;
+    expect((combinedText.match(/<system-reminder>/g) ?? []).length).toBe(1);
+    expect(combinedText).toContain("Remember the skills");
+    expect(combinedText).toContain("bash_summarizer");
+
+    autoRespondRequest.respond({
+      stopReason: "end_turn",
+      text: "Done",
+      toolRequests: [],
+    });
+
+    // After rendering the combined reminder, only one collapsed header should
+    // appear for the auto-respond turn (the user-typed message also has its
+    // own header, so total across the buffer is 2).
+    await driver.assertDisplayBufferContains("📋 [System Reminder]");
+    const displayText = await driver.getDisplayBufferText();
+    const headerCount = (displayText.match(/📋 \[System Reminder\]/g) ?? [])
+      .length;
+    expect(headerCount).toBe(2);
+  });
+});
+
 test("multiple user messages each get their own system reminder", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
