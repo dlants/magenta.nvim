@@ -31,7 +31,10 @@ import type {
   Usage,
 } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
-import { getSubsequentReminder } from "./providers/system-reminders.ts";
+import {
+  getBashSummaryReminder,
+  getSubsequentReminder,
+} from "./providers/system-reminders.ts";
 import type { ThreadSupervisor } from "./thread-supervisor.ts";
 import type {
   ToolInvocation,
@@ -123,6 +126,9 @@ export interface ThreadCoreContext {
 /** Minimum output tokens between system reminders during auto-respond loops */
 const SYSTEM_REMINDER_MIN_TOKEN_INTERVAL = 2000;
 
+/** Minimum output tokens between bash-summary reminders. */
+const BASH_REMINDER_TOKEN_INTERVAL = 5000;
+
 const CONTEXT_MANAGER_POLL_INTERVAL_MS = 1000;
 
 export type ThreadCoreAction =
@@ -140,7 +146,9 @@ export type ThreadCoreAction =
   | { type: "push-pending-messages"; messages: InputMessage[] }
   | { type: "drain-pending-messages" }
   | { type: "push-compaction-record"; record: CompactionRecord }
-  | { type: "reset-after-compaction" };
+  | { type: "reset-after-compaction" }
+  | { type: "mark-bash-output-abbreviated" }
+  | { type: "reset-bash-reminder" };
 
 export class ThreadCore extends Emitter<ThreadCoreEvents> {
   public state: {
@@ -154,6 +162,9 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     outputTokensSinceLastReminder: number;
     compactionHistory: CompactionRecord[];
     editedFilesThisTurn: AbsFilePath[];
+    pendingBashReminder: boolean;
+    bashTokensSinceLastReminder: number;
+    firstBashReminderPending: boolean;
   };
 
   public agent: Agent;
@@ -186,6 +197,9 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       outputTokensSinceLastReminder: 0,
       compactionHistory: [],
       editedFilesThisTurn: [],
+      pendingBashReminder: false,
+      bashTokensSinceLastReminder: 0,
+      firstBashReminderPending: true,
     };
 
     this.listenToContextManager();
@@ -353,6 +367,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         break;
       case "increment-output-tokens":
         this.state.outputTokensSinceLastReminder += action.tokens;
+        this.state.bashTokensSinceLastReminder += action.tokens;
         break;
       case "reset-output-tokens":
         this.state.outputTokensSinceLastReminder = 0;
@@ -376,6 +391,17 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
         this.state.outputTokensSinceLastReminder = 0;
         this.state.editedFilesThisTurn = [];
+        this.state.pendingBashReminder = false;
+        this.state.bashTokensSinceLastReminder = 0;
+        this.state.firstBashReminderPending = true;
+        break;
+      case "mark-bash-output-abbreviated":
+        this.state.pendingBashReminder = true;
+        break;
+      case "reset-bash-reminder":
+        this.state.pendingBashReminder = false;
+        this.state.bashTokensSinceLastReminder = 0;
+        this.state.firstBashReminderPending = false;
         break;
       default:
         assertUnreachable(action);
@@ -954,6 +980,19 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
   ): Promise<void> {
     for (const { id, result } of toolResults) {
       this.agent.toolResult(id, result);
+      if (result.result.status === "ok") {
+        const structured = result.result.structuredResult;
+        if (
+          structured.toolName === "bash_command" &&
+          "wasAbbreviated" in structured &&
+          structured.wasAbbreviated
+        ) {
+          this.update(
+            { type: "mark-bash-output-abbreviated" },
+            { silent: true },
+          );
+        }
+      }
     }
 
     this.update({ type: "set-mode", mode: { type: "normal" } });
@@ -983,6 +1022,21 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         });
       }
       this.update({ type: "reset-output-tokens" }, { silent: true });
+    }
+
+    if (
+      this.state.pendingBashReminder &&
+      (this.state.firstBashReminderPending ||
+        this.state.bashTokensSinceLastReminder >= BASH_REMINDER_TOKEN_INTERVAL)
+    ) {
+      const bashReminder = getBashSummaryReminder(this.state.threadType);
+      if (bashReminder) {
+        contentToSend.push({
+          type: "text",
+          text: bashReminder,
+        });
+      }
+      this.update({ type: "reset-bash-reminder" }, { silent: true });
     }
 
     if (contextUpdates) {

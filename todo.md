@@ -9,9 +9,6 @@
 
 # token efficiency
 
-- I want to revisit the way bash command works.
-  - if the output is short, just pipe it directly to the agent without the "full output at file"
-  - if the output is long, provide a summary as currently. Let's make the threadIds/bash output shorter, so they don't take up as many tokens. Let's also set up a hook system that encourages the parent agent to use a subagent to explore the command output - so it should send a reminder on the first long bash output, and then periodically after (not on every bash command)
 - Let's revisit how we summarize files.
 
 # customization
@@ -22,17 +19,22 @@
 
 # UX
 
+- scrolling. When we send a message, we should scroll the user input to the top (as currently), but then put the cursor on the last line of the buffer (Streaming...), so it scrolls down as the text grows
+- Animate the dot on "streaming" independent of partial stream results
 - when a thread is titled, we should use that title somehow in the buffer name (instead of just using an opaque id, though still need to make sure it's unique)
 - make the spawn_subagents preview the command as it's streaming in
+- thread display buffers should be listed
+- deleting a thread display or input buffer (via :bd) should remove that thread from magenta state
 - = on spawn_subagents is showing "\n" ... we should probably format that more nicely
-- let's make = vs <CR> more consistent. "=" should always toggle expand. "<CR>" should always "enter / select"
-- compaction takes a while and doesn't show progress... we should show something like `X / Y chunks` as it's going along
+- let's make = vs <CR> more consistent. "=" should always toggle expand. "<CR>" should always "enter / select". We should always have the carrot to visually indicate that the section is expandable
+- when the list of edited files gets long, collapse it to a "N edited files" summary + carrot
 
 # misc features
 
 - fork a conversation from any previous message
 - add context tracking for the state of git. When we change branches, commit, etc...
 - we should be able to @fork during the assistant's turn, tool use, etc... without aborting the thread we're in
+- asking aside/followup questions about things is a bit awkward... it would be cool to allow one to select a part of the display buffer, and then ask a question about it, with the output appearing within the flow of the original thread
 
 # bug fixes, etc
 

@@ -772,8 +772,7 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
             "text": "stdout:
 secret secrets are no fun
 exit code 0 (<timing>ms)
-
-Full output (1 lines): /tmp/magenta/threads/<thread-id>/tools/bash-tool/bashCommand.log",
+",
             "type": "text",
           },
         ],

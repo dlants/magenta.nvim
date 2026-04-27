@@ -94,6 +94,7 @@ export type StructuredResult = {
   logFilePath: string | undefined;
   logFileLineCount: number | undefined;
   outputText: string;
+  wasAbbreviated: boolean;
 };
 
 export type ToolRequest = GenericToolRequest<"bash_command", Input>;
@@ -135,7 +136,7 @@ function formatOutputForToolResult(
   signal: NodeJS.Signals | undefined,
   durationMs: number,
   logFilePath: string | undefined,
-): string {
+): { formattedOutput: string; wasAbbreviated: boolean } {
   const totalLines = output.length;
   const totalBudgetChars = MAX_OUTPUT_TOKENS_FOR_AGENT * CHARACTERS_PER_TOKEN;
 
@@ -162,11 +163,7 @@ function formatOutputForToolResult(
       formattedOutput += `exit code ${exitCode} (${durationMs}ms)\n`;
     }
 
-    if (logFilePath) {
-      formattedOutput += `\nFull output (${totalLines} lines): ${logFilePath}`;
-    }
-
-    return formattedOutput;
+    return { formattedOutput, wasAbbreviated: false };
   }
 
   const headBudgetChars = Math.floor(totalBudgetChars * 0.3);
@@ -234,7 +231,7 @@ function formatOutputForToolResult(
     formattedOutput += `\nFull output (${totalLines} lines): ${logFilePath}`;
   }
 
-  return formattedOutput;
+  return { formattedOutput, wasAbbreviated: true };
 }
 
 // ===== New function-based ToolInvocation =====
@@ -285,7 +282,7 @@ export function execute(
     .then((result): ProviderToolResult => {
       if (aborted) {
         stopTickInterval();
-        const formattedOutput = formatOutputForToolResult(
+        const { formattedOutput } = formatOutputForToolResult(
           result.output,
           result.exitCode,
           result.signal,
@@ -306,7 +303,7 @@ export function execute(
       }
       stopTickInterval();
 
-      const formattedOutput = formatOutputForToolResult(
+      const { formattedOutput, wasAbbreviated } = formatOutputForToolResult(
         result.output,
         result.exitCode,
         result.signal,
@@ -332,6 +329,7 @@ export function execute(
               /\n?Full output \(\d+ lines\): .+$/m,
               "",
             ),
+            wasAbbreviated,
           },
         },
       };
@@ -350,7 +348,7 @@ export function execute(
                 undefined,
                 durationMs,
                 undefined,
-              )
+              ).formattedOutput
             : "";
         const errorMsg = formattedOutput
           ? `Request was aborted by the user.\n\nOutput before termination:\n${formattedOutput}`

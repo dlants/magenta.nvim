@@ -583,8 +583,8 @@ describe("bash command output logging", () => {
       expect(Array.isArray(toolResultMessage.content)).toBe(true);
 
       const content = extractToolResultText(toolResultMessage);
-      // Log file path should always be in the result
-      expect(content).toContain("Full output");
+      // Short output fits in the token budget so the trailer is omitted
+      expect(content).not.toContain("Full output");
 
       // But we can verify the log file exists by getting the thread id and constructing the path
       const thread = driver.magenta.chat.getActiveThread();
@@ -708,8 +708,8 @@ describe("bash command output logging", () => {
       // Should NOT contain omission marker
       expect(content).not.toContain("lines omitted");
 
-      // Should always have log file reference
-      expect(content).toContain("Full output");
+      // Short output fits in the token budget so the trailer is omitted
+      expect(content).not.toContain("Full output");
     });
   });
 

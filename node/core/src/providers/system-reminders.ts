@@ -62,3 +62,14 @@ CRITICAL: You MUST write the summary to /summary.md using the edl tool.
 </system-reminder>`;
   }
 }
+
+export function getBashSummaryReminder(
+  threadType: ThreadType,
+): string | undefined {
+  if (threadType === "compact") {
+    return undefined;
+  }
+  return `<system-reminder>
+Use the \`bash_summarizer\` subagent to extract information from abbreviated bash output. Pass the log file to the subagent as a contextFile.
+</system-reminder>`;
+}

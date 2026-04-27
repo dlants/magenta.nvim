@@ -58,7 +58,7 @@ async function getResultText(invocation: {
 }
 
 describe("bashCommand unit tests", () => {
-  it("returns formatted output for simple successful command", async () => {
+  it("returns formatted output for simple successful command without trailer", async () => {
     const { invocation } = createTool("echo hello", {
       exitCode: 0,
       signal: undefined,
@@ -67,11 +67,20 @@ describe("bashCommand unit tests", () => {
       durationMs: 42,
     });
 
-    const text = await getResultText(invocation);
+    const result = await invocation.promise;
+    expect(result.result.status).toBe("ok");
+    if (result.result.status !== "ok") throw new Error("expected ok");
+    const text = (result.result.value[0] as { type: "text"; text: string })
+      .text;
     expect(text).toContain("stdout:");
     expect(text).toContain("hello");
     expect(text).toContain("exit code 0 (42ms)");
-    expect(text).toContain("Full output (1 lines): /tmp/test.log");
+    expect(text).not.toContain("Full output (");
+    const structured = result.result.structuredResult as {
+      toolName: "bash_command";
+      wasAbbreviated: boolean;
+    };
+    expect(structured.wasAbbreviated).toBe(false);
   });
 
   it("includes duration in result for failed commands", async () => {
@@ -115,7 +124,7 @@ describe("bashCommand unit tests", () => {
       expect(text).toContain(`LINE${i}:`);
     }
     expect(text).not.toContain("lines omitted");
-    expect(text).toContain("Full output");
+    expect(text).not.toContain("Full output");
   });
 
   it("abbreviates output when it exceeds token budget", async () => {
@@ -141,6 +150,14 @@ describe("bashCommand unit tests", () => {
     expect(text).toContain("LINE100:");
     expect(text).toContain("Full output (100 lines):");
     expect(text).toContain("/tmp/test.log");
+
+    const result = await invocation.promise;
+    if (result.result.status !== "ok") throw new Error("expected ok");
+    const structured = result.result.structuredResult as {
+      toolName: "bash_command";
+      wasAbbreviated: boolean;
+    };
+    expect(structured.wasAbbreviated).toBe(true);
   });
 
   it("abbreviates long lines", async () => {

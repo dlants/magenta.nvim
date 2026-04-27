@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { Logger } from "./logger.ts";
@@ -497,5 +498,200 @@ describe("ThreadCore.editedFilesThisTurn", () => {
 
     await core.sendMessage([{ type: "user", text: "next turn" }]);
     expect(core.state.editedFilesThisTurn).toEqual([]);
+  });
+});
+
+function createMockShell(initialResult: ShellResult): {
+  shell: Shell;
+  setNextResult: (r: ShellResult) => void;
+} {
+  let nextResult = initialResult;
+  const shell: Shell = {
+    execute: (
+      _command: string,
+      opts: {
+        toolRequestId: string;
+        onOutput?: (line: OutputLine) => void;
+        onStart?: () => void;
+      },
+    ) => {
+      opts.onStart?.();
+      for (const line of nextResult.output) {
+        opts.onOutput?.(line);
+      }
+      return Promise.resolve(nextResult);
+    },
+    terminate: vi.fn(),
+  };
+  return {
+    shell,
+    setNextResult: (r) => {
+      nextResult = r;
+    },
+  };
+}
+
+function findBashReminderText(
+  messages: Anthropic.MessageParam[],
+): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== "user" || typeof msg.content === "string") continue;
+    for (const block of msg.content as Anthropic.ContentBlockParam[]) {
+      if (
+        block.type === "text" &&
+        block.text.includes("<system-reminder>") &&
+        block.text.includes("log file") &&
+        block.text.includes("bash_summarizer")
+      ) {
+        return block.text;
+      }
+    }
+  }
+  return undefined;
+}
+
+function makeAbbreviatedShellResult(): ShellResult {
+  const lineContent = "X".repeat(500);
+  const output: OutputLine[] = Array.from({ length: 100 }, (_, i) => ({
+    stream: "stdout" as const,
+    text: `LINE${i + 1}:${lineContent}`,
+  }));
+  return {
+    exitCode: 0,
+    signal: undefined,
+    output,
+    logFilePath: "/tmp/test.log",
+    durationMs: 50,
+  };
+}
+
+function makeShortShellResult(): ShellResult {
+  return {
+    exitCode: 0,
+    signal: undefined,
+    output: [{ stream: "stdout", text: "ok" }],
+    logFilePath: "/tmp/test.log",
+    durationMs: 10,
+  };
+}
+
+describe("ThreadCore bash summary reminder", () => {
+  it("fires the bash reminder on the first abbreviated bash output", async () => {
+    const { shell } = createMockShell(makeAbbreviatedShellResult());
+    const { core, mockClient } = createThreadCoreWithMock({
+      shell: shell as unknown as ThreadCoreContext["shell"],
+    });
+
+    await core.sendMessage([{ type: "user", text: "run a thing" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "tool-bash-1" as ToolRequestId,
+      "bash_command" as ToolName,
+      { command: "echo hi" },
+    );
+    stream.finishResponse("tool_use");
+
+    const nextStream = await pollUntil(() => {
+      const s = mockClient.streams[mockClient.streams.length - 1];
+      if (s && s !== stream) return s;
+      throw new Error("waiting for next stream");
+    });
+
+    const reminderText = findBashReminderText(nextStream.messages);
+    expect(reminderText).toBeDefined();
+  });
+
+  it("does not fire again below the token threshold, but fires after the threshold is crossed", async () => {
+    const { shell, setNextResult } = createMockShell(
+      makeAbbreviatedShellResult(),
+    );
+    const { core, mockClient } = createThreadCoreWithMock({
+      shell: shell as unknown as ThreadCoreContext["shell"],
+    });
+
+    // First abbreviated bash → reminder should fire
+    await core.sendMessage([{ type: "user", text: "first" }]);
+    const stream1 = await mockClient.awaitStream();
+    stream1.streamToolUse(
+      "tool-bash-1" as ToolRequestId,
+      "bash_command" as ToolName,
+      { command: "echo hi" },
+    );
+    stream1.finishResponse("tool_use", { inputTokens: 1, outputTokens: 10 });
+
+    const stream2 = await pollUntil(() => {
+      const s = mockClient.streams[mockClient.streams.length - 1];
+      if (s && s !== stream1) return s;
+      throw new Error("waiting for second stream");
+    });
+    expect(findBashReminderText(stream2.messages)).toBeDefined();
+
+    // Second abbreviated bash with few tokens → NO second reminder
+    setNextResult(makeAbbreviatedShellResult());
+    stream2.streamToolUse(
+      "tool-bash-2" as ToolRequestId,
+      "bash_command" as ToolName,
+      { command: "echo hi" },
+    );
+    stream2.finishResponse("tool_use", { inputTokens: 1, outputTokens: 100 });
+
+    const stream3 = await pollUntil(() => {
+      const s = mockClient.streams[mockClient.streams.length - 1];
+      if (s && s !== stream2) return s;
+      throw new Error("waiting for third stream");
+    });
+    const lastUserMsg3 = stream3.messages[stream3.messages.length - 1];
+    if (
+      lastUserMsg3.role !== "user" ||
+      typeof lastUserMsg3.content === "string"
+    ) {
+      throw new Error("expected structured user message");
+    }
+    const hasReminderInStream3 = (
+      lastUserMsg3.content as Anthropic.ContentBlockParam[]
+    )
+      .filter(
+        (b): b is Anthropic.TextBlockParam =>
+          b.type === "text" && b.text.includes("<system-reminder>"),
+      )
+      .some(
+        (b) =>
+          b.text.includes("log file") && b.text.includes("bash_summarizer"),
+      );
+    expect(hasReminderInStream3).toBe(false);
+
+    // Third bash with enough output tokens to cross the threshold → reminder fires again
+    stream3.streamToolUse(
+      "tool-bash-3" as ToolRequestId,
+      "bash_command" as ToolName,
+      { command: "echo hi" },
+    );
+    stream3.finishResponse("tool_use", { inputTokens: 1, outputTokens: 6000 });
+
+    const stream4 = await pollUntil(() => {
+      const s = mockClient.streams[mockClient.streams.length - 1];
+      if (s && s !== stream3) return s;
+      throw new Error("waiting for fourth stream");
+    });
+    const lastUserMsg4 = stream4.messages[stream4.messages.length - 1];
+    if (
+      lastUserMsg4.role !== "user" ||
+      typeof lastUserMsg4.content === "string"
+    ) {
+      throw new Error("expected structured user message");
+    }
+    const hasReminderInStream4 = (
+      lastUserMsg4.content as Anthropic.ContentBlockParam[]
+    )
+      .filter(
+        (b): b is Anthropic.TextBlockParam =>
+          b.type === "text" && b.text.includes("<system-reminder>"),
+      )
+      .some(
+        (b) =>
+          b.text.includes("log file") && b.text.includes("bash_summarizer"),
+      );
+    expect(hasReminderInStream4).toBe(true);
   });
 });
