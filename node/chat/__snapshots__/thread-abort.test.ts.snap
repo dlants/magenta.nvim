@@ -6,10 +6,12 @@ exports[`aborts request when sending new message while waiting for response 1`] 
     "content": [
       {
         "citations": undefined,
+        "nativeMessageIdx": 0,
         "text": "First message",
         "type": "text",
       },
       {
+        "nativeMessageIdx": 0,
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
@@ -33,6 +35,7 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
     "content": [
       {
         "citations": undefined,
+        "nativeMessageIdx": 1,
         "text": "[The user aborted the previous request.]",
         "type": "text",
       },
@@ -43,10 +46,12 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
     "content": [
       {
         "citations": undefined,
+        "nativeMessageIdx": 2,
         "text": "Second message while first is pending",
         "type": "text",
       },
       {
+        "nativeMessageIdx": 2,
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
@@ -70,6 +75,7 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
     "content": [
       {
         "citations": undefined,
+        "nativeMessageIdx": 3,
         "text": "Second response that should be shown",
         "type": "text",
       },
@@ -85,10 +91,12 @@ exports[`aborts tool use when sending new message while tool is executing 1`] = 
     "content": [
       {
         "citations": undefined,
+        "nativeMessageIdx": 0,
         "text": "Run a slow command",
         "type": "text",
       },
       {
+        "nativeMessageIdx": 0,
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
@@ -112,12 +120,14 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
     "content": [
       {
         "citations": undefined,
+        "nativeMessageIdx": 1,
         "text": "I'll run a slow bash command for you.",
         "type": "text",
       },
       {
         "id": "slow-bash-command",
         "name": "bash_command",
+        "nativeMessageIdx": 1,
         "request": {
           "status": "ok",
           "value": {
@@ -142,6 +152,7 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
     "content": [
       {
         "id": "slow-bash-command",
+        "nativeMessageIdx": 2,
         "result": {
           "error": "Request was aborted by the user.",
           "status": "error",
@@ -155,6 +166,7 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
     "content": [
       {
         "citations": undefined,
+        "nativeMessageIdx": 3,
         "text": "[The user aborted the previous request.]",
         "type": "text",
       },
@@ -165,10 +177,12 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
     "content": [
       {
         "citations": undefined,
+        "nativeMessageIdx": 4,
         "text": "Cancel that, run something else",
         "type": "text",
       },
       {
+        "nativeMessageIdx": 4,
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
@@ -228,41 +242,6 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
       },
     ],
     "role": "assistant",
-  },
-  {
-    "content": [
-      {
-        "text": "What about 3+3?",
-        "type": "text",
-      },
-      {
-        "text": "<system-reminder>
-Remember the skills in <available-skills> and the learn tool for built-in documentation.
-If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
-WRONG: \`command 2>&1 | tail -50\`
-WRONG: \`command | head -100\`
-RIGHT: \`command\`
-Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
-When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
-
-Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-Don't spawn sub-agents for things you can do with a single tool call (get_file, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
-
-</system-reminder>",
-        "type": "text",
-      },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
-      {
-        "text": "[The user aborted the previous request.]",
-        "type": "text",
-      },
-    ],
-    "role": "user",
   },
   {
     "content": [

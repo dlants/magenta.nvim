@@ -1,6 +1,7 @@
 import type {
   FileIO,
   InputMessage,
+  NativeMessageIdx,
   SubagentConfig,
   ThreadId,
   ThreadType,
@@ -13,7 +14,6 @@ import {
 } from "@magenta/core";
 import { v7 as uuidv7 } from "uuid";
 import type { Lsp } from "../capabilities/lsp.ts";
-import type { SandboxViolationHandler } from "../capabilities/sandbox-violation-handler.ts";
 import type {
   DockerSpawnConfig,
   ThreadManager,
@@ -838,8 +838,10 @@ ${threadViews.map((view) => d`${view}\n`)}`;
 
   async handleForkThread({
     sourceThreadId,
+    truncateAtMessageIdx,
   }: {
     sourceThreadId: ThreadId;
+    truncateAtMessageIdx?: NativeMessageIdx;
   }): Promise<ThreadId> {
     const sourceThreadWrapper = this.threadWrappers[sourceThreadId];
     if (!sourceThreadWrapper || sourceThreadWrapper.state !== "initialized") {
@@ -862,6 +864,10 @@ ${threadViews.map((view) => d`${view}\n`)}`;
     const newThreadId = uuidv7() as ThreadId;
 
     const clonedAgent = sourceAgent.clone();
+
+    if (truncateAtMessageIdx !== undefined) {
+      clonedAgent.truncateMessages(truncateAtMessageIdx);
+    }
 
     // Create the new thread with the cloned agent
     this.threadWrappers[newThreadId] = {

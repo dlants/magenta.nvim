@@ -7,6 +7,7 @@ import {
   type InputMessage,
   loadAgents,
   type MCPToolManagerImpl,
+  type NativeMessageIdx,
   ThreadCore,
   type ThreadId,
   type ThreadType,
@@ -113,6 +114,11 @@ export type Msg =
     }
   | {
       type: "toggle-sandbox-bypass";
+    }
+  | {
+      type: "fork-message";
+      nativeMessageIdx: NativeMessageIdx;
+      prepopulate?: string[];
     };
 
 export type ThreadMsg = {
@@ -502,6 +508,10 @@ export class Thread {
         root.sandboxBypassed = !root.sandboxBypassed;
         return;
       }
+
+      case "fork-message":
+        // Handled at the Magenta dispatch level; ignored here.
+        return;
 
       default:
         assertUnreachable(msg);

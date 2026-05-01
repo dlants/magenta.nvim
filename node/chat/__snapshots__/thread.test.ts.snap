@@ -185,7 +185,7 @@ Read a file for me
 # assistant:
 I'll read the file for you.
 👀 \`poem.txt\`
-✅ 5 lines (~43 tok)
+✅ 5 lines (~48 tok)
 [input: 1000, output: 5000]
 📋 [System Reminder]
 I've read the file. It contains a poem about moonlight.
@@ -457,42 +457,6 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
   {
     "content": [
       {
-        "text": "What about Germany?",
-        "type": "text",
-      },
-      {
-        "text": "<system-reminder>
-Remember the skills in <available-skills> and the learn tool for built-in documentation.
-If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
-WRONG: \`command 2>&1 | tail -50\`
-WRONG: \`command | head -100\`
-RIGHT: \`command\`
-Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
-When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
-
-Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-Don't spawn sub-agents for things you can do with a single tool call (get_file, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
-
-</system-reminder>",
-        "type": "text",
-      },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
-      {
-        "citations": null,
-        "text": "The capital of Germany is Berlin.",
-        "type": "text",
-      },
-    ],
-    "role": "assistant",
-  },
-  {
-    "content": [
-      {
         "text": "Tell me about Italy",
         "type": "text",
       },
@@ -528,10 +492,12 @@ exports[`forks a thread with multiple messages into a new thread > forked-thread
     "content": [
       {
         "citations": undefined,
+        "nativeMessageIdx": 0,
         "text": "What is the capital of France?",
         "type": "text",
       },
       {
+        "nativeMessageIdx": 0,
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
@@ -555,6 +521,7 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
     "content": [
       {
         "citations": undefined,
+        "nativeMessageIdx": 1,
         "text": "The capital of France is Paris.",
         "type": "text",
       },
@@ -570,52 +537,12 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
     "content": [
       {
         "citations": undefined,
-        "text": "What about Germany?",
-        "type": "text",
-      },
-      {
-        "text": "<system-reminder>
-Remember the skills in <available-skills> and the learn tool for built-in documentation.
-If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
-When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
-WRONG: \`command 2>&1 | tail -50\`
-WRONG: \`command | head -100\`
-RIGHT: \`command\`
-Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
-When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
-
-Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-Don't spawn sub-agents for things you can do with a single tool call (get_file, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
-
-</system-reminder>",
-        "type": "system_reminder",
-      },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
-      {
-        "citations": undefined,
-        "text": "The capital of Germany is Berlin.",
-        "type": "text",
-      },
-    ],
-    "role": "assistant",
-    "stopReason": "end_turn",
-    "usage": {
-      "inputTokens": 1000,
-      "outputTokens": 5000,
-    },
-  },
-  {
-    "content": [
-      {
-        "citations": undefined,
+        "nativeMessageIdx": 2,
         "text": "Tell me about Italy",
         "type": "text",
       },
       {
+        "nativeMessageIdx": 2,
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.
@@ -639,6 +566,7 @@ Don't spawn sub-agents for things you can do with a single tool call (get_file, 
     "content": [
       {
         "citations": undefined,
+        "nativeMessageIdx": 3,
         "text": "Italy's capital is Rome. It's known for its rich history, art, and cuisine.",
         "type": "text",
       },
@@ -825,12 +753,12 @@ Read two files for me
 # assistant:
 I'll read the first file.
 👀 \`poem.txt\`
-✅ 5 lines (~43 tok)
+✅ 5 lines (~48 tok)
 [input: 1000, output: 5000]
 📋 [System Reminder]
 💭 [Thinking]
 👀 \`poem2.txt\`
-✅ 5 lines (~43 tok)
+✅ 5 lines (~48 tok)
 [input: 1000, output: 5000]
 📋 [System Reminder]
 I've read both files for you.

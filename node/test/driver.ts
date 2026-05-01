@@ -462,6 +462,85 @@ vim.rpcnotify(${this.nvim.channelId}, "magentaKey", "${key}")
     ]);
   }
 
+  /** Find a line containing the given text in the display buffer, position
+   * the cursor on that line, and dispatch the F binding for the message that
+   * contains that line. Resolves the binding directly via getBindings to avoid
+   * re-render races, and dispatches with no selection (normal-mode F).
+   */
+  async pressOnDisplayMessage(
+    textSnippet: string,
+    key: BindingKey,
+  ): Promise<void> {
+    return this.triggerDisplayBufferKeyOnContent(textSnippet, key);
+  }
+
+  /** Like pressOnDisplayMessage but invokes the binding with a `selection`
+   * payload — emulating visual-mode F where the lua side captures the visual
+   * selection and forwards it to node.
+   */
+  async pressOnDisplayMessageWithSelection(
+    textSnippet: string,
+    key: BindingKey,
+    selection: string[],
+  ): Promise<void> {
+    let latestContent;
+    await pollUntil(
+      async () => {
+        const displayBuffer = this.getDisplayBuffer();
+        const versionBefore =
+          this.magenta.bufferManager.getMountedApp(this.getActiveKey())
+            ?.renderVersion ?? 0;
+
+        const lines = await displayBuffer.getLines({
+          start: 0 as Row0Indexed,
+          end: -1 as Row0Indexed,
+        });
+        latestContent = lines.join("\n");
+        const index = Buffer.from(latestContent).indexOf(
+          textSnippet,
+        ) as ByteIdx;
+        if (index === -1) {
+          throw new Error(
+            `! Unable to find text ${textSnippet} in displayBuffer`,
+          );
+        }
+        const position = calculatePosition(
+          { row: 0, col: 0 } as Position0Indexed,
+          Buffer.from(latestContent),
+          index,
+        );
+
+        const { displayWindow } = this.getVisibleState();
+        await this.nvim.call("nvim_set_current_win", [displayWindow.id]);
+        await displayWindow.setCursor(pos0to1(position));
+
+        const versionAfter =
+          this.magenta.bufferManager.getMountedApp(this.getActiveKey())
+            ?.renderVersion ?? 0;
+        if (versionBefore !== versionAfter) {
+          throw new Error(
+            `! Re-render occurred while setting cursor. Retrying.`,
+          );
+        }
+
+        const mountedNode = this.magenta.bufferManager
+          .getMountedApp(this.getActiveKey())
+          ?.getMountedNode();
+        if (!mountedNode) {
+          throw new Error(`! mountedChatApp not available`);
+        }
+        const bindings = getBindings(mountedNode, position);
+        if (!bindings || !bindings[key]) {
+          throw new Error(
+            `! No binding for key "${key}" at position ${JSON.stringify(position)}`,
+          );
+        }
+        bindings[key]({ selection });
+      },
+      { timeout: 2000 },
+    );
+  }
+
   async triggerDisplayBufferKeyOnContent(
     text: string,
     key: BindingKey,

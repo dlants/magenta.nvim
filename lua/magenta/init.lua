@@ -247,15 +247,41 @@ M.bridge = function(channelId)
     }
   )
 
-  M.listenToBufKey = function(bufnr, vimKey)
-    vim.keymap.set(
-      "n",
-      vimKey,
-      function()
-        safe_rpcnotify(channelId, "magentaKey", vimKey)
-      end,
-      { buffer = bufnr, noremap = true, silent = true }
-    )
+  M.listenToBufKey = function(bufnr, vimKey, mode)
+    mode = mode or "n"
+    if mode == "v" or mode == "x" then
+      -- Visual mode: capture the current visual selection (using marks set
+      -- when visual mode exits via <Esc>) and forward as `selection` arg.
+      vim.keymap.set(
+        mode,
+        vimKey,
+        function()
+          -- Exit visual mode so '< and '> marks are populated.
+          local esc = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
+          vim.api.nvim_feedkeys(esc, "x", false)
+
+          local startPos = vim.fn.getpos("'<")
+          local endPos = vim.fn.getpos("'>")
+          local startRow = startPos[2] - 1
+          local startCol = startPos[3] - 1
+          local endRow = endPos[2] - 1
+          local endCol = endPos[3]
+
+          local lines = vim.api.nvim_buf_get_text(bufnr, startRow, startCol, endRow, endCol, {})
+          safe_rpcnotify(channelId, "magentaKey", vimKey, { selection = lines })
+        end,
+        { buffer = bufnr, noremap = true, silent = true }
+      )
+    else
+      vim.keymap.set(
+        mode,
+        vimKey,
+        function()
+          safe_rpcnotify(channelId, "magentaKey", vimKey)
+        end,
+        { buffer = bufnr, noremap = true, silent = true }
+      )
+    end
   end
 
   M.lsp_response = function(requestId, response)

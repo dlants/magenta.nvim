@@ -242,12 +242,20 @@ it("forks a thread with multiple messages into a new thread", async () => {
     // Get the original thread ID before forking
     const originalThreadId = driver.magenta.chat.state.activeThreadId;
 
-    // 3. Fork the thread with @fork
-    await driver.inputMagentaText("@fork Tell me about Italy");
+    // 3. Fork the thread by pressing F on the assistant's response.
+    await driver.pressOnDisplayMessage("The capital of France is Paris.", "F");
+
+    // 4. Wait for the new thread to become active.
+    await pollUntil(() => {
+      if (driver.magenta.chat.state.activeThreadId === originalThreadId) {
+        throw new Error("Still on original thread");
+      }
+    });
+
+    // Send a follow-up message on the forked thread.
+    await driver.inputMagentaText("Tell me about Italy");
     await driver.send();
 
-    // 4. The fork should immediately clone and create a new thread
-    // The new thread should receive the message without @fork
     const stream = await driver.mockAnthropic.awaitPendingStream({
       message: "forked thread request",
     });

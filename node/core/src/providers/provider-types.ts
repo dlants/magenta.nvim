@@ -61,27 +61,32 @@ export type ProviderTextContent = {
   type: "text";
   text: string;
   citations?: ProviderWebSearchCitation[] | undefined;
+  nativeMessageIdx?: NativeMessageIdx;
 };
 
 export type ProviderThinkingContent = {
   type: "thinking";
   thinking: string;
   signature: string;
+  nativeMessageIdx?: NativeMessageIdx;
 };
 
 export type ProviderRedactedThinkingContent = {
   type: "redacted_thinking";
   data: string;
+  nativeMessageIdx?: NativeMessageIdx;
 };
 
 export type ProviderSystemReminderContent = {
   type: "system_reminder";
   text: string;
+  nativeMessageIdx?: NativeMessageIdx;
 };
 
 export type ProviderContextUpdateContent = {
   type: "context_update";
   text: string;
+  nativeMessageIdx?: NativeMessageIdx;
 };
 
 export type ProviderImageContent = {
@@ -91,6 +96,7 @@ export type ProviderImageContent = {
     media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
     data: string;
   };
+  nativeMessageIdx?: NativeMessageIdx;
 };
 
 export type ProviderDocumentContent = {
@@ -101,6 +107,7 @@ export type ProviderDocumentContent = {
     data: string;
   };
   title?: string | null;
+  nativeMessageIdx?: NativeMessageIdx;
 };
 
 export type ProviderToolUseContent = {
@@ -108,6 +115,7 @@ export type ProviderToolUseContent = {
   id: ToolManager.ToolRequestId;
   name: ToolName;
   request: Result<ToolRequest, { rawRequest: unknown }>;
+  nativeMessageIdx?: NativeMessageIdx;
 };
 
 export type ProviderServerToolUseContent = {
@@ -117,12 +125,14 @@ export type ProviderServerToolUseContent = {
   input: {
     query: string;
   };
+  nativeMessageIdx?: NativeMessageIdx;
 };
 
 export type ProviderWebSearchToolResult = {
   type: "web_search_tool_result";
   tool_use_id: string;
   content: Anthropic.WebSearchToolResultBlockContent;
+  nativeMessageIdx?: NativeMessageIdx;
 };
 
 export type ProviderToolResultContent =
@@ -140,6 +150,7 @@ export type ProviderToolResult = {
         structuredResult: ToolManager.ToolStructuredResult;
       }
     | { status: "error"; error: string };
+  nativeMessageIdx?: NativeMessageIdx;
 };
 
 export type ProviderToolSpec = {

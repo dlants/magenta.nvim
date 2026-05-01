@@ -464,6 +464,43 @@ function renderMessageContent(
   messageUsage: Usage | undefined,
   isLastBlock: boolean,
 ): VDOMNode {
+  const node = renderMessageContentInner(
+    content,
+    messageIdx,
+    contentIdx,
+    thread,
+    dispatch,
+    messageUsage,
+    isLastBlock,
+  );
+  if (content.nativeMessageIdx === undefined) return node;
+  const nativeMessageIdx = content.nativeMessageIdx;
+  // Merge with any existing bindings on the node — withBindings replaces,
+  // but we need to preserve inner bindings (e.g. <CR> for expand) and add F.
+  return {
+    ...node,
+    bindings: {
+      ...(node.bindings ?? {}),
+      F: (ctx) =>
+        dispatch({
+          type: "fork-message",
+          nativeMessageIdx,
+          ...(ctx?.selection ? { prepopulate: ctx.selection } : {}),
+        }),
+    },
+  };
+}
+
+/** Inner renderer producing the VDOMNode without the fork binding wrapper. */
+function renderMessageContentInner(
+  content: ProviderMessageContent,
+  messageIdx: number,
+  contentIdx: number,
+  thread: Thread,
+  dispatch: Dispatch<Msg>,
+  messageUsage: Usage | undefined,
+  isLastBlock: boolean,
+): VDOMNode {
   switch (content.type) {
     case "text":
       return d`${content.text}\n`;

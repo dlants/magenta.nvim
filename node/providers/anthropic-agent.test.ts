@@ -202,7 +202,7 @@ describe("appendUserMessage", () => {
     expect(state.messages).toHaveLength(1);
     expect(state.messages[0].role).toBe("user");
     expect(state.messages[0].content).toHaveLength(1);
-    expect(state.messages[0].content[0]).toEqual({
+    expect(state.messages[0].content[0]).toMatchObject({
       type: "text",
       text: "Hello, world!",
     });
@@ -230,7 +230,7 @@ describe("appendUserMessage", () => {
     agent.appendUserMessage(content);
 
     const state = agent.getState();
-    expect(state.messages[0].content[0]).toEqual({
+    expect(state.messages[0].content[0]).toMatchObject({
       type: "image",
       source: {
         type: "base64",
@@ -258,7 +258,7 @@ describe("appendUserMessage", () => {
     agent.appendUserMessage(content);
 
     const state = agent.getState();
-    expect(state.messages[0].content[0]).toEqual({
+    expect(state.messages[0].content[0]).toMatchObject({
       type: "document",
       source: {
         type: "base64",
@@ -1524,11 +1524,11 @@ File context here
 
       // Verify content is copied
       const clonedState = cloned.getState();
-      expect(clonedState.messages[0].content[0]).toEqual({
+      expect(clonedState.messages[0].content[0]).toMatchObject({
         type: "text",
         text: "Hello",
       });
-      expect(clonedState.messages[1].content[0]).toEqual({
+      expect(clonedState.messages[1].content[0]).toMatchObject({
         type: "text",
         text: "Hi there!",
       });
@@ -1744,7 +1744,7 @@ File context here
       );
       expect(clonedState.messages[2].role).toBe("user");
       expect(clonedState.messages[2].content).toHaveLength(1);
-      expect(clonedState.messages[2].content[0]).toEqual({
+      expect(clonedState.messages[2].content[0]).toMatchObject({
         type: "tool_result",
         id: "tool-req-1",
         result: {
@@ -1860,13 +1860,175 @@ File context here
 
       // Cloned agent has the new message
       expect(cloned.getState().messages).toHaveLength(3);
-      expect(cloned.getState().messages[2].content[0]).toEqual({
+      expect(cloned.getState().messages[2].content[0]).toMatchObject({
         type: "text",
         text: "From clone",
       });
 
       // Original is unchanged
       expect(agent.getState().messages).toHaveLength(2);
+    });
+  });
+
+  describe("truncateMessages", () => {
+    it("truncates at an assistant text-only message keeping [0..N]", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Q1" }]);
+      await delay(0);
+      agent.continueConversation();
+      let stream = await mockClient.awaitStream();
+      stream.streamText("A1");
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
+
+      agent.appendUserMessage([{ type: "text", text: "Q2" }]);
+      await delay(0);
+      agent.continueConversation();
+      stream = await mockClient.awaitStream();
+      stream.streamText("A2");
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
+
+      // messages: [user Q1, assistant A1, user Q2, assistant A2]
+      const messageIdx = 1 as never;
+      agent.truncateMessages(messageIdx);
+
+      expect(agent.getState().messages).toHaveLength(2);
+      expect(agent.getState().status).toEqual({
+        type: "stopped",
+        stopReason: "end_turn",
+      });
+    });
+
+    it("truncates at assistant tool_use message and extends to keep tool_result", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Run tool" }]);
+      await delay(0);
+      agent.continueConversation();
+      const stream = await mockClient.awaitStream();
+      stream.streamText("Running...");
+      stream.streamToolUse("tool-1" as ToolRequestId, "get_file" as ToolName, {
+        filePath: "x.ts",
+      });
+      stream.finishResponse("tool_use");
+      await stream.finalMessage();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      agent.toolResult("tool-1" as ToolRequestId, {
+        type: "tool_result",
+        id: "tool-1" as ToolRequestId,
+        result: {
+          status: "ok",
+          value: [{ type: "text", text: "file contents" }],
+          structuredResult: { toolName: "get_file" as ToolName },
+        },
+      });
+
+      agent.continueConversation();
+      const followup = await mockClient.awaitStream();
+      followup.streamText("Done.");
+      followup.finishResponse("end_turn");
+      await followup.finalMessage();
+
+      // messages: [user Run, assistant w/tool_use, user tool_result, assistant Done]
+      expect(agent.getState().messages).toHaveLength(4);
+
+      // Truncate at the assistant message that contains tool_use (idx=1).
+      // Should extend to keep idx=2 (tool_result) too.
+      agent.truncateMessages(1 as never);
+      expect(agent.getState().messages).toHaveLength(3);
+      expect(agent.getState().messages[1].role).toBe("assistant");
+      expect(agent.getState().messages[2].role).toBe("user");
+    });
+
+    it("drops orphan tool_use blocks when no matching tool_result follows", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Run tool" }]);
+      await delay(0);
+      agent.continueConversation();
+      const stream = await mockClient.awaitStream();
+      stream.streamText("Running.");
+      stream.streamToolUse(
+        "orphan-1" as ToolRequestId,
+        "get_file" as ToolName,
+        { filePath: "x.ts" },
+      );
+      stream.finishResponse("tool_use");
+      await stream.finalMessage();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // No tool_result has been provided yet — truncate at the assistant idx
+      agent.truncateMessages(1 as never);
+
+      const messages = agent.getState().messages;
+      // Assistant message should still exist with text but no tool_use
+      expect(messages).toHaveLength(2);
+      expect(messages[1].role).toBe("assistant");
+      const content = messages[1].content;
+      expect(Array.isArray(content)).toBe(true);
+      if (Array.isArray(content)) {
+        expect(content.some((c) => c.type === "tool_use")).toBe(false);
+      }
+    });
+
+    it("drops the entire assistant message if it only contained an orphan tool_use", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Run tool" }]);
+      await delay(0);
+      agent.continueConversation();
+      const stream = await mockClient.awaitStream();
+      stream.streamToolUse(
+        "orphan-2" as ToolRequestId,
+        "get_file" as ToolName,
+        { filePath: "x.ts" },
+      );
+      stream.finishResponse("tool_use");
+      await stream.finalMessage();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // messages: [user, assistant w/only tool_use]
+      agent.truncateMessages(1 as never);
+
+      // Assistant message should be dropped entirely
+      const messages = agent.getState().messages;
+      expect(messages).toHaveLength(1);
+      expect(messages[0].role).toBe("user");
+    });
+
+    it("clears messageStopInfo entries after the cut", async () => {
+      const mockClient = new MockAnthropicClient();
+      const agent = createAgent(mockClient);
+
+      agent.appendUserMessage([{ type: "text", text: "Q1" }]);
+      await delay(0);
+      agent.continueConversation();
+      let stream = await mockClient.awaitStream();
+      stream.streamText("A1");
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
+
+      agent.appendUserMessage([{ type: "text", text: "Q2" }]);
+      await delay(0);
+      agent.continueConversation();
+      stream = await mockClient.awaitStream();
+      stream.streamText("A2");
+      stream.finishResponse("end_turn");
+      await stream.finalMessage();
+
+      // Cut at index 1
+      agent.truncateMessages(1 as never);
+
+      const messagesAfter = agent.getState().messages;
+      // Only the first assistant should still have stop info
+      expect(messagesAfter[1].stopReason).toBe("end_turn");
     });
   });
 });

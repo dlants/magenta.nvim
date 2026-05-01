@@ -28,13 +28,18 @@
 - = on spawn_subagents is showing "\n" ... we should probably format that more nicely
 - let's make = vs <CR> more consistent. "=" should always toggle expand. "<CR>" should always "enter / select". We should always have the carrot to visually indicate that the section is expandable
 - when the list of edited files gets long, collapse it to a "N edited files" summary + carrot
+- trim the stream display (for edl especially) to the last N lines, so it doesn't collapse down and mess with scroll when it finishes.
+- tmux integration (update tab title with active thread title, thread state)
+-
 
 # misc features
 
-- fork a conversation from any previous message
+- fork a conversation from any previous message. Also get rid of @fork - let's just make fork a Magenta command or a message binding (so it doesn't interact with sendMessage)
+  - we should be able to @fork during the assistant's turn, tool use, etc... without aborting the thread we're in
 - add context tracking for the state of git. When we change branches, commit, etc...
-- we should be able to @fork during the assistant's turn, tool use, etc... without aborting the thread we're in
 - asking aside/followup questions about things is a bit awkward... it would be cool to allow one to select a part of the display buffer, and then ask a question about it, with the output appearing within the flow of the original thread
+- support for oil buffers for adding files to context
+- enable thinking summary
 
 # bug fixes, etc
 
@@ -53,3 +58,4 @@
 ```
 
 - overloaded handling / exponential backoff not working correctly
+- when we terminate/error, the reset for the message places it in the wrong buffer (currently open one, not the one corresponding to the thread that the error happened in)

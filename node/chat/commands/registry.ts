@@ -5,7 +5,6 @@ import { compactCommand } from "./compact.ts";
 import { diagCommand, diagnosticsCommand } from "./diagnostics.ts";
 import { diffCommand, stagedCommand } from "./diff.ts";
 import { fileCommand } from "./file.ts";
-import { forkCommand } from "./fork.ts";
 import { qfCommand, quickfixCommand } from "./quickfix.ts";
 import type { Command, MessageContext } from "./types.ts";
 
@@ -18,7 +17,6 @@ export class CommandRegistry {
 
   private registerBuiltinCommands(): void {
     const builtinCommands: Command[] = [
-      forkCommand,
       compactCommand,
       fileCommand,
       diffCommand,

@@ -3,7 +3,13 @@ import { getCurrentWindow } from "../nvim/nvim.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
 import { Defer } from "../utils/async.ts";
-import { BINDING_KEYS, type BindingKey, getBindings } from "./bindings.ts";
+import {
+  BINDING_KEYS,
+  BINDING_MODES,
+  type BindingCtx,
+  type BindingKey,
+  getBindings,
+} from "./bindings.ts";
 import {
   d,
   type MountedVDOM,
@@ -28,7 +34,7 @@ type AppState<Model> =
     };
 
 export type MountedApp = {
-  onKey(key: BindingKey): Promise<void>;
+  onKey(key: BindingKey, ctx?: BindingCtx): Promise<void>;
   render(): void;
   unmount(): void;
   getMountedNode(): MountedVDOM;
@@ -168,13 +174,16 @@ export function createApp<Model>({
       });
 
       for (const vimKey of BINDING_KEYS) {
-        try {
-          await nvim.call("nvim_exec_lua", [
-            `require('magenta').listenToBufKey(${mount.buffer.id}, "${vimKey}")`,
-            [],
-          ]);
-        } catch (e) {
-          throw new Error(`failed to nvim_exec_lua: ${JSON.stringify(e)}`);
+        const modes = BINDING_MODES[vimKey] ?? ["n"];
+        for (const mode of modes) {
+          try {
+            await nvim.call("nvim_exec_lua", [
+              `require('magenta').listenToBufKey(${mount.buffer.id}, "${vimKey}", "${mode}")`,
+              [],
+            ]);
+          } catch (e) {
+            throw new Error(`failed to nvim_exec_lua: ${JSON.stringify(e)}`);
+          }
         }
       }
 
@@ -204,7 +213,7 @@ export function createApp<Model>({
           return renderVersion;
         },
 
-        async onKey(key: BindingKey): Promise<void> {
+        async onKey(key: BindingKey, ctx?: BindingCtx): Promise<void> {
           // Wait for any in-flight render to finish so buffer content
           // and VDOM positions are consistent when we read the cursor.
           if (renderPromise) {
@@ -227,7 +236,7 @@ export function createApp<Model>({
             });
 
             if (bindings?.[key]) {
-              bindings[key]();
+              bindings[key](ctx);
             } else if (onUnhandledKey) {
               try {
                 await onUnhandledKey({

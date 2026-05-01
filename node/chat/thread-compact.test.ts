@@ -460,10 +460,17 @@ it("forks a thread with @compact to clone and compact in one step", async () => 
 
     const originalThreadId = driver.magenta.chat.state.activeThreadId;
 
-    // Fork with compact - should clone the thread, then process @compact on the forked thread
-    await driver.inputMagentaText(
-      "@fork @compact Now help me with multiplication",
-    );
+    // Fork by pressing F on the most recent assistant message, then send
+    // @compact + new prompt on the forked thread.
+    await driver.pressOnDisplayMessage("3+3 equals 6.", "F");
+
+    await pollUntil(() => {
+      if (driver.magenta.chat.state.activeThreadId === originalThreadId) {
+        throw new Error("Still on original thread");
+      }
+    });
+
+    await driver.inputMagentaText("@compact Now help me with multiplication");
     await driver.send();
 
     // The forked thread detects @compact and spawns a compact subagent

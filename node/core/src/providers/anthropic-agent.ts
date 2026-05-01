@@ -544,12 +544,14 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
   }
 
   truncateMessages(messageIdx: NativeMessageIdx): void {
-    // Keep messages 0..messageIdx (inclusive), remove everything after
-    this.messages.length = messageIdx + 1;
+    const endIdx = this.computeTruncateEndIdx(messageIdx);
+
+    // Slice once, handles endIdx === -1 by setting length 0
+    this.messages.length = endIdx + 1;
 
     // Clean up messageStopInfo for removed messages
     for (const idx of this.messageStopInfo.keys()) {
-      if (idx > messageIdx) {
+      if (idx > endIdx) {
         this.messageStopInfo.delete(idx);
       }
     }
@@ -557,6 +559,92 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
     this.status = { type: "stopped", stopReason: "end_turn" };
     this.updateCachedProviderMessages();
     this.emitAsync("stopped", "end_turn", undefined);
+  }
+
+  /** Decide where to cut the messages array for a truncate at `messageIdx`.
+   * If messages[messageIdx] is an assistant message containing tool_use blocks
+   * whose tool_results all appear in the consecutive following user messages,
+   * extend forward to keep those tool_result messages too.
+   * Otherwise drop orphan tool_use / server_tool_use blocks (and the message
+   * itself if it would become empty). Returns the inclusive end index, or -1
+   * to drop everything. May mutate messages[messageIdx].content in place.
+   */
+  private computeTruncateEndIdx(messageIdx: NativeMessageIdx): number {
+    if (messageIdx < 0 || messageIdx >= this.messages.length) {
+      return Math.min(messageIdx, this.messages.length - 1);
+    }
+
+    const target = this.messages[messageIdx];
+    if (target.role === "user") {
+      return messageIdx;
+    }
+
+    const content = target.content;
+    if (typeof content === "string") {
+      return messageIdx;
+    }
+
+    const toolUseIds = new Set<string>();
+    for (const block of content) {
+      if (block.type === "tool_use") {
+        toolUseIds.add(block.id);
+      }
+    }
+
+    if (toolUseIds.size > 0) {
+      // Walk forward through the run of consecutive user messages collecting
+      // matching tool_result IDs.
+      const foundResultIds = new Set<string>();
+      let lastResultIdx: number = messageIdx;
+      let m = messageIdx + 1;
+      while (m < this.messages.length && this.messages[m].role === "user") {
+        const userContent = this.messages[m].content;
+        if (Array.isArray(userContent)) {
+          for (const block of userContent) {
+            if (block.type === "tool_result") {
+              foundResultIds.add(block.tool_use_id);
+            }
+          }
+        }
+        lastResultIdx = m;
+        m += 1;
+      }
+
+      let allFound = true;
+      for (const id of toolUseIds) {
+        if (!foundResultIds.has(id)) {
+          allFound = false;
+          break;
+        }
+      }
+
+      if (allFound) {
+        return lastResultIdx;
+      }
+    }
+
+    // Drop orphan tool_use / server_tool_use blocks.
+    const trimmed = content.filter((block, idx) => {
+      if (block.type === "tool_use") return false;
+      if ((block as { type: string }).type === "server_tool_use") {
+        const next = content[idx + 1];
+        if (
+          next &&
+          (next as { type: string }).type === "web_search_tool_result"
+        ) {
+          return true;
+        }
+        return false;
+      }
+      return true;
+    });
+
+    if (trimmed.length === 0) {
+      return messageIdx - 1;
+    }
+
+    target.content = trimmed;
+    return messageIdx;
   }
 
   clone(): AnthropicAgent {
@@ -1048,11 +1136,18 @@ export function convertAnthropicMessagesToProvider(
 ): ProviderMessage[] {
   return messages.map((msg, msgIndex): ProviderMessage => {
     const stopInfo = messageStopInfo?.get(msgIndex);
+    const nativeMessageIdx = msgIndex as NativeMessageIdx;
     const content =
       typeof msg.content === "string"
-        ? [{ type: "text" as const, text: msg.content }]
+        ? [
+            {
+              type: "text" as const,
+              text: msg.content,
+              nativeMessageIdx,
+            },
+          ]
         : msg.content.map((block) =>
-            convertBlockToProvider(validateInput, block),
+            convertBlockToProvider(validateInput, block, nativeMessageIdx),
           );
 
     const result: ProviderMessage = {
@@ -1073,6 +1168,7 @@ export function convertAnthropicMessagesToProvider(
 function convertBlockToProvider(
   validateInput: ValidateInput,
   block: Anthropic.Messages.ContentBlockParam,
+  nativeMessageIdx: NativeMessageIdx,
 ): ProviderMessage["content"][number] {
   switch (block.type) {
     case "text": {
@@ -1081,6 +1177,7 @@ function convertBlockToProvider(
         return {
           type: "system_reminder",
           text: block.text,
+          nativeMessageIdx,
         };
       }
       // Detect context_update blocks (converted to text with <context_update> tags)
@@ -1088,11 +1185,13 @@ function convertBlockToProvider(
         return {
           type: "context_update",
           text: block.text,
+          nativeMessageIdx,
         };
       }
       return {
         type: "text",
         text: block.text,
+        nativeMessageIdx,
         citations: block.citations
           ? block.citations
               .filter(
@@ -1122,6 +1221,7 @@ function convertBlockToProvider(
           media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
           data: string;
         },
+        nativeMessageIdx,
       };
 
     case "document":
@@ -1133,6 +1233,7 @@ function convertBlockToProvider(
           data: string;
         },
         title: block.title ?? null,
+        nativeMessageIdx,
       };
 
     case "tool_use": {
@@ -1155,6 +1256,7 @@ function convertBlockToProvider(
                 },
               }
             : { ...inputResult, rawRequest: block.input },
+        nativeMessageIdx,
       };
     }
 
@@ -1166,7 +1268,13 @@ function convertBlockToProvider(
           ? { status: "error", error: block.content }
           : {
               status: "ok",
-              value: [{ type: "text", text: block.content }],
+              value: [
+                {
+                  type: "text",
+                  text: block.content,
+                  nativeMessageIdx,
+                },
+              ],
               structuredResult: {
                 toolName: "unknown" as ToolName,
               },
@@ -1194,7 +1302,11 @@ function convertBlockToProvider(
             )
             .map((c) => {
               if (c.type === "text") {
-                return { type: "text" as const, text: c.text };
+                return {
+                  type: "text" as const,
+                  text: c.text,
+                  nativeMessageIdx,
+                };
               } else {
                 return {
                   type: "image" as const,
@@ -1207,6 +1319,7 @@ function convertBlockToProvider(
                       | "image/webp";
                     data: string;
                   },
+                  nativeMessageIdx,
                 };
               }
             }),
@@ -1220,6 +1333,7 @@ function convertBlockToProvider(
         type: "tool_result",
         id: block.tool_use_id as ToolRequestId,
         result: contents,
+        nativeMessageIdx,
       };
     }
 
@@ -1228,12 +1342,14 @@ function convertBlockToProvider(
         type: "thinking",
         thinking: block.thinking,
         signature: block.signature,
+        nativeMessageIdx,
       };
 
     case "redacted_thinking":
       return {
         type: "redacted_thinking",
         data: block.data,
+        nativeMessageIdx,
       };
 
     default:
@@ -1250,6 +1366,7 @@ function convertBlockToProvider(
           id: serverBlock.id,
           name: "web_search",
           input: serverBlock.input,
+          nativeMessageIdx,
         };
       }
       if ((block as { type: string }).type === "web_search_tool_result") {
@@ -1262,12 +1379,14 @@ function convertBlockToProvider(
           type: "web_search_tool_result",
           tool_use_id: resultBlock.tool_use_id,
           content: resultBlock.content,
+          nativeMessageIdx,
         };
       }
       // Fallback for unknown types
       return {
         type: "text",
         text: `[Unknown block type: ${(block as { type: string }).type}]`,
+        nativeMessageIdx,
       };
   }
 }

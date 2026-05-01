@@ -49,7 +49,7 @@ describe("node/tools/diagnostics.test.ts", () => {
 
       const result = await pollForToolResult(driver, toolRequestId);
 
-      expect(normalizePaths(result, dirs.tmpDir)).toEqual({
+      expect(normalizePaths(result, dirs.tmpDir)).toMatchObject({
         type: "tool_result",
         id: toolRequestId,
         result: {

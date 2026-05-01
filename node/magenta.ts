@@ -1,5 +1,5 @@
 import * as os from "node:os";
-import type { InputMessage, ThreadId } from "@magenta/core";
+import type { InputMessage, NativeMessageIdx, ThreadId } from "@magenta/core";
 import { probeAndSaveClipboardImage } from "@magenta/core";
 import { type BufferInfo, BufferManager } from "./buffer-manager.ts";
 import { Lsp } from "./capabilities/lsp.ts";
@@ -17,6 +17,7 @@ import type { Nvim } from "./nvim/nvim-node/index.ts";
 import { findOrCreateNonMagentaWindow } from "./nvim/openFileInNonMagentaWindow.ts";
 import {
   NvimWindow,
+  type Position1Indexed,
   pos1col1to0,
   type Row0Indexed,
   type WindowId,
@@ -31,7 +32,11 @@ import { DynamicOptionsLoader } from "./options-loader.ts";
 import type { RootMsg, SidebarMsg } from "./root-msg.ts";
 import { initializeSandbox, type Sandbox } from "./sandbox-manager.ts";
 import { Sidebar } from "./sidebar.ts";
-import { BINDING_KEYS, type BindingKey } from "./tea/bindings.ts";
+import {
+  BINDING_KEYS,
+  type BindingCtx,
+  type BindingKey,
+} from "./tea/bindings.ts";
 import type { Dispatch } from "./tea/tea.ts";
 import * as TEA from "./tea/tea.ts";
 import { record as recordTiming } from "./timings.ts";
@@ -92,6 +97,24 @@ export class Magenta {
               `Error syncing active view: ${e instanceof Error ? `${e.message}\n${e.stack}` : JSON.stringify(e)}`,
             );
           });
+        }
+
+        // fork-message: F binding from the view dispatches this. We handle it
+        // here at the dispatch layer (clone agent + truncate + switch + populate
+        // input buffer) rather than letting it flow into Thread.update.
+        if (msg.type === "thread-msg" && msg.msg.type === "fork-message") {
+          const sourceThreadId = msg.id;
+          const { nativeMessageIdx, prepopulate } = msg.msg;
+          this.forkAtMessageAndSwitch(
+            sourceThreadId,
+            nativeMessageIdx,
+            prepopulate,
+          ).catch((e) => {
+            nvim.logger.error(
+              `Error forking thread at message: ${e instanceof Error ? `${e.message}\n${e.stack}` : JSON.stringify(e)}`,
+            );
+          });
+          return;
         }
 
         this.chat.update(msg);
@@ -252,6 +275,49 @@ export class Magenta {
       msg: { type: "set-active-thread", id: threadId },
     });
     await this.syncActiveView();
+    return threadId;
+  }
+
+  async forkAtMessageAndSwitch(
+    sourceThreadId: ThreadId,
+    nativeMessageIdx: NativeMessageIdx,
+    prepopulate?: string[],
+  ): Promise<ThreadId> {
+    const threadId = await this.chat.handleForkThread({
+      sourceThreadId,
+      truncateAtMessageIdx: nativeMessageIdx,
+    });
+    await this.bufferManager.registerThread(threadId);
+    this.dispatch({
+      type: "chat-msg",
+      msg: { type: "set-active-thread", id: threadId },
+    });
+    await this.syncActiveView();
+
+    if (!this.sidebar.isVisible()) {
+      await this.command("toggle");
+    }
+
+    const quotedLines: Line[] =
+      prepopulate && prepopulate.length > 0
+        ? ([...prepopulate.map((l) => `> ${l}`), "", ""] as Line[])
+        : ([""] as Line[]);
+
+    await this.activeBuffers.inputBuffer.setLines({
+      start: 0 as Row0Indexed,
+      end: -1 as Row0Indexed,
+      lines: quotedLines,
+    });
+
+    if (this.sidebar.state.state === "visible") {
+      const inputWindow = this.sidebar.state.inputWindow;
+      await this.nvim.call("nvim_set_current_win", [inputWindow.id]);
+      const cursorRow = quotedLines.length;
+      await inputWindow.setCursor({
+        row: cursorRow,
+        col: 0,
+      } as Position1Indexed);
+    }
     return threadId;
   }
   private handleSidebarMsg(msg: SidebarMsg): void {
@@ -529,12 +595,17 @@ ${lines.join("\n")}
     }
   }
 
-  onKey(args: string[]) {
-    const key = args[0];
+  onKey(args: unknown[]) {
+    const key = args[0] as string;
+    const rawCtx = args[1] as { selection?: unknown } | undefined;
+    let ctx: BindingCtx | undefined;
+    if (rawCtx && Array.isArray(rawCtx.selection)) {
+      ctx = { selection: rawCtx.selection.map((s) => String(s)) };
+    }
     const mountedApp = this.bufferManager.getMountedApp(this.getActiveKey());
     if (mountedApp) {
       if (BINDING_KEYS.indexOf(key as BindingKey) > -1) {
-        mountedApp.onKey(key as BindingKey).catch((err) => {
+        mountedApp.onKey(key as BindingKey, ctx).catch((err) => {
           this.nvim.logger.error(err);
           throw err;
         });
@@ -731,7 +802,7 @@ ${lines.join("\n")}
 
     nvim.onNotification(MAGENTA_KEY, (args) => {
       try {
-        magenta.onKey(args as string[]);
+        magenta.onKey(args);
       } catch (err) {
         nvim.logger.error(err as Error);
       }
@@ -889,20 +960,7 @@ ${lines.join("\n")}
   private async preprocessAndSend(text: string): Promise<void> {
     const thread = this.chat.getActiveThread();
 
-    // @fork: create a forked thread, then re-process remaining text on it
-    if (text.trim().startsWith("@fork")) {
-      const strippedText = text.replace(/^\s*@fork\s*/, "");
-      await this.forkAndSwitchToThread(thread.id);
-
-      // If there's remaining text, re-invoke preprocessAndSend on the new active thread
-      if (strippedText.trim()) {
-        await this.preprocessAndSend(strippedText);
-      }
-      return;
-    }
-
     // @compact: tell the thread to start compaction
-    // Note: @compact @fork is not supported. Use @fork @compact instead.
     if (text.trim().startsWith("@compact")) {
       const rawNextPrompt = text.replace(/^\s*@compact\s*/, "").trim();
       const nextMessages = rawNextPrompt
@@ -921,7 +979,7 @@ ${lines.join("\n")}
     }
 
     // @async: strip prefix and set flag
-    // Note: @async @fork and @async @compact are not supported. Use @fork @async instead.
+    // Note: @async @compact is not supported. Use @compact @async instead.
     const isAsync = text.trim().startsWith("@async");
     const cleanText = isAsync ? text.replace(/^\s*@async\s*/, "") : text;
 

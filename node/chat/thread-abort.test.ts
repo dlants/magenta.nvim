@@ -26,22 +26,45 @@ it("forks a thread while streaming by aborting the stream first", async () => {
     const originalThreadId = driver.magenta.chat.state.activeThreadId;
     const originalThread = driver.magenta.chat.getActiveThread();
 
-    // Fork while the request is still streaming
-    await driver.inputMagentaText("@fork Actually, tell me about 5+5");
-    await driver.send();
+    // Fork by pressing F on the prior assistant message ("2+2 equals 4.")
+    await driver.pressOnDisplayMessage("2+2 equals 4.", "F");
 
-    // The streaming request should be aborted
+    // The streaming request should be aborted (asynchronous via fork)
+    await pollUntil(
+      () => {
+        if (!streamingRequest.aborted) {
+          throw new Error("stream not yet aborted");
+        }
+      },
+      { timeout: 2000, message: "waiting for stream to abort" },
+    );
     expect(streamingRequest.aborted).toBe(true);
 
     // The original thread should now be stopped/aborted
     await pollUntil(
-      () => originalThread.agent.getState().status.type === "stopped",
-      { timeout: 1000, message: "waiting for agent to be stopped" },
+      () => {
+        const status = originalThread.agent.getState().status;
+        if (status.type !== "stopped" || status.stopReason !== "aborted") {
+          throw new Error(`agent status: ${JSON.stringify(status)}`);
+        }
+      },
+      { timeout: 2000, message: "waiting for agent to be stopped/aborted" },
     );
     expect(originalThread.agent.getState().status).toEqual({
       type: "stopped",
       stopReason: "aborted",
     });
+
+    // Wait for the new thread to become active
+    await pollUntil(() => {
+      if (driver.magenta.chat.state.activeThreadId === originalThreadId) {
+        throw new Error("Still on original thread");
+      }
+    });
+
+    // Type a follow-up message in the forked thread.
+    await driver.inputMagentaText("Actually, tell me about 5+5");
+    await driver.send();
 
     // A new thread should be created and receive the forked message
     const forkedStream = await driver.mockAnthropic.awaitPendingStream({
@@ -92,8 +115,18 @@ it("forks a thread while waiting for tool use by aborting pending tools first", 
     // Verify we're in tool_use mode
     expect(originalThread.core.state.mode.type).toBe("tool_use");
 
-    // Fork the thread while waiting for tool use
-    await driver.inputMagentaText("@fork Do something else instead");
+    // Fork by pressing F on the assistant's tool-use message text.
+    await driver.pressOnDisplayMessage("I'll read your secret file.", "F");
+
+    // Wait for the new thread to become active
+    await pollUntil(() => {
+      if (driver.magenta.chat.state.activeThreadId === originalThreadId) {
+        throw new Error("Still on original thread");
+      }
+    });
+
+    // Type a follow-up message and send it.
+    await driver.inputMagentaText("Do something else instead");
     await driver.send();
 
     // The fork should abort the pending tool use, then clone
