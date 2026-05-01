@@ -220,6 +220,7 @@ export type MagentaOptions = {
   sandbox: SandboxConfig;
   autoContext: string[];
   skillsPaths: string[];
+  suppressProjectSkills: string[];
   agentsPaths: string[];
   maxConcurrentSubagents: number;
   mcpServers: { [serverName: ServerName]: MCPServerConfig };
@@ -1019,6 +1020,7 @@ export function parseOptions(
       ".magenta/skills",
       ".claude/skills",
     ],
+    suppressProjectSkills: [],
     agentsPaths: [
       BUILTIN_AGENTS_PATH,
       "~/.claude/agents",
@@ -1079,6 +1081,14 @@ export function parseOptions(
         "skillsPaths",
       );
       options.skillsPaths = userSkillsPaths;
+    }
+
+    // Parse suppressProjectSkills
+    if ("suppressProjectSkills" in inputOptionsObj) {
+      options.suppressProjectSkills = parseStringArray(
+        inputOptionsObj.suppressProjectSkills,
+        "suppressProjectSkills",
+      );
     }
 
     // Parse agents paths - always prepend built-in agents
@@ -1208,6 +1218,15 @@ export function parseProjectOptions(
     );
   }
 
+  // Parse suppressProjectSkills (filtered out by loadProjectSettings)
+  if ("suppressProjectSkills" in inputOptionsObj) {
+    options.suppressProjectSkills = parseStringArray(
+      inputOptionsObj.suppressProjectSkills,
+      "suppressProjectSkills",
+      logger,
+    );
+  }
+
   // Parse agents paths
   if ("agentsPaths" in inputOptionsObj) {
     options.agentsPaths = parseStringArray(
@@ -1311,7 +1330,14 @@ export function loadProjectSettings(
       const fileContent = fs.readFileSync(settingsPath, "utf8");
       const rawSettings = JSON.parse(fileContent) as unknown;
 
-      return parseProjectOptions(rawSettings, logger);
+      const parsed = parseProjectOptions(rawSettings, logger);
+      if ("suppressProjectSkills" in parsed) {
+        logger.warn(
+          "`suppressProjectSkills` is a user-level option and is ignored when set in project options.",
+        );
+        delete parsed.suppressProjectSkills;
+      }
+      return parsed;
     }
   } catch (error) {
     logger.warn(
@@ -1352,6 +1378,10 @@ export function mergeOptions(
       ...baseOptions.skillsPaths,
       ...projectSettings.skillsPaths,
     ];
+  }
+
+  if (projectSettings.suppressProjectSkills) {
+    merged.suppressProjectSkills = projectSettings.suppressProjectSkills;
   }
 
   if (projectSettings.agentsPaths) {

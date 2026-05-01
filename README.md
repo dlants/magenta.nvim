@@ -219,7 +219,7 @@ For any of the below, you can also just ask magenta to explain.
 
 - **Profiles & providers** — configure models, API keys, and provider options. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-providers.txt) · `:help magenta-providers`
 - **Project settings** — per-project `.magenta/options.json` for profiles, auto-context, skills paths, and MCP servers. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-config.txt) · `:help magenta-config`
-- **Skills** — markdown files in `~/.magenta/skills/`, `.magenta/skills/`, `~/.claude/skills/`, or `.claude/skills/` that teach the agent project-specific knowledge. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-skills.txt) · `:help magenta-skills`
+- **Skills** — markdown files in `~/.magenta/skills/`, `.magenta/skills/`, `~/.claude/skills/`, or `.claude/skills/` that teach the agent project-specific knowledge. Supports suppressing project-level skills by name when shared configs collide with personal ones. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-skills.txt) · `:help magenta-skills`
 - **Sandbox** — OS-level sandboxing (seatbelt/bubblewrap) with configurable filesystem, network, and approval policies. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-permissions.txt) · `:help magenta-sandbox`
 - **MCP servers** — connect to local or remote MCP servers for additional tools. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-tools.txt) · `:help magenta-mcp`
 - **Docker subagents** — spawn isolated agents in Docker containers for parallel, unsupervised work. [docs](https://github.com/dlants/magenta.nvim/blob/main/doc/magenta-docker.txt) · `:help magenta-docker`
