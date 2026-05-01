@@ -89,6 +89,7 @@ local defaults = {
     ".magenta/skills",
     ".claude/skills"
   },
+  suppressProjectSkills = {},
   maxConcurrentSubagents = 3,
   chimeVolume = 0.3,
   bellOnNotify = true,

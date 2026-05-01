@@ -1,11 +1,16 @@
-import { describe, expect, it } from "vitest";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_SANDBOX_CONFIG,
+  loadProjectSettings,
+  loadUserSettings,
   type MagentaOptions,
   mergeOptions,
   parseOptions,
   parseProjectOptions,
 } from "./options.ts";
+import type { NvimCwd } from "./utils/files.ts";
 
 function makeBaseOptions(overrides?: Partial<MagentaOptions>): MagentaOptions {
   return {
@@ -25,6 +30,7 @@ function makeBaseOptions(overrides?: Partial<MagentaOptions>): MagentaOptions {
     sandbox: structuredClone(DEFAULT_SANDBOX_CONFIG),
     autoContext: [],
     skillsPaths: [],
+    suppressProjectSkills: [],
     agentsPaths: [],
     mcpServers: {},
     customCommands: [],
@@ -231,5 +237,77 @@ describe("parseProfiles thinking.effort", () => {
     );
     expect(result.profiles[0].thinking?.effort).toBeUndefined();
     expect(warnings.some((w) => w.includes("Invalid effort"))).toBe(true);
+  });
+});
+
+describe("suppressProjectSkills", () => {
+  let testCounter = 0;
+  let tmpRoot: string;
+
+  beforeEach(async () => {
+    tmpRoot = path.join(
+      "/tmp/magenta-test",
+      `options-${Date.now()}-${testCounter++}`,
+    );
+    await fs.mkdir(tmpRoot, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("parseOptions populates suppressProjectSkills from input", () => {
+    const result = parseOptions(
+      {
+        profiles: [{ name: "test", provider: "mock" }],
+        suppressProjectSkills: ["plan"],
+      },
+      noopLogger,
+    );
+    expect(result.suppressProjectSkills).toEqual(["plan"]);
+  });
+
+  it("parseOptions defaults suppressProjectSkills to empty array", () => {
+    const result = parseOptions(
+      {
+        profiles: [{ name: "test", provider: "mock" }],
+      },
+      noopLogger,
+    );
+    expect(result.suppressProjectSkills).toEqual([]);
+  });
+
+  it("loadProjectSettings strips suppressProjectSkills and warns", async () => {
+    const magentaDir = path.join(tmpRoot, ".magenta");
+    await fs.mkdir(magentaDir, { recursive: true });
+    await fs.writeFile(
+      path.join(magentaDir, "options.json"),
+      JSON.stringify({ suppressProjectSkills: ["plan"] }),
+    );
+
+    const warnings: string[] = [];
+    const logger = { warn: (msg: string) => warnings.push(msg) };
+
+    const result = loadProjectSettings(tmpRoot as NvimCwd, logger);
+
+    expect(result).toBeDefined();
+    expect(result?.suppressProjectSkills).toBeUndefined();
+    expect(warnings.some((w) => w.includes("suppressProjectSkills"))).toBe(
+      true,
+    );
+  });
+
+  it("loadUserSettings retains suppressProjectSkills", async () => {
+    const magentaDir = path.join(tmpRoot, ".magenta");
+    await fs.mkdir(magentaDir, { recursive: true });
+    await fs.writeFile(
+      path.join(magentaDir, "options.json"),
+      JSON.stringify({ suppressProjectSkills: ["plan"] }),
+    );
+
+    const result = loadUserSettings(tmpRoot, noopLogger);
+
+    expect(result).toBeDefined();
+    expect(result?.suppressProjectSkills).toEqual(["plan"]);
   });
 });
