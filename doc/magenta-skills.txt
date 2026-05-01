@@ -8,10 +8,11 @@ CONTENTS                                            *magenta-skills-contents*
 
     1. Introduction .......................... |magenta-skills-introduction|
     2. Skill Locations ....................... |magenta-skills-locations|
-    3. Skill Structure ....................... |magenta-skills-structure|
-    4. skill.md Format ....................... |magenta-skills-format|
-    5. TypeScript Scripts .................... |magenta-skills-scripts|
-    6. Recommended Skills .................... |magenta-skills-recommended|
+    3. Suppressing Project Skills ............ |magenta-skills-suppress|
+    4. Skill Structure ....................... |magenta-skills-structure|
+    5. skill.md Format ....................... |magenta-skills-format|
+    6. TypeScript Scripts .................... |magenta-skills-scripts|
+    7. Recommended Skills .................... |magenta-skills-recommended|
 ==============================================================================
 INTRODUCTION                                   *magenta-skills-introduction*
 
@@ -38,6 +39,42 @@ Project-Specific Skills~
   Usage: Only available in that specific project
   Use case: Project-specific workflows, conventions, or documentation
 
+
+==============================================================================
+SUPPRESSING PROJECT SKILLS                          *magenta-skills-suppress*
+
+When you sync a project's `.magenta/` or `.claude/` directory across machines
+(for example via dotfiles, cloud sync, or shared team configs), the project's
+skills can override your personal user-level skills with the same name. Use
+`suppressProjectSkills` to drop specific project-level skills by name while
+keeping your user-level skills intact.
+
+User-level skills directories are those whose paths resolve to a location
+inside your home directory (e.g. `~/.magenta/skills`, `~/.claude/skills`).
+All other directories — including `.magenta/skills` and `.claude/skills` in
+the project root — are treated as project-level.
+
+This option is **user-level only**. Setting it in lua via `setup({...})` or
+in `~/.magenta/options.json` works as expected. If you set it in a
+project's `.magenta/options.json`, magenta logs a warning and ignores it,
+since allowing the project to disable its own suppression would defeat the
+purpose.
+
+In lua:~
+>lua
+    require('magenta').setup({
+      suppressProjectSkills = { "plan", "browser" }
+    })
+<
+
+In `~/.magenta/options.json`:~
+>json
+    {
+      "suppressProjectSkills": ["plan", "browser"]
+    }
+<
+
+See |magenta-suppressProjectSkills| for the option reference.
 
 ==============================================================================
 SKILL STRUCTURE                                   *magenta-skills-structure*

@@ -152,6 +152,23 @@ skillsPaths ~
 
     Directories containing skill subdirectories.
 
+                                            *magenta-suppressProjectSkills*
+suppressProjectSkills ~
+    Type: `table`
+    Default: `{}`
+
+    List of skill names to suppress when found in project-level skills
+    directories. Useful when a project's shared `.magenta/` or `.claude/`
+    config (e.g. via dotfiles or cloud sync) defines skills that conflict
+    with your personal user-level skills. User-level skills with the same
+    name are kept; project-level skills with these names are dropped.
+
+    User-level only: this option is honored when set via lua `setup({...})`
+    or in `~/.magenta/options.json`. It is ignored (with a warning) if set
+    in a project's `.magenta/options.json`.
+
+    See |magenta-skills-suppress| for details.
+
                                                     *magenta-sidebarKeymaps*
 sidebarKeymaps ~
     Type: `table`
@@ -186,6 +203,8 @@ Merging behavior:~
     (e.g., `allowWrite` paths append to global `allowWrite` paths)
   - `autoContext`: Project patterns add to base auto context
   - `skillsPaths`: Project paths add to base skills paths
+  - `suppressProjectSkills`: User-level only; ignored (with warning) when
+    set in project options
   - `mcpServers`: Project servers merge (override same-name globals)
   - Other settings: Project overrides global
 

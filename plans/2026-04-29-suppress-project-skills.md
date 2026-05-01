@@ -39,11 +39,11 @@ A `skillsPaths` entry is **user-level** iff, after `expandTilde`, the resulting 
 
 # Implementation
 
-- [ ] **Add `suppressProjectSkills` field to `ProviderOptions`**
+- [x] **Add `suppressProjectSkills` field to `ProviderOptions`**
   - In `node/core/src/provider-options.ts`, add `suppressProjectSkills?: string[]` to the `ProviderOptions` type.
   - This is the minimum surface that core needs.
 
-- [ ] **Modify `loadSkills` to apply suppression**
+- [x] **Modify `loadSkills` to apply suppression**
   - In `node/core/src/providers/skills.ts`:
     - Read `context.options.suppressProjectSkills ?? []` once at the top of `loadSkills` into a `Set<string>`.
     - Inside the per-`skillsDir` loop, before processing skill files, classify the directory: a directory is user-level iff `path.isAbsolute(expandedDir)` AND `expandedDir.startsWith(homeDir)` (with a trailing-separator check to avoid false matches like `/home/foo/...` matching `homeDir = "/home/fo"`). Pass this `isUserLevel` flag into the inner loop.
@@ -63,7 +63,7 @@ A `skillsPaths` entry is **user-level** iff, after `expandTilde`, the resulting 
     - Setup: project-level `plan` and `browser` skills, `suppressProjectSkills: ["plan"]`.
     - Assertions: `skills["browser"]` is defined; `skills["plan"]` is `undefined`.
 
-- [ ] **Add `suppressProjectSkills` to root `MagentaOptions`**
+- [x] **Add `suppressProjectSkills` to root `MagentaOptions`**
   - In `node/options.ts`:
     - Add `suppressProjectSkills: string[]` to the `MagentaOptions` type (required, defaulted in `parseOptions`).
     - In `parseOptions`, default to `[]` and parse from `inputOptionsObj.suppressProjectSkills` using the existing `parseStringArray` helper.
@@ -82,21 +82,21 @@ A `skillsPaths` entry is **user-level** iff, after `expandTilde`, the resulting 
     - Setup: write `~/.magenta/options.json` containing `suppressProjectSkills: ["plan"]`.
     - Expected: returned partial options have `suppressProjectSkills: ["plan"]`.
 
-- [ ] **Plumb the field through `ProviderOptions` consumers**
+- [x] **Plumb the field through `ProviderOptions` consumers**
   - The root project's `MagentaOptions` already structurally satisfies `ProviderOptions` because `MagentaOptions` is passed where `ProviderOptions` is expected. Adding the optional field on the core side and a defaulted field on the root side is sufficient — no call-site changes are needed beyond confirming `tsgo -b` still passes.
   - Run `npx tsgo -b` and fix any type issues.
 
-- [ ] **Update lua defaults**
+- [x] **Update lua defaults**
   - In `lua/magenta/options.lua`, add `suppressProjectSkills = {}` to the `defaults` table. Place it next to `skillsPaths` for discoverability.
 
-- [ ] **Update documentation**
+- [x] **Update documentation**
   - `doc/magenta-skills.txt`: add a new section after "SKILL LOCATIONS" titled "SUPPRESSING PROJECT SKILLS" (`*magenta-skills-suppress*`). Explain the use case (shared cloud configs dropping unwanted skills), how to set the option in lua or `~/.magenta/options.json`, and the precedence rules. Cross-reference `magenta-suppressProjectSkills`.
   - `doc/magenta-config.txt`:
     - Add `suppressProjectSkills` (`*magenta-suppressProjectSkills*`) to the GENERAL OPTIONS section near `skillsPaths`. Type: `table`, Default: `{}`. Brief description, link to `magenta-skills-suppress`.
     - Update the PROJECT SETTINGS merging-behavior list: note that `suppressProjectSkills` is **user-level only** and is ignored if set in project options.
   - `README.md`: no change needed beyond what's already there about skills, unless we want to mention the new option in the "Skills" bullet. Light touch: add a short clause like "supports suppressing project-level skills by name". Keep it brief.
 
-- [ ] **End-to-end verification**
+- [x] **End-to-end verification**
   - Run `TEST_MODE=sandbox npx vitest run node/core/src/providers/skills.test.ts node/options.test.ts` — ensure all new tests pass and no regressions.
   - Run `npx tsgo -b` — confirm type checks pass.
   - Run `npx biome check .` — confirm lint/format passes.
