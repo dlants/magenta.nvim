@@ -41,16 +41,25 @@ export async function loadSkills(context: {
     return skills;
   }
 
+  const suppressedNames = new Set(context.options.suppressProjectSkills ?? []);
+
   try {
     // Process each skills directory in order
     // Later directories override earlier ones
     for (const skillsDir of context.options.skillsPaths) {
+      const isUserLevel = isUserLevelSkillsDir(skillsDir, context.homeDir);
       const skillFiles = await findSkillFilesInDirectory(skillsDir, context);
 
       for (const skillFile of skillFiles) {
         try {
           const skillInfo = await parseSkillFile(skillFile, context);
           if (skillInfo) {
+            if (!isUserLevel && suppressedNames.has(skillInfo.name)) {
+              context.logger.info(
+                `Suppressing project-level skill "${skillInfo.name}" from ${skillFile}`,
+              );
+              continue;
+            }
             if (skillInfo.name in skills) {
               context.logger.info(
                 `Skill "${skillInfo.name}" from ${skillFile} overrides skill from ${skills[skillInfo.name].skillFile}`,
@@ -71,6 +80,15 @@ export async function loadSkills(context: {
   }
 
   return skills;
+}
+
+function isUserLevelSkillsDir(skillsDir: string, homeDir: HomeDir): boolean {
+  const expandedDir = expandTilde(skillsDir, homeDir);
+  if (!path.isAbsolute(expandedDir)) {
+    return false;
+  }
+  const homeWithSep = homeDir.endsWith(path.sep) ? homeDir : homeDir + path.sep;
+  return expandedDir === homeDir || expandedDir.startsWith(homeWithSep);
 }
 
 async function findSkillFilesInDirectory(
