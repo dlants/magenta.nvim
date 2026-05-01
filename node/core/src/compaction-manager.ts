@@ -32,6 +32,7 @@ import type {
   ProviderToolResult,
   StopReason,
 } from "./providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type {
   ToolInvocation,
   ToolName,
@@ -359,6 +360,7 @@ export class CompactionManager extends Emitter<CompactionEvents> {
             status: "error",
             error: `Malformed tool_use block: ${block.request.error}`,
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         });
         continue;
       }
@@ -413,6 +415,7 @@ export class CompactionManager extends Emitter<CompactionEvents> {
                 status: "error",
                 error: `Tool execution failed: ${err.message}`,
               },
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           });
         });
@@ -461,7 +464,7 @@ export class CompactionManager extends Emitter<CompactionEvents> {
       .replace("{{summary}}", summaryContent)
       .replace("{{chunk}}", chunks[chunkIndex]);
 
-    agent.appendUserMessage([{ type: "text", text: prompt }]);
+    agent.appendUserMessage([{ type: "text", text: prompt, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     agent.continueConversation();
   }
 }

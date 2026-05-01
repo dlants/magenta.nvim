@@ -3,6 +3,7 @@ import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
   GenericToolRequest,
   ToolInvocation,
@@ -34,6 +35,7 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       return {
@@ -41,9 +43,10 @@ export function execute(
         id: request.id,
         result: {
           status: "ok",
-          value: [{ type: "text", text: content }],
+          value: [{ type: "text", text: content, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
           structuredResult: { toolName: "diagnostics" },
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     } catch (error) {
       if (aborted) {
@@ -54,6 +57,7 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       return {
@@ -63,6 +67,7 @@ export function execute(
           status: "error",
           error: `Failed to get diagnostics: ${error instanceof Error ? error.message : String(error)}`,
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
   })();

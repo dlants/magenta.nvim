@@ -1,5 +1,6 @@
 import { getQuickfixList, quickfixListToString } from "../../nvim/nvim.ts";
 import type { ProviderMessageContent } from "../../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "@magenta/core";
 import type { Command } from "./types.ts";
 
 const createQuickfixCommand = (name: string, pattern: RegExp): Command => ({
@@ -13,6 +14,7 @@ const createQuickfixCommand = (name: string, pattern: RegExp): Command => ({
         {
           type: "text",
           text: `Current quickfix list:\n${quickfixStr}`,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     } catch (error) {
@@ -23,6 +25,7 @@ const createQuickfixCommand = (name: string, pattern: RegExp): Command => ({
         {
           type: "text",
           text: `Error fetching quickfix list: ${error instanceof Error ? error.message : String(error)}`,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     }

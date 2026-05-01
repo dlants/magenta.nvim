@@ -1,5 +1,6 @@
 import type { CustomCommand as CustomCommandConfig } from "../../options.ts";
 import type { ProviderMessageContent } from "../../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "@magenta/core";
 import { bufCommand, buffersCommand } from "./buffers.ts";
 import { compactCommand } from "./compact.ts";
 import { diagCommand, diagnosticsCommand } from "./diagnostics.ts";
@@ -60,6 +61,7 @@ export class CommandRegistry {
           {
             type: "text",
             text: config.text,
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ]);
       },

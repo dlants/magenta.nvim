@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { PDFDocument } from "pdf-lib";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type { ProviderToolResultContent } from "../providers/provider-types.ts";
 import type { AbsFilePath } from "./files.ts";
 import type { Result } from "./result.ts";
@@ -89,6 +90,7 @@ export async function getSummaryAsProviderContent(
 Pages: ${pageCountResult.value}
 
 Use get-file tool with a pdfPage parameter to access specific pages.`,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ],
   };

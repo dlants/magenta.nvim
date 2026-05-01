@@ -1,8 +1,9 @@
 import type { FileIO } from "../capabilities/file-io.ts";
 import type { HelpTagsProvider } from "../capabilities/help-tags-provider.ts";
-import type {
-  ProviderToolResult,
-  ProviderToolSpec,
+import {
+  PLACEHOLDER_NATIVE_MESSAGE_IDX,
+  type ProviderToolResult,
+  type ProviderToolSpec,
 } from "../providers/provider-types.ts";
 import type {
   GenericToolRequest,
@@ -90,6 +91,7 @@ export function execute(
           status: "error",
           error: "Request was aborted by the user.",
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
 
@@ -190,13 +192,14 @@ export function execute(
         id: request.id,
         result: {
           status: "ok",
-          value: [{ type: "text", text }],
+          value: [{ type: "text", text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
           structuredResult: {
             toolName: "docs" as const,
             matchCount: totalMatches,
             truncated,
           },
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     } catch (error) {
       return {
@@ -206,6 +209,7 @@ export function execute(
           status: "error",
           error: `Failed to search docs: ${error instanceof Error ? error.message : String(error)}`,
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
   })();

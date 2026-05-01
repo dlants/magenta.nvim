@@ -8,6 +8,7 @@ import type {
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
   GenericToolRequest,
   ToolInvocation,
@@ -122,6 +123,7 @@ export function execute(
     type: "tool_result",
     id: request.id,
     result: { status: "error", error: "Request was aborted by the user." },
+    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
 
   const promise = (async (): Promise<ProviderToolResult> => {
@@ -153,10 +155,12 @@ export function execute(
                 type: "text",
                 text: `This file is already part of the thread context. \
 You already have the most up-to-date information about the contents of this file.`,
+                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               },
             ],
             structuredResult: { toolName: "get_file", lineCount: 0 },
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -174,6 +178,7 @@ You already have the most up-to-date information about the contents of this file
             status: "error",
             error: `File ${filePath} does not exist.`,
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -185,6 +190,7 @@ You already have the most up-to-date information about the contents of this file
             status: "error",
             error: `Unsupported file type: ${fileTypeInfo.mimeType}. Supported types: text files, images (JPEG, PNG, GIF, WebP), and PDF documents.`,
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -210,6 +216,7 @@ You already have the most up-to-date information about the contents of this file
             status: "error",
             error: `File too large: ${sizeMB}MB (max ${maxSizeMB}MB for ${fileTypeInfo.category} files)`,
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -233,6 +240,7 @@ You already have the most up-to-date information about the contents of this file
               status: "error",
               error: `startLine ${startLine} is beyond end of file (${totalLines} lines)`,
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         }
 
@@ -272,7 +280,7 @@ You already have the most up-to-date information about the contents of this file
           );
         }
 
-        result = [{ type: "text", text: processedResult.text }];
+        result = [{ type: "text", text: processedResult.text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }];
         lineCount = processedResult.text.split("\n").length;
       } else if (fileTypeInfo.category === FileCategory.PDF) {
         const existingFileInfo = context.contextTracker.files[absFilePath];
@@ -292,10 +300,12 @@ You already have the most up-to-date information about the contents of this file
                   {
                     type: "text",
                     text: `Page ${request.input.pdfPage} of ${filePath} has already been provided to you in this conversation.`,
+                    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                   },
                 ],
                 structuredResult: { toolName: "get_file", lineCount: 0 },
               },
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             };
           }
 
@@ -310,6 +320,7 @@ You already have the most up-to-date information about the contents of this file
               type: "tool_result",
               id: request.id,
               result: { status: "error", error: pageResult.error },
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             };
           }
 
@@ -322,6 +333,7 @@ You already have the most up-to-date information about the contents of this file
                 data: Buffer.from(pageResult.value).toString("base64"),
               },
               title: `${filePath} - Page ${request.input.pdfPage}`,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ];
 
@@ -344,10 +356,12 @@ You already have the most up-to-date information about the contents of this file
                   {
                     type: "text",
                     text: `The summary information for ${filePath} has already been provided to you in this conversation.`,
+                    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                   },
                 ],
                 structuredResult: { toolName: "get_file", lineCount: 0 },
               },
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             };
           }
 
@@ -360,6 +374,7 @@ You already have the most up-to-date information about the contents of this file
               type: "tool_result",
               id: request.id,
               result: { status: "error", error: pageCountResult.error },
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             };
           }
 
@@ -402,6 +417,7 @@ You already have the most up-to-date information about the contents of this file
                     | "image/webp",
                   data: base64Data,
                 },
+                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
               },
             ];
             break;
@@ -418,6 +434,7 @@ You already have the most up-to-date information about the contents of this file
           value: result,
           structuredResult: { toolName: "get_file", lineCount },
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     } catch (error) {
       if (aborted) return abortResult;
@@ -428,6 +445,7 @@ You already have the most up-to-date information about the contents of this file
           status: "error",
           error: `Failed: ${error instanceof Error ? error.message : String(error)}`,
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
   })();

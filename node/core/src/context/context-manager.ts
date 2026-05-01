@@ -8,6 +8,7 @@ import type { FileIO } from "../capabilities/file-io.ts";
 import { Emitter } from "../emitter.ts";
 import type { Logger } from "../logger.ts";
 import type { ProviderMessageContent } from "../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import {
   type AbsFilePath,
@@ -426,6 +427,7 @@ From now on, whenever any of these files are updated by the user, you will get a
       {
         type: "text",
         text: `<context_update>\n${fileList}\n${header}\n${textParts.join("\n")}\n</context_update>`,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
       ...mediaParts,
     ];
@@ -539,8 +541,8 @@ From now on, whenever any of these files are updated by the user, you will get a
           value: {
             type: "whole-file",
             content: [
-              { type: "text", text: `File \`${relFilePath}\`` },
-              { type: "text", text: currentFileContent },
+              { type: "text", text: `File \`${relFilePath}\``, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
+              { type: "text", text: currentFileContent, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
             ],
           },
         },
@@ -701,6 +703,7 @@ From now on, whenever any of these files are updated by the user, you will get a
                           | "image/webp",
                         data: buffer.toString("base64"),
                       },
+                      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                     },
                   ],
                 },

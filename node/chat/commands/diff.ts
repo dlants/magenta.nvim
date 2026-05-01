@@ -1,5 +1,6 @@
 import { $, within } from "zx";
 import type { ProviderMessageContent } from "../../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "@magenta/core";
 import type { NvimCwd, UnresolvedFilePath } from "../../utils/files.ts";
 import type { Command } from "./types.ts";
 
@@ -48,6 +49,7 @@ export const diffCommand: Command = {
         {
           type: "text",
           text: `Git diff for \`${filePath}\`:\n\`\`\`diff\n${diffContent}\n\`\`\``,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     } catch (error) {
@@ -58,6 +60,7 @@ export const diffCommand: Command = {
         {
           type: "text",
           text: `Error fetching git diff for \`${filePath}\`: ${error instanceof Error ? error.message : String(error)}`,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     }
@@ -75,6 +78,7 @@ export const stagedCommand: Command = {
         {
           type: "text",
           text: `Staged diff for \`${filePath}\`:\n\`\`\`diff\n${stagedContent}\n\`\`\``,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     } catch (error) {
@@ -85,6 +89,7 @@ export const stagedCommand: Command = {
         {
           type: "text",
           text: `Error fetching staged diff for \`${filePath}\`: ${error instanceof Error ? error.message : String(error)}`,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     }

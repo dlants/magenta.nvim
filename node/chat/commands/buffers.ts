@@ -1,4 +1,5 @@
 import type { ProviderMessageContent } from "../../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "@magenta/core";
 import { getBuffersList } from "../../utils/listBuffers.ts";
 import type { Command } from "./types.ts";
 
@@ -12,6 +13,7 @@ const createBuffersCommand = (name: string, pattern: RegExp): Command => ({
         {
           type: "text",
           text: `Current buffers list:\n${buffersList}`,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     } catch (error) {
@@ -22,6 +24,7 @@ const createBuffersCommand = (name: string, pattern: RegExp): Command => ({
         {
           type: "text",
           text: `Error fetching buffers list: ${error instanceof Error ? error.message : String(error)}`,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     }

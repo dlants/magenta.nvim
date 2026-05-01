@@ -61,32 +61,32 @@ export type ProviderTextContent = {
   type: "text";
   text: string;
   citations?: ProviderWebSearchCitation[] | undefined;
-  nativeMessageIdx?: NativeMessageIdx;
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderThinkingContent = {
   type: "thinking";
   thinking: string;
   signature: string;
-  nativeMessageIdx?: NativeMessageIdx;
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderRedactedThinkingContent = {
   type: "redacted_thinking";
   data: string;
-  nativeMessageIdx?: NativeMessageIdx;
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderSystemReminderContent = {
   type: "system_reminder";
   text: string;
-  nativeMessageIdx?: NativeMessageIdx;
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderContextUpdateContent = {
   type: "context_update";
   text: string;
-  nativeMessageIdx?: NativeMessageIdx;
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderImageContent = {
@@ -96,7 +96,7 @@ export type ProviderImageContent = {
     media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
     data: string;
   };
-  nativeMessageIdx?: NativeMessageIdx;
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderDocumentContent = {
@@ -107,7 +107,7 @@ export type ProviderDocumentContent = {
     data: string;
   };
   title?: string | null;
-  nativeMessageIdx?: NativeMessageIdx;
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderToolUseContent = {
@@ -115,7 +115,7 @@ export type ProviderToolUseContent = {
   id: ToolManager.ToolRequestId;
   name: ToolName;
   request: Result<ToolRequest, { rawRequest: unknown }>;
-  nativeMessageIdx?: NativeMessageIdx;
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderServerToolUseContent = {
@@ -125,14 +125,14 @@ export type ProviderServerToolUseContent = {
   input: {
     query: string;
   };
-  nativeMessageIdx?: NativeMessageIdx;
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderWebSearchToolResult = {
   type: "web_search_tool_result";
   tool_use_id: string;
   content: Anthropic.WebSearchToolResultBlockContent;
-  nativeMessageIdx?: NativeMessageIdx;
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderToolResultContent =
@@ -150,7 +150,7 @@ export type ProviderToolResult = {
         structuredResult: ToolManager.ToolStructuredResult;
       }
     | { status: "error"; error: string };
-  nativeMessageIdx?: NativeMessageIdx;
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderToolSpec = {
@@ -250,6 +250,12 @@ export type AgentStatus =
  * This is opaque to external code - only the Agent knows how to use it.
  */
 export type NativeMessageIdx = number & { __nativeMessageIdx: true };
+
+/** Placeholder used when constructing content blocks before they are attached
+ * to a native message array (e.g. tool results, AgentInput). The actual
+ * `nativeMessageIdx` is stamped by `convertAnthropicMessagesToProvider` on the
+ * agent's `cachedProviderMessages`, so the input value is discarded. */
+export const PLACEHOLDER_NATIVE_MESSAGE_IDX = -1 as NativeMessageIdx;
 
 export type AgentStreamingBlock =
   | { type: "text"; text: string }

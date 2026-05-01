@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
 import type { OutputLine, Shell } from "../capabilities/shell.ts";
-import type {
-  ProviderToolResult,
-  ProviderToolSpec,
+import {
+  PLACEHOLDER_NATIVE_MESSAGE_IDX,
+  type ProviderToolResult,
+  type ProviderToolSpec,
 } from "../providers/provider-types.ts";
 import type {
   GenericToolRequest,
@@ -299,6 +300,7 @@ export function execute(
             status: "error",
             error,
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       stopTickInterval();
@@ -316,7 +318,7 @@ export function execute(
         id: request.id,
         result: {
           status: "ok",
-          value: [{ type: "text", text: formattedOutput }],
+          value: [{ type: "text", text: formattedOutput, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
           structuredResult: {
             toolName: "bash_command" as const,
             exitCode: result.exitCode,
@@ -332,6 +334,7 @@ export function execute(
             wasAbbreviated,
           },
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     })
     .catch((error: Error): ProviderToolResult => {
@@ -360,6 +363,7 @@ export function execute(
             status: "error",
             error: errorMsg,
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       stopTickInterval();
@@ -376,6 +380,7 @@ export function execute(
           status: "error",
           error: `Error: ${error.message}${durationStr}`,
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     });
 

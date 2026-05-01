@@ -1,4 +1,5 @@
 import type { ProviderMessageContent } from "../../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "@magenta/core";
 import type { UnresolvedFilePath } from "../../utils/files.ts";
 import {
   AT_FILE_PATTERN,
@@ -46,6 +47,7 @@ export const fileCommand: Command = {
         {
           type: "text",
           text: `Error adding file to context for ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ];
     }

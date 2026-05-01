@@ -38,4 +38,4 @@ export type {
   StopReason,
   Usage,
 } from "@magenta/core";
-export { PROVIDER_NAMES } from "@magenta/core";
+export { PLACEHOLDER_NATIVE_MESSAGE_IDX, PROVIDER_NAMES } from "@magenta/core";

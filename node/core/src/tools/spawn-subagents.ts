@@ -14,6 +14,7 @@ import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
   GenericToolRequest,
   ToolInvocation,
@@ -295,6 +296,7 @@ export function execute(
             status: "error",
             error: "Sub-agent execution was aborted",
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -347,6 +349,7 @@ export function execute(
             status: "error",
             error: "Sub-agent execution was aborted",
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -359,6 +362,7 @@ export function execute(
           status: "error",
           error: e instanceof Error ? e.message : String(e),
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
   })();
@@ -450,12 +454,13 @@ function buildResult(
     id: requestId,
     result: {
       status: "ok",
-      value: [{ type: "text", text: resultText }],
+      value: [{ type: "text", text: resultText, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
       structuredResult: {
         toolName: "spawn_subagents" as const,
         agents,
       },
     },
+    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
 }
 

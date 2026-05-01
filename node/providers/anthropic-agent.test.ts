@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ToolName, ToolRequestId } from "@magenta/core";
-import { validateInput } from "@magenta/core";
+import { validateInput, PLACEHOLDER_NATIVE_MESSAGE_IDX } from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import winston from "winston";
 import { delay } from "../utils/async.ts";
@@ -81,7 +81,7 @@ describe("thinking.effort", () => {
       thinking: { enabled: true, effort: "max" },
     });
 
-    agent.appendUserMessage([{ type: "text", text: "Hi" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hi", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -117,7 +117,7 @@ describe("thinking.effort", () => {
       { ...defaultAnthropicOptions, logger },
     );
 
-    agent.appendUserMessage([{ type: "text", text: "Hi" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hi", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -138,7 +138,7 @@ describe("appendUserMessage", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -192,7 +192,7 @@ describe("appendUserMessage", () => {
     const tracked = trackMessages();
     const agent = createAgent(mockClient, undefined, tracked);
 
-    const content: AgentInput[] = [{ type: "text", text: "Hello, world!" }];
+    const content: AgentInput[] = [{ type: "text", text: "Hello, world!", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }];
     agent.appendUserMessage(content);
 
     // Message should not have been dispatched synchronously
@@ -225,6 +225,7 @@ describe("appendUserMessage", () => {
           media_type: "image/png",
           data: "base64data",
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ];
     agent.appendUserMessage(content);
@@ -253,6 +254,7 @@ describe("appendUserMessage", () => {
           data: "pdfdata",
         },
         title: "My Document",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ];
     agent.appendUserMessage(content);
@@ -281,9 +283,10 @@ describe("toolResult", () => {
       id: toolUseId,
       result: {
         status: "ok",
-        value: [{ type: "text", text: "Tool output" }],
+        value: [{ type: "text", text: "Tool output", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
         structuredResult: { toolName: "get_file" as ToolName },
       },
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     };
 
     expect(() => agent.toolResult(toolUseId, result)).toThrow(
@@ -298,7 +301,7 @@ describe("toolResult", () => {
     const toolUseId = "tool-123" as ToolRequestId;
 
     // Send a message to trigger streaming, then respond with tool_use
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -318,9 +321,10 @@ describe("toolResult", () => {
       id: toolUseId,
       result: {
         status: "ok",
-        value: [{ type: "text", text: "Tool output" }],
+        value: [{ type: "text", text: "Tool output", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
         structuredResult: { toolName: "get_file" as ToolName },
       },
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     };
 
     agent.toolResult(toolUseId, result);
@@ -339,7 +343,7 @@ describe("continueConversation", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
 
     // Should not throw
     expect(() => agent.continueConversation()).not.toThrow();
@@ -353,7 +357,7 @@ describe("dispatch messages", () => {
     const agent = createAgent(mockClient, undefined, tracked);
 
     // appendUserMessage dispatches content-updated async
-    agent.appendUserMessage([{ type: "text", text: "Test" }]);
+    agent.appendUserMessage([{ type: "text", text: "Test", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     expect(tracked.messages).toHaveLength(0);
     await delay(0);
     expect(tracked.messages).toHaveLength(1);
@@ -400,7 +404,7 @@ describe("abort", () => {
     const tracked = trackMessages();
     const agent = createAgent(mockClient, undefined, tracked);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -432,7 +436,7 @@ describe("abort", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -470,7 +474,7 @@ describe("abort", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Search for info" }]);
+    agent.appendUserMessage([{ type: "text", text: "Search for info", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -504,7 +508,7 @@ describe("abort with empty blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -538,7 +542,7 @@ describe("abort with empty blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -570,7 +574,7 @@ describe("abort with empty blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -608,7 +612,7 @@ describe("thinking blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -690,7 +694,7 @@ describe("thinking blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -754,7 +758,7 @@ describe("thinking blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -787,7 +791,7 @@ describe("streaming block", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -840,7 +844,7 @@ describe("streaming block", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -902,7 +906,7 @@ describe("streaming block", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Search" }]);
+    agent.appendUserMessage([{ type: "text", text: "Search", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -939,7 +943,7 @@ describe("streaming block", () => {
     const tracked = trackMessages();
     const agent = createAgent(mockClient, undefined, tracked);
 
-    agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -971,7 +975,7 @@ describe("web search result preservation", () => {
     const agent = createAgent(mockClient);
 
     agent.appendUserMessage([
-      { type: "text", text: "Search for Claude Shannon" },
+      { type: "text", text: "Search for Claude Shannon", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
     ]);
     await delay(0);
     agent.continueConversation();
@@ -1048,7 +1052,7 @@ describe("web search result preservation", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "Search for info" }]);
+    agent.appendUserMessage([{ type: "text", text: "Search for info", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -1074,7 +1078,7 @@ describe("web search result preservation", () => {
     await delay(0);
 
     // Append a follow-up user message
-    agent.appendUserMessage([{ type: "text", text: "Tell me more" }]);
+    agent.appendUserMessage([{ type: "text", text: "Tell me more", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     await delay(0);
     agent.continueConversation();
 
@@ -1108,7 +1112,7 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
 
@@ -1149,7 +1153,7 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Search for info" }]);
+      agent.appendUserMessage([{ type: "text", text: "Search for info", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
 
@@ -1186,7 +1190,7 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
 
@@ -1216,7 +1220,7 @@ describe("web search result preservation", () => {
       const agent = createAgent(mockClient);
 
       // First request - successful
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
 
@@ -1237,7 +1241,7 @@ describe("web search result preservation", () => {
       });
 
       // Second request - will be aborted
-      agent.appendUserMessage([{ type: "text", text: "Follow up" }]);
+      agent.appendUserMessage([{ type: "text", text: "Follow up", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
 
@@ -1262,7 +1266,7 @@ describe("web search result preservation", () => {
       const agent = createAgent(mockClient);
 
       // First request - successful
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
 
@@ -1285,7 +1289,7 @@ describe("web search result preservation", () => {
       });
 
       // Second request - will error
-      agent.appendUserMessage([{ type: "text", text: "Follow up" }]);
+      agent.appendUserMessage([{ type: "text", text: "Follow up", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
 
@@ -1315,7 +1319,7 @@ describe("web search result preservation", () => {
       expect(agent.getState().latestUsage).toBeUndefined();
 
       // First request - abort (should not set latestUsage)
-      agent.appendUserMessage([{ type: "text", text: "First" }]);
+      agent.appendUserMessage([{ type: "text", text: "First", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
       const stream1 = await mockClient.awaitStream();
@@ -1326,7 +1330,7 @@ describe("web search result preservation", () => {
       expect(agent.getState().latestUsage).toBeUndefined();
 
       // Second request - successful (should set latestUsage)
-      agent.appendUserMessage([{ type: "text", text: "Second" }]);
+      agent.appendUserMessage([{ type: "text", text: "Second", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
       const stream2 = await mockClient.awaitStream();
@@ -1351,7 +1355,7 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
 
@@ -1381,7 +1385,7 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
 
@@ -1401,6 +1405,7 @@ describe("web search result preservation", () => {
           status: "error",
           error: "Malformed tool_use block: missing filePath",
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       });
 
       const state = agent.getState();
@@ -1430,7 +1435,7 @@ File \`test.ts\`
 const x = 1;
 </context_update>`;
 
-      agent.appendUserMessage([{ type: "text", text: contextUpdateText }]);
+      agent.appendUserMessage([{ type: "text", text: contextUpdateText, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
 
       const state = agent.getState();
       expect(state.messages).toHaveLength(1);
@@ -1445,7 +1450,7 @@ const x = 1;
       const agent = createAgent(mockClient);
 
       agent.appendUserMessage([
-        { type: "text", text: "Hello, this is regular text" },
+        { type: "text", text: "Hello, this is regular text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
       ]);
 
       const state = agent.getState();
@@ -1461,8 +1466,8 @@ File context here
 </context_update>`;
 
       agent.appendUserMessage([
-        { type: "text", text: contextUpdateText },
-        { type: "text", text: "Now here is my question" },
+        { type: "text", text: contextUpdateText, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
+        { type: "text", text: "Now here is my question", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
       ]);
 
       const state = agent.getState();
@@ -1480,7 +1485,7 @@ File context here
       const agent = createAgent(mockClient, undefined, tracked);
 
       // Build up some conversation history
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
@@ -1489,7 +1494,7 @@ File context here
       await stream.finalMessage();
       await delay(0);
 
-      agent.appendUserMessage([{ type: "text", text: "How are you?" }]);
+      agent.appendUserMessage([{ type: "text", text: "How are you?", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       agent.continueConversation();
 
       const stream2 = await mockClient.awaitStream();
@@ -1538,7 +1543,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
@@ -1551,7 +1556,7 @@ File context here
       const cloned = agent.clone();
 
       // Add more messages to original
-      agent.appendUserMessage([{ type: "text", text: "Another message" }]);
+      agent.appendUserMessage([{ type: "text", text: "Another message", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
 
       // Clone should not be affected
@@ -1563,7 +1568,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
@@ -1604,7 +1609,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
@@ -1654,7 +1659,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Search for something" }]);
+      agent.appendUserMessage([{ type: "text", text: "Search for something", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
@@ -1687,7 +1692,7 @@ File context here
       const tracked = trackMessages();
       const agent = createAgent(mockClient, undefined, tracked);
 
-      agent.appendUserMessage([{ type: "text", text: "Use a tool" }]);
+      agent.appendUserMessage([{ type: "text", text: "Use a tool", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
@@ -1750,7 +1755,8 @@ File context here
         result: {
           status: "error",
           error: "The thread was forked before the tool could execute.",
-        },
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    },
       });
       expect(clonedState.status).toEqual({
         type: "stopped",
@@ -1770,7 +1776,7 @@ File context here
       const tracked = trackMessages();
       const agent = createAgent(mockClient, undefined, tracked);
 
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
@@ -1817,7 +1823,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
@@ -1842,7 +1848,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Hello" }]);
+      agent.appendUserMessage([{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
@@ -1855,7 +1861,7 @@ File context here
       const cloned = agent.clone();
 
       // Append message to cloned agent (without streaming)
-      cloned.appendUserMessage([{ type: "text", text: "From clone" }]);
+      cloned.appendUserMessage([{ type: "text", text: "From clone", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
 
       // Cloned agent has the new message
@@ -1875,7 +1881,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Q1" }]);
+      agent.appendUserMessage([{ type: "text", text: "Q1", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
       let stream = await mockClient.awaitStream();
@@ -1883,7 +1889,7 @@ File context here
       stream.finishResponse("end_turn");
       await stream.finalMessage();
 
-      agent.appendUserMessage([{ type: "text", text: "Q2" }]);
+      agent.appendUserMessage([{ type: "text", text: "Q2", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
       stream = await mockClient.awaitStream();
@@ -1906,7 +1912,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Run tool" }]);
+      agent.appendUserMessage([{ type: "text", text: "Run tool", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
       const stream = await mockClient.awaitStream();
@@ -1923,9 +1929,10 @@ File context here
         id: "tool-1" as ToolRequestId,
         result: {
           status: "ok",
-          value: [{ type: "text", text: "file contents" }],
+          value: [{ type: "text", text: "file contents", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
           structuredResult: { toolName: "get_file" as ToolName },
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       });
 
       agent.continueConversation();
@@ -1949,7 +1956,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Run tool" }]);
+      agent.appendUserMessage([{ type: "text", text: "Run tool", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
       const stream = await mockClient.awaitStream();
@@ -1981,7 +1988,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Run tool" }]);
+      agent.appendUserMessage([{ type: "text", text: "Run tool", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
       const stream = await mockClient.awaitStream();
@@ -2007,7 +2014,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([{ type: "text", text: "Q1" }]);
+      agent.appendUserMessage([{ type: "text", text: "Q1", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
       let stream = await mockClient.awaitStream();
@@ -2015,7 +2022,7 @@ File context here
       stream.finishResponse("end_turn");
       await stream.finalMessage();
 
-      agent.appendUserMessage([{ type: "text", text: "Q2" }]);
+      agent.appendUserMessage([{ type: "text", text: "Q2", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
       await delay(0);
       agent.continueConversation();
       stream = await mockClient.awaitStream();

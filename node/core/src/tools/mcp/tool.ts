@@ -1,4 +1,4 @@
-import type { ProviderToolResult } from "../../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX, type ProviderToolResult } from "../../providers/provider-types.ts";
 import type {
   ToolInvocation,
   ToolName,
@@ -40,6 +40,7 @@ export function execute(
     type: "tool_result",
     id: request.id,
     result: { status: "error", error: "Request was aborted by the user." },
+    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
 
   const promise = (async (): Promise<ProviderToolResult> => {
@@ -61,6 +62,7 @@ export function execute(
           value: result,
           structuredResult: { toolName: request.toolName },
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     } catch (error) {
       if (aborted) return abortResult;
@@ -77,6 +79,7 @@ export function execute(
           status: "error",
           error: `MCP tool error: ${errorMessage}`,
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     } finally {
       clearInterval(tickInterval);

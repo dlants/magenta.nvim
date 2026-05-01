@@ -144,7 +144,10 @@ export type {
   StopReason,
   Usage,
 } from "./providers/provider-types.ts";
-export { PROVIDER_NAMES } from "./providers/provider-types.ts";
+export {
+  PLACEHOLDER_NATIVE_MESSAGE_IDX,
+  PROVIDER_NAMES,
+} from "./providers/provider-types.ts";
 export type { SkillInfo, SkillsMap } from "./providers/skills.ts";
 export { formatSkillsIntroduction, loadSkills } from "./providers/skills.ts";
 export type {

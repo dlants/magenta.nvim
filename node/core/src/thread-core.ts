@@ -30,6 +30,7 @@ import type {
   StopReason,
   Usage,
 } from "./providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import {
   buildSystemReminder,
@@ -568,8 +569,8 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
             status: "error",
             error: `Malformed tool_use block: ${block.request.error}`,
           },
-        });
-        continue;
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        });        continue;
       }
 
       const request = block.request.value;
@@ -629,6 +630,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
                 status: "error",
                 error: `Tool execution failed: ${err.message}`,
               },
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           });
         })
@@ -693,6 +695,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
               status: "error",
               error: "Request was aborted by the user.",
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           });
         }
       }
@@ -702,7 +705,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     }
 
     this.agent.appendUserMessage([
-      { type: "text", text: "[The user aborted the previous request.]" },
+      { type: "text", text: "[The user aborted the previous request.]", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
     ]);
     this.emit("update");
 
@@ -736,13 +739,13 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
 
     for (const c of content) {
       if (c.type === "text") {
-        contentToSend.push({ type: "text", text: c.text });
+        contentToSend.push({ type: "text", text: c.text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX });
       } else if (c.type === "image") {
         contentToSend.push(c);
       } else if (c.type === "document") {
         contentToSend.push(c);
       } else if (c.type === "system_reminder") {
-        contentToSend.push({ type: "text", text: c.text });
+        contentToSend.push({ type: "text", text: c.text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX });
       }
     }
 
@@ -843,12 +846,14 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
                   {
                     type: "text",
                     text: "Yield accepted. Your result has been sent to the parent thread.",
+                    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                   },
                 ],
                 structuredResult: {
                   toolName: "yield_to_parent" as ToolName,
                 },
               },
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           });
           continue;
@@ -965,7 +970,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     const content: AgentInput[] = [];
     for (const c of contextContent) {
       if (c.type === "text") {
-        content.push({ type: "text", text: c.text });
+        content.push({ type: "text", text: c.text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX });
       } else if (c.type === "image" || c.type === "document") {
         content.push(c);
       }
@@ -1026,7 +1031,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         kinds: reminderKinds,
       });
       if (reminder) {
-        contentToSend.push({ type: "text", text: reminder });
+        contentToSend.push({ type: "text", text: reminder, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX });
       }
       if (subsequentReminderFires) {
         this.update({ type: "reset-output-tokens" }, { silent: true });
@@ -1065,6 +1070,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       messageContent.push({
         type: "text",
         text: m.text,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       });
     }
 
@@ -1079,6 +1085,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         messageContent.push({
           type: "system_reminder",
           text: reminder,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         });
       }
     }
@@ -1093,6 +1100,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     const contentToSend: AgentInput[] = messages.map((m) => ({
       type: "text" as const,
       text: m.text,
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     }));
 
     if (contentToSend.length === 0) return;
@@ -1193,7 +1201,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     this.update({ type: "reset-after-compaction" });
 
     const summaryText = `<conversation-summary>\n${summary}\n</conversation-summary>`;
-    this.agent.appendUserMessage([{ type: "text", text: summaryText }]);
+    this.agent.appendUserMessage([{ type: "text", text: summaryText, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
 
     if (nextPrompt) {
       await this.sendMessage([{ type: "user", text: nextPrompt }]);
@@ -1231,6 +1239,7 @@ ${userMessage}
 
 Come up with a succinct thread title for this prompt. It should be less than 80 characters long.
 `,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ],
       spec: ThreadTitle.spec,

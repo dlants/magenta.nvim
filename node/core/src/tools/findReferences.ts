@@ -1,9 +1,10 @@
 import type { FileIO } from "../capabilities/file-io.ts";
 
 import type { LspClient } from "../capabilities/lsp-client.ts";
-import type {
-  ProviderToolResult,
-  ProviderToolSpec,
+import {
+  PLACEHOLDER_NATIVE_MESSAGE_IDX,
+  type ProviderToolResult,
+  type ProviderToolSpec,
 } from "../providers/provider-types.ts";
 import type {
   GenericToolRequest,
@@ -52,6 +53,7 @@ export function execute(
             status: "error",
             error: `Failed to read file ${absFilePath}: ${e instanceof Error ? e.message : String(e)}`,
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -63,6 +65,7 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -78,6 +81,7 @@ export function execute(
             status: "error",
             error: `Symbol "${request.input.symbol}" not found in file.`,
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -102,6 +106,7 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
 
@@ -127,9 +132,10 @@ export function execute(
         id: request.id,
         result: {
           status: "ok",
-          value: [{ type: "text", text: content || "No references found" }],
+          value: [{ type: "text", text: content || "No references found", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
           structuredResult: { toolName: "find_references" },
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     } catch (error) {
       if (aborted) {
@@ -140,6 +146,7 @@ export function execute(
             status: "error",
             error: "Request was aborted by the user.",
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
       }
       return {
@@ -149,6 +156,7 @@ export function execute(
           status: "error",
           error: `Error requesting references: ${error instanceof Error ? error.message : String(error)}`,
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     }
   })();

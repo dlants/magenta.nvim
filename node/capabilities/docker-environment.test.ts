@@ -10,6 +10,7 @@ import type {
   ToolRequestId,
   UnresolvedFilePath,
 } from "@magenta/core";
+import type { ProviderToolResultContent } from "@magenta/core";
 import {
   ContextManager,
   FileCategory,
@@ -283,7 +284,8 @@ describe.runIf(FULL_CAPABILITIES)("Docker Environment", () => {
         if (result.status === "ok") {
           const text = result.value
             .filter(
-              (c): c is { type: "text"; text: string } => c.type === "text",
+              (c): c is Extract<ProviderToolResultContent, { type: "text" }> =>
+                c.type === "text",
             )
             .map((c) => c.text)
             .join("");

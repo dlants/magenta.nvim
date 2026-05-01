@@ -2,6 +2,7 @@ import type {
   ProviderToolResult,
   ProviderToolSpec,
 } from "../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
   GenericToolRequest,
   ToolInvocation,
@@ -19,43 +20,50 @@ export function execute(
     try {
       await Promise.resolve();
       if (aborted) {
-        return {
+                return {
           type: "tool_result",
           id: request.id,
           result: {
             status: "error",
             error: "Request was aborted by the user.",
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
+
       }
       return {
         type: "tool_result",
         id: request.id,
         result: {
           status: "ok",
-          value: [{ type: "text", text: request.input.title }],
+          value: [{ type: "text", text: request.input.title, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
           structuredResult: { toolName: "thread_title" as const },
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     } catch (error) {
       if (aborted) {
-        return {
+                return {
           type: "tool_result",
           id: request.id,
           result: {
             status: "error",
             error: "Request was aborted by the user.",
           },
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         };
+
       }
-      return {
+            return {
         type: "tool_result",
         id: request.id,
         result: {
           status: "error",
           error: `Failed: ${error instanceof Error ? error.message : String(error)}`,
         },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
+
     }
   })();
 

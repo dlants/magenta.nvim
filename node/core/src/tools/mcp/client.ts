@@ -20,6 +20,7 @@ import type {
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../../providers/provider-types.ts";
 import { assertUnreachable } from "../../utils/assertUnreachable.ts";
 import { MockMCPServer } from "./mock-server.ts";
 import type { MCPServerConfig } from "./options.ts";
@@ -242,6 +243,7 @@ export class MCPClient {
           return {
             type: "text",
             text: c.text,
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         case "image":
           return {
@@ -255,21 +257,25 @@ export class MCPClient {
                 | "image/webp",
               data: c.data,
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         case "audio":
           return {
             type: "text",
             text: `[MCP audio content type not supported yet]`,
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         case "resource_link":
           return {
             type: "text",
             text: `[MCP resource_link content type not supported yet]`,
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         case "resource":
           return {
             type: "text",
             text: `[MCP resource content type not supported yet]`,
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           };
         default:
           assertUnreachable(c);

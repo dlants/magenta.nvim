@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chunkMessages, renderThreadToMarkdown } from "./compact-renderer.ts";
 import type { ProviderMessage } from "./providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 
 describe("renderThreadToMarkdown", () => {
@@ -8,11 +9,11 @@ describe("renderThreadToMarkdown", () => {
     const messages: ProviderMessage[] = [
       {
         role: "user",
-        content: [{ type: "text", text: "Hello" }],
+        content: [{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
       },
       {
         role: "assistant",
-        content: [{ type: "text", text: "Hi there!" }],
+        content: [{ type: "text", text: "Hi there!", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
       },
     ];
 
@@ -28,8 +29,8 @@ describe("renderThreadToMarkdown", () => {
       {
         role: "assistant",
         content: [
-          { type: "thinking", thinking: "Let me think...", signature: "sig" },
-          { type: "text", text: "Here is my answer" },
+          { type: "thinking", thinking: "Let me think...", signature: "sig", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
+          { type: "text", text: "Here is my answer", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
         ],
       },
     ];
@@ -44,8 +45,8 @@ describe("renderThreadToMarkdown", () => {
       {
         role: "assistant",
         content: [
-          { type: "redacted_thinking", data: "secret" },
-          { type: "text", text: "visible text" },
+          { type: "redacted_thinking", data: "secret", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
+          { type: "text", text: "visible text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
         ],
       },
     ];
@@ -60,8 +61,8 @@ describe("renderThreadToMarkdown", () => {
       {
         role: "user",
         content: [
-          { type: "text", text: "My question" },
-          { type: "system_reminder", text: "Remember to be helpful" },
+          { type: "text", text: "My question", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
+          { type: "system_reminder", text: "Remember to be helpful", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
         ],
       },
     ];
@@ -91,6 +92,7 @@ const x = 1;
 +new line
 \`\`\`
 </context_update>`,
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -123,6 +125,7 @@ File \`context.md\`
 - \`dispatch/myDispatch\` - Functions passed to controllers.
 - \`view\` - A function that renders the current controller state in TUI.
 </context_update>`,
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -144,6 +147,7 @@ File \`context.md\`
           {
             type: "context_update",
             text: "some context update without file patterns",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -170,6 +174,7 @@ File \`context.md\`
                 input: { filePath: "src/index.ts" },
               },
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -194,6 +199,7 @@ File \`context.md\`
               error: "parse error",
               rawRequest: {},
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -213,9 +219,10 @@ File \`context.md\`
             id: "tool_1" as ToolRequestId,
             result: {
               status: "ok",
-              value: [{ type: "text", text: "File contents here" }],
+              value: [{ type: "text", text: "File contents here", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
               structuredResult: { toolName: "get_file" as ToolName },
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -238,6 +245,7 @@ File \`context.md\`
               status: "error",
               error: "File not found",
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -260,6 +268,7 @@ File \`context.md\`
               media_type: "image/png",
               data: "abc123",
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
           {
             type: "document",
@@ -269,6 +278,7 @@ File \`context.md\`
               data: "abc123",
             },
             title: "report.pdf",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -290,6 +300,7 @@ File \`context.md\`
             id: "search_1",
             name: "web_search" as const,
             input: { query: "vitest documentation" },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -315,6 +326,7 @@ File \`context.md\`
                 page_age: null,
               },
             ],
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -351,6 +363,7 @@ File \`context.md\`
                 input: { filePath: "src/index.ts" },
               },
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -366,10 +379,12 @@ File \`context.md\`
                 {
                   type: "text",
                   text: "const x = 1;\nconst y = 2;\n// lots of file content here...",
+                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                 },
               ],
               structuredResult: { toolName: "get_file" as ToolName },
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -397,9 +412,10 @@ File \`context.md\`
               value: {
                 id: "tool_1" as ToolRequestId,
                 toolName: "get_file" as ToolName,
-                input: { filePath: "nonexistent.ts" },
+                input: { filePath: "src/index.ts" },
               },
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -413,6 +429,7 @@ File \`context.md\`
               status: "error",
               error: "File not found: nonexistent.ts",
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -440,6 +457,7 @@ File \`context.md\`
                 input: { command: "echo hello" },
               },
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -451,9 +469,10 @@ File \`context.md\`
             id: "tool_1" as ToolRequestId,
             result: {
               status: "ok",
-              value: [{ type: "text", text: "hello" }],
+              value: [{ type: "text", text: "hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
               structuredResult: { toolName: "get_file" as ToolName },
             },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
       },
@@ -468,15 +487,15 @@ File \`context.md\`
     const messages: ProviderMessage[] = [
       {
         role: "user",
-        content: [{ type: "text", text: "Hello" }],
+        content: [{ type: "text", text: "Hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
       },
       {
         role: "assistant",
-        content: [{ type: "text", text: "Hi there!" }],
+        content: [{ type: "text", text: "Hi there!", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
       },
       {
         role: "user",
-        content: [{ type: "text", text: "Goodbye" }],
+        content: [{ type: "text", text: "Goodbye", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }],
       },
     ];
 

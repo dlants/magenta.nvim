@@ -9,6 +9,7 @@ import {
 } from "./anthropic-agent.ts";
 import { MockAnthropicClient } from "./mock-anthropic-client.ts";
 import type { ProviderToolSpec } from "./provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 
 const noopLogger: Logger = {
   info: () => {},
@@ -102,7 +103,7 @@ describe("AnthropicAgent retry logic", () => {
     const agent = createAgent(mockClient);
     const events = trackEvents(agent);
 
-    agent.appendUserMessage([{ type: "text", text: "hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
@@ -122,7 +123,7 @@ describe("AnthropicAgent retry logic", () => {
     const agent = createAgent(mockClient);
     const events = trackEvents(agent);
 
-    agent.appendUserMessage([{ type: "text", text: "hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     agent.continueConversation();
 
     // First attempt: fail with 529
@@ -175,7 +176,7 @@ describe("AnthropicAgent retry logic", () => {
     const agent = createAgent(mockClient);
     const events = trackEvents(agent);
 
-    agent.appendUserMessage([{ type: "text", text: "hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     agent.continueConversation();
 
     // First attempt: fail with 429
@@ -206,7 +207,7 @@ describe("AnthropicAgent retry logic", () => {
     const agent = createAgent(mockClient);
     const events = trackEvents(agent);
 
-    agent.appendUserMessage([{ type: "text", text: "hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     agent.continueConversation();
 
     // Simulate time passing beyond MAX_RETRY_DURATION (300s)
@@ -252,7 +253,7 @@ describe("AnthropicAgent retry logic", () => {
     const agent = createAgent(mockClient);
     const events = trackEvents(agent);
 
-    agent.appendUserMessage([{ type: "text", text: "hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     agent.continueConversation();
 
     // First attempt: fail with 529
@@ -280,7 +281,7 @@ describe("AnthropicAgent retry logic", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([{ type: "text", text: "hello" }]);
+    agent.appendUserMessage([{ type: "text", text: "hello", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
     agent.continueConversation();
 
     // First attempt: fail with 529
