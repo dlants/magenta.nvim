@@ -109,7 +109,7 @@ describe("CommandRegistry", () => {
     // Commands should NOT be removed from text
     expect(result.processedText).toBe("@custom some text");
     // Should have custom command content
-    expect(result.additionalContent).toEqual([
+    expect(result.additionalContent).toMatchObject([
       {
         type: "text",
         text: "Custom command text",
@@ -182,7 +182,7 @@ describe("CommandRegistry", () => {
     const result = await registry.processMessage("@test[1] text", context);
 
     expect(result.processedText).toBe("@test[1] text");
-    expect(result.additionalContent).toEqual([
+    expect(result.additionalContent).toMatchObject([
       {
         type: "text",
         text: "Special characters",

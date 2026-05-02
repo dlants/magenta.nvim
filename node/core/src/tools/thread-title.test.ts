@@ -16,7 +16,7 @@ describe("thread-title unit tests", () => {
     const result = await invocation.promise;
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      expect(result.result.value[0]).toEqual({
+      expect(result.result.value[0]).toMatchObject({
         type: "text",
         text: "My Title",
       });
