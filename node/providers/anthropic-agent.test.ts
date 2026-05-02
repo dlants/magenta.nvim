@@ -12,6 +12,7 @@ import { MockAnthropicClient } from "./mock-anthropic-client.ts";
 import type {
   AgentInput,
   AgentMsg,
+  NativeMessageIdx,
   ProviderToolResult,
   ProviderToolSpec,
 } from "./provider-types.ts";
@@ -1755,8 +1756,8 @@ File context here
         result: {
           status: "error",
           error: "The thread was forked before the tool could execute.",
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    },
+        },
+        nativeMessageIdx: 2 as NativeMessageIdx,
       });
       expect(clonedState.status).toEqual({
         type: "stopped",

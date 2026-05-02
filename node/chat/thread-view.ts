@@ -464,25 +464,27 @@ function renderMessageContent(
   messageUsage: Usage | undefined,
   isLastBlock: boolean,
 ): VDOMNode {
-  return withBindings(
-    renderMessageContentBlock(
-      content,
-      messageIdx,
-      contentIdx,
-      thread,
-      dispatch,
-      messageUsage,
-      isLastBlock,
-    ),
-    {
-      F: (ctx) =>
-        dispatch({
-          type: "fork-message",
-          nativeMessageIdx: content.nativeMessageIdx,
-          ...(ctx?.selection ? { prepopulate: ctx.selection } : {}),
-        }),
-    },
+  const inner = renderMessageContentBlock(
+    content,
+    messageIdx,
+    contentIdx,
+    thread,
+    dispatch,
+    messageUsage,
+    isLastBlock,
   );
+  // Wrap the inner block in a fresh `d` node so that its own bindings (e.g.
+  // <CR> to expand a thinking block) live on a child node and continue to
+  // take precedence per getBindings' "most specific wins" traversal. The F
+  // binding lives on the outer wrapper.
+  return withBindings(d`${inner}`, {
+    F: (ctx) =>
+      dispatch({
+        type: "fork-message",
+        nativeMessageIdx: content.nativeMessageIdx,
+        ...(ctx?.selection ? { prepopulate: ctx.selection } : {}),
+      }),
+  });
 }
 
 function renderMessageContentBlock(

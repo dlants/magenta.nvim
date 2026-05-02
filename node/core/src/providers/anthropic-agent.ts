@@ -17,6 +17,7 @@ import type {
   ProviderMessage,
   ProviderToolResult,
 } from "./provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 
 export type AnthropicAgentOptions = {
   authType: "key" | "max" | "keychain";
@@ -730,6 +731,7 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
           tool_use_id: t.id,
           content: "The thread was forked before the tool could execute.",
           is_error: true,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         })),
       });
     }
