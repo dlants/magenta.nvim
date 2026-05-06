@@ -12,7 +12,7 @@ import {
   type Row0Indexed,
 } from "../nvim/window.ts";
 import type { MockProvider } from "../providers/mock.ts";
-import { type BindingKey, getBindings } from "../tea/bindings.ts";
+import { type BindingKey, getBinding } from "../tea/bindings.ts";
 import { calculatePosition } from "../tea/util.ts";
 import { Defer, pollUntil } from "../utils/async.ts";
 import { CompletionsInteraction } from "./driver/completions.ts";
@@ -529,13 +529,13 @@ vim.rpcnotify(${this.nvim.channelId}, "magentaKey", "${key}")
         if (!mountedNode) {
           throw new Error(`! mountedChatApp not available`);
         }
-        const bindings = getBindings(mountedNode, position);
-        if (!bindings || !bindings[key]) {
+        const binding = getBinding(mountedNode, position, "v", key);
+        if (!binding) {
           throw new Error(
             `! No binding for key "${key}" at position ${JSON.stringify(position)}`,
           );
         }
-        bindings[key]({ selection });
+        binding({ selection });
       },
       { timeout: 2000 },
     );
@@ -596,13 +596,13 @@ vim.rpcnotify(${this.nvim.channelId}, "magentaKey", "${key}")
           if (!mountedNode) {
             throw new Error(`! mountedChatApp not available`);
           }
-          const bindings = getBindings(mountedNode, position);
-          if (!bindings || !bindings[key]) {
+          const binding = getBinding(mountedNode, position, "n", key);
+          if (!binding) {
             throw new Error(
               `! No binding for key "${key}" at position ${JSON.stringify(position)}`,
             );
           }
-          bindings[key]();
+          binding();
         },
         { timeout: 2000 },
       );

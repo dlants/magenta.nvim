@@ -8,7 +8,7 @@ import {
   BINDING_MODES,
   type BindingCtx,
   type BindingKey,
-  getBindings,
+  getBinding,
 } from "./bindings.ts";
 import {
   d,
@@ -230,13 +230,16 @@ export function createApp<Model>({
           const { row, col } = await window.getCursor();
           if (root) {
             // win_get_cursor is 1-indexed, while our positions are 0-indexed
-            const bindings = getBindings(root._getMountedNode(), {
-              row: (row - 1) as Row0Indexed,
-              col,
-            });
+            const mode: "n" | "v" = ctx?.selection !== undefined ? "v" : "n";
+            const binding = getBinding(
+              root._getMountedNode(),
+              { row: (row - 1) as Row0Indexed, col },
+              mode,
+              key,
+            );
 
-            if (bindings?.[key]) {
-              bindings[key](ctx);
+            if (binding) {
+              binding(ctx);
             } else if (onUnhandledKey) {
               try {
                 await onUnhandledKey({

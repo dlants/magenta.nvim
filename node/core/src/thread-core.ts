@@ -208,6 +208,11 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     if (clonedAgent) {
       this.agent = clonedAgent.clone();
       this.listenToAgent(this.agent);
+      // Rebuild the tool result cache from the cloned agent's messages so
+      // existing tool_use blocks in the new thread's view can find their
+      // tool_results. Without this, the view renders "tool result not found"
+      // warnings for every tool_use carried over from the source thread.
+      this.update({ type: "rebuild-tool-cache" }, { silent: true });
     } else {
       this.agent = this.createFreshAgent();
     }
@@ -570,7 +575,8 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
             error: `Malformed tool_use block: ${block.request.error}`,
           },
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        });        continue;
+        });
+        continue;
       }
 
       const request = block.request.value;
@@ -705,7 +711,11 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     }
 
     this.agent.appendUserMessage([
-      { type: "text", text: "[The user aborted the previous request.]", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
+      {
+        type: "text",
+        text: "[The user aborted the previous request.]",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
     ]);
     this.emit("update");
 
@@ -739,13 +749,21 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
 
     for (const c of content) {
       if (c.type === "text") {
-        contentToSend.push({ type: "text", text: c.text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX });
+        contentToSend.push({
+          type: "text",
+          text: c.text,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        });
       } else if (c.type === "image") {
         contentToSend.push(c);
       } else if (c.type === "document") {
         contentToSend.push(c);
       } else if (c.type === "system_reminder") {
-        contentToSend.push({ type: "text", text: c.text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX });
+        contentToSend.push({
+          type: "text",
+          text: c.text,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        });
       }
     }
 
@@ -970,7 +988,11 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     const content: AgentInput[] = [];
     for (const c of contextContent) {
       if (c.type === "text") {
-        content.push({ type: "text", text: c.text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX });
+        content.push({
+          type: "text",
+          text: c.text,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        });
       } else if (c.type === "image" || c.type === "document") {
         content.push(c);
       }
@@ -1031,7 +1053,11 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         kinds: reminderKinds,
       });
       if (reminder) {
-        contentToSend.push({ type: "text", text: reminder, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX });
+        contentToSend.push({
+          type: "text",
+          text: reminder,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        });
       }
       if (subsequentReminderFires) {
         this.update({ type: "reset-output-tokens" }, { silent: true });
@@ -1201,7 +1227,13 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     this.update({ type: "reset-after-compaction" });
 
     const summaryText = `<conversation-summary>\n${summary}\n</conversation-summary>`;
-    this.agent.appendUserMessage([{ type: "text", text: summaryText, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX }]);
+    this.agent.appendUserMessage([
+      {
+        type: "text",
+        text: summaryText,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ]);
 
     if (nextPrompt) {
       await this.sendMessage([{ type: "user", text: nextPrompt }]);

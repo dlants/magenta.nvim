@@ -30,7 +30,7 @@
 - when the list of edited files gets long, collapse it to a "N edited files" summary + carrot
 - trim the stream display (for edl especially) to the last N lines, so it doesn't collapse down and mess with scroll when it finishes.
 - tmux integration (update tab title with active thread title, thread state)
--
+- toggling sandbox to off should auto-approve any current dialogues
 
 # misc features
 
@@ -59,3 +59,4 @@
 
 - overloaded handling / exponential backoff not working correctly
 - when we terminate/error, the reset for the message places it in the wrong buffer (currently open one, not the one corresponding to the thread that the error happened in)
+- figure out why bedrock is not doing thinking now

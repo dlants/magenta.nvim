@@ -19,7 +19,7 @@
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.28.1",
     "@anthropic-ai/sandbox-runtime": "0.0.46",
-    "@anthropic-ai/sdk": "^0.90.0",
+    "@anthropic-ai/sdk": "^0.92.0",
     "@modelcontextprotocol/sdk": "^1.15.1",
     "@openauthjs/openauth": "^0.4.3",
     "@types/diff": "^7.0.2",

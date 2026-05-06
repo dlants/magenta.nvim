@@ -23,10 +23,12 @@ export type Bindings = Partial<{
   [key in BindingKey]: (ctx?: BindingCtx) => void;
 }>;
 
-export function getBindings(
+export function getBinding(
   mountedNode: MountedVDOM,
   cursor: Position0Indexed,
-): Bindings | undefined {
+  mode: "n" | "v",
+  key: BindingKey,
+): ((ctx?: BindingCtx) => void) | undefined {
   if (
     comparePos(cursor, mountedNode.startPos) === "lt" ||
     ["gt", "eq"].includes(comparePos(cursor, mountedNode.endPos))
@@ -34,19 +36,25 @@ export function getBindings(
     return undefined;
   }
 
+  const allowedModes = BINDING_MODES[key] ?? ["n"];
+  if (!allowedModes.includes(mode)) {
+    return undefined;
+  }
+
   switch (mountedNode.type) {
     case "string":
-      return mountedNode.bindings;
+      return mountedNode.bindings?.[key];
     case "node":
     case "array": {
-      // most specific binding wins
+      // Walk children to find the most specific (innermost) binding for this
+      // key. If no child has it, fall back to this node's binding.
       for (const child of mountedNode.children) {
-        const childBindings = getBindings(child, cursor);
-        if (childBindings) {
-          return childBindings;
+        const childBinding = getBinding(child, cursor, mode, key);
+        if (childBinding) {
+          return childBinding;
         }
       }
-      return mountedNode.bindings;
+      return mountedNode.bindings?.[key];
     }
     default:
       assertUnreachable(mountedNode);
