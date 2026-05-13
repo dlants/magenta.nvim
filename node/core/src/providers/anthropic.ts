@@ -67,6 +67,7 @@ export class AnthropicProvider implements Provider {
   private validateInput: ValidateInput;
   private auth: AnthropicAuth | undefined;
   private pendingOAuthFlow: Promise<void> | undefined;
+  protected isBedrock: boolean = false;
 
   constructor(
     protected logger: Logger,
@@ -544,7 +545,12 @@ export class AnthropicProvider implements Provider {
       },
     };
 
-    const outputConfig = resolveOutputConfig(model, thinking, this.logger);
+    const outputConfig = resolveOutputConfig(
+      model,
+      thinking,
+      this.logger,
+      this.isBedrock,
+    );
     if (outputConfig) {
       streamParams.output_config = outputConfig;
     }
@@ -711,6 +717,7 @@ export class AnthropicProvider implements Provider {
       disableParallelToolUseFlag: this.disableParallelToolUseFlag,
       logger: this.logger,
       validateInput: this.validateInput,
+      bedrock: this.isBedrock,
     });
   }
 }

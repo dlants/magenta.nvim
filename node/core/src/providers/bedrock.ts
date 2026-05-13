@@ -20,6 +20,7 @@ export class BedrockProvider extends AnthropicProvider {
     options: BedrockProviderOptions,
   ) {
     super(logger, undefined, validateInput, anthropicAuth, {});
+    this.isBedrock = true;
 
     const env = options.env;
     const clientOptions: ClientOptions = {};

@@ -25,6 +25,9 @@ export type AnthropicAgentOptions = {
   disableParallelToolUseFlag: boolean;
   logger: Logger;
   validateInput: ValidateInput;
+  // AWS Bedrock does not support adaptive thinking or output_config.
+  // When true, magenta falls back to thinking.type=enabled with budget_tokens.
+  bedrock?: boolean;
 };
 
 // Internal streaming block type for all Anthropic block types
@@ -860,16 +863,19 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
       tools: [...anthropicTools, ...builtInTools],
     };
 
+    const isBedrock = this.anthropicOptions.bedrock === true;
     if (thinking?.enabled) {
-      if (supportsAdaptiveThinking(model)) {
+      if (supportsAdaptiveThinking(model, isBedrock)) {
         params.thinking = {
           type: "adaptive",
           display: thinking.displayThinking ? "summarized" : "omitted",
         };
       } else {
+        const budget =
+          thinking.budgetTokens ?? effortToBudgetTokens(thinking.effort);
         params.thinking = {
           type: "enabled",
-          budget_tokens: thinking.budgetTokens || 1024,
+          budget_tokens: budget,
         };
       }
     }
@@ -878,6 +884,7 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
       model,
       thinking,
       this.anthropicOptions.logger,
+      isBedrock,
     );
     if (outputConfig) {
       params.output_config = outputConfig;
@@ -1473,8 +1480,14 @@ export function resolveOutputConfig(
       }
     | undefined,
   logger: Logger,
+  isBedrock = false,
 ): Anthropic.Messages.OutputConfig | undefined {
   if (!thinking?.effort) return undefined;
+  if (isBedrock) {
+    // AWS Bedrock has no output_config support; effort is mapped to
+    // budget_tokens for the legacy thinking.type=enabled path.
+    return undefined;
+  }
   if (!supportsAdaptiveThinking(model)) {
     logger.warn(
       `thinking.effort is only supported on adaptive-thinking models (Opus 4.7+, Sonnet 4.6+); ignoring effort=${thinking.effort} on model ${model}`,
@@ -1484,8 +1497,33 @@ export function resolveOutputConfig(
   return { effort: thinking.effort };
 }
 
-// Opus 4.7+ and Sonnet 4.6+ require adaptive thinking instead of budget_tokens
-function supportsAdaptiveThinking(model: string): boolean {
+// Map a high-level effort level to a concrete budget_tokens value for the
+// legacy thinking.type=enabled path (used on AWS Bedrock, which doesn't
+// support adaptive thinking or output_config).
+export function effortToBudgetTokens(
+  effort: "low" | "medium" | "high" | "xhigh" | "max" | undefined,
+): number {
+  switch (effort) {
+    case "low":
+      return 2048;
+    case "medium":
+      return 8192;
+    case "high":
+      return 16000;
+    case "xhigh":
+      return 24000;
+    case "max":
+      return 32000;
+    default:
+      return 1024;
+  }
+}
+
+// Opus 4.7+ and Sonnet 4.6+ require adaptive thinking instead of budget_tokens.
+// AWS Bedrock does not yet support adaptive thinking, so callers running on
+// Bedrock should pass isBedrock=true to force the legacy budget_tokens path.
+function supportsAdaptiveThinking(model: string, isBedrock = false): boolean {
+  if (isBedrock) return false;
   const normalized = normalizeModelName(model);
   if (normalized.match(/^claude-opus-4-([7-9]|\d{2,})/)) return true;
   if (normalized.match(/^claude-sonnet-4-([6-9]|\d{2,})/)) return true;
