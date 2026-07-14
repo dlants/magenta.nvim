@@ -1,9 +1,13 @@
-import type { ProviderMessageContent } from "./providers/provider-types.ts";
+import type {
+  ProviderMessageContent,
+  StopReason,
+} from "./providers/provider-types.ts";
 
 export type SupervisorAction =
   | { type: "send-message"; text: string }
   | { type: "accept"; resultPrefix?: string }
   | { type: "reject"; message: string }
+  | { type: "compact"; nextPrompt?: string }
   | { type: "none" };
 
 export type EndTurnContext = {
@@ -11,10 +15,16 @@ export type EndTurnContext = {
   lastAssistantMessage: ReadonlyArray<ProviderMessageContent> | undefined;
 };
 
+export type HandoffContext = {
+  inputTokenCount: number | undefined;
+  stopReason: StopReason;
+};
+
 export interface ThreadSupervisor {
-  onEndTurnWithoutYield(context: EndTurnContext): SupervisorAction;
-  onYield(result: string): Promise<SupervisorAction>;
-  onAbort(): SupervisorAction;
+  onEndTurnWithoutYield?(context: EndTurnContext): SupervisorAction;
+  onYield?(result: string): Promise<SupervisorAction>;
+  onAbort?(): SupervisorAction;
+  onHandoff?(context: HandoffContext): SupervisorAction;
 }
 
 function containsYieldTag(
@@ -89,6 +99,30 @@ export class UnsupervisedSupervisor implements ThreadSupervisor {
   }
 
   onAbort(): SupervisorAction {
+    return { type: "none" };
+  }
+}
+
+/** Triggers auto-compaction when the thread's input token count breaches
+ *  a configurable threshold. Only implements the handoff hook. */
+export class AutoCompactSupervisor implements ThreadSupervisor {
+  private readonly threshold: number;
+  private readonly nextPrompt: string | undefined;
+
+  constructor(opts?: { threshold?: number; nextPrompt?: string }) {
+    this.threshold = opts?.threshold ?? 300000;
+    this.nextPrompt = opts?.nextPrompt;
+  }
+
+  onHandoff(context: HandoffContext): SupervisorAction {
+    if (
+      context.inputTokenCount !== undefined &&
+      context.inputTokenCount >= this.threshold
+    ) {
+      return this.nextPrompt !== undefined
+        ? { type: "compact", nextPrompt: this.nextPrompt }
+        : { type: "compact" };
+    }
     return { type: "none" };
   }
 }

@@ -690,10 +690,10 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     const autoRespondResult = this.maybeAutoRespond();
 
     if (autoRespondResult.type === "no-action-needed" && this.supervisor) {
-      const action = this.supervisor.onEndTurnWithoutYield({
+      const action = this.supervisor.onEndTurnWithoutYield?.({
         stopReason,
         lastAssistantMessage: this.getLastAssistantMessage(),
-      });
+      }) ?? { type: "none" };
       if (action.type === "send-message") {
         this.sendMessage([{ type: "system", text: action.text }]).catch(
           this.handleSendMessageError.bind(this),
@@ -1226,7 +1226,9 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     this.update({ type: "set-mode", mode: { type: "normal" } });
 
     if (this.supervisor) {
-      const action = await this.supervisor.onYield(yieldResult);
+      const action = (await this.supervisor.onYield?.(yieldResult)) ?? {
+        type: "none",
+      };
       switch (action.type) {
         case "accept": {
           const response = action.resultPrefix
