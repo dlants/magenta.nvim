@@ -161,7 +161,18 @@ Code-review follow-ups (Stage 3):
   - Expected: correct supervisors present; compaction triggered; subagent yield-policing intact.
 - Before moving on: confirm tests, type checks, and linting all pass.
 
-## 4. Make threshold + prompt configurable
+## 4. Make threshold + prompt configurable — DONE
+
+Progress notes (Stage 4):
+- `node/options.ts`: added `autoCompactThreshold: number` (default 300000) and optional `autoCompactPrompt?: string` to `MagentaOptions`; parse+validate in both `parseOptions` and `parseProjectOptions` (positive number for threshold; non-empty trimmed string for prompt); honored in `mergeOptions` (project overrides). Default 300000 added to the defaults object and to `node/options.test.ts`'s `makeBaseOptions`.
+- `lua/magenta/options.lua`: added `autoCompactThreshold = 300000` default. `autoCompactPrompt` left unset (optional; falls back to bundled template).
+- `CompactionManager` (`node/core/src/compaction-manager.ts`): added optional `compactPromptTemplate` to its context; `sendChunkToAgent` now uses `this.context.compactPromptTemplate ?? COMPACT_PROMPT_TEMPLATE`.
+- `ThreadCoreContext` (`node/core/src/thread-core.ts`): added optional `autoCompactPrompt`; `startCompaction` forwards it as `compactPromptTemplate` to the `CompactionManager`.
+- `node/chat/thread.ts`: both `ThreadCoreContext` construction sites now forward `context.options.autoCompactPrompt` (when set) into the core context.
+- `node/chat/chat.ts`: `AutoCompactSupervisor` is now constructed with `{ threshold: getOptions().autoCompactThreshold }`.
+- Tests: added `autoCompact options` describe in `node/options.test.ts` (defaults, valid parse, rejects non-positive threshold / blank prompt, project-merge override) and an integration test in `node/chat/thread-compact.test.ts` asserting a configured `autoCompactPrompt` template (with a unique marker) reaches the compact subagent's request.
+- Decision: `autoCompactPrompt` is a full prompt *template* (must contain `{{status}}`/`{{next_prompt}}` placeholders), matching the bundled `compact-system-prompt.md`; it is not just an instruction string.
+- All green: `npx tsgo -b`, `npx biome check .`, `npx vitest run node/options.test.ts node/core/`, and the new compaction test.
 
 - Goal: `autoCompactThreshold` (default 300000) and `autoCompactPrompt` are parsed in `node/options.ts`, defaulted in `lua/magenta/options.lua`, and plumbed into supervisor construction and `CompactionManager` (prompt override). `COMPACT_PROMPT_TEMPLATE` becomes the fallback default.
 - Verification:

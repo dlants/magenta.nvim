@@ -107,6 +107,7 @@ export interface CompactionManagerContext {
   threadManager: ThreadManager;
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
+  compactPromptTemplate?: string | undefined;
   getProvider: (profile: ProviderProfile) => Provider;
   requestRender: () => void;
 }
@@ -455,10 +456,11 @@ export class CompactionManager extends Emitter<CompactionEvents> {
     const summaryContent =
       chunkIndex > 0 ? (this.fileIO.getFileContents("/summary.md") ?? "") : "";
 
-    const prompt = COMPACT_PROMPT_TEMPLATE.replace(
-      "{{status}}",
-      statusParts.join(" "),
-    ).replace("{{next_prompt}}", nextPromptText);
+    const prompt = (
+      this.context.compactPromptTemplate ?? COMPACT_PROMPT_TEMPLATE
+    )
+      .replace("{{status}}", statusParts.join(" "))
+      .replace("{{next_prompt}}", nextPromptText);
 
     const contextBlock = `<context_update>
 <file_paths>

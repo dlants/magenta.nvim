@@ -239,6 +239,8 @@ export type MagentaOptions = {
   agentsPaths: string[];
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
+  autoCompactThreshold: number;
+  autoCompactPrompt?: string;
   mcpServers: { [serverName: ServerName]: MCPServerConfig };
   customCommands: CustomCommand[];
   lspDebounceMs?: number;
@@ -1071,6 +1073,7 @@ export function parseOptions(
     },
     maxConcurrentSubagents: 3,
     maxConcurrentFastSubagents: 8,
+    autoCompactThreshold: 300000,
     sandbox: { ...DEFAULT_SANDBOX_CONFIG },
     autoContext: [],
     hierarchyContextFileNames: ["context.md", "agent.md"],
@@ -1196,6 +1199,24 @@ export function parseOptions(
     ) {
       options.maxConcurrentFastSubagents =
         inputOptionsObj.maxConcurrentFastSubagents;
+    }
+
+    // Parse auto-compact threshold
+    if (
+      "autoCompactThreshold" in inputOptionsObj &&
+      typeof inputOptionsObj.autoCompactThreshold === "number" &&
+      inputOptionsObj.autoCompactThreshold > 0
+    ) {
+      options.autoCompactThreshold = inputOptionsObj.autoCompactThreshold;
+    }
+
+    // Parse auto-compact prompt
+    if (
+      "autoCompactPrompt" in inputOptionsObj &&
+      typeof inputOptionsObj.autoCompactPrompt === "string" &&
+      inputOptionsObj.autoCompactPrompt.trim().length > 0
+    ) {
+      options.autoCompactPrompt = inputOptionsObj.autoCompactPrompt;
     }
 
     // Parse LSP debounce ms
@@ -1360,6 +1381,24 @@ export function parseProjectOptions(
   ) {
     options.maxConcurrentFastSubagents =
       inputOptionsObj.maxConcurrentFastSubagents;
+  }
+
+  // Parse auto-compact threshold
+  if (
+    "autoCompactThreshold" in inputOptionsObj &&
+    typeof inputOptionsObj.autoCompactThreshold === "number" &&
+    inputOptionsObj.autoCompactThreshold > 0
+  ) {
+    options.autoCompactThreshold = inputOptionsObj.autoCompactThreshold;
+  }
+
+  // Parse auto-compact prompt
+  if (
+    "autoCompactPrompt" in inputOptionsObj &&
+    typeof inputOptionsObj.autoCompactPrompt === "string" &&
+    inputOptionsObj.autoCompactPrompt.trim().length > 0
+  ) {
+    options.autoCompactPrompt = inputOptionsObj.autoCompactPrompt;
   }
 
   // Parse LSP debounce ms
@@ -1531,6 +1570,14 @@ export function mergeOptions(
   if (projectSettings.maxConcurrentFastSubagents !== undefined) {
     merged.maxConcurrentFastSubagents =
       projectSettings.maxConcurrentFastSubagents;
+  }
+
+  if (projectSettings.autoCompactThreshold !== undefined) {
+    merged.autoCompactThreshold = projectSettings.autoCompactThreshold;
+  }
+
+  if (projectSettings.autoCompactPrompt !== undefined) {
+    merged.autoCompactPrompt = projectSettings.autoCompactPrompt;
   }
 
   if (projectSettings.lspDebounceMs !== undefined) {

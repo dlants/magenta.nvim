@@ -331,6 +331,9 @@ export class Thread {
           maxConcurrentSubagents: context.options.maxConcurrentSubagents || 3,
           maxConcurrentFastSubagents:
             context.options.maxConcurrentFastSubagents || 8,
+          ...(context.options.autoCompactPrompt !== undefined
+            ? { autoCompactPrompt: context.options.autoCompactPrompt }
+            : {}),
           ...(context.yieldSchema ? { yieldSchema: context.yieldSchema } : {}),
           getAgents: () =>
             loadAgents({
@@ -564,6 +567,9 @@ export class Thread {
         maxConcurrentSubagents: getOptions().maxConcurrentSubagents || 3,
         maxConcurrentFastSubagents:
           getOptions().maxConcurrentFastSubagents || 8,
+        ...(getOptions().autoCompactPrompt !== undefined
+          ? { autoCompactPrompt: getOptions().autoCompactPrompt }
+          : {}),
         getAgents: () =>
           loadAgents({
             cwd: environment.cwd,

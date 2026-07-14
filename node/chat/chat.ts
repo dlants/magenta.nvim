@@ -721,7 +721,13 @@ export class Chat implements ThreadManager {
     }
 
     const autoCompact =
-      threadType === "compact" ? [] : [new AutoCompactSupervisor()];
+      threadType === "compact"
+        ? []
+        : [
+            new AutoCompactSupervisor({
+              threshold: this.context.getOptions().autoCompactThreshold,
+            }),
+          ];
 
     if (dockerSpawnConfig?.supervised) {
       thread.supervisors = [

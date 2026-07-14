@@ -158,6 +158,8 @@ export interface ThreadCoreContext {
   yieldSchema?: JSONSchemaType;
   /** Base dir for the conversation archive. Defaults to MAGENTA_TEMP_DIR. */
   conversationLogBaseDir?: string;
+  /** Overrides the bundled compaction prompt template when set. */
+  autoCompactPrompt?: string | undefined;
 }
 
 /** Minimum output tokens between system reminders during auto-respond loops */
@@ -1484,6 +1486,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       threadManager: this.context.threadManager,
       maxConcurrentSubagents: this.context.maxConcurrentSubagents,
       maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
+      compactPromptTemplate: this.context.autoCompactPrompt,
       getProvider: this.context.getProvider,
       requestRender: () => this.emit("update"),
     });

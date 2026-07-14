@@ -722,6 +722,93 @@ it("auto-compact triggers on handoff when inputTokenCount breaches the superviso
   });
 });
 
+it("auto-compact uses the configured compaction prompt template", async () => {
+  const customTemplate =
+    "CUSTOM_COMPACT_MARKER_XYZ {{status}} :: {{next_prompt}}";
+  await withDriver(
+    { options: { autoCompactPrompt: customTemplate } },
+    async (driver) => {
+      await driver.showSidebar();
+
+      driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+
+      await driver.inputMagentaText("What is 2+2?");
+      await driver.send();
+
+      const request1 = await driver.mockAnthropic.awaitPendingStream({
+        message: "initial request",
+      });
+      request1.respond({
+        stopReason: "end_turn",
+        text: "2+2 equals 4.",
+        toolRequests: [],
+      });
+
+      const originalThread = driver.magenta.chat.getActiveThread();
+
+      await pollUntil(
+        () => {
+          const state = originalThread.agent.getState();
+          if (state.status.type !== "stopped")
+            throw new Error("waiting for stop");
+          if (
+            state.inputTokenCount === undefined ||
+            state.inputTokenCount < 160_000
+          ) {
+            throw new Error(
+              `expected inputTokenCount >= 160000 but got ${state.inputTokenCount}`,
+            );
+          }
+        },
+        { timeout: 2000, message: "inputTokenCount should be populated" },
+      );
+
+      originalThread.supervisors = [
+        new AutoCompactSupervisor({ threshold: 160_000 }),
+      ];
+
+      await driver.inputMagentaText("Another question");
+      await driver.send();
+
+      const request2 = await driver.mockAnthropic.awaitPendingStream({
+        message: "second request",
+      });
+      request2.respond({
+        stopReason: "end_turn",
+        text: "Sure, happy to help.",
+        toolRequests: [],
+      });
+
+      await pollUntil(
+        () => {
+          if (originalThread.core.state.mode.type !== "compacting")
+            throw new Error(
+              `expected compacting mode but got ${originalThread.core.state.mode.type}`,
+            );
+        },
+        { timeout: 2000, message: "thread should auto-compact" },
+      );
+
+      const compactSubagentStream =
+        await driver.mockAnthropic.awaitPendingStream({
+          message: "compact subagent stream",
+        });
+
+      const subagentMessages = compactSubagentStream.getProviderMessages();
+      const userMsg = subagentMessages.find((m) => m.role === "user");
+      expect(userMsg).toBeDefined();
+      const textContent = userMsg!.content
+        .filter(
+          (c): c is Extract<typeof c, { type: "text" | "context_update" }> =>
+            c.type === "text" || c.type === "context_update",
+        )
+        .map((c) => c.text)
+        .join("");
+      expect(textContent).toContain("CUSTOM_COMPACT_MARKER_XYZ");
+    },
+  );
+});
+
 it("compaction history records steps from multi-chunk compaction", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();

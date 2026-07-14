@@ -35,6 +35,7 @@ function makeBaseOptions(overrides?: Partial<MagentaOptions>): MagentaOptions {
     },
     maxConcurrentSubagents: 3,
     maxConcurrentFastSubagents: 8,
+    autoCompactThreshold: 300000,
     sandbox: structuredClone(DEFAULT_SANDBOX_CONFIG),
     autoContext: [],
     hierarchyContextFileNames: ["context.md", "agent.md"],
@@ -511,5 +512,52 @@ describe("suppressProjectSkills", () => {
 
     expect(result).toBeDefined();
     expect(result?.suppressProjectSkills).toEqual(["plan"]);
+  });
+});
+
+describe("autoCompact options", () => {
+  it("defaults autoCompactThreshold to 300000 and leaves prompt unset", () => {
+    const result = parseOptions(
+      { profiles: [{ name: "test", provider: "mock" }] },
+      noopLogger,
+    );
+    expect(result.autoCompactThreshold).toBe(300000);
+    expect(result.autoCompactPrompt).toBeUndefined();
+  });
+
+  it("parses a valid threshold and prompt", () => {
+    const result = parseOptions(
+      {
+        profiles: [{ name: "test", provider: "mock" }],
+        autoCompactThreshold: 150000,
+        autoCompactPrompt: "custom compaction prompt",
+      },
+      noopLogger,
+    );
+    expect(result.autoCompactThreshold).toBe(150000);
+    expect(result.autoCompactPrompt).toBe("custom compaction prompt");
+  });
+
+  it("rejects a non-positive threshold and a blank prompt", () => {
+    const result = parseOptions(
+      {
+        profiles: [{ name: "test", provider: "mock" }],
+        autoCompactThreshold: 0,
+        autoCompactPrompt: "   ",
+      },
+      noopLogger,
+    );
+    expect(result.autoCompactThreshold).toBe(300000);
+    expect(result.autoCompactPrompt).toBeUndefined();
+  });
+
+  it("lets project settings override auto-compact scalars", () => {
+    const base = makeBaseOptions();
+    const merged = mergeOptions(base, {
+      autoCompactThreshold: 200000,
+      autoCompactPrompt: "project prompt",
+    });
+    expect(merged.autoCompactThreshold).toBe(200000);
+    expect(merged.autoCompactPrompt).toBe("project prompt");
   });
 });
