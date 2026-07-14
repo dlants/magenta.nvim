@@ -149,6 +149,10 @@ Progress notes (Stage 3) — DONE:
 - Uses the default 300000 threshold for now; configurable threshold/prompt is Stage 4/5.
 - `npx tsgo -b` and `npx biome check` green. Core suite green except a pre-existing flaky `archive.test.ts` fs-cleanup race (ENOTEMPTY rmdir), unrelated to this change.
 
+Code-review follow-ups (Stage 3):
+- Added `node/chat/supervisor-wiring.test.ts` (withDriver integration) covering the reachable supervisor-wiring branches: a root/user thread's `supervisors` includes an `AutoCompactSupervisor` (and no `SubagentSupervisor`); a spawned subagent thread's `supervisors` include *both* `SubagentSupervisor` and `AutoCompactSupervisor`.
+- Decision: the `threadType === "compact"` → `autoCompact = []` branch is defensive and not reachable via any real flow — compaction runs on a bare agent inside `CompactionManager` (`createCompactAgent`), so no `compact`-type `Thread` is ever created through `createThreadWithContext` / stored in `threadWrappers`. A driver-based assertion for it is therefore impossible; the guard remains to prevent recursive auto-compaction should a compact `Thread` ever be introduced.
+
 - Goal: `chat.ts` builds each thread's `supervisors` array — root: `[AutoCompactSupervisor]`; subagent/docker_root: `[SubagentSupervisor, AutoCompactSupervisor]`; supervised docker: `[DockerSupervisor, AutoCompactSupervisor]`; compact threads: `[]`.
 - Verification:
   - Behavior: a freshly created root thread has an `AutoCompactSupervisor` in its list that triggers compaction at the threshold; a subagent thread keeps its `SubagentSupervisor` behavior *and* auto-compacts.
