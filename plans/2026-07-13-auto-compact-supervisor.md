@@ -143,6 +143,12 @@ Progress notes (Stage 2) — DONE:
 
 ## 3. Build supervisor lists in `chat.ts`
 
+Progress notes (Stage 3) — DONE:
+- `chat.ts` `createThreadWithContext` now builds an `autoCompact` list (`[]` for `compact` threads, else `[new AutoCompactSupervisor()]`) and appends/prepends it: supervised docker → `[DockerSupervisor, ...autoCompact]`; subagent/docker_root → `[SubagentSupervisor, ...autoCompact]`; all other (root/user) threads → `autoCompact`.
+- Imported `AutoCompactSupervisor` from `@magenta/core`.
+- Uses the default 300000 threshold for now; configurable threshold/prompt is Stage 4/5.
+- `npx tsgo -b` and `npx biome check` green. Core suite green except a pre-existing flaky `archive.test.ts` fs-cleanup race (ENOTEMPTY rmdir), unrelated to this change.
+
 - Goal: `chat.ts` builds each thread's `supervisors` array — root: `[AutoCompactSupervisor]`; subagent/docker_root: `[SubagentSupervisor, AutoCompactSupervisor]`; supervised docker: `[DockerSupervisor, AutoCompactSupervisor]`; compact threads: `[]`.
 - Verification:
   - Behavior: a freshly created root thread has an `AutoCompactSupervisor` in its list that triggers compaction at the threshold; a subagent thread keeps its `SubagentSupervisor` behavior *and* auto-compacts.

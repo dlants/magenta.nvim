@@ -8,6 +8,7 @@ import type {
   ThreadType,
 } from "@magenta/core";
 import {
+  AutoCompactSupervisor,
   deleteArchivedThread,
   listArchivedThreadIds,
   loadAgents,
@@ -719,6 +720,9 @@ export class Chat implements ThreadManager {
       await thread.contextManager.addFiles(contextFiles);
     }
 
+    const autoCompact =
+      threadType === "compact" ? [] : [new AutoCompactSupervisor()];
+
     if (dockerSpawnConfig?.supervised) {
       thread.supervisors = [
         new DockerSupervisor(
@@ -740,8 +744,11 @@ export class Chat implements ThreadManager {
           },
         ),
       ];
+      thread.supervisors.push(...autoCompact);
     } else if (threadType === "subagent" || threadType === "docker_root") {
-      thread.supervisors = [new SubagentSupervisor()];
+      thread.supervisors = [new SubagentSupervisor(), ...autoCompact];
+    } else {
+      thread.supervisors = autoCompact;
     }
 
     this.context.dispatch({
