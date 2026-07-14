@@ -1,4 +1,4 @@
-import type { SupervisorAction, TeardownResult } from "@magenta/core";
+import type { TeardownResult, YieldAction } from "@magenta/core";
 import { teardownContainer, UnsupervisedSupervisor } from "@magenta/core";
 
 export class DockerSupervisor extends UnsupervisedSupervisor {
@@ -20,7 +20,7 @@ export class DockerSupervisor extends UnsupervisedSupervisor {
     );
   }
 
-  override async onYield(_result: string): Promise<SupervisorAction> {
+  override async onYield(_result: string): Promise<YieldAction> {
     this.teardownResult = await teardownContainer({
       containerName: this.containerName,
       workspacePath: this.workspacePath,

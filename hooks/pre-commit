@@ -1,0 +1,18 @@
+#!/bin/sh
+# Sample pkb pre-commit hook: refresh the search index for the content being
+# committed and include it in the same commit.
+#
+# Install by pointing git at this directory:
+#   git config core.hooksPath hooks
+#
+# `pkb reindex --staged` indexes the staging area (git write-tree), so the blob
+# shas it records equal the blob shas the commit will contain -- a subsequent
+# post-commit reindex is a no-op. We then stage the refreshed index files so
+# they ride along in this commit. pkb.db is Git LFS-tracked, so `git add` stages
+# the small LFS pointer and does not interfere with the LFS pre-push hook.
+set -e
+
+command -v pkb >/dev/null 2>&1 || { printf >&2 "pkb not found on PATH; skipping index refresh\n"; exit 0; }
+
+pkb reindex --staged
+git add pkb.db pkb-state.toml

@@ -3,12 +3,34 @@ import type {
   StopReason,
 } from "./providers/provider-types.ts";
 
-export type SupervisorAction =
+/** Action returned from the `onEndTurnWithoutYield` hook. */
+export type EndTurnAction =
   | { type: "send-message"; text: string }
+  | { type: "none" };
+
+/** Action returned from the `onYield` hook. */
+export type YieldAction =
   | { type: "accept"; resultPrefix?: string }
   | { type: "reject"; message: string }
+  | { type: "send-message"; text: string }
+  | { type: "none" };
+
+/** Action returned from the `onAbort` hook. */
+export type AbortAction = { type: "none" };
+
+/** Action returned from the `onHandoff` hook. */
+export type HandoffAction =
   | { type: "compact"; nextPrompt?: string }
   | { type: "none" };
+
+/** Union of all hook action types. Prefer the narrower per-hook types
+ *  where possible so that a hook cannot return an action it does not
+ *  own (e.g. `compact` is only representable from `onHandoff`). */
+export type SupervisorAction =
+  | EndTurnAction
+  | YieldAction
+  | AbortAction
+  | HandoffAction;
 
 export type EndTurnContext = {
   stopReason: string;
@@ -21,10 +43,10 @@ export type HandoffContext = {
 };
 
 export interface ThreadSupervisor {
-  onEndTurnWithoutYield?(context: EndTurnContext): SupervisorAction;
-  onYield?(result: string): Promise<SupervisorAction>;
-  onAbort?(): SupervisorAction;
-  onHandoff?(context: HandoffContext): SupervisorAction;
+  onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
+  onYield?(result: string): Promise<YieldAction>;
+  onAbort?(): AbortAction;
+  onHandoff?(context: HandoffContext): HandoffAction;
 }
 
 function containsYieldTag(
@@ -43,7 +65,7 @@ function containsYieldTag(
  *  `<yield>` XML tag instead of calling the tool. Otherwise allows
  *  the agent to stop normally. */
 export class SubagentSupervisor implements ThreadSupervisor {
-  onEndTurnWithoutYield(context: EndTurnContext): SupervisorAction {
+  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
     if (containsYieldTag(context.lastAssistantMessage)) {
       return {
         type: "send-message",
@@ -53,11 +75,11 @@ export class SubagentSupervisor implements ThreadSupervisor {
     return { type: "none" };
   }
 
-  async onYield(_result: string): Promise<SupervisorAction> {
+  async onYield(_result: string): Promise<YieldAction> {
     return { type: "none" };
   }
 
-  onAbort(): SupervisorAction {
+  onAbort(): AbortAction {
     return { type: "none" };
   }
 }
@@ -72,7 +94,7 @@ export class UnsupervisedSupervisor implements ThreadSupervisor {
     this.maxRestarts = opts?.maxRestarts ?? 5;
   }
 
-  onEndTurnWithoutYield(context: EndTurnContext): SupervisorAction {
+  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
     if (
       context.stopReason === "aborted" ||
       this.restartCount >= this.maxRestarts
@@ -94,11 +116,11 @@ export class UnsupervisedSupervisor implements ThreadSupervisor {
     };
   }
 
-  async onYield(_result: string): Promise<SupervisorAction> {
+  async onYield(_result: string): Promise<YieldAction> {
     return { type: "none" };
   }
 
-  onAbort(): SupervisorAction {
+  onAbort(): AbortAction {
     return { type: "none" };
   }
 }
@@ -114,7 +136,7 @@ export class AutoCompactSupervisor implements ThreadSupervisor {
     this.nextPrompt = opts?.nextPrompt;
   }
 
-  onHandoff(context: HandoffContext): SupervisorAction {
+  onHandoff(context: HandoffContext): HandoffAction {
     if (
       context.inputTokenCount !== undefined &&
       context.inputTokenCount >= this.threshold

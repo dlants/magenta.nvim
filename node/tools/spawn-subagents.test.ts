@@ -2,12 +2,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
+  type AbortAction,
+  type EndTurnAction,
   pollUntil,
-  type SupervisorAction,
   type ThreadId,
   type ThreadSupervisor,
   type ToolName,
   type ToolRequestId,
+  type YieldAction,
 } from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import type { Chat } from "../chat/chat.ts";
@@ -376,13 +378,13 @@ describe("yield behavior", () => {
 
       const childWrapper = findChildThread(driver.magenta.chat);
       const mockSupervisor: ThreadSupervisor = {
-        onEndTurnWithoutYield: (): SupervisorAction => ({ type: "none" }),
-        onYield: async (): Promise<SupervisorAction> => ({
+        onEndTurnWithoutYield: (): EndTurnAction => ({ type: "none" }),
+        onYield: async (): Promise<YieldAction> => ({
           type: "accept",
           resultPrefix:
             "[Worker branch: magenta/worker-test123 (forked from main), 2 commit(s) synced to host]",
         }),
-        onAbort: (): SupervisorAction => ({ type: "none" }),
+        onAbort: (): AbortAction => ({ type: "none" }),
       };
       childWrapper.thread.supervisor = mockSupervisor;
 

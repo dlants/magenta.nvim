@@ -106,6 +106,13 @@ Progress notes (Stage 1):
 - Added `node/core/src/thread-supervisor.test.ts` covering at/over/under threshold, `undefined`, default threshold, and custom `nextPrompt`.
 - Full suite green: `npx tsgo -b`, `npx vitest run node/core/`, `npx biome check .` all pass.
 
+Code-review follow-ups (Stage 1):
+- Narrowed hook return types so unhandled actions are non-representable: added `EndTurnAction` (send-message | none), `YieldAction` (accept | reject | send-message | none), `AbortAction` (none), and `HandoffAction` (compact | none). `SupervisorAction` is now the union of these. `compact` is only representable from `onHandoff`, so it can no longer be silently returned from `onYield`/`onEndTurnWithoutYield`.
+- `ThreadSupervisor` methods now return their narrow per-hook types; concrete supervisors and `DockerSupervisor.onYield` updated accordingly.
+- Exported the new action/context types from `node/core/src/index.ts`; updated `node/tools/spawn-subagents.test.ts` annotations.
+- Made the `onYield` switch in `thread-core.ts` exhaustive with `assertUnreachable`.
+- Decision on optional methods (nit): kept all `ThreadSupervisor` methods optional — a supervisor implements exactly the subset of hooks it needs (single-concern supervisors compose in a list). `ThreadCore` guards each call and treats a missing method as `{ type: "none" }`. This is the intended design.
+
 - Goal: make all `ThreadSupervisor` methods optional and add `onHandoff`; add the `compact` `SupervisorAction`; add a standalone `AutoCompactSupervisor` implementing the 300k threshold check; `SubagentSupervisor`/`UnsupervisedSupervisor` are unchanged.
 - Verification:
   - Behavior: `onHandoff` returns `compact` at/over threshold and `none` below.

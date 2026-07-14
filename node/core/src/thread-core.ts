@@ -1252,6 +1252,8 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         case "send-message":
           await this.sendMessage([{ type: "system", text: action.text }]);
           return;
+        default:
+          assertUnreachable(action);
       }
     } else {
       this.update({

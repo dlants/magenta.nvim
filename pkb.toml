@@ -3,11 +3,6 @@ exclude = ["node_modules", "dist", "plans"]
 
 [embedding]
 provider = "voyage"
-model = "voyage-code-3"
+model = "voyage-context-4"
 dimensions = 256
 apikeyenv = "VOYAGE_API_KEY"
-
-[inference]
-provider = "anthropic"
-model = "claude-haiku-4-5"
-apikeyenv = "ANTHROPIC_API_KEY"
