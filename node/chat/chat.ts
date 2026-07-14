@@ -720,26 +720,28 @@ export class Chat implements ThreadManager {
     }
 
     if (dockerSpawnConfig?.supervised) {
-      thread.supervisor = new DockerSupervisor(
-        dockerSpawnConfig.containerName,
-        dockerSpawnConfig.workspacePath,
-        dockerSpawnConfig.hostDir,
-        {
-          onProgress: (message) => {
-            thread.core.update({
-              type: "set-teardown-message",
-              message,
-            });
-            this.context.dispatch({
-              type: "thread-msg",
-              id: thread.id,
-              msg: { type: "tool-progress" },
-            });
+      thread.supervisors = [
+        new DockerSupervisor(
+          dockerSpawnConfig.containerName,
+          dockerSpawnConfig.workspacePath,
+          dockerSpawnConfig.hostDir,
+          {
+            onProgress: (message) => {
+              thread.core.update({
+                type: "set-teardown-message",
+                message,
+              });
+              this.context.dispatch({
+                type: "thread-msg",
+                id: thread.id,
+                msg: { type: "tool-progress" },
+              });
+            },
           },
-        },
-      );
+        ),
+      ];
     } else if (threadType === "subagent" || threadType === "docker_root") {
-      thread.supervisor = new SubagentSupervisor();
+      thread.supervisors = [new SubagentSupervisor()];
     }
 
     this.context.dispatch({

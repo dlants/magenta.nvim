@@ -20,7 +20,10 @@ import type {
 } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { ThreadCore, type ThreadCoreContext } from "./thread-core.ts";
-import { SubagentSupervisor } from "./thread-supervisor.ts";
+import {
+  AutoCompactSupervisor,
+  SubagentSupervisor,
+} from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
@@ -513,7 +516,7 @@ describe("SubagentSupervisor yield tag detection", () => {
     const { core, mockClient } = createThreadCoreWithMock({
       threadType: "subagent" as ThreadType,
     });
-    core.supervisor = new SubagentSupervisor();
+    core.supervisors = [new SubagentSupervisor()];
 
     core.sendMessage([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
@@ -547,7 +550,7 @@ describe("SubagentSupervisor yield tag detection", () => {
     const { core, mockClient } = createThreadCoreWithMock({
       threadType: "subagent" as ThreadType,
     });
-    core.supervisor = new SubagentSupervisor();
+    core.supervisors = [new SubagentSupervisor()];
 
     core.sendMessage([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
@@ -559,6 +562,67 @@ describe("SubagentSupervisor yield tag detection", () => {
     // Wait a tick to ensure no new stream is created
     await new Promise((r) => setTimeout(r, 50));
     expect(mockClient.streams.length).toBe(1);
+  });
+});
+
+describe("AutoCompactSupervisor integration", () => {
+  it("triggers compaction on end_turn handoff when input tokens breach the threshold", async () => {
+    const { core, mockClient } = createThreadCoreWithMock();
+    core.supervisors = [new AutoCompactSupervisor({ threshold: 100 })];
+    mockClient.mockInputTokenCount = 200;
+
+    let compactCalls = 0;
+    core.startCompaction = () => {
+      compactCalls++;
+    };
+
+    await core.sendMessage([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+
+    // inputTokenCount is populated post-flight, so it lags one turn. Drive a
+    // second turn; the handoff at its end sees the over-threshold count.
+    await pollUntil(() => {
+      if (core.agent.getState().inputTokenCount === 200) return true;
+      throw new Error("waiting for token count");
+    });
+
+    await core.sendMessage([{ type: "user", text: "again" }]);
+    const stream2 = await mockClient.awaitStream();
+    stream2.streamText("done again");
+    stream2.finishResponse("end_turn");
+
+    await pollUntil(() => {
+      if (compactCalls > 0) return true;
+      throw new Error("waiting for compaction");
+    });
+
+    expect(compactCalls).toBe(1);
+  });
+
+  it("does not trigger compaction when input tokens are below the threshold", async () => {
+    const { core, mockClient } = createThreadCoreWithMock();
+    core.supervisors = [new AutoCompactSupervisor({ threshold: 100000 })];
+    mockClient.mockInputTokenCount = 50;
+
+    let compactCalls = 0;
+    core.startCompaction = () => {
+      compactCalls++;
+    };
+
+    await core.sendMessage([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("done");
+    stream.finishResponse("end_turn", { inputTokens: 50, outputTokens: 5 });
+
+    await pollUntil(() => {
+      if (core.agent.getState().status.type !== "stopped")
+        throw new Error("waiting");
+      return true;
+    });
+
+    expect(compactCalls).toBe(0);
   });
 });
 

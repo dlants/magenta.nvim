@@ -386,7 +386,7 @@ describe("yield behavior", () => {
         }),
         onAbort: (): AbortAction => ({ type: "none" }),
       };
-      childWrapper.thread.supervisor = mockSupervisor;
+      childWrapper.thread.supervisors = [mockSupervisor];
 
       subagentStream.respond({
         stopReason: "tool_use",

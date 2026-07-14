@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { ToolName, ToolRequestId } from "@magenta/core";
+import { AutoCompactSupervisor } from "@magenta/core";
 import { expect, it } from "vitest";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
@@ -546,9 +547,14 @@ it("forks a thread with @compact to clone and compact in one step", async () => 
   });
 });
 
-it("auto-compact triggers when inputTokenCount exceeds 80% of context window", async () => {
+it("auto-compact triggers on handoff when inputTokenCount breaches the supervisor threshold", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
+
+    // inputTokenCount lags one turn (it is populated post-flight), so set the
+    // mock high before the first turn. The first turn has no supervisor yet,
+    // so it never compacts regardless of the count.
+    driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
 
     // Build up some conversation history
     await driver.inputMagentaText("What is 2+2?");
@@ -563,29 +569,50 @@ it("auto-compact triggers when inputTokenCount exceeds 80% of context window", a
       toolRequests: [],
     });
 
-    // Set the mock token count to exceed 80% of 200K context window (160K)
-    driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+    const originalThread = driver.magenta.chat.getActiveThread();
 
-    // Wait for countTokensPostFlight to run and update inputTokenCount
+    // Wait for the first turn to settle and its post-flight token count to
+    // populate inputTokenCount.
     await pollUntil(
       () => {
-        const tokenCount = driver.magenta.chat
-          .getActiveThread()
-          .agent.getState().inputTokenCount;
-        if (tokenCount === undefined || tokenCount < 160_000) {
+        const state = originalThread.agent.getState();
+        if (state.status.type !== "stopped")
+          throw new Error("waiting for stop");
+        if (
+          state.inputTokenCount === undefined ||
+          state.inputTokenCount < 160_000
+        ) {
           throw new Error(
-            `expected inputTokenCount >= 160000 but got ${tokenCount}`,
+            `expected inputTokenCount >= 160000 but got ${state.inputTokenCount}`,
           );
         }
       },
       { timeout: 2000, message: "inputTokenCount should be populated" },
     );
 
-    const originalThread = driver.magenta.chat.getActiveThread();
+    // Auto-compact is now a supervisor concern. Attach one (after the first
+    // turn's handoff already ran) with a threshold below the current count and
+    // a configured nextPrompt so the next handoff triggers compaction.
+    originalThread.supervisors = [
+      new AutoCompactSupervisor({
+        threshold: 160_000,
+        nextPrompt: "Now help me with multiplication",
+      }),
+    ];
 
-    // Send another message - this should trigger auto-compact instead of normal send
-    await driver.inputMagentaText("Now help me with multiplication");
+    // Drive a second turn. At its handoff the over-threshold token count
+    // triggers auto-compaction.
+    await driver.inputMagentaText("Another question");
     await driver.send();
+
+    const request2 = await driver.mockAnthropic.awaitPendingStream({
+      message: "second request",
+    });
+    request2.respond({
+      stopReason: "end_turn",
+      text: "Sure, happy to help.",
+      toolRequests: [],
+    });
 
     // The thread should enter compacting mode automatically
     await pollUntil(
@@ -598,7 +625,7 @@ it("auto-compact triggers when inputTokenCount exceeds 80% of context window", a
       { timeout: 2000, message: "thread should auto-compact" },
     );
 
-    // Verify the nextPrompt was preserved
+    // Verify the supervisor's nextPrompt was preserved
     if (originalThread.core.state.mode.type !== "compacting")
       throw new Error("expected compacting");
     expect(originalThread.core.compactionController?.nextPrompt).toBe(

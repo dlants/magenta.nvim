@@ -31,7 +31,6 @@ import { Emitter } from "./emitter.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import {
-  getContextWindowForModel,
   getRetryDelay,
   isRetryableError,
   MAX_RETRY_DURATION,
@@ -60,7 +59,13 @@ import {
   type ReminderKind,
 } from "./providers/system-reminders.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
-import type { ThreadSupervisor } from "./thread-supervisor.ts";
+import type {
+  EndTurnAction,
+  EndTurnContext,
+  HandoffAction,
+  ThreadSupervisor,
+  YieldAction,
+} from "./thread-supervisor.ts";
 import type {
   ToolInvocation,
   ToolName,
@@ -215,7 +220,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
   public contextManager: ContextManager;
   public gitTracker: GitTracker;
   public compactionController: CompactionManager | undefined;
-  public supervisor: ThreadSupervisor | undefined;
+  public supervisors: ThreadSupervisor[] = [];
   private threadLogger: ThreadLogger;
 
   constructor(
@@ -676,6 +681,12 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         return;
       }
 
+      const handoff = this.consultHandoffSupervisors(stopReason);
+      if (handoff.type === "compact") {
+        this.startCompaction(handoff.nextPrompt);
+        return;
+      }
+
       this.sendMessage([
         {
           type: "system",
@@ -687,13 +698,21 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
 
     this.update({ type: "set-mode", mode: { type: "normal" } });
 
+    if (stopReason !== "aborted") {
+      const handoff = this.consultHandoffSupervisors(stopReason);
+      if (handoff.type === "compact") {
+        this.startCompaction(handoff.nextPrompt);
+        return;
+      }
+    }
+
     const autoRespondResult = this.maybeAutoRespond();
 
-    if (autoRespondResult.type === "no-action-needed" && this.supervisor) {
-      const action = this.supervisor.onEndTurnWithoutYield?.({
+    if (autoRespondResult.type === "no-action-needed") {
+      const action = this.consultEndTurnSupervisors({
         stopReason,
         lastAssistantMessage: this.getLastAssistantMessage(),
-      }) ?? { type: "none" };
+      });
       if (action.type === "send-message") {
         this.sendMessage([{ type: "system", text: action.text }]).catch(
           this.handleSendMessageError.bind(this),
@@ -1045,15 +1064,6 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       });
     }
 
-    if (this.shouldAutoCompact()) {
-      const rawText = inputMessages
-        ?.filter((m) => m.type === "user")
-        .map((m) => m.text)
-        .join("\n");
-      this.startCompaction(rawText || undefined);
-      return;
-    }
-
     this.update(
       {
         type: "set-pre-submit-native-idx",
@@ -1225,41 +1235,32 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     }
     this.update({ type: "set-mode", mode: { type: "normal" } });
 
-    if (this.supervisor) {
-      const action = (await this.supervisor.onYield?.(yieldResult)) ?? {
-        type: "none",
-      };
-      switch (action.type) {
-        case "accept": {
-          const response = action.resultPrefix
-            ? `${action.resultPrefix}\n\n${yieldResult}`
-            : yieldResult;
-          this.update({
-            type: "set-mode",
-            mode: { type: "yielded", response, tornDown: true },
-          });
-          break;
-        }
-        case "none":
-          this.update({
-            type: "set-mode",
-            mode: { type: "yielded", response: yieldResult },
-          });
-          break;
-        case "reject":
-          await this.sendMessage([{ type: "system", text: action.message }]);
-          return;
-        case "send-message":
-          await this.sendMessage([{ type: "system", text: action.text }]);
-          return;
-        default:
-          assertUnreachable(action);
+    const action = await this.consultYieldSupervisors(yieldResult);
+    switch (action.type) {
+      case "accept": {
+        const response = action.resultPrefix
+          ? `${action.resultPrefix}\n\n${yieldResult}`
+          : yieldResult;
+        this.update({
+          type: "set-mode",
+          mode: { type: "yielded", response, tornDown: true },
+        });
+        break;
       }
-    } else {
-      this.update({
-        type: "set-mode",
-        mode: { type: "yielded", response: yieldResult },
-      });
+      case "none":
+        this.update({
+          type: "set-mode",
+          mode: { type: "yielded", response: yieldResult },
+        });
+        break;
+      case "reject":
+        await this.sendMessage([{ type: "system", text: action.message }]);
+        return;
+      case "send-message":
+        await this.sendMessage([{ type: "system", text: action.text }]);
+        return;
+      default:
+        assertUnreachable(action);
     }
   }
 
@@ -1403,8 +1404,9 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       this.emit("gitContextUpdateSent", gitUpdate);
     }
 
-    if (this.shouldAutoCompact()) {
-      this.startCompaction();
+    const handoff = this.consultHandoffSupervisors("tool_use");
+    if (handoff.type === "compact") {
+      this.startCompaction(handoff.nextPrompt);
       return;
     }
 
@@ -1577,13 +1579,29 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     }
   }
 
-  private shouldAutoCompact(): boolean {
-    const inputTokenCount = this.agent.getState().inputTokenCount;
-    if (inputTokenCount === undefined) return false;
-    if (this.state.threadType === "compact") return false;
+  private consultEndTurnSupervisors(context: EndTurnContext): EndTurnAction {
+    for (const sup of this.supervisors) {
+      const action = sup.onEndTurnWithoutYield?.(context);
+      if (action && action.type !== "none") return action;
+    }
+    return { type: "none" };
+  }
 
-    const contextWindow = getContextWindowForModel(this.context.profile.model);
-    return inputTokenCount >= contextWindow * 0.8;
+  private async consultYieldSupervisors(result: string): Promise<YieldAction> {
+    for (const sup of this.supervisors) {
+      const action = await sup.onYield?.(result);
+      if (action && action.type !== "none") return action;
+    }
+    return { type: "none" };
+  }
+
+  private consultHandoffSupervisors(stopReason: StopReason): HandoffAction {
+    const inputTokenCount = this.agent.getState().inputTokenCount;
+    for (const sup of this.supervisors) {
+      const action = sup.onHandoff?.({ inputTokenCount, stopReason });
+      if (action && action.type !== "none") return action;
+    }
+    return { type: "none" };
   }
 
   async setThreadTitle(userMessage: string): Promise<void> {

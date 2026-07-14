@@ -123,6 +123,15 @@ Code-review follow-ups (Stage 1):
 
 ## 2. Route `ThreadCore` through the supervisor list
 
+Progress notes (Stage 2) — DONE:
+- Replaced `ThreadCore.supervisor?: ThreadSupervisor` with `supervisors: ThreadSupervisor[] = []`. Updated `Thread` getter/setter (`node/chat/thread.ts`) to `supervisors`, and `chat.ts` to assign single-element arrays (`[DockerSupervisor]` / `[SubagentSupervisor]`; full lists incl. `AutoCompactSupervisor` are Stage 3).
+- Added three aggregation helpers in `thread-core.ts` (first non-`none` wins): `consultEndTurnSupervisors`, `consultYieldSupervisors` (async), `consultHandoffSupervisors`. The two existing hook sites now iterate via these helpers.
+- Consulted `onHandoff` in `handleProviderStopped`: fires for the terminal `end_turn` path (guarded `stopReason !== "aborted"`) and the `max_tokens`-without-tool-use path, and in `sendToolResultsAndContinue` for the `tool_use` path (after pending tools resolve). On a `compact` action calls `startCompaction(nextPrompt)` and returns.
+- Removed `shouldAutoCompact` and the two inline call sites (message-send prep in `sendMessage`, continue-after-tool-results). Dropped the now-unused `getContextWindowForModel` import. Intentional behavior change: default trigger is the supervisor's absolute threshold, not `contextWindow * 0.8`.
+- Exported `AutoCompactSupervisor` from `node/core/src/index.ts`.
+- Tests: added `AutoCompactSupervisor integration` cases in `thread-core.test.ts` (spies on `startCompaction`; over- vs under-threshold on `end_turn` handoff). Reworked `thread-compact.test.ts`'s auto-compact integration test to the new handoff-driven mechanism (attach an `AutoCompactSupervisor` with a configured `nextPrompt`; drive two turns so the post-flight `inputTokenCount` lag is respected; assert `compacting` mode + preserved `nextPrompt` + summarized transcript). Updated `spawn-subagents.test.ts` and `thread-core.test.ts` to the new `supervisors` array field.
+- `npx tsgo -b`, `npx biome check .`, and `npx vitest run node/core/` all green. Full `npx vitest run` failures are pre-existing/flaky nvim-env tests (winfixbuf buffer-switch, `thinkingModel` profile mismatch, display-buffer timing, completions under parallelism), unrelated to this change and present on a clean checkout.
+
 - Goal: replace `ThreadCore.supervisor` with `supervisors: ThreadSupervisor[]`; update the existing `onEndTurnWithoutYield`/`onYield`/`onAbort` sites to iterate the list (first non-`none` wins); consult the list's `onHandoff` in `handleProviderStopped` (firing on every stop reason, but after pending tool calls resolve for the `tool_use` path) and call `startCompaction(nextPrompt)` on a `compact` action; `shouldAutoCompact` is removed.
 - Verification:
   - Behavior: a thread with an over-threshold `AutoCompactSupervisor` in its list triggers compaction on the next handoff; an under-threshold one does not; a second supervisor in the list still fires its own hooks.

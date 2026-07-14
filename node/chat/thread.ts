@@ -228,12 +228,12 @@ export class Thread {
     return this.core.agent;
   }
 
-  get supervisor(): ThreadSupervisor | undefined {
-    return this.core.supervisor;
+  get supervisors(): ThreadSupervisor[] {
+    return this.core.supervisors;
   }
 
-  set supervisor(value: ThreadSupervisor | undefined) {
-    this.core.supervisor = value;
+  set supervisors(value: ThreadSupervisor[]) {
+    this.core.supervisors = value;
   }
 
   get isSandboxBypassed(): boolean {

@@ -216,6 +216,7 @@ export type {
   YieldAction,
 } from "./thread-supervisor.ts";
 export {
+  AutoCompactSupervisor,
   SubagentSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
