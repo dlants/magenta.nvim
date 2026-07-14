@@ -23,6 +23,7 @@ import { ThreadCore, type ThreadCoreContext } from "./thread-core.ts";
 import {
   AutoCompactSupervisor,
   SubagentSupervisor,
+  type ThreadSupervisor,
 } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { validateInput } from "./tools/helpers.ts";
@@ -623,6 +624,123 @@ describe("AutoCompactSupervisor integration", () => {
     });
 
     expect(compactCalls).toBe(0);
+  });
+
+  it("triggers compaction on a tool_use handoff after tools resolve", async () => {
+    const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
+    const { core, mockClient } = createThreadCoreWithMock({
+      fileIO: fileIO as unknown as ThreadCoreContext["fileIO"],
+    });
+    core.supervisors = [new AutoCompactSupervisor({ threshold: 100 })];
+    mockClient.mockInputTokenCount = 200;
+
+    let compactCalls = 0;
+    core.startCompaction = () => {
+      compactCalls++;
+    };
+
+    // First turn populates the post-flight inputTokenCount.
+    await core.sendMessage([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (core.agent.getState().inputTokenCount === 200) return true;
+      throw new Error("waiting for token count");
+    });
+
+    // Second turn ends with a tool_use. After the tool resolves, the tool_use
+    // handoff sees the over-threshold count and triggers compaction rather
+    // than continuing the conversation.
+    await core.sendMessage([{ type: "user", text: "edit a" }]);
+    const stream2 = await mockClient.awaitStream();
+    stream2.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
+      script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
+    });
+    stream2.finishResponse("tool_use");
+
+    await pollUntil(() => {
+      if (compactCalls > 0) return true;
+      throw new Error("waiting for compaction");
+    });
+    expect(compactCalls).toBe(1);
+  });
+
+  it("triggers compaction on a max_tokens handoff when over threshold", async () => {
+    const { core, mockClient } = createThreadCoreWithMock();
+    core.supervisors = [new AutoCompactSupervisor({ threshold: 100 })];
+    mockClient.mockInputTokenCount = 200;
+
+    let compactCalls = 0;
+    core.startCompaction = () => {
+      compactCalls++;
+    };
+
+    await core.sendMessage([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (core.agent.getState().inputTokenCount === 200) return true;
+      throw new Error("waiting for token count");
+    });
+
+    // A max_tokens stop without a tool_use block routes through the handoff
+    // check before the truncation-continue path.
+    await core.sendMessage([{ type: "user", text: "again" }]);
+    const stream2 = await mockClient.awaitStream();
+    stream2.streamText("partial");
+    stream2.finishResponse("max_tokens");
+
+    await pollUntil(() => {
+      if (compactCalls > 0) return true;
+      throw new Error("waiting for compaction");
+    });
+    expect(compactCalls).toBe(1);
+  });
+
+  it("consults supervisors in order and takes the first non-none action", async () => {
+    const { core, mockClient } = createThreadCoreWithMock();
+    const calls: string[] = [];
+    const first: ThreadSupervisor = {
+      onHandoff: () => {
+        calls.push("first");
+        return { type: "none" };
+      },
+    };
+    const second: ThreadSupervisor = {
+      onHandoff: () => {
+        calls.push("second");
+        return { type: "compact", nextPrompt: "go" };
+      },
+    };
+    const third: ThreadSupervisor = {
+      onHandoff: () => {
+        calls.push("third");
+        return { type: "compact" };
+      },
+    };
+    core.supervisors = [first, second, third];
+
+    let compactPrompt: string | undefined = "unset";
+    core.startCompaction = (p?: string) => {
+      compactPrompt = p;
+    };
+
+    await core.sendMessage([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+
+    await pollUntil(() => {
+      if (calls.includes("second")) return true;
+      throw new Error("waiting for supervisor consultation");
+    });
+
+    // First returns none so we advance to the second; the second returns a
+    // non-none action so the third is never consulted.
+    expect(calls).toEqual(["first", "second"]);
+    expect(compactPrompt).toBe("go");
   });
 });
 
