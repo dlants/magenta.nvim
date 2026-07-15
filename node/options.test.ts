@@ -551,6 +551,30 @@ describe("autoCompact options", () => {
     expect(result.autoCompactPrompt).toBeUndefined();
   });
 
+  it("parseProjectOptions parses valid auto-compact scalars", () => {
+    const result = parseProjectOptions(
+      {
+        autoCompactThreshold: 120000,
+        autoCompactPrompt: "project side prompt",
+      },
+      noopLogger,
+    );
+    expect(result.autoCompactThreshold).toBe(120000);
+    expect(result.autoCompactPrompt).toBe("project side prompt");
+  });
+
+  it("parseProjectOptions rejects non-positive threshold and blank prompt", () => {
+    const result = parseProjectOptions(
+      {
+        autoCompactThreshold: -5,
+        autoCompactPrompt: "   ",
+      },
+      noopLogger,
+    );
+    expect(result.autoCompactThreshold).toBeUndefined();
+    expect(result.autoCompactPrompt).toBeUndefined();
+  });
+
   it("lets project settings override auto-compact scalars", () => {
     const base = makeBaseOptions();
     const merged = mergeOptions(base, {

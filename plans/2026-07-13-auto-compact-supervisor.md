@@ -174,6 +174,10 @@ Progress notes (Stage 4):
 - Decision: `autoCompactPrompt` is a full prompt *template* (must contain `{{status}}`/`{{next_prompt}}` placeholders), matching the bundled `compact-system-prompt.md`; it is not just an instruction string.
 - All green: `npx tsgo -b`, `npx biome check .`, `npx vitest run node/options.test.ts node/core/`, and the new compaction test.
 
+Code-review follow-ups (Stage 4):
+- Added an options→Chat→supervisor integration test in `node/chat/thread-compact.test.ts` ("auto-compact threshold from options wires into the thread's supervisor") that sets `autoCompactThreshold` via `withDriver` options and verifies auto-compaction triggers at that boundary *without* manually overriding `thread.supervisors` — covering the real `getOptions().autoCompactThreshold` → `new AutoCompactSupervisor({ threshold })` plumbing in `chat.ts`.
+- Added two `parseProjectOptions` unit tests in `node/options.test.ts` for the project-side parsing/validation of the auto-compact scalars (valid values parsed; non-positive threshold and blank prompt rejected).
+
 - Goal: `autoCompactThreshold` (default 300000) and `autoCompactPrompt` are parsed in `node/options.ts`, defaulted in `lua/magenta/options.lua`, and plumbed into supervisor construction and `CompactionManager` (prompt override). `COMPACT_PROMPT_TEMPLATE` becomes the fallback default.
 - Verification:
   - Behavior: options parsing accepts/validates the new fields; a custom prompt reaches the compaction request; a custom threshold changes the trigger point.

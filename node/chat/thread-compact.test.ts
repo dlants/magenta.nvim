@@ -547,6 +547,81 @@ it("forks a thread with @compact to clone and compact in one step", async () => 
   });
 });
 
+it("auto-compact threshold from options wires into the thread's supervisor", async () => {
+  await withDriver(
+    { options: { autoCompactThreshold: 160_000 } },
+    async (driver) => {
+      await driver.showSidebar();
+
+      // inputTokenCount lags one turn (populated post-flight), so set it high
+      // before the first turn. The first turn's handoff sees an undefined count
+      // and never compacts.
+      driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+
+      await driver.inputMagentaText("What is 2+2?");
+      await driver.send();
+
+      const request1 = await driver.mockAnthropic.awaitPendingStream({
+        message: "initial request",
+      });
+      request1.respond({
+        stopReason: "end_turn",
+        text: "2+2 equals 4.",
+        toolRequests: [],
+      });
+
+      const originalThread = driver.magenta.chat.getActiveThread();
+
+      // The supervisor built from options should carry the configured threshold.
+      const autoCompact = originalThread.supervisors.find(
+        (s): s is AutoCompactSupervisor => s instanceof AutoCompactSupervisor,
+      );
+      expect(autoCompact).toBeDefined();
+
+      await pollUntil(
+        () => {
+          const state = originalThread.agent.getState();
+          if (state.status.type !== "stopped")
+            throw new Error("waiting for stop");
+          if (
+            state.inputTokenCount === undefined ||
+            state.inputTokenCount < 160_000
+          ) {
+            throw new Error(
+              `expected inputTokenCount >= 160000 but got ${state.inputTokenCount}`,
+            );
+          }
+        },
+        { timeout: 2000, message: "inputTokenCount should be populated" },
+      );
+
+      // Drive a second turn. At its handoff the over-threshold count triggers
+      // the options-configured supervisor without any manual override.
+      await driver.inputMagentaText("Another question");
+      await driver.send();
+
+      const request2 = await driver.mockAnthropic.awaitPendingStream({
+        message: "second request",
+      });
+      request2.respond({
+        stopReason: "end_turn",
+        text: "Sure, happy to help.",
+        toolRequests: [],
+      });
+
+      await pollUntil(
+        () => {
+          if (originalThread.core.state.mode.type !== "compacting")
+            throw new Error(
+              `expected compacting mode but got ${originalThread.core.state.mode.type}`,
+            );
+        },
+        { timeout: 2000, message: "thread should auto-compact" },
+      );
+    },
+  );
+});
+
 it("auto-compact triggers on handoff when inputTokenCount breaches the supervisor threshold", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
