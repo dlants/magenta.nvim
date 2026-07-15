@@ -3,6 +3,7 @@ import * as path from "node:path";
 import type { ToolName, ToolRequestId } from "@magenta/core";
 import { AutoCompactSupervisor } from "@magenta/core";
 import { expect, it } from "vitest";
+import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
 
@@ -882,6 +883,122 @@ it("auto-compact uses the configured compaction prompt template", async () => {
       expect(textContent).toContain("CUSTOM_COMPACT_MARKER_XYZ");
     },
   );
+});
+
+it("script-spawned thread honors per-thread autoCompactPrompt override", async () => {
+  const customTemplate =
+    "PER_THREAD_COMPACT_MARKER_QRS {{status}} :: {{next_prompt}}";
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+
+    const threadId = await driver.magenta.chat.spawnScriptThread({
+      scriptInvocationId: "inv-prompt-override" as ScriptInvocationId,
+      prompt: "do the work",
+      yieldSchema: { type: "object", properties: {} },
+      getSandboxRoot: () => undefined,
+      autoCompactThreshold: 160_000,
+      autoCompactPrompt: customTemplate,
+    });
+
+    const wrapper = driver.magenta.chat.threadWrappers[threadId];
+    if (wrapper.state !== "initialized")
+      throw new Error("expected initialized thread");
+    const thread = wrapper.thread;
+
+    // Drive turns until the post-flight inputTokenCount is populated and the
+    // handoff triggers auto-compaction. Once the thread enters compacting mode,
+    // the next pending stream is the compaction subagent stream (which we must
+    // not respond to as an ordinary turn).
+    let compactSubagentStream: Awaited<
+      ReturnType<typeof driver.mockAnthropic.awaitPendingStream>
+    > | null = null;
+    for (let i = 0; i < 5; i++) {
+      const stream = await driver.mockAnthropic.awaitPendingStream({
+        message: `script thread turn ${i}`,
+      });
+      if (thread.core.state.mode.type === "compacting") {
+        compactSubagentStream = stream;
+        break;
+      }
+      stream.respond({
+        stopReason: "end_turn",
+        text: "working on it",
+        toolRequests: [],
+      });
+    }
+
+    if (!compactSubagentStream)
+      throw new Error("script thread did not auto-compact");
+
+    const subagentMessages = compactSubagentStream.getProviderMessages();
+    const userMsg = subagentMessages.find((m) => m.role === "user");
+    expect(userMsg).toBeDefined();
+    const textContent = userMsg!.content
+      .filter(
+        (c): c is Extract<typeof c, { type: "text" | "context_update" }> =>
+          c.type === "text" || c.type === "context_update",
+      )
+      .map((c) => c.text)
+      .join("");
+    expect(textContent).toContain("PER_THREAD_COMPACT_MARKER_QRS");
+  });
+});
+
+it("script-spawned thread without prompt override falls back to the default template", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
+
+    const threadId = await driver.magenta.chat.spawnScriptThread({
+      scriptInvocationId: "inv-no-override" as ScriptInvocationId,
+      prompt: "do the work",
+      yieldSchema: { type: "object", properties: {} },
+      getSandboxRoot: () => undefined,
+      autoCompactThreshold: 160_000,
+    });
+
+    const wrapper = driver.magenta.chat.threadWrappers[threadId];
+    if (wrapper.state !== "initialized")
+      throw new Error("expected initialized thread");
+    const thread = wrapper.thread;
+
+    let compactSubagentStream: Awaited<
+      ReturnType<typeof driver.mockAnthropic.awaitPendingStream>
+    > | null = null;
+    for (let i = 0; i < 5; i++) {
+      const stream = await driver.mockAnthropic.awaitPendingStream({
+        message: `script thread turn ${i}`,
+      });
+      if (thread.core.state.mode.type === "compacting") {
+        compactSubagentStream = stream;
+        break;
+      }
+      stream.respond({
+        stopReason: "end_turn",
+        text: "working on it",
+        toolRequests: [],
+      });
+    }
+
+    if (!compactSubagentStream)
+      throw new Error("script thread did not auto-compact");
+
+    const subagentMessages = compactSubagentStream.getProviderMessages();
+    const userMsg = subagentMessages.find((m) => m.role === "user");
+    expect(userMsg).toBeDefined();
+    const textContent = userMsg!.content
+      .filter(
+        (c): c is Extract<typeof c, { type: "text" | "context_update" }> =>
+          c.type === "text" || c.type === "context_update",
+      )
+      .map((c) => c.text)
+      .join("");
+    expect(textContent).not.toContain("PER_THREAD_COMPACT_MARKER_QRS");
+    expect(textContent).toContain("working brief");
+  });
 });
 
 it("compaction history records steps from multi-chunk compaction", async () => {
