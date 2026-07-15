@@ -27,6 +27,10 @@ export type ThreadOptions = {
   contextFiles?: string[];
   /** A recurring system reminder injected into the thread. */
   systemReminder?: string;
+  /** Override the global auto-compact input-token threshold for this thread. */
+  autoCompactThreshold?: number;
+  /** Override the global auto-compact prompt template for this thread. */
+  autoCompactPrompt?: string;
 };
 
 export type ScriptMeta = {

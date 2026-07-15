@@ -5,7 +5,9 @@ import {
   type ToolName,
   type ToolRequestId,
 } from "@magenta/core";
+import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import { expect, it } from "vitest";
+import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import { withDriver } from "../test/preamble.ts";
 
 it("root/user threads get an AutoCompactSupervisor", async () => {
@@ -70,4 +72,61 @@ it("subagent threads get both SubagentSupervisor and AutoCompactSupervisor", asy
       true,
     );
   });
+});
+
+const emptyYieldSchema: JSONSchemaType = { type: "object", properties: {} };
+
+it("script-spawned thread honors per-thread autoCompactThreshold override", async () => {
+  await withDriver(
+    { options: { autoCompactThreshold: 300_000 } },
+    async (driver) => {
+      await driver.showSidebar();
+
+      const overriddenId = await driver.magenta.chat.spawnScriptThread({
+        scriptInvocationId: "inv-override" as ScriptInvocationId,
+        prompt: "do work",
+        yieldSchema: emptyYieldSchema,
+        getSandboxRoot: () => undefined,
+        autoCompactThreshold: 100_000,
+      });
+
+      const defaultId = await driver.magenta.chat.spawnScriptThread({
+        scriptInvocationId: "inv-default" as ScriptInvocationId,
+        prompt: "do work",
+        yieldSchema: emptyYieldSchema,
+        getSandboxRoot: () => undefined,
+      });
+
+      const chat = driver.magenta.chat;
+      const getSupervisor = (id: ThreadId) => {
+        const wrapper = chat.threadWrappers[id];
+        if (wrapper.state !== "initialized")
+          throw new Error("expected initialized thread");
+        const sup = wrapper.thread.supervisors.find(
+          (s): s is AutoCompactSupervisor => s instanceof AutoCompactSupervisor,
+        );
+        if (!sup) throw new Error("expected AutoCompactSupervisor");
+        return sup;
+      };
+
+      const overridden = getSupervisor(overriddenId);
+      const fallback = getSupervisor(defaultId);
+
+      // The override compacts at 100k; the default only at 300k.
+      expect(
+        overridden.onHandoff({
+          inputTokenCount: 100_000,
+          stopReason: "end_turn",
+        }).type,
+      ).toBe("compact");
+      expect(
+        fallback.onHandoff({ inputTokenCount: 100_000, stopReason: "end_turn" })
+          .type,
+      ).toBe("none");
+      expect(
+        fallback.onHandoff({ inputTokenCount: 300_000, stopReason: "end_turn" })
+          .type,
+      ).toBe("compact");
+    },
+  );
 });

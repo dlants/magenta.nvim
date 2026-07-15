@@ -396,6 +396,12 @@ export class ScriptManager {
             ...(options?.systemReminder
               ? { systemReminder: options.systemReminder }
               : {}),
+            ...(options?.autoCompactThreshold !== undefined
+              ? { autoCompactThreshold: options.autoCompactThreshold }
+              : {}),
+            ...(options?.autoCompactPrompt !== undefined
+              ? { autoCompactPrompt: options.autoCompactPrompt }
+              : {}),
           })
           .then((threadId) => {
             invocation.threadIds.push(threadId);

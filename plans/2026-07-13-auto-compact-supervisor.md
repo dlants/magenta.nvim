@@ -186,7 +186,15 @@ Code-review follow-ups (Stage 4):
   - Expected: defaults applied when absent; overrides respected; invalid values rejected/warned as with other options.
 - Before moving on: confirm tests, type checks, and linting all pass.
 
-## 5. Per-thread auto-compact config for magenta scripts
+## 5. Per-thread auto-compact config for magenta scripts — DONE
+
+Progress notes (Stage 5):
+- `sdk/protocol.ts`: added optional `autoCompactThreshold?: number` and `autoCompactPrompt?: string` to `ThreadOptions`; these flow through the existing `create-thread` IPC message unchanged.
+- `node/scripts/script-manager.ts`: the `create-thread` handler forwards both new options into `chat.spawnScriptThread` when present.
+- `node/chat/chat.ts`: `spawnScriptThread` accepts the two optional overrides and passes them into `createThreadWithContext`, which now takes `autoCompactThreshold`/`autoCompactPrompt`. The threshold override feeds `new AutoCompactSupervisor({ threshold: autoCompactThreshold ?? getOptions().autoCompactThreshold })`; the prompt override is merged into the Thread's `options` (`{ ...getOptions(), autoCompactPrompt }`), so it reaches `ThreadCoreContext.autoCompactPrompt` via the existing `thread.ts` plumbing (Stage 4). Absent overrides fall back to global defaults.
+- Test: added `node/chat/supervisor-wiring.test.ts` "script-spawned thread honors per-thread autoCompactThreshold override" — spawns two script threads (one with a 100k override, one without) and asserts the overridden thread's `AutoCompactSupervisor.onHandoff` compacts at 100k while the default thread only compacts at the global 300k.
+- Decision: the SDK `thread()` surface already passes `ThreadOptions` verbatim, so no SDK-side change was needed beyond the `protocol.ts` type additions.
+- All green: `npx tsgo -b`, `npx biome check .`, and the new/adjacent `node/chat/supervisor-wiring.test.ts`.
 
 - Goal: a magenta script can set `autoCompactThreshold` and `autoCompactPrompt` per spawned thread via `thread(prompt, yieldSchema, options)`; these override the global defaults for that thread only, and threads without overrides fall back to global config.
 - Plumbing: add the two fields to `ThreadOptions` (`sdk/protocol.ts`); forward them in the `create-thread` handler (`node/scripts/script-manager.ts`) into `chat.spawnScriptThread`; thread them through `createThreadWithContext` into the thread's supervisor (threshold) and `ThreadCoreContext` (prompt override).

@@ -595,6 +595,8 @@ export class Chat implements ThreadManager {
     getSandboxRoot,
     yieldSchema,
     scriptInvocationId,
+    autoCompactThreshold,
+    autoCompactPrompt,
   }: {
     threadId: ThreadId;
     profile: Profile;
@@ -610,6 +612,8 @@ export class Chat implements ThreadManager {
     getSandboxRoot?: () => SandboxRoot | undefined;
     yieldSchema?: JSONSchemaType;
     scriptInvocationId?: ScriptInvocationId;
+    autoCompactThreshold?: number;
+    autoCompactPrompt?: string;
   }) {
     this.threadWrappers[threadId] = {
       state: "pending",
@@ -690,7 +694,10 @@ export class Chat implements ThreadManager {
 
     const thread = new Thread(threadId, threadType, systemPrompt, {
       ...this.context,
-      options: this.context.getOptions(),
+      options: {
+        ...this.context.getOptions(),
+        ...(autoCompactPrompt !== undefined ? { autoCompactPrompt } : {}),
+      },
       mcpToolManager: this.mcpToolManager,
       profile,
       chat: this,
@@ -725,7 +732,9 @@ export class Chat implements ThreadManager {
         ? []
         : [
             new AutoCompactSupervisor({
-              threshold: this.context.getOptions().autoCompactThreshold,
+              threshold:
+                autoCompactThreshold ??
+                this.context.getOptions().autoCompactThreshold,
             }),
           ];
 
@@ -1656,6 +1665,8 @@ ${rows}${loadMore}`;
     cwd?: string;
     contextFiles?: string[];
     systemReminder?: string;
+    autoCompactThreshold?: number;
+    autoCompactPrompt?: string;
   }): Promise<ThreadId> {
     const threadId = uuidv7() as ThreadId;
     const profile =
@@ -1685,6 +1696,12 @@ ${rows}${loadMore}`;
       scriptInvocationId: opts.scriptInvocationId,
       yieldSchema: opts.yieldSchema,
       getSandboxRoot: opts.getSandboxRoot,
+      ...(opts.autoCompactThreshold !== undefined
+        ? { autoCompactThreshold: opts.autoCompactThreshold }
+        : {}),
+      ...(opts.autoCompactPrompt !== undefined
+        ? { autoCompactPrompt: opts.autoCompactPrompt }
+        : {}),
     });
 
     return thread.id;
