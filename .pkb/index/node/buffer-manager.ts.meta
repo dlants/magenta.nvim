@@ -1,0 +1,231 @@
+{
+  "blobSha": "1ba809ba226cae6f540b8e5e883cda8a2140958a",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { ThreadId } from \"@magenta/core\";\nimport { type BufNr, type Line, NvimBuffer } from \"./nvim/buffer.ts\";\nimport type { Nvim } from \"./nvim/nvim-node/index.ts\";\nimport type { NvimWindow, Row0Indexed } from \"./nvim/window.ts\";\nimport type * as TEA from \"./tea/tea.ts\";\nimport { pos } from \"./tea/view.ts\";\n\n/** Buffer name prefix used to identify magenta input buffers.\n * Must match the pattern in lua/magenta/completion/ sources.\n */\nexport const MAGENTA_INPUT_BUFFER_PREFIX = \"Magenta Input\";",
+      "contextualizedText": "// node/buffer-manager.ts\n\nimport type { ThreadId } from \"@magenta/core\";\nimport { type BufNr, type Line, NvimBuffer } from \"./nvim/buffer.ts\";\nimport type { Nvim } from \"./nvim/nvim-node/index.ts\";\nimport type { NvimWindow, Row0Indexed } from \"./nvim/window.ts\";\nimport type * as TEA from \"./tea/tea.ts\";\nimport { pos } from \"./tea/view.ts\";\n\n/** Buffer name prefix used to identify magenta input buffers.\n * Must match the pattern in lua/magenta/completion/ sources.\n */\nexport const MAGENTA_INPUT_BUFFER_PREFIX = \"Magenta Input\";",
+      "headingContext": "node/buffer-manager.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 11,
+      "endCol": 60
+    },
+    {
+      "text": "/** Sanitize a thread title for use in a buffer name: single line, collapsed\n * whitespace, truncated. */\nfunction sanitizeTitle(title: string): string {\n  const cleaned = title.replace(/\\s+/g, \" \").trim();\n  const MAX = 40;\n  return cleaned.length \u003e MAX ? cleaned.slice(0, MAX).trimEnd() : cleaned;\n}",
+      "contextualizedText": "// node/buffer-manager.ts \u003e function sanitizeTitle\n\n/** Sanitize a thread title for use in a buffer name: single line, collapsed\n * whitespace, truncated. */\nfunction sanitizeTitle(title: string): string {\n  const cleaned = title.replace(/\\s+/g, \" \").trim();\n  const MAX = 40;\n  return cleaned.length \u003e MAX ? cleaned.slice(0, MAX).trimEnd() : cleaned;\n}",
+      "headingContext": "node/buffer-manager.ts \u003e function sanitizeTitle",
+      "startLine": 13,
+      "startCol": 1,
+      "endLine": 19,
+      "endCol": 2
+    },
+    {
+      "text": "function displayBufferName(\n  title: string | undefined,\n  bufferId: string,\n): string {\n  const sanitized = title ? sanitizeTitle(title) : \"\";\n  const lead = sanitized || \"Thread\";\n  return `${lead} [Magenta ${bufferId}]`;\n}",
+      "contextualizedText": "// node/buffer-manager.ts \u003e function displayBufferName\n\nfunction displayBufferName(\n  title: string | undefined,\n  bufferId: string,\n): string {\n  const sanitized = title ? sanitizeTitle(title) : \"\";\n  const lead = sanitized || \"Thread\";\n  return `${lead} [Magenta ${bufferId}]`;\n}",
+      "headingContext": "node/buffer-manager.ts \u003e function displayBufferName",
+      "startLine": 21,
+      "startCol": 1,
+      "endLine": 28,
+      "endCol": 2
+    },
+    {
+      "text": "function inputBufferName(title: string | undefined, bufferId: string): string {\n  const sanitized = title ? sanitizeTitle(title) : \"\";\n  const lead = sanitized || \"Thread\";\n  return `${lead} [${MAGENTA_INPUT_BUFFER_PREFIX} ${bufferId}]`;\n}",
+      "contextualizedText": "// node/buffer-manager.ts \u003e function inputBufferName\n\nfunction inputBufferName(title: string | undefined, bufferId: string): string {\n  const sanitized = title ? sanitizeTitle(title) : \"\";\n  const lead = sanitized || \"Thread\";\n  return `${lead} [${MAGENTA_INPUT_BUFFER_PREFIX} ${bufferId}]`;\n}",
+      "headingContext": "node/buffer-manager.ts \u003e function inputBufferName",
+      "startLine": 30,
+      "startCol": 1,
+      "endLine": 34,
+      "endCol": 2
+    },
+    {
+      "text": "type BufferEntry =\n  | {\n      state: \"registered\";\n      buffer: NvimBuffer;\n      inputBuffer: NvimBuffer;\n    }\n  | {\n      state: \"mounted\";\n      buffer: NvimBuffer;\n      inputBuffer: NvimBuffer;\n      app: TEA.App\u003cunknown\u003e;\n      mountedApp: TEA.MountedApp;\n    };\n\nexport type BufferRole = \"display\" | \"input\";\n\nexport type BufferInfo = {\n  key: ThreadId | \"overview\";\n  role: BufferRole;\n};",
+      "contextualizedText": "// node/buffer-manager.ts\n\ntype BufferEntry =\n  | {\n      state: \"registered\";\n      buffer: NvimBuffer;\n      inputBuffer: NvimBuffer;\n    }\n  | {\n      state: \"mounted\";\n      buffer: NvimBuffer;\n      inputBuffer: NvimBuffer;\n      app: TEA.App\u003cunknown\u003e;\n      mountedApp: TEA.MountedApp;\n    };\n\nexport type BufferRole = \"display\" | \"input\";\n\nexport type BufferInfo = {\n  key: ThreadId | \"overview\";\n  role: BufferRole;\n};",
+      "headingContext": "node/buffer-manager.ts",
+      "startLine": 36,
+      "startCol": 1,
+      "endLine": 55,
+      "endCol": 3
+    },
+    {
+      "text": "export class BufferManager {\n  private threadEntries: Map\u003cThreadId, BufferEntry\u003e = new Map();\n  private overviewEntry: BufferEntry;\n  /** Reverse lookup: buffer id → { key, role } */\n  private bufNrToInfo: Map\u003cBufNr, BufferInfo\u003e = new Map();\n\n  private createThreadApp!: (threadId: ThreadId) =\u003e TEA.App\u003cunknown\u003e;\n  private createOverviewApp!: () =\u003e TEA.App\u003cunknown\u003e;\n\n  private constructor(\n    private nvim: Nvim,\n    overviewEntry: BufferEntry,\n  ) {\n    this.overviewEntry = overviewEntry;\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager\n\nexport class BufferManager {\n  private threadEntries: Map\u003cThreadId, BufferEntry\u003e = new Map();\n  private overviewEntry: BufferEntry;\n  /** Reverse lookup: buffer id → { key, role } */\n  private bufNrToInfo: Map\u003cBufNr, BufferInfo\u003e = new Map();\n\n  private createThreadApp!: (threadId: ThreadId) =\u003e TEA.App\u003cunknown\u003e;\n  private createOverviewApp!: () =\u003e TEA.App\u003cunknown\u003e;\n\n  private constructor(\n    private nvim: Nvim,\n    overviewEntry: BufferEntry,\n  ) {\n    this.overviewEntry = overviewEntry;\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager",
+      "startLine": 57,
+      "startCol": 1,
+      "endLine": 71,
+      "endCol": 4
+    },
+    {
+      "text": "  setAppFactories(\n    createThreadApp: (threadId: ThreadId) =\u003e TEA.App\u003cunknown\u003e,\n    createOverviewApp: () =\u003e TEA.App\u003cunknown\u003e,\n  ): void {\n    this.createThreadApp = createThreadApp;\n    this.createOverviewApp = createOverviewApp;\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method setAppFactories\n\n  setAppFactories(\n    createThreadApp: (threadId: ThreadId) =\u003e TEA.App\u003cunknown\u003e,\n    createOverviewApp: () =\u003e TEA.App\u003cunknown\u003e,\n  ): void {\n    this.createThreadApp = createThreadApp;\n    this.createOverviewApp = createOverviewApp;\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method setAppFactories",
+      "startLine": 73,
+      "startCol": 1,
+      "endLine": 79,
+      "endCol": 4
+    },
+    {
+      "text": "  static async create(nvim: Nvim): Promise\u003cBufferManager\u003e {\n    const [buffer, inputBuffer] = await Promise.all([\n      BufferManager.createDisplayBuffer(nvim, \"[Magenta Threads]\", false),\n      BufferManager.createReadOnlyInputBuffer(nvim, \"[Magenta Overview Input]\"),\n    ]);\n    const overviewEntry: BufferEntry = {\n      state: \"registered\",\n      buffer,\n      inputBuffer,\n    };\n    const manager = new BufferManager(nvim, overviewEntry);\n    manager.bufNrToInfo.set(buffer.id, { key: \"overview\", role: \"display\" });\n    manager.bufNrToInfo.set(inputBuffer.id, { key: \"overview\", role: \"input\" });\n    return manager;\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method create\n\n  static async create(nvim: Nvim): Promise\u003cBufferManager\u003e {\n    const [buffer, inputBuffer] = await Promise.all([\n      BufferManager.createDisplayBuffer(nvim, \"[Magenta Threads]\", false),\n      BufferManager.createReadOnlyInputBuffer(nvim, \"[Magenta Overview Input]\"),\n    ]);\n    const overviewEntry: BufferEntry = {\n      state: \"registered\",\n      buffer,\n      inputBuffer,\n    };\n    const manager = new BufferManager(nvim, overviewEntry);\n    manager.bufNrToInfo.set(buffer.id, { key: \"overview\", role: \"display\" });\n    manager.bufNrToInfo.set(inputBuffer.id, { key: \"overview\", role: \"input\" });\n    return manager;\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method create",
+      "startLine": 81,
+      "startCol": 1,
+      "endLine": 95,
+      "endCol": 4
+    },
+    {
+      "text": "  async registerThread(\n    threadId: ThreadId,\n  ): Promise\u003c{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }\u003e {\n    const existing = this.threadEntries.get(threadId);\n    if (existing)\n      return {\n        displayBuffer: existing.buffer,\n        inputBuffer: existing.inputBuffer,\n      };\n\n    const bufferId = threadId.replace(/-/g, \"\");\n    const [buffer, inputBuffer] = await Promise.all([\n      BufferManager.createDisplayBuffer(\n        this.nvim,\n        displayBufferName(undefined, bufferId),\n        true,\n      ),\n      BufferManager.createInputBuffer(\n        this.nvim,\n        inputBufferName(undefined, bufferId),\n      ),\n    ]);\n\n    const entry: BufferEntry = {\n      state: \"registered\",\n      buffer,\n      inputBuffer,\n    };\n    this.threadEntries.set(threadId, entry);\n    this.bufNrToInfo.set(buffer.id, { key: threadId, role: \"display\" });\n    this.bufNrToInfo.set(inputBuffer.id, { key: threadId, role: \"input\" });\n    return { displayBuffer: buffer, inputBuffer };\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method registerThread\n\n  async registerThread(\n    threadId: ThreadId,\n  ): Promise\u003c{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }\u003e {\n    const existing = this.threadEntries.get(threadId);\n    if (existing)\n      return {\n        displayBuffer: existing.buffer,\n        inputBuffer: existing.inputBuffer,\n      };\n\n    const bufferId = threadId.replace(/-/g, \"\");\n    const [buffer, inputBuffer] = await Promise.all([\n      BufferManager.createDisplayBuffer(\n        this.nvim,\n        displayBufferName(undefined, bufferId),\n        true,\n      ),\n      BufferManager.createInputBuffer(\n        this.nvim,\n        inputBufferName(undefined, bufferId),\n      ),\n    ]);\n\n    const entry: BufferEntry = {\n      state: \"registered\",\n      buffer,\n      inputBuffer,\n    };\n    this.threadEntries.set(threadId, entry);\n    this.bufNrToInfo.set(buffer.id, { key: threadId, role: \"display\" });\n    this.bufNrToInfo.set(inputBuffer.id, { key: threadId, role: \"input\" });\n    return { displayBuffer: buffer, inputBuffer };\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method registerThread",
+      "startLine": 97,
+      "startCol": 1,
+      "endLine": 129,
+      "endCol": 4
+    },
+    {
+      "text": "  private async ensureMounted(threadId: ThreadId): Promise\u003cTEA.MountedApp\u003e {\n    const entry = this.threadEntries.get(threadId);\n    if (!entry) {\n      throw new Error(`No buffers registered for thread ${threadId}`);\n    }\n\n    if (entry.state === \"mounted\") {\n      return entry.mountedApp;\n    }\n\n    const app = this.createThreadApp(threadId);\n\n    const mountedApp = await app.mount({\n      nvim: this.nvim,\n      buffer: entry.buffer,\n      startPos: pos(0 as Row0Indexed, 0),\n      endPos: pos(-1 as Row0Indexed, -1),\n    });\n\n    this.threadEntries.set(threadId, {\n      state: \"mounted\",\n      buffer: entry.buffer,\n      inputBuffer: entry.inputBuffer,\n      app,\n      mountedApp,\n    });\n\n    return mountedApp;\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method ensureMounted\n\n  private async ensureMounted(threadId: ThreadId): Promise\u003cTEA.MountedApp\u003e {\n    const entry = this.threadEntries.get(threadId);\n    if (!entry) {\n      throw new Error(`No buffers registered for thread ${threadId}`);\n    }\n\n    if (entry.state === \"mounted\") {\n      return entry.mountedApp;\n    }\n\n    const app = this.createThreadApp(threadId);\n\n    const mountedApp = await app.mount({\n      nvim: this.nvim,\n      buffer: entry.buffer,\n      startPos: pos(0 as Row0Indexed, 0),\n      endPos: pos(-1 as Row0Indexed, -1),\n    });\n\n    this.threadEntries.set(threadId, {\n      state: \"mounted\",\n      buffer: entry.buffer,\n      inputBuffer: entry.inputBuffer,\n      app,\n      mountedApp,\n    });\n\n    return mountedApp;\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method ensureMounted",
+      "startLine": 131,
+      "startCol": 1,
+      "endLine": 159,
+      "endCol": 4
+    },
+    {
+      "text": "  async ensureOverviewMounted(): Promise\u003c{\n    buffer: NvimBuffer;\n    mountedApp: TEA.MountedApp;\n  }\u003e {\n    if (this.overviewEntry.state !== \"mounted\") {\n      const app = this.createOverviewApp();\n      const mountedApp = await app.mount({\n        nvim: this.nvim,\n        buffer: this.overviewEntry.buffer,\n        startPos: pos(0 as Row0Indexed, 0),\n        endPos: pos(-1 as Row0Indexed, -1),\n      });\n      this.overviewEntry = {\n        state: \"mounted\",\n        buffer: this.overviewEntry.buffer,\n        inputBuffer: this.overviewEntry.inputBuffer,\n        app,\n        mountedApp,\n      };\n    }\n\n    return {\n      buffer: this.overviewEntry.buffer,\n      mountedApp: this.overviewEntry.mountedApp,\n    };\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method ensureOverviewMounted\n\n  async ensureOverviewMounted(): Promise\u003c{\n    buffer: NvimBuffer;\n    mountedApp: TEA.MountedApp;\n  }\u003e {\n    if (this.overviewEntry.state !== \"mounted\") {\n      const app = this.createOverviewApp();\n      const mountedApp = await app.mount({\n        nvim: this.nvim,\n        buffer: this.overviewEntry.buffer,\n        startPos: pos(0 as Row0Indexed, 0),\n        endPos: pos(-1 as Row0Indexed, -1),\n      });\n      this.overviewEntry = {\n        state: \"mounted\",\n        buffer: this.overviewEntry.buffer,\n        inputBuffer: this.overviewEntry.inputBuffer,\n        app,\n        mountedApp,\n      };\n    }\n\n    return {\n      buffer: this.overviewEntry.buffer,\n      mountedApp: this.overviewEntry.mountedApp,\n    };\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method ensureOverviewMounted",
+      "startLine": 161,
+      "startCol": 1,
+      "endLine": 186,
+      "endCol": 4
+    },
+    {
+      "text": "  getOverviewBuffers(): { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer } {\n    return {\n      displayBuffer: this.overviewEntry.buffer,\n      inputBuffer: this.overviewEntry.inputBuffer,\n    };\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method getOverviewBuffers\n\n  getOverviewBuffers(): { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer } {\n    return {\n      displayBuffer: this.overviewEntry.buffer,\n      inputBuffer: this.overviewEntry.inputBuffer,\n    };\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method getOverviewBuffers",
+      "startLine": 188,
+      "startCol": 1,
+      "endLine": 193,
+      "endCol": 4
+    },
+    {
+      "text": "  getThreadBuffers(\n    threadId: ThreadId,\n  ): { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer } | undefined {\n    const entry = this.threadEntries.get(threadId);\n    if (!entry) return undefined;\n    return { displayBuffer: entry.buffer, inputBuffer: entry.inputBuffer };\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method getThreadBuffers\n\n  getThreadBuffers(\n    threadId: ThreadId,\n  ): { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer } | undefined {\n    const entry = this.threadEntries.get(threadId);\n    if (!entry) return undefined;\n    return { displayBuffer: entry.buffer, inputBuffer: entry.inputBuffer };\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method getThreadBuffers",
+      "startLine": 195,
+      "startCol": 1,
+      "endLine": 201,
+      "endCol": 4
+    },
+    {
+      "text": "/** Rename a thread's display and input buffers to reflect its title. */\n  async setThreadTitle(threadId: ThreadId, title: string): Promise\u003cvoid\u003e {\n    const entry = this.threadEntries.get(threadId);\n    if (!entry) return;\n    const bufferId = threadId.replace(/-/g, \"\");\n    await Promise.all([\n      entry.buffer.setName(displayBufferName(title, bufferId)),\n      entry.inputBuffer.setName(inputBufferName(title, bufferId)),\n    ]);\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method setThreadTitle\n\n/** Rename a thread's display and input buffers to reflect its title. */\n  async setThreadTitle(threadId: ThreadId, title: string): Promise\u003cvoid\u003e {\n    const entry = this.threadEntries.get(threadId);\n    if (!entry) return;\n    const bufferId = threadId.replace(/-/g, \"\");\n    await Promise.all([\n      entry.buffer.setName(displayBufferName(title, bufferId)),\n      entry.inputBuffer.setName(inputBufferName(title, bufferId)),\n    ]);\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method setThreadTitle",
+      "startLine": 203,
+      "startCol": 3,
+      "endLine": 212,
+      "endCol": 4
+    },
+    {
+      "text": "/** Remove a thread's buffers and state. Idempotent: a no-op if already gone.\n   * Deletes both backing NvimBuffers best-effort. */\n  async removeThread(threadId: ThreadId): Promise\u003cvoid\u003e {\n    const entry = this.threadEntries.get(threadId);\n    if (!entry) return;\n    this.threadEntries.delete(threadId);\n    this.bufNrToInfo.delete(entry.buffer.id);\n    this.bufNrToInfo.delete(entry.inputBuffer.id);\n    await Promise.all(\n      [entry.buffer, entry.inputBuffer].map((buf) =\u003e\n        buf\n          .delete({ force: true })\n          .catch((e: Error) =\u003e\n            this.nvim.logger.error(\n              `Error deleting buffer for thread ${threadId}: ${e.message}`,\n            ),\n          ),\n      ),\n    );\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method removeThread\n\n/** Remove a thread's buffers and state. Idempotent: a no-op if already gone.\n   * Deletes both backing NvimBuffers best-effort. */\n  async removeThread(threadId: ThreadId): Promise\u003cvoid\u003e {\n    const entry = this.threadEntries.get(threadId);\n    if (!entry) return;\n    this.threadEntries.delete(threadId);\n    this.bufNrToInfo.delete(entry.buffer.id);\n    this.bufNrToInfo.delete(entry.inputBuffer.id);\n    await Promise.all(\n      [entry.buffer, entry.inputBuffer].map((buf) =\u003e\n        buf\n          .delete({ force: true })\n          .catch((e: Error) =\u003e\n            this.nvim.logger.error(\n              `Error deleting buffer for thread ${threadId}: ${e.message}`,\n            ),\n          ),\n      ),\n    );\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method removeThread",
+      "startLine": 214,
+      "startCol": 3,
+      "endLine": 233,
+      "endCol": 4
+    },
+    {
+      "text": "/** Recreate the overview buffers after they were externally deleted.\n   * Resets the overview to an unmounted state so the next mount rebinds it. */\n  async recreateOverview(): Promise\u003cvoid\u003e {\n    const dead = [this.overviewEntry.buffer, this.overviewEntry.inputBuffer];\n    this.bufNrToInfo.delete(this.overviewEntry.buffer.id);\n    this.bufNrToInfo.delete(this.overviewEntry.inputBuffer.id);\n    // Fully wipe the dead buffers so their (canonical) names are released\n    // before we recreate buffers with the same names.\n    await Promise.all(\n      dead.map((buf) =\u003e\n        buf.delete({ force: true }).catch(() =\u003e {\n          // best-effort; the buffer may already be gone\n        }),\n      ),\n    );\n    const [buffer, inputBuffer] = await Promise.all([\n      BufferManager.createDisplayBuffer(this.nvim, \"[Magenta Threads]\", false),\n      BufferManager.createReadOnlyInputBuffer(\n        this.nvim,\n        \"[Magenta Overview Input]\",\n      ),\n    ]);\n    this.overviewEntry = { state: \"registered\", buffer, inputBuffer };\n    this.bufNrToInfo.set(buffer.id, { key: \"overview\", role: \"display\" });\n    this.bufNrToInfo.set(inputBuffer.id, { key: \"overview\", role: \"input\" });\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method recreateOverview\n\n/** Recreate the overview buffers after they were externally deleted.\n   * Resets the overview to an unmounted state so the next mount rebinds it. */\n  async recreateOverview(): Promise\u003cvoid\u003e {\n    const dead = [this.overviewEntry.buffer, this.overviewEntry.inputBuffer];\n    this.bufNrToInfo.delete(this.overviewEntry.buffer.id);\n    this.bufNrToInfo.delete(this.overviewEntry.inputBuffer.id);\n    // Fully wipe the dead buffers so their (canonical) names are released\n    // before we recreate buffers with the same names.\n    await Promise.all(\n      dead.map((buf) =\u003e\n        buf.delete({ force: true }).catch(() =\u003e {\n          // best-effort; the buffer may already be gone\n        }),\n      ),\n    );\n    const [buffer, inputBuffer] = await Promise.all([\n      BufferManager.createDisplayBuffer(this.nvim, \"[Magenta Threads]\", false),\n      BufferManager.createReadOnlyInputBuffer(\n        this.nvim,\n        \"[Magenta Overview Input]\",\n      ),\n    ]);\n    this.overviewEntry = { state: \"registered\", buffer, inputBuffer };\n    this.bufNrToInfo.set(buffer.id, { key: \"overview\", role: \"display\" });\n    this.bufNrToInfo.set(inputBuffer.id, { key: \"overview\", role: \"input\" });\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method recreateOverview",
+      "startLine": 235,
+      "startCol": 3,
+      "endLine": 260,
+      "endCol": 4
+    },
+    {
+      "text": "/** Look up which thread/overview a buffer belongs to and its role. */\n  /** Look up which thread/overview a buffer belongs to and its role. */\n  lookupBuffer(bufNr: BufNr): BufferInfo | undefined {\n    return this.bufNrToInfo.get(bufNr);\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method lookupBuffer\n\n/** Look up which thread/overview a buffer belongs to and its role. */\n  /** Look up which thread/overview a buffer belongs to and its role. */\n  lookupBuffer(bufNr: BufNr): BufferInfo | undefined {\n    return this.bufNrToInfo.get(bufNr);\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method lookupBuffer",
+      "startLine": 262,
+      "startCol": 3,
+      "endLine": 266,
+      "endCol": 4
+    },
+    {
+      "text": "/** Check if a buffer id belongs to any magenta buffer. */\n  isMagentaBuffer(bufNr: BufNr): boolean {\n    return this.bufNrToInfo.has(bufNr);\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method isMagentaBuffer\n\n/** Check if a buffer id belongs to any magenta buffer. */\n  isMagentaBuffer(bufNr: BufNr): boolean {\n    return this.bufNrToInfo.has(bufNr);\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method isMagentaBuffer",
+      "startLine": 268,
+      "startCol": 3,
+      "endLine": 271,
+      "endCol": 4
+    },
+    {
+      "text": "  getMountedApp(activeKey: ThreadId | \"overview\"): TEA.MountedApp | undefined {\n    if (activeKey === \"overview\") {\n      return this.overviewEntry.state === \"mounted\"\n        ? this.overviewEntry.mountedApp\n        : undefined;\n    }\n    const entry = this.threadEntries.get(activeKey);\n    return entry?.state === \"mounted\" ? entry.mountedApp : undefined;\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method getMountedApp\n\n  getMountedApp(activeKey: ThreadId | \"overview\"): TEA.MountedApp | undefined {\n    if (activeKey === \"overview\") {\n      return this.overviewEntry.state === \"mounted\"\n        ? this.overviewEntry.mountedApp\n        : undefined;\n    }\n    const entry = this.threadEntries.get(activeKey);\n    return entry?.state === \"mounted\" ? entry.mountedApp : undefined;\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method getMountedApp",
+      "startLine": 273,
+      "startCol": 1,
+      "endLine": 281,
+      "endCol": 4
+    },
+    {
+      "text": "/** Ensure the active view is mounted and return its buffers. */\n  async ensureActiveIsMounted(\n    activeKey: ThreadId | \"overview\",\n  ): Promise\u003c{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }\u003e {\n    if (activeKey === \"overview\") {\n      await this.ensureOverviewMounted();\n      return this.getOverviewBuffers();\n    }\n    // Lazily register thread buffers if not yet registered\n    if (!this.threadEntries.has(activeKey)) {\n      await this.registerThread(activeKey);\n    }\n    await this.ensureMounted(activeKey);\n    const entry = this.threadEntries.get(activeKey)!;\n    return { displayBuffer: entry.buffer, inputBuffer: entry.inputBuffer };\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method ensureActiveIsMounted\n\n/** Ensure the active view is mounted and return its buffers. */\n  async ensureActiveIsMounted(\n    activeKey: ThreadId | \"overview\",\n  ): Promise\u003c{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }\u003e {\n    if (activeKey === \"overview\") {\n      await this.ensureOverviewMounted();\n      return this.getOverviewBuffers();\n    }\n    // Lazily register thread buffers if not yet registered\n    if (!this.threadEntries.has(activeKey)) {\n      await this.registerThread(activeKey);\n    }\n    await this.ensureMounted(activeKey);\n    const entry = this.threadEntries.get(activeKey)!;\n    return { displayBuffer: entry.buffer, inputBuffer: entry.inputBuffer };\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method ensureActiveIsMounted",
+      "startLine": 283,
+      "startCol": 3,
+      "endLine": 298,
+      "endCol": 4
+    },
+    {
+      "text": "  async switchToThread(\n    threadId: ThreadId,\n    displayWindow: NvimWindow,\n    inputWindow: NvimWindow,\n  ): Promise\u003c{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }\u003e {\n    if (!this.threadEntries.has(threadId)) {\n      await this.registerThread(threadId);\n    }\n    const entry = this.threadEntries.get(threadId)!;\n\n    const mountedApp = await this.ensureMounted(threadId);\n    await Promise.all([\n      displayWindow.setBufferForced(entry.buffer),\n      inputWindow.setBufferForced(entry.inputBuffer),\n    ]);\n    // Sync the view to current state, in case dispatches occurred while this app wasn't visible\n    mountedApp.render();\n    return { displayBuffer: entry.buffer, inputBuffer: entry.inputBuffer };\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method switchToThread\n\n  async switchToThread(\n    threadId: ThreadId,\n    displayWindow: NvimWindow,\n    inputWindow: NvimWindow,\n  ): Promise\u003c{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }\u003e {\n    if (!this.threadEntries.has(threadId)) {\n      await this.registerThread(threadId);\n    }\n    const entry = this.threadEntries.get(threadId)!;\n\n    const mountedApp = await this.ensureMounted(threadId);\n    await Promise.all([\n      displayWindow.setBufferForced(entry.buffer),\n      inputWindow.setBufferForced(entry.inputBuffer),\n    ]);\n    // Sync the view to current state, in case dispatches occurred while this app wasn't visible\n    mountedApp.render();\n    return { displayBuffer: entry.buffer, inputBuffer: entry.inputBuffer };\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method switchToThread",
+      "startLine": 300,
+      "startCol": 1,
+      "endLine": 318,
+      "endCol": 4
+    },
+    {
+      "text": "  async switchToOverview(\n    displayWindow: NvimWindow,\n    inputWindow: NvimWindow,\n  ): Promise\u003c{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }\u003e {\n    const { buffer, mountedApp } = await this.ensureOverviewMounted();\n    await Promise.all([\n      displayWindow.setBufferForced(buffer),\n      inputWindow.setBufferForced(this.overviewEntry.inputBuffer),\n    ]);\n\n    // Sync the view to current state, in case dispatches occurred while this app wasn't visible\n    mountedApp.render();\n    return this.getOverviewBuffers();\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method switchToOverview\n\n  async switchToOverview(\n    displayWindow: NvimWindow,\n    inputWindow: NvimWindow,\n  ): Promise\u003c{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }\u003e {\n    const { buffer, mountedApp } = await this.ensureOverviewMounted();\n    await Promise.all([\n      displayWindow.setBufferForced(buffer),\n      inputWindow.setBufferForced(this.overviewEntry.inputBuffer),\n    ]);\n\n    // Sync the view to current state, in case dispatches occurred while this app wasn't visible\n    mountedApp.render();\n    return this.getOverviewBuffers();\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method switchToOverview",
+      "startLine": 320,
+      "startCol": 1,
+      "endLine": 333,
+      "endCol": 4
+    },
+    {
+      "text": "  private static async createDisplayBuffer(\n    nvim: Nvim,\n    name: string,\n    listed: boolean,\n  ): Promise\u003cNvimBuffer\u003e {\n    const buffer = await NvimBuffer.create(listed, true, nvim);\n    await buffer.setName(name);\n    await buffer.setOption(\"bufhidden\", \"hide\");\n    await buffer.setOption(\"buftype\", \"nofile\");\n    await buffer.setOption(\"swapfile\", false);\n    await buffer.setDisplayKeymaps();\n    return buffer;\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method createDisplayBuffer\n\n  private static async createDisplayBuffer(\n    nvim: Nvim,\n    name: string,\n    listed: boolean,\n  ): Promise\u003cNvimBuffer\u003e {\n    const buffer = await NvimBuffer.create(listed, true, nvim);\n    await buffer.setName(name);\n    await buffer.setOption(\"bufhidden\", \"hide\");\n    await buffer.setOption(\"buftype\", \"nofile\");\n    await buffer.setOption(\"swapfile\", false);\n    await buffer.setDisplayKeymaps();\n    return buffer;\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method createDisplayBuffer",
+      "startLine": 335,
+      "startCol": 1,
+      "endLine": 347,
+      "endCol": 4
+    },
+    {
+      "text": "  private static async createReadOnlyInputBuffer(\n    nvim: Nvim,\n    name: string,\n  ): Promise\u003cNvimBuffer\u003e {\n    const buffer = await NvimBuffer.create(false, true, nvim);\n    await buffer.setName(name);\n    await buffer.setOption(\"bufhidden\", \"hide\");\n    await buffer.setOption(\"buftype\", \"nofile\");\n    await buffer.setOption(\"swapfile\", false);\n    await buffer.setOption(\"modifiable\", false);\n    return buffer;\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method createReadOnlyInputBuffer\n\n  private static async createReadOnlyInputBuffer(\n    nvim: Nvim,\n    name: string,\n  ): Promise\u003cNvimBuffer\u003e {\n    const buffer = await NvimBuffer.create(false, true, nvim);\n    await buffer.setName(name);\n    await buffer.setOption(\"bufhidden\", \"hide\");\n    await buffer.setOption(\"buftype\", \"nofile\");\n    await buffer.setOption(\"swapfile\", false);\n    await buffer.setOption(\"modifiable\", false);\n    return buffer;\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method createReadOnlyInputBuffer",
+      "startLine": 349,
+      "startCol": 1,
+      "endLine": 360,
+      "endCol": 4
+    },
+    {
+      "text": "  private static async createInputBuffer(\n    nvim: Nvim,\n    name: string,\n  ): Promise\u003cNvimBuffer\u003e {\n    const buffer = await NvimBuffer.create(true, true, nvim);\n    await buffer.setName(name);\n    await buffer.setOption(\"bufhidden\", \"hide\");\n    await buffer.setOption(\"buftype\", \"nofile\");\n    await buffer.setOption(\"swapfile\", false);\n    await buffer.setOption(\"filetype\", \"markdown\");\n    await buffer.setSiderbarKeymaps();\n    await buffer.setupPasteHandlers();\n\n    await buffer.setLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: [\"\" as Line],\n    });\n\n    return buffer;\n  }",
+      "contextualizedText": "// node/buffer-manager.ts \u003e class BufferManager \u003e method createInputBuffer\n\n  private static async createInputBuffer(\n    nvim: Nvim,\n    name: string,\n  ): Promise\u003cNvimBuffer\u003e {\n    const buffer = await NvimBuffer.create(true, true, nvim);\n    await buffer.setName(name);\n    await buffer.setOption(\"bufhidden\", \"hide\");\n    await buffer.setOption(\"buftype\", \"nofile\");\n    await buffer.setOption(\"swapfile\", false);\n    await buffer.setOption(\"filetype\", \"markdown\");\n    await buffer.setSiderbarKeymaps();\n    await buffer.setupPasteHandlers();\n\n    await buffer.setLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: [\"\" as Line],\n    });\n\n    return buffer;\n  }",
+      "headingContext": "node/buffer-manager.ts \u003e class BufferManager \u003e method createInputBuffer",
+      "startLine": 362,
+      "startCol": 1,
+      "endLine": 382,
+      "endCol": 4
+    }
+  ]
+}

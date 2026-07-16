@@ -1,0 +1,15 @@
+{
+  "blobSha": "c5bf3c26b682326a11038f03226ea527a6e1fcf2",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { registerScript } from \"../../index.ts\";\n\nregisterScript(\n  \"worker\",\n  \"logs then spawns a thread\",\n  { type: \"object\", properties: {}, required: [] },\n  async (_parameters, thread, log) =\u003e {\n    log(\"hi\");\n    const result = await thread\u003c{ answer: number }\u003e(\"p\", {\n      type: \"object\",\n      properties: { answer: { type: \"number\" } },\n      required: [\"answer\"],\n    });\n    log(`got ${result.answer}`);\n  },\n);",
+      "contextualizedText": "// sdk/test/fixtures/log-then-thread.ts\n\nimport { registerScript } from \"../../index.ts\";\n\nregisterScript(\n  \"worker\",\n  \"logs then spawns a thread\",\n  { type: \"object\", properties: {}, required: [] },\n  async (_parameters, thread, log) =\u003e {\n    log(\"hi\");\n    const result = await thread\u003c{ answer: number }\u003e(\"p\", {\n      type: \"object\",\n      properties: { answer: { type: \"number\" } },\n      required: [\"answer\"],\n    });\n    log(`got ${result.answer}`);\n  },\n);",
+      "headingContext": "sdk/test/fixtures/log-then-thread.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 16,
+      "endCol": 3
+    }
+  ]
+}

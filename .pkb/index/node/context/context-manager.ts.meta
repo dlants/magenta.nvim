@@ -1,0 +1,132 @@
+{
+  "blobSha": "e65ade4558c975572d32511a41132bd225caeca2",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import {\n  type ContextManager,\n  type FileUpdates,\n  formatGitHead,\n  type GitContextUpdate,\n} from \"@magenta/core\";\nimport open from \"open\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport { openFileInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\nimport type { MagentaOptions } from \"../options.ts\";\nimport { d, type VDOMNode, withBindings, withInlineCode } from \"../tea/view.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport {\n  type AbsFilePath,\n  displayPath,\n  FileCategory,\n  type HomeDir,\n  type NvimCwd,\n} from \"../utils/files.ts\";\nimport { formatTokens } from \"../utils/tokens.ts\";\n\nexport type {\n  ContextFiles as Files,\n  DiffUpdate,\n  FileDeletedUpdate,\n  FileUpdate,\n  FileUpdates,\n  Patch,\n  ToolApplied as ToolApplication,\n  WholeFileUpdate,\n} from \"@magenta/core\";\n\nexport type ContextViewContext = {\n  cwd: NvimCwd;\n  homeDir: HomeDir;\n  nvim: Nvim;\n  options: MagentaOptions;\n};",
+      "contextualizedText": "// node/context/context-manager.ts\n\nimport {\n  type ContextManager,\n  type FileUpdates,\n  formatGitHead,\n  type GitContextUpdate,\n} from \"@magenta/core\";\nimport open from \"open\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport { openFileInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\nimport type { MagentaOptions } from \"../options.ts\";\nimport { d, type VDOMNode, withBindings, withInlineCode } from \"../tea/view.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport {\n  type AbsFilePath,\n  displayPath,\n  FileCategory,\n  type HomeDir,\n  type NvimCwd,\n} from \"../utils/files.ts\";\nimport { formatTokens } from \"../utils/tokens.ts\";\n\nexport type {\n  ContextFiles as Files,\n  DiffUpdate,\n  FileDeletedUpdate,\n  FileUpdate,\n  FileUpdates,\n  Patch,\n  ToolApplied as ToolApplication,\n  WholeFileUpdate,\n} from \"@magenta/core\";\n\nexport type ContextViewContext = {\n  cwd: NvimCwd;\n  homeDir: HomeDir;\n  nvim: Nvim;\n  options: MagentaOptions;\n};",
+      "headingContext": "node/context/context-manager.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 38,
+      "endCol": 3
+    },
+    {
+      "text": "export function openFile(\n  absFilePath: AbsFilePath,\n  core: ContextManager,\n  context: ContextViewContext,\n): void {\n  const fileInfo = core.files[absFilePath];\n\n  if (fileInfo \u0026\u0026 fileInfo.fileTypeInfo.category !== FileCategory.TEXT) {\n    open(absFilePath).catch((error: Error) =\u003e {\n      context.nvim.logger.error(\n        `Failed to open file with OS: ${error.message}`,\n      );\n    });\n  } else {\n    openFileInNonMagentaWindow(absFilePath, {\n      nvim: context.nvim,\n      cwd: context.cwd,\n      homeDir: context.homeDir,\n      options: context.options,\n    }).catch((e: Error) =\u003e context.nvim.logger.error(e.message));\n  }\n}",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function openFile\n\nexport function openFile(\n  absFilePath: AbsFilePath,\n  core: ContextManager,\n  context: ContextViewContext,\n): void {\n  const fileInfo = core.files[absFilePath];\n\n  if (fileInfo \u0026\u0026 fileInfo.fileTypeInfo.category !== FileCategory.TEXT) {\n    open(absFilePath).catch((error: Error) =\u003e {\n      context.nvim.logger.error(\n        `Failed to open file with OS: ${error.message}`,\n      );\n    });\n  } else {\n    openFileInNonMagentaWindow(absFilePath, {\n      nvim: context.nvim,\n      cwd: context.cwd,\n      homeDir: context.homeDir,\n      options: context.options,\n    }).catch((e: Error) =\u003e context.nvim.logger.error(e.message));\n  }\n}",
+      "headingContext": "node/context/context-manager.ts \u003e function openFile",
+      "startLine": 40,
+      "startCol": 1,
+      "endLine": 61,
+      "endCol": 2
+    },
+    {
+      "text": "function renderUpdateIndicator(\n  update: FileUpdates[AbsFilePath][\"update\"],\n): string {\n  if (update.status !== \"ok\") {\n    return `[ error: ${update.error} ]`;\n  }\n  switch (update.value.type) {\n    case \"diff\": {\n      const patch = update.value.patch;\n      const additions = (patch.match(/^\\+[^+]/gm) || []).length;\n      const deletions = (patch.match(/^-[^-]/gm) || []).length;\n      return `[ +${additions} / -${deletions} ]`;\n    }\n    case \"whole-file\": {\n      const mediaBlock = update.value.content.find(\n        (block) =\u003e block.type === \"image\" || block.type === \"document\",\n      );\n      if (mediaBlock) {\n        return mediaBlock.type === \"image\" ? \"[ image ]\" : \"[ document ]\";\n      }\n      let charCount = 0;\n      const lastTextBlock = update.value.content.findLast(\n        (block) =\u003e block.type === \"text\",\n      );\n      if (lastTextBlock \u0026\u0026 lastTextBlock.type === \"text\") {\n        if (lastTextBlock.text.startsWith(\"[File too large for full context\")) {\n          return \"[ summary ]\";\n        }\n        charCount = lastTextBlock.text.length;\n      }\n      return `[ +${formatTokens(charCount)} ]`;\n    }\n    case \"file-deleted\":\n      return \"[ deleted ]\";\n    default:\n      assertUnreachable(update.value);\n  }\n}",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function renderUpdateIndicator\n\nfunction renderUpdateIndicator(\n  update: FileUpdates[AbsFilePath][\"update\"],\n): string {\n  if (update.status !== \"ok\") {\n    return `[ error: ${update.error} ]`;\n  }\n  switch (update.value.type) {\n    case \"diff\": {\n      const patch = update.value.patch;\n      const additions = (patch.match(/^\\+[^+]/gm) || []).length;\n      const deletions = (patch.match(/^-[^-]/gm) || []).length;\n      return `[ +${additions} / -${deletions} ]`;\n    }\n    case \"whole-file\": {\n      const mediaBlock = update.value.content.find(\n        (block) =\u003e block.type === \"image\" || block.type === \"document\",\n      );\n      if (mediaBlock) {\n        return mediaBlock.type === \"image\" ? \"[ image ]\" : \"[ document ]\";\n      }\n      let charCount = 0;\n      const lastTextBlock = update.value.content.findLast(\n        (block) =\u003e block.type === \"text\",\n      );\n      if (lastTextBlock \u0026\u0026 lastTextBlock.type === \"text\") {\n        if (lastTextBlock.text.startsWith(\"[File too large for full context\")) {\n          return \"[ summary ]\";\n        }\n        charCount = lastTextBlock.text.length;\n      }\n      return `[ +${formatTokens(charCount)} ]`;\n    }\n    case \"file-deleted\":\n      return \"[ deleted ]\";\n    default:\n      assertUnreachable(update.value);\n  }\n}",
+      "headingContext": "node/context/context-manager.ts \u003e function renderUpdateIndicator",
+      "startLine": 63,
+      "startCol": 1,
+      "endLine": 100,
+      "endCol": 2
+    },
+    {
+      "text": "export function contextFilesView(\n  core: ContextManager,\n  context: ContextViewContext,\n  view: { expanded: boolean; onToggle: () =\u003e void },\n) {\n  const pending = core.getPendingUpdates();\n  const allPaths = Object.keys(core.files) as AbsFilePath[];\n  if (allPaths.length === 0) {\n    return \"\";\n  }\n\n  const pendingPaths = Object.keys(pending) as AbsFilePath[];\n  const otherPaths = allPaths\n    .filter((p) =\u003e !pending[p])\n    .sort() as AbsFilePath[];",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function contextFilesView\n\nexport function contextFilesView(\n  core: ContextManager,\n  context: ContextViewContext,\n  view: { expanded: boolean; onToggle: () =\u003e void },\n) {\n  const pending = core.getPendingUpdates();\n  const allPaths = Object.keys(core.files) as AbsFilePath[];\n  if (allPaths.length === 0) {\n    return \"\";\n  }\n\n  const pendingPaths = Object.keys(pending) as AbsFilePath[];\n  const otherPaths = allPaths\n    .filter((p) =\u003e !pending[p])\n    .sort() as AbsFilePath[];",
+      "headingContext": "node/context/context-manager.ts \u003e function contextFilesView",
+      "startLine": 102,
+      "startCol": 1,
+      "endLine": 116,
+      "endCol": 30
+    },
+    {
+      "text": "  const renderFileLine = (\n    absFilePath: AbsFilePath,\n    indicator: string,\n  ): VDOMNode =\u003e {\n    const pathForDisplay = displayPath(\n      context.cwd,\n      absFilePath,\n      context.homeDir,\n    );\n    const fileInfo = core.files[absFilePath];\n    const summaryBadge =\n      fileInfo?.agentView?.type === \"summary\" ? \" (summary)\" : \"\";\n    return withBindings(\n      d`- ${withInlineCode(d`\\`${pathForDisplay}\\``)}${summaryBadge}${indicator}\\n`",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function contextFilesView \u003e function renderFileLine\n\n  const renderFileLine = (\n    absFilePath: AbsFilePath,\n    indicator: string,\n  ): VDOMNode =\u003e {\n    const pathForDisplay = displayPath(\n      context.cwd,\n      absFilePath,\n      context.homeDir,\n    );\n    const fileInfo = core.files[absFilePath];\n    const summaryBadge =\n      fileInfo?.agentView?.type === \"summary\" ? \" (summary)\" : \"\";\n    return withBindings(\n      d`- ${withInlineCode(d`\\`${pathForDisplay}\\``)}${summaryBadge}${indicator}\\n`",
+      "headingContext": "node/context/context-manager.ts \u003e function contextFilesView \u003e function renderFileLine",
+      "startLine": 118,
+      "startCol": 1,
+      "endLine": 131,
+      "endCol": 84
+    },
+    {
+      "text": "        dd: () =\u003e core.removeFileContext(absFilePath)",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function contextFilesView \u003e function renderFileLine \u003e function dd\n\n        dd: () =\u003e core.removeFileContext(absFilePath)",
+      "headingContext": "node/context/context-manager.ts \u003e function contextFilesView \u003e function renderFileLine \u003e function dd",
+      "startLine": 133,
+      "startCol": 1,
+      "endLine": 133,
+      "endCol": 54
+    },
+    {
+      "text": "\"\u003cCR\u003e\": () =\u003e openFile(absFilePath, core, context),\n      },\n    );\n  }",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function contextFilesView \u003e function renderFileLine\n\n\"\u003cCR\u003e\": () =\u003e openFile(absFilePath, core, context),\n      },\n    );\n  }",
+      "headingContext": "node/context/context-manager.ts \u003e function contextFilesView \u003e function renderFileLine",
+      "startLine": 134,
+      "startCol": 9,
+      "endLine": 137,
+      "endCol": 4
+    },
+    {
+      "text": "const pendingLines = pendingPaths\n    .sort()\n    .map((p) =\u003e\n      renderFileLine(p, ` ${renderUpdateIndicator(pending[p].update)}`),\n    );\n\n  if (otherPaths.length === 0) {\n    return d`${pendingLines}`;\n  }\n\n  const marker = view.expanded ? \"▼\" : \"▶\";\n  const label =\n    pendingPaths.length \u003e 0\n      ? `${otherPaths.length.toString()} other file${otherPaths.length === 1 ? \"\" : \"s\"} in context`\n      : `${otherPaths.length.toString()} file${otherPaths.length === 1 ? \"\" : \"s\"} in context`;\n  const toggleLine = withBindings(d`${marker} ${label}\\n`, {\n    \"=\": () =\u003e view.onToggle(),\n  });\n\n  if (!view.expanded) {\n    return d`${pendingLines}${toggleLine}`;\n  }\n\n  const otherLines = otherPaths.map((p) =\u003e renderFileLine(p, \"\"));\n  return d`${pendingLines}${toggleLine}${otherLines}`;\n}",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function contextFilesView\n\nconst pendingLines = pendingPaths\n    .sort()\n    .map((p) =\u003e\n      renderFileLine(p, ` ${renderUpdateIndicator(pending[p].update)}`),\n    );\n\n  if (otherPaths.length === 0) {\n    return d`${pendingLines}`;\n  }\n\n  const marker = view.expanded ? \"▼\" : \"▶\";\n  const label =\n    pendingPaths.length \u003e 0\n      ? `${otherPaths.length.toString()} other file${otherPaths.length === 1 ? \"\" : \"s\"} in context`\n      : `${otherPaths.length.toString()} file${otherPaths.length === 1 ? \"\" : \"s\"} in context`;\n  const toggleLine = withBindings(d`${marker} ${label}\\n`, {\n    \"=\": () =\u003e view.onToggle(),\n  });\n\n  if (!view.expanded) {\n    return d`${pendingLines}${toggleLine}`;\n  }\n\n  const otherLines = otherPaths.map((p) =\u003e renderFileLine(p, \"\"));\n  return d`${pendingLines}${toggleLine}${otherLines}`;\n}",
+      "headingContext": "node/context/context-manager.ts \u003e function contextFilesView",
+      "startLine": 139,
+      "startCol": 3,
+      "endLine": 164,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderGitUpdate(\n  gitUpdate: GitContextUpdate | undefined,\n): VDOMNode {\n  if (!gitUpdate) {\n    return d``;\n  }\n  const { current } = gitUpdate;\n  if (!current) {\n    return d`󰊢 git: no longer in a git repository\\n`;\n  }\n  const branch = current.branch ?? \"(detached HEAD)\";\n  return d`󰊢 git: ${branch} @ ${formatGitHead(current)}\\n`;\n}",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function renderGitUpdate\n\nexport function renderGitUpdate(\n  gitUpdate: GitContextUpdate | undefined,\n): VDOMNode {\n  if (!gitUpdate) {\n    return d``;\n  }\n  const { current } = gitUpdate;\n  if (!current) {\n    return d`󰊢 git: no longer in a git repository\\n`;\n  }\n  const branch = current.branch ?? \"(detached HEAD)\";\n  return d`󰊢 git: ${branch} @ ${formatGitHead(current)}\\n`;\n}",
+      "headingContext": "node/context/context-manager.ts \u003e function renderGitUpdate",
+      "startLine": 166,
+      "startCol": 1,
+      "endLine": 178,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderContextUpdate(\n  contextUpdates: FileUpdates | undefined,\n  core: ContextManager,\n  context: ContextViewContext,\n  view: {\n    expandedUpdates: { [absFilePath: string]: boolean };\n    onToggle: (absFilePath: AbsFilePath) =\u003e void;\n  },\n) {\n  if (!(contextUpdates \u0026\u0026 Object.keys(contextUpdates).length)) {\n    return \"\";\n  }\n\n  const fileUpdates = [];\n  for (const path in contextUpdates) {\n    const absFilePath = path as AbsFilePath;\n    const update = contextUpdates[absFilePath];\n    const pathForDisplay = displayPath(\n      context.cwd,\n      absFilePath,\n      context.homeDir,\n    );\n\n    if (update.update.status === \"ok\") {\n      let changeIndicator = \"\";",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function renderContextUpdate\n\nexport function renderContextUpdate(\n  contextUpdates: FileUpdates | undefined,\n  core: ContextManager,\n  context: ContextViewContext,\n  view: {\n    expandedUpdates: { [absFilePath: string]: boolean };\n    onToggle: (absFilePath: AbsFilePath) =\u003e void;\n  },\n) {\n  if (!(contextUpdates \u0026\u0026 Object.keys(contextUpdates).length)) {\n    return \"\";\n  }\n\n  const fileUpdates = [];\n  for (const path in contextUpdates) {\n    const absFilePath = path as AbsFilePath;\n    const update = contextUpdates[absFilePath];\n    const pathForDisplay = displayPath(\n      context.cwd,\n      absFilePath,\n      context.homeDir,\n    );\n\n    if (update.update.status === \"ok\") {\n      let changeIndicator = \"\";",
+      "headingContext": "node/context/context-manager.ts \u003e function renderContextUpdate",
+      "startLine": 180,
+      "startCol": 1,
+      "endLine": 204,
+      "endCol": 32
+    },
+    {
+      "text": "switch (update.update.value.type) {\n        case \"diff\": {\n          const patch = update.update.value.patch;\n          const additions = (patch.match(/^\\+[^+]/gm) || []).length;\n          const deletions = (patch.match(/^-[^-]/gm) || []).length;\n          changeIndicator = `[ +${additions} / -${deletions}, ${formatTokens(patch.length)} ]`;\n          break;\n        }\n        case \"whole-file\": {\n          let charCount = 0;\n          let mediaKind: \"image\" | \"document\" | undefined;\n          let isSummary = false;\n          for (const block of update.update.value.content) {\n            if (block.type === \"text\") {\n              if (block.text.startsWith(\"[File too large for full context\")) {\n                isSummary = true;\n              }\n              charCount += block.text.length;\n            } else if (block.type === \"image\" || block.type === \"document\") {\n              mediaKind = block.type;\n            }\n          }\n          changeIndicator = mediaKind\n            ? `[ ${mediaKind} ]`\n            : isSummary\n              ? `[ summary, ${formatTokens(charCount)} ]`\n              : `[ ${formatTokens(charCount)} ]`;\n          break;\n        }\n        case \"file-deleted\": {\n          changeIndicator = \"[ deleted ]\";\n          break;\n        }\n        default:\n          assertUnreachable(update.update.value);\n      }\n\n      const pdfInfo =\n        update.update.value.type === \"whole-file\"\n          ? formatPdfInfo({\n              summary: update.update.value.pdfSummary,\n              pages: update.update.value.pdfPage\n                ? [update.update.value.pdfPage]\n                : undefined,\n            })\n          : \"\";\n\n      const expanded = view.expandedUpdates[absFilePath];\n      let expandedBody: VDOMNode = d``;",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function renderContextUpdate\n\nswitch (update.update.value.type) {\n        case \"diff\": {\n          const patch = update.update.value.patch;\n          const additions = (patch.match(/^\\+[^+]/gm) || []).length;\n          const deletions = (patch.match(/^-[^-]/gm) || []).length;\n          changeIndicator = `[ +${additions} / -${deletions}, ${formatTokens(patch.length)} ]`;\n          break;\n        }\n        case \"whole-file\": {\n          let charCount = 0;\n          let mediaKind: \"image\" | \"document\" | undefined;\n          let isSummary = false;\n          for (const block of update.update.value.content) {\n            if (block.type === \"text\") {\n              if (block.text.startsWith(\"[File too large for full context\")) {\n                isSummary = true;\n              }\n              charCount += block.text.length;\n            } else if (block.type === \"image\" || block.type === \"document\") {\n              mediaKind = block.type;\n            }\n          }\n          changeIndicator = mediaKind\n            ? `[ ${mediaKind} ]`\n            : isSummary\n              ? `[ summary, ${formatTokens(charCount)} ]`\n              : `[ ${formatTokens(charCount)} ]`;\n          break;\n        }\n        case \"file-deleted\": {\n          changeIndicator = \"[ deleted ]\";\n          break;\n        }\n        default:\n          assertUnreachable(update.update.value);\n      }\n\n      const pdfInfo =\n        update.update.value.type === \"whole-file\"\n          ? formatPdfInfo({\n              summary: update.update.value.pdfSummary,\n              pages: update.update.value.pdfPage\n                ? [update.update.value.pdfPage]\n                : undefined,\n            })\n          : \"\";\n\n      const expanded = view.expandedUpdates[absFilePath];\n      let expandedBody: VDOMNode = d``;",
+      "headingContext": "node/context/context-manager.ts \u003e function renderContextUpdate",
+      "startLine": 205,
+      "startCol": 7,
+      "endLine": 253,
+      "endCol": 40
+    },
+    {
+      "text": "if (expanded) {\n        const value = update.update.value;\n        if (value.type === \"diff\") {\n          expandedBody = d`${value.patch}\\n`;\n        } else if (value.type === \"whole-file\") {\n          const hasMedia = value.content.some(\n            (block) =\u003e block.type === \"image\" || block.type === \"document\",\n          );\n          if (hasMedia) {\n            expandedBody = d`binary format\\n`;\n          } else {\n            const text = value.content\n              .filter((block) =\u003e block.type === \"text\")\n              .map((block) =\u003e block.text)\n              .join(\"\\n\");\n            expandedBody = d`${text}\\n`;\n          }\n        }\n      }\n\n      const fileLine = withBindings(\n        d`- \\`${pathForDisplay}\\`${pdfInfo} ${changeIndicator}`,\n        {\n          \"\u003cCR\u003e\": () =\u003e openFile(absFilePath, core, context),\n          \"=\": () =\u003e view.onToggle(absFilePath),\n        },\n      );\n\n      fileUpdates.push(d`${fileLine}\\n${expandedBody}`);\n    } else {\n      fileUpdates.push(\n        d`- \\`${pathForDisplay}\\` [Error: ${update.update.error}]\\n`,\n      );\n    }\n  }\n\n  return fileUpdates.length \u003e 0 ? d`Context Updates:\\n${fileUpdates}\\n` : \"\";\n}",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function renderContextUpdate\n\nif (expanded) {\n        const value = update.update.value;\n        if (value.type === \"diff\") {\n          expandedBody = d`${value.patch}\\n`;\n        } else if (value.type === \"whole-file\") {\n          const hasMedia = value.content.some(\n            (block) =\u003e block.type === \"image\" || block.type === \"document\",\n          );\n          if (hasMedia) {\n            expandedBody = d`binary format\\n`;\n          } else {\n            const text = value.content\n              .filter((block) =\u003e block.type === \"text\")\n              .map((block) =\u003e block.text)\n              .join(\"\\n\");\n            expandedBody = d`${text}\\n`;\n          }\n        }\n      }\n\n      const fileLine = withBindings(\n        d`- \\`${pathForDisplay}\\`${pdfInfo} ${changeIndicator}`,\n        {\n          \"\u003cCR\u003e\": () =\u003e openFile(absFilePath, core, context),\n          \"=\": () =\u003e view.onToggle(absFilePath),\n        },\n      );\n\n      fileUpdates.push(d`${fileLine}\\n${expandedBody}`);\n    } else {\n      fileUpdates.push(\n        d`- \\`${pathForDisplay}\\` [Error: ${update.update.error}]\\n`,\n      );\n    }\n  }\n\n  return fileUpdates.length \u003e 0 ? d`Context Updates:\\n${fileUpdates}\\n` : \"\";\n}",
+      "headingContext": "node/context/context-manager.ts \u003e function renderContextUpdate",
+      "startLine": 254,
+      "startCol": 7,
+      "endLine": 291,
+      "endCol": 2
+    },
+    {
+      "text": "function formatPageRanges(pages: number[]): string {\n  if (pages.length === 0) return \"\";\n\n  const ranges: string[] = [];\n  let start = pages[0];\n  let end = pages[0];\n\n  for (let i = 1; i \u003c pages.length; i++) {\n    if (pages[i] === end + 1) {\n      end = pages[i];\n    } else {\n      if (start === end) {\n        ranges.push(start.toString());\n      } else {\n        ranges.push(`${start}-${end}`);\n      }\n      start = pages[i];\n      end = pages[i];\n    }\n  }\n\n  if (start === end) {\n    ranges.push(start.toString());\n  } else {\n    ranges.push(`${start}-${end}`);\n  }\n\n  return ranges.join(\", \");\n}",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function formatPageRanges\n\nfunction formatPageRanges(pages: number[]): string {\n  if (pages.length === 0) return \"\";\n\n  const ranges: string[] = [];\n  let start = pages[0];\n  let end = pages[0];\n\n  for (let i = 1; i \u003c pages.length; i++) {\n    if (pages[i] === end + 1) {\n      end = pages[i];\n    } else {\n      if (start === end) {\n        ranges.push(start.toString());\n      } else {\n        ranges.push(`${start}-${end}`);\n      }\n      start = pages[i];\n      end = pages[i];\n    }\n  }\n\n  if (start === end) {\n    ranges.push(start.toString());\n  } else {\n    ranges.push(`${start}-${end}`);\n  }\n\n  return ranges.join(\", \");\n}",
+      "headingContext": "node/context/context-manager.ts \u003e function formatPageRanges",
+      "startLine": 293,
+      "startCol": 1,
+      "endLine": 321,
+      "endCol": 2
+    },
+    {
+      "text": "function formatPdfInfo(options: {\n  summary?: boolean | undefined;\n  pages?: number[] | undefined;\n}): string {\n  const parts: string[] = [];\n\n  if (options.summary) {\n    parts.push(\"summary\");\n  }\n\n  if (options.pages \u0026\u0026 options.pages.length === 1) {\n    parts.push(`page ${options.pages[0]}`);\n  } else if (options.pages \u0026\u0026 options.pages.length \u003e 1) {\n    const pageRanges = formatPageRanges(options.pages);\n    parts.push(`pages ${pageRanges}`);\n  }\n\n  if (parts.length \u003e 0) {\n    return ` (${parts.join(\", \")})`;\n  }\n\n  return \"\";\n}",
+      "contextualizedText": "// node/context/context-manager.ts \u003e function formatPdfInfo\n\nfunction formatPdfInfo(options: {\n  summary?: boolean | undefined;\n  pages?: number[] | undefined;\n}): string {\n  const parts: string[] = [];\n\n  if (options.summary) {\n    parts.push(\"summary\");\n  }\n\n  if (options.pages \u0026\u0026 options.pages.length === 1) {\n    parts.push(`page ${options.pages[0]}`);\n  } else if (options.pages \u0026\u0026 options.pages.length \u003e 1) {\n    const pageRanges = formatPageRanges(options.pages);\n    parts.push(`pages ${pageRanges}`);\n  }\n\n  if (parts.length \u003e 0) {\n    return ` (${parts.join(\", \")})`;\n  }\n\n  return \"\";\n}",
+      "headingContext": "node/context/context-manager.ts \u003e function formatPdfInfo",
+      "startLine": 323,
+      "startCol": 1,
+      "endLine": 345,
+      "endCol": 2
+    }
+  ]
+}

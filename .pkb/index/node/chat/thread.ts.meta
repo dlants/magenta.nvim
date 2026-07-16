@@ -1,0 +1,465 @@
+{
+  "blobSha": "eb0d82133d49fa547a3c6ec3f660d29133df9da6",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import * as fs from \"node:fs/promises\";\nimport type {\n  GitContextUpdate,\n  GitState,\n  ProviderToolResult,\n  SubagentConfig,\n  ThreadSupervisor,\n} from \"@magenta/core\";\nimport {\n  type ContextFiles,\n  type ContextManager,\n  type InputMessage,\n  loadAgents,\n  type MCPToolManagerImpl,\n  type NativeMessageIdx,\n  ThreadCore,\n  type ThreadId,\n  type ThreadType,\n  type ToolRequestId,\n} from \"@magenta/core\";\nimport * as diff from \"diff\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport type { Lsp } from \"../capabilities/lsp.ts\";\nimport type { SandboxViolationHandler } from \"../capabilities/sandbox-violation-handler.ts\";\nimport type { FileUpdates } from \"../context/context-manager.ts\";\nimport { createLocalEnvironment, type Environment } from \"../environment.ts\";\nimport { displaySnapshotDiff } from \"../nvim/displaySnapshotDiff.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport { openFileInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\nimport type { Row0Indexed } from \"../nvim/window.ts\";\nimport type { MagentaOptions, Profile } from \"../options.ts\";\nimport {\n  type Agent,\n  type AgentStatus,\n  getProvider,\n  type ProviderMessage,\n} from \"../providers/provider.ts\";\nimport type { SystemInfo, SystemPrompt } from \"../providers/system-prompt.ts\";\nimport type { RootMsg } from \"../root-msg.ts\";\nimport type { Sandbox } from \"../sandbox-manager.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport { getBufferIfOpen } from \"../utils/buffers.ts\";\nimport type {\n  AbsFilePath,\n  HomeDir,\n  NvimCwd,\n  UnresolvedFilePath,\n} from \"../utils/files.ts\";\nimport { displayPath } from \"../utils/files.ts\";\nimport type { Chat } from \"./chat.ts\";\nimport { notifyUser } from \"./notify.ts\";\n\nexport type SandboxRoot = {\n  readonly isSandboxBypassed: boolean;\n  toggle?: () =\u003e void;\n};\n\nexport type Msg",
+      "contextualizedText": "// node/chat/thread.ts\n\nimport * as fs from \"node:fs/promises\";\nimport type {\n  GitContextUpdate,\n  GitState,\n  ProviderToolResult,\n  SubagentConfig,\n  ThreadSupervisor,\n} from \"@magenta/core\";\nimport {\n  type ContextFiles,\n  type ContextManager,\n  type InputMessage,\n  loadAgents,\n  type MCPToolManagerImpl,\n  type NativeMessageIdx,\n  ThreadCore,\n  type ThreadId,\n  type ThreadType,\n  type ToolRequestId,\n} from \"@magenta/core\";\nimport * as diff from \"diff\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport type { Lsp } from \"../capabilities/lsp.ts\";\nimport type { SandboxViolationHandler } from \"../capabilities/sandbox-violation-handler.ts\";\nimport type { FileUpdates } from \"../context/context-manager.ts\";\nimport { createLocalEnvironment, type Environment } from \"../environment.ts\";\nimport { displaySnapshotDiff } from \"../nvim/displaySnapshotDiff.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport { openFileInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\nimport type { Row0Indexed } from \"../nvim/window.ts\";\nimport type { MagentaOptions, Profile } from \"../options.ts\";\nimport {\n  type Agent,\n  type AgentStatus,\n  getProvider,\n  type ProviderMessage,\n} from \"../providers/provider.ts\";\nimport type { SystemInfo, SystemPrompt } from \"../providers/system-prompt.ts\";\nimport type { RootMsg } from \"../root-msg.ts\";\nimport type { Sandbox } from \"../sandbox-manager.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport { getBufferIfOpen } from \"../utils/buffers.ts\";\nimport type {\n  AbsFilePath,\n  HomeDir,\n  NvimCwd,\n  UnresolvedFilePath,\n} from \"../utils/files.ts\";\nimport { displayPath } from \"../utils/files.ts\";\nimport type { Chat } from \"./chat.ts\";\nimport { notifyUser } from \"./notify.ts\";\n\nexport type SandboxRoot = {\n  readonly isSandboxBypassed: boolean;\n  toggle?: () =\u003e void;\n};\n\nexport type Msg",
+      "headingContext": "node/chat/thread.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 59,
+      "endCol": 16
+    },
+    {
+      "text": "| { type: \"set-title\"; title: string }\n  | {\n      type: \"send-message\";\n      messages: InputMessage[];\n      async?: boolean;\n      reminders?: string[];\n    }\n  | {\n      type: \"abort\";\n    }\n  | {\n      type: \"start-compaction\";\n      nextPrompt?: string;\n    }\n  | {\n      type: \"toggle-system-prompt\";\n    }\n  | {\n      type: \"toggle-tool-definitions\";\n    }\n  | {\n      type: \"toggle-tool-definition\";\n      toolName: string;\n    }\n  | {\n      type: \"toggle-context-files-expanded\";\n    }\n  | {\n      type: \"toggle-pending-message\";\n      index: number;\n    }\n  | {\n      type: \"toggle-expand-content\";\n      messageIdx: number;\n      contentIdx: number;\n    }\n  | {\n      type: \"toggle-expand-update\";\n      messageIdx: number;\n      filePath: string;\n    }\n  | {\n      type: \"toggle-tool-input-summary\";\n      toolRequestId: ToolRequestId;\n    }\n  | {\n      type: \"toggle-tool-input\";\n      toolRequestId: ToolRequestId;\n    }\n  | {\n      type: \"toggle-tool-progress\";\n      toolRequestId: ToolRequestId;\n    }\n  | {\n      type: \"toggle-tool-result-summary\";\n      toolRequestId: ToolRequestId;\n    }\n  | {\n      type: \"toggle-tool-result\";\n      toolRequestId: ToolRequestId;\n    }\n  | {\n      type: \"toggle-tool-result-item\";\n      toolRequestId: ToolRequestId;\n      itemKey: string;\n    }\n  | {\n      type: \"toggle-tool-progress-item\";\n      toolRequestId: ToolRequestId;\n      itemKey: string;\n    }\n  | {\n      type: \"open-edit-file\";\n      filePath: UnresolvedFilePath;\n    }\n  | {\n      type: \"toggle-edited-file-expanded\";\n      filePath: AbsFilePath;\n    }\n  | {\n      type: \"open-edit-file-diff\";\n      filePath: AbsFilePath;\n      snapshot: string;\n    }\n  | {\n      type: \"permission-pending-change\";\n    }\n  | {\n      type: \"tool-progress\";\n    }\n  | {\n      type: \"turn-ended\";\n    }\n  | {\n      type: \"toggle-compaction-record\";\n      recordIdx: number;\n    }\n  | {\n      type: \"toggle-compaction-step\";\n      recordIdx: number;\n      stepIdx: number;\n    }",
+      "contextualizedText": "// node/chat/thread.ts\n\n| { type: \"set-title\"; title: string }\n  | {\n      type: \"send-message\";\n      messages: InputMessage[];\n      async?: boolean;\n      reminders?: string[];\n    }\n  | {\n      type: \"abort\";\n    }\n  | {\n      type: \"start-compaction\";\n      nextPrompt?: string;\n    }\n  | {\n      type: \"toggle-system-prompt\";\n    }\n  | {\n      type: \"toggle-tool-definitions\";\n    }\n  | {\n      type: \"toggle-tool-definition\";\n      toolName: string;\n    }\n  | {\n      type: \"toggle-context-files-expanded\";\n    }\n  | {\n      type: \"toggle-pending-message\";\n      index: number;\n    }\n  | {\n      type: \"toggle-expand-content\";\n      messageIdx: number;\n      contentIdx: number;\n    }\n  | {\n      type: \"toggle-expand-update\";\n      messageIdx: number;\n      filePath: string;\n    }\n  | {\n      type: \"toggle-tool-input-summary\";\n      toolRequestId: ToolRequestId;\n    }\n  | {\n      type: \"toggle-tool-input\";\n      toolRequestId: ToolRequestId;\n    }\n  | {\n      type: \"toggle-tool-progress\";\n      toolRequestId: ToolRequestId;\n    }\n  | {\n      type: \"toggle-tool-result-summary\";\n      toolRequestId: ToolRequestId;\n    }\n  | {\n      type: \"toggle-tool-result\";\n      toolRequestId: ToolRequestId;\n    }\n  | {\n      type: \"toggle-tool-result-item\";\n      toolRequestId: ToolRequestId;\n      itemKey: string;\n    }\n  | {\n      type: \"toggle-tool-progress-item\";\n      toolRequestId: ToolRequestId;\n      itemKey: string;\n    }\n  | {\n      type: \"open-edit-file\";\n      filePath: UnresolvedFilePath;\n    }\n  | {\n      type: \"toggle-edited-file-expanded\";\n      filePath: AbsFilePath;\n    }\n  | {\n      type: \"open-edit-file-diff\";\n      filePath: AbsFilePath;\n      snapshot: string;\n    }\n  | {\n      type: \"permission-pending-change\";\n    }\n  | {\n      type: \"tool-progress\";\n    }\n  | {\n      type: \"turn-ended\";\n    }\n  | {\n      type: \"toggle-compaction-record\";\n      recordIdx: number;\n    }\n  | {\n      type: \"toggle-compaction-step\";\n      recordIdx: number;\n      stepIdx: number;\n    }",
+      "headingContext": "node/chat/thread.ts",
+      "startLine": 60,
+      "startCol": 3,
+      "endLine": 161,
+      "endCol": 6
+    },
+    {
+      "text": "{\n      type: \"toggle-sandbox-bypass\";\n    }\n  | {\n      type: \"fork-message\";\n      nativeMessageIdx: NativeMessageIdx;\n      prepopulate?: string[];\n    };\n\nexport type ThreadMsg = {\n  type: \"thread-msg\";\n  id: ThreadId;\n  msg: Msg;\n};\n\n/** View state for a single message, stored separately from provider thread content */\nexport type MessageViewState = {\n  contextUpdates?: FileUpdates;\n  gitUpdate?: GitContextUpdate;\n  forkedFrom?: ThreadId;\n  expandedUpdates?: { [absFilePath: string]: boolean };\n  expandedContent?: { [contentIdx: number]: boolean };\n};\n\n/** View state for tools, keyed by tool request ID */\nexport type ToolViewState = {\n  inputSummaryExpanded: boolean;\n  inputExpanded: boolean;\n  progressExpanded: boolean;\n  resultSummaryExpanded: boolean;\n  resultExpanded: boolean;\n  resultItemExpanded?: { [key: string]: boolean };\n  progressItemExpanded?: { [key: string]: boolean };\n};",
+      "contextualizedText": "// node/chat/thread.ts\n\n{\n      type: \"toggle-sandbox-bypass\";\n    }\n  | {\n      type: \"fork-message\";\n      nativeMessageIdx: NativeMessageIdx;\n      prepopulate?: string[];\n    };\n\nexport type ThreadMsg = {\n  type: \"thread-msg\";\n  id: ThreadId;\n  msg: Msg;\n};\n\n/** View state for a single message, stored separately from provider thread content */\nexport type MessageViewState = {\n  contextUpdates?: FileUpdates;\n  gitUpdate?: GitContextUpdate;\n  forkedFrom?: ThreadId;\n  expandedUpdates?: { [absFilePath: string]: boolean };\n  expandedContent?: { [contentIdx: number]: boolean };\n};\n\n/** View state for tools, keyed by tool request ID */\nexport type ToolViewState = {\n  inputSummaryExpanded: boolean;\n  inputExpanded: boolean;\n  progressExpanded: boolean;\n  resultSummaryExpanded: boolean;\n  resultExpanded: boolean;\n  resultItemExpanded?: { [key: string]: boolean };\n  progressItemExpanded?: { [key: string]: boolean };\n};",
+      "headingContext": "node/chat/thread.ts",
+      "startLine": 162,
+      "startCol": 5,
+      "endLine": 195,
+      "endCol": 3
+    },
+    {
+      "text": "export class Thread {\n  public state: {\n    showSystemPrompt: boolean;\n    showToolDefinitions: boolean;\n    expandedToolDefinitions: { [toolName: string]: boolean };\n    contextFilesExpanded: boolean;\n    pendingMessagesExpanded: { [index: number]: boolean };\n    editedFilesExpanded: { [path: AbsFilePath]: { patch: string } };\n    messageViewState: { [messageIdx: number]: MessageViewState };\n    toolViewState: { [toolRequestId: ToolRequestId]: ToolViewState };\n    compactionViewState: {\n      [recordIdx: number]: {\n        expanded: boolean;\n        expandedSteps: { [stepIdx: number]: boolean };\n      };\n    };\n    toolResultMap: Map\u003cToolRequestId, ProviderToolResult\u003e;\n    forkedTo: { childThreadId: ThreadId; atMessageIdx: NativeMessageIdx }[];\n  };\n\n  public core: ThreadCore;\n  private myDispatch: Dispatch\u003cMsg\u003e;\n  private lastAppliedTitle: string | undefined;\n  public sandboxViolationHandler: SandboxViolationHandler | undefined;\n  public sandboxBypassed = false",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread\n\nexport class Thread {\n  public state: {\n    showSystemPrompt: boolean;\n    showToolDefinitions: boolean;\n    expandedToolDefinitions: { [toolName: string]: boolean };\n    contextFilesExpanded: boolean;\n    pendingMessagesExpanded: { [index: number]: boolean };\n    editedFilesExpanded: { [path: AbsFilePath]: { patch: string } };\n    messageViewState: { [messageIdx: number]: MessageViewState };\n    toolViewState: { [toolRequestId: ToolRequestId]: ToolViewState };\n    compactionViewState: {\n      [recordIdx: number]: {\n        expanded: boolean;\n        expandedSteps: { [stepIdx: number]: boolean };\n      };\n    };\n    toolResultMap: Map\u003cToolRequestId, ProviderToolResult\u003e;\n    forkedTo: { childThreadId: ThreadId; atMessageIdx: NativeMessageIdx }[];\n  };\n\n  public core: ThreadCore;\n  private myDispatch: Dispatch\u003cMsg\u003e;\n  private lastAppliedTitle: string | undefined;\n  public sandboxViolationHandler: SandboxViolationHandler | undefined;\n  public sandboxBypassed = false",
+      "headingContext": "node/chat/thread.ts \u003e class Thread",
+      "startLine": 197,
+      "startCol": 1,
+      "endLine": 221,
+      "endCol": 33
+    },
+    {
+      "text": "  get contextManager(): ContextManager {\n    return this.core.contextManager;\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method contextManager\n\n  get contextManager(): ContextManager {\n    return this.core.contextManager;\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method contextManager",
+      "startLine": 223,
+      "startCol": 1,
+      "endLine": 225,
+      "endCol": 4
+    },
+    {
+      "text": "  get agent(): Agent {\n    return this.core.agent;\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method agent\n\n  get agent(): Agent {\n    return this.core.agent;\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method agent",
+      "startLine": 227,
+      "startCol": 1,
+      "endLine": 229,
+      "endCol": 4
+    },
+    {
+      "text": "  get supervisors(): ThreadSupervisor[] {\n    return this.core.supervisors;\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method supervisors\n\n  get supervisors(): ThreadSupervisor[] {\n    return this.core.supervisors;\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method supervisors",
+      "startLine": 231,
+      "startCol": 1,
+      "endLine": 233,
+      "endCol": 4
+    },
+    {
+      "text": "  set supervisors(value: ThreadSupervisor[]) {\n    this.core.supervisors = value;\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method supervisors\n\n  set supervisors(value: ThreadSupervisor[]) {\n    this.core.supervisors = value;\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method supervisors",
+      "startLine": 235,
+      "startCol": 1,
+      "endLine": 237,
+      "endCol": 4
+    },
+    {
+      "text": "  get isSandboxBypassed(): boolean {\n    const sandboxRoot = this.context.getSandboxRoot?.();\n    if (sandboxRoot) return sandboxRoot.isSandboxBypassed;\n    const parent = this.context.getParentThread?.();\n    if (parent) return parent.isSandboxBypassed;\n    return this.sandboxBypassed;\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method isSandboxBypassed\n\n  get isSandboxBypassed(): boolean {\n    const sandboxRoot = this.context.getSandboxRoot?.();\n    if (sandboxRoot) return sandboxRoot.isSandboxBypassed;\n    const parent = this.context.getParentThread?.();\n    if (parent) return parent.isSandboxBypassed;\n    return this.sandboxBypassed;\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method isSandboxBypassed",
+      "startLine": 239,
+      "startCol": 1,
+      "endLine": 245,
+      "endCol": 4
+    },
+    {
+      "text": "constructor(\n    public id: ThreadId,\n    threadType: ThreadType,\n    systemPrompt: SystemPrompt,\n    public context: {\n      dispatch: Dispatch\u003cRootMsg\u003e;\n      chat: Chat;\n      mcpToolManager: MCPToolManagerImpl;\n      profile: Profile;\n      nvim: Nvim;\n      cwd: NvimCwd;\n      homeDir: HomeDir;\n      options: MagentaOptions;\n      getDisplayWidth: () =\u003e number;\n      getParentThread?: () =\u003e Thread | undefined;\n      getSandboxRoot?: () =\u003e SandboxRoot | undefined;\n      yieldSchema?: JSONSchemaType;\n      environment: Environment;\n      initialFiles?: ContextFiles;\n      initialGitState?: GitState | undefined;\n      subagentConfig?: SubagentConfig;\n      systemInfo: SystemInfo;\n    },\n    clonedAgent?: Agent,\n    preBuiltCore?: ThreadCore,\n  ) {\n    this.myDispatch = (msg) =\u003e\n      this.context.dispatch({\n        type: \"thread-msg\",\n        id: this.id,\n        msg,\n      });\n\n    const env = this.context.environment;\n    this.sandboxViolationHandler = env.sandboxViolationHandler;\n\n    this.state = {\n      showSystemPrompt: false,\n      showToolDefinitions: false,\n      expandedToolDefinitions: {},\n      contextFilesExpanded: false,\n      pendingMessagesExpanded: {},\n      editedFilesExpanded: {},\n      messageViewState: {},\n      toolViewState: {},\n      compactionViewState: {},\n      toolResultMap: new Map(),\n      forkedTo: [],\n    };\n\n    const isDocker = env.environmentConfig.type === \"docker\";\n\n    if (preBuiltCore) {\n      this.core = preBuiltCore;\n    } else {\n      this.core = new ThreadCore(\n        id,\n        {\n          logger: context.nvim.logger,\n          profile: context.profile,\n          cwd: isDocker ? env.cwd : context.cwd,\n          homeDir: isDocker ? env.homeDir : context.homeDir,\n          threadType,\n          ...(context.subagentConfig\n            ? { subagentConfig: context.subagentConfig }\n            : {}),\n          systemPrompt,\n          systemInfo: context.systemInfo,\n          mcpToolManager: context.mcpToolManager",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread\n\nconstructor(\n    public id: ThreadId,\n    threadType: ThreadType,\n    systemPrompt: SystemPrompt,\n    public context: {\n      dispatch: Dispatch\u003cRootMsg\u003e;\n      chat: Chat;\n      mcpToolManager: MCPToolManagerImpl;\n      profile: Profile;\n      nvim: Nvim;\n      cwd: NvimCwd;\n      homeDir: HomeDir;\n      options: MagentaOptions;\n      getDisplayWidth: () =\u003e number;\n      getParentThread?: () =\u003e Thread | undefined;\n      getSandboxRoot?: () =\u003e SandboxRoot | undefined;\n      yieldSchema?: JSONSchemaType;\n      environment: Environment;\n      initialFiles?: ContextFiles;\n      initialGitState?: GitState | undefined;\n      subagentConfig?: SubagentConfig;\n      systemInfo: SystemInfo;\n    },\n    clonedAgent?: Agent,\n    preBuiltCore?: ThreadCore,\n  ) {\n    this.myDispatch = (msg) =\u003e\n      this.context.dispatch({\n        type: \"thread-msg\",\n        id: this.id,\n        msg,\n      });\n\n    const env = this.context.environment;\n    this.sandboxViolationHandler = env.sandboxViolationHandler;\n\n    this.state = {\n      showSystemPrompt: false,\n      showToolDefinitions: false,\n      expandedToolDefinitions: {},\n      contextFilesExpanded: false,\n      pendingMessagesExpanded: {},\n      editedFilesExpanded: {},\n      messageViewState: {},\n      toolViewState: {},\n      compactionViewState: {},\n      toolResultMap: new Map(),\n      forkedTo: [],\n    };\n\n    const isDocker = env.environmentConfig.type === \"docker\";\n\n    if (preBuiltCore) {\n      this.core = preBuiltCore;\n    } else {\n      this.core = new ThreadCore(\n        id,\n        {\n          logger: context.nvim.logger,\n          profile: context.profile,\n          cwd: isDocker ? env.cwd : context.cwd,\n          homeDir: isDocker ? env.homeDir : context.homeDir,\n          threadType,\n          ...(context.subagentConfig\n            ? { subagentConfig: context.subagentConfig }\n            : {}),\n          systemPrompt,\n          systemInfo: context.systemInfo,\n          mcpToolManager: context.mcpToolManager",
+      "headingContext": "node/chat/thread.ts \u003e class Thread",
+      "startLine": 247,
+      "startCol": 3,
+      "endLine": 315,
+      "endCol": 49
+    },
+    {
+      "text": "threadManager: context.chat",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread\n\nthreadManager: context.chat",
+      "headingContext": "node/chat/thread.ts \u003e class Thread",
+      "startLine": 316,
+      "startCol": 11,
+      "endLine": 316,
+      "endCol": 38
+    },
+    {
+      "text": "          getScriptRunner: () =\u003e context.chat.scriptRunner",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function getScriptRunner\n\n          getScriptRunner: () =\u003e context.chat.scriptRunner",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function getScriptRunner",
+      "startLine": 317,
+      "startCol": 1,
+      "endLine": 317,
+      "endCol": 59
+    },
+    {
+      "text": "fileIO: env.fileIO,\n          shell: env.shell,\n          gitClient: env.gitClient,\n          ...(context.initialGitState !== undefined\n            ? { initialGitState: context.initialGitState }\n            : {}),\n          lspClient: env.lspClient,\n          helpTagsProvider: env.helpTagsProvider,\n          ...(env.luaExecutor !== undefined\n            ? { luaExecutor: env.luaExecutor }\n            : {}),\n          availableCapabilities: env.availableCapabilities,\n          environmentConfig: env.environmentConfig,\n          maxConcurrentSubagents: context.options.maxConcurrentSubagents || 3,\n          maxConcurrentFastSubagents:\n            context.options.maxConcurrentFastSubagents || 8,\n          ...(context.yieldSchema ? { yieldSchema: context.yieldSchema } : {})",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread\n\nfileIO: env.fileIO,\n          shell: env.shell,\n          gitClient: env.gitClient,\n          ...(context.initialGitState !== undefined\n            ? { initialGitState: context.initialGitState }\n            : {}),\n          lspClient: env.lspClient,\n          helpTagsProvider: env.helpTagsProvider,\n          ...(env.luaExecutor !== undefined\n            ? { luaExecutor: env.luaExecutor }\n            : {}),\n          availableCapabilities: env.availableCapabilities,\n          environmentConfig: env.environmentConfig,\n          maxConcurrentSubagents: context.options.maxConcurrentSubagents || 3,\n          maxConcurrentFastSubagents:\n            context.options.maxConcurrentFastSubagents || 8,\n          ...(context.yieldSchema ? { yieldSchema: context.yieldSchema } : {})",
+      "headingContext": "node/chat/thread.ts \u003e class Thread",
+      "startLine": 318,
+      "startCol": 11,
+      "endLine": 334,
+      "endCol": 79
+    },
+    {
+      "text": "          getAgents: () =\u003e\n            loadAgents({\n              cwd: isDocker ? env.cwd : context.cwd,\n              logger: context.nvim.logger,\n              options: context.options,\n            })",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function getAgents\n\n          getAgents: () =\u003e\n            loadAgents({\n              cwd: isDocker ? env.cwd : context.cwd,\n              logger: context.nvim.logger,\n              options: context.options,\n            })",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function getAgents",
+      "startLine": 335,
+      "startCol": 1,
+      "endLine": 340,
+      "endCol": 15
+    },
+    {
+      "text": "          getProvider: (profile) =\u003e getProvider(context.nvim, profile)",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function getProvider\n\n          getProvider: (profile) =\u003e getProvider(context.nvim, profile)",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function getProvider",
+      "startLine": 341,
+      "startCol": 1,
+      "endLine": 341,
+      "endCol": 71
+    },
+    {
+      "text": "...(context.initialFiles\n            ? { initialFiles: context.initialFiles }\n            : {}),\n        },\n        clonedAgent,\n      );\n    }\n\n    const coreListeners",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread\n\n...(context.initialFiles\n            ? { initialFiles: context.initialFiles }\n            : {}),\n        },\n        clonedAgent,\n      );\n    }\n\n    const coreListeners",
+      "headingContext": "node/chat/thread.ts \u003e class Thread",
+      "startLine": 342,
+      "startCol": 11,
+      "endLine": 350,
+      "endCol": 24
+    },
+    {
+      "text": "      update: () =\u003e {\n        this.rebuildToolResultMap();\n        const title = this.core.state.title;\n        if (title !== undefined \u0026\u0026 title !== this.lastAppliedTitle) {\n          this.lastAppliedTitle = title;\n          this.context.dispatch({\n            type: \"set-thread-title-effect\",\n            id: this.core.id,\n            title,\n          });\n        }\n        this.myDispatch({ type: \"tool-progress\" });\n      }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function update\n\n      update: () =\u003e {\n        this.rebuildToolResultMap();\n        const title = this.core.state.title;\n        if (title !== undefined \u0026\u0026 title !== this.lastAppliedTitle) {\n          this.lastAppliedTitle = title;\n          this.context.dispatch({\n            type: \"set-thread-title-effect\",\n            id: this.core.id,\n            title,\n          });\n        }\n        this.myDispatch({ type: \"tool-progress\" });\n      }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function update",
+      "startLine": 351,
+      "startCol": 1,
+      "endLine": 363,
+      "endCol": 8
+    },
+    {
+      "text": "      pendingUpdatesChanged: () =\u003e this.myDispatch({ type: \"tool-progress\" })",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function pendingUpdatesChanged\n\n      pendingUpdatesChanged: () =\u003e this.myDispatch({ type: \"tool-progress\" })",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function pendingUpdatesChanged",
+      "startLine": 364,
+      "startCol": 1,
+      "endLine": 364,
+      "endCol": 78
+    },
+    {
+      "text": "      turnEnded: (payload: { reason: \"end_turn\" | \"aborted\" | \"error\" }) =\u003e {\n        this.myDispatch({ type: \"turn-ended\" });\n        if (payload.reason === \"end_turn\" || payload.reason === \"error\") {\n          notifyUser(\n            {\n              nvim: this.context.nvim,\n              options: this.context.options,\n            },\n            \"thread-turn-end\",\n          );\n        }\n      }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function turnEnded\n\n      turnEnded: (payload: { reason: \"end_turn\" | \"aborted\" | \"error\" }) =\u003e {\n        this.myDispatch({ type: \"turn-ended\" });\n        if (payload.reason === \"end_turn\" || payload.reason === \"error\") {\n          notifyUser(\n            {\n              nvim: this.context.nvim,\n              options: this.context.options,\n            },\n            \"thread-turn-end\",\n          );\n        }\n      }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function turnEnded",
+      "startLine": 365,
+      "startCol": 1,
+      "endLine": 376,
+      "endCol": 8
+    },
+    {
+      "text": "      setupResubmit: (threadId: ThreadId, lastUserMessage: string) =\u003e\n        this.context.dispatch({\n          type: \"sidebar-msg\",\n          msg: { type: \"setup-resubmit\", threadId, lastUserMessage },\n        })",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function setupResubmit\n\n      setupResubmit: (threadId: ThreadId, lastUserMessage: string) =\u003e\n        this.context.dispatch({\n          type: \"sidebar-msg\",\n          msg: { type: \"setup-resubmit\", threadId, lastUserMessage },\n        })",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function setupResubmit",
+      "startLine": 377,
+      "startCol": 1,
+      "endLine": 381,
+      "endCol": 11
+    },
+    {
+      "text": "      recoverPendingMessages: (threadId: ThreadId, text: string) =\u003e\n        this.context.dispatch({\n          type: \"sidebar-msg\",\n          msg: { type: \"append-to-input\", threadId, text },\n        })",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function recoverPendingMessages\n\n      recoverPendingMessages: (threadId: ThreadId, text: string) =\u003e\n        this.context.dispatch({\n          type: \"sidebar-msg\",\n          msg: { type: \"append-to-input\", threadId, text },\n        })",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function recoverPendingMessages",
+      "startLine": 382,
+      "startCol": 1,
+      "endLine": 386,
+      "endCol": 11
+    },
+    {
+      "text": "      scrollToLastMessage: () =\u003e\n        this.context.dispatch({\n          type: \"sidebar-msg\",\n          msg: { type: \"scroll-to-last-user-message\" },\n        })",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function scrollToLastMessage\n\n      scrollToLastMessage: () =\u003e\n        this.context.dispatch({\n          type: \"sidebar-msg\",\n          msg: { type: \"scroll-to-last-user-message\" },\n        })",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function scrollToLastMessage",
+      "startLine": 387,
+      "startCol": 1,
+      "endLine": 391,
+      "endCol": 11
+    },
+    {
+      "text": "      aborting: () =\u003e {\n        this.sandboxViolationHandler?.rejectAll();\n      }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function aborting\n\n      aborting: () =\u003e {\n        this.sandboxViolationHandler?.rejectAll();\n      }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function aborting",
+      "startLine": 392,
+      "startCol": 1,
+      "endLine": 394,
+      "endCol": 8
+    },
+    {
+      "text": "      contextUpdatesSent: (updates: Record\u003cstring, unknown\u003e) =\u003e {\n        const messageCount = this.core.getProviderMessages().length;\n        this.state.messageViewState[messageCount] = {\n          ...this.state.messageViewState[messageCount],\n          contextUpdates: updates as FileUpdates,\n        };\n      }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function contextUpdatesSent\n\n      contextUpdatesSent: (updates: Record\u003cstring, unknown\u003e) =\u003e {\n        const messageCount = this.core.getProviderMessages().length;\n        this.state.messageViewState[messageCount] = {\n          ...this.state.messageViewState[messageCount],\n          contextUpdates: updates as FileUpdates,\n        };\n      }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function contextUpdatesSent",
+      "startLine": 395,
+      "startCol": 1,
+      "endLine": 401,
+      "endCol": 8
+    },
+    {
+      "text": "      gitContextUpdateSent: (update: GitContextUpdate) =\u003e {\n        const messageCount = this.core.getProviderMessages().length;\n        this.state.messageViewState[messageCount] = {\n          ...this.state.messageViewState[messageCount],\n          gitUpdate: update,\n        };\n      }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e function gitContextUpdateSent\n\n      gitContextUpdateSent: (update: GitContextUpdate) =\u003e {\n        const messageCount = this.core.getProviderMessages().length;\n        this.state.messageViewState[messageCount] = {\n          ...this.state.messageViewState[messageCount],\n          gitUpdate: update,\n        };\n      }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e function gitContextUpdateSent",
+      "startLine": 402,
+      "startCol": 1,
+      "endLine": 408,
+      "endCol": 8
+    },
+    {
+      "text": "this.coreListeners = coreListeners;\n    this.core.on(\"update\", coreListeners.update);\n    this.core.on(\"pendingUpdatesChanged\", coreListeners.pendingUpdatesChanged);\n    this.core.on(\"turnEnded\", coreListeners.turnEnded);\n    this.core.on(\"setupResubmit\", coreListeners.setupResubmit);\n    this.core.on(\n      \"recoverPendingMessages\",\n      coreListeners.recoverPendingMessages,\n    );\n    this.core.on(\"scrollToLastMessage\", coreListeners.scrollToLastMessage);\n    this.core.on(\"aborting\", coreListeners.aborting);\n    this.core.on(\"contextUpdatesSent\", coreListeners.contextUpdatesSent);\n    this.core.on(\"gitContextUpdateSent\", coreListeners.gitContextUpdateSent);\n\n    this.rebuildToolResultMap();",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread\n\nthis.coreListeners = coreListeners;\n    this.core.on(\"update\", coreListeners.update);\n    this.core.on(\"pendingUpdatesChanged\", coreListeners.pendingUpdatesChanged);\n    this.core.on(\"turnEnded\", coreListeners.turnEnded);\n    this.core.on(\"setupResubmit\", coreListeners.setupResubmit);\n    this.core.on(\n      \"recoverPendingMessages\",\n      coreListeners.recoverPendingMessages,\n    );\n    this.core.on(\"scrollToLastMessage\", coreListeners.scrollToLastMessage);\n    this.core.on(\"aborting\", coreListeners.aborting);\n    this.core.on(\"contextUpdatesSent\", coreListeners.contextUpdatesSent);\n    this.core.on(\"gitContextUpdateSent\", coreListeners.gitContextUpdateSent);\n\n    this.rebuildToolResultMap();",
+      "headingContext": "node/chat/thread.ts \u003e class Thread",
+      "startLine": 410,
+      "startCol": 5,
+      "endLine": 424,
+      "endCol": 33
+    },
+    {
+      "text": "/** Walks the agent's provider messages and rebuilds the tool result map.\n   * Preserves any pre-existing structuredResult for surviving tool result IDs,\n   * since the provider strips structuredResult when serializing to native form\n   * but the rich view rendering relies on it. */\n  rebuildToolResultMap(): void {\n    const next = new Map\u003cToolRequestId, ProviderToolResult\u003e();\n    const prev = this.state.toolResultMap;\n    for (const message of this.core.getProviderMessages()) {\n      if (message.role !== \"user\") continue;\n      for (const content of message.content) {\n        if (content.type === \"tool_result\") {\n          const cached = prev.get(content.id);\n          if (\n            cached?.result.status === \"ok\" \u0026\u0026\n            content.result.status === \"ok\"\n          ) {\n            next.set(content.id, {\n              ...content,\n              result: {\n                ...content.result,\n                structuredResult: cached.result.structuredResult,\n              },\n            });\n          } else {\n            next.set(content.id, content);\n          }\n        }\n      }\n    }\n    // Include results from active tool entries whose results haven't yet been\n    // submitted back to the agent (e.g. mid tool_use turn while other tools\n    // are still running). The rendering layer needs these to display custom\n    // result summaries as soon as the tool completes.\n    const mode = this.core.state.mode;\n    if (mode.type === \"tool_use\") {\n      for (const entry of mode.activeTools.values()) {\n        if (entry.result \u0026\u0026 !next.has(entry.request.id)) {\n          next.set(entry.request.id, entry.result);\n        }\n      }\n    }\n    this.state.toolResultMap = next;\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method rebuildToolResultMap\n\n/** Walks the agent's provider messages and rebuilds the tool result map.\n   * Preserves any pre-existing structuredResult for surviving tool result IDs,\n   * since the provider strips structuredResult when serializing to native form\n   * but the rich view rendering relies on it. */\n  rebuildToolResultMap(): void {\n    const next = new Map\u003cToolRequestId, ProviderToolResult\u003e();\n    const prev = this.state.toolResultMap;\n    for (const message of this.core.getProviderMessages()) {\n      if (message.role !== \"user\") continue;\n      for (const content of message.content) {\n        if (content.type === \"tool_result\") {\n          const cached = prev.get(content.id);\n          if (\n            cached?.result.status === \"ok\" \u0026\u0026\n            content.result.status === \"ok\"\n          ) {\n            next.set(content.id, {\n              ...content,\n              result: {\n                ...content.result,\n                structuredResult: cached.result.structuredResult,\n              },\n            });\n          } else {\n            next.set(content.id, content);\n          }\n        }\n      }\n    }\n    // Include results from active tool entries whose results haven't yet been\n    // submitted back to the agent (e.g. mid tool_use turn while other tools\n    // are still running). The rendering layer needs these to display custom\n    // result summaries as soon as the tool completes.\n    const mode = this.core.state.mode;\n    if (mode.type === \"tool_use\") {\n      for (const entry of mode.activeTools.values()) {\n        if (entry.result \u0026\u0026 !next.has(entry.request.id)) {\n          next.set(entry.request.id, entry.result);\n        }\n      }\n    }\n    this.state.toolResultMap = next;\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method rebuildToolResultMap",
+      "startLine": 427,
+      "startCol": 3,
+      "endLine": 469,
+      "endCol": 4
+    },
+    {
+      "text": "/** Build an independent fork of `sourceThread` frozen at `nativeMessageIdx`.\n   * The cloned agent is created exactly once (by ThreadCore.clone). The source\n   * is not aborted, no auto-context is re-resolved, and no system prompt is\n   * regenerated. The result is a new Thread with its own environment and\n   * Layer 3 view state, ready to continue from the snapshot. */\n  static async cloneFromNativeMessageIdx(args: {\n    sourceThread: Thread;\n    newThreadId: ThreadId;\n    nativeMessageIdx: NativeMessageIdx;\n    chat: Chat;\n    mcpToolManager: MCPToolManagerImpl;\n    dispatch: Dispatch\u003cRootMsg\u003e;\n    nvim: Nvim;\n    cwd: NvimCwd;\n    homeDir: HomeDir;\n    lsp: Lsp;\n    sandbox: Sandbox;\n    getOptions: () =\u003e MagentaOptions;\n    getDisplayWidth: () =\u003e number;\n  }): Promise\u003cThread\u003e {\n    const {\n      sourceThread,\n      newThreadId,\n      nativeMessageIdx,\n      chat,\n      mcpToolManager,\n      dispatch,\n      nvim,\n      cwd,\n      homeDir,\n      lsp,\n      sandbox,\n      getOptions,\n      getDisplayWidth,\n    } = args;\n\n    const sourceEnvConfig = sourceThread.context.environment.environmentConfig;\n    if (sourceEnvConfig.type !== \"local\") {\n      throw new Error(\n        `Thread.cloneFromNativeMessageIdx only supports local-source forks for MVP (got ${sourceEnvConfig.type}). Docker-source forks are a follow-up.`,\n      );\n    }\n\n",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx\n\n/** Build an independent fork of `sourceThread` frozen at `nativeMessageIdx`.\n   * The cloned agent is created exactly once (by ThreadCore.clone). The source\n   * is not aborted, no auto-context is re-resolved, and no system prompt is\n   * regenerated. The result is a new Thread with its own environment and\n   * Layer 3 view state, ready to continue from the snapshot. */\n  static async cloneFromNativeMessageIdx(args: {\n    sourceThread: Thread;\n    newThreadId: ThreadId;\n    nativeMessageIdx: NativeMessageIdx;\n    chat: Chat;\n    mcpToolManager: MCPToolManagerImpl;\n    dispatch: Dispatch\u003cRootMsg\u003e;\n    nvim: Nvim;\n    cwd: NvimCwd;\n    homeDir: HomeDir;\n    lsp: Lsp;\n    sandbox: Sandbox;\n    getOptions: () =\u003e MagentaOptions;\n    getDisplayWidth: () =\u003e number;\n  }): Promise\u003cThread\u003e {\n    const {\n      sourceThread,\n      newThreadId,\n      nativeMessageIdx,\n      chat,\n      mcpToolManager,\n      dispatch,\n      nvim,\n      cwd,\n      homeDir,\n      lsp,\n      sandbox,\n      getOptions,\n      getDisplayWidth,\n    } = args;\n\n    const sourceEnvConfig = sourceThread.context.environment.environmentConfig;\n    if (sourceEnvConfig.type !== \"local\") {\n      throw new Error(\n        `Thread.cloneFromNativeMessageIdx only supports local-source forks for MVP (got ${sourceEnvConfig.type}). Docker-source forks are a follow-up.`,\n      );\n    }\n\n",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx",
+      "startLine": 471,
+      "startCol": 3,
+      "endLine": 514,
+      "endCol": 1
+    },
+    {
+      "text": "    const bypassRef = { get: () =\u003e false as boolean",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx \u003e function get\n\n    const bypassRef = { get: () =\u003e false as boolean",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx \u003e function get",
+      "startLine": 514,
+      "startCol": 1,
+      "endLine": 514,
+      "endCol": 52
+    },
+    {
+      "text": "environment = createLocalEnvironment({\n      nvim,\n      lsp,\n      cwd,\n      homeDir,\n      getOptions,\n      threadId: newThreadId,\n      sandbox",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx\n\nenvironment = createLocalEnvironment({\n      nvim,\n      lsp,\n      cwd,\n      homeDir,\n      getOptions,\n      threadId: newThreadId,\n      sandbox",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx",
+      "startLine": 516,
+      "startCol": 11,
+      "endLine": 523,
+      "endCol": 14
+    },
+    {
+      "text": "      onPendingChange: () =\u003e\n        dispatch({\n          type: \"thread-msg\",\n          id: newThreadId,\n          msg: { type: \"permission-pending-change\" },\n        })",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx \u003e function onPendingChange\n\n      onPendingChange: () =\u003e\n        dispatch({\n          type: \"thread-msg\",\n          id: newThreadId,\n          msg: { type: \"permission-pending-change\" },\n        })",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx \u003e function onPendingChange",
+      "startLine": 524,
+      "startCol": 1,
+      "endLine": 529,
+      "endCol": 11
+    },
+    {
+      "text": "      isBypassed: () =\u003e bypassRef.get()",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx \u003e function isBypassed\n\n      isBypassed: () =\u003e bypassRef.get()",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx \u003e function isBypassed",
+      "startLine": 530,
+      "startCol": 1,
+      "endLine": 530,
+      "endCol": 40
+    },
+    {
+      "text": "const sourceCore = sourceThread.core;\n    const profile = sourceThread.context.profile;\n    const sourceCoreState = sourceCore.state;\n\n    const core = await ThreadCore.clone({\n      sourceCore,\n      newId: newThreadId,\n      nativeMessageIdx,\n      context: {\n        logger: nvim.logger,\n        profile,\n        cwd: environment.cwd,\n        homeDir: environment.homeDir,\n        threadType: sourceCoreState.threadType,\n        ...(sourceThread.context.subagentConfig\n          ? { subagentConfig: sourceThread.context.subagentConfig }\n          : {}),\n        systemPrompt: sourceCoreState.systemPrompt,\n        systemInfo: sourceCoreState.systemInfo,\n        mcpToolManager,\n        threadManager: chat,\n        fileIO: environment.fileIO,\n        shell: environment.shell,\n        gitClient: environment.gitClient,\n        lspClient: environment.lspClient,\n        helpTagsProvider: environment.helpTagsProvider,\n        ...(environment.luaExecutor !== undefined\n          ? { luaExecutor: environment.luaExecutor }\n          : {}),\n        availableCapabilities: environment.availableCapabilities,\n        environmentConfig: environment.environmentConfig,\n        maxConcurrentSubagents: getOptions().maxConcurrentSubagents || 3,\n        maxConcurrentFastSubagents:\n          getOptions().maxConcurrentFastSubagents || 8",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx\n\nconst sourceCore = sourceThread.core;\n    const profile = sourceThread.context.profile;\n    const sourceCoreState = sourceCore.state;\n\n    const core = await ThreadCore.clone({\n      sourceCore,\n      newId: newThreadId,\n      nativeMessageIdx,\n      context: {\n        logger: nvim.logger,\n        profile,\n        cwd: environment.cwd,\n        homeDir: environment.homeDir,\n        threadType: sourceCoreState.threadType,\n        ...(sourceThread.context.subagentConfig\n          ? { subagentConfig: sourceThread.context.subagentConfig }\n          : {}),\n        systemPrompt: sourceCoreState.systemPrompt,\n        systemInfo: sourceCoreState.systemInfo,\n        mcpToolManager,\n        threadManager: chat,\n        fileIO: environment.fileIO,\n        shell: environment.shell,\n        gitClient: environment.gitClient,\n        lspClient: environment.lspClient,\n        helpTagsProvider: environment.helpTagsProvider,\n        ...(environment.luaExecutor !== undefined\n          ? { luaExecutor: environment.luaExecutor }\n          : {}),\n        availableCapabilities: environment.availableCapabilities,\n        environmentConfig: environment.environmentConfig,\n        maxConcurrentSubagents: getOptions().maxConcurrentSubagents || 3,\n        maxConcurrentFastSubagents:\n          getOptions().maxConcurrentFastSubagents || 8",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx",
+      "startLine": 533,
+      "startCol": 5,
+      "endLine": 566,
+      "endCol": 55
+    },
+    {
+      "text": "        getAgents: () =\u003e\n          loadAgents({\n            cwd: environment.cwd,\n            logger: nvim.logger,\n            options: getOptions(),\n          })",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx \u003e function getAgents\n\n        getAgents: () =\u003e\n          loadAgents({\n            cwd: environment.cwd,\n            logger: nvim.logger,\n            options: getOptions(),\n          })",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx \u003e function getAgents",
+      "startLine": 567,
+      "startCol": 1,
+      "endLine": 572,
+      "endCol": 13
+    },
+    {
+      "text": "        getProvider: (p) =\u003e getProvider(nvim, p)",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx \u003e function getProvider\n\n        getProvider: (p) =\u003e getProvider(nvim, p)",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx \u003e function getProvider",
+      "startLine": 573,
+      "startCol": 1,
+      "endLine": 573,
+      "endCol": 49
+    },
+    {
+      "text": "const thread = new Thread(\n      newThreadId,\n      sourceCoreState.threadType,\n      sourceCoreState.systemPrompt,\n      {\n        dispatch,\n        chat,\n        mcpToolManager,\n        profile,\n        nvim,\n        cwd,\n        homeDir,\n        options: getOptions(),\n        getDisplayWidth,\n        environment,\n        systemInfo: sourceCoreState.systemInfo,\n        ...(sourceThread.context.subagentConfig\n          ? { subagentConfig: sourceThread.context.subagentConfig }\n          : {}),\n      },\n      undefined,\n      core,\n    );\n\n    thread.sandboxBypassed = sourceThread.isSandboxBypassed;\n    bypassRef.get = () =\u003e thread.isSandboxBypassed;\n\n    const survivingToolResults = sourceThread.state.toolResultMap;\n    const newMap = new Map\u003cToolRequestId, ProviderToolResult\u003e();\n    for (const message of core.getProviderMessages()) {\n      if (message.role !== \"user\") continue;\n      for (const content of message.content) {\n        if (content.type === \"tool_result\") {\n          const cached = survivingToolResults.get(content.id);\n          if (\n            cached?.result.status === \"ok\" \u0026\u0026\n            content.result.status === \"ok\"\n          ) {\n            newMap.set(content.id, {\n              ...content,\n              result: {\n                ...content.result,\n                structuredResult: cached.result.structuredResult,\n              },\n            });\n          } else {\n            newMap.set(content.id, content);\n          }\n        }\n      }\n    }\n    thread.state.toolResultMap = newMap;",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx\n\nconst thread = new Thread(\n      newThreadId,\n      sourceCoreState.threadType,\n      sourceCoreState.systemPrompt,\n      {\n        dispatch,\n        chat,\n        mcpToolManager,\n        profile,\n        nvim,\n        cwd,\n        homeDir,\n        options: getOptions(),\n        getDisplayWidth,\n        environment,\n        systemInfo: sourceCoreState.systemInfo,\n        ...(sourceThread.context.subagentConfig\n          ? { subagentConfig: sourceThread.context.subagentConfig }\n          : {}),\n      },\n      undefined,\n      core,\n    );\n\n    thread.sandboxBypassed = sourceThread.isSandboxBypassed;\n    bypassRef.get = () =\u003e thread.isSandboxBypassed;\n\n    const survivingToolResults = sourceThread.state.toolResultMap;\n    const newMap = new Map\u003cToolRequestId, ProviderToolResult\u003e();\n    for (const message of core.getProviderMessages()) {\n      if (message.role !== \"user\") continue;\n      for (const content of message.content) {\n        if (content.type === \"tool_result\") {\n          const cached = survivingToolResults.get(content.id);\n          if (\n            cached?.result.status === \"ok\" \u0026\u0026\n            content.result.status === \"ok\"\n          ) {\n            newMap.set(content.id, {\n              ...content,\n              result: {\n                ...content.result,\n                structuredResult: cached.result.structuredResult,\n              },\n            });\n          } else {\n            newMap.set(content.id, content);\n          }\n        }\n      }\n    }\n    thread.state.toolResultMap = newMap;",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx",
+      "startLine": 577,
+      "startCol": 5,
+      "endLine": 628,
+      "endCol": 41
+    },
+    {
+      "text": "for (const [idxStr, viewState] of Object.entries(\n      sourceThread.state.messageViewState,\n    )) {\n      const idx = Number(idxStr);\n      if (idx \u003c= nativeMessageIdx) {\n        thread.state.messageViewState[idx] = {\n          ...(viewState.contextUpdates\n            ? { contextUpdates: { ...viewState.contextUpdates } }\n            : {}),\n          ...(viewState.gitUpdate ? { gitUpdate: viewState.gitUpdate } : {}),\n          ...(viewState.expandedUpdates\n            ? { expandedUpdates: { ...viewState.expandedUpdates } }\n            : {}),\n          ...(viewState.expandedContent\n            ? { expandedContent: { ...viewState.expandedContent } }\n            : {}),\n        };\n      }\n    }\n\n    return thread;\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx\n\nfor (const [idxStr, viewState] of Object.entries(\n      sourceThread.state.messageViewState,\n    )) {\n      const idx = Number(idxStr);\n      if (idx \u003c= nativeMessageIdx) {\n        thread.state.messageViewState[idx] = {\n          ...(viewState.contextUpdates\n            ? { contextUpdates: { ...viewState.contextUpdates } }\n            : {}),\n          ...(viewState.gitUpdate ? { gitUpdate: viewState.gitUpdate } : {}),\n          ...(viewState.expandedUpdates\n            ? { expandedUpdates: { ...viewState.expandedUpdates } }\n            : {}),\n          ...(viewState.expandedContent\n            ? { expandedContent: { ...viewState.expandedContent } }\n            : {}),\n        };\n      }\n    }\n\n    return thread;\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method cloneFromNativeMessageIdx",
+      "startLine": 630,
+      "startCol": 5,
+      "endLine": 651,
+      "endCol": 4
+    },
+    {
+      "text": "private coreListeners:\n    | {\n        update: () =\u003e void;\n        pendingUpdatesChanged: () =\u003e void;\n        turnEnded: (payload: {\n          reason: \"end_turn\" | \"aborted\" | \"error\";\n        }) =\u003e void;\n        setupResubmit: (threadId: ThreadId, lastUserMessage: string) =\u003e void;\n        recoverPendingMessages: (threadId: ThreadId, text: string) =\u003e void;\n        scrollToLastMessage: () =\u003e void;\n        aborting: () =\u003e void;\n        contextUpdatesSent: (updates: Record\u003cstring, unknown\u003e) =\u003e void;\n        gitContextUpdateSent: (update: GitContextUpdate) =\u003e void;\n      }\n    | undefined;\n\n  private destroyed = false",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread\n\nprivate coreListeners:\n    | {\n        update: () =\u003e void;\n        pendingUpdatesChanged: () =\u003e void;\n        turnEnded: (payload: {\n          reason: \"end_turn\" | \"aborted\" | \"error\";\n        }) =\u003e void;\n        setupResubmit: (threadId: ThreadId, lastUserMessage: string) =\u003e void;\n        recoverPendingMessages: (threadId: ThreadId, text: string) =\u003e void;\n        scrollToLastMessage: () =\u003e void;\n        aborting: () =\u003e void;\n        contextUpdatesSent: (updates: Record\u003cstring, unknown\u003e) =\u003e void;\n        gitContextUpdateSent: (update: GitContextUpdate) =\u003e void;\n      }\n    | undefined;\n\n  private destroyed = false",
+      "headingContext": "node/chat/thread.ts \u003e class Thread",
+      "startLine": 653,
+      "startCol": 3,
+      "endLine": 669,
+      "endCol": 28
+    },
+    {
+      "text": "  async destroy(): Promise\u003cvoid\u003e {\n    if (this.destroyed) return;\n    this.destroyed = true;\n\n    if (this.coreListeners) {\n      this.core.off(\"update\", this.coreListeners.update);\n      this.core.off(\n        \"pendingUpdatesChanged\",\n        this.coreListeners.pendingUpdatesChanged,\n      );\n      this.core.off(\"turnEnded\", this.coreListeners.turnEnded);\n      this.core.off(\"setupResubmit\", this.coreListeners.setupResubmit);\n      this.core.off(\n        \"recoverPendingMessages\",\n        this.coreListeners.recoverPendingMessages,\n      );\n      this.core.off(\n        \"scrollToLastMessage\",\n        this.coreListeners.scrollToLastMessage,\n      );\n      this.core.off(\"aborting\", this.coreListeners.aborting);\n      this.core.off(\n        \"contextUpdatesSent\",\n        this.coreListeners.contextUpdatesSent,\n      );\n      this.core.off(\n        \"gitContextUpdateSent\",\n        this.coreListeners.gitContextUpdateSent,\n      );\n      this.coreListeners = undefined;\n    }\n\n    await this.core.destroy();\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method destroy\n\n  async destroy(): Promise\u003cvoid\u003e {\n    if (this.destroyed) return;\n    this.destroyed = true;\n\n    if (this.coreListeners) {\n      this.core.off(\"update\", this.coreListeners.update);\n      this.core.off(\n        \"pendingUpdatesChanged\",\n        this.coreListeners.pendingUpdatesChanged,\n      );\n      this.core.off(\"turnEnded\", this.coreListeners.turnEnded);\n      this.core.off(\"setupResubmit\", this.coreListeners.setupResubmit);\n      this.core.off(\n        \"recoverPendingMessages\",\n        this.coreListeners.recoverPendingMessages,\n      );\n      this.core.off(\n        \"scrollToLastMessage\",\n        this.coreListeners.scrollToLastMessage,\n      );\n      this.core.off(\"aborting\", this.coreListeners.aborting);\n      this.core.off(\n        \"contextUpdatesSent\",\n        this.coreListeners.contextUpdatesSent,\n      );\n      this.core.off(\n        \"gitContextUpdateSent\",\n        this.coreListeners.gitContextUpdateSent,\n      );\n      this.coreListeners = undefined;\n    }\n\n    await this.core.destroy();\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method destroy",
+      "startLine": 671,
+      "startCol": 1,
+      "endLine": 704,
+      "endCol": 4
+    },
+    {
+      "text": "  getProviderStatus(): AgentStatus {\n    return this.core.getProviderStatus();\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method getProviderStatus\n\n  getProviderStatus(): AgentStatus {\n    return this.core.getProviderStatus();\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method getProviderStatus",
+      "startLine": 706,
+      "startCol": 1,
+      "endLine": 708,
+      "endCol": 4
+    },
+    {
+      "text": "  getProviderMessages(): ReadonlyArray\u003cProviderMessage\u003e {\n    return this.core.getProviderMessages();\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method getProviderMessages\n\n  getProviderMessages(): ReadonlyArray\u003cProviderMessage\u003e {\n    return this.core.getProviderMessages();\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method getProviderMessages",
+      "startLine": 710,
+      "startCol": 1,
+      "endLine": 712,
+      "endCol": 4
+    },
+    {
+      "text": "  getMessages(): ProviderMessage[] {\n    return this.core.getMessages();\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method getMessages\n\n  getMessages(): ProviderMessage[] {\n    return this.core.getMessages();\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method getMessages",
+      "startLine": 714,
+      "startCol": 1,
+      "endLine": 716,
+      "endCol": 4
+    },
+    {
+      "text": "  getLastStopTokenCount(): number {\n    return this.core.getLastStopTokenCount();\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method getLastStopTokenCount\n\n  getLastStopTokenCount(): number {\n    return this.core.getLastStopTokenCount();\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method getLastStopTokenCount",
+      "startLine": 718,
+      "startCol": 1,
+      "endLine": 720,
+      "endCol": 4
+    },
+    {
+      "text": "  private async readCurrentFileContent(filePath: AbsFilePath): Promise\u003cstring\u003e {\n    const bufResult = await getBufferIfOpen({\n      unresolvedPath: filePath,\n      context: this.context,\n    });\n    if (bufResult.status === \"ok\") {\n      const lines = await bufResult.buffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      return lines.join(\"\\n\");\n    }\n    return await fs.readFile(filePath, \"utf-8\");\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method readCurrentFileContent\n\n  private async readCurrentFileContent(filePath: AbsFilePath): Promise\u003cstring\u003e {\n    const bufResult = await getBufferIfOpen({\n      unresolvedPath: filePath,\n      context: this.context,\n    });\n    if (bufResult.status === \"ok\") {\n      const lines = await bufResult.buffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      return lines.join(\"\\n\");\n    }\n    return await fs.readFile(filePath, \"utf-8\");\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method readCurrentFileContent",
+      "startLine": 722,
+      "startCol": 1,
+      "endLine": 735,
+      "endCol": 4
+    },
+    {
+      "text": "  update(msg: RootMsg): void {\n    if (msg.type === \"thread-msg\" \u0026\u0026 msg.id === this.id) {\n      this.myUpdate(msg.msg);\n    }\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method update\n\n  update(msg: RootMsg): void {\n    if (msg.type === \"thread-msg\" \u0026\u0026 msg.id === this.id) {\n      this.myUpdate(msg.msg);\n    }\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method update",
+      "startLine": 737,
+      "startCol": 1,
+      "endLine": 741,
+      "endCol": 4
+    },
+    {
+      "text": "  private myUpdate(msg: Msg): void {\n    switch (msg.type) {\n      case \"send-message\":\n        if (msg.reminders) {\n          for (const text of msg.reminders) {\n            this.core.update({ type: \"activate-reminder\", text });\n          }\n        }\n        this.core\n          .handleSendMessageRequest(msg.messages, msg.async)\n          .catch((e: Error) =\u003e this.context.nvim.logger.error(e));\n        return;\n\n      case \"start-compaction\":\n        this.core.startCompaction(msg.nextPrompt);\n        return;\n\n      case \"abort\": {\n        if (this.core.state.mode.type === \"tool_use\") {\n          for (const [, entry] of this.core.state.mode.activeTools) {\n            entry.handle.abort();\n          }\n        }\n        this.abortAndWait().catch((e: Error) =\u003e {\n          this.context.nvim.logger.error(`Error during abort: ${e.message}`);\n        });\n        return;\n      }\n\n      case \"set-title\":\n        this.core.setTitle(msg.title);\n        return;\n\n      case \"toggle-system-prompt\":\n        this.state.showSystemPrompt = !this.state.showSystemPrompt;\n        return;\n\n      case \"toggle-tool-definitions\":\n        this.state.showToolDefinitions = !this.state.showToolDefinitions;\n        if (!this.state.showToolDefinitions) {\n          this.state.expandedToolDefinitions = {};\n        }\n        return;\n\n      case \"toggle-tool-definition\":\n        this.state.expandedToolDefinitions[msg.toolName] =\n          !this.state.expandedToolDefinitions[msg.toolName];\n        return;\n\n      case \"toggle-context-files-expanded\":\n        this.state.contextFilesExpanded = !this.state.contextFilesExpanded;\n        return;\n\n      case \"toggle-pending-message\":\n        this.state.pendingMessagesExpanded[msg.index] =\n          !this.state.pendingMessagesExpanded[msg.index];\n        return;",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method myUpdate\n\n  private myUpdate(msg: Msg): void {\n    switch (msg.type) {\n      case \"send-message\":\n        if (msg.reminders) {\n          for (const text of msg.reminders) {\n            this.core.update({ type: \"activate-reminder\", text });\n          }\n        }\n        this.core\n          .handleSendMessageRequest(msg.messages, msg.async)\n          .catch((e: Error) =\u003e this.context.nvim.logger.error(e));\n        return;\n\n      case \"start-compaction\":\n        this.core.startCompaction(msg.nextPrompt);\n        return;\n\n      case \"abort\": {\n        if (this.core.state.mode.type === \"tool_use\") {\n          for (const [, entry] of this.core.state.mode.activeTools) {\n            entry.handle.abort();\n          }\n        }\n        this.abortAndWait().catch((e: Error) =\u003e {\n          this.context.nvim.logger.error(`Error during abort: ${e.message}`);\n        });\n        return;\n      }\n\n      case \"set-title\":\n        this.core.setTitle(msg.title);\n        return;\n\n      case \"toggle-system-prompt\":\n        this.state.showSystemPrompt = !this.state.showSystemPrompt;\n        return;\n\n      case \"toggle-tool-definitions\":\n        this.state.showToolDefinitions = !this.state.showToolDefinitions;\n        if (!this.state.showToolDefinitions) {\n          this.state.expandedToolDefinitions = {};\n        }\n        return;\n\n      case \"toggle-tool-definition\":\n        this.state.expandedToolDefinitions[msg.toolName] =\n          !this.state.expandedToolDefinitions[msg.toolName];\n        return;\n\n      case \"toggle-context-files-expanded\":\n        this.state.contextFilesExpanded = !this.state.contextFilesExpanded;\n        return;\n\n      case \"toggle-pending-message\":\n        this.state.pendingMessagesExpanded[msg.index] =\n          !this.state.pendingMessagesExpanded[msg.index];\n        return;",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method myUpdate",
+      "startLine": 743,
+      "startCol": 1,
+      "endLine": 799,
+      "endCol": 16
+    },
+    {
+      "text": "case \"toggle-expand-content\": {\n        const viewState = this.state.messageViewState[msg.messageIdx] || {};\n        viewState.expandedContent = viewState.expandedContent || {};\n        viewState.expandedContent[msg.contentIdx] =\n          !viewState.expandedContent[msg.contentIdx];\n        this.state.messageViewState[msg.messageIdx] = viewState;\n        return;\n      }\n\n      case \"toggle-expand-update\": {\n        const viewState = this.state.messageViewState[msg.messageIdx] || {};\n        viewState.expandedUpdates = viewState.expandedUpdates || {};\n        viewState.expandedUpdates[msg.filePath] =\n          !viewState.expandedUpdates[msg.filePath];\n        this.state.messageViewState[msg.messageIdx] = viewState;\n        return;\n      }\n\n      case \"toggle-tool-input-summary\":\n      case \"toggle-tool-input\":\n      case \"toggle-tool-progress\":\n      case \"toggle-tool-result-summary\":\n      case \"toggle-tool-result\": {\n        const field = {\n          \"toggle-tool-input-summary\": \"inputSummaryExpanded\",\n          \"toggle-tool-input\": \"inputExpanded\",\n          \"toggle-tool-progress\": \"progressExpanded\",\n          \"toggle-tool-result-summary\": \"resultSummaryExpanded\",\n          \"toggle-tool-result\": \"resultExpanded\",\n        } as const;\n        const toolState = this.state.toolViewState[msg.toolRequestId] || {\n          inputSummaryExpanded: false,\n          inputExpanded: false,\n          progressExpanded: false,\n          resultSummaryExpanded: false,\n          resultExpanded: false,\n        };\n        const key = field[msg.type];\n        toolState[key] = !toolState[key];\n        this.state.toolViewState[msg.toolRequestId] = toolState;\n        return;\n      }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method myUpdate\n\ncase \"toggle-expand-content\": {\n        const viewState = this.state.messageViewState[msg.messageIdx] || {};\n        viewState.expandedContent = viewState.expandedContent || {};\n        viewState.expandedContent[msg.contentIdx] =\n          !viewState.expandedContent[msg.contentIdx];\n        this.state.messageViewState[msg.messageIdx] = viewState;\n        return;\n      }\n\n      case \"toggle-expand-update\": {\n        const viewState = this.state.messageViewState[msg.messageIdx] || {};\n        viewState.expandedUpdates = viewState.expandedUpdates || {};\n        viewState.expandedUpdates[msg.filePath] =\n          !viewState.expandedUpdates[msg.filePath];\n        this.state.messageViewState[msg.messageIdx] = viewState;\n        return;\n      }\n\n      case \"toggle-tool-input-summary\":\n      case \"toggle-tool-input\":\n      case \"toggle-tool-progress\":\n      case \"toggle-tool-result-summary\":\n      case \"toggle-tool-result\": {\n        const field = {\n          \"toggle-tool-input-summary\": \"inputSummaryExpanded\",\n          \"toggle-tool-input\": \"inputExpanded\",\n          \"toggle-tool-progress\": \"progressExpanded\",\n          \"toggle-tool-result-summary\": \"resultSummaryExpanded\",\n          \"toggle-tool-result\": \"resultExpanded\",\n        } as const;\n        const toolState = this.state.toolViewState[msg.toolRequestId] || {\n          inputSummaryExpanded: false,\n          inputExpanded: false,\n          progressExpanded: false,\n          resultSummaryExpanded: false,\n          resultExpanded: false,\n        };\n        const key = field[msg.type];\n        toolState[key] = !toolState[key];\n        this.state.toolViewState[msg.toolRequestId] = toolState;\n        return;\n      }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method myUpdate",
+      "startLine": 801,
+      "startCol": 7,
+      "endLine": 842,
+      "endCol": 8
+    },
+    {
+      "text": "case \"toggle-tool-progress-item\": {\n        const toolState = this.state.toolViewState[msg.toolRequestId] || {\n          inputSummaryExpanded: false,\n          inputExpanded: false,\n          progressExpanded: false,\n          resultSummaryExpanded: false,\n          resultExpanded: false,\n        };\n        const itemExpanded = toolState.progressItemExpanded || {};\n        itemExpanded[msg.itemKey] = !itemExpanded[msg.itemKey];\n        toolState.progressItemExpanded = itemExpanded;\n        this.state.toolViewState[msg.toolRequestId] = toolState;\n        return;\n      }\n\n      case \"toggle-tool-result-item\": {\n        const toolState = this.state.toolViewState[msg.toolRequestId] || {\n          inputSummaryExpanded: false,\n          inputExpanded: false,\n          progressExpanded: false,\n          resultSummaryExpanded: false,\n          resultExpanded: false,\n        };\n        const itemExpanded = toolState.resultItemExpanded || {};\n        itemExpanded[msg.itemKey] = !itemExpanded[msg.itemKey];\n        toolState.resultItemExpanded = itemExpanded;\n        this.state.toolViewState[msg.toolRequestId] = toolState;\n        return;\n      }\n\n      case \"open-edit-file\":\n        openFileInNonMagentaWindow(msg.filePath, this.context).catch(\n          (e: Error) =\u003e this.context.nvim.logger.error(e.message),\n        );\n        return;",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method myUpdate\n\ncase \"toggle-tool-progress-item\": {\n        const toolState = this.state.toolViewState[msg.toolRequestId] || {\n          inputSummaryExpanded: false,\n          inputExpanded: false,\n          progressExpanded: false,\n          resultSummaryExpanded: false,\n          resultExpanded: false,\n        };\n        const itemExpanded = toolState.progressItemExpanded || {};\n        itemExpanded[msg.itemKey] = !itemExpanded[msg.itemKey];\n        toolState.progressItemExpanded = itemExpanded;\n        this.state.toolViewState[msg.toolRequestId] = toolState;\n        return;\n      }\n\n      case \"toggle-tool-result-item\": {\n        const toolState = this.state.toolViewState[msg.toolRequestId] || {\n          inputSummaryExpanded: false,\n          inputExpanded: false,\n          progressExpanded: false,\n          resultSummaryExpanded: false,\n          resultExpanded: false,\n        };\n        const itemExpanded = toolState.resultItemExpanded || {};\n        itemExpanded[msg.itemKey] = !itemExpanded[msg.itemKey];\n        toolState.resultItemExpanded = itemExpanded;\n        this.state.toolViewState[msg.toolRequestId] = toolState;\n        return;\n      }\n\n      case \"open-edit-file\":\n        openFileInNonMagentaWindow(msg.filePath, this.context).catch(\n          (e: Error) =\u003e this.context.nvim.logger.error(e.message),\n        );\n        return;",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method myUpdate",
+      "startLine": 844,
+      "startCol": 7,
+      "endLine": 878,
+      "endCol": 16
+    },
+    {
+      "text": "case \"toggle-edited-file-expanded\": {\n        const key = msg.filePath;\n        if (this.state.editedFilesExpanded[key]) {\n          delete this.state.editedFilesExpanded[key];\n          return;\n        }\n        const entry = this.core.state.editedFilesThisTurn.find(\n          (e) =\u003e e.path === msg.filePath,\n        );\n        if (!entry) return;\n        this.readCurrentFileContent(msg.filePath)\n          .then((current) =\u003e {\n            const patch = diff.createPatch(\n              displayPath(this.context.cwd, msg.filePath, this.context.homeDir),\n              entry.snapshot,\n              current,\n              \"snapshot\",\n              \"current\",\n              { context: 2 },\n            );\n            this.state.editedFilesExpanded[key] = { patch };\n            this.myDispatch({ type: \"turn-ended\" });\n          })\n          .catch((e: Error) =\u003e this.context.nvim.logger.error(e.message));\n        return;\n      }\n\n      case \"open-edit-file-diff\":\n        displaySnapshotDiff({\n          filePath: msg.filePath,\n          snapshot: msg.snapshot,\n          nvim: this.context.nvim,\n          cwd: this.context.cwd,\n          homeDir: this.context.homeDir,\n          getDisplayWidth: this.context.getDisplayWidth,\n        }).catch((e: Error) =\u003e this.context.nvim.logger.error(e.message));\n        return;\n\n      case \"permission-pending-change\":\n        notifyUser(\n          { nvim: this.context.nvim, options: this.context.options },\n          \"thread-attention\",\n        );\n        return;\n\n      case \"tool-progress\":\n        if (this.core.state.pendingMessages.length === 0) {\n          this.state.pendingMessagesExpanded = {};\n        }\n        return;\n\n      case \"turn-ended\":\n        return;",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method myUpdate\n\ncase \"toggle-edited-file-expanded\": {\n        const key = msg.filePath;\n        if (this.state.editedFilesExpanded[key]) {\n          delete this.state.editedFilesExpanded[key];\n          return;\n        }\n        const entry = this.core.state.editedFilesThisTurn.find(\n          (e) =\u003e e.path === msg.filePath,\n        );\n        if (!entry) return;\n        this.readCurrentFileContent(msg.filePath)\n          .then((current) =\u003e {\n            const patch = diff.createPatch(\n              displayPath(this.context.cwd, msg.filePath, this.context.homeDir),\n              entry.snapshot,\n              current,\n              \"snapshot\",\n              \"current\",\n              { context: 2 },\n            );\n            this.state.editedFilesExpanded[key] = { patch };\n            this.myDispatch({ type: \"turn-ended\" });\n          })\n          .catch((e: Error) =\u003e this.context.nvim.logger.error(e.message));\n        return;\n      }\n\n      case \"open-edit-file-diff\":\n        displaySnapshotDiff({\n          filePath: msg.filePath,\n          snapshot: msg.snapshot,\n          nvim: this.context.nvim,\n          cwd: this.context.cwd,\n          homeDir: this.context.homeDir,\n          getDisplayWidth: this.context.getDisplayWidth,\n        }).catch((e: Error) =\u003e this.context.nvim.logger.error(e.message));\n        return;\n\n      case \"permission-pending-change\":\n        notifyUser(\n          { nvim: this.context.nvim, options: this.context.options },\n          \"thread-attention\",\n        );\n        return;\n\n      case \"tool-progress\":\n        if (this.core.state.pendingMessages.length === 0) {\n          this.state.pendingMessagesExpanded = {};\n        }\n        return;\n\n      case \"turn-ended\":\n        return;",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method myUpdate",
+      "startLine": 880,
+      "startCol": 7,
+      "endLine": 932,
+      "endCol": 16
+    },
+    {
+      "text": "case \"toggle-compaction-record\": {\n        const vs = this.state.compactionViewState[msg.recordIdx] || {\n          expanded: false,\n          expandedSteps: {},\n        };\n        vs.expanded = !vs.expanded;\n        this.state.compactionViewState[msg.recordIdx] = vs;\n        return;\n      }\n\n      case \"toggle-compaction-step\": {\n        const vs = this.state.compactionViewState[msg.recordIdx] || {\n          expanded: false,\n          expandedSteps: {},\n        };\n        vs.expandedSteps[msg.stepIdx] = !vs.expandedSteps[msg.stepIdx];\n        this.state.compactionViewState[msg.recordIdx] = vs;\n        return;\n      }\n\n      case \"toggle-sandbox-bypass\": {\n        let root: Thread = this;\n        let parentThread = root.context.getParentThread?.();\n        while (parentThread) {\n          root = parentThread;\n          parentThread = root.context.getParentThread?.();\n        }\n        const sandboxRoot = root.context.getSandboxRoot?.();\n        if (sandboxRoot?.toggle) {\n          sandboxRoot.toggle();\n        } else {\n          root.sandboxBypassed = !root.sandboxBypassed;\n        }\n        if (root.isSandboxBypassed) {\n          root.context.chat.approveAllPendingInSubtree(root.id);\n        }\n        return;\n      }\n\n      case \"fork-message\":\n        // Handled at the Magenta dispatch level; ignored here.\n        return;\n\n      default:\n        assertUnreachable(msg);\n    }\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method myUpdate\n\ncase \"toggle-compaction-record\": {\n        const vs = this.state.compactionViewState[msg.recordIdx] || {\n          expanded: false,\n          expandedSteps: {},\n        };\n        vs.expanded = !vs.expanded;\n        this.state.compactionViewState[msg.recordIdx] = vs;\n        return;\n      }\n\n      case \"toggle-compaction-step\": {\n        const vs = this.state.compactionViewState[msg.recordIdx] || {\n          expanded: false,\n          expandedSteps: {},\n        };\n        vs.expandedSteps[msg.stepIdx] = !vs.expandedSteps[msg.stepIdx];\n        this.state.compactionViewState[msg.recordIdx] = vs;\n        return;\n      }\n\n      case \"toggle-sandbox-bypass\": {\n        let root: Thread = this;\n        let parentThread = root.context.getParentThread?.();\n        while (parentThread) {\n          root = parentThread;\n          parentThread = root.context.getParentThread?.();\n        }\n        const sandboxRoot = root.context.getSandboxRoot?.();\n        if (sandboxRoot?.toggle) {\n          sandboxRoot.toggle();\n        } else {\n          root.sandboxBypassed = !root.sandboxBypassed;\n        }\n        if (root.isSandboxBypassed) {\n          root.context.chat.approveAllPendingInSubtree(root.id);\n        }\n        return;\n      }\n\n      case \"fork-message\":\n        // Handled at the Magenta dispatch level; ignored here.\n        return;\n\n      default:\n        assertUnreachable(msg);\n    }\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method myUpdate",
+      "startLine": 934,
+      "startCol": 7,
+      "endLine": 980,
+      "endCol": 4
+    },
+    {
+      "text": "  async abortAndWait(): Promise\u003cvoid\u003e {\n    await this.core.abort();\n  }",
+      "contextualizedText": "// node/chat/thread.ts \u003e class Thread \u003e method abortAndWait\n\n  async abortAndWait(): Promise\u003cvoid\u003e {\n    await this.core.abort();\n  }",
+      "headingContext": "node/chat/thread.ts \u003e class Thread \u003e method abortAndWait",
+      "startLine": 982,
+      "startCol": 1,
+      "endLine": 984,
+      "endCol": 4
+    }
+  ]
+}

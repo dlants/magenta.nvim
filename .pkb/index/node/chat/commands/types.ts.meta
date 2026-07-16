@@ -1,0 +1,51 @@
+{
+  "blobSha": "2e18123e9167c1afcf740fc2ebcae473402cd881",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { ProviderMessageContent } from \"../../providers/provider-types.ts\";",
+      "contextualizedText": "// node/chat/commands/types.ts\n\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";",
+      "headingContext": "node/chat/commands/types.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 1,
+      "endCol": 81
+    },
+    {
+      "text": "export interface MessageContext {\n  nvim: import(\"../../nvim/nvim-node/index.ts\").Nvim;\n  cwd: import(\"../../utils/files.ts\").NvimCwd;\n  homeDir: import(\"../../utils/files.ts\").HomeDir;\n  contextManager: import(\"@magenta/core\").ContextManager;\n  options: import(\"../../options.ts\").MagentaOptions;\n}",
+      "contextualizedText": "// node/chat/commands/types.ts \u003e interface MessageContext\n\nexport interface MessageContext {\n  nvim: import(\"../../nvim/nvim-node/index.ts\").Nvim;\n  cwd: import(\"../../utils/files.ts\").NvimCwd;\n  homeDir: import(\"../../utils/files.ts\").HomeDir;\n  contextManager: import(\"@magenta/core\").ContextManager;\n  options: import(\"../../options.ts\").MagentaOptions;\n}",
+      "headingContext": "node/chat/commands/types.ts \u003e interface MessageContext",
+      "startLine": 3,
+      "startCol": 1,
+      "endLine": 9,
+      "endCol": 2
+    },
+    {
+      "text": "export interface Command {\n  name: string;\n  description?: string;\n  // Optional persistent system reminder activated when this command matches.\n  systemReminder?: string;\n  // Pattern to match the command (e.g., /^@nedit\\b/ for simple commands, /^@file:(.+)/ for parameterized)\n  pattern: RegExp",
+      "contextualizedText": "// node/chat/commands/types.ts \u003e interface Command\n\nexport interface Command {\n  name: string;\n  description?: string;\n  // Optional persistent system reminder activated when this command matches.\n  systemReminder?: string;\n  // Pattern to match the command (e.g., /^@nedit\\b/ for simple commands, /^@file:(.+)/ for parameterized)\n  pattern: RegExp",
+      "headingContext": "node/chat/commands/types.ts \u003e interface Command",
+      "startLine": 11,
+      "startCol": 1,
+      "endLine": 17,
+      "endCol": 18
+    },
+    {
+      "text": "  execute(\n    match: RegExpMatchArray,\n    context: MessageContext,\n  ): Promise\u003cProviderMessageContent[]\u003e",
+      "contextualizedText": "// node/chat/commands/types.ts \u003e interface Command \u003e method execute\n\n  execute(\n    match: RegExpMatchArray,\n    context: MessageContext,\n  ): Promise\u003cProviderMessageContent[]\u003e",
+      "headingContext": "node/chat/commands/types.ts \u003e interface Command \u003e method execute",
+      "startLine": 18,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 39
+    },
+    {
+      "text": "export interface CommandMatch {\n  command: Command;\n  match: RegExpMatchArray;\n  startIndex: number;\n  endIndex: number;\n}",
+      "contextualizedText": "// node/chat/commands/types.ts \u003e interface CommandMatch\n\nexport interface CommandMatch {\n  command: Command;\n  match: RegExpMatchArray;\n  startIndex: number;\n  endIndex: number;\n}",
+      "headingContext": "node/chat/commands/types.ts \u003e interface CommandMatch",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 29,
+      "endCol": 2
+    }
+  ]
+}

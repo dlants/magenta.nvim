@@ -1,0 +1,114 @@
+{
+  "blobSha": "82246378faf3bad5a9696c28057cffa59045cf87",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { Pos, Range } from \"./types.ts\";",
+      "contextualizedText": "// node/core/src/edl/document.ts\n\nimport type { Pos, Range } from \"./types.ts\";",
+      "headingContext": "node/core/src/edl/document.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 1,
+      "endCol": 46
+    },
+    {
+      "text": "export class Document {\n  private _content: string;\n  /** Byte offset of each line start (0-indexed line numbers internally) */\n  private _lineStarts: number[];\n\n  constructor(content: string) {\n    this._content = content;\n    this._lineStarts = computeLineStarts(content);\n  }",
+      "contextualizedText": "// node/core/src/edl/document.ts \u003e class Document\n\nexport class Document {\n  private _content: string;\n  /** Byte offset of each line start (0-indexed line numbers internally) */\n  private _lineStarts: number[];\n\n  constructor(content: string) {\n    this._content = content;\n    this._lineStarts = computeLineStarts(content);\n  }",
+      "headingContext": "node/core/src/edl/document.ts \u003e class Document",
+      "startLine": 3,
+      "startCol": 1,
+      "endLine": 11,
+      "endCol": 4
+    },
+    {
+      "text": "  get content(): string {\n    return this._content;\n  }",
+      "contextualizedText": "// node/core/src/edl/document.ts \u003e class Document \u003e method content\n\n  get content(): string {\n    return this._content;\n  }",
+      "headingContext": "node/core/src/edl/document.ts \u003e class Document \u003e method content",
+      "startLine": 13,
+      "startCol": 1,
+      "endLine": 15,
+      "endCol": 4
+    },
+    {
+      "text": "  get lineCount(): number {\n    return this._lineStarts.length;\n  }",
+      "contextualizedText": "// node/core/src/edl/document.ts \u003e class Document \u003e method lineCount\n\n  get lineCount(): number {\n    return this._lineStarts.length;\n  }",
+      "headingContext": "node/core/src/edl/document.ts \u003e class Document \u003e method lineCount",
+      "startLine": 17,
+      "startCol": 1,
+      "endLine": 19,
+      "endCol": 4
+    },
+    {
+      "text": "  get lineStarts(): readonly number[] {\n    return this._lineStarts;\n  }",
+      "contextualizedText": "// node/core/src/edl/document.ts \u003e class Document \u003e method lineStarts\n\n  get lineStarts(): readonly number[] {\n    return this._lineStarts;\n  }",
+      "headingContext": "node/core/src/edl/document.ts \u003e class Document \u003e method lineStarts",
+      "startLine": 20,
+      "startCol": 1,
+      "endLine": 22,
+      "endCol": 4
+    },
+    {
+      "text": "  posToOffset(pos: Pos): number {\n    const idx = pos.line - 1;\n    if (idx \u003c 0 || idx \u003e= this._lineStarts.length) {\n      throw new Error(`Line ${pos.line} out of range (1-${this.lineCount})`);\n    }\n    return this._lineStarts[idx] + pos.col;\n  }",
+      "contextualizedText": "// node/core/src/edl/document.ts \u003e class Document \u003e method posToOffset\n\n  posToOffset(pos: Pos): number {\n    const idx = pos.line - 1;\n    if (idx \u003c 0 || idx \u003e= this._lineStarts.length) {\n      throw new Error(`Line ${pos.line} out of range (1-${this.lineCount})`);\n    }\n    return this._lineStarts[idx] + pos.col;\n  }",
+      "headingContext": "node/core/src/edl/document.ts \u003e class Document \u003e method posToOffset",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 30,
+      "endCol": 4
+    },
+    {
+      "text": "  offsetToPos(offset: number): Pos {\n    let lo = 0;\n    let hi = this._lineStarts.length - 1;\n    while (lo \u003c hi) {\n      const mid = (lo + hi + 1) \u003e\u003e 1;\n      if (this._lineStarts[mid] \u003c= offset) {\n        lo = mid;\n      } else {\n        hi = mid - 1;\n      }\n    }\n    return { line: lo + 1, col: offset - this._lineStarts[lo] };\n  }",
+      "contextualizedText": "// node/core/src/edl/document.ts \u003e class Document \u003e method offsetToPos\n\n  offsetToPos(offset: number): Pos {\n    let lo = 0;\n    let hi = this._lineStarts.length - 1;\n    while (lo \u003c hi) {\n      const mid = (lo + hi + 1) \u003e\u003e 1;\n      if (this._lineStarts[mid] \u003c= offset) {\n        lo = mid;\n      } else {\n        hi = mid - 1;\n      }\n    }\n    return { line: lo + 1, col: offset - this._lineStarts[lo] };\n  }",
+      "headingContext": "node/core/src/edl/document.ts \u003e class Document \u003e method offsetToPos",
+      "startLine": 32,
+      "startCol": 1,
+      "endLine": 44,
+      "endCol": 4
+    },
+    {
+      "text": "  lineRange(line: number): Range {\n    const idx = line - 1;\n    if (idx \u003c 0 || idx \u003e= this._lineStarts.length) {\n      throw new Error(`Line ${line} out of range (1-${this.lineCount})`);\n    }\n    const start = this._lineStarts[idx];\n    const end =\n      idx + 1 \u003c this._lineStarts.length\n        ? this._lineStarts[idx + 1] - 1 // exclude the \\n\n        : this._content.length;\n    return { start, end };\n  }",
+      "contextualizedText": "// node/core/src/edl/document.ts \u003e class Document \u003e method lineRange\n\n  lineRange(line: number): Range {\n    const idx = line - 1;\n    if (idx \u003c 0 || idx \u003e= this._lineStarts.length) {\n      throw new Error(`Line ${line} out of range (1-${this.lineCount})`);\n    }\n    const start = this._lineStarts[idx];\n    const end =\n      idx + 1 \u003c this._lineStarts.length\n        ? this._lineStarts[idx + 1] - 1 // exclude the \\n\n        : this._content.length;\n    return { start, end };\n  }",
+      "headingContext": "node/core/src/edl/document.ts \u003e class Document \u003e method lineRange",
+      "startLine": 46,
+      "startCol": 1,
+      "endLine": 57,
+      "endCol": 4
+    },
+    {
+      "text": "/** Full document range */\n  fullRange(): Range {\n    return { start: 0, end: this._content.length };\n  }",
+      "contextualizedText": "// node/core/src/edl/document.ts \u003e class Document \u003e method fullRange\n\n/** Full document range */\n  fullRange(): Range {\n    return { start: 0, end: this._content.length };\n  }",
+      "headingContext": "node/core/src/edl/document.ts \u003e class Document \u003e method fullRange",
+      "startLine": 59,
+      "startCol": 3,
+      "endLine": 62,
+      "endCol": 4
+    },
+    {
+      "text": "  getText(range: Range): string {\n    return this._content.slice(range.start, range.end);\n  }",
+      "contextualizedText": "// node/core/src/edl/document.ts \u003e class Document \u003e method getText\n\n  getText(range: Range): string {\n    return this._content.slice(range.start, range.end);\n  }",
+      "headingContext": "node/core/src/edl/document.ts \u003e class Document \u003e method getText",
+      "startLine": 64,
+      "startCol": 1,
+      "endLine": 66,
+      "endCol": 4
+    },
+    {
+      "text": "  splice(range: Range, replacement: string): void {\n    this._content =\n      this._content.slice(0, range.start) +\n      replacement +\n      this._content.slice(range.end);\n    this._lineStarts = computeLineStarts(this._content);\n  }",
+      "contextualizedText": "// node/core/src/edl/document.ts \u003e class Document \u003e method splice\n\n  splice(range: Range, replacement: string): void {\n    this._content =\n      this._content.slice(0, range.start) +\n      replacement +\n      this._content.slice(range.end);\n    this._lineStarts = computeLineStarts(this._content);\n  }",
+      "headingContext": "node/core/src/edl/document.ts \u003e class Document \u003e method splice",
+      "startLine": 68,
+      "startCol": 1,
+      "endLine": 74,
+      "endCol": 4
+    },
+    {
+      "text": "function computeLineStarts(content: string): number[] {\n  const starts = [0];\n  for (let i = 0; i \u003c content.length; i++) {\n    if (content[i] === \"\\n\") {\n      starts.push(i + 1);\n    }\n  }\n  return starts;\n}",
+      "contextualizedText": "// node/core/src/edl/document.ts \u003e function computeLineStarts\n\nfunction computeLineStarts(content: string): number[] {\n  const starts = [0];\n  for (let i = 0; i \u003c content.length; i++) {\n    if (content[i] === \"\\n\") {\n      starts.push(i + 1);\n    }\n  }\n  return starts;\n}",
+      "headingContext": "node/core/src/edl/document.ts \u003e function computeLineStarts",
+      "startLine": 77,
+      "startCol": 1,
+      "endLine": 85,
+      "endCol": 2
+    }
+  ]
+}

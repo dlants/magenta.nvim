@@ -1,0 +1,33 @@
+{
+  "blobSha": "14d7cc2566e2e3227f4807b09d7e10130d6e3a4e",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { platform } from \"node:os\";\nimport {\n  COMPACT_SYSTEM_PROMPT,\n  createSystemPrompt as coreCreateSystemPrompt,\n  type FileIO,\n  type HomeDir,\n  type NvimCwd,\n  type ProviderOptions,\n  type SubagentConfig,\n  type SystemInfo,\n  type SystemPrompt,\n  type ThreadType,\n} from \"@magenta/core\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\n\nexport { COMPACT_SYSTEM_PROMPT };\n\nexport type { SystemInfo, SystemPrompt } from \"@magenta/core\";",
+      "contextualizedText": "// node/providers/system-prompt.ts\n\nimport { platform } from \"node:os\";\nimport {\n  COMPACT_SYSTEM_PROMPT,\n  createSystemPrompt as coreCreateSystemPrompt,\n  type FileIO,\n  type HomeDir,\n  type NvimCwd,\n  type ProviderOptions,\n  type SubagentConfig,\n  type SystemInfo,\n  type SystemPrompt,\n  type ThreadType,\n} from \"@magenta/core\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\n\nexport { COMPACT_SYSTEM_PROMPT };\n\nexport type { SystemInfo, SystemPrompt } from \"@magenta/core\";",
+      "headingContext": "node/providers/system-prompt.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 18,
+      "endCol": 63
+    },
+    {
+      "text": "export async function buildSystemInfo(context: {\n  nvim: Nvim;\n  cwd: NvimCwd;\n  systemInfoOverrides?: Partial\u003cSystemInfo\u003e;\n}): Promise\u003cSystemInfo\u003e {\n  const neovimVersion = (await context.nvim.call(\"nvim_eval\", [\n    \"v:version\",\n  ])) as string;\n\n  return {\n    timestamp: new Date().toString(),\n    platform: platform(),\n    neovimVersion,\n    cwd: context.cwd,\n    ...context.systemInfoOverrides,\n  };\n}",
+      "contextualizedText": "// node/providers/system-prompt.ts \u003e function buildSystemInfo\n\nexport async function buildSystemInfo(context: {\n  nvim: Nvim;\n  cwd: NvimCwd;\n  systemInfoOverrides?: Partial\u003cSystemInfo\u003e;\n}): Promise\u003cSystemInfo\u003e {\n  const neovimVersion = (await context.nvim.call(\"nvim_eval\", [\n    \"v:version\",\n  ])) as string;\n\n  return {\n    timestamp: new Date().toString(),\n    platform: platform(),\n    neovimVersion,\n    cwd: context.cwd,\n    ...context.systemInfoOverrides,\n  };\n}",
+      "headingContext": "node/providers/system-prompt.ts \u003e function buildSystemInfo",
+      "startLine": 20,
+      "startCol": 1,
+      "endLine": 36,
+      "endCol": 2
+    },
+    {
+      "text": "export async function createSystemPrompt(\n  type: ThreadType,\n  context: {\n    nvim: Nvim;\n    cwd: NvimCwd;\n    options: ProviderOptions;\n    fileIO: FileIO;\n    homeDir: HomeDir;\n    dockerAvailable?: boolean;\n    subagentConfig?: SubagentConfig;\n  },\n): Promise\u003cSystemPrompt\u003e {\n  return coreCreateSystemPrompt(type, {\n    logger: context.nvim.logger,\n    cwd: context.cwd,\n    options: context.options,\n    fileIO: context.fileIO,\n    homeDir: context.homeDir,\n    ...(context.dockerAvailable\n      ? { dockerAvailable: context.dockerAvailable }\n      : {}),\n    ...(context.subagentConfig\n      ? { subagentConfig: context.subagentConfig }\n      : {}),\n  });\n}",
+      "contextualizedText": "// node/providers/system-prompt.ts \u003e function createSystemPrompt\n\nexport async function createSystemPrompt(\n  type: ThreadType,\n  context: {\n    nvim: Nvim;\n    cwd: NvimCwd;\n    options: ProviderOptions;\n    fileIO: FileIO;\n    homeDir: HomeDir;\n    dockerAvailable?: boolean;\n    subagentConfig?: SubagentConfig;\n  },\n): Promise\u003cSystemPrompt\u003e {\n  return coreCreateSystemPrompt(type, {\n    logger: context.nvim.logger,\n    cwd: context.cwd,\n    options: context.options,\n    fileIO: context.fileIO,\n    homeDir: context.homeDir,\n    ...(context.dockerAvailable\n      ? { dockerAvailable: context.dockerAvailable }\n      : {}),\n    ...(context.subagentConfig\n      ? { subagentConfig: context.subagentConfig }\n      : {}),\n  });\n}",
+      "headingContext": "node/providers/system-prompt.ts \u003e function createSystemPrompt",
+      "startLine": 38,
+      "startCol": 1,
+      "endLine": 63,
+      "endCol": 2
+    }
+  ]
+}

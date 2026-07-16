@@ -1,0 +1,168 @@
+{
+  "blobSha": "51d81ba79c2d4b78aefc405f4e08dd349e2427f3",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { describe, expect, it } from \"vitest\";\nimport type { LuaExecutor } from \"../capabilities/lua-executor.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport * as NvimLua from \"./nvimLua.ts\";",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport type { LuaExecutor } from \"../capabilities/lua-executor.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport * as NvimLua from \"./nvimLua.ts\";",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 5,
+      "endCol": 41
+    },
+    {
+      "text": "function createTool(code: string, executor: LuaExecutor) {\n  return NvimLua.execute(\n    {\n      id: \"tool_1\" as ToolRequestId,\n      toolName: \"nvim_lua\",\n      input: { code },\n    },\n    { luaExecutor: executor },\n  );\n}",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts \u003e function createTool\n\nfunction createTool(code: string, executor: LuaExecutor) {\n  return NvimLua.execute(\n    {\n      id: \"tool_1\" as ToolRequestId,\n      toolName: \"nvim_lua\",\n      input: { code },\n    },\n    { luaExecutor: executor },\n  );\n}",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts \u003e function createTool",
+      "startLine": 7,
+      "startCol": 1,
+      "endLine": 16,
+      "endCol": 2
+    },
+    {
+      "text": "async function getResultText(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003c{ status: string; text: string }\u003e {\n  const { result } = await invocation.promise;\n  if (result.status === \"ok\") {\n    return {\n      status: \"ok\",\n      text: (result.value[0] as { type: \"text\"; text: string }).text,\n    };\n  }\n  return { status: \"error\", text: result.error };\n}",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts \u003e function getResultText\n\nasync function getResultText(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003c{ status: string; text: string }\u003e {\n  const { result } = await invocation.promise;\n  if (result.status === \"ok\") {\n    return {\n      status: \"ok\",\n      text: (result.value[0] as { type: \"text\"; text: string }).text,\n    };\n  }\n  return { status: \"error\", text: result.error };\n}",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts \u003e function getResultText",
+      "startLine": 18,
+      "startCol": 1,
+      "endLine": 29,
+      "endCol": 2
+    },
+    {
+      "text": "describe(\"nvimLua unit tests\", () =\u003e {\n  it(\"serializes a table return value\", async () =\u003e {\n    const executor: LuaExecutor",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts\n\ndescribe(\"nvimLua unit tests\", () =\u003e {\n  it(\"serializes a table return value\", async () =\u003e {\n    const executor: LuaExecutor",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts",
+      "startLine": 31,
+      "startCol": 1,
+      "endLine": 33,
+      "endCol": 32
+    },
+    {
+      "text": "      execLua: () =\u003e Promise.resolve({ a: 1, b: [2, 3] })",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts \u003e function execLua\n\n      execLua: () =\u003e Promise.resolve({ a: 1, b: [2, 3] })",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts \u003e function execLua",
+      "startLine": 34,
+      "startCol": 1,
+      "endLine": 34,
+      "endCol": 58
+    },
+    {
+      "text": "const result = await getResultText(createTool(\"return {}\", executor));\n    expect(result.status).toBe(\"ok\");\n    expect(JSON.parse(result.text)).toEqual({ a: 1, b: [2, 3] });\n  });\n\n  it(\"reports a no-return-value message for undefined\", async () =\u003e {\n    const executor: LuaExecutor",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts\n\nconst result = await getResultText(createTool(\"return {}\", executor));\n    expect(result.status).toBe(\"ok\");\n    expect(JSON.parse(result.text)).toEqual({ a: 1, b: [2, 3] });\n  });\n\n  it(\"reports a no-return-value message for undefined\", async () =\u003e {\n    const executor: LuaExecutor",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts",
+      "startLine": 36,
+      "startCol": 5,
+      "endLine": 42,
+      "endCol": 32
+    },
+    {
+      "text": "      execLua: () =\u003e Promise.resolve(undefined)",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts \u003e function execLua\n\n      execLua: () =\u003e Promise.resolve(undefined)",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts \u003e function execLua",
+      "startLine": 43,
+      "startCol": 1,
+      "endLine": 43,
+      "endCol": 48
+    },
+    {
+      "text": "const result = await getResultText(createTool(\"vim.g.x = 1\", executor));\n    expect(result.status).toBe(\"ok\");\n    expect(result.text).toContain(\"no return value\");\n  });\n\n  it(\"reports a no-return-value message for null\", async () =\u003e {\n    const executor: LuaExecutor",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts\n\nconst result = await getResultText(createTool(\"vim.g.x = 1\", executor));\n    expect(result.status).toBe(\"ok\");\n    expect(result.text).toContain(\"no return value\");\n  });\n\n  it(\"reports a no-return-value message for null\", async () =\u003e {\n    const executor: LuaExecutor",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts",
+      "startLine": 45,
+      "startCol": 5,
+      "endLine": 51,
+      "endCol": 32
+    },
+    {
+      "text": "      execLua: () =\u003e Promise.resolve(null)",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts \u003e function execLua\n\n      execLua: () =\u003e Promise.resolve(null)",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts \u003e function execLua",
+      "startLine": 52,
+      "startCol": 1,
+      "endLine": 52,
+      "endCol": 43
+    },
+    {
+      "text": "const result = await getResultText(createTool(\"return nil\", executor));\n    expect(result.status).toBe(\"ok\");\n    expect(result.text).toContain(\"no return value\");\n  });\n\n  it(\"returns an error result when execLua rejects\", async () =\u003e {\n    const executor: LuaExecutor",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts\n\nconst result = await getResultText(createTool(\"return nil\", executor));\n    expect(result.status).toBe(\"ok\");\n    expect(result.text).toContain(\"no return value\");\n  });\n\n  it(\"returns an error result when execLua rejects\", async () =\u003e {\n    const executor: LuaExecutor",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts",
+      "startLine": 54,
+      "startCol": 5,
+      "endLine": 60,
+      "endCol": 32
+    },
+    {
+      "text": "      execLua: () =\u003e Promise.reject(new Error(\"boom\"))",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts \u003e function execLua\n\n      execLua: () =\u003e Promise.reject(new Error(\"boom\"))",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts \u003e function execLua",
+      "startLine": 61,
+      "startCol": 1,
+      "endLine": 61,
+      "endCol": 55
+    },
+    {
+      "text": "const result = await getResultText(createTool(\"error('boom')\", executor));\n    expect(result.status).toBe(\"error\");\n    expect(result.text).toContain(\"boom\");\n  });\n\n  it(\"returns an aborted error when abort is called before resolve\", async () =\u003e {\n    let resolve!: (value: unknown) =\u003e void;\n    const executor: LuaExecutor",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts\n\nconst result = await getResultText(createTool(\"error('boom')\", executor));\n    expect(result.status).toBe(\"error\");\n    expect(result.text).toContain(\"boom\");\n  });\n\n  it(\"returns an aborted error when abort is called before resolve\", async () =\u003e {\n    let resolve!: (value: unknown) =\u003e void;\n    const executor: LuaExecutor",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts",
+      "startLine": 63,
+      "startCol": 5,
+      "endLine": 70,
+      "endCol": 32
+    },
+    {
+      "text": "      execLua: () =\u003e new Promise((r) =\u003e (resolve = r))",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts \u003e function execLua\n\n      execLua: () =\u003e new Promise((r) =\u003e (resolve = r))",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts \u003e function execLua",
+      "startLine": 71,
+      "startCol": 1,
+      "endLine": 71,
+      "endCol": 55
+    },
+    {
+      "text": "const invocation = createTool(\"return 1\", executor);\n    invocation.abort();\n    resolve({ a: 1 });\n    const result = await getResultText(invocation);\n    expect(result.status).toBe(\"error\");\n    expect(result.text).toContain(\"aborted\");\n  });\n\n  it(\"returns an aborted error when abort is called before reject\", async () =\u003e {\n    let reject!: (error: unknown) =\u003e void;\n    const executor: LuaExecutor",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts\n\nconst invocation = createTool(\"return 1\", executor);\n    invocation.abort();\n    resolve({ a: 1 });\n    const result = await getResultText(invocation);\n    expect(result.status).toBe(\"error\");\n    expect(result.text).toContain(\"aborted\");\n  });\n\n  it(\"returns an aborted error when abort is called before reject\", async () =\u003e {\n    let reject!: (error: unknown) =\u003e void;\n    const executor: LuaExecutor",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts",
+      "startLine": 73,
+      "startCol": 5,
+      "endLine": 83,
+      "endCol": 32
+    },
+    {
+      "text": "      execLua: () =\u003e new Promise((_, r) =\u003e (reject = r))",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts \u003e function execLua\n\n      execLua: () =\u003e new Promise((_, r) =\u003e (reject = r))",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts \u003e function execLua",
+      "startLine": 84,
+      "startCol": 1,
+      "endLine": 84,
+      "endCol": 57
+    },
+    {
+      "text": "const invocation = createTool(\"error('boom')\", executor);\n    invocation.abort();\n    reject(new Error(\"boom\"));\n    const result = await getResultText(invocation);\n    expect(result.status).toBe(\"error\");\n    expect(result.text).toContain(\"aborted\");\n  });\n\n  it(\"falls back to String() for non-serializable return values\", async () =\u003e {\n    const circular: Record\u003cstring, unknown\u003e = {};\n    circular.self = circular;\n    const executor: LuaExecutor",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts\n\nconst invocation = createTool(\"error('boom')\", executor);\n    invocation.abort();\n    reject(new Error(\"boom\"));\n    const result = await getResultText(invocation);\n    expect(result.status).toBe(\"error\");\n    expect(result.text).toContain(\"aborted\");\n  });\n\n  it(\"falls back to String() for non-serializable return values\", async () =\u003e {\n    const circular: Record\u003cstring, unknown\u003e = {};\n    circular.self = circular;\n    const executor: LuaExecutor",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts",
+      "startLine": 86,
+      "startCol": 5,
+      "endLine": 97,
+      "endCol": 32
+    },
+    {
+      "text": "      execLua: () =\u003e Promise.resolve(circular)",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts \u003e function execLua\n\n      execLua: () =\u003e Promise.resolve(circular)",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts \u003e function execLua",
+      "startLine": 98,
+      "startCol": 1,
+      "endLine": 98,
+      "endCol": 47
+    },
+    {
+      "text": "const result = await getResultText(createTool(\"return {}\", executor));\n    expect(result.status).toBe(\"ok\");\n    expect(result.text).toContain(\"[object Object]\");\n  });\n\n  it(\"validateInput rejects non-string code\", () =\u003e {\n    expect(NvimLua.validateInput({ code: 42 }).status).toBe(\"error\");\n    expect(NvimLua.validateInput({ code: \"return 1\" }).status).toBe(\"ok\");\n  });",
+      "contextualizedText": "// node/core/src/tools/nvimLua.test.ts\n\nconst result = await getResultText(createTool(\"return {}\", executor));\n    expect(result.status).toBe(\"ok\");\n    expect(result.text).toContain(\"[object Object]\");\n  });\n\n  it(\"validateInput rejects non-string code\", () =\u003e {\n    expect(NvimLua.validateInput({ code: 42 }).status).toBe(\"error\");\n    expect(NvimLua.validateInput({ code: \"return 1\" }).status).toBe(\"ok\");\n  });",
+      "headingContext": "node/core/src/tools/nvimLua.test.ts",
+      "startLine": 100,
+      "startCol": 5,
+      "endLine": 108,
+      "endCol": 6
+    }
+  ]
+}

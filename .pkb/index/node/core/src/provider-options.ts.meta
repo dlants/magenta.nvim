@@ -1,0 +1,15 @@
+{
+  "blobSha": "7f1ec0ec3007524e95aa706977b0ec0442c79fdd",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "/**\n * Minimal provider-facing interfaces for options.\n * The root project's Profile and MagentaOptions satisfy these interfaces,\n * so they can be passed to providers without casting.\n */\n\nexport type ProviderName =\n  | \"anthropic\"\n  | \"openai\"\n  | \"bedrock\"\n  | \"ollama\"\n  | \"copilot\"\n  | \"mock\";\n\nexport type ThinkingEffort = \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\";\n\nexport type ProviderProfile = {\n  name: string;\n  provider: ProviderName;\n  model: string;\n  fastModel: string;\n  thinkingModel: string;\n  baseUrl?: string;\n  apiKeyEnvVar?: string;\n  authType?: \"key\" | \"max\" | \"keychain\";\n  promptCaching?: boolean;\n  env?: Record\u003cstring, string\u003e;\n  tokenRefreshCommand?: string;\n  thinking?:\n    | {\n        enabled: boolean;\n        budgetTokens?: number;\n        displayThinking?: boolean;\n        effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\";\n      }\n    | undefined;\n  reasoning?:\n    | {\n        effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\";\n        summary?: \"auto\" | \"concise\" | \"detailed\";\n      }\n    | undefined;\n};\n\nexport type ProviderOptions = {\n  skillsPaths: string[];\n  agentsPaths: string[];\n  suppressProjectSkills?: string[];\n};",
+      "contextualizedText": "// node/core/src/provider-options.ts\n\n/**\n * Minimal provider-facing interfaces for options.\n * The root project's Profile and MagentaOptions satisfy these interfaces,\n * so they can be passed to providers without casting.\n */\n\nexport type ProviderName =\n  | \"anthropic\"\n  | \"openai\"\n  | \"bedrock\"\n  | \"ollama\"\n  | \"copilot\"\n  | \"mock\";\n\nexport type ThinkingEffort = \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\";\n\nexport type ProviderProfile = {\n  name: string;\n  provider: ProviderName;\n  model: string;\n  fastModel: string;\n  thinkingModel: string;\n  baseUrl?: string;\n  apiKeyEnvVar?: string;\n  authType?: \"key\" | \"max\" | \"keychain\";\n  promptCaching?: boolean;\n  env?: Record\u003cstring, string\u003e;\n  tokenRefreshCommand?: string;\n  thinking?:\n    | {\n        enabled: boolean;\n        budgetTokens?: number;\n        displayThinking?: boolean;\n        effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\";\n      }\n    | undefined;\n  reasoning?:\n    | {\n        effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\";\n        summary?: \"auto\" | \"concise\" | \"detailed\";\n      }\n    | undefined;\n};\n\nexport type ProviderOptions = {\n  skillsPaths: string[];\n  agentsPaths: string[];\n  suppressProjectSkills?: string[];\n};",
+      "headingContext": "node/core/src/provider-options.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 49,
+      "endCol": 3
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "blobSha": "4d1294803221ee19f1af02094e224b0514d21b18",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { CompletedToolInfo, RunScript } from \"@magenta/core\";\nimport { openFileInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\nimport { d, type VDOMNode, withBindings } from \"../tea/view.ts\";\nimport type { UnresolvedFilePath } from \"../utils/files.ts\";\nimport type { RenderContext } from \"./index.ts\";",
+      "contextualizedText": "// node/render-tools/run-script.ts\n\nimport type { CompletedToolInfo, RunScript } from \"@magenta/core\";\nimport { openFileInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\nimport { d, type VDOMNode, withBindings } from \"../tea/view.ts\";\nimport type { UnresolvedFilePath } from \"../utils/files.ts\";\nimport type { RenderContext } from \"./index.ts\";",
+      "headingContext": "node/render-tools/run-script.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 5,
+      "endCol": 49
+    },
+    {
+      "text": "export function renderResult(\n  info: CompletedToolInfo,\n  context: RenderContext,\n): VDOMNode | undefined {\n  const input = info.request.input as RunScript.Input;\n  const entry = context.chat.scriptRunner\n    ?.getScriptCatalog()\n    .find((c) =\u003e c.name === input.scriptName);\n  if (!entry) {\n    return undefined;\n  }\n\n  return withBindings(d`\\n📄 ${entry.file}`, {\n    \"\u003cCR\u003e\": () =\u003e {\n      openFileInNonMagentaWindow(\n        entry.file as UnresolvedFilePath,\n        context,\n      ).catch((e: Error) =\u003e context.nvim.logger.error(e.message));\n    },\n  });\n}",
+      "contextualizedText": "// node/render-tools/run-script.ts \u003e function renderResult\n\nexport function renderResult(\n  info: CompletedToolInfo,\n  context: RenderContext,\n): VDOMNode | undefined {\n  const input = info.request.input as RunScript.Input;\n  const entry = context.chat.scriptRunner\n    ?.getScriptCatalog()\n    .find((c) =\u003e c.name === input.scriptName);\n  if (!entry) {\n    return undefined;\n  }\n\n  return withBindings(d`\\n📄 ${entry.file}`, {\n    \"\u003cCR\u003e\": () =\u003e {\n      openFileInNonMagentaWindow(\n        entry.file as UnresolvedFilePath,\n        context,\n      ).catch((e: Error) =\u003e context.nvim.logger.error(e.message));\n    },\n  });\n}",
+      "headingContext": "node/render-tools/run-script.ts \u003e function renderResult",
+      "startLine": 7,
+      "startCol": 1,
+      "endLine": 27,
+      "endCol": 2
+    }
+  ]
+}

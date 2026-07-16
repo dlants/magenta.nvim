@@ -1,0 +1,249 @@
+{
+  "blobSha": "1df3553bde4b053ce62525a38cd3b5e35ab2544c",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type Anthropic from \"@anthropic-ai/sdk\";\nimport { type ToolRequest, validateInput } from \"@magenta/core\";\nimport winston from \"winston\";\nimport { Defer, pollUntil } from \"../utils/async.ts\";\nimport type { Result } from \"../utils/result.ts\";\nimport { AnthropicAgent } from \"./anthropic-agent.ts\";\nimport {\n  MockAnthropicClient,\n  type MockStream,\n} from \"./mock-anthropic-client.ts\";\nimport { setMockProvider } from \"./provider.ts\";\nimport type {\n  Agent,\n  AgentInput,\n  AgentOptions,\n  Provider,\n  ProviderMessage,\n  ProviderStreamEvent,\n  ProviderStreamRequest,\n  ProviderToolSpec,\n  ProviderToolUseRequest,\n  StopReason,\n  Usage,\n} from \"./provider-types.ts\";",
+      "contextualizedText": "// node/providers/mock.ts\n\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport { type ToolRequest, validateInput } from \"@magenta/core\";\nimport winston from \"winston\";\nimport { Defer, pollUntil } from \"../utils/async.ts\";\nimport type { Result } from \"../utils/result.ts\";\nimport { AnthropicAgent } from \"./anthropic-agent.ts\";\nimport {\n  MockAnthropicClient,\n  type MockStream,\n} from \"./mock-anthropic-client.ts\";\nimport { setMockProvider } from \"./provider.ts\";\nimport type {\n  Agent,\n  AgentInput,\n  AgentOptions,\n  Provider,\n  ProviderMessage,\n  ProviderStreamEvent,\n  ProviderStreamRequest,\n  ProviderToolSpec,\n  ProviderToolUseRequest,\n  StopReason,\n  Usage,\n} from \"./provider-types.ts\";",
+      "headingContext": "node/providers/mock.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 24,
+      "endCol": 30
+    },
+    {
+      "text": "function anthropicBlockIncludesText(\n  block: Anthropic.Messages.ContentBlockParam,\n  text: string,\n): boolean {\n  switch (block.type) {\n    case \"text\":\n      return block.text.includes(text);\n    case \"tool_use\":\n      return JSON.stringify(block.input).includes(text);\n    case \"tool_result\":\n      if (typeof block.content === \"string\") {\n        return block.content.includes(text);\n      }\n      if (Array.isArray(block.content)) {\n        return block.content.some(\n          (c) =\u003e c.type === \"text\" \u0026\u0026 c.text.includes(text),\n        );\n      }\n      return false;\n    case \"thinking\":\n      return block.thinking.includes(text);\n    default:\n      return false;\n  }\n}",
+      "contextualizedText": "// node/providers/mock.ts \u003e function anthropicBlockIncludesText\n\nfunction anthropicBlockIncludesText(\n  block: Anthropic.Messages.ContentBlockParam,\n  text: string,\n): boolean {\n  switch (block.type) {\n    case \"text\":\n      return block.text.includes(text);\n    case \"tool_use\":\n      return JSON.stringify(block.input).includes(text);\n    case \"tool_result\":\n      if (typeof block.content === \"string\") {\n        return block.content.includes(text);\n      }\n      if (Array.isArray(block.content)) {\n        return block.content.some(\n          (c) =\u003e c.type === \"text\" \u0026\u0026 c.text.includes(text),\n        );\n      }\n      return false;\n    case \"thinking\":\n      return block.thinking.includes(text);\n    default:\n      return false;\n  }\n}",
+      "headingContext": "node/providers/mock.ts \u003e function anthropicBlockIncludesText",
+      "startLine": 26,
+      "startCol": 1,
+      "endLine": 50,
+      "endCol": 2
+    },
+    {
+      "text": "type MockForceToolUseRequest = {\n  model: string;\n  input: AgentInput[];\n  spec: ProviderToolSpec;\n  systemPrompt?: string | undefined;\n  contextAgent?: Agent | undefined;\n  defer: Defer\u003c{\n    toolRequest: Result\u003cToolRequest, { rawRequest: unknown }\u003e;\n    stopReason: StopReason;\n    usage: Usage;\n  }\u003e;\n  aborted: boolean;\n};",
+      "contextualizedText": "// node/providers/mock.ts\n\ntype MockForceToolUseRequest = {\n  model: string;\n  input: AgentInput[];\n  spec: ProviderToolSpec;\n  systemPrompt?: string | undefined;\n  contextAgent?: Agent | undefined;\n  defer: Defer\u003c{\n    toolRequest: Result\u003cToolRequest, { rawRequest: unknown }\u003e;\n    stopReason: StopReason;\n    usage: Usage;\n  }\u003e;\n  aborted: boolean;\n};",
+      "headingContext": "node/providers/mock.ts",
+      "startLine": 52,
+      "startCol": 1,
+      "endLine": 64,
+      "endCol": 3
+    },
+    {
+      "text": "export class MockProvider implements Provider {\n  public forceToolUseRequests: MockForceToolUseRequest[] = [];\n  public mockClient = new MockAnthropicClient();\n  private blockCounter = 0",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider\n\nexport class MockProvider implements Provider {\n  public forceToolUseRequests: MockForceToolUseRequest[] = [];\n  public mockClient = new MockAnthropicClient();\n  private blockCounter = 0",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider",
+      "startLine": 66,
+      "startCol": 1,
+      "endLine": 69,
+      "endCol": 27
+    },
+    {
+      "text": "  getNextBlockId(): string {\n    return `block_${this.blockCounter++}`;\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method getNextBlockId\n\n  getNextBlockId(): string {\n    return `block_${this.blockCounter++}`;\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method getNextBlockId",
+      "startLine": 71,
+      "startCol": 1,
+      "endLine": 73,
+      "endCol": 4
+    },
+    {
+      "text": "  setModel(_model: string): void {}",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method setModel\n\n  setModel(_model: string): void {}",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method setModel",
+      "startLine": 75,
+      "startCol": 1,
+      "endLine": 75,
+      "endCol": 36
+    },
+    {
+      "text": "  createStreamParameters(options: {\n    model: string;\n    messages: Array\u003cProviderMessage\u003e;\n    tools: Array\u003cProviderToolSpec\u003e;\n    disableCaching?: boolean;\n    systemPrompt?: string | undefined;\n  }): unknown {\n    return { messages: options.messages, tools: options.tools };\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method createStreamParameters\n\n  createStreamParameters(options: {\n    model: string;\n    messages: Array\u003cProviderMessage\u003e;\n    tools: Array\u003cProviderToolSpec\u003e;\n    disableCaching?: boolean;\n    systemPrompt?: string | undefined;\n  }): unknown {\n    return { messages: options.messages, tools: options.tools };\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method createStreamParameters",
+      "startLine": 77,
+      "startCol": 1,
+      "endLine": 85,
+      "endCol": 4
+    },
+    {
+      "text": "  countTokens(\n    messages: Array\u003cProviderMessage\u003e,\n    tools: Array\u003cProviderToolSpec\u003e,\n  ): number {\n    const CHARS_PER_TOKEN = 4;\n\n    let charCount = 5000;\n    charCount += JSON.stringify(tools).length;\n    charCount += JSON.stringify(messages).length;\n\n    return Math.ceil(charCount / CHARS_PER_TOKEN);\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method countTokens\n\n  countTokens(\n    messages: Array\u003cProviderMessage\u003e,\n    tools: Array\u003cProviderToolSpec\u003e,\n  ): number {\n    const CHARS_PER_TOKEN = 4;\n\n    let charCount = 5000;\n    charCount += JSON.stringify(tools).length;\n    charCount += JSON.stringify(messages).length;\n\n    return Math.ceil(charCount / CHARS_PER_TOKEN);\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method countTokens",
+      "startLine": 87,
+      "startCol": 1,
+      "endLine": 98,
+      "endCol": 4
+    },
+    {
+      "text": "  forceToolUse(options: {\n    model: string;\n    input: AgentInput[];\n    spec: ProviderToolSpec;\n    systemPrompt?: string;\n    disableCaching?: boolean;\n    contextAgent?: Agent;\n    thinking?: {\n      enabled: boolean;\n      budgetTokens?: number;\n      displayThinking?: boolean;\n      effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\";\n    };\n  }): ProviderToolUseRequest {\n    const { model, input, spec, systemPrompt, contextAgent } = options;\n    const request: MockForceToolUseRequest = {\n      model,\n      input,\n      spec,\n      systemPrompt,\n      contextAgent,\n      defer: new Defer(),\n      aborted: false,\n    };\n    this.forceToolUseRequests.push(request);",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method forceToolUse\n\n  forceToolUse(options: {\n    model: string;\n    input: AgentInput[];\n    spec: ProviderToolSpec;\n    systemPrompt?: string;\n    disableCaching?: boolean;\n    contextAgent?: Agent;\n    thinking?: {\n      enabled: boolean;\n      budgetTokens?: number;\n      displayThinking?: boolean;\n      effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\";\n    };\n  }): ProviderToolUseRequest {\n    const { model, input, spec, systemPrompt, contextAgent } = options;\n    const request: MockForceToolUseRequest = {\n      model,\n      input,\n      spec,\n      systemPrompt,\n      contextAgent,\n      defer: new Defer(),\n      aborted: false,\n    };\n    this.forceToolUseRequests.push(request);",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method forceToolUse",
+      "startLine": 100,
+      "startCol": 1,
+      "endLine": 124,
+      "endCol": 45
+    },
+    {
+      "text": "      abort: () =\u003e {\n        if (!request.defer.resolved) {\n          request.aborted = true;\n          request.defer.reject(new Error(\"request aborted\"));\n        }\n      }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method forceToolUse \u003e function abort\n\n      abort: () =\u003e {\n        if (!request.defer.resolved) {\n          request.aborted = true;\n          request.defer.reject(new Error(\"request aborted\"));\n        }\n      }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method forceToolUse \u003e function abort",
+      "startLine": 127,
+      "startCol": 1,
+      "endLine": 132,
+      "endCol": 8
+    },
+    {
+      "text": "aborted: request.aborted,\n      promise: request.defer.promise,\n    };\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method forceToolUse\n\naborted: request.aborted,\n      promise: request.defer.promise,\n    };\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method forceToolUse",
+      "startLine": 133,
+      "startCol": 7,
+      "endLine": 136,
+      "endCol": 4
+    },
+    {
+      "text": "  sendMessage(_options: {\n    model: string;\n    messages: Array\u003cProviderMessage\u003e;\n    onStreamEvent: (event: ProviderStreamEvent) =\u003e void;\n    tools: Array\u003cProviderToolSpec\u003e;\n    systemPrompt?: string | undefined;\n    thinking?: {\n      enabled: boolean;\n      budgetTokens?: number;\n    };\n  }): ProviderStreamRequest {\n    throw new Error(\n      \"sendMessage is deprecated - use createAgent instead. Tests should use mockAnthropic.awaitPendingStream()\",\n    );\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method sendMessage\n\n  sendMessage(_options: {\n    model: string;\n    messages: Array\u003cProviderMessage\u003e;\n    onStreamEvent: (event: ProviderStreamEvent) =\u003e void;\n    tools: Array\u003cProviderToolSpec\u003e;\n    systemPrompt?: string | undefined;\n    thinking?: {\n      enabled: boolean;\n      budgetTokens?: number;\n    };\n  }): ProviderStreamRequest {\n    throw new Error(\n      \"sendMessage is deprecated - use createAgent instead. Tests should use mockAnthropic.awaitPendingStream()\",\n    );\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method sendMessage",
+      "startLine": 138,
+      "startCol": 1,
+      "endLine": 152,
+      "endCol": 4
+    },
+    {
+      "text": "  async awaitPendingStream(options?: {\n    predicate?: (request: MockStream) =\u003e boolean;\n    message?: string;\n    timeout?: number;\n  }): Promise\u003cMockStream\u003e {\n    return pollUntil(\n      () =\u003e {\n        // Check mock client streams first (new API) - find the latest unresolved stream\n        for (let i = this.mockClient.streams.length - 1; i \u003e= 0; i--) {\n          const stream = this.mockClient.streams[i];\n          if (stream \u0026\u0026 !stream.aborted \u0026\u0026 !stream.resolved) {\n            if (!options?.predicate || options.predicate(stream)) {\n              return stream;\n            }\n          }\n        }\n        // Fall back to legacy requests\n        throw new Error(`No pending streams${options?.predicate ? \" matching predicate\" : \"\"}! ${options?.message ?? \"\"}\nStreams: ${this.mockClient.streams.length}`);\n      },\n      { timeout: options?.timeout ?? 1000 },\n    );\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingStream\n\n  async awaitPendingStream(options?: {\n    predicate?: (request: MockStream) =\u003e boolean;\n    message?: string;\n    timeout?: number;\n  }): Promise\u003cMockStream\u003e {\n    return pollUntil(\n      () =\u003e {\n        // Check mock client streams first (new API) - find the latest unresolved stream\n        for (let i = this.mockClient.streams.length - 1; i \u003e= 0; i--) {\n          const stream = this.mockClient.streams[i];\n          if (stream \u0026\u0026 !stream.aborted \u0026\u0026 !stream.resolved) {\n            if (!options?.predicate || options.predicate(stream)) {\n              return stream;\n            }\n          }\n        }\n        // Fall back to legacy requests\n        throw new Error(`No pending streams${options?.predicate ? \" matching predicate\" : \"\"}! ${options?.message ?? \"\"}\nStreams: ${this.mockClient.streams.length}`);\n      },\n      { timeout: options?.timeout ?? 1000 },\n    );\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingStream",
+      "startLine": 154,
+      "startCol": 1,
+      "endLine": 176,
+      "endCol": 4
+    },
+    {
+      "text": "  async awaitPendingStreamWithText(\n    text: string,\n    options?: { message?: string; timeout?: number },\n  ): Promise\u003cMockStream\u003e {\n    return this.awaitPendingStream",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingStreamWithText\n\n  async awaitPendingStreamWithText(\n    text: string,\n    options?: { message?: string; timeout?: number },\n  ): Promise\u003cMockStream\u003e {\n    return this.awaitPendingStream",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingStreamWithText",
+      "startLine": 178,
+      "startCol": 1,
+      "endLine": 182,
+      "endCol": 35
+    },
+    {
+      "text": "      predicate: (stream) =\u003e {\n        // Check all recent user messages (last 3) since system reminders may follow tool results\n        const messagesToCheck = Math.min(3, stream.messages.length);\n        for (\n          let i = stream.messages.length - 1;\n          i \u003e= stream.messages.length - messagesToCheck;\n          i--\n        ) {\n          const msg = stream.messages[i];\n          if (msg.role !== \"user\") continue;\n\n          const content = msg.content;\n          if (typeof content === \"string\") {\n            if (content.includes(text)) return true;\n          } else {\n            for (const block of content) {\n              if (anthropicBlockIncludesText(block, text)) {\n                return true;\n              }\n            }\n          }\n        }\n        return false;\n      }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingStreamWithText \u003e function predicate\n\n      predicate: (stream) =\u003e {\n        // Check all recent user messages (last 3) since system reminders may follow tool results\n        const messagesToCheck = Math.min(3, stream.messages.length);\n        for (\n          let i = stream.messages.length - 1;\n          i \u003e= stream.messages.length - messagesToCheck;\n          i--\n        ) {\n          const msg = stream.messages[i];\n          if (msg.role !== \"user\") continue;\n\n          const content = msg.content;\n          if (typeof content === \"string\") {\n            if (content.includes(text)) return true;\n          } else {\n            for (const block of content) {\n              if (anthropicBlockIncludesText(block, text)) {\n                return true;\n              }\n            }\n          }\n        }\n        return false;\n      }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingStreamWithText \u003e function predicate",
+      "startLine": 183,
+      "startCol": 1,
+      "endLine": 206,
+      "endCol": 8
+    },
+    {
+      "text": "message: options?.message ?? `recent messages contain \"${text}\"`,\n      ...(options?.timeout !== undefined ? { timeout: options.timeout } : {}),\n    });\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingStreamWithText\n\nmessage: options?.message ?? `recent messages contain \"${text}\"`,\n      ...(options?.timeout !== undefined ? { timeout: options.timeout } : {}),\n    });\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingStreamWithText",
+      "startLine": 207,
+      "startCol": 7,
+      "endLine": 210,
+      "endCol": 4
+    },
+    {
+      "text": "  async awaitPendingUserRequest(message?: string) {\n    return this.awaitPendingStream",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingUserRequest\n\n  async awaitPendingUserRequest(message?: string) {\n    return this.awaitPendingStream",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingUserRequest",
+      "startLine": 212,
+      "startCol": 1,
+      "endLine": 213,
+      "endCol": 35
+    },
+    {
+      "text": "      predicate: (request) =\u003e {\n        return request.messages[request.messages.length - 1].role === \"user\";\n      }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingUserRequest \u003e function predicate\n\n      predicate: (request) =\u003e {\n        return request.messages[request.messages.length - 1].role === \"user\";\n      }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingUserRequest \u003e function predicate",
+      "startLine": 214,
+      "startCol": 1,
+      "endLine": 216,
+      "endCol": 8
+    },
+    {
+      "text": "message: message ?? \"there is a pending request with a user message\",\n    });\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingUserRequest\n\nmessage: message ?? \"there is a pending request with a user message\",\n    });\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingUserRequest",
+      "startLine": 217,
+      "startCol": 7,
+      "endLine": 219,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Find the last user message containing a tool_result in the stream's messages.\n   * Returns the message and its content array.\n   */\n  static findLastToolResultMessage(\n    messages: Anthropic.Messages.MessageParam[],\n  ): Anthropic.Messages.MessageParam | undefined {\n    for (let i = messages.length - 1; i \u003e= 0; i--) {\n      const msg = messages[i];\n      if (msg.role === \"user\" \u0026\u0026 Array.isArray(msg.content)) {\n        const hasToolResult = msg.content.some(\n          (block) =\u003e block.type === \"tool_result\",\n        );\n        if (hasToolResult) {\n          return msg;\n        }\n      }\n    }\n    return undefined;\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method findLastToolResultMessage\n\n/**\n   * Find the last user message containing a tool_result in the stream's messages.\n   * Returns the message and its content array.\n   */\n  static findLastToolResultMessage(\n    messages: Anthropic.Messages.MessageParam[],\n  ): Anthropic.Messages.MessageParam | undefined {\n    for (let i = messages.length - 1; i \u003e= 0; i--) {\n      const msg = messages[i];\n      if (msg.role === \"user\" \u0026\u0026 Array.isArray(msg.content)) {\n        const hasToolResult = msg.content.some(\n          (block) =\u003e block.type === \"tool_result\",\n        );\n        if (hasToolResult) {\n          return msg;\n        }\n      }\n    }\n    return undefined;\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method findLastToolResultMessage",
+      "startLine": 221,
+      "startCol": 3,
+      "endLine": 240,
+      "endCol": 4
+    },
+    {
+      "text": "  async awaitStopped(): Promise\u003cMockStream\u003e {\n    return pollUntil(() =\u003e {\n      const lastStream =\n        this.mockClient.streams[this.mockClient.streams.length - 1];\n      if (lastStream?.resolved) {\n        return lastStream;\n      }\n      throw new Error(`has pending streams`);\n    });\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method awaitStopped\n\n  async awaitStopped(): Promise\u003cMockStream\u003e {\n    return pollUntil(() =\u003e {\n      const lastStream =\n        this.mockClient.streams[this.mockClient.streams.length - 1];\n      if (lastStream?.resolved) {\n        return lastStream;\n      }\n      throw new Error(`has pending streams`);\n    });\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method awaitStopped",
+      "startLine": 242,
+      "startCol": 1,
+      "endLine": 251,
+      "endCol": 4
+    },
+    {
+      "text": "  async awaitPendingForceToolUseRequest(message?: string) {\n    return pollUntil(() =\u003e {\n      const lastRequest =\n        this.forceToolUseRequests[this.forceToolUseRequests.length - 1];\n      if (lastRequest \u0026\u0026 !lastRequest.defer.resolved) {\n        return lastRequest;\n      }\n      throw new Error(`no pending force tool use requests: ${message}`);\n    });\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingForceToolUseRequest\n\n  async awaitPendingForceToolUseRequest(message?: string) {\n    return pollUntil(() =\u003e {\n      const lastRequest =\n        this.forceToolUseRequests[this.forceToolUseRequests.length - 1];\n      if (lastRequest \u0026\u0026 !lastRequest.defer.resolved) {\n        return lastRequest;\n      }\n      throw new Error(`no pending force tool use requests: ${message}`);\n    });\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method awaitPendingForceToolUseRequest",
+      "startLine": 253,
+      "startCol": 1,
+      "endLine": 262,
+      "endCol": 4
+    },
+    {
+      "text": "  hasPendingStreamWithText(text: string): boolean {\n    for (const stream of this.mockClient.streams) {\n      if (stream \u0026\u0026 !stream.resolved) {\n        // Check all recent user messages (last 3) since system reminders may follow tool results\n        const messagesToCheck = Math.min(3, stream.messages.length);\n        for (\n          let i = stream.messages.length - 1;\n          i \u003e= stream.messages.length - messagesToCheck;\n          i--\n        ) {\n          const msg = stream.messages[i];\n          if (msg.role !== \"user\") continue;\n\n          const content = msg.content;\n          if (typeof content === \"string\") {\n            if (content.includes(text)) {\n              return true;\n            }\n          } else {\n            for (const block of content) {\n              if (anthropicBlockIncludesText(block, text)) {\n                return true;\n              }\n            }\n          }\n        }\n      }\n    }\n    return false;\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method hasPendingStreamWithText\n\n  hasPendingStreamWithText(text: string): boolean {\n    for (const stream of this.mockClient.streams) {\n      if (stream \u0026\u0026 !stream.resolved) {\n        // Check all recent user messages (last 3) since system reminders may follow tool results\n        const messagesToCheck = Math.min(3, stream.messages.length);\n        for (\n          let i = stream.messages.length - 1;\n          i \u003e= stream.messages.length - messagesToCheck;\n          i--\n        ) {\n          const msg = stream.messages[i];\n          if (msg.role !== \"user\") continue;\n\n          const content = msg.content;\n          if (typeof content === \"string\") {\n            if (content.includes(text)) {\n              return true;\n            }\n          } else {\n            for (const block of content) {\n              if (anthropicBlockIncludesText(block, text)) {\n                return true;\n              }\n            }\n          }\n        }\n      }\n    }\n    return false;\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method hasPendingStreamWithText",
+      "startLine": 264,
+      "startCol": 1,
+      "endLine": 293,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Helper to generate a web search tool use response\n   */\n  // async respondWithWebSearch(\n  //   query: string,\n  //   stopReason: StopReason = \"tool_use\",\n  // ) {\n  //   const lastRequest = await this.awaitPendingRequest();\n  //   const blockId = this.getNextBlockId();\n  //   const index = 0;\n  //\n  //   // Send content_block_start event for server_tool_use\n  //   lastRequest.onStreamEvent({\n  //     type: \"content_block_start\",\n  //     index,\n  //     content_block: {\n  //       type: \"server_tool_use\",\n  //       id: blockId,\n  //       name: \"web_search\",\n  //     },\n  //   });\n  //\n  //   // Send search query as JSON delta\n  //   lastRequest.onStreamEvent({\n  //     type: \"content_block_delta\",\n  //     index,\n  //     delta: {\n  //       type: \"input_json_delta\",\n  //       value: JSON.stringify({ query }),\n  //     },\n  //   });\n  //\n  //   // Send content_block_stop event\n  //   lastRequest.onStreamEvent({\n  //     type: \"content_block_stop\",\n  //     index,\n  //   });\n  //\n  //   // Resolve the request\n  //   lastRequest.defer.resolve({\n  //     stopReason,\n  //     usage: {\n  //       inputTokens: 10,\n  //       outputTokens: 20,\n  //     },\n  //   });\n  // }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider\n\n/**\n   * Helper to generate a web search tool use response\n   */\n  // async respondWithWebSearch(\n  //   query: string,\n  //   stopReason: StopReason = \"tool_use\",\n  // ) {\n  //   const lastRequest = await this.awaitPendingRequest();\n  //   const blockId = this.getNextBlockId();\n  //   const index = 0;\n  //\n  //   // Send content_block_start event for server_tool_use\n  //   lastRequest.onStreamEvent({\n  //     type: \"content_block_start\",\n  //     index,\n  //     content_block: {\n  //       type: \"server_tool_use\",\n  //       id: blockId,\n  //       name: \"web_search\",\n  //     },\n  //   });\n  //\n  //   // Send search query as JSON delta\n  //   lastRequest.onStreamEvent({\n  //     type: \"content_block_delta\",\n  //     index,\n  //     delta: {\n  //       type: \"input_json_delta\",\n  //       value: JSON.stringify({ query }),\n  //     },\n  //   });\n  //\n  //   // Send content_block_stop event\n  //   lastRequest.onStreamEvent({\n  //     type: \"content_block_stop\",\n  //     index,\n  //   });\n  //\n  //   // Resolve the request\n  //   lastRequest.defer.resolve({\n  //     stopReason,\n  //     usage: {\n  //       inputTokens: 10,\n  //       outputTokens: 20,\n  //     },\n  //   });\n  // }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider",
+      "startLine": 295,
+      "startCol": 3,
+      "endLine": 341,
+      "endCol": 7
+    },
+    {
+      "text": "/**\n   * Completes a request with the given stop reason and usage statistics\n   */\n  async respondToForceToolUse({\n    toolRequest,\n    stopReason,\n  }: {\n    toolRequest: Result\u003cToolRequest, { rawRequest: unknown }\u003e;\n    stopReason: StopReason;\n  }) {\n    const lastRequest = await this.awaitPendingForceToolUseRequest();\n\n    lastRequest.defer.resolve({\n      toolRequest,\n      stopReason,\n      usage: {\n        inputTokens: 10,\n        outputTokens: 20,\n      },\n    });\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method respondToForceToolUse\n\n/**\n   * Completes a request with the given stop reason and usage statistics\n   */\n  async respondToForceToolUse({\n    toolRequest,\n    stopReason,\n  }: {\n    toolRequest: Result\u003cToolRequest, { rawRequest: unknown }\u003e;\n    stopReason: StopReason;\n  }) {\n    const lastRequest = await this.awaitPendingForceToolUseRequest();\n\n    lastRequest.defer.resolve({\n      toolRequest,\n      stopReason,\n      usage: {\n        inputTokens: 10,\n        outputTokens: 20,\n      },\n    });\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method respondToForceToolUse",
+      "startLine": 343,
+      "startCol": 3,
+      "endLine": 363,
+      "endCol": 4
+    },
+    {
+      "text": "  createAgent(options: AgentOptions): Agent {\n    return new AnthropicAgent(\n      options,\n      this.mockClient as unknown as Anthropic,\n      {\n        authType: \"max\",\n        includeWebSearch: true,\n        disableParallelToolUseFlag: true,\n        logger: winston.createLogger(),\n        validateInput,\n      },\n    );\n  }",
+      "contextualizedText": "// node/providers/mock.ts \u003e class MockProvider \u003e method createAgent\n\n  createAgent(options: AgentOptions): Agent {\n    return new AnthropicAgent(\n      options,\n      this.mockClient as unknown as Anthropic,\n      {\n        authType: \"max\",\n        includeWebSearch: true,\n        disableParallelToolUseFlag: true,\n        logger: winston.createLogger(),\n        validateInput,\n      },\n    );\n  }",
+      "headingContext": "node/providers/mock.ts \u003e class MockProvider \u003e method createAgent",
+      "startLine": 365,
+      "startCol": 1,
+      "endLine": 377,
+      "endCol": 4
+    },
+    {
+      "text": "export async function withMockClient(\n  fn: (mock: MockProvider) =\u003e Promise\u003cvoid\u003e,\n) {\n  const mock = new MockProvider();\n  // these should match the defaults in the\n  setMockProvider(mock);\n  try {\n    await fn(mock);\n  } finally {\n    setMockProvider(undefined);\n  }\n}",
+      "contextualizedText": "// node/providers/mock.ts \u003e function withMockClient\n\nexport async function withMockClient(\n  fn: (mock: MockProvider) =\u003e Promise\u003cvoid\u003e,\n) {\n  const mock = new MockProvider();\n  // these should match the defaults in the\n  setMockProvider(mock);\n  try {\n    await fn(mock);\n  } finally {\n    setMockProvider(undefined);\n  }\n}",
+      "headingContext": "node/providers/mock.ts \u003e function withMockClient",
+      "startLine": 380,
+      "startCol": 1,
+      "endLine": 391,
+      "endCol": 2
+    }
+  ]
+}

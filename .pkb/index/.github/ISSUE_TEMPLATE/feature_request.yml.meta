@@ -1,0 +1,15 @@
+{
+  "blobSha": "f8ce0f9d540bbb759890c8fe2db46b8fbf9265a9",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "name: Feature Request\ndescription: Suggest a new feature\ntitle: \"feature: \"\nlabels: [enhancement]\nbody:\n  - type: checkboxes\n    attributes:\n      label: Did you check the docs?\n      description: Make sure you read all the docs before submitting a feature request\n      options:\n        - label: I have read all the docs\n          required: true\n  - type: textarea\n    validations:\n      required: true\n    attributes:\n      label: Is your feature request related to a problem? Please describe.\n      description: A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]\n  - type: textarea\n    validations:\n      required: true\n    attributes:\n      label: Describe the solution you'd like\n      description: A clear and concise description of what you want to happen.\n  - type: textarea\n    validations:\n      required: true\n    attributes:\n      label: Describe alternatives you've considered\n      description: A clear and concise description of any alternative solutions or features you've considered.\n  - type: textarea\n    validations:\n      required: false\n    attributes:\n      label: Additional context\n      description: Add any other context or screenshots about the feature request here.\n",
+      "contextualizedText": "# .github/ISSUE_TEMPLATE/feature_request.yml\n\nname: Feature Request\ndescription: Suggest a new feature\ntitle: \"feature: \"\nlabels: [enhancement]\nbody:\n  - type: checkboxes\n    attributes:\n      label: Did you check the docs?\n      description: Make sure you read all the docs before submitting a feature request\n      options:\n        - label: I have read all the docs\n          required: true\n  - type: textarea\n    validations:\n      required: true\n    attributes:\n      label: Is your feature request related to a problem? Please describe.\n      description: A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]\n  - type: textarea\n    validations:\n      required: true\n    attributes:\n      label: Describe the solution you'd like\n      description: A clear and concise description of what you want to happen.\n  - type: textarea\n    validations:\n      required: true\n    attributes:\n      label: Describe alternatives you've considered\n      description: A clear and concise description of any alternative solutions or features you've considered.\n  - type: textarea\n    validations:\n      required: false\n    attributes:\n      label: Additional context\n      description: Add any other context or screenshots about the feature request here.\n",
+      "headingContext": ".github/ISSUE_TEMPLATE/feature_request.yml",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 37,
+      "endCol": 1
+    }
+  ]
+}

@@ -1,0 +1,330 @@
+{
+  "blobSha": "8879f6e9c9f858ed28818a3a458b9f8ae6068835",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type Anthropic from \"@anthropic-ai/sdk\";\nimport { MessageStream } from \"@anthropic-ai/sdk/lib/MessageStream.mjs\";\nimport type { ToolName, ToolRequestId } from \"../tool-types.ts\";\nimport { validateInput } from \"../tools/helpers.ts\";\nimport { pollUntil } from \"../utils/async.ts\";\nimport type { Result } from \"../utils/result.ts\";\nimport { convertAnthropicMessagesToProvider } from \"./anthropic-agent.ts\";\nimport type { ProviderMessage, StopReason, Usage } from \"./provider-types.ts\";",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts\n\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport { MessageStream } from \"@anthropic-ai/sdk/lib/MessageStream.mjs\";\nimport type { ToolName, ToolRequestId } from \"../tool-types.ts\";\nimport { validateInput } from \"../tools/helpers.ts\";\nimport { pollUntil } from \"../utils/async.ts\";\nimport type { Result } from \"../utils/result.ts\";\nimport { convertAnthropicMessagesToProvider } from \"./anthropic-agent.ts\";\nimport type { ProviderMessage, StopReason, Usage } from \"./provider-types.ts\";",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 79
+    },
+    {
+      "text": "/** A mock stream that tests can control to simulate Anthropic API responses.\n *  Drives a real MessageStream via a ReadableStream so all event accumulation,\n *  partialParse, and finalMessage() assembly use the real SDK code path.\n */\nexport class MockStream {\n  private readableController!: ReadableStreamDefaultController\u003cUint8Array\u003e;\n  private realStream: MessageStream;\n  private blockCounter = 0;\n  private messageStartEmitted = false;\n  private _resolved = false;\n  private _abortController = new AbortController();\n  private _pushedEventCount = 0;\n  private _processedEventCount = 0;\n  private _partialToolIndex?: number;\n\n  constructor(public params: Anthropic.Messages.MessageStreamParams) {\n    const readable = new ReadableStream\u003cUint8Array\u003e",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream\n\n/** A mock stream that tests can control to simulate Anthropic API responses.\n *  Drives a real MessageStream via a ReadableStream so all event accumulation,\n *  partialParse, and finalMessage() assembly use the real SDK code path.\n */\nexport class MockStream {\n  private readableController!: ReadableStreamDefaultController\u003cUint8Array\u003e;\n  private realStream: MessageStream;\n  private blockCounter = 0;\n  private messageStartEmitted = false;\n  private _resolved = false;\n  private _abortController = new AbortController();\n  private _pushedEventCount = 0;\n  private _processedEventCount = 0;\n  private _partialToolIndex?: number;\n\n  constructor(public params: Anthropic.Messages.MessageStreamParams) {\n    const readable = new ReadableStream\u003cUint8Array\u003e",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream",
+      "startLine": 10,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 52
+    },
+    {
+      "text": "      start: (controller) =\u003e {\n        this.readableController = controller;\n      }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e function start\n\n      start: (controller) =\u003e {\n        this.readableController = controller;\n      }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e function start",
+      "startLine": 27,
+      "startCol": 1,
+      "endLine": 29,
+      "endCol": 8
+    },
+    {
+      "text": "this.realStream = MessageStream.fromReadableStream(readable);\n\n    this.realStream.on(\"streamEvent\", () =\u003e {\n      this._processedEventCount++;\n    });",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream\n\nthis.realStream = MessageStream.fromReadableStream(readable);\n\n    this.realStream.on(\"streamEvent\", () =\u003e {\n      this._processedEventCount++;\n    });",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream",
+      "startLine": 31,
+      "startCol": 5,
+      "endLine": 35,
+      "endCol": 8
+    },
+    {
+      "text": "  get messages(): Anthropic.MessageParam[] {\n    return this.params.messages;\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method messages\n\n  get messages(): Anthropic.MessageParam[] {\n    return this.params.messages;\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method messages",
+      "startLine": 38,
+      "startCol": 1,
+      "endLine": 40,
+      "endCol": 4
+    },
+    {
+      "text": "  getProviderMessages(): ProviderMessage[] {\n    return convertAnthropicMessagesToProvider(\n      validateInput,\n      this.params.messages,\n    );\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method getProviderMessages\n\n  getProviderMessages(): ProviderMessage[] {\n    return convertAnthropicMessagesToProvider(\n      validateInput,\n      this.params.messages,\n    );\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method getProviderMessages",
+      "startLine": 42,
+      "startCol": 1,
+      "endLine": 47,
+      "endCol": 4
+    },
+    {
+      "text": "  get systemPrompt(): string | undefined {\n    const system = this.params.system;\n    if (!system) return undefined;\n    if (typeof system === \"string\") return system;\n    return system\n      .map((block) =\u003e (\"text\" in block ? block.text : \"\"))\n      .join(\"\\n\");\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method systemPrompt\n\n  get systemPrompt(): string | undefined {\n    const system = this.params.system;\n    if (!system) return undefined;\n    if (typeof system === \"string\") return system;\n    return system\n      .map((block) =\u003e (\"text\" in block ? block.text : \"\"))\n      .join(\"\\n\");\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method systemPrompt",
+      "startLine": 49,
+      "startCol": 1,
+      "endLine": 56,
+      "endCol": 4
+    },
+    {
+      "text": "  on(\n    event: \"streamEvent\",\n    callback: (\n      event: Anthropic.Messages.MessageStreamEvent,\n      snapshot: Anthropic.Message,\n    ) =\u003e void,\n  ): this {\n    if (event === \"streamEvent\") {\n      this.realStream.on(\"streamEvent\", callback);\n    }\n    return this;\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method on\n\n  on(\n    event: \"streamEvent\",\n    callback: (\n      event: Anthropic.Messages.MessageStreamEvent,\n      snapshot: Anthropic.Message,\n    ) =\u003e void,\n  ): this {\n    if (event === \"streamEvent\") {\n      this.realStream.on(\"streamEvent\", callback);\n    }\n    return this;\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method on",
+      "startLine": 58,
+      "startCol": 1,
+      "endLine": 69,
+      "endCol": 4
+    },
+    {
+      "text": "  finalMessage(): Promise\u003cAnthropic.Message\u003e {\n    return this.realStream.finalMessage();\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method finalMessage\n\n  finalMessage(): Promise\u003cAnthropic.Message\u003e {\n    return this.realStream.finalMessage();\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method finalMessage",
+      "startLine": 71,
+      "startCol": 1,
+      "endLine": 73,
+      "endCol": 4
+    },
+    {
+      "text": "  abort(): void {\n    this._resolved = true;\n    this._abortController.abort();\n    try {\n      this.readableController.close();\n    } catch {\n      // already closed\n    }\n    this.realStream.abort();\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method abort\n\n  abort(): void {\n    this._resolved = true;\n    this._abortController.abort();\n    try {\n      this.readableController.close();\n    } catch {\n      // already closed\n    }\n    this.realStream.abort();\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method abort",
+      "startLine": 75,
+      "startCol": 1,
+      "endLine": 84,
+      "endCol": 4
+    },
+    {
+      "text": "  get controller(): AbortController {\n    return this._abortController;\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method controller\n\n  get controller(): AbortController {\n    return this._abortController;\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method controller",
+      "startLine": 86,
+      "startCol": 1,
+      "endLine": 88,
+      "endCol": 4
+    },
+    {
+      "text": "  get aborted(): boolean {\n    return this._abortController.signal.aborted;\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method aborted\n\n  get aborted(): boolean {\n    return this._abortController.signal.aborted;\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method aborted",
+      "startLine": 90,
+      "startCol": 1,
+      "endLine": 92,
+      "endCol": 4
+    },
+    {
+      "text": "  get resolved(): boolean {\n    return this._resolved;\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method resolved\n\n  get resolved(): boolean {\n    return this._resolved;\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method resolved",
+      "startLine": 94,
+      "startCol": 1,
+      "endLine": 96,
+      "endCol": 4
+    },
+    {
+      "text": "  private pushEvent(event: Anthropic.Messages.MessageStreamEvent): void {\n    this._pushedEventCount++;\n    const json = `${JSON.stringify(event)}\\n`;\n    const bytes = new TextEncoder().encode(json);\n    this.readableController.enqueue(bytes);\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method pushEvent\n\n  private pushEvent(event: Anthropic.Messages.MessageStreamEvent): void {\n    this._pushedEventCount++;\n    const json = `${JSON.stringify(event)}\\n`;\n    const bytes = new TextEncoder().encode(json);\n    this.readableController.enqueue(bytes);\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method pushEvent",
+      "startLine": 98,
+      "startCol": 1,
+      "endLine": 103,
+      "endCol": 4
+    },
+    {
+      "text": "  private ensureMessageStart(): void {\n    if (!this.messageStartEmitted) {\n      this.messageStartEmitted = true;\n      this.pushEvent({\n        type: \"message_start\",\n        message: {\n          id: `msg_mock_${Date.now()}`,\n          type: \"message\",\n          role: \"assistant\",\n          content: [],\n          model: \"mock-model\",\n          stop_reason: null,\n          stop_sequence: null,\n          container: null,\n          stop_details: null,\n          usage: {\n            input_tokens: 0,\n            output_tokens: 0,\n            cache_creation_input_tokens: null,\n            cache_read_input_tokens: null,\n            cache_creation: null,\n            inference_geo: null,\n            server_tool_use: null,\n            service_tier: null,\n            output_tokens_details: null,\n          },\n        },\n      });\n    }\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method ensureMessageStart\n\n  private ensureMessageStart(): void {\n    if (!this.messageStartEmitted) {\n      this.messageStartEmitted = true;\n      this.pushEvent({\n        type: \"message_start\",\n        message: {\n          id: `msg_mock_${Date.now()}`,\n          type: \"message\",\n          role: \"assistant\",\n          content: [],\n          model: \"mock-model\",\n          stop_reason: null,\n          stop_sequence: null,\n          container: null,\n          stop_details: null,\n          usage: {\n            input_tokens: 0,\n            output_tokens: 0,\n            cache_creation_input_tokens: null,\n            cache_read_input_tokens: null,\n            cache_creation: null,\n            inference_geo: null,\n            server_tool_use: null,\n            service_tier: null,\n            output_tokens_details: null,\n          },\n        },\n      });\n    }\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method ensureMessageStart",
+      "startLine": 105,
+      "startCol": 1,
+      "endLine": 134,
+      "endCol": 4
+    },
+    {
+      "text": "/** Wait for all pushed events to be processed by the real MessageStream. */\n  async settle(): Promise\u003cvoid\u003e {\n    while (this._processedEventCount \u003c this._pushedEventCount) {\n      await new Promise\u003cvoid\u003e((resolve) =\u003e queueMicrotask(resolve));\n    }\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method settle\n\n/** Wait for all pushed events to be processed by the real MessageStream. */\n  async settle(): Promise\u003cvoid\u003e {\n    while (this._processedEventCount \u003c this._pushedEventCount) {\n      await new Promise\u003cvoid\u003e((resolve) =\u003e queueMicrotask(resolve));\n    }\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method settle",
+      "startLine": 136,
+      "startCol": 3,
+      "endLine": 141,
+      "endCol": 4
+    },
+    {
+      "text": "// --- Test helper methods ---",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream\n\n// --- Test helper methods ---",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream",
+      "startLine": 143,
+      "startCol": 3,
+      "endLine": 143,
+      "endCol": 33
+    },
+    {
+      "text": "  streamText(text: string): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: { type: \"text\", text: \"\", citations: null },\n    });\n    this.pushEvent({\n      type: \"content_block_delta\",\n      index,\n      delta: { type: \"text_delta\", text },\n    });\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamText\n\n  streamText(text: string): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: { type: \"text\", text: \"\", citations: null },\n    });\n    this.pushEvent({\n      type: \"content_block_delta\",\n      index,\n      delta: { type: \"text_delta\", text },\n    });\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamText",
+      "startLine": 145,
+      "startCol": 1,
+      "endLine": 160,
+      "endCol": 4
+    },
+    {
+      "text": "  streamToolUse(\n    id: ToolRequestId,\n    name: ToolName,\n    input: Record\u003cstring, unknown\u003e,\n  ): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: {\n        type: \"tool_use\",\n        id,\n        name,\n        input: {},\n        caller: { type: \"direct\" as const },\n      },\n    });\n    this.pushEvent({\n      type: \"content_block_delta\",\n      index,\n      delta: { type: \"input_json_delta\", partial_json: JSON.stringify(input) },\n    });\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamToolUse\n\n  streamToolUse(\n    id: ToolRequestId,\n    name: ToolName,\n    input: Record\u003cstring, unknown\u003e,\n  ): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: {\n        type: \"tool_use\",\n        id,\n        name,\n        input: {},\n        caller: { type: \"direct\" as const },\n      },\n    });\n    this.pushEvent({\n      type: \"content_block_delta\",\n      index,\n      delta: { type: \"input_json_delta\", partial_json: JSON.stringify(input) },\n    });\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamToolUse",
+      "startLine": 162,
+      "startCol": 1,
+      "endLine": 187,
+      "endCol": 4
+    },
+    {
+      "text": "/** Start a tool_use block and stream the given partial JSON chunks WITHOUT\n   *  emitting content_block_stop, leaving the block as the live streaming block.\n   *  Use to test streaming-input previews. Follow up with\n   *  `continueToolUsePartial` to append more chunks to the same block. */\n  streamToolUsePartial(\n    id: ToolRequestId,\n    name: ToolName,\n    chunks: string[],\n  ): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n    this._partialToolIndex = index;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: {\n        type: \"tool_use\",\n        id,\n        name,\n        input: {},\n        caller: { type: \"direct\" as const },\n      },\n    });\n    for (const chunk of chunks) {\n      this.pushEvent({\n        type: \"content_block_delta\",\n        index,\n        delta: { type: \"input_json_delta\", partial_json: chunk },\n      });\n    }\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamToolUsePartial\n\n/** Start a tool_use block and stream the given partial JSON chunks WITHOUT\n   *  emitting content_block_stop, leaving the block as the live streaming block.\n   *  Use to test streaming-input previews. Follow up with\n   *  `continueToolUsePartial` to append more chunks to the same block. */\n  streamToolUsePartial(\n    id: ToolRequestId,\n    name: ToolName,\n    chunks: string[],\n  ): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n    this._partialToolIndex = index;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: {\n        type: \"tool_use\",\n        id,\n        name,\n        input: {},\n        caller: { type: \"direct\" as const },\n      },\n    });\n    for (const chunk of chunks) {\n      this.pushEvent({\n        type: \"content_block_delta\",\n        index,\n        delta: { type: \"input_json_delta\", partial_json: chunk },\n      });\n    }\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamToolUsePartial",
+      "startLine": 189,
+      "startCol": 3,
+      "endLine": 220,
+      "endCol": 4
+    },
+    {
+      "text": "/** Append more partial JSON chunks to the block started by\n   *  `streamToolUsePartial`, without closing it. */\n  continueToolUsePartial(chunks: string[]): void {\n    const index = this._partialToolIndex;\n    if (index === undefined) {\n      throw new Error(\n        \"continueToolUsePartial called before streamToolUsePartial\",\n      );\n    }\n    for (const chunk of chunks) {\n      this.pushEvent({\n        type: \"content_block_delta\",\n        index,\n        delta: { type: \"input_json_delta\", partial_json: chunk },\n      });\n    }\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method continueToolUsePartial\n\n/** Append more partial JSON chunks to the block started by\n   *  `streamToolUsePartial`, without closing it. */\n  continueToolUsePartial(chunks: string[]): void {\n    const index = this._partialToolIndex;\n    if (index === undefined) {\n      throw new Error(\n        \"continueToolUsePartial called before streamToolUsePartial\",\n      );\n    }\n    for (const chunk of chunks) {\n      this.pushEvent({\n        type: \"content_block_delta\",\n        index,\n        delta: { type: \"input_json_delta\", partial_json: chunk },\n      });\n    }\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method continueToolUsePartial",
+      "startLine": 222,
+      "startCol": 3,
+      "endLine": 238,
+      "endCol": 4
+    },
+    {
+      "text": "  streamThinking(thinking: string, signature: string = \"\"): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: { type: \"thinking\", thinking: \"\", signature: \"\" },\n    });\n    this.pushEvent({\n      type: \"content_block_delta\",\n      index,\n      delta: { type: \"thinking_delta\", thinking },\n    });\n    if (signature) {\n      this.pushEvent({\n        type: \"content_block_delta\",\n        index,\n        delta: {\n          type: \"signature_delta\",\n          signature,\n        } as Anthropic.Messages.ContentBlockDeltaEvent[\"delta\"],\n      });\n    }\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamThinking\n\n  streamThinking(thinking: string, signature: string = \"\"): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: { type: \"thinking\", thinking: \"\", signature: \"\" },\n    });\n    this.pushEvent({\n      type: \"content_block_delta\",\n      index,\n      delta: { type: \"thinking_delta\", thinking },\n    });\n    if (signature) {\n      this.pushEvent({\n        type: \"content_block_delta\",\n        index,\n        delta: {\n          type: \"signature_delta\",\n          signature,\n        } as Anthropic.Messages.ContentBlockDeltaEvent[\"delta\"],\n      });\n    }\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamThinking",
+      "startLine": 240,
+      "startCol": 1,
+      "endLine": 265,
+      "endCol": 4
+    },
+    {
+      "text": "  streamRedactedThinking(data: string): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: { type: \"redacted_thinking\", data },\n    });\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamRedactedThinking\n\n  streamRedactedThinking(data: string): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: { type: \"redacted_thinking\", data },\n    });\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamRedactedThinking",
+      "startLine": 267,
+      "startCol": 1,
+      "endLine": 277,
+      "endCol": 4
+    },
+    {
+      "text": "  streamServerToolUse(\n    id: string,\n    name: \"web_search\",\n    input: { query: string },\n  ): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: {\n        type: \"server_tool_use\",\n        id,\n        name,\n        input: {},\n      } as unknown as Anthropic.Messages.ContentBlock,\n    });\n    this.pushEvent({\n      type: \"content_block_delta\",\n      index,\n      delta: { type: \"input_json_delta\", partial_json: JSON.stringify(input) },\n    });\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamServerToolUse\n\n  streamServerToolUse(\n    id: string,\n    name: \"web_search\",\n    input: { query: string },\n  ): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: {\n        type: \"server_tool_use\",\n        id,\n        name,\n        input: {},\n      } as unknown as Anthropic.Messages.ContentBlock,\n    });\n    this.pushEvent({\n      type: \"content_block_delta\",\n      index,\n      delta: { type: \"input_json_delta\", partial_json: JSON.stringify(input) },\n    });\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamServerToolUse",
+      "startLine": 279,
+      "startCol": 1,
+      "endLine": 303,
+      "endCol": 4
+    },
+    {
+      "text": "  streamWebSearchToolResult(toolUseId: string, content: unknown): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    const block = {\n      type: \"web_search_tool_result\",\n      tool_use_id: toolUseId,\n      content,\n    } as unknown as Anthropic.Messages.ContentBlock;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: block,\n    });\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamWebSearchToolResult\n\n  streamWebSearchToolResult(toolUseId: string, content: unknown): void {\n    this.ensureMessageStart();\n    const index = this.blockCounter++;\n\n    const block = {\n      type: \"web_search_tool_result\",\n      tool_use_id: toolUseId,\n      content,\n    } as unknown as Anthropic.Messages.ContentBlock;\n\n    this.pushEvent({\n      type: \"content_block_start\",\n      index,\n      content_block: block,\n    });\n    this.pushEvent({ type: \"content_block_stop\", index });\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method streamWebSearchToolResult",
+      "startLine": 305,
+      "startCol": 1,
+      "endLine": 321,
+      "endCol": 4
+    },
+    {
+      "text": "  nextBlockIndex(): number {\n    return this.blockCounter++;\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method nextBlockIndex\n\n  nextBlockIndex(): number {\n    return this.blockCounter++;\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method nextBlockIndex",
+      "startLine": 323,
+      "startCol": 1,
+      "endLine": 325,
+      "endCol": 4
+    },
+    {
+      "text": "  emitEvent(event: Anthropic.Messages.MessageStreamEvent): void {\n    if (\n      event.type === \"content_block_start\" ||\n      event.type === \"content_block_delta\" ||\n      event.type === \"content_block_stop\" ||\n      event.type === \"message_delta\"\n    ) {\n      this.ensureMessageStart();\n    }\n    this.pushEvent(event);\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method emitEvent\n\n  emitEvent(event: Anthropic.Messages.MessageStreamEvent): void {\n    if (\n      event.type === \"content_block_start\" ||\n      event.type === \"content_block_delta\" ||\n      event.type === \"content_block_stop\" ||\n      event.type === \"message_delta\"\n    ) {\n      this.ensureMessageStart();\n    }\n    this.pushEvent(event);\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method emitEvent",
+      "startLine": 327,
+      "startCol": 1,
+      "endLine": 337,
+      "endCol": 4
+    },
+    {
+      "text": "  finishResponse(\n    stopReason: StopReason,\n    usage: Usage = { inputTokens: 1000, outputTokens: 5000 },\n  ): void {\n    this._resolved = true;\n    this.ensureMessageStart();\n    this.pushEvent({\n      type: \"message_delta\",\n      delta: {\n        stop_reason: stopReason as Anthropic.Message[\"stop_reason\"],\n        stop_sequence: null,\n        container: null,\n        stop_details: null,\n      },\n      usage: {\n        output_tokens: usage.outputTokens,\n        input_tokens: usage.inputTokens,\n        cache_creation_input_tokens: usage.cacheMisses ?? null,\n        cache_read_input_tokens: usage.cacheHits ?? null,\n        server_tool_use: null,\n        output_tokens_details: null,\n      },\n    });\n    this.pushEvent({ type: \"message_stop\" });\n    this.readableController.close();\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method finishResponse\n\n  finishResponse(\n    stopReason: StopReason,\n    usage: Usage = { inputTokens: 1000, outputTokens: 5000 },\n  ): void {\n    this._resolved = true;\n    this.ensureMessageStart();\n    this.pushEvent({\n      type: \"message_delta\",\n      delta: {\n        stop_reason: stopReason as Anthropic.Message[\"stop_reason\"],\n        stop_sequence: null,\n        container: null,\n        stop_details: null,\n      },\n      usage: {\n        output_tokens: usage.outputTokens,\n        input_tokens: usage.inputTokens,\n        cache_creation_input_tokens: usage.cacheMisses ?? null,\n        cache_read_input_tokens: usage.cacheHits ?? null,\n        server_tool_use: null,\n        output_tokens_details: null,\n      },\n    });\n    this.pushEvent({ type: \"message_stop\" });\n    this.readableController.close();\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method finishResponse",
+      "startLine": 339,
+      "startCol": 1,
+      "endLine": 364,
+      "endCol": 4
+    },
+    {
+      "text": "  respondWithError(error: Error): void {\n    this._resolved = true;\n    // Push an error event that will cause finalMessage() to reject\n    // but NOT set the abort signal\n    try {\n      // Throw the error into the readable stream without aborting\n      this.readableController.error(error);\n    } catch {\n      // If error fails, abort as fallback\n      this.realStream.abort();\n    }\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method respondWithError\n\n  respondWithError(error: Error): void {\n    this._resolved = true;\n    // Push an error event that will cause finalMessage() to reject\n    // but NOT set the abort signal\n    try {\n      // Throw the error into the readable stream without aborting\n      this.readableController.error(error);\n    } catch {\n      // If error fails, abort as fallback\n      this.realStream.abort();\n    }\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method respondWithError",
+      "startLine": 366,
+      "startCol": 1,
+      "endLine": 377,
+      "endCol": 4
+    },
+    {
+      "text": "  respond({\n    text,\n    toolRequests,\n    stopReason,\n    usage,\n  }: {\n    text: string;\n    toolRequests: Result\u003c\n      { id: ToolRequestId; toolName: ToolName; input: unknown },\n      { rawRequest: unknown }\n    \u003e[];\n    stopReason: StopReason;\n    usage?: Usage;\n  }): void {\n    if (this.aborted) {\n      return;\n    }\n\n    if (text) {\n      this.streamText(text);\n    }\n\n    if (toolRequests \u0026\u0026 toolRequests.length \u003e 0) {\n      for (const toolRequest of toolRequests) {\n        if (toolRequest.status === \"ok\") {\n          this.streamToolUse(\n            toolRequest.value.id,\n            toolRequest.value.toolName,\n            toolRequest.value.input as Record\u003cstring, unknown\u003e,\n          );\n        } else {\n          const blockId = `block_error_${this.blockCounter}`;\n          this.streamToolUse(\n            blockId as ToolRequestId,\n            \"unknown\" as ToolName,\n            (toolRequest as { rawRequest: unknown }).rawRequest as Record\u003c\n              string,\n              unknown\n            \u003e,\n          );\n        }\n      }\n    }\n\n    this.finishResponse(stopReason, usage);\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method respond\n\n  respond({\n    text,\n    toolRequests,\n    stopReason,\n    usage,\n  }: {\n    text: string;\n    toolRequests: Result\u003c\n      { id: ToolRequestId; toolName: ToolName; input: unknown },\n      { rawRequest: unknown }\n    \u003e[];\n    stopReason: StopReason;\n    usage?: Usage;\n  }): void {\n    if (this.aborted) {\n      return;\n    }\n\n    if (text) {\n      this.streamText(text);\n    }\n\n    if (toolRequests \u0026\u0026 toolRequests.length \u003e 0) {\n      for (const toolRequest of toolRequests) {\n        if (toolRequest.status === \"ok\") {\n          this.streamToolUse(\n            toolRequest.value.id,\n            toolRequest.value.toolName,\n            toolRequest.value.input as Record\u003cstring, unknown\u003e,\n          );\n        } else {\n          const blockId = `block_error_${this.blockCounter}`;\n          this.streamToolUse(\n            blockId as ToolRequestId,\n            \"unknown\" as ToolName,\n            (toolRequest as { rawRequest: unknown }).rawRequest as Record\u003c\n              string,\n              unknown\n            \u003e,\n          );\n        }\n      }\n    }\n\n    this.finishResponse(stopReason, usage);\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockStream \u003e method respond",
+      "startLine": 379,
+      "startCol": 1,
+      "endLine": 424,
+      "endCol": 4
+    },
+    {
+      "text": "/** Validate that the Anthropic API constraint is satisfied:\n * every assistant message containing tool_use blocks must be immediately\n * followed by a user message with a tool_result for each tool_use.id.\n */\nfunction validateToolUseConstraint(messages: Anthropic.MessageParam[]): void {\n  for (let i = 0; i \u003c messages.length; i++) {\n    const msg = messages[i];\n    if (msg.role !== \"assistant\") continue;\n    if (typeof msg.content === \"string\") continue;\n\n    const toolUseIds = msg.content\n      .filter(\n        (block): block is Anthropic.ToolUseBlockParam =\u003e\n          block.type === \"tool_use\",\n      )\n      .map((block) =\u003e block.id);\n\n    if (toolUseIds.length === 0) continue;\n\n    const nextMsg = messages[i + 1];\n    if (!nextMsg || nextMsg.role !== \"user\") {\n      throw new Error(\n        `MockAnthropicClient: assistant message at index ${i} contains tool_use blocks [${toolUseIds.join(\", \")}] ` +\n          `but is not followed by a user message with tool_results.`,\n      );\n    }\n\n    if (typeof nextMsg.content === \"string\") {\n      throw new Error(\n        `MockAnthropicClient: user message at index ${i + 1} should contain tool_results for [${toolUseIds.join(\", \")}] ` +\n          `but has string content.`,\n      );\n    }\n\n    const toolResultIds = new Set(\n      (nextMsg.content as Anthropic.ToolResultBlockParam[])\n        .filter(\n          (block): block is Anthropic.ToolResultBlockParam =\u003e\n            block.type === \"tool_result\",\n        )\n        .map((block) =\u003e block.tool_use_id),\n    );\n\n    for (const id of toolUseIds) {\n      if (!toolResultIds.has(id)) {\n        throw new Error(\n          `MockAnthropicClient: missing tool_result for tool_use id \"${id}\" in user message at index ${i + 1}.`,\n        );\n      }\n    }\n  }\n}",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e function validateToolUseConstraint\n\n/** Validate that the Anthropic API constraint is satisfied:\n * every assistant message containing tool_use blocks must be immediately\n * followed by a user message with a tool_result for each tool_use.id.\n */\nfunction validateToolUseConstraint(messages: Anthropic.MessageParam[]): void {\n  for (let i = 0; i \u003c messages.length; i++) {\n    const msg = messages[i];\n    if (msg.role !== \"assistant\") continue;\n    if (typeof msg.content === \"string\") continue;\n\n    const toolUseIds = msg.content\n      .filter(\n        (block): block is Anthropic.ToolUseBlockParam =\u003e\n          block.type === \"tool_use\",\n      )\n      .map((block) =\u003e block.id);\n\n    if (toolUseIds.length === 0) continue;\n\n    const nextMsg = messages[i + 1];\n    if (!nextMsg || nextMsg.role !== \"user\") {\n      throw new Error(\n        `MockAnthropicClient: assistant message at index ${i} contains tool_use blocks [${toolUseIds.join(\", \")}] ` +\n          `but is not followed by a user message with tool_results.`,\n      );\n    }\n\n    if (typeof nextMsg.content === \"string\") {\n      throw new Error(\n        `MockAnthropicClient: user message at index ${i + 1} should contain tool_results for [${toolUseIds.join(\", \")}] ` +\n          `but has string content.`,\n      );\n    }\n\n    const toolResultIds = new Set(\n      (nextMsg.content as Anthropic.ToolResultBlockParam[])\n        .filter(\n          (block): block is Anthropic.ToolResultBlockParam =\u003e\n            block.type === \"tool_result\",\n        )\n        .map((block) =\u003e block.tool_use_id),\n    );\n\n    for (const id of toolUseIds) {\n      if (!toolResultIds.has(id)) {\n        throw new Error(\n          `MockAnthropicClient: missing tool_result for tool_use id \"${id}\" in user message at index ${i + 1}.`,\n        );\n      }\n    }\n  }\n}",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e function validateToolUseConstraint",
+      "startLine": 427,
+      "startCol": 1,
+      "endLine": 478,
+      "endCol": 2
+    },
+    {
+      "text": "/** Mock Anthropic client that creates MockStreams for testing */\nexport class MockAnthropicClient {\n  public streams: MockStream[] = [];\n\n  /** If set, countTokens will return this value as input_tokens */\n  public mockInputTokenCount: number | undefined;\n\n  messages",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockAnthropicClient\n\n/** Mock Anthropic client that creates MockStreams for testing */\nexport class MockAnthropicClient {\n  public streams: MockStream[] = [];\n\n  /** If set, countTokens will return this value as input_tokens */\n  public mockInputTokenCount: number | undefined;\n\n  messages",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockAnthropicClient",
+      "startLine": 480,
+      "startCol": 1,
+      "endLine": 487,
+      "endCol": 11
+    },
+    {
+      "text": "    stream: (params: Anthropic.Messages.MessageStreamParams): MockStream =\u003e {\n      validateToolUseConstraint(params.messages);\n      const stream = new MockStream(params);\n      this.streams.push(stream);\n      return stream;\n    }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockAnthropicClient \u003e function stream\n\n    stream: (params: Anthropic.Messages.MessageStreamParams): MockStream =\u003e {\n      validateToolUseConstraint(params.messages);\n      const stream = new MockStream(params);\n      this.streams.push(stream);\n      return stream;\n    }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockAnthropicClient \u003e function stream",
+      "startLine": 488,
+      "startCol": 1,
+      "endLine": 493,
+      "endCol": 6
+    },
+    {
+      "text": "    countTokens: (\n      _params: Anthropic.Messages.MessageCountTokensParams,\n    ): Promise\u003c{ input_tokens: number }\u003e =\u003e {\n      return Promise.resolve({ input_tokens: this.mockInputTokenCount ?? 0 });\n    }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockAnthropicClient \u003e function countTokens\n\n    countTokens: (\n      _params: Anthropic.Messages.MessageCountTokensParams,\n    ): Promise\u003c{ input_tokens: number }\u003e =\u003e {\n      return Promise.resolve({ input_tokens: this.mockInputTokenCount ?? 0 });\n    }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockAnthropicClient \u003e function countTokens",
+      "startLine": 494,
+      "startCol": 1,
+      "endLine": 498,
+      "endCol": 6
+    },
+    {
+      "text": "  get lastStream(): MockStream | undefined {\n    return this.streams[this.streams.length - 1];\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockAnthropicClient \u003e method lastStream\n\n  get lastStream(): MockStream | undefined {\n    return this.streams[this.streams.length - 1];\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockAnthropicClient \u003e method lastStream",
+      "startLine": 501,
+      "startCol": 1,
+      "endLine": 503,
+      "endCol": 4
+    },
+    {
+      "text": "  async awaitStream(): Promise\u003cMockStream\u003e {\n    return pollUntil(() =\u003e {\n      const stream = this.lastStream;\n      if (stream \u0026\u0026 !stream.aborted) {\n        return stream;\n      }\n      throw new Error(\"No pending stream\");\n    });\n  }",
+      "contextualizedText": "// node/core/src/providers/mock-anthropic-client.ts \u003e class MockAnthropicClient \u003e method awaitStream\n\n  async awaitStream(): Promise\u003cMockStream\u003e {\n    return pollUntil(() =\u003e {\n      const stream = this.lastStream;\n      if (stream \u0026\u0026 !stream.aborted) {\n        return stream;\n      }\n      throw new Error(\"No pending stream\");\n    });\n  }",
+      "headingContext": "node/core/src/providers/mock-anthropic-client.ts \u003e class MockAnthropicClient \u003e method awaitStream",
+      "startLine": 505,
+      "startCol": 1,
+      "endLine": 513,
+      "endCol": 4
+    }
+  ]
+}

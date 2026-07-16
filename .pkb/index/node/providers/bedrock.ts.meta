@@ -1,0 +1,15 @@
+{
+  "blobSha": "c1a7f29e37909153535667417ab6b2cdb0e699ec",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export type { BedrockProviderOptions } from \"@magenta/core\";\nexport { BedrockProvider } from \"@magenta/core\";",
+      "contextualizedText": "// node/providers/bedrock.ts\n\nexport type { BedrockProviderOptions } from \"@magenta/core\";\nexport { BedrockProvider } from \"@magenta/core\";",
+      "headingContext": "node/providers/bedrock.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 2,
+      "endCol": 49
+    }
+  ]
+}

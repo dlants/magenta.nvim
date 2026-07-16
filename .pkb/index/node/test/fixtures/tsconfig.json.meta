@@ -1,0 +1,15 @@
+{
+  "blobSha": "daa110639f63d2372bdffa2dbe9ff7172317bf60",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2020\",\n    \"module\": \"CommonJS\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true\n  }\n}",
+      "contextualizedText": "// node/test/fixtures/tsconfig.json\n\n{\n  \"compilerOptions\": {\n    \"target\": \"ES2020\",\n    \"module\": \"CommonJS\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true\n  }\n}",
+      "headingContext": "node/test/fixtures/tsconfig.json",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 10,
+      "endCol": 2
+    }
+  ]
+}

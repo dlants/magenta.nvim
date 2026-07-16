@@ -1,0 +1,42 @@
+{
+  "blobSha": "34686a95bcf6fd334f9ea8a18953d7ae4bf07256",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { describe, expect, it } from \"vitest\";\nimport { withNvimClient } from \"../test/preamble.ts\";\nimport { type Line, NvimBuffer } from \"./buffer.ts\";\nimport { getTokenAtCursor } from \"./cursorToken.ts\";\nimport { getCurrentWindow } from \"./nvim.ts\";\nimport type { ByteIdx, Row0Indexed, Row1Indexed } from \"./window.ts\";",
+      "contextualizedText": "// node/nvim/cursorToken.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport { withNvimClient } from \"../test/preamble.ts\";\nimport { type Line, NvimBuffer } from \"./buffer.ts\";\nimport { getTokenAtCursor } from \"./cursorToken.ts\";\nimport { getCurrentWindow } from \"./nvim.ts\";\nimport type { ByteIdx, Row0Indexed, Row1Indexed } from \"./window.ts\";",
+      "headingContext": "node/nvim/cursorToken.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 6,
+      "endCol": 70
+    },
+    {
+      "text": "async function setupLine(\n  nvim: import(\"./nvim-node/index.ts\").Nvim,\n  line: string,\n) {\n  const buffer = await NvimBuffer.create(false, true, nvim);\n  await buffer.setLines({\n    start: 0 as Row0Indexed,\n    end: -1 as Row0Indexed,\n    lines: [line as Line],\n  });\n  const window = await getCurrentWindow(nvim);\n  await window.setBuffer(buffer);\n  return { buffer, window };\n}",
+      "contextualizedText": "// node/nvim/cursorToken.test.ts \u003e function setupLine\n\nasync function setupLine(\n  nvim: import(\"./nvim-node/index.ts\").Nvim,\n  line: string,\n) {\n  const buffer = await NvimBuffer.create(false, true, nvim);\n  await buffer.setLines({\n    start: 0 as Row0Indexed,\n    end: -1 as Row0Indexed,\n    lines: [line as Line],\n  });\n  const window = await getCurrentWindow(nvim);\n  await window.setBuffer(buffer);\n  return { buffer, window };\n}",
+      "headingContext": "node/nvim/cursorToken.test.ts \u003e function setupLine",
+      "startLine": 8,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 2
+    },
+    {
+      "text": "describe(\"nvim/cursorToken.test.ts\", () =\u003e {\n  it(\"returns an absolute path under the cursor\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const { window } = await setupLine(nvim, \"see /tmp/x.txt here\");\n      await window.setCursor({ row: 1 as Row1Indexed, col: 6 as ByteIdx });\n      const token = await getTokenAtCursor(nvim, window);\n      expect(token).toBe(\"/tmp/x.txt\");\n    });\n  });\n\n  it(\"returns a relative path under the cursor\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const { window } = await setupLine(nvim, \"read ./foo/bar.txt quickly\");\n      await window.setCursor({ row: 1 as Row1Indexed, col: 8 as ByteIdx });\n      const token = await getTokenAtCursor(nvim, window);\n      expect(token).toBe(\"./foo/bar.txt\");\n    });\n  });\n\n  it(\"returns a URL under the cursor via cWORD fallback\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const { window } = await setupLine(nvim, \"visit https://example.com now\");\n      await window.setCursor({ row: 1 as Row1Indexed, col: 10 as ByteIdx });\n      const token = await getTokenAtCursor(nvim, window);\n      expect(token).toBe(\"https://example.com\");\n    });\n  });\n\n  it(\"strips trailing punctuation from URL tokens\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const { window } = await setupLine(nvim, \"(https://example.com).\");\n      await window.setCursor({ row: 1 as Row1Indexed, col: 5 as ByteIdx });\n      const token = await getTokenAtCursor(nvim, window);\n      expect(token).toBe(\"https://example.com\");\n    });\n  });",
+      "contextualizedText": "// node/nvim/cursorToken.test.ts\n\ndescribe(\"nvim/cursorToken.test.ts\", () =\u003e {\n  it(\"returns an absolute path under the cursor\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const { window } = await setupLine(nvim, \"see /tmp/x.txt here\");\n      await window.setCursor({ row: 1 as Row1Indexed, col: 6 as ByteIdx });\n      const token = await getTokenAtCursor(nvim, window);\n      expect(token).toBe(\"/tmp/x.txt\");\n    });\n  });\n\n  it(\"returns a relative path under the cursor\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const { window } = await setupLine(nvim, \"read ./foo/bar.txt quickly\");\n      await window.setCursor({ row: 1 as Row1Indexed, col: 8 as ByteIdx });\n      const token = await getTokenAtCursor(nvim, window);\n      expect(token).toBe(\"./foo/bar.txt\");\n    });\n  });\n\n  it(\"returns a URL under the cursor via cWORD fallback\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const { window } = await setupLine(nvim, \"visit https://example.com now\");\n      await window.setCursor({ row: 1 as Row1Indexed, col: 10 as ByteIdx });\n      const token = await getTokenAtCursor(nvim, window);\n      expect(token).toBe(\"https://example.com\");\n    });\n  });\n\n  it(\"strips trailing punctuation from URL tokens\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const { window } = await setupLine(nvim, \"(https://example.com).\");\n      await window.setCursor({ row: 1 as Row1Indexed, col: 5 as ByteIdx });\n      const token = await getTokenAtCursor(nvim, window);\n      expect(token).toBe(\"https://example.com\");\n    });\n  });",
+      "headingContext": "node/nvim/cursorToken.test.ts",
+      "startLine": 23,
+      "startCol": 1,
+      "endLine": 58,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"extracts markdown link target regardless of cursor position in span\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const line = \"see [the file](./hello.txt) now\";\n      for (const col of [4, 9, 14, 20, 26]) {\n        const { window } = await setupLine(nvim, line);\n        await window.setCursor({\n          row: 1 as Row1Indexed,\n          col: col as ByteIdx,\n        });\n        const token = await getTokenAtCursor(nvim, window);\n        expect(token, `col=${col}`).toBe(\"./hello.txt\");\n      }\n    });\n  });",
+      "contextualizedText": "// node/nvim/cursorToken.test.ts\n\nit(\"extracts markdown link target regardless of cursor position in span\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const line = \"see [the file](./hello.txt) now\";\n      for (const col of [4, 9, 14, 20, 26]) {\n        const { window } = await setupLine(nvim, line);\n        await window.setCursor({\n          row: 1 as Row1Indexed,\n          col: col as ByteIdx,\n        });\n        const token = await getTokenAtCursor(nvim, window);\n        expect(token, `col=${col}`).toBe(\"./hello.txt\");\n      }\n    });\n  });",
+      "headingContext": "node/nvim/cursorToken.test.ts",
+      "startLine": 60,
+      "startCol": 3,
+      "endLine": 73,
+      "endCol": 6
+    }
+  ]
+}

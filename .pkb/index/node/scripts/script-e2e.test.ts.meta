@@ -1,0 +1,132 @@
+{
+  "blobSha": "f971ed9ed1570db7a232c5e52455729cb7860896",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { promises as fs } from \"node:fs\";\nimport path from \"node:path\";\nimport type { ToolName, ToolRequestId } from \"@magenta/core\";\nimport { expect, it } from \"vitest\";\nimport { notificationLog, resetNotificationLog } from \"../chat/notify.ts\";\nimport { BUILTIN_SDK_PATH } from \"../options.ts\";\nimport { withDriver } from \"../test/preamble.ts\";",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts\n\nimport { promises as fs } from \"node:fs\";\nimport path from \"node:path\";\nimport type { ToolName, ToolRequestId } from \"@magenta/core\";\nimport { expect, it } from \"vitest\";\nimport { notificationLog, resetNotificationLog } from \"../chat/notify.ts\";\nimport { BUILTIN_SDK_PATH } from \"../options.ts\";\nimport { withDriver } from \"../test/preamble.ts\";",
+      "headingContext": "node/scripts/script-e2e.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 7,
+      "endCol": 50
+    },
+    {
+      "text": "async function setupScript(tmpDir: string, body: string): Promise\u003cvoid\u003e {\n  const pkgDir = path.join(tmpDir, \".magenta\", \"scripts\", \"pkg\");\n  await fs.mkdir(pkgDir, { recursive: true });\n  await fs.writeFile(path.join(pkgDir, \"index.ts\"), body);\n  await fs.symlink(BUILTIN_SDK_PATH, path.join(pkgDir, \"magenta-sdk\"));\n}",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts \u003e function setupScript\n\nasync function setupScript(tmpDir: string, body: string): Promise\u003cvoid\u003e {\n  const pkgDir = path.join(tmpDir, \".magenta\", \"scripts\", \"pkg\");\n  await fs.mkdir(pkgDir, { recursive: true });\n  await fs.writeFile(path.join(pkgDir, \"index.ts\"), body);\n  await fs.symlink(BUILTIN_SDK_PATH, path.join(pkgDir, \"magenta-sdk\"));\n}",
+      "headingContext": "node/scripts/script-e2e.test.ts \u003e function setupScript",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 14,
+      "endCol": 2
+    },
+    {
+      "text": "async function pollUntil(\n  fn: () =\u003e boolean | Promise\u003cboolean\u003e,\n  timeoutMs = 10000,\n): Promise\u003cvoid\u003e {\n  const start = Date.now();\n  while (!(await fn())) {\n    if (Date.now() - start \u003e timeoutMs) {\n      throw new Error(\"pollUntil timed out\");\n    }\n    await new Promise((r) =\u003e setTimeout(r, 50));\n  }\n}",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts \u003e function pollUntil\n\nasync function pollUntil(\n  fn: () =\u003e boolean | Promise\u003cboolean\u003e,\n  timeoutMs = 10000,\n): Promise\u003cvoid\u003e {\n  const start = Date.now();\n  while (!(await fn())) {\n    if (Date.now() - start \u003e timeoutMs) {\n      throw new Error(\"pollUntil timed out\");\n    }\n    await new Promise((r) =\u003e setTimeout(r, 50));\n  }\n}",
+      "headingContext": "node/scripts/script-e2e.test.ts \u003e function pollUntil",
+      "startLine": 16,
+      "startCol": 1,
+      "endLine": 27,
+      "endCol": 2
+    },
+    {
+      "text": "const FOO_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\n\nregisterScript(\n  \"foo\",\n  \"does foo\",\n  { type: \"object\", properties: { x: { type: \"string\" } }, required: [\"x\"] },\n  async (params, thread, log) =\u003e {\n    log(\"starting\");\n    const r = await thread(\"work on \" + params.x, {\n      type: \"object\",\n      properties: { ok: { type: \"boolean\" } },\n      required: [\"ok\"],\n    });\n    log(\"got \" + JSON.stringify(r));\n  },\n);\n`;\n\nit(\"end-to-end: agent invokes run_script, subprocess spawns a thread, yields, and the UI reflects it\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts\n\nconst FOO_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\n\nregisterScript(\n  \"foo\",\n  \"does foo\",\n  { type: \"object\", properties: { x: { type: \"string\" } }, required: [\"x\"] },\n  async (params, thread, log) =\u003e {\n    log(\"starting\");\n    const r = await thread(\"work on \" + params.x, {\n      type: \"object\",\n      properties: { ok: { type: \"boolean\" } },\n      required: [\"ok\"],\n    });\n    log(\"got \" + JSON.stringify(r));\n  },\n);\n`;\n\nit(\"end-to-end: agent invokes run_script, subprocess spawns a thread, yields, and the UI reflects it\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-e2e.test.ts",
+      "startLine": 29,
+      "startCol": 1,
+      "endLine": 49,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-e2e.test.ts \u003e function setupFiles",
+      "startLine": 51,
+      "startCol": 1,
+      "endLine": 53,
+      "endCol": 8
+    },
+    {
+      "text": "(driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n\n      // 1. Script is detected and registered in the catalog.\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      // 2. The in-magenta agent invokes the script via run_script.\n      await driver.inputMagentaText(\"please run foo\");\n      driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"running the script\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"run-1\" as ToolRequestId,\n              toolName: \"run_script\" as ToolName,\n              input: { scriptName: \"foo\", parameters: { x: \"thing\" } },\n            },\n          },\n        ],\n      });\n\n      // 3. The subprocess runs and its thread() spawns a real thread that hits\n      //    the mock provider.\n      await pollUntil(() =\u003e scriptManager.invocations.size \u003e 0);\n      const inv = [...scriptManager.invocations.values()][0];\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n\n      // 4. The spawned thread yields a schema-matching structured result.\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      // 5. The runner completes.\n      await pollUntil(() =\u003e inv.status === \"done\");\n      expect(inv.scriptName).toBe(\"foo\");\n      expect(inv.threadIds.length).toBe(1);\n      expect(inv.logs).toContain(\"starting\");\n      expect(inv.logs.some((l) =\u003e l.includes('\"ok\":true'))).toBe(true);",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts\n\n(driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n\n      // 1. Script is detected and registered in the catalog.\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      // 2. The in-magenta agent invokes the script via run_script.\n      await driver.inputMagentaText(\"please run foo\");\n      driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"running the script\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"run-1\" as ToolRequestId,\n              toolName: \"run_script\" as ToolName,\n              input: { scriptName: \"foo\", parameters: { x: \"thing\" } },\n            },\n          },\n        ],\n      });\n\n      // 3. The subprocess runs and its thread() spawns a real thread that hits\n      //    the mock provider.\n      await pollUntil(() =\u003e scriptManager.invocations.size \u003e 0);\n      const inv = [...scriptManager.invocations.values()][0];\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n\n      // 4. The spawned thread yields a schema-matching structured result.\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      // 5. The runner completes.\n      await pollUntil(() =\u003e inv.status === \"done\");\n      expect(inv.scriptName).toBe(\"foo\");\n      expect(inv.threadIds.length).toBe(1);\n      expect(inv.logs).toContain(\"starting\");\n      expect(inv.logs.some((l) =\u003e l.includes('\"ok\":true'))).toBe(true);",
+      "headingContext": "node/scripts/script-e2e.test.ts",
+      "startLine": 55,
+      "startCol": 11,
+      "endLine": 113,
+      "endCol": 72
+    },
+    {
+      "text": "// 6. The Scripts section reflects the invocation and its log line.\n      await driver.magenta.command(\"threads-overview\");\n      await driver.assertDisplayBufferContains(\"# SCRIPTS\");\n      await driver.assertDisplayBufferContains(\"foo (done)\");\n\n      // 7. The row starts collapsed (whole invocation body hidden); expanding\n      // reveals the log line and a link to the spawned thread, but the yield\n      // result stays hidden until the thread line itself is expanded.\n      await driver.assertDisplayBufferDoesNotContain(\"starting\");\n      await driver.assertDisplayBufferDoesNotContain(\"yielded\");\n      await driver.triggerDisplayBufferKeyOnContent(\"foo (done)\", \"=\");\n      await driver.assertDisplayBufferContains(\"starting\");\n      await driver.assertDisplayBufferDoesNotContain(\"⮑ yielded:\");\n\n      // 8. Expanding the spawned thread line reveals its yield result.\n      await driver.triggerDisplayBufferKeyOnContent(\"work on thing\", \"=\");\n      await driver.assertDisplayBufferContains(\"⮑ yielded:\");\n    },\n  );\n});\n\nconst TWO_THREAD_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\n\nconst yieldSchema = {\n  type: \"object\",\n  properties: { ok: { type: \"boolean\" } },\n  required: [\"ok\"],\n};\n\nregisterScript(\n  \"twothreads\",\n  \"spawns two threads\",\n  { type: \"object\", properties: {}, additionalProperties: false },\n  async (_params, thread, log) =\u003e {\n    log(\"starting\");\n    await thread(\"work on one\", yieldSchema);\n    await thread(\"work on two\", yieldSchema);\n    log(\"finished\");\n  },\n);\n`;",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts\n\n// 6. The Scripts section reflects the invocation and its log line.\n      await driver.magenta.command(\"threads-overview\");\n      await driver.assertDisplayBufferContains(\"# SCRIPTS\");\n      await driver.assertDisplayBufferContains(\"foo (done)\");\n\n      // 7. The row starts collapsed (whole invocation body hidden); expanding\n      // reveals the log line and a link to the spawned thread, but the yield\n      // result stays hidden until the thread line itself is expanded.\n      await driver.assertDisplayBufferDoesNotContain(\"starting\");\n      await driver.assertDisplayBufferDoesNotContain(\"yielded\");\n      await driver.triggerDisplayBufferKeyOnContent(\"foo (done)\", \"=\");\n      await driver.assertDisplayBufferContains(\"starting\");\n      await driver.assertDisplayBufferDoesNotContain(\"⮑ yielded:\");\n\n      // 8. Expanding the spawned thread line reveals its yield result.\n      await driver.triggerDisplayBufferKeyOnContent(\"work on thing\", \"=\");\n      await driver.assertDisplayBufferContains(\"⮑ yielded:\");\n    },\n  );\n});\n\nconst TWO_THREAD_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\n\nconst yieldSchema = {\n  type: \"object\",\n  properties: { ok: { type: \"boolean\" } },\n  required: [\"ok\"],\n};\n\nregisterScript(\n  \"twothreads\",\n  \"spawns two threads\",\n  { type: \"object\", properties: {}, additionalProperties: false },\n  async (_params, thread, log) =\u003e {\n    log(\"starting\");\n    await thread(\"work on one\", yieldSchema);\n    await thread(\"work on two\", yieldSchema);\n    log(\"finished\");\n  },\n);\n`;",
+      "headingContext": "node/scripts/script-e2e.test.ts",
+      "startLine": 115,
+      "startCol": 7,
+      "endLine": 156,
+      "endCol": 3
+    },
+    {
+      "text": "function countBells(text: string): number {\n  return (text.match(/🔔/g) ?? []).length;\n}",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts \u003e function countBells\n\nfunction countBells(text: string): number {\n  return (text.match(/🔔/g) ?? []).length;\n}",
+      "headingContext": "node/scripts/script-e2e.test.ts \u003e function countBells",
+      "startLine": 158,
+      "startCol": 1,
+      "endLine": 160,
+      "endCol": 2
+    },
+    {
+      "text": "it(\"bell behavior: pending-approval bells propagate to script+neovim, yields don't, completion bells\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts\n\nit(\"bell behavior: pending-approval bells propagate to script+neovim, yields don't, completion bells\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-e2e.test.ts",
+      "startLine": 162,
+      "startCol": 1,
+      "endLine": 163,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, TWO_THREAD_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, TWO_THREAD_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-e2e.test.ts \u003e function setupFiles",
+      "startLine": 165,
+      "startCol": 1,
+      "endLine": 167,
+      "endCol": 8
+    },
+    {
+      "text": "(driver) =\u003e {\n      // Make any sandbox-checked command require an approval prompt.\n      driver.mockSandbox.setState({\n        status: \"unsupported\",\n        reason: \"disabled\",\n      });\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"twothreads\"),\n      );\n\n      // Main agent launches the script.\n      await driver.inputMagentaText(\"please run twothreads\");\n      driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"running the script\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"run-1\" as ToolRequestId,\n              toolName: \"run_script\" as ToolName,\n              input: { scriptName: \"twothreads\", parameters: {} },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e scriptManager.invocations.size \u003e 0);\n      const inv = [...scriptManager.invocations.values()][0];\n\n      // Thread 1 starts and asks to run a command that needs approval.\n      const t1 =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on one\");\n\n      // View the overview so the active main thread is marked viewed and won't\n      // contribute its own bell to the assertions below.\n      await driver.magenta.command(\"threads-overview\");\n      await driver.assertDisplayBufferContains(\"# SCRIPTS\");\n\n      resetNotificationLog();\n      t1.respond({\n        stopReason: \"tool_use\",\n        text: \"I'll run a command.\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"bash-1\" as ToolRequestId,\n              toolName: \"bash_command\" as ToolName,\n              input: { command: \"mkdir bell-test-dir\" },\n            },\n          },\n        ],\n      });",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts\n\n(driver) =\u003e {\n      // Make any sandbox-checked command require an approval prompt.\n      driver.mockSandbox.setState({\n        status: \"unsupported\",\n        reason: \"disabled\",\n      });\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"twothreads\"),\n      );\n\n      // Main agent launches the script.\n      await driver.inputMagentaText(\"please run twothreads\");\n      driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"running the script\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"run-1\" as ToolRequestId,\n              toolName: \"run_script\" as ToolName,\n              input: { scriptName: \"twothreads\", parameters: {} },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e scriptManager.invocations.size \u003e 0);\n      const inv = [...scriptManager.invocations.values()][0];\n\n      // Thread 1 starts and asks to run a command that needs approval.\n      const t1 =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on one\");\n\n      // View the overview so the active main thread is marked viewed and won't\n      // contribute its own bell to the assertions below.\n      await driver.magenta.command(\"threads-overview\");\n      await driver.assertDisplayBufferContains(\"# SCRIPTS\");\n\n      resetNotificationLog();\n      t1.respond({\n        stopReason: \"tool_use\",\n        text: \"I'll run a command.\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"bash-1\" as ToolRequestId,\n              toolName: \"bash_command\" as ToolName,\n              input: { command: \"mkdir bell-test-dir\" },\n            },\n          },\n        ],\n      });",
+      "headingContext": "node/scripts/script-e2e.test.ts",
+      "startLine": 169,
+      "startCol": 11,
+      "endLine": 228,
+      "endCol": 10
+    },
+    {
+      "text": "// The approval surfaces, and neovim is notified that a thread wants\n      // attention.\n      await driver.assertDisplayBufferContains(\"May I run command\");\n      await pollUntil(() =\u003e\n        notificationLog.some((n) =\u003e n.reason === \"thread-attention\"),\n      );\n\n      // The bell is propagated to the script row. Expand the invocation so the\n      // waiting thread's own row (and its bell) is visible too.\n      await driver.triggerDisplayBufferKeyOnContent(\n        \"twothreads (running)\",\n        \"=\",\n      );\n      await driver.assertDisplayBufferContains(\"work on one\");\n      await pollUntil(async () =\u003e {\n        const text = await driver.getDisplayBufferText();\n        // One bell on the script row, one on the waiting thread row.\n        return countBells(text) \u003e= 2;\n      });\n\n      // Collapse the invocation again so the approval dialog (only shown on the\n      // collapsed row) is visible, then approve and let thread 1 yield.\n      await driver.triggerDisplayBufferKeyOnContent(\n        \"twothreads (running)\",\n        \"=\",\n      );\n      await driver.assertDisplayBufferContains(\"\u003e YES\");\n      await driver.triggerDisplayBufferKeyOnContent(\"\u003e YES\", \"\u003cCR\u003e\");\n      await driver.assertDisplayBufferDoesNotContain(\"\u003e YES\");\n\n      const t1Resume = await driver.mockAnthropic.awaitPendingStream",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts\n\n// The approval surfaces, and neovim is notified that a thread wants\n      // attention.\n      await driver.assertDisplayBufferContains(\"May I run command\");\n      await pollUntil(() =\u003e\n        notificationLog.some((n) =\u003e n.reason === \"thread-attention\"),\n      );\n\n      // The bell is propagated to the script row. Expand the invocation so the\n      // waiting thread's own row (and its bell) is visible too.\n      await driver.triggerDisplayBufferKeyOnContent(\n        \"twothreads (running)\",\n        \"=\",\n      );\n      await driver.assertDisplayBufferContains(\"work on one\");\n      await pollUntil(async () =\u003e {\n        const text = await driver.getDisplayBufferText();\n        // One bell on the script row, one on the waiting thread row.\n        return countBells(text) \u003e= 2;\n      });\n\n      // Collapse the invocation again so the approval dialog (only shown on the\n      // collapsed row) is visible, then approve and let thread 1 yield.\n      await driver.triggerDisplayBufferKeyOnContent(\n        \"twothreads (running)\",\n        \"=\",\n      );\n      await driver.assertDisplayBufferContains(\"\u003e YES\");\n      await driver.triggerDisplayBufferKeyOnContent(\"\u003e YES\", \"\u003cCR\u003e\");\n      await driver.assertDisplayBufferDoesNotContain(\"\u003e YES\");\n\n      const t1Resume = await driver.mockAnthropic.awaitPendingStream",
+      "headingContext": "node/scripts/script-e2e.test.ts",
+      "startLine": 230,
+      "startCol": 7,
+      "endLine": 260,
+      "endCol": 69
+    },
+    {
+      "text": "        predicate: (stream) =\u003e\n          stream.messages.some(\n            (m) =\u003e\n              m.role === \"user\" \u0026\u0026\n              Array.isArray(m.content) \u0026\u0026\n              m.content.some(\n                (b) =\u003e b.type === \"tool_result\" \u0026\u0026 b.tool_use_id === \"bash-1\",\n              ),\n          )",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts \u003e function predicate\n\n        predicate: (stream) =\u003e\n          stream.messages.some(\n            (m) =\u003e\n              m.role === \"user\" \u0026\u0026\n              Array.isArray(m.content) \u0026\u0026\n              m.content.some(\n                (b) =\u003e b.type === \"tool_result\" \u0026\u0026 b.tool_use_id === \"bash-1\",\n              ),\n          )",
+      "headingContext": "node/scripts/script-e2e.test.ts \u003e function predicate",
+      "startLine": 261,
+      "startCol": 1,
+      "endLine": 269,
+      "endCol": 12
+    },
+    {
+      "text": "message: \"waiting for thread 1 resume after approval\",\n      });\n\n      resetNotificationLog();\n      t1Resume.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      // Thread 1 yields and thread 2 starts streaming. Yielding must not bell:\n      // not the thread, not the script row, and not neovim.\n      const t2 =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on two\");\n      await driver.assertDisplayBufferDoesNotContain(\"🔔\");\n      expect(notificationLog).toEqual([]);\n\n      // Thread 2 yields, which finishes the script.\n      resetNotificationLog();\n      t2.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-2\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e inv.status === \"done\");\n\n      // Finishing the script bells the script row and notifies neovim so the\n      // user knows the run completed.\n      await pollUntil(() =\u003e\n        notificationLog.some((n) =\u003e n.reason === \"script-finished\"),\n      );\n      await driver.assertDisplayBufferContains(\"🔔\");",
+      "contextualizedText": "// node/scripts/script-e2e.test.ts\n\nmessage: \"waiting for thread 1 resume after approval\",\n      });\n\n      resetNotificationLog();\n      t1Resume.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      // Thread 1 yields and thread 2 starts streaming. Yielding must not bell:\n      // not the thread, not the script row, and not neovim.\n      const t2 =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on two\");\n      await driver.assertDisplayBufferDoesNotContain(\"🔔\");\n      expect(notificationLog).toEqual([]);\n\n      // Thread 2 yields, which finishes the script.\n      resetNotificationLog();\n      t2.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-2\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e inv.status === \"done\");\n\n      // Finishing the script bells the script row and notifies neovim so the\n      // user knows the run completed.\n      await pollUntil(() =\u003e\n        notificationLog.some((n) =\u003e n.reason === \"script-finished\"),\n      );\n      await driver.assertDisplayBufferContains(\"🔔\");",
+      "headingContext": "node/scripts/script-e2e.test.ts",
+      "startLine": 270,
+      "startCol": 9,
+      "endLine": 320,
+      "endCol": 56
+    }
+  ]
+}
