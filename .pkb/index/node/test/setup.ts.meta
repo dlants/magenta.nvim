@@ -1,0 +1,15 @@
+{
+  "blobSha": "bd3a5b7de6cfd71c4e9768d37cd6a350f3d764f3",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "// Test setup file - add any global test configuration here",
+      "contextualizedText": "// node/test/setup.ts\n\n// Test setup file - add any global test configuration here",
+      "headingContext": "node/test/setup.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 1,
+      "endCol": 60
+    }
+  ]
+}

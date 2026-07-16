@@ -1,0 +1,195 @@
+{
+  "blobSha": "da1791dfed97d8112163ecb6ec61cc7b7794ccc9",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type {\n  CompletedToolInfo,\n  DisplayContext,\n  SpawnSubagents,\n  ThreadId,\n  ToolRequestId,\n  ToolRequest as UnionToolRequest,\n  UnresolvedFilePath,\n} from \"@magenta/core\";\nimport { renderPendingApprovals } from \"../capabilities/render-pending-approvals.ts\";\nimport type { Chat } from \"../chat/chat.ts\";\nimport type { Msg as ThreadMsg, ToolViewState } from \"../chat/thread.ts\";\nimport type { RootMsg } from \"../root-msg.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport { d, type VDOMNode, withBindings } from \"../tea/view.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport { formatTokens } from \"../utils/tokens.ts\";\n\ntype Input = SpawnSubagents.Input;\ntype SubagentEntry = SpawnSubagents.SubagentEntry;\ntype PartialInput = SpawnSubagents.PartialSpawnSubagentsInput;\ntype PartialEntry = SpawnSubagents.PartialSubagentEntry;\n\nconst PROMPT_TAIL_MAX = 100;",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts\n\nimport type {\n  CompletedToolInfo,\n  DisplayContext,\n  SpawnSubagents,\n  ThreadId,\n  ToolRequestId,\n  ToolRequest as UnionToolRequest,\n  UnresolvedFilePath,\n} from \"@magenta/core\";\nimport { renderPendingApprovals } from \"../capabilities/render-pending-approvals.ts\";\nimport type { Chat } from \"../chat/chat.ts\";\nimport type { Msg as ThreadMsg, ToolViewState } from \"../chat/thread.ts\";\nimport type { RootMsg } from \"../root-msg.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport { d, type VDOMNode, withBindings } from \"../tea/view.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport { formatTokens } from \"../utils/tokens.ts\";\n\ntype Input = SpawnSubagents.Input;\ntype SubagentEntry = SpawnSubagents.SubagentEntry;\ntype PartialInput = SpawnSubagents.PartialSpawnSubagentsInput;\ntype PartialEntry = SpawnSubagents.PartialSubagentEntry;\n\nconst PROMPT_TAIL_MAX = 100;",
+      "headingContext": "node/render-tools/spawn-subagents.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 24,
+      "endCol": 29
+    },
+    {
+      "text": "function promptTail(text: string): string {\n  const collapsed = text.replace(/\\s+/g, \" \").trim();\n  const tail =\n    collapsed.length \u003e PROMPT_TAIL_MAX\n      ? `…${collapsed.slice(collapsed.length - PROMPT_TAIL_MAX)}`\n      : collapsed;\n  return `(${formatTokens(text.length)}) ${tail}`;\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function promptTail\n\nfunction promptTail(text: string): string {\n  const collapsed = text.replace(/\\s+/g, \" \").trim();\n  const tail =\n    collapsed.length \u003e PROMPT_TAIL_MAX\n      ? `…${collapsed.slice(collapsed.length - PROMPT_TAIL_MAX)}`\n      : collapsed;\n  return `(${formatTokens(text.length)}) ${tail}`;\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function promptTail",
+      "startLine": 26,
+      "startCol": 1,
+      "endLine": 33,
+      "endCol": 2
+    },
+    {
+      "text": "function isDockerEntry(entry: PartialEntry): boolean {\n  return (\n    entry.environment === \"docker\" ||\n    entry.environment === \"docker_unsupervised\"\n  );\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function isDockerEntry\n\nfunction isDockerEntry(entry: PartialEntry): boolean {\n  return (\n    entry.environment === \"docker\" ||\n    entry.environment === \"docker_unsupervised\"\n  );\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function isDockerEntry",
+      "startLine": 35,
+      "startCol": 1,
+      "endLine": 40,
+      "endCol": 2
+    },
+    {
+      "text": "function agentMetaLine(entry: PartialEntry, statusIcon?: string): string {\n  const parts: string[] = [];\n  if (isDockerEntry(entry)) parts.push(\"🐳\");\n  if (statusIcon) parts.push(statusIcon);\n  if (entry.agentType \u0026\u0026 entry.agentType !== \"default\")\n    parts.push(entry.agentType);\n  if (entry.environment \u0026\u0026 entry.environment !== \"host\")\n    parts.push(`[${entry.environment}]`);\n  if (entry.dockerfile) parts.push(`dockerfile=${entry.dockerfile}`);\n  if (entry.directory) parts.push(`dir=${entry.directory}`);\n  if (entry.workspacePath) parts.push(`ws=${entry.workspacePath}`);\n  if (parts.length === 0) parts.push(\"agent\");\n  return parts.join(\" \");\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function agentMetaLine\n\nfunction agentMetaLine(entry: PartialEntry, statusIcon?: string): string {\n  const parts: string[] = [];\n  if (isDockerEntry(entry)) parts.push(\"🐳\");\n  if (statusIcon) parts.push(statusIcon);\n  if (entry.agentType \u0026\u0026 entry.agentType !== \"default\")\n    parts.push(entry.agentType);\n  if (entry.environment \u0026\u0026 entry.environment !== \"host\")\n    parts.push(`[${entry.environment}]`);\n  if (entry.dockerfile) parts.push(`dockerfile=${entry.dockerfile}`);\n  if (entry.directory) parts.push(`dir=${entry.directory}`);\n  if (entry.workspacePath) parts.push(`ws=${entry.workspacePath}`);\n  if (parts.length === 0) parts.push(\"agent\");\n  return parts.join(\" \");\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function agentMetaLine",
+      "startLine": 42,
+      "startCol": 1,
+      "endLine": 55,
+      "endCol": 2
+    },
+    {
+      "text": "type AgentExtras = {\n  statusIcon?: string | undefined;\n  statusDetail?: string | undefined;\n  pendingApprovals?: VDOMNode | undefined;\n  expandedContent?: VDOMNode | undefined;\n  bindings?: Record\u003cstring, () =\u003e void\u003e | undefined;\n};",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts\n\ntype AgentExtras = {\n  statusIcon?: string | undefined;\n  statusDetail?: string | undefined;\n  pendingApprovals?: VDOMNode | undefined;\n  expandedContent?: VDOMNode | undefined;\n  bindings?: Record\u003cstring, () =\u003e void\u003e | undefined;\n};",
+      "headingContext": "node/render-tools/spawn-subagents.ts",
+      "startLine": 57,
+      "startCol": 1,
+      "endLine": 63,
+      "endCol": 3
+    },
+    {
+      "text": "function renderFileRows(\n  files: string[],\n  indent: string,\n  fileBinding?: (path: string) =\u003e Record\u003cstring, () =\u003e void\u003e,\n): VDOMNode {\n  return d`${files.map((path) =\u003e {\n    const row = d`${indent}- ${path}\\n`;\n    return fileBinding ? withBindings(row, fileBinding(path)) : row;\n  })}`;\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function renderFileRows\n\nfunction renderFileRows(\n  files: string[],\n  indent: string,\n  fileBinding?: (path: string) =\u003e Record\u003cstring, () =\u003e void\u003e,\n): VDOMNode {\n  return d`${files.map((path) =\u003e {\n    const row = d`${indent}- ${path}\\n`;\n    return fileBinding ? withBindings(row, fileBinding(path)) : row;\n  })}`;\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function renderFileRows",
+      "startLine": 65,
+      "startCol": 1,
+      "endLine": 74,
+      "endCol": 2
+    },
+    {
+      "text": "function renderAgentBlock(\n  entry: PartialEntry,\n  extras: AgentExtras | undefined,\n  fileBinding?: (path: string) =\u003e Record\u003cstring, () =\u003e void\u003e,\n): VDOMNode {\n  const metaLine = agentMetaLine(entry, extras?.statusIcon);\n  const detail = extras?.statusDetail ? ` : ${extras.statusDetail}` : \"\";\n  const blockParts: VDOMNode[] = [d`  - ${metaLine}${detail}\\n`];\n\n  if (entry.prompt) {\n    blockParts.push(d`    prompt: ${promptTail(entry.prompt)}\\n`);\n  }\n  if (entry.contextFiles \u0026\u0026 entry.contextFiles.length \u003e 0) {\n    blockParts.push(d`    contextFiles:\\n`);\n    blockParts.push(renderFileRows(entry.contextFiles, \"      \", fileBinding));\n  }\n  if (extras?.pendingApprovals) {\n    blockParts.push(d`${extras.pendingApprovals}\\n`);\n  }\n  if (extras?.expandedContent) {\n    blockParts.push(d`${extras.expandedContent}\\n`);\n  }\n\n  const block = d`${blockParts}`;\n  return extras?.bindings ? withBindings(block, extras.bindings) : block;\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function renderAgentBlock\n\nfunction renderAgentBlock(\n  entry: PartialEntry,\n  extras: AgentExtras | undefined,\n  fileBinding?: (path: string) =\u003e Record\u003cstring, () =\u003e void\u003e,\n): VDOMNode {\n  const metaLine = agentMetaLine(entry, extras?.statusIcon);\n  const detail = extras?.statusDetail ? ` : ${extras.statusDetail}` : \"\";\n  const blockParts: VDOMNode[] = [d`  - ${metaLine}${detail}\\n`];\n\n  if (entry.prompt) {\n    blockParts.push(d`    prompt: ${promptTail(entry.prompt)}\\n`);\n  }\n  if (entry.contextFiles \u0026\u0026 entry.contextFiles.length \u003e 0) {\n    blockParts.push(d`    contextFiles:\\n`);\n    blockParts.push(renderFileRows(entry.contextFiles, \"      \", fileBinding));\n  }\n  if (extras?.pendingApprovals) {\n    blockParts.push(d`${extras.pendingApprovals}\\n`);\n  }\n  if (extras?.expandedContent) {\n    blockParts.push(d`${extras.expandedContent}\\n`);\n  }\n\n  const block = d`${blockParts}`;\n  return extras?.bindings ? withBindings(block, extras.bindings) : block;\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function renderAgentBlock",
+      "startLine": 76,
+      "startCol": 1,
+      "endLine": 101,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderSpawnLayout(\n  input: PartialInput,\n  opts?: {\n    agentExtras?: (idx: number) =\u003e AgentExtras;\n    fileBinding?: (path: string) =\u003e Record\u003cstring, () =\u003e void\u003e;\n  },\n): VDOMNode {\n  const parts: VDOMNode[] = [];\n\n  if (input.sharedPrompt) {\n    parts.push(d`sharedPrompt: ${promptTail(input.sharedPrompt)}\\n`);\n  }\n  if (input.sharedContextFiles \u0026\u0026 input.sharedContextFiles.length \u003e 0) {\n    parts.push(d`sharedContextFiles:\\n`);\n    parts.push(\n      renderFileRows(input.sharedContextFiles, \"  \", opts?.fileBinding),\n    );\n  }\n  if (input.agents.length \u003e 0) {\n    parts.push(d`agents:\\n`);\n    input.agents.forEach((entry, idx) =\u003e {\n      parts.push(\n        renderAgentBlock(entry, opts?.agentExtras?.(idx), opts?.fileBinding),\n      );\n    });\n  }\n\n  return d`${parts}`;\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function renderSpawnLayout\n\nexport function renderSpawnLayout(\n  input: PartialInput,\n  opts?: {\n    agentExtras?: (idx: number) =\u003e AgentExtras;\n    fileBinding?: (path: string) =\u003e Record\u003cstring, () =\u003e void\u003e;\n  },\n): VDOMNode {\n  const parts: VDOMNode[] = [];\n\n  if (input.sharedPrompt) {\n    parts.push(d`sharedPrompt: ${promptTail(input.sharedPrompt)}\\n`);\n  }\n  if (input.sharedContextFiles \u0026\u0026 input.sharedContextFiles.length \u003e 0) {\n    parts.push(d`sharedContextFiles:\\n`);\n    parts.push(\n      renderFileRows(input.sharedContextFiles, \"  \", opts?.fileBinding),\n    );\n  }\n  if (input.agents.length \u003e 0) {\n    parts.push(d`agents:\\n`);\n    input.agents.forEach((entry, idx) =\u003e {\n      parts.push(\n        renderAgentBlock(entry, opts?.agentExtras?.(idx), opts?.fileBinding),\n      );\n    });\n  }\n\n  return d`${parts}`;\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function renderSpawnLayout",
+      "startLine": 103,
+      "startCol": 1,
+      "endLine": 131,
+      "endCol": 2
+    },
+    {
+      "text": "type AgentRowRenderInfo = {\n  entry: SubagentEntry;\n  statusIcon: string;\n  statusDetail?: string | undefined;\n  threadId?: ThreadId | undefined;\n  pendingApprovals?: VDOMNode | undefined;\n};",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts\n\ntype AgentRowRenderInfo = {\n  entry: SubagentEntry;\n  statusIcon: string;\n  statusDetail?: string | undefined;\n  threadId?: ThreadId | undefined;\n  pendingApprovals?: VDOMNode | undefined;\n};",
+      "headingContext": "node/render-tools/spawn-subagents.ts",
+      "startLine": 133,
+      "startCol": 1,
+      "endLine": 139,
+      "endCol": 3
+    },
+    {
+      "text": "function resolveAgentRowFromProgress(\n  element: SpawnSubagents.SpawnSubagentsProgress[\"elements\"][0],\n  chat: Chat,\n): AgentRowRenderInfo {\n  const entry = element.entry;\n\n  switch (element.state.status) {\n    case \"pending\":\n      return { entry, statusIcon: \"⏸️\" };\n    case \"provisioning\":\n      return { entry, statusIcon: \"📦\", statusDetail: element.state.message };\n    case \"spawn-error\":\n      return { entry, statusIcon: \"❌\", statusDetail: element.state.error };\n    case \"spawned\":\n      return resolveAgentRowFromThread(entry, element.state.threadId, chat);\n    default:\n      assertUnreachable(element.state);\n  }\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function resolveAgentRowFromProgress\n\nfunction resolveAgentRowFromProgress(\n  element: SpawnSubagents.SpawnSubagentsProgress[\"elements\"][0],\n  chat: Chat,\n): AgentRowRenderInfo {\n  const entry = element.entry;\n\n  switch (element.state.status) {\n    case \"pending\":\n      return { entry, statusIcon: \"⏸️\" };\n    case \"provisioning\":\n      return { entry, statusIcon: \"📦\", statusDetail: element.state.message };\n    case \"spawn-error\":\n      return { entry, statusIcon: \"❌\", statusDetail: element.state.error };\n    case \"spawned\":\n      return resolveAgentRowFromThread(entry, element.state.threadId, chat);\n    default:\n      assertUnreachable(element.state);\n  }\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function resolveAgentRowFromProgress",
+      "startLine": 141,
+      "startCol": 1,
+      "endLine": 159,
+      "endCol": 2
+    },
+    {
+      "text": "function resolveAgentRowFromThread(\n  entry: SubagentEntry,\n  threadId: ThreadId,\n  chat: Chat,\n): AgentRowRenderInfo {\n  const summary = chat.getThreadSummary(threadId);\n  let statusIcon: string;\n  let statusDetail: string | undefined;\n\n  switch (summary.status.type) {\n    case \"missing\":\n      statusIcon = \"❓\";\n      statusDetail = \"not found\";\n      break;\n    case \"pending\":\n      statusIcon = \"⏳\";\n      statusDetail = \"initializing\";\n      break;\n    case \"running\":\n      statusIcon = \"⏳\";\n      statusDetail = summary.status.activity;\n      break;\n    case \"stopped\":\n      statusIcon = \"⏹️\";\n      statusDetail = `stopped (${summary.status.reason})`;\n      break;\n    case \"yielded\": {\n      statusIcon = \"✅\";\n      statusDetail = formatTokens(summary.status.response.length);\n      break;\n    }\n    case \"error\": {\n      statusIcon = \"❌\";\n      statusDetail =\n        summary.status.message.length \u003e 50\n          ? `${summary.status.message.substring(0, 47)}...`\n          : summary.status.message;\n      break;\n    }\n    default:\n      assertUnreachable(summary.status);\n  }\n\n  const pendingApprovals = renderPendingApprovals(chat, threadId);\n  return { entry, statusIcon, statusDetail, threadId, pendingApprovals };\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function resolveAgentRowFromThread\n\nfunction resolveAgentRowFromThread(\n  entry: SubagentEntry,\n  threadId: ThreadId,\n  chat: Chat,\n): AgentRowRenderInfo {\n  const summary = chat.getThreadSummary(threadId);\n  let statusIcon: string;\n  let statusDetail: string | undefined;\n\n  switch (summary.status.type) {\n    case \"missing\":\n      statusIcon = \"❓\";\n      statusDetail = \"not found\";\n      break;\n    case \"pending\":\n      statusIcon = \"⏳\";\n      statusDetail = \"initializing\";\n      break;\n    case \"running\":\n      statusIcon = \"⏳\";\n      statusDetail = summary.status.activity;\n      break;\n    case \"stopped\":\n      statusIcon = \"⏹️\";\n      statusDetail = `stopped (${summary.status.reason})`;\n      break;\n    case \"yielded\": {\n      statusIcon = \"✅\";\n      statusDetail = formatTokens(summary.status.response.length);\n      break;\n    }\n    case \"error\": {\n      statusIcon = \"❌\";\n      statusDetail =\n        summary.status.message.length \u003e 50\n          ? `${summary.status.message.substring(0, 47)}...`\n          : summary.status.message;\n      break;\n    }\n    default:\n      assertUnreachable(summary.status);\n  }\n\n  const pendingApprovals = renderPendingApprovals(chat, threadId);\n  return { entry, statusIcon, statusDetail, threadId, pendingApprovals };\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function resolveAgentRowFromThread",
+      "startLine": 161,
+      "startCol": 1,
+      "endLine": 206,
+      "endCol": 2
+    },
+    {
+      "text": "function resolveAgentRowFromResult(\n  agent: SpawnSubagents.StructuredResult[\"agents\"][0],\n  entry: SubagentEntry,\n  chat: Chat,\n): AgentRowRenderInfo {\n  if (agent.threadId) {\n    return resolveAgentRowFromThread(entry, agent.threadId, chat);\n  }\n\n  const statusIcon = agent.ok ? \"✅\" : \"❌\";\n  const statusDetail = agent.responseBody\n    ? formatTokens(agent.responseBody.length)\n    : undefined;\n  return { entry, statusIcon, statusDetail, threadId: agent.threadId };\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function resolveAgentRowFromResult\n\nfunction resolveAgentRowFromResult(\n  agent: SpawnSubagents.StructuredResult[\"agents\"][0],\n  entry: SubagentEntry,\n  chat: Chat,\n): AgentRowRenderInfo {\n  if (agent.threadId) {\n    return resolveAgentRowFromThread(entry, agent.threadId, chat);\n  }\n\n  const statusIcon = agent.ok ? \"✅\" : \"❌\";\n  const statusDetail = agent.responseBody\n    ? formatTokens(agent.responseBody.length)\n    : undefined;\n  return { entry, statusIcon, statusDetail, threadId: agent.threadId };\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function resolveAgentRowFromResult",
+      "startLine": 208,
+      "startCol": 1,
+      "endLine": 222,
+      "endCol": 2
+    },
+    {
+      "text": "function threadBindings(\n  info: AgentRowRenderInfo,\n  dispatch: Dispatch\u003cRootMsg\u003e,\n): Record\u003cstring, () =\u003e void\u003e {\n  if (!info.threadId) return {};\n  const threadId = info.threadId;\n  return {\n    \"\u003cCR\u003e\": () =\u003e\n      dispatch({\n        type: \"select-thread-effect\",\n        id: threadId,\n      }),\n  };\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function threadBindings\n\nfunction threadBindings(\n  info: AgentRowRenderInfo,\n  dispatch: Dispatch\u003cRootMsg\u003e,\n): Record\u003cstring, () =\u003e void\u003e {\n  if (!info.threadId) return {};\n  const threadId = info.threadId;\n  return {\n    \"\u003cCR\u003e\": () =\u003e\n      dispatch({\n        type: \"select-thread-effect\",\n        id: threadId,\n      }),\n  };\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function threadBindings",
+      "startLine": 224,
+      "startCol": 1,
+      "endLine": 237,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  const count = input.agents?.length ?? 0;\n  return d`🤖 spawn_subagents: ${count.toString()} agent${count === 1 ? \"\" : \"s\"}`;\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function renderSummary\n\nexport function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  const count = input.agents?.length ?? 0;\n  return d`🤖 spawn_subagents: ${count.toString()} agent${count === 1 ? \"\" : \"s\"}`;\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function renderSummary",
+      "startLine": 239,
+      "startCol": 1,
+      "endLine": 246,
+      "endCol": 2
+    },
+    {
+      "text": "function fileBindingFactory(\n  threadDispatch: Dispatch\u003cThreadMsg\u003e,\n): (path: string) =\u003e Record\u003cstring, () =\u003e void\u003e {\n  return (path: string) =\u003e ({\n    \"\u003cCR\u003e\": () =\u003e\n      threadDispatch({\n        type: \"open-edit-file\",\n        filePath: path as UnresolvedFilePath,\n      }),\n  });\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function fileBindingFactory\n\nfunction fileBindingFactory(\n  threadDispatch: Dispatch\u003cThreadMsg\u003e,\n): (path: string) =\u003e Record\u003cstring, () =\u003e void\u003e {\n  return (path: string) =\u003e ({\n    \"\u003cCR\u003e\": () =\u003e\n      threadDispatch({\n        type: \"open-edit-file\",\n        filePath: path as UnresolvedFilePath,\n      }),\n  });\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function fileBindingFactory",
+      "startLine": 248,
+      "startCol": 1,
+      "endLine": 258,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderInput(\n  _request: UnionToolRequest,\n  _displayContext: DisplayContext,\n  _expanded: boolean,\n): VDOMNode | undefined {\n  // The structured layout is rendered by renderProgress (in-flight) and\n  // renderResult (completed); the streaming phase is covered by\n  // renderStreamdedTool. Returning undefined avoids duplicating it here.\n  return undefined;\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function renderInput\n\nexport function renderInput(\n  _request: UnionToolRequest,\n  _displayContext: DisplayContext,\n  _expanded: boolean,\n): VDOMNode | undefined {\n  // The structured layout is rendered by renderProgress (in-flight) and\n  // renderResult (completed); the streaming phase is covered by\n  // renderStreamdedTool. Returning undefined avoids duplicating it here.\n  return undefined;\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function renderInput",
+      "startLine": 260,
+      "startCol": 1,
+      "endLine": 269,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderProgress(\n  request: UnionToolRequest,\n  progress: SpawnSubagents.SpawnSubagentsProgress | undefined,\n  context: {\n    dispatch: Dispatch\u003cRootMsg\u003e;\n    threadDispatch: Dispatch\u003cThreadMsg\u003e;\n    chat: Chat;\n  },\n  _expanded: boolean,\n  toolViewState: ToolViewState,\n  toolRequestId: ToolRequestId,\n): VDOMNode | undefined {\n  if (!progress || progress.elements.length === 0) {\n    return undefined;\n  }\n\n  const input = request.input as Input;\n  const fileBinding = fileBindingFactory(context.threadDispatch);\n\n  return renderSpawnLayout(input, {\n    fileBinding",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function renderProgress\n\nexport function renderProgress(\n  request: UnionToolRequest,\n  progress: SpawnSubagents.SpawnSubagentsProgress | undefined,\n  context: {\n    dispatch: Dispatch\u003cRootMsg\u003e;\n    threadDispatch: Dispatch\u003cThreadMsg\u003e;\n    chat: Chat;\n  },\n  _expanded: boolean,\n  toolViewState: ToolViewState,\n  toolRequestId: ToolRequestId,\n): VDOMNode | undefined {\n  if (!progress || progress.elements.length === 0) {\n    return undefined;\n  }\n\n  const input = request.input as Input;\n  const fileBinding = fileBindingFactory(context.threadDispatch);\n\n  return renderSpawnLayout(input, {\n    fileBinding",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function renderProgress",
+      "startLine": 271,
+      "startCol": 1,
+      "endLine": 291,
+      "endCol": 16
+    },
+    {
+      "text": "    agentExtras: (idx) =\u003e {\n      const element = progress.elements[idx];\n      const info = resolveAgentRowFromProgress(element, context.chat);\n      const agentKey = String(idx);\n      const itemExpanded =\n        toolViewState.progressItemExpanded?.[agentKey] || false;\n      const entry = input.agents[idx];\n      const expandedContent =\n        itemExpanded \u0026\u0026 entry?.prompt ? d`${entry.prompt}` : undefined;\n\n      return {\n        statusIcon: info.statusIcon,\n        statusDetail: info.statusDetail,\n        pendingApprovals: info.pendingApprovals,\n        expandedContent,\n        bindings: {\n          ...threadBindings(info, context.dispatch),\n          \"=\": () =\u003e\n            context.threadDispatch({\n              type: \"toggle-tool-progress-item\",\n              toolRequestId,\n              itemKey: agentKey,\n            }),\n        },\n      };\n    }",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function renderProgress \u003e function agentExtras\n\n    agentExtras: (idx) =\u003e {\n      const element = progress.elements[idx];\n      const info = resolveAgentRowFromProgress(element, context.chat);\n      const agentKey = String(idx);\n      const itemExpanded =\n        toolViewState.progressItemExpanded?.[agentKey] || false;\n      const entry = input.agents[idx];\n      const expandedContent =\n        itemExpanded \u0026\u0026 entry?.prompt ? d`${entry.prompt}` : undefined;\n\n      return {\n        statusIcon: info.statusIcon,\n        statusDetail: info.statusDetail,\n        pendingApprovals: info.pendingApprovals,\n        expandedContent,\n        bindings: {\n          ...threadBindings(info, context.dispatch),\n          \"=\": () =\u003e\n            context.threadDispatch({\n              type: \"toggle-tool-progress-item\",\n              toolRequestId,\n              itemKey: agentKey,\n            }),\n        },\n      };\n    }",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function renderProgress \u003e function agentExtras",
+      "startLine": 292,
+      "startCol": 1,
+      "endLine": 317,
+      "endCol": 6
+    },
+    {
+      "text": "export function renderResultSummary(info: CompletedToolInfo): VDOMNode {\n  const input = info.request.input as Input;\n  const result = info.result.result;\n  const totalAgents = input.agents?.length ?? 0;\n\n  if (result.status === \"error\") {\n    const errorPreview =\n      result.error.length \u003e 50\n        ? `${result.error.substring(0, 50)}...`\n        : result.error;\n    return d`${errorPreview}`;\n  }\n\n  return d`${totalAgents.toString()} agent${totalAgents === 1 ? \"\" : \"s\"}`;\n}",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function renderResultSummary\n\nexport function renderResultSummary(info: CompletedToolInfo): VDOMNode {\n  const input = info.request.input as Input;\n  const result = info.result.result;\n  const totalAgents = input.agents?.length ?? 0;\n\n  if (result.status === \"error\") {\n    const errorPreview =\n      result.error.length \u003e 50\n        ? `${result.error.substring(0, 50)}...`\n        : result.error;\n    return d`${errorPreview}`;\n  }\n\n  return d`${totalAgents.toString()} agent${totalAgents === 1 ? \"\" : \"s\"}`;\n}",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function renderResultSummary",
+      "startLine": 321,
+      "startCol": 1,
+      "endLine": 335,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderResult(\n  info: CompletedToolInfo,\n  context: {\n    dispatch: Dispatch\u003cRootMsg\u003e;\n    threadDispatch: Dispatch\u003cThreadMsg\u003e;\n    chat: Chat;\n  },\n  toolViewState: ToolViewState,\n  toolRequestId: ToolRequestId,\n): VDOMNode | undefined {\n  const input = info.request.input as Input;\n  const result = info.result.result;\n\n  if (result.status === \"error\") {\n    if (toolViewState.resultExpanded) {\n      return d`**Error:**\\n${result.error}`;\n    }\n    return undefined;\n  }\n\n  if (info.structuredResult.toolName !== \"spawn_subagents\") return undefined;\n  const sr = info.structuredResult as SpawnSubagents.StructuredResult;\n\n  const fileBinding = fileBindingFactory(context.threadDispatch);\n\n  return renderSpawnLayout(input, {\n    fileBinding",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function renderResult\n\nexport function renderResult(\n  info: CompletedToolInfo,\n  context: {\n    dispatch: Dispatch\u003cRootMsg\u003e;\n    threadDispatch: Dispatch\u003cThreadMsg\u003e;\n    chat: Chat;\n  },\n  toolViewState: ToolViewState,\n  toolRequestId: ToolRequestId,\n): VDOMNode | undefined {\n  const input = info.request.input as Input;\n  const result = info.result.result;\n\n  if (result.status === \"error\") {\n    if (toolViewState.resultExpanded) {\n      return d`**Error:**\\n${result.error}`;\n    }\n    return undefined;\n  }\n\n  if (info.structuredResult.toolName !== \"spawn_subagents\") return undefined;\n  const sr = info.structuredResult as SpawnSubagents.StructuredResult;\n\n  const fileBinding = fileBindingFactory(context.threadDispatch);\n\n  return renderSpawnLayout(input, {\n    fileBinding",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function renderResult",
+      "startLine": 337,
+      "startCol": 1,
+      "endLine": 363,
+      "endCol": 16
+    },
+    {
+      "text": "    agentExtras: (idx) =\u003e {\n      const agent = sr.agents[idx];\n      if (!agent) return {};\n      const entry = input.agents[idx] ?? { prompt: agent.prompt };\n      const agentKey = String(idx);\n      const itemExpanded =\n        toolViewState.resultItemExpanded?.[agentKey] || false;\n      const rowInfo = resolveAgentRowFromResult(agent, entry, context.chat);\n\n      let expandedContent: VDOMNode | undefined;\n      if (itemExpanded) {\n        const promptText = entry.prompt ?? agent.prompt;\n        const responseText = agent.responseBody;\n        if (promptText \u0026\u0026 responseText) {\n          expandedContent = d`**Prompt:**\\n${promptText}\\n\\n**Response:**\\n${responseText}`;\n        } else if (promptText) {\n          expandedContent = d`**Prompt:**\\n${promptText}`;\n        } else if (responseText) {\n          expandedContent = d`${responseText}`;\n        }\n      }\n\n      return {\n        statusIcon: rowInfo.statusIcon,\n        statusDetail: rowInfo.statusDetail,\n        pendingApprovals: rowInfo.pendingApprovals,\n        expandedContent,\n        bindings: {\n          ...threadBindings(rowInfo, context.dispatch),\n          \"=\": () =\u003e\n            context.threadDispatch({\n              type: \"toggle-tool-result-item\",\n              toolRequestId,\n              itemKey: agentKey,\n            }),\n        },\n      };\n    }",
+      "contextualizedText": "// node/render-tools/spawn-subagents.ts \u003e function renderResult \u003e function agentExtras\n\n    agentExtras: (idx) =\u003e {\n      const agent = sr.agents[idx];\n      if (!agent) return {};\n      const entry = input.agents[idx] ?? { prompt: agent.prompt };\n      const agentKey = String(idx);\n      const itemExpanded =\n        toolViewState.resultItemExpanded?.[agentKey] || false;\n      const rowInfo = resolveAgentRowFromResult(agent, entry, context.chat);\n\n      let expandedContent: VDOMNode | undefined;\n      if (itemExpanded) {\n        const promptText = entry.prompt ?? agent.prompt;\n        const responseText = agent.responseBody;\n        if (promptText \u0026\u0026 responseText) {\n          expandedContent = d`**Prompt:**\\n${promptText}\\n\\n**Response:**\\n${responseText}`;\n        } else if (promptText) {\n          expandedContent = d`**Prompt:**\\n${promptText}`;\n        } else if (responseText) {\n          expandedContent = d`${responseText}`;\n        }\n      }\n\n      return {\n        statusIcon: rowInfo.statusIcon,\n        statusDetail: rowInfo.statusDetail,\n        pendingApprovals: rowInfo.pendingApprovals,\n        expandedContent,\n        bindings: {\n          ...threadBindings(rowInfo, context.dispatch),\n          \"=\": () =\u003e\n            context.threadDispatch({\n              type: \"toggle-tool-result-item\",\n              toolRequestId,\n              itemKey: agentKey,\n            }),\n        },\n      };\n    }",
+      "headingContext": "node/render-tools/spawn-subagents.ts \u003e function renderResult \u003e function agentExtras",
+      "startLine": 364,
+      "startCol": 1,
+      "endLine": 401,
+      "endCol": 6
+    }
+  ]
+}

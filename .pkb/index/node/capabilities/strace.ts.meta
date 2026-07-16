@@ -1,0 +1,87 @@
+{
+  "blobSha": "9ee2d08c4538b44a95b618bffe2f0e08e0d27cdf",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { execFileSync } from \"node:child_process\";\nimport type { SandboxViolationEvent } from \"@anthropic-ai/sandbox-runtime\";\n\n// strace-based Linux sandbox violation capture.\n//\n// On Linux (bubblewrap) there is no live violation-log channel like macOS\n// seatbelt provides, so we run the user command under strace and synthesize\n// structured violation events from syscalls that the sandbox denied\n// (EPERM / EACCES). This replaces the old, brittle stderr-regex heuristic.",
+      "contextualizedText": "// node/capabilities/strace.ts\n\nimport { execFileSync } from \"node:child_process\";\nimport type { SandboxViolationEvent } from \"@anthropic-ai/sandbox-runtime\";\n\n// strace-based Linux sandbox violation capture.\n//\n// On Linux (bubblewrap) there is no live violation-log channel like macOS\n// seatbelt provides, so we run the user command under strace and synthesize\n// structured violation events from syscalls that the sandbox denied\n// (EPERM / EACCES). This replaces the old, brittle stderr-regex heuristic.",
+      "headingContext": "node/capabilities/strace.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 9,
+      "endCol": 76
+    },
+    {
+      "text": "/** Shell-quote a string for safe embedding inside a `bash -c` command. */\nfunction shellQuote(s: string): string {\n  return `'${s.replace(/'/g, `'\\\\''`)}'`;\n}",
+      "contextualizedText": "// node/capabilities/strace.ts \u003e function shellQuote\n\n/** Shell-quote a string for safe embedding inside a `bash -c` command. */\nfunction shellQuote(s: string): string {\n  return `'${s.replace(/'/g, `'\\\\''`)}'`;\n}",
+      "headingContext": "node/capabilities/strace.ts \u003e function shellQuote",
+      "startLine": 11,
+      "startCol": 1,
+      "endLine": 14,
+      "endCol": 2
+    },
+    {
+      "text": "// Build a command that runs `command` under strace, writing the trace to\n// `traceFilePath`. The caller is responsible for nesting this *inside* the\n// bubblewrap wrap (i.e. pass the returned string to wrapWithSandbox), so that\n// bwrap remains the outermost process and we only trace the user command — not\n// bwrap's own namespace-setup syscalls (which legitimately return EPERM).\nexport function buildStraceCommand(\n  command: string,\n  traceFilePath: string,\n): string {\n  return [\n    \"strace\",\n    \"-f\",\n    \"-qq\",\n    \"-e\",\n    \"trace=file,network,process\",\n    \"-e\",\n    \"signal=none\",\n    \"-o\",\n    shellQuote(traceFilePath),\n    \"--\",\n    \"bash\",\n    \"-c\",\n    shellQuote(command),\n  ].join(\" \");\n}",
+      "contextualizedText": "// node/capabilities/strace.ts \u003e function buildStraceCommand\n\n// Build a command that runs `command` under strace, writing the trace to\n// `traceFilePath`. The caller is responsible for nesting this *inside* the\n// bubblewrap wrap (i.e. pass the returned string to wrapWithSandbox), so that\n// bwrap remains the outermost process and we only trace the user command — not\n// bwrap's own namespace-setup syscalls (which legitimately return EPERM).\nexport function buildStraceCommand(\n  command: string,\n  traceFilePath: string,\n): string {\n  return [\n    \"strace\",\n    \"-f\",\n    \"-qq\",\n    \"-e\",\n    \"trace=file,network,process\",\n    \"-e\",\n    \"signal=none\",\n    \"-o\",\n    shellQuote(traceFilePath),\n    \"--\",\n    \"bash\",\n    \"-c\",\n    shellQuote(command),\n  ].join(\" \");\n}",
+      "headingContext": "node/capabilities/strace.ts \u003e function buildStraceCommand",
+      "startLine": 16,
+      "startCol": 1,
+      "endLine": 40,
+      "endCol": 2
+    },
+    {
+      "text": "const TRACE_LINE_RE =\n  /^(?:\\[pid\\s+\\d+\\]\\s+)?(\\w+)\\((.*)\\)\\s+=\\s+-1\\s+(EPERM|EACCES)\\b/;\nconst FIRST_STRING_ARG_RE = /\"((?:[^\"\\\\]|\\\\.)*)\"/;",
+      "contextualizedText": "// node/capabilities/strace.ts\n\nconst TRACE_LINE_RE =\n  /^(?:\\[pid\\s+\\d+\\]\\s+)?(\\w+)\\((.*)\\)\\s+=\\s+-1\\s+(EPERM|EACCES)\\b/;\nconst FIRST_STRING_ARG_RE = /\"((?:[^\"\\\\]|\\\\.)*)\"/;",
+      "headingContext": "node/capabilities/strace.ts",
+      "startLine": 42,
+      "startCol": 1,
+      "endLine": 44,
+      "endCol": 51
+    },
+    {
+      "text": "// Parse raw strace output into violation events. Only syscalls whose result is\n// EPERM/EACCES become events; everything else (successful syscalls, other\n// errnos) is ignored. Events are de-duplicated by their rendered `line`.\nexport function parseStraceViolations(\n  traceContent: string,\n  command: string,\n  timestamp: Date = new Date(),\n): SandboxViolationEvent[] {\n  const violations: SandboxViolationEvent[] = [];\n  const seen = new Set\u003cstring\u003e();\n\n  for (const raw of traceContent.split(\"\\n\")) {\n    const m = raw.match(TRACE_LINE_RE);\n    if (!m) continue;\n    const syscall = m[1];\n    const args = m[2];\n    const errno = m[3];\n    const argMatch = args.match(FIRST_STRING_ARG_RE);\n    const target = argMatch ? argMatch[1] : undefined;\n    const line = target\n      ? `${syscall}(\"${target}\") -\u003e ${errno}`\n      : `${syscall}() -\u003e ${errno}`;\n    if (seen.has(line)) continue;\n    seen.add(line);\n    violations.push({ line, command, timestamp });\n  }\n\n  return violations;\n}",
+      "contextualizedText": "// node/capabilities/strace.ts \u003e function parseStraceViolations\n\n// Parse raw strace output into violation events. Only syscalls whose result is\n// EPERM/EACCES become events; everything else (successful syscalls, other\n// errnos) is ignored. Events are de-duplicated by their rendered `line`.\nexport function parseStraceViolations(\n  traceContent: string,\n  command: string,\n  timestamp: Date = new Date(),\n): SandboxViolationEvent[] {\n  const violations: SandboxViolationEvent[] = [];\n  const seen = new Set\u003cstring\u003e();\n\n  for (const raw of traceContent.split(\"\\n\")) {\n    const m = raw.match(TRACE_LINE_RE);\n    if (!m) continue;\n    const syscall = m[1];\n    const args = m[2];\n    const errno = m[3];\n    const argMatch = args.match(FIRST_STRING_ARG_RE);\n    const target = argMatch ? argMatch[1] : undefined;\n    const line = target\n      ? `${syscall}(\"${target}\") -\u003e ${errno}`\n      : `${syscall}() -\u003e ${errno}`;\n    if (seen.has(line)) continue;\n    seen.add(line);\n    violations.push({ line, command, timestamp });\n  }\n\n  return violations;\n}",
+      "headingContext": "node/capabilities/strace.ts \u003e function parseStraceViolations",
+      "startLine": 46,
+      "startCol": 1,
+      "endLine": 74,
+      "endCol": 2
+    },
+    {
+      "text": "// Raised when strace is unavailable on Linux. The sandbox refuses to start\n// rather than silently degrading, since there is no regex fallback.\nexport class StraceUnavailableError extends Error {\n  constructor(detail: string) {\n    super(\n      `magenta requires 'strace' to run the Linux sandbox, but it is unavailable: ${detail}.\\n` +\n        `Install it (e.g. 'apt-get install strace' / 'dnf install strace') and ensure it can attach ` +\n        `(kernel.yama.ptrace_scope must permit tracing). The sandbox cannot start without it.`,\n    );\n    this.name = \"StraceUnavailableError\";\n  }\n}",
+      "contextualizedText": "// node/capabilities/strace.ts \u003e class StraceUnavailableError\n\n// Raised when strace is unavailable on Linux. The sandbox refuses to start\n// rather than silently degrading, since there is no regex fallback.\nexport class StraceUnavailableError extends Error {\n  constructor(detail: string) {\n    super(\n      `magenta requires 'strace' to run the Linux sandbox, but it is unavailable: ${detail}.\\n` +\n        `Install it (e.g. 'apt-get install strace' / 'dnf install strace') and ensure it can attach ` +\n        `(kernel.yama.ptrace_scope must permit tracing). The sandbox cannot start without it.`,\n    );\n    this.name = \"StraceUnavailableError\";\n  }\n}",
+      "headingContext": "node/capabilities/strace.ts \u003e class StraceUnavailableError",
+      "startLine": 76,
+      "startCol": 1,
+      "endLine": 87,
+      "endCol": 2
+    },
+    {
+      "text": "export type StraceProbeResult = { ok: true } | { ok: false; error: string };\n\nexport type StraceProbe = () =\u003e StraceProbeResult;",
+      "contextualizedText": "// node/capabilities/strace.ts\n\nexport type StraceProbeResult = { ok: true } | { ok: false; error: string };\n\nexport type StraceProbe = () =\u003e StraceProbeResult;",
+      "headingContext": "node/capabilities/strace.ts",
+      "startLine": 89,
+      "startCol": 1,
+      "endLine": 91,
+      "endCol": 51
+    },
+    {
+      "text": "// Default probe: actually run strace on a trivial command so we verify it can\n// attach (ptrace), not merely that the binary exists.\nexport const defaultStraceProbe: StraceProbe = () =\u003e {\n  try {\n    execFileSync(\"strace\", [\"-f\", \"-qq\", \"-e\", \"trace=none\", \"--\", \"true\"], {\n      stdio: \"ignore\",\n    });\n    return { ok: true };\n  } catch (err) {\n    return {\n      ok: false,\n      error: err instanceof Error ? err.message : String(err),\n    };\n  }\n}",
+      "contextualizedText": "// node/capabilities/strace.ts \u003e function defaultStraceProbe\n\n// Default probe: actually run strace on a trivial command so we verify it can\n// attach (ptrace), not merely that the binary exists.\nexport const defaultStraceProbe: StraceProbe = () =\u003e {\n  try {\n    execFileSync(\"strace\", [\"-f\", \"-qq\", \"-e\", \"trace=none\", \"--\", \"true\"], {\n      stdio: \"ignore\",\n    });\n    return { ok: true };\n  } catch (err) {\n    return {\n      ok: false,\n      error: err instanceof Error ? err.message : String(err),\n    };\n  }\n}",
+      "headingContext": "node/capabilities/strace.ts \u003e function defaultStraceProbe",
+      "startLine": 93,
+      "startCol": 1,
+      "endLine": 107,
+      "endCol": 2
+    },
+    {
+      "text": "// Startup capability check. On non-Linux platforms this is a no-op. On Linux,\n// it throws StraceUnavailableError when strace is missing or cannot attach.\nexport function assertStraceAvailable(\n  platform: NodeJS.Platform,\n  probe: StraceProbe = defaultStraceProbe,\n): void {\n  if (platform !== \"linux\") return;\n  const result = probe();\n  if (!result.ok) {\n    throw new StraceUnavailableError(result.error);\n  }\n}",
+      "contextualizedText": "// node/capabilities/strace.ts \u003e function assertStraceAvailable\n\n// Startup capability check. On non-Linux platforms this is a no-op. On Linux,\n// it throws StraceUnavailableError when strace is missing or cannot attach.\nexport function assertStraceAvailable(\n  platform: NodeJS.Platform,\n  probe: StraceProbe = defaultStraceProbe,\n): void {\n  if (platform !== \"linux\") return;\n  const result = probe();\n  if (!result.ok) {\n    throw new StraceUnavailableError(result.error);\n  }\n}",
+      "headingContext": "node/capabilities/strace.ts \u003e function assertStraceAvailable",
+      "startLine": 109,
+      "startCol": 1,
+      "endLine": 120,
+      "endCol": 2
+    }
+  ]
+}

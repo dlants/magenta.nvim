@@ -1,0 +1,105 @@
+{
+  "blobSha": "f6e14ab26ecbf781ba1928fe274192196497412f",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport { afterEach, beforeEach, describe, expect, it } from \"vitest\";\nimport { FsFileIO } from \"../capabilities/file-io.ts\";\nimport type { Logger } from \"../logger.ts\";\nimport type { ProviderOptions } from \"../provider-options.ts\";\nimport type { HomeDir, NvimCwd } from \"../utils/files.ts\";\nimport { loadSkills } from \"./skills.ts\";\n\nconst noopLogger: Logger",
+      "contextualizedText": "// node/core/src/providers/skills.test.ts\n\nimport * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport { afterEach, beforeEach, describe, expect, it } from \"vitest\";\nimport { FsFileIO } from \"../capabilities/file-io.ts\";\nimport type { Logger } from \"../logger.ts\";\nimport type { ProviderOptions } from \"../provider-options.ts\";\nimport type { HomeDir, NvimCwd } from \"../utils/files.ts\";\nimport { loadSkills } from \"./skills.ts\";\n\nconst noopLogger: Logger",
+      "headingContext": "node/core/src/providers/skills.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 10,
+      "endCol": 25
+    },
+    {
+      "text": "  info: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/skills.test.ts \u003e function info\n\n  info: () =\u003e {}",
+      "headingContext": "node/core/src/providers/skills.test.ts \u003e function info",
+      "startLine": 11,
+      "startCol": 1,
+      "endLine": 11,
+      "endCol": 17
+    },
+    {
+      "text": "  warn: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/skills.test.ts \u003e function warn\n\n  warn: () =\u003e {}",
+      "headingContext": "node/core/src/providers/skills.test.ts \u003e function warn",
+      "startLine": 12,
+      "startCol": 1,
+      "endLine": 12,
+      "endCol": 17
+    },
+    {
+      "text": "  error: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/skills.test.ts \u003e function error\n\n  error: () =\u003e {}",
+      "headingContext": "node/core/src/providers/skills.test.ts \u003e function error",
+      "startLine": 13,
+      "startCol": 1,
+      "endLine": 13,
+      "endCol": 18
+    },
+    {
+      "text": "  debug: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/skills.test.ts \u003e function debug\n\n  debug: () =\u003e {}",
+      "headingContext": "node/core/src/providers/skills.test.ts \u003e function debug",
+      "startLine": 14,
+      "startCol": 1,
+      "endLine": 14,
+      "endCol": 18
+    },
+    {
+      "text": "let testCounter = 0;\nlet tmpRoot: string;\nlet tmpHome: HomeDir;\nlet tmpCwd: NvimCwd;\n\nbeforeEach(async () =\u003e {\n  tmpRoot = path.join(\n    \"/tmp/magenta-test\",\n    `skills-${Date.now()}-${testCounter++}`,\n  );\n  await fs.mkdir(tmpRoot, { recursive: true });\n  tmpHome = path.join(tmpRoot, \"home\") as HomeDir;\n  tmpCwd = path.join(tmpRoot, \"cwd\") as NvimCwd;\n  await fs.mkdir(tmpHome, { recursive: true });\n  await fs.mkdir(tmpCwd, { recursive: true });\n});\n\nafterEach(async () =\u003e {\n  await fs.rm(tmpRoot, { recursive: true, force: true });\n});",
+      "contextualizedText": "// node/core/src/providers/skills.test.ts\n\nlet testCounter = 0;\nlet tmpRoot: string;\nlet tmpHome: HomeDir;\nlet tmpCwd: NvimCwd;\n\nbeforeEach(async () =\u003e {\n  tmpRoot = path.join(\n    \"/tmp/magenta-test\",\n    `skills-${Date.now()}-${testCounter++}`,\n  );\n  await fs.mkdir(tmpRoot, { recursive: true });\n  tmpHome = path.join(tmpRoot, \"home\") as HomeDir;\n  tmpCwd = path.join(tmpRoot, \"cwd\") as NvimCwd;\n  await fs.mkdir(tmpHome, { recursive: true });\n  await fs.mkdir(tmpCwd, { recursive: true });\n});\n\nafterEach(async () =\u003e {\n  await fs.rm(tmpRoot, { recursive: true, force: true });\n});",
+      "headingContext": "node/core/src/providers/skills.test.ts",
+      "startLine": 17,
+      "startCol": 1,
+      "endLine": 36,
+      "endCol": 4
+    },
+    {
+      "text": "async function writeSkill(\n  skillsRoot: string,\n  name: string,\n  description: string,\n) {\n  const dir = path.join(skillsRoot, name);\n  await fs.mkdir(dir, { recursive: true });\n  await fs.writeFile(\n    path.join(dir, \"skill.md\"),\n    `---\\nname: ${name}\\ndescription: ${description}\\n---\\n`,\n  );\n}",
+      "contextualizedText": "// node/core/src/providers/skills.test.ts \u003e function writeSkill\n\nasync function writeSkill(\n  skillsRoot: string,\n  name: string,\n  description: string,\n) {\n  const dir = path.join(skillsRoot, name);\n  await fs.mkdir(dir, { recursive: true });\n  await fs.writeFile(\n    path.join(dir, \"skill.md\"),\n    `---\\nname: ${name}\\ndescription: ${description}\\n---\\n`,\n  );\n}",
+      "headingContext": "node/core/src/providers/skills.test.ts \u003e function writeSkill",
+      "startLine": 38,
+      "startCol": 1,
+      "endLine": 49,
+      "endCol": 2
+    },
+    {
+      "text": "function makeContext(options: ProviderOptions) {\n  return {\n    cwd: tmpCwd,\n    logger: noopLogger,\n    options,\n    fileIO: new FsFileIO(),\n    homeDir: tmpHome,\n  };\n}",
+      "contextualizedText": "// node/core/src/providers/skills.test.ts \u003e function makeContext\n\nfunction makeContext(options: ProviderOptions) {\n  return {\n    cwd: tmpCwd,\n    logger: noopLogger,\n    options,\n    fileIO: new FsFileIO(),\n    homeDir: tmpHome,\n  };\n}",
+      "headingContext": "node/core/src/providers/skills.test.ts \u003e function makeContext",
+      "startLine": 51,
+      "startCol": 1,
+      "endLine": 59,
+      "endCol": 2
+    },
+    {
+      "text": "describe(\"loadSkills with hierarchical relative paths\", () =\u003e {\n  it(\"walks up parent directories above cwd for relative skills paths\", async () =\u003e {\n    const deepCwd = path.join(tmpRoot, \"level1\", \"level2\") as NvimCwd;\n    await fs.mkdir(deepCwd, { recursive: true });\n\n    await writeSkill(\n      path.join(tmpRoot, \"level1\", \".magenta\", \"skills\"),\n      \"skill-l1\",\n      \"level1 skill\",\n    );\n    await writeSkill(\n      path.join(deepCwd, \".magenta\", \"skills\"),\n      \"skill-cwd\",\n      \"cwd skill\",\n    );\n\n    const skills = await loadSkills({\n      cwd: deepCwd,\n      logger: noopLogger,\n      options: {\n        skillsPaths: [\".magenta/skills\"],\n        agentsPaths: [],\n      },\n      fileIO: new FsFileIO(),\n      homeDir: tmpHome,\n    });\n\n    expect(skills[\"skill-l1\"]).toBeDefined();\n    expect(skills[\"skill-l1\"].description).toBe(\"level1 skill\");\n    expect(skills[\"skill-cwd\"]).toBeDefined();\n    expect(skills[\"skill-cwd\"].description).toBe(\"cwd skill\");\n  });\n\n  it(\"skills closer to cwd override same-named skills from parent directories\", async () =\u003e {\n    const deepCwd = path.join(tmpRoot, \"outer\", \"inner\") as NvimCwd;\n    await fs.mkdir(deepCwd, { recursive: true });\n\n    await writeSkill(\n      path.join(tmpRoot, \"outer\", \".magenta\", \"skills\"),\n      \"plan\",\n      \"outer-plan\",\n    );\n    await writeSkill(\n      path.join(deepCwd, \".magenta\", \"skills\"),\n      \"plan\",\n      \"inner-plan\",\n    );\n\n    const skills = await loadSkills({\n      cwd: deepCwd,\n      logger: noopLogger,\n      options: {\n        skillsPaths: [\".magenta/skills\"],\n        agentsPaths: [],\n      },\n      fileIO: new FsFileIO(),\n      homeDir: tmpHome,\n    });\n\n    expect(skills.plan).toBeDefined();\n    expect(skills.plan.description).toBe(\"inner-plan\");\n  });",
+      "contextualizedText": "// node/core/src/providers/skills.test.ts\n\ndescribe(\"loadSkills with hierarchical relative paths\", () =\u003e {\n  it(\"walks up parent directories above cwd for relative skills paths\", async () =\u003e {\n    const deepCwd = path.join(tmpRoot, \"level1\", \"level2\") as NvimCwd;\n    await fs.mkdir(deepCwd, { recursive: true });\n\n    await writeSkill(\n      path.join(tmpRoot, \"level1\", \".magenta\", \"skills\"),\n      \"skill-l1\",\n      \"level1 skill\",\n    );\n    await writeSkill(\n      path.join(deepCwd, \".magenta\", \"skills\"),\n      \"skill-cwd\",\n      \"cwd skill\",\n    );\n\n    const skills = await loadSkills({\n      cwd: deepCwd,\n      logger: noopLogger,\n      options: {\n        skillsPaths: [\".magenta/skills\"],\n        agentsPaths: [],\n      },\n      fileIO: new FsFileIO(),\n      homeDir: tmpHome,\n    });\n\n    expect(skills[\"skill-l1\"]).toBeDefined();\n    expect(skills[\"skill-l1\"].description).toBe(\"level1 skill\");\n    expect(skills[\"skill-cwd\"]).toBeDefined();\n    expect(skills[\"skill-cwd\"].description).toBe(\"cwd skill\");\n  });\n\n  it(\"skills closer to cwd override same-named skills from parent directories\", async () =\u003e {\n    const deepCwd = path.join(tmpRoot, \"outer\", \"inner\") as NvimCwd;\n    await fs.mkdir(deepCwd, { recursive: true });\n\n    await writeSkill(\n      path.join(tmpRoot, \"outer\", \".magenta\", \"skills\"),\n      \"plan\",\n      \"outer-plan\",\n    );\n    await writeSkill(\n      path.join(deepCwd, \".magenta\", \"skills\"),\n      \"plan\",\n      \"inner-plan\",\n    );\n\n    const skills = await loadSkills({\n      cwd: deepCwd,\n      logger: noopLogger,\n      options: {\n        skillsPaths: [\".magenta/skills\"],\n        agentsPaths: [],\n      },\n      fileIO: new FsFileIO(),\n      homeDir: tmpHome,\n    });\n\n    expect(skills.plan).toBeDefined();\n    expect(skills.plan.description).toBe(\"inner-plan\");\n  });",
+      "headingContext": "node/core/src/providers/skills.test.ts",
+      "startLine": 61,
+      "startCol": 1,
+      "endLine": 122,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"does not walk up for absolute (tilde-expanded) skills paths\", async () =\u003e {\n    const homeSkillsDir = path.join(tmpHome, \".claude\", \"skills\");\n    await writeSkill(homeSkillsDir, \"home-skill\", \"home-only\");\n\n    const deepCwd = path.join(tmpRoot, \"a\", \"b\") as NvimCwd;\n    await fs.mkdir(deepCwd, { recursive: true });\n    await writeSkill(\n      path.join(tmpRoot, \"a\", \".claude\", \"skills\"),\n      \"intermediate\",\n      \"should-not-be-found-via-absolute\",\n    );\n\n    const skills = await loadSkills({\n      cwd: deepCwd,\n      logger: noopLogger,\n      options: {\n        skillsPaths: [\"~/.claude/skills\"],\n        agentsPaths: [],\n      },\n      fileIO: new FsFileIO(),\n      homeDir: tmpHome,\n    });\n\n    expect(skills[\"home-skill\"]).toBeDefined();\n    expect(skills.intermediate).toBeUndefined();\n  });",
+      "contextualizedText": "// node/core/src/providers/skills.test.ts\n\nit(\"does not walk up for absolute (tilde-expanded) skills paths\", async () =\u003e {\n    const homeSkillsDir = path.join(tmpHome, \".claude\", \"skills\");\n    await writeSkill(homeSkillsDir, \"home-skill\", \"home-only\");\n\n    const deepCwd = path.join(tmpRoot, \"a\", \"b\") as NvimCwd;\n    await fs.mkdir(deepCwd, { recursive: true });\n    await writeSkill(\n      path.join(tmpRoot, \"a\", \".claude\", \"skills\"),\n      \"intermediate\",\n      \"should-not-be-found-via-absolute\",\n    );\n\n    const skills = await loadSkills({\n      cwd: deepCwd,\n      logger: noopLogger,\n      options: {\n        skillsPaths: [\"~/.claude/skills\"],\n        agentsPaths: [],\n      },\n      fileIO: new FsFileIO(),\n      homeDir: tmpHome,\n    });\n\n    expect(skills[\"home-skill\"]).toBeDefined();\n    expect(skills.intermediate).toBeUndefined();\n  });",
+      "headingContext": "node/core/src/providers/skills.test.ts",
+      "startLine": 124,
+      "startCol": 3,
+      "endLine": 149,
+      "endCol": 6
+    },
+    {
+      "text": "describe(\"loadSkills with suppressProjectSkills\", () =\u003e {\n  it(\"drops project-level skill while keeping user-level skill of the same name\", async () =\u003e {\n    const userSkillsDir = path.join(tmpHome, \".claude\", \"skills\");\n    const projectSkillsDir = path.join(tmpCwd, \".claude\", \"skills\");\n    await writeSkill(userSkillsDir, \"plan\", \"user-plan\");\n    await writeSkill(projectSkillsDir, \"plan\", \"project-plan\");\n\n    const skills = await loadSkills(\n      makeContext({\n        skillsPaths: [\"~/.claude/skills\", \".claude/skills\"],\n        agentsPaths: [],\n        suppressProjectSkills: [\"plan\"],\n      }),\n    );\n\n    expect(skills.plan).toBeDefined();\n    expect(skills.plan.description).toBe(\"user-plan\");\n    expect(skills.plan.skillFile).toBe(\n      path.join(userSkillsDir, \"plan\", \"skill.md\"),\n    );\n  });\n\n  it(\"drops project-level skill even when no user-level skill exists\", async () =\u003e {\n    const projectSkillsDir = path.join(tmpCwd, \".claude\", \"skills\");\n    await writeSkill(projectSkillsDir, \"plan\", \"project-plan\");\n\n    const skills = await loadSkills(\n      makeContext({\n        skillsPaths: [\"~/.claude/skills\", \".claude/skills\"],\n        agentsPaths: [],\n        suppressProjectSkills: [\"plan\"],\n      }),\n    );\n\n    expect(skills.plan).toBeUndefined();\n  });\n\n  it(\"does not affect project-level skills outside the suppression list\", async () =\u003e {\n    const projectSkillsDir = path.join(tmpCwd, \".claude\", \"skills\");\n    await writeSkill(projectSkillsDir, \"plan\", \"project-plan\");\n    await writeSkill(projectSkillsDir, \"browser\", \"project-browser\");\n\n    const skills = await loadSkills(\n      makeContext({\n        skillsPaths: [\"~/.claude/skills\", \".claude/skills\"],\n        agentsPaths: [],\n        suppressProjectSkills: [\"plan\"],\n      }),\n    );\n\n    expect(skills.plan).toBeUndefined();\n    expect(skills.browser).toBeDefined();\n    expect(skills.browser.description).toBe(\"project-browser\");\n  });\n});",
+      "contextualizedText": "// node/core/src/providers/skills.test.ts\n\ndescribe(\"loadSkills with suppressProjectSkills\", () =\u003e {\n  it(\"drops project-level skill while keeping user-level skill of the same name\", async () =\u003e {\n    const userSkillsDir = path.join(tmpHome, \".claude\", \"skills\");\n    const projectSkillsDir = path.join(tmpCwd, \".claude\", \"skills\");\n    await writeSkill(userSkillsDir, \"plan\", \"user-plan\");\n    await writeSkill(projectSkillsDir, \"plan\", \"project-plan\");\n\n    const skills = await loadSkills(\n      makeContext({\n        skillsPaths: [\"~/.claude/skills\", \".claude/skills\"],\n        agentsPaths: [],\n        suppressProjectSkills: [\"plan\"],\n      }),\n    );\n\n    expect(skills.plan).toBeDefined();\n    expect(skills.plan.description).toBe(\"user-plan\");\n    expect(skills.plan.skillFile).toBe(\n      path.join(userSkillsDir, \"plan\", \"skill.md\"),\n    );\n  });\n\n  it(\"drops project-level skill even when no user-level skill exists\", async () =\u003e {\n    const projectSkillsDir = path.join(tmpCwd, \".claude\", \"skills\");\n    await writeSkill(projectSkillsDir, \"plan\", \"project-plan\");\n\n    const skills = await loadSkills(\n      makeContext({\n        skillsPaths: [\"~/.claude/skills\", \".claude/skills\"],\n        agentsPaths: [],\n        suppressProjectSkills: [\"plan\"],\n      }),\n    );\n\n    expect(skills.plan).toBeUndefined();\n  });\n\n  it(\"does not affect project-level skills outside the suppression list\", async () =\u003e {\n    const projectSkillsDir = path.join(tmpCwd, \".claude\", \"skills\");\n    await writeSkill(projectSkillsDir, \"plan\", \"project-plan\");\n    await writeSkill(projectSkillsDir, \"browser\", \"project-browser\");\n\n    const skills = await loadSkills(\n      makeContext({\n        skillsPaths: [\"~/.claude/skills\", \".claude/skills\"],\n        agentsPaths: [],\n        suppressProjectSkills: [\"plan\"],\n      }),\n    );\n\n    expect(skills.plan).toBeUndefined();\n    expect(skills.browser).toBeDefined();\n    expect(skills.browser.description).toBe(\"project-browser\");\n  });\n});",
+      "headingContext": "node/core/src/providers/skills.test.ts",
+      "startLine": 152,
+      "startCol": 1,
+      "endLine": 206,
+      "endCol": 4
+    }
+  ]
+}

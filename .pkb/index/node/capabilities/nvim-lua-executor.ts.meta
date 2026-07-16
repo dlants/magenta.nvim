@@ -1,0 +1,33 @@
+{
+  "blobSha": "d4de3e77d9370b79d7a93b1688dfac2539cf1ac2",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { LuaExecutor } from \"@magenta/core\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";",
+      "contextualizedText": "// node/capabilities/nvim-lua-executor.ts\n\nimport type { LuaExecutor } from \"@magenta/core\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";",
+      "headingContext": "node/capabilities/nvim-lua-executor.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 2,
+      "endCol": 56
+    },
+    {
+      "text": "export class NvimLuaExecutor implements LuaExecutor {\n  constructor(private nvim: Nvim) {}",
+      "contextualizedText": "// node/capabilities/nvim-lua-executor.ts \u003e class NvimLuaExecutor\n\nexport class NvimLuaExecutor implements LuaExecutor {\n  constructor(private nvim: Nvim) {}",
+      "headingContext": "node/capabilities/nvim-lua-executor.ts \u003e class NvimLuaExecutor",
+      "startLine": 4,
+      "startCol": 1,
+      "endLine": 5,
+      "endCol": 37
+    },
+    {
+      "text": "  async execLua(code: string): Promise\u003cunknown\u003e {\n    const result = await this.nvim.call(\"nvim_exec_lua\", [code, []]);\n    return result ?? undefined;\n  }",
+      "contextualizedText": "// node/capabilities/nvim-lua-executor.ts \u003e class NvimLuaExecutor \u003e method execLua\n\n  async execLua(code: string): Promise\u003cunknown\u003e {\n    const result = await this.nvim.call(\"nvim_exec_lua\", [code, []]);\n    return result ?? undefined;\n  }",
+      "headingContext": "node/capabilities/nvim-lua-executor.ts \u003e class NvimLuaExecutor \u003e method execLua",
+      "startLine": 7,
+      "startCol": 1,
+      "endLine": 10,
+      "endCol": 4
+    }
+  ]
+}

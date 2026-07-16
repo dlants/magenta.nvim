@@ -1,0 +1,33 @@
+{
+  "blobSha": "5894fe011ae7d97fa126cd4b497bd32f236a07c9",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { HelpTagsProvider } from \"@magenta/core\";",
+      "contextualizedText": "// node/capabilities/noop-help-tags-provider.ts\n\nimport type { HelpTagsProvider } from \"@magenta/core\";",
+      "headingContext": "node/capabilities/noop-help-tags-provider.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 1,
+      "endCol": 55
+    },
+    {
+      "text": "export class NoopHelpTagsProvider implements HelpTagsProvider",
+      "contextualizedText": "// node/capabilities/noop-help-tags-provider.ts \u003e class NoopHelpTagsProvider\n\nexport class NoopHelpTagsProvider implements HelpTagsProvider",
+      "headingContext": "node/capabilities/noop-help-tags-provider.ts \u003e class NoopHelpTagsProvider",
+      "startLine": 3,
+      "startCol": 1,
+      "endLine": 3,
+      "endCol": 62
+    },
+    {
+      "text": "  listTagFiles(): Promise\u003cstring[]\u003e {\n    return Promise.resolve([]);\n  }",
+      "contextualizedText": "// node/capabilities/noop-help-tags-provider.ts \u003e class NoopHelpTagsProvider \u003e method listTagFiles\n\n  listTagFiles(): Promise\u003cstring[]\u003e {\n    return Promise.resolve([]);\n  }",
+      "headingContext": "node/capabilities/noop-help-tags-provider.ts \u003e class NoopHelpTagsProvider \u003e method listTagFiles",
+      "startLine": 4,
+      "startCol": 1,
+      "endLine": 6,
+      "endCol": 4
+    }
+  ]
+}

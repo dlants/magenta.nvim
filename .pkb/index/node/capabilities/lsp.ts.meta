@@ -1,0 +1,96 @@
+{
+  "blobSha": "fd6439ea221288b7ee3748d5a3c3e4557c152c37",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { NvimBuffer } from \"../nvim/buffer.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { PositionString } from \"../nvim/window.ts\";",
+      "contextualizedText": "// node/capabilities/lsp.ts\n\nimport type { NvimBuffer } from \"../nvim/buffer.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { PositionString } from \"../nvim/window.ts\";",
+      "headingContext": "node/capabilities/lsp.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 3,
+      "endCol": 57
+    },
+    {
+      "text": "export class Lsp {\n  private requestCounter = 0;\n  private requests: {\n    [requestId: string]:\n      | {\n          type: \"hover\";\n          resolve: (result: LspHoverResponse) =\u003e void;\n          reject: (err: Error) =\u003e void;\n        }\n      | {\n          type: \"find_references\";\n          resolve: (result: LspReferencesResponse) =\u003e void;\n          reject: (err: Error) =\u003e void;\n        }\n      | {\n          type: \"definition\";\n          resolve: (result: LspDefinitionResponse) =\u003e void;\n          reject: (err: Error) =\u003e void;\n        }\n      | {\n          type: \"type_definition\";\n          resolve: (result: LspTypeDefinitionResponse) =\u003e void;\n          reject: (err: Error) =\u003e void;\n        };\n  } = {};\n\n  constructor(private nvim: Nvim) {}",
+      "contextualizedText": "// node/capabilities/lsp.ts \u003e class Lsp\n\nexport class Lsp {\n  private requestCounter = 0;\n  private requests: {\n    [requestId: string]:\n      | {\n          type: \"hover\";\n          resolve: (result: LspHoverResponse) =\u003e void;\n          reject: (err: Error) =\u003e void;\n        }\n      | {\n          type: \"find_references\";\n          resolve: (result: LspReferencesResponse) =\u003e void;\n          reject: (err: Error) =\u003e void;\n        }\n      | {\n          type: \"definition\";\n          resolve: (result: LspDefinitionResponse) =\u003e void;\n          reject: (err: Error) =\u003e void;\n        }\n      | {\n          type: \"type_definition\";\n          resolve: (result: LspTypeDefinitionResponse) =\u003e void;\n          reject: (err: Error) =\u003e void;\n        };\n  } = {};\n\n  constructor(private nvim: Nvim) {}",
+      "headingContext": "node/capabilities/lsp.ts \u003e class Lsp",
+      "startLine": 5,
+      "startCol": 1,
+      "endLine": 31,
+      "endCol": 37
+    },
+    {
+      "text": "  requestHover(\n    buffer: NvimBuffer,\n    pos: PositionString,\n  ): Promise\u003cLspHoverResponse\u003e {\n    return new Promise\u003cLspHoverResponse\u003e((resolve, reject) =\u003e {\n      const requestId = this.getRequestId();\n      this.requests[requestId] = { type: \"hover\", resolve, reject };\n\n      this.nvim.logger.debug(`Initiating hover command...`);\n      this.nvim\n        .call(\"nvim_exec_lua\", [\n          `require('magenta').lsp_hover_request(\"${requestId}\", ${buffer.id}, ${pos.row}, ${pos.col})`,\n          [],\n        ])\n        .catch((...args: string[][]) =\u003e {\n          this.nvim.logger.error(`lsp request error: ${JSON.stringify(args)}`);\n          this.rejectRequest(\n            requestId,\n            new Error(args[0][1] as unknown as string),\n          );\n        });\n    });\n  }",
+      "contextualizedText": "// node/capabilities/lsp.ts \u003e class Lsp \u003e method requestHover\n\n  requestHover(\n    buffer: NvimBuffer,\n    pos: PositionString,\n  ): Promise\u003cLspHoverResponse\u003e {\n    return new Promise\u003cLspHoverResponse\u003e((resolve, reject) =\u003e {\n      const requestId = this.getRequestId();\n      this.requests[requestId] = { type: \"hover\", resolve, reject };\n\n      this.nvim.logger.debug(`Initiating hover command...`);\n      this.nvim\n        .call(\"nvim_exec_lua\", [\n          `require('magenta').lsp_hover_request(\"${requestId}\", ${buffer.id}, ${pos.row}, ${pos.col})`,\n          [],\n        ])\n        .catch((...args: string[][]) =\u003e {\n          this.nvim.logger.error(`lsp request error: ${JSON.stringify(args)}`);\n          this.rejectRequest(\n            requestId,\n            new Error(args[0][1] as unknown as string),\n          );\n        });\n    });\n  }",
+      "headingContext": "node/capabilities/lsp.ts \u003e class Lsp \u003e method requestHover",
+      "startLine": 33,
+      "startCol": 1,
+      "endLine": 55,
+      "endCol": 4
+    },
+    {
+      "text": "  requestReferences(\n    buffer: NvimBuffer,\n    pos: PositionString,\n  ): Promise\u003cLspReferencesResponse\u003e {\n    return new Promise((resolve, reject) =\u003e {\n      const requestId = this.getRequestId();\n      this.requests[requestId] = { type: \"find_references\", resolve, reject };\n\n      this.nvim.logger.debug(`Initiating references command...`);\n      this.nvim\n        .call(\"nvim_exec_lua\", [\n          `require('magenta').lsp_references_request(\"${requestId}\", ${buffer.id}, ${pos.row}, ${pos.col})`,\n          [],\n        ])\n        .catch((err: Error) =\u003e {\n          this.rejectRequest(requestId, err);\n        });\n    });\n  }",
+      "contextualizedText": "// node/capabilities/lsp.ts \u003e class Lsp \u003e method requestReferences\n\n  requestReferences(\n    buffer: NvimBuffer,\n    pos: PositionString,\n  ): Promise\u003cLspReferencesResponse\u003e {\n    return new Promise((resolve, reject) =\u003e {\n      const requestId = this.getRequestId();\n      this.requests[requestId] = { type: \"find_references\", resolve, reject };\n\n      this.nvim.logger.debug(`Initiating references command...`);\n      this.nvim\n        .call(\"nvim_exec_lua\", [\n          `require('magenta').lsp_references_request(\"${requestId}\", ${buffer.id}, ${pos.row}, ${pos.col})`,\n          [],\n        ])\n        .catch((err: Error) =\u003e {\n          this.rejectRequest(requestId, err);\n        });\n    });\n  }",
+      "headingContext": "node/capabilities/lsp.ts \u003e class Lsp \u003e method requestReferences",
+      "startLine": 57,
+      "startCol": 1,
+      "endLine": 75,
+      "endCol": 4
+    },
+    {
+      "text": "  requestDefinition(\n    buffer: NvimBuffer,\n    pos: PositionString,\n  ): Promise\u003cLspDefinitionResponse\u003e {\n    return new Promise((resolve, reject) =\u003e {\n      const requestId = this.getRequestId();\n      this.requests[requestId] = { type: \"definition\", resolve, reject };\n\n      this.nvim.logger.debug(`Initiating definition command...`);\n      this.nvim\n        .call(\"nvim_exec_lua\", [\n          `require('magenta').lsp_definition_request(\"${requestId}\", ${buffer.id}, ${pos.row}, ${pos.col})`,\n          [],\n        ])\n        .catch((err: Error) =\u003e {\n          this.rejectRequest(requestId, err);\n        });\n    });\n  }",
+      "contextualizedText": "// node/capabilities/lsp.ts \u003e class Lsp \u003e method requestDefinition\n\n  requestDefinition(\n    buffer: NvimBuffer,\n    pos: PositionString,\n  ): Promise\u003cLspDefinitionResponse\u003e {\n    return new Promise((resolve, reject) =\u003e {\n      const requestId = this.getRequestId();\n      this.requests[requestId] = { type: \"definition\", resolve, reject };\n\n      this.nvim.logger.debug(`Initiating definition command...`);\n      this.nvim\n        .call(\"nvim_exec_lua\", [\n          `require('magenta').lsp_definition_request(\"${requestId}\", ${buffer.id}, ${pos.row}, ${pos.col})`,\n          [],\n        ])\n        .catch((err: Error) =\u003e {\n          this.rejectRequest(requestId, err);\n        });\n    });\n  }",
+      "headingContext": "node/capabilities/lsp.ts \u003e class Lsp \u003e method requestDefinition",
+      "startLine": 77,
+      "startCol": 1,
+      "endLine": 95,
+      "endCol": 4
+    },
+    {
+      "text": "  requestTypeDefinition(\n    buffer: NvimBuffer,\n    pos: PositionString,\n  ): Promise\u003cLspTypeDefinitionResponse\u003e {\n    return new Promise((resolve, reject) =\u003e {\n      const requestId = this.getRequestId();\n      this.requests[requestId] = { type: \"type_definition\", resolve, reject };\n\n      this.nvim.logger.debug(`Initiating type definition command...`);\n      this.nvim\n        .call(\"nvim_exec_lua\", [\n          `require('magenta').lsp_type_definition_request(\"${requestId}\", ${buffer.id}, ${pos.row}, ${pos.col})`,\n          [],\n        ])\n        .catch((err: Error) =\u003e {\n          this.rejectRequest(requestId, err);\n        });\n    });\n  }",
+      "contextualizedText": "// node/capabilities/lsp.ts \u003e class Lsp \u003e method requestTypeDefinition\n\n  requestTypeDefinition(\n    buffer: NvimBuffer,\n    pos: PositionString,\n  ): Promise\u003cLspTypeDefinitionResponse\u003e {\n    return new Promise((resolve, reject) =\u003e {\n      const requestId = this.getRequestId();\n      this.requests[requestId] = { type: \"type_definition\", resolve, reject };\n\n      this.nvim.logger.debug(`Initiating type definition command...`);\n      this.nvim\n        .call(\"nvim_exec_lua\", [\n          `require('magenta').lsp_type_definition_request(\"${requestId}\", ${buffer.id}, ${pos.row}, ${pos.col})`,\n          [],\n        ])\n        .catch((err: Error) =\u003e {\n          this.rejectRequest(requestId, err);\n        });\n    });\n  }",
+      "headingContext": "node/capabilities/lsp.ts \u003e class Lsp \u003e method requestTypeDefinition",
+      "startLine": 97,
+      "startCol": 1,
+      "endLine": 115,
+      "endCol": 4
+    },
+    {
+      "text": "  private rejectRequest(requestId: string, error: Error) {\n    const request = this.requests[requestId];\n    if (request) {\n      delete this.requests[requestId];\n      request.reject(error);\n    }\n  }",
+      "contextualizedText": "// node/capabilities/lsp.ts \u003e class Lsp \u003e method rejectRequest\n\n  private rejectRequest(requestId: string, error: Error) {\n    const request = this.requests[requestId];\n    if (request) {\n      delete this.requests[requestId];\n      request.reject(error);\n    }\n  }",
+      "headingContext": "node/capabilities/lsp.ts \u003e class Lsp \u003e method rejectRequest",
+      "startLine": 117,
+      "startCol": 1,
+      "endLine": 123,
+      "endCol": 4
+    },
+    {
+      "text": "  private getRequestId() {\n    const id = this.requestCounter.toString();\n    this.requestCounter += 1;\n    return id;\n  }",
+      "contextualizedText": "// node/capabilities/lsp.ts \u003e class Lsp \u003e method getRequestId\n\n  private getRequestId() {\n    const id = this.requestCounter.toString();\n    this.requestCounter += 1;\n    return id;\n  }",
+      "headingContext": "node/capabilities/lsp.ts \u003e class Lsp \u003e method getRequestId",
+      "startLine": 125,
+      "startCol": 1,
+      "endLine": 129,
+      "endCol": 4
+    },
+    {
+      "text": "  onLspResponse(result: unknown) {\n    this.nvim.logger.debug(`onLspResponse: ${JSON.stringify(result)}`);\n    const [[[requestId, res]]] = result as [[[number, unknown]]];\n    const request = this.requests[requestId];\n    if (!request) {\n      throw new Error(\n        `Expected to find lsp request with id ${requestId} but found none.`,\n      );\n    }\n\n    // biome-ignore lint/suspicious/noExplicitAny: LSP response is dynamically typed and needs to be cast\n    request.resolve(res as any);\n  }",
+      "contextualizedText": "// node/capabilities/lsp.ts \u003e class Lsp \u003e method onLspResponse\n\n  onLspResponse(result: unknown) {\n    this.nvim.logger.debug(`onLspResponse: ${JSON.stringify(result)}`);\n    const [[[requestId, res]]] = result as [[[number, unknown]]];\n    const request = this.requests[requestId];\n    if (!request) {\n      throw new Error(\n        `Expected to find lsp request with id ${requestId} but found none.`,\n      );\n    }\n\n    // biome-ignore lint/suspicious/noExplicitAny: LSP response is dynamically typed and needs to be cast\n    request.resolve(res as any);\n  }",
+      "headingContext": "node/capabilities/lsp.ts \u003e class Lsp \u003e method onLspResponse",
+      "startLine": 131,
+      "startCol": 1,
+      "endLine": 143,
+      "endCol": 4
+    },
+    {
+      "text": "// LSP Protocol types - these document what we expect from vim.lsp.buf_request_all responses\n\ntype LspPosition = {\n  line: number;\n  character: number;\n};\n\nexport type LspRange = {\n  start: LspPosition;\n  end: LspPosition;\n};\n\ntype LspHoverResponse = (null | {\n  result: {\n    range: LspRange;\n    contents: {\n      kind: string;\n      value: string;\n    };\n  };\n})[];\n\ntype LspReferencesResponse = (null | {\n  result: {\n    uri: string;\n    range: LspRange;\n  }[];\n})[];\n\n// Definition responses can have two formats:\n// 1. Simple format with uri and range\n// 2. LSP LocationLink format with targetUri and targetRange\nexport type LspDefinitionResponse = (null | {\n  result: (\n    | {\n        uri: string;\n        range: LspRange;\n      }\n    | {\n        targetUri: string;\n        targetRange: LspRange;\n        targetSelectionRange?: LspRange;\n        originSelectionRange?: LspRange;\n      }\n  )[];\n})[];\n\ntype LspTypeDefinitionResponse = (null | {\n  result: (\n    | {\n        uri: string;\n        range: LspRange;\n      }\n    | {\n        targetUri: string;\n        targetRange: LspRange;\n        targetSelectionRange?: LspRange;\n        originSelectionRange?: LspRange;\n      }\n  )[];\n})[];",
+      "contextualizedText": "// node/capabilities/lsp.ts\n\n// LSP Protocol types - these document what we expect from vim.lsp.buf_request_all responses\n\ntype LspPosition = {\n  line: number;\n  character: number;\n};\n\nexport type LspRange = {\n  start: LspPosition;\n  end: LspPosition;\n};\n\ntype LspHoverResponse = (null | {\n  result: {\n    range: LspRange;\n    contents: {\n      kind: string;\n      value: string;\n    };\n  };\n})[];\n\ntype LspReferencesResponse = (null | {\n  result: {\n    uri: string;\n    range: LspRange;\n  }[];\n})[];\n\n// Definition responses can have two formats:\n// 1. Simple format with uri and range\n// 2. LSP LocationLink format with targetUri and targetRange\nexport type LspDefinitionResponse = (null | {\n  result: (\n    | {\n        uri: string;\n        range: LspRange;\n      }\n    | {\n        targetUri: string;\n        targetRange: LspRange;\n        targetSelectionRange?: LspRange;\n        originSelectionRange?: LspRange;\n      }\n  )[];\n})[];\n\ntype LspTypeDefinitionResponse = (null | {\n  result: (\n    | {\n        uri: string;\n        range: LspRange;\n      }\n    | {\n        targetUri: string;\n        targetRange: LspRange;\n        targetSelectionRange?: LspRange;\n        originSelectionRange?: LspRange;\n      }\n  )[];\n})[];",
+      "headingContext": "node/capabilities/lsp.ts",
+      "startLine": 146,
+      "startCol": 1,
+      "endLine": 206,
+      "endCol": 6
+    }
+  ]
+}

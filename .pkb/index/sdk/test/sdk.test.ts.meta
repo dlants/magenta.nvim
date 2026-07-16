@@ -1,0 +1,51 @@
+{
+  "blobSha": "8d239e21f5995afa1f64e38f7cc3cee4c0cadf3d",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { type ChildProcess, spawn } from \"node:child_process\";\nimport path from \"node:path\";\nimport { describe, expect, it } from \"vitest\";\nimport type { MagentaToScript, ScriptToMagenta } from \"../protocol.ts\";\nimport { runScript } from \"../testing.ts\";\nimport \"./fixtures/two-threads.ts\";\n\nconst FIXTURES = path.join(import.meta.dirname, \"fixtures\");",
+      "contextualizedText": "// sdk/test/sdk.test.ts\n\nimport { type ChildProcess, spawn } from \"node:child_process\";\nimport path from \"node:path\";\nimport { describe, expect, it } from \"vitest\";\nimport type { MagentaToScript, ScriptToMagenta } from \"../protocol.ts\";\nimport { runScript } from \"../testing.ts\";\nimport \"./fixtures/two-threads.ts\";\n\nconst FIXTURES = path.join(import.meta.dirname, \"fixtures\");",
+      "headingContext": "sdk/test/sdk.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 61
+    },
+    {
+      "text": "function forkScript(file: string): ChildProcess {\n  return spawn(\n    process.execPath,\n    [\"--experimental-transform-types\", path.join(FIXTURES, file)],\n    {\n      stdio: [\"inherit\", \"inherit\", \"inherit\", \"ipc\"],\n      env: { ...process.env, MAGENTA_SDK_CHILD: \"1\" },\n    },\n  );\n}",
+      "contextualizedText": "// sdk/test/sdk.test.ts \u003e function forkScript\n\nfunction forkScript(file: string): ChildProcess {\n  return spawn(\n    process.execPath,\n    [\"--experimental-transform-types\", path.join(FIXTURES, file)],\n    {\n      stdio: [\"inherit\", \"inherit\", \"inherit\", \"ipc\"],\n      env: { ...process.env, MAGENTA_SDK_CHILD: \"1\" },\n    },\n  );\n}",
+      "headingContext": "sdk/test/sdk.test.ts \u003e function forkScript",
+      "startLine": 10,
+      "startCol": 1,
+      "endLine": 19,
+      "endCol": 2
+    },
+    {
+      "text": "function nextMessage(child: ChildProcess): Promise\u003cScriptToMagenta\u003e {\n  return new Promise((resolve) =\u003e {\n    child.once(\"message\", (msg) =\u003e resolve(msg as ScriptToMagenta));\n  });\n}",
+      "contextualizedText": "// sdk/test/sdk.test.ts \u003e function nextMessage\n\nfunction nextMessage(child: ChildProcess): Promise\u003cScriptToMagenta\u003e {\n  return new Promise((resolve) =\u003e {\n    child.once(\"message\", (msg) =\u003e resolve(msg as ScriptToMagenta));\n  });\n}",
+      "headingContext": "sdk/test/sdk.test.ts \u003e function nextMessage",
+      "startLine": 21,
+      "startCol": 1,
+      "endLine": 25,
+      "endCol": 2
+    },
+    {
+      "text": "describe(\"sdk IPC\", () =\u003e {\n  it(\"registers scripts and reports them over IPC\", async () =\u003e {\n    const child = forkScript(\"two-scripts.ts\");\n    try {\n      const msg = await nextMessage(child);\n      expect(msg.type).toBe(\"register\");\n      if (msg.type === \"register\") {\n        const names = msg.scripts.map((s) =\u003e s.name).sort();\n        expect(names).toEqual([\"alpha\", \"beta\"]);\n        const alpha = msg.scripts.find((s) =\u003e s.name === \"alpha\");\n        expect(alpha?.description).toBe(\"the alpha script\");\n        expect(alpha?.parameterSchema).toBeDefined();\n      }\n    } finally {\n      child.kill();\n    }\n  });",
+      "contextualizedText": "// sdk/test/sdk.test.ts\n\ndescribe(\"sdk IPC\", () =\u003e {\n  it(\"registers scripts and reports them over IPC\", async () =\u003e {\n    const child = forkScript(\"two-scripts.ts\");\n    try {\n      const msg = await nextMessage(child);\n      expect(msg.type).toBe(\"register\");\n      if (msg.type === \"register\") {\n        const names = msg.scripts.map((s) =\u003e s.name).sort();\n        expect(names).toEqual([\"alpha\", \"beta\"]);\n        const alpha = msg.scripts.find((s) =\u003e s.name === \"alpha\");\n        expect(alpha?.description).toBe(\"the alpha script\");\n        expect(alpha?.parameterSchema).toBeDefined();\n      }\n    } finally {\n      child.kill();\n    }\n  });",
+      "headingContext": "sdk/test/sdk.test.ts",
+      "startLine": 27,
+      "startCol": 1,
+      "endLine": 43,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"runner thread()/log() produce correct IPC and resolve on thread-result\", async () =\u003e {\n    const child = forkScript(\"log-then-thread.ts\");\n    const messages: ScriptToMagenta[] = [];\n    try {\n      // wait for register, then invoke\n      const reg = await nextMessage(child);\n      expect(reg.type).toBe(\"register\");\n\n      const collected: Promise\u003cvoid\u003e = new Promise((resolve) =\u003e {\n        child.on(\"message\", (raw) =\u003e {\n          const msg = raw as ScriptToMagenta;\n          messages.push(msg);\n          if (msg.type === \"create-thread\") {\n            const reply: MagentaToScript = {\n              type: \"thread-result\",\n              requestId: msg.requestId,\n              result: { status: \"ok\", value: { answer: 42 } },\n            };\n            child.send(reply);\n          }\n          if (msg.type === \"done\") resolve();\n        });\n      });\n\n      const invoke: MagentaToScript = {\n        type: \"run-script\",\n        scriptName: \"worker\",\n        parameters: {},\n      };\n      child.send(invoke);\n\n      await collected;\n\n      const types = messages.map((m) =\u003e m.type);\n      expect(types).toEqual([\"log\", \"create-thread\", \"log\", \"done\"]);\n      const threadMsg = messages.find((m) =\u003e m.type === \"create-thread\");\n      expect(\n        threadMsg \u0026\u0026 threadMsg.type === \"create-thread\" \u0026\u0026 threadMsg.prompt,\n      ).toBe(\"p\");\n    } finally {\n      child.kill();\n    }\n  });\n\n  it(\"test harness drives a runner in-process and feeds yields back\", async () =\u003e {\n    const { handle, donePromise } = runScript(\"sequential\", {});\n\n    const first = await handle.nextThread();\n    expect(first.prompt).toBe(\"first prompt\");\n    first.yield({ value: \"A\" });\n\n    const second = await handle.nextThread();\n    expect(second.prompt).toBe(\"second using A\");\n    second.yield({ value: \"B\" });\n\n    await donePromise;\n    expect(handle.logs).toEqual([\"starting\", \"done B\"]);\n  });",
+      "contextualizedText": "// sdk/test/sdk.test.ts\n\nit(\"runner thread()/log() produce correct IPC and resolve on thread-result\", async () =\u003e {\n    const child = forkScript(\"log-then-thread.ts\");\n    const messages: ScriptToMagenta[] = [];\n    try {\n      // wait for register, then invoke\n      const reg = await nextMessage(child);\n      expect(reg.type).toBe(\"register\");\n\n      const collected: Promise\u003cvoid\u003e = new Promise((resolve) =\u003e {\n        child.on(\"message\", (raw) =\u003e {\n          const msg = raw as ScriptToMagenta;\n          messages.push(msg);\n          if (msg.type === \"create-thread\") {\n            const reply: MagentaToScript = {\n              type: \"thread-result\",\n              requestId: msg.requestId,\n              result: { status: \"ok\", value: { answer: 42 } },\n            };\n            child.send(reply);\n          }\n          if (msg.type === \"done\") resolve();\n        });\n      });\n\n      const invoke: MagentaToScript = {\n        type: \"run-script\",\n        scriptName: \"worker\",\n        parameters: {},\n      };\n      child.send(invoke);\n\n      await collected;\n\n      const types = messages.map((m) =\u003e m.type);\n      expect(types).toEqual([\"log\", \"create-thread\", \"log\", \"done\"]);\n      const threadMsg = messages.find((m) =\u003e m.type === \"create-thread\");\n      expect(\n        threadMsg \u0026\u0026 threadMsg.type === \"create-thread\" \u0026\u0026 threadMsg.prompt,\n      ).toBe(\"p\");\n    } finally {\n      child.kill();\n    }\n  });\n\n  it(\"test harness drives a runner in-process and feeds yields back\", async () =\u003e {\n    const { handle, donePromise } = runScript(\"sequential\", {});\n\n    const first = await handle.nextThread();\n    expect(first.prompt).toBe(\"first prompt\");\n    first.yield({ value: \"A\" });\n\n    const second = await handle.nextThread();\n    expect(second.prompt).toBe(\"second using A\");\n    second.yield({ value: \"B\" });\n\n    await donePromise;\n    expect(handle.logs).toEqual([\"starting\", \"done B\"]);\n  });",
+      "headingContext": "sdk/test/sdk.test.ts",
+      "startLine": 45,
+      "startCol": 3,
+      "endLine": 102,
+      "endCol": 6
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "blobSha": "f2762d4a0ed59e51d95e5d2bab5e50f4d5b958b9",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "github: dlants\n",
+      "contextualizedText": "# .github/FUNDING.yml\n\ngithub: dlants\n",
+      "headingContext": ".github/FUNDING.yml",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 2,
+      "endCol": 1
+    }
+  ]
+}

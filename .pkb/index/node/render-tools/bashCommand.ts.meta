@@ -1,0 +1,105 @@
+{
+  "blobSha": "60a70414638be09e001a74297e5a3a686b53f1df",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type {\n  BashCommand,\n  CompletedToolInfo,\n  DisplayContext,\n  ToolRequestId,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport type { OutputLine } from \"../capabilities/shell.ts\";\nimport type { ToolViewState } from \"../chat/thread.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { MagentaOptions } from \"../options.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport {\n  d,\n  type VDOMNode,\n  withBindings,\n  withCode,\n  withInlineCode,\n} from \"../tea/view.ts\";\nimport type { HomeDir, NvimCwd, UnresolvedFilePath } from \"../utils/files.ts\";\nimport { formatTokens } from \"../utils/tokens.ts\";\n\ntype BashProgress = BashCommand.BashProgress;\n\nimport { openFileInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\n\ntype Input = {\n  command: string;\n};\n\nexport type RenderContext = {\n  getDisplayWidth: () =\u003e number;\n  nvim: Nvim;\n  cwd: NvimCwd;\n  homeDir: HomeDir;\n  options: MagentaOptions;\n  threadDispatch: Dispatch\u003c{\n    type: \"toggle-tool-result\";\n    toolRequestId: ToolRequestId;\n  }\u003e;\n};",
+      "contextualizedText": "// node/render-tools/bashCommand.ts\n\nimport type {\n  BashCommand,\n  CompletedToolInfo,\n  DisplayContext,\n  ToolRequestId,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport type { OutputLine } from \"../capabilities/shell.ts\";\nimport type { ToolViewState } from \"../chat/thread.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { MagentaOptions } from \"../options.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport {\n  d,\n  type VDOMNode,\n  withBindings,\n  withCode,\n  withInlineCode,\n} from \"../tea/view.ts\";\nimport type { HomeDir, NvimCwd, UnresolvedFilePath } from \"../utils/files.ts\";\nimport { formatTokens } from \"../utils/tokens.ts\";\n\ntype BashProgress = BashCommand.BashProgress;\n\nimport { openFileInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\n\ntype Input = {\n  command: string;\n};\n\nexport type RenderContext = {\n  getDisplayWidth: () =\u003e number;\n  nvim: Nvim;\n  cwd: NvimCwd;\n  homeDir: HomeDir;\n  options: MagentaOptions;\n  threadDispatch: Dispatch\u003c{\n    type: \"toggle-tool-result\";\n    toolRequestId: ToolRequestId;\n  }\u003e;\n};",
+      "headingContext": "node/render-tools/bashCommand.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 41,
+      "endCol": 3
+    },
+    {
+      "text": "export function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  return d`⚡ ${withInlineCode(d`\\`${input.command}\\``)}`;\n}",
+      "contextualizedText": "// node/render-tools/bashCommand.ts \u003e function renderSummary\n\nexport function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  return d`⚡ ${withInlineCode(d`\\`${input.command}\\``)}`;\n}",
+      "headingContext": "node/render-tools/bashCommand.ts \u003e function renderSummary",
+      "startLine": 43,
+      "startCol": 1,
+      "endLine": 49,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderInput(\n  _request: UnionToolRequest,\n  _displayContext: DisplayContext,\n  _expanded: boolean,\n): VDOMNode | undefined {\n  return undefined;\n}",
+      "contextualizedText": "// node/render-tools/bashCommand.ts \u003e function renderInput\n\nexport function renderInput(\n  _request: UnionToolRequest,\n  _displayContext: DisplayContext,\n  _expanded: boolean,\n): VDOMNode | undefined {\n  return undefined;\n}",
+      "headingContext": "node/render-tools/bashCommand.ts \u003e function renderInput",
+      "startLine": 51,
+      "startCol": 1,
+      "endLine": 57,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderProgress(\n  _request: UnionToolRequest,\n  progress: BashProgress,\n  context: RenderContext,\n  expanded: boolean,\n): VDOMNode | undefined {\n  if (!expanded) {\n    const formattedOutput = formatOutputPreview(\n      progress.liveOutput,\n      context.getDisplayWidth,\n    );\n    const timing =\n      progress.startTime !== undefined\n        ? d`(${String(Math.floor((Date.now() - progress.startTime) / 1000))}s / 300s) `\n        : undefined;\n    if (formattedOutput) {\n      return d`${timing ?? d``}${withCode(d`${formattedOutput}`)}`;\n    }\n    return timing;\n  }\n\n  return renderOutputDetail(progress.liveOutput, undefined, context);\n}",
+      "contextualizedText": "// node/render-tools/bashCommand.ts \u003e function renderProgress\n\nexport function renderProgress(\n  _request: UnionToolRequest,\n  progress: BashProgress,\n  context: RenderContext,\n  expanded: boolean,\n): VDOMNode | undefined {\n  if (!expanded) {\n    const formattedOutput = formatOutputPreview(\n      progress.liveOutput,\n      context.getDisplayWidth,\n    );\n    const timing =\n      progress.startTime !== undefined\n        ? d`(${String(Math.floor((Date.now() - progress.startTime) / 1000))}s / 300s) `\n        : undefined;\n    if (formattedOutput) {\n      return d`${timing ?? d``}${withCode(d`${formattedOutput}`)}`;\n    }\n    return timing;\n  }\n\n  return renderOutputDetail(progress.liveOutput, undefined, context);\n}",
+      "headingContext": "node/render-tools/bashCommand.ts \u003e function renderProgress",
+      "startLine": 59,
+      "startCol": 1,
+      "endLine": 81,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderResultSummary(info: CompletedToolInfo): VDOMNode {\n  const result = info.result.result;\n\n  if (result.status === \"error\") {\n    return d`${result.error}`;\n  }\n\n  let exitCode: number | undefined;\n  let signal: string | undefined;\n\n  if (info.structuredResult.toolName === \"bash_command\") {\n    const sr = info.structuredResult as BashCommand.StructuredResult;\n    exitCode = sr.exitCode;\n    signal = sr.signal;\n  }\n\n  if (signal) {\n    return d`Terminated by ${signal}`;\n  }\n\n  if (exitCode !== undefined \u0026\u0026 exitCode !== 0) {\n    return d`exit ${exitCode.toString()}`;\n  }\n\n  return d`exit 0`;\n}",
+      "contextualizedText": "// node/render-tools/bashCommand.ts \u003e function renderResultSummary\n\nexport function renderResultSummary(info: CompletedToolInfo): VDOMNode {\n  const result = info.result.result;\n\n  if (result.status === \"error\") {\n    return d`${result.error}`;\n  }\n\n  let exitCode: number | undefined;\n  let signal: string | undefined;\n\n  if (info.structuredResult.toolName === \"bash_command\") {\n    const sr = info.structuredResult as BashCommand.StructuredResult;\n    exitCode = sr.exitCode;\n    signal = sr.signal;\n  }\n\n  if (signal) {\n    return d`Terminated by ${signal}`;\n  }\n\n  if (exitCode !== undefined \u0026\u0026 exitCode !== 0) {\n    return d`exit ${exitCode.toString()}`;\n  }\n\n  return d`exit 0`;\n}",
+      "headingContext": "node/render-tools/bashCommand.ts \u003e function renderResultSummary",
+      "startLine": 83,
+      "startCol": 1,
+      "endLine": 108,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderResult(\n  info: CompletedToolInfo,\n  context: RenderContext,\n  toolViewState: ToolViewState,\n  toolRequestId: ToolRequestId,\n): VDOMNode | undefined {\n  const expanded = toolViewState.resultExpanded;\n  const content = expanded\n    ? renderResultDetail(info, context)\n    : renderResultPreview(info, context);\n  if (!content) return undefined;\n  return withBindings(content, {\n    \"=\": () =\u003e\n      context.threadDispatch({\n        type: \"toggle-tool-result\",\n        toolRequestId,\n      }),\n  });\n}",
+      "contextualizedText": "// node/render-tools/bashCommand.ts \u003e function renderResult\n\nexport function renderResult(\n  info: CompletedToolInfo,\n  context: RenderContext,\n  toolViewState: ToolViewState,\n  toolRequestId: ToolRequestId,\n): VDOMNode | undefined {\n  const expanded = toolViewState.resultExpanded;\n  const content = expanded\n    ? renderResultDetail(info, context)\n    : renderResultPreview(info, context);\n  if (!content) return undefined;\n  return withBindings(content, {\n    \"=\": () =\u003e\n      context.threadDispatch({\n        type: \"toggle-tool-result\",\n        toolRequestId,\n      }),\n  });\n}",
+      "headingContext": "node/render-tools/bashCommand.ts \u003e function renderResult",
+      "startLine": 110,
+      "startCol": 1,
+      "endLine": 128,
+      "endCol": 2
+    },
+    {
+      "text": "function renderResultPreview(\n  info: CompletedToolInfo,\n  context: RenderContext,\n): VDOMNode | undefined {\n  const result = info.result.result;\n\n  if (result.status !== \"ok\" || result.value.length === 0) {\n    return undefined;\n  }\n\n  const firstValue = result.value[0];\n  if (firstValue.type !== \"text\") {\n    return undefined;\n  }\n\n  const outputText =\n    info.structuredResult.toolName === \"bash_command\"\n      ? (info.structuredResult as BashCommand.StructuredResult).outputText\n      : firstValue.text;\n  const exitCode =\n    info.structuredResult.toolName === \"bash_command\"\n      ? (info.structuredResult as BashCommand.StructuredResult).exitCode\n      : undefined;\n  const logFileView =\n    info.structuredResult.toolName === \"bash_command\"\n      ? (() =\u003e {\n          const sr = info.structuredResult as BashCommand.StructuredResult;\n          return sr.wasAbbreviated \u0026\u0026\n            sr.logFilePath \u0026\u0026\n            sr.logFileCharCount !== undefined\n            ? renderLogFileLinkDirect(\n                sr.logFilePath,\n                sr.logFileCharCount,\n                context,\n              )\n            : d``;\n        })()\n      : d``;\n\n  const lines = outputText.split(\"\\n\");\n  const maxLines = 10;\n  const maxLength = context.getDisplayWidth() - 5;\n\n  let previewLines = lines.length \u003e maxLines ? lines.slice(-maxLines) : lines;\n  previewLines = previewLines.map((line) =\u003e\n    line.length \u003e maxLength ? `${line.substring(0, maxLength)}...` : line,\n  );\n\n  const previewText = previewLines.join(\"\\n\");\n\n  if (exitCode !== undefined \u0026\u0026 exitCode !== 0) {\n    return d`❌ Exit code: ${exitCode.toString()}\n${withCode(d`${previewText}`)}${logFileView}`;\n  }\n\n  return d`${withCode(d`${previewText}`)}${logFileView}`;\n}",
+      "contextualizedText": "// node/render-tools/bashCommand.ts \u003e function renderResultPreview\n\nfunction renderResultPreview(\n  info: CompletedToolInfo,\n  context: RenderContext,\n): VDOMNode | undefined {\n  const result = info.result.result;\n\n  if (result.status !== \"ok\" || result.value.length === 0) {\n    return undefined;\n  }\n\n  const firstValue = result.value[0];\n  if (firstValue.type !== \"text\") {\n    return undefined;\n  }\n\n  const outputText =\n    info.structuredResult.toolName === \"bash_command\"\n      ? (info.structuredResult as BashCommand.StructuredResult).outputText\n      : firstValue.text;\n  const exitCode =\n    info.structuredResult.toolName === \"bash_command\"\n      ? (info.structuredResult as BashCommand.StructuredResult).exitCode\n      : undefined;\n  const logFileView =\n    info.structuredResult.toolName === \"bash_command\"\n      ? (() =\u003e {\n          const sr = info.structuredResult as BashCommand.StructuredResult;\n          return sr.wasAbbreviated \u0026\u0026\n            sr.logFilePath \u0026\u0026\n            sr.logFileCharCount !== undefined\n            ? renderLogFileLinkDirect(\n                sr.logFilePath,\n                sr.logFileCharCount,\n                context,\n              )\n            : d``;\n        })()\n      : d``;\n\n  const lines = outputText.split(\"\\n\");\n  const maxLines = 10;\n  const maxLength = context.getDisplayWidth() - 5;\n\n  let previewLines = lines.length \u003e maxLines ? lines.slice(-maxLines) : lines;\n  previewLines = previewLines.map((line) =\u003e\n    line.length \u003e maxLength ? `${line.substring(0, maxLength)}...` : line,\n  );\n\n  const previewText = previewLines.join(\"\\n\");\n\n  if (exitCode !== undefined \u0026\u0026 exitCode !== 0) {\n    return d`❌ Exit code: ${exitCode.toString()}\n${withCode(d`${previewText}`)}${logFileView}`;\n  }\n\n  return d`${withCode(d`${previewText}`)}${logFileView}`;\n}",
+      "headingContext": "node/render-tools/bashCommand.ts \u003e function renderResultPreview",
+      "startLine": 130,
+      "startCol": 1,
+      "endLine": 186,
+      "endCol": 2
+    },
+    {
+      "text": "function renderResultDetail(\n  info: CompletedToolInfo,\n  context: RenderContext,\n): VDOMNode | undefined {\n  const input = info.request.input as Input;\n  const result = info.result.result;\n\n  if (result.status !== \"ok\" || result.value.length === 0) {\n    return result.status === \"error\" ? d`❌ ${result.error}` : undefined;\n  }\n\n  const firstValue = result.value[0];\n  if (firstValue.type !== \"text\") {\n    return undefined;\n  }\n\n  const outputText =\n    info.structuredResult.toolName === \"bash_command\"\n      ? (info.structuredResult as BashCommand.StructuredResult).outputText\n      : firstValue.text;\n  const logFileView =\n    info.structuredResult.toolName === \"bash_command\"\n      ? (() =\u003e {\n          const sr = info.structuredResult as BashCommand.StructuredResult;\n          return sr.wasAbbreviated \u0026\u0026\n            sr.logFilePath \u0026\u0026\n            sr.logFileCharCount !== undefined\n            ? renderLogFileLinkDirect(\n                sr.logFilePath,\n                sr.logFileCharCount,\n                context,\n              )\n            : d``;\n        })()\n      : d``;\n\n  return d`command: ${withInlineCode(d`\\`${input.command}\\``)}\n${withCode(d`${outputText}`)}${logFileView}`;\n}",
+      "contextualizedText": "// node/render-tools/bashCommand.ts \u003e function renderResultDetail\n\nfunction renderResultDetail(\n  info: CompletedToolInfo,\n  context: RenderContext,\n): VDOMNode | undefined {\n  const input = info.request.input as Input;\n  const result = info.result.result;\n\n  if (result.status !== \"ok\" || result.value.length === 0) {\n    return result.status === \"error\" ? d`❌ ${result.error}` : undefined;\n  }\n\n  const firstValue = result.value[0];\n  if (firstValue.type !== \"text\") {\n    return undefined;\n  }\n\n  const outputText =\n    info.structuredResult.toolName === \"bash_command\"\n      ? (info.structuredResult as BashCommand.StructuredResult).outputText\n      : firstValue.text;\n  const logFileView =\n    info.structuredResult.toolName === \"bash_command\"\n      ? (() =\u003e {\n          const sr = info.structuredResult as BashCommand.StructuredResult;\n          return sr.wasAbbreviated \u0026\u0026\n            sr.logFilePath \u0026\u0026\n            sr.logFileCharCount !== undefined\n            ? renderLogFileLinkDirect(\n                sr.logFilePath,\n                sr.logFileCharCount,\n                context,\n              )\n            : d``;\n        })()\n      : d``;\n\n  return d`command: ${withInlineCode(d`\\`${input.command}\\``)}\n${withCode(d`${outputText}`)}${logFileView}`;\n}",
+      "headingContext": "node/render-tools/bashCommand.ts \u003e function renderResultDetail",
+      "startLine": 188,
+      "startCol": 1,
+      "endLine": 226,
+      "endCol": 2
+    },
+    {
+      "text": "function formatOutputPreview(\n  output: OutputLine[],\n  getDisplayWidth: () =\u003e number,\n): string {\n  let formattedOutput = \"\";\n  let currentStream: \"stdout\" | \"stderr\" | null = null;\n  const lastTenLines = output.slice(-10);\n\n  for (const line of lastTenLines) {\n    if (currentStream !== line.stream) {\n      formattedOutput += line.stream === \"stdout\" ? \"stdout:\\n\" : \"stderr:\\n\";\n      currentStream = line.stream;\n    }\n    const displayWidth = getDisplayWidth() - 5;\n    const displayText =\n      line.text.length \u003e displayWidth\n        ? `${line.text.substring(0, displayWidth)}...`\n        : line.text;\n    formattedOutput += `${displayText}\\n`;\n  }\n\n  return formattedOutput;\n}",
+      "contextualizedText": "// node/render-tools/bashCommand.ts \u003e function formatOutputPreview\n\nfunction formatOutputPreview(\n  output: OutputLine[],\n  getDisplayWidth: () =\u003e number,\n): string {\n  let formattedOutput = \"\";\n  let currentStream: \"stdout\" | \"stderr\" | null = null;\n  const lastTenLines = output.slice(-10);\n\n  for (const line of lastTenLines) {\n    if (currentStream !== line.stream) {\n      formattedOutput += line.stream === \"stdout\" ? \"stdout:\\n\" : \"stderr:\\n\";\n      currentStream = line.stream;\n    }\n    const displayWidth = getDisplayWidth() - 5;\n    const displayText =\n      line.text.length \u003e displayWidth\n        ? `${line.text.substring(0, displayWidth)}...`\n        : line.text;\n    formattedOutput += `${displayText}\\n`;\n  }\n\n  return formattedOutput;\n}",
+      "headingContext": "node/render-tools/bashCommand.ts \u003e function formatOutputPreview",
+      "startLine": 228,
+      "startCol": 1,
+      "endLine": 250,
+      "endCol": 2
+    },
+    {
+      "text": "function renderOutputDetail(\n  output: OutputLine[],\n  logFilePath: string | undefined,\n  context: RenderContext,\n): VDOMNode {\n  let formattedOutput = \"\";\n  let currentStream: \"stdout\" | \"stderr\" | null = null;\n\n  for (const line of output) {\n    if (currentStream !== line.stream) {\n      formattedOutput += line.stream === \"stdout\" ? \"stdout:\\n\" : \"stderr:\\n\";\n      currentStream = line.stream;\n    }\n    formattedOutput += `${line.text}\\n`;\n  }\n\n  const charCount = output.reduce((acc, line) =\u003e acc + line.text.length + 1, 0);\n  const logFileView = logFilePath\n    ? renderLogFileLinkDirect(logFilePath, charCount, context)\n    : d``;\n\n  return d`${withCode(d`${formattedOutput}`)}${logFileView}`;\n}",
+      "contextualizedText": "// node/render-tools/bashCommand.ts \u003e function renderOutputDetail\n\nfunction renderOutputDetail(\n  output: OutputLine[],\n  logFilePath: string | undefined,\n  context: RenderContext,\n): VDOMNode {\n  let formattedOutput = \"\";\n  let currentStream: \"stdout\" | \"stderr\" | null = null;\n\n  for (const line of output) {\n    if (currentStream !== line.stream) {\n      formattedOutput += line.stream === \"stdout\" ? \"stdout:\\n\" : \"stderr:\\n\";\n      currentStream = line.stream;\n    }\n    formattedOutput += `${line.text}\\n`;\n  }\n\n  const charCount = output.reduce((acc, line) =\u003e acc + line.text.length + 1, 0);\n  const logFileView = logFilePath\n    ? renderLogFileLinkDirect(logFilePath, charCount, context)\n    : d``;\n\n  return d`${withCode(d`${formattedOutput}`)}${logFileView}`;\n}",
+      "headingContext": "node/render-tools/bashCommand.ts \u003e function renderOutputDetail",
+      "startLine": 252,
+      "startCol": 1,
+      "endLine": 274,
+      "endCol": 2
+    },
+    {
+      "text": "function renderLogFileLinkDirect(\n  logFilePath: string,\n  charCount: number,\n  context: RenderContext,\n): VDOMNode {\n  return withBindings(\n    d`\\nFull output (${formatTokens(charCount)}): ${withInlineCode(d`\\`${logFilePath}\\``)}`,\n    {\n      \"\u003cCR\u003e\": () =\u003e {\n        openFileInNonMagentaWindow(\n          logFilePath as UnresolvedFilePath,\n          context,\n        ).catch((e: Error) =\u003e context.nvim.logger.error(e.message));\n      },\n    },\n  );\n}",
+      "contextualizedText": "// node/render-tools/bashCommand.ts \u003e function renderLogFileLinkDirect\n\nfunction renderLogFileLinkDirect(\n  logFilePath: string,\n  charCount: number,\n  context: RenderContext,\n): VDOMNode {\n  return withBindings(\n    d`\\nFull output (${formatTokens(charCount)}): ${withInlineCode(d`\\`${logFilePath}\\``)}`,\n    {\n      \"\u003cCR\u003e\": () =\u003e {\n        openFileInNonMagentaWindow(\n          logFilePath as UnresolvedFilePath,\n          context,\n        ).catch((e: Error) =\u003e context.nvim.logger.error(e.message));\n      },\n    },\n  );\n}",
+      "headingContext": "node/render-tools/bashCommand.ts \u003e function renderLogFileLinkDirect",
+      "startLine": 276,
+      "startCol": 1,
+      "endLine": 292,
+      "endCol": 2
+    }
+  ]
+}

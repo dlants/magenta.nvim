@@ -1,0 +1,60 @@
+{
+  "blobSha": "bde47186e8340ac06572dd5c171293b4795a4e01",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { Line } from \"../nvim/buffer.ts\";\nimport type { ExtmarkId, ExtmarkOptions } from \"../nvim/extmarks.ts\";\nimport type { ByteIdx } from \"../nvim/window.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport type { Bindings } from \"./bindings.ts\";\nimport { calculatePosition, replaceBetweenPositions } from \"./util.ts\";\nimport type { MountedVDOM, MountPoint, VDOMNode } from \"./view.ts\";",
+      "contextualizedText": "// node/tea/render.ts\n\nimport type { Line } from \"../nvim/buffer.ts\";\nimport type { ExtmarkId, ExtmarkOptions } from \"../nvim/extmarks.ts\";\nimport type { ByteIdx } from \"../nvim/window.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport type { Bindings } from \"./bindings.ts\";\nimport { calculatePosition, replaceBetweenPositions } from \"./util.ts\";\nimport type { MountedVDOM, MountPoint, VDOMNode } from \"./view.ts\";",
+      "headingContext": "node/tea/render.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 7,
+      "endCol": 68
+    },
+    {
+      "text": "export async function render({\n  vdom,\n  mount,\n}: {\n  vdom: VDOMNode;\n  mount: MountPoint;\n}): Promise\u003cMountedVDOM\u003e {\n  type NodePosition =\n    | {\n        type: \"string\";\n        content: string;\n        start: ByteIdx;\n        end: ByteIdx;\n        bindings?: Bindings | undefined;\n        extmarkOptions?: ExtmarkOptions | undefined;\n      }\n    | {\n        type: \"node\";\n        template: TemplateStringsArray;\n        children: NodePosition[];\n        start: ByteIdx;\n        end: ByteIdx;\n        bindings?: Bindings | undefined;\n        extmarkOptions?: ExtmarkOptions | undefined;\n      }\n    | {\n        type: \"array\";\n        children: NodePosition[];\n        start: ByteIdx;\n        end: ByteIdx;\n        bindings?: Bindings | undefined;\n        extmarkOptions?: ExtmarkOptions | undefined;\n      };\n\n  // First pass: build the complete string and create tree structure with positions\n  const contents: string[] = [];\n  let currentByteWidth: ByteIdx = 0 as ByteIdx;",
+      "contextualizedText": "// node/tea/render.ts \u003e function render\n\nexport async function render({\n  vdom,\n  mount,\n}: {\n  vdom: VDOMNode;\n  mount: MountPoint;\n}): Promise\u003cMountedVDOM\u003e {\n  type NodePosition =\n    | {\n        type: \"string\";\n        content: string;\n        start: ByteIdx;\n        end: ByteIdx;\n        bindings?: Bindings | undefined;\n        extmarkOptions?: ExtmarkOptions | undefined;\n      }\n    | {\n        type: \"node\";\n        template: TemplateStringsArray;\n        children: NodePosition[];\n        start: ByteIdx;\n        end: ByteIdx;\n        bindings?: Bindings | undefined;\n        extmarkOptions?: ExtmarkOptions | undefined;\n      }\n    | {\n        type: \"array\";\n        children: NodePosition[];\n        start: ByteIdx;\n        end: ByteIdx;\n        bindings?: Bindings | undefined;\n        extmarkOptions?: ExtmarkOptions | undefined;\n      };\n\n  // First pass: build the complete string and create tree structure with positions\n  const contents: string[] = [];\n  let currentByteWidth: ByteIdx = 0 as ByteIdx;",
+      "headingContext": "node/tea/render.ts \u003e function render",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 45,
+      "endCol": 48
+    },
+    {
+      "text": "  function traverse(node: VDOMNode): NodePosition {\n    switch (node.type) {\n      case \"string\": {\n        const start = currentByteWidth;\n        contents.push(node.content);\n        currentByteWidth = (currentByteWidth +\n          Buffer.byteLength(node.content, \"utf8\")) as ByteIdx;\n\n        return {\n          type: \"string\",\n          content: node.content,\n          start,\n          end: currentByteWidth,\n          bindings: node.bindings,\n          extmarkOptions: node.extmarkOptions,\n        };\n      }\n      case \"node\": {\n        const start = currentByteWidth;\n        const children = node.children.map(traverse);\n        return {\n          type: \"node\",\n          template: node.template,\n          children,\n          start,\n          end: currentByteWidth,\n          bindings: node.bindings,\n          extmarkOptions: node.extmarkOptions,\n        };\n      }\n      case \"array\": {\n        const start = currentByteWidth;\n        const children = node.children.map(traverse);\n        return {\n          type: \"array\",\n          children,\n          start,\n          end: currentByteWidth,\n          bindings: node.bindings,\n          extmarkOptions: node.extmarkOptions,\n        };\n      }\n      default: {\n        assertUnreachable(node);\n      }\n    }\n  }",
+      "contextualizedText": "// node/tea/render.ts \u003e function render \u003e function traverse\n\n  function traverse(node: VDOMNode): NodePosition {\n    switch (node.type) {\n      case \"string\": {\n        const start = currentByteWidth;\n        contents.push(node.content);\n        currentByteWidth = (currentByteWidth +\n          Buffer.byteLength(node.content, \"utf8\")) as ByteIdx;\n\n        return {\n          type: \"string\",\n          content: node.content,\n          start,\n          end: currentByteWidth,\n          bindings: node.bindings,\n          extmarkOptions: node.extmarkOptions,\n        };\n      }\n      case \"node\": {\n        const start = currentByteWidth;\n        const children = node.children.map(traverse);\n        return {\n          type: \"node\",\n          template: node.template,\n          children,\n          start,\n          end: currentByteWidth,\n          bindings: node.bindings,\n          extmarkOptions: node.extmarkOptions,\n        };\n      }\n      case \"array\": {\n        const start = currentByteWidth;\n        const children = node.children.map(traverse);\n        return {\n          type: \"array\",\n          children,\n          start,\n          end: currentByteWidth,\n          bindings: node.bindings,\n          extmarkOptions: node.extmarkOptions,\n        };\n      }\n      default: {\n        assertUnreachable(node);\n      }\n    }\n  }",
+      "headingContext": "node/tea/render.ts \u003e function render \u003e function traverse",
+      "startLine": 47,
+      "startCol": 1,
+      "endLine": 93,
+      "endCol": 4
+    },
+    {
+      "text": "const positionTree = traverse(vdom);\n\n  const content = contents.join(\"\");\n  await replaceBetweenPositions({\n    ...mount,\n    context: { nvim: mount.nvim },\n    lines: content.split(\"\\n\") as Line[],\n  });\n\n  const mountPos = mount.startPos;\n  const contentBuf = Buffer.from(content, \"utf-8\");",
+      "contextualizedText": "// node/tea/render.ts \u003e function render\n\nconst positionTree = traverse(vdom);\n\n  const content = contents.join(\"\");\n  await replaceBetweenPositions({\n    ...mount,\n    context: { nvim: mount.nvim },\n    lines: content.split(\"\\n\") as Line[],\n  });\n\n  const mountPos = mount.startPos;\n  const contentBuf = Buffer.from(content, \"utf-8\");",
+      "headingContext": "node/tea/render.ts \u003e function render",
+      "startLine": 95,
+      "startCol": 3,
+      "endLine": 105,
+      "endCol": 52
+    },
+    {
+      "text": "  async function assignPositions(node: NodePosition): Promise\u003cMountedVDOM\u003e {\n    const startPos = calculatePosition(mountPos, contentBuf, node.start);\n    const endPos = calculatePosition(mountPos, contentBuf, node.end);\n\n    // Set extmark if options are provided and there's actual content\n    let extmarkId: ExtmarkId | undefined;\n    if (node.extmarkOptions \u0026\u0026 node.start \u003c node.end) {\n      extmarkId = await mount.buffer.setExtmark({\n        startPos,\n        endPos,\n        options: node.extmarkOptions,\n      });\n    }\n\n    switch (node.type) {\n      case \"string\":\n        return {\n          type: \"string\",\n          content: node.content,\n          startPos,\n          endPos,\n          bindings: node.bindings,\n          ...(node.extmarkOptions \u0026\u0026 { extmarkOptions: node.extmarkOptions }),\n          ...(extmarkId \u0026\u0026 { extmarkId }),\n        };\n      case \"node\": {\n        const children = await Promise.all(node.children.map(assignPositions));\n        return {\n          type: \"node\",\n          template: node.template,\n          children,\n          startPos,\n          endPos,\n          bindings: node.bindings,\n          ...(node.extmarkOptions \u0026\u0026 { extmarkOptions: node.extmarkOptions }),\n          ...(extmarkId \u0026\u0026 { extmarkId }),\n        };\n      }\n      case \"array\": {\n        const children = await Promise.all(node.children.map(assignPositions));\n        return {\n          type: \"array\",\n          children,\n          startPos,\n          endPos,\n          bindings: node.bindings,\n          ...(node.extmarkOptions \u0026\u0026 { extmarkOptions: node.extmarkOptions }),\n          ...(extmarkId \u0026\u0026 { extmarkId }),\n        };\n      }\n      default:\n        assertUnreachable(node);\n    }\n  }",
+      "contextualizedText": "// node/tea/render.ts \u003e function render \u003e function assignPositions\n\n  async function assignPositions(node: NodePosition): Promise\u003cMountedVDOM\u003e {\n    const startPos = calculatePosition(mountPos, contentBuf, node.start);\n    const endPos = calculatePosition(mountPos, contentBuf, node.end);\n\n    // Set extmark if options are provided and there's actual content\n    let extmarkId: ExtmarkId | undefined;\n    if (node.extmarkOptions \u0026\u0026 node.start \u003c node.end) {\n      extmarkId = await mount.buffer.setExtmark({\n        startPos,\n        endPos,\n        options: node.extmarkOptions,\n      });\n    }\n\n    switch (node.type) {\n      case \"string\":\n        return {\n          type: \"string\",\n          content: node.content,\n          startPos,\n          endPos,\n          bindings: node.bindings,\n          ...(node.extmarkOptions \u0026\u0026 { extmarkOptions: node.extmarkOptions }),\n          ...(extmarkId \u0026\u0026 { extmarkId }),\n        };\n      case \"node\": {\n        const children = await Promise.all(node.children.map(assignPositions));\n        return {\n          type: \"node\",\n          template: node.template,\n          children,\n          startPos,\n          endPos,\n          bindings: node.bindings,\n          ...(node.extmarkOptions \u0026\u0026 { extmarkOptions: node.extmarkOptions }),\n          ...(extmarkId \u0026\u0026 { extmarkId }),\n        };\n      }\n      case \"array\": {\n        const children = await Promise.all(node.children.map(assignPositions));\n        return {\n          type: \"array\",\n          children,\n          startPos,\n          endPos,\n          bindings: node.bindings,\n          ...(node.extmarkOptions \u0026\u0026 { extmarkOptions: node.extmarkOptions }),\n          ...(extmarkId \u0026\u0026 { extmarkId }),\n        };\n      }\n      default:\n        assertUnreachable(node);\n    }\n  }",
+      "headingContext": "node/tea/render.ts \u003e function render \u003e function assignPositions",
+      "startLine": 107,
+      "startCol": 1,
+      "endLine": 160,
+      "endCol": 4
+    },
+    {
+      "text": "return await assignPositions(positionTree);\n}",
+      "contextualizedText": "// node/tea/render.ts \u003e function render\n\nreturn await assignPositions(positionTree);\n}",
+      "headingContext": "node/tea/render.ts \u003e function render",
+      "startLine": 162,
+      "startCol": 3,
+      "endLine": 163,
+      "endCol": 2
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "blobSha": "b524621c786bd01a8ecfb4a2baa3a9413d22f17b",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { Logger } from \"../../logger.ts\";\nimport type { ProviderToolSpec } from \"../../providers/provider-types.ts\";\nimport type { ToolName } from \"../../tool-types.ts\";\nimport { MCPClient } from \"./client.ts\";\nimport type { MCPServersConfig } from \"./options.ts\";\nimport type { ServerName } from \"./types.ts\";\n\ntype ServerMap = {\n  [serverName: ServerName]: {\n    client: MCPClient;\n    specs: {\n      [toolName: ToolName]: ProviderToolSpec;\n    };\n  };\n};",
+      "contextualizedText": "// node/core/src/tools/mcp/manager.ts\n\nimport type { Logger } from \"../../logger.ts\";\nimport type { ProviderToolSpec } from \"../../providers/provider-types.ts\";\nimport type { ToolName } from \"../../tool-types.ts\";\nimport { MCPClient } from \"./client.ts\";\nimport type { MCPServersConfig } from \"./options.ts\";\nimport type { ServerName } from \"./types.ts\";\n\ntype ServerMap = {\n  [serverName: ServerName]: {\n    client: MCPClient;\n    specs: {\n      [toolName: ToolName]: ProviderToolSpec;\n    };\n  };\n};",
+      "headingContext": "node/core/src/tools/mcp/manager.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 15,
+      "endCol": 3
+    },
+    {
+      "text": "export class MCPToolManager {\n  serverMap: ServerMap;\n\n  constructor(\n    options: MCPServersConfig,\n    private context: { logger: Logger },\n  ) {\n    this.serverMap = {};\n    this.init(options, context).catch((error) =\u003e {\n      this.context.logger.error(\n        `Failed to initialize MCPToolManager: ${error instanceof Error ? error.message : String(error)}`,\n      );\n    });\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/manager.ts \u003e class MCPToolManager\n\nexport class MCPToolManager {\n  serverMap: ServerMap;\n\n  constructor(\n    options: MCPServersConfig,\n    private context: { logger: Logger },\n  ) {\n    this.serverMap = {};\n    this.init(options, context).catch((error) =\u003e {\n      this.context.logger.error(\n        `Failed to initialize MCPToolManager: ${error instanceof Error ? error.message : String(error)}`,\n      );\n    });\n  }",
+      "headingContext": "node/core/src/tools/mcp/manager.ts \u003e class MCPToolManager",
+      "startLine": 17,
+      "startCol": 1,
+      "endLine": 30,
+      "endCol": 4
+    },
+    {
+      "text": "  private async init(\n    mcpServers: MCPServersConfig,\n    context: {\n      logger: Logger;\n    },\n  ) {\n    for (const [serverName, config] of Object.entries(mcpServers)) {\n      try {\n        const client = new MCPClient(serverName as ServerName, config, {\n          logger: context.logger,\n        });\n        await client.connect();\n        const serverToolSpecs = client.listTools();\n        this.serverMap[serverName as ServerName] = {\n          client,\n          specs: {},\n        };\n        for (const spec of serverToolSpecs) {\n          this.serverMap[serverName as ServerName].specs[spec.name] = spec;\n        }\n      } catch (error) {\n        context.logger.error(\n          `Failed to connect to MCP server ${serverName}: ${error instanceof Error ? error.message : String(error)}`,\n        );\n        // Continue with other servers even if one fails\n      }\n    }\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/manager.ts \u003e class MCPToolManager \u003e method init\n\n  private async init(\n    mcpServers: MCPServersConfig,\n    context: {\n      logger: Logger;\n    },\n  ) {\n    for (const [serverName, config] of Object.entries(mcpServers)) {\n      try {\n        const client = new MCPClient(serverName as ServerName, config, {\n          logger: context.logger,\n        });\n        await client.connect();\n        const serverToolSpecs = client.listTools();\n        this.serverMap[serverName as ServerName] = {\n          client,\n          specs: {},\n        };\n        for (const spec of serverToolSpecs) {\n          this.serverMap[serverName as ServerName].specs[spec.name] = spec;\n        }\n      } catch (error) {\n        context.logger.error(\n          `Failed to connect to MCP server ${serverName}: ${error instanceof Error ? error.message : String(error)}`,\n        );\n        // Continue with other servers even if one fails\n      }\n    }\n  }",
+      "headingContext": "node/core/src/tools/mcp/manager.ts \u003e class MCPToolManager \u003e method init",
+      "startLine": 32,
+      "startCol": 1,
+      "endLine": 59,
+      "endCol": 4
+    },
+    {
+      "text": "  getToolSpecs(): ProviderToolSpec[] {\n    const allToolSpecs = [];\n    for (const server of Object.values(this.serverMap)) {\n      allToolSpecs.push(...Object.values(server.specs));\n    }\n\n    return allToolSpecs;\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/manager.ts \u003e class MCPToolManager \u003e method getToolSpecs\n\n  getToolSpecs(): ProviderToolSpec[] {\n    const allToolSpecs = [];\n    for (const server of Object.values(this.serverMap)) {\n      allToolSpecs.push(...Object.values(server.specs));\n    }\n\n    return allToolSpecs;\n  }",
+      "headingContext": "node/core/src/tools/mcp/manager.ts \u003e class MCPToolManager \u003e method getToolSpecs",
+      "startLine": 61,
+      "startCol": 1,
+      "endLine": 68,
+      "endCol": 4
+    },
+    {
+      "text": "  async disconnect(): Promise\u003cvoid\u003e {\n    // Disconnect all MCP clients\n    for (const { client } of Object.values(this.serverMap)) {\n      try {\n        await client.disconnect();\n      } catch (error) {\n        // Log but don't throw - we want to try to disconnect all clients\n        this.context.logger.error(`Error disconnecting MCP client:`, error);\n      }\n    }\n    this.serverMap = {};\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/manager.ts \u003e class MCPToolManager \u003e method disconnect\n\n  async disconnect(): Promise\u003cvoid\u003e {\n    // Disconnect all MCP clients\n    for (const { client } of Object.values(this.serverMap)) {\n      try {\n        await client.disconnect();\n      } catch (error) {\n        // Log but don't throw - we want to try to disconnect all clients\n        this.context.logger.error(`Error disconnecting MCP client:`, error);\n      }\n    }\n    this.serverMap = {};\n  }",
+      "headingContext": "node/core/src/tools/mcp/manager.ts \u003e class MCPToolManager \u003e method disconnect",
+      "startLine": 70,
+      "startCol": 1,
+      "endLine": 81,
+      "endCol": 4
+    },
+    {
+      "text": "export function isMCPTool(toolName: string): boolean {\n  return toolName.startsWith(\"mcp_\");\n}",
+      "contextualizedText": "// node/core/src/tools/mcp/manager.ts \u003e function isMCPTool\n\nexport function isMCPTool(toolName: string): boolean {\n  return toolName.startsWith(\"mcp_\");\n}",
+      "headingContext": "node/core/src/tools/mcp/manager.ts \u003e function isMCPTool",
+      "startLine": 83,
+      "startCol": 1,
+      "endLine": 85,
+      "endCol": 2
+    }
+  ]
+}

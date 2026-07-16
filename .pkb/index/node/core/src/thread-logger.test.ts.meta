@@ -1,0 +1,141 @@
+{
+  "blobSha": "a1cc46da5a5a4adb4739358e7d108091fdb15700",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import * as fs from \"node:fs/promises\";\nimport * as os from \"node:os\";\nimport * as path from \"node:path\";\nimport { afterEach, describe, expect, it } from \"vitest\";\nimport type { ThreadId } from \"./chat-types.ts\";\nimport type { Logger } from \"./logger.ts\";\nimport type { ProviderMessage } from \"./providers/provider-types.ts\";\nimport { ThreadLogger } from \"./thread-logger.ts\";\nimport { threadConversationLogPath, threadMetaPath } from \"./utils/files.ts\";\n\nconst TEST_BASE_DIR = path.join(os.tmpdir(), \"magenta-test-thread-logger\");",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts\n\nimport * as fs from \"node:fs/promises\";\nimport * as os from \"node:os\";\nimport * as path from \"node:path\";\nimport { afterEach, describe, expect, it } from \"vitest\";\nimport type { ThreadId } from \"./chat-types.ts\";\nimport type { Logger } from \"./logger.ts\";\nimport type { ProviderMessage } from \"./providers/provider-types.ts\";\nimport { ThreadLogger } from \"./thread-logger.ts\";\nimport { threadConversationLogPath, threadMetaPath } from \"./utils/files.ts\";\n\nconst TEST_BASE_DIR = path.join(os.tmpdir(), \"magenta-test-thread-logger\");",
+      "headingContext": "node/core/src/thread-logger.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 11,
+      "endCol": 76
+    },
+    {
+      "text": "function makeLogger(): { logger: Logger; errors: unknown[][] } {\n  const errors: unknown[][] = [];\n  const logger: Logger",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts \u003e function makeLogger\n\nfunction makeLogger(): { logger: Logger; errors: unknown[][] } {\n  const errors: unknown[][] = [];\n  const logger: Logger",
+      "headingContext": "node/core/src/thread-logger.test.ts \u003e function makeLogger",
+      "startLine": 13,
+      "startCol": 1,
+      "endLine": 15,
+      "endCol": 23
+    },
+    {
+      "text": "    info: () =\u003e {}",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts \u003e function makeLogger \u003e function info\n\n    info: () =\u003e {}",
+      "headingContext": "node/core/src/thread-logger.test.ts \u003e function makeLogger \u003e function info",
+      "startLine": 16,
+      "startCol": 1,
+      "endLine": 16,
+      "endCol": 19
+    },
+    {
+      "text": "    warn: () =\u003e {}",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts \u003e function makeLogger \u003e function warn\n\n    warn: () =\u003e {}",
+      "headingContext": "node/core/src/thread-logger.test.ts \u003e function makeLogger \u003e function warn",
+      "startLine": 17,
+      "startCol": 1,
+      "endLine": 17,
+      "endCol": 19
+    },
+    {
+      "text": "    error: (...args: unknown[]) =\u003e errors.push(args)",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts \u003e function makeLogger \u003e function error\n\n    error: (...args: unknown[]) =\u003e errors.push(args)",
+      "headingContext": "node/core/src/thread-logger.test.ts \u003e function makeLogger \u003e function error",
+      "startLine": 18,
+      "startCol": 1,
+      "endLine": 18,
+      "endCol": 53
+    },
+    {
+      "text": "    debug: () =\u003e {}",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts \u003e function makeLogger \u003e function debug\n\n    debug: () =\u003e {}",
+      "headingContext": "node/core/src/thread-logger.test.ts \u003e function makeLogger \u003e function debug",
+      "startLine": 19,
+      "startCol": 1,
+      "endLine": 19,
+      "endCol": 20
+    },
+    {
+      "text": "return { logger, errors };\n}",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts \u003e function makeLogger\n\nreturn { logger, errors };\n}",
+      "headingContext": "node/core/src/thread-logger.test.ts \u003e function makeLogger",
+      "startLine": 21,
+      "startCol": 3,
+      "endLine": 22,
+      "endCol": 2
+    },
+    {
+      "text": "function msg(text: string): ProviderMessage {\n  return {\n    role: \"user\",\n    content: [{ type: \"text\", text, nativeMessageIdx: 0 as never }],\n  };\n}",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts \u003e function msg\n\nfunction msg(text: string): ProviderMessage {\n  return {\n    role: \"user\",\n    content: [{ type: \"text\", text, nativeMessageIdx: 0 as never }],\n  };\n}",
+      "headingContext": "node/core/src/thread-logger.test.ts \u003e function msg",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 29,
+      "endCol": 2
+    },
+    {
+      "text": "describe(\"ThreadLogger\", () =\u003e {\n  const threadIds: ThreadId[] = [];",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts\n\ndescribe(\"ThreadLogger\", () =\u003e {\n  const threadIds: ThreadId[] = [];",
+      "headingContext": "node/core/src/thread-logger.test.ts",
+      "startLine": 31,
+      "startCol": 1,
+      "endLine": 32,
+      "endCol": 36
+    },
+    {
+      "text": "  function freshThreadId(): ThreadId {\n    const id = `test-${Math.random().toString(36).slice(2)}` as ThreadId;\n    threadIds.push(id);\n    return id;\n  }",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts \u003e function freshThreadId\n\n  function freshThreadId(): ThreadId {\n    const id = `test-${Math.random().toString(36).slice(2)}` as ThreadId;\n    threadIds.push(id);\n    return id;\n  }",
+      "headingContext": "node/core/src/thread-logger.test.ts \u003e function freshThreadId",
+      "startLine": 34,
+      "startCol": 1,
+      "endLine": 38,
+      "endCol": 4
+    },
+    {
+      "text": "afterEach(async () =\u003e {\n    for (const id of threadIds) {\n      await fs.rm(path.dirname(threadConversationLogPath(id, TEST_BASE_DIR)), {\n        recursive: true,\n        force: true,\n      });\n    }\n    threadIds.length = 0;\n  });\n\n  it(\"produces the {baseDir}/threads/{threadId}/conversation.jsonl path\", () =\u003e {\n    const threadId = \"abc123\" as ThreadId;\n    expect(threadConversationLogPath(threadId)).toBe(\n      \"/tmp/magenta/threads/abc123/conversation.jsonl\",\n    );\n    expect(threadConversationLogPath(threadId, \"/base\")).toBe(\n      \"/base/threads/abc123/conversation.jsonl\",\n    );\n  });\n\n  it(\"persists the title to the sidecar and appends title entries to the JSONL\", async () =\u003e {\n    const threadId = freshThreadId();\n    const { logger } = makeLogger();\n    const messages: ProviderMessage[] = [];\n    const tl = new ThreadLogger(\n      threadId,\n      \"root\",\n      () =\u003e messages,\n      () =\u003e messages.length,\n      logger,\n      { baseDir: TEST_BASE_DIR },\n    );\n\n    tl.recordTitle(\"Hello\");\n    tl.recordTitle(\"Hello 2\");\n    await tl.flushed();\n\n    const meta = JSON.parse(\n      await fs.readFile(threadMetaPath(threadId, TEST_BASE_DIR), \"utf8\"),\n    ) as { title: string; threadType: string };\n    expect(meta).toEqual({ title: \"Hello 2\", threadType: \"root\" });\n\n    const lines = (\n      await fs.readFile(\n        threadConversationLogPath(threadId, TEST_BASE_DIR),\n        \"utf8\",\n      )\n    )\n      .split(\"\\n\")\n      .filter((l) =\u003e l.length \u003e 0)\n      .map((l) =\u003e JSON.parse(l) as { type: string; title?: string });\n    const titles = lines.filter((l) =\u003e l.type === \"title\");\n    expect(titles.map((t) =\u003e t.title)).toEqual([\"Hello\", \"Hello 2\"]);\n  });\n\n  it(\"withholds the streaming message on update and persists all on turn end, idempotently\", async () =\u003e {\n    const threadId = freshThreadId();\n    const { logger } = makeLogger();\n    const messages: ProviderMessage[] = [msg(\"a\"), msg(\"b\"), msg(\"c\")];",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts\n\nafterEach(async () =\u003e {\n    for (const id of threadIds) {\n      await fs.rm(path.dirname(threadConversationLogPath(id, TEST_BASE_DIR)), {\n        recursive: true,\n        force: true,\n      });\n    }\n    threadIds.length = 0;\n  });\n\n  it(\"produces the {baseDir}/threads/{threadId}/conversation.jsonl path\", () =\u003e {\n    const threadId = \"abc123\" as ThreadId;\n    expect(threadConversationLogPath(threadId)).toBe(\n      \"/tmp/magenta/threads/abc123/conversation.jsonl\",\n    );\n    expect(threadConversationLogPath(threadId, \"/base\")).toBe(\n      \"/base/threads/abc123/conversation.jsonl\",\n    );\n  });\n\n  it(\"persists the title to the sidecar and appends title entries to the JSONL\", async () =\u003e {\n    const threadId = freshThreadId();\n    const { logger } = makeLogger();\n    const messages: ProviderMessage[] = [];\n    const tl = new ThreadLogger(\n      threadId,\n      \"root\",\n      () =\u003e messages,\n      () =\u003e messages.length,\n      logger,\n      { baseDir: TEST_BASE_DIR },\n    );\n\n    tl.recordTitle(\"Hello\");\n    tl.recordTitle(\"Hello 2\");\n    await tl.flushed();\n\n    const meta = JSON.parse(\n      await fs.readFile(threadMetaPath(threadId, TEST_BASE_DIR), \"utf8\"),\n    ) as { title: string; threadType: string };\n    expect(meta).toEqual({ title: \"Hello 2\", threadType: \"root\" });\n\n    const lines = (\n      await fs.readFile(\n        threadConversationLogPath(threadId, TEST_BASE_DIR),\n        \"utf8\",\n      )\n    )\n      .split(\"\\n\")\n      .filter((l) =\u003e l.length \u003e 0)\n      .map((l) =\u003e JSON.parse(l) as { type: string; title?: string });\n    const titles = lines.filter((l) =\u003e l.type === \"title\");\n    expect(titles.map((t) =\u003e t.title)).toEqual([\"Hello\", \"Hello 2\"]);\n  });\n\n  it(\"withholds the streaming message on update and persists all on turn end, idempotently\", async () =\u003e {\n    const threadId = freshThreadId();\n    const { logger } = makeLogger();\n    const messages: ProviderMessage[] = [msg(\"a\"), msg(\"b\"), msg(\"c\")];",
+      "headingContext": "node/core/src/thread-logger.test.ts",
+      "startLine": 40,
+      "startCol": 3,
+      "endLine": 98,
+      "endCol": 72
+    },
+    {
+      "text": "const tl = new ThreadLogger(\n      threadId,\n      \"root\",\n      () =\u003e messages,\n      () =\u003e messages.length,\n      logger,\n      { baseDir: TEST_BASE_DIR },\n    );\n\n    tl.onUpdate();\n    await tl.flushed();",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts\n\nconst tl = new ThreadLogger(\n      threadId,\n      \"root\",\n      () =\u003e messages,\n      () =\u003e messages.length,\n      logger,\n      { baseDir: TEST_BASE_DIR },\n    );\n\n    tl.onUpdate();\n    await tl.flushed();",
+      "headingContext": "node/core/src/thread-logger.test.ts",
+      "startLine": 99,
+      "startCol": 5,
+      "endLine": 109,
+      "endCol": 24
+    },
+    {
+      "text": "    async function messageTexts(): Promise\u003cstring[]\u003e {\n      const lines = (\n        await fs.readFile(\n          threadConversationLogPath(threadId, TEST_BASE_DIR),\n          \"utf8\",\n        )\n      )\n        .split(\"\\n\")\n        .filter((l) =\u003e l.length \u003e 0)\n        .map(\n          (l) =\u003e\n            JSON.parse(l) as {\n              type: string;\n              message?: { content: { text?: string }[] };\n            },\n        );\n      return lines\n        .filter((l) =\u003e l.type === \"message\")\n        .map((l) =\u003e l.message?.content?.[0]?.text ?? \"\");\n    }",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts \u003e function messageTexts\n\n    async function messageTexts(): Promise\u003cstring[]\u003e {\n      const lines = (\n        await fs.readFile(\n          threadConversationLogPath(threadId, TEST_BASE_DIR),\n          \"utf8\",\n        )\n      )\n        .split(\"\\n\")\n        .filter((l) =\u003e l.length \u003e 0)\n        .map(\n          (l) =\u003e\n            JSON.parse(l) as {\n              type: string;\n              message?: { content: { text?: string }[] };\n            },\n        );\n      return lines\n        .filter((l) =\u003e l.type === \"message\")\n        .map((l) =\u003e l.message?.content?.[0]?.text ?? \"\");\n    }",
+      "headingContext": "node/core/src/thread-logger.test.ts \u003e function messageTexts",
+      "startLine": 111,
+      "startCol": 1,
+      "endLine": 130,
+      "endCol": 6
+    },
+    {
+      "text": "// onUpdate withholds the final (still-streaming) message: only a, b land.\n    expect(await messageTexts()).toEqual([\"a\", \"b\"]);\n\n    // Repeated onUpdate is idempotent by cursor: no duplicates.\n    tl.onUpdate();\n    await tl.flushed();\n    expect(await messageTexts()).toEqual([\"a\", \"b\"]);\n\n    // onTurnEnded persists the withheld final message with no duplicates.\n    tl.onTurnEnded();\n    await tl.flushed();\n    expect(await messageTexts()).toEqual([\"a\", \"b\", \"c\"]);\n\n    // Repeated onTurnEnded stays idempotent.\n    tl.onTurnEnded();\n    await tl.flushed();\n    expect(await messageTexts()).toEqual([\"a\", \"b\", \"c\"]);\n  });\n\n  it(\"routes meta sidecar write errors to the logger\", async () =\u003e {\n    const threadId = freshThreadId();\n    const { logger, errors } = makeLogger();\n    const messages: ProviderMessage[] = [];\n    const tl = new ThreadLogger(\n      threadId,\n      \"root\",\n      () =\u003e messages,\n      () =\u003e messages.length,\n      logger,\n      { baseDir: TEST_BASE_DIR },\n    );\n    await tl.flushed();\n\n    // Replace the thread dir with a file so the meta.json write fails.\n    const dir = path.dirname(\n      threadConversationLogPath(threadId, TEST_BASE_DIR),\n    );\n    await fs.rm(dir, { recursive: true, force: true });\n    await fs.mkdir(path.dirname(dir), { recursive: true });\n    await fs.writeFile(dir, \"not a dir\");\n\n    expect(() =\u003e tl.recordTitle(\"boom\")).not.toThrow();\n    await tl.flushed();\n    expect(errors.length).toBeGreaterThan(0);\n\n    await fs.rm(dir, { force: true });\n  });",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts\n\n// onUpdate withholds the final (still-streaming) message: only a, b land.\n    expect(await messageTexts()).toEqual([\"a\", \"b\"]);\n\n    // Repeated onUpdate is idempotent by cursor: no duplicates.\n    tl.onUpdate();\n    await tl.flushed();\n    expect(await messageTexts()).toEqual([\"a\", \"b\"]);\n\n    // onTurnEnded persists the withheld final message with no duplicates.\n    tl.onTurnEnded();\n    await tl.flushed();\n    expect(await messageTexts()).toEqual([\"a\", \"b\", \"c\"]);\n\n    // Repeated onTurnEnded stays idempotent.\n    tl.onTurnEnded();\n    await tl.flushed();\n    expect(await messageTexts()).toEqual([\"a\", \"b\", \"c\"]);\n  });\n\n  it(\"routes meta sidecar write errors to the logger\", async () =\u003e {\n    const threadId = freshThreadId();\n    const { logger, errors } = makeLogger();\n    const messages: ProviderMessage[] = [];\n    const tl = new ThreadLogger(\n      threadId,\n      \"root\",\n      () =\u003e messages,\n      () =\u003e messages.length,\n      logger,\n      { baseDir: TEST_BASE_DIR },\n    );\n    await tl.flushed();\n\n    // Replace the thread dir with a file so the meta.json write fails.\n    const dir = path.dirname(\n      threadConversationLogPath(threadId, TEST_BASE_DIR),\n    );\n    await fs.rm(dir, { recursive: true, force: true });\n    await fs.mkdir(path.dirname(dir), { recursive: true });\n    await fs.writeFile(dir, \"not a dir\");\n\n    expect(() =\u003e tl.recordTitle(\"boom\")).not.toThrow();\n    await tl.flushed();\n    expect(errors.length).toBeGreaterThan(0);\n\n    await fs.rm(dir, { force: true });\n  });",
+      "headingContext": "node/core/src/thread-logger.test.ts",
+      "startLine": 132,
+      "startCol": 5,
+      "endLine": 178,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"does not throw and routes fs errors to the logger\", async () =\u003e {\n    const threadId = freshThreadId();\n    const { logger, errors } = makeLogger();\n    const messages: ProviderMessage[] = [];\n    const tl = new ThreadLogger(\n      threadId,\n      \"root\",\n      () =\u003e messages,\n      () =\u003e messages.length,\n      logger,\n      { baseDir: TEST_BASE_DIR },\n    );\n    await tl.flushed();\n\n    // Replace the thread dir with a file so subsequent appends fail.\n    const dir = path.dirname(\n      threadConversationLogPath(threadId, TEST_BASE_DIR),\n    );\n    await fs.rm(dir, { recursive: true, force: true });\n    await fs.mkdir(path.dirname(dir), { recursive: true });\n    await fs.writeFile(dir, \"not a dir\");\n\n    messages.push(msg(\"a\"));\n    expect(() =\u003e tl.onTurnEnded()).not.toThrow();\n    await tl.flushed();\n    expect(errors.length).toBeGreaterThan(0);\n\n    await fs.rm(dir, { force: true });\n  });",
+      "contextualizedText": "// node/core/src/thread-logger.test.ts\n\nit(\"does not throw and routes fs errors to the logger\", async () =\u003e {\n    const threadId = freshThreadId();\n    const { logger, errors } = makeLogger();\n    const messages: ProviderMessage[] = [];\n    const tl = new ThreadLogger(\n      threadId,\n      \"root\",\n      () =\u003e messages,\n      () =\u003e messages.length,\n      logger,\n      { baseDir: TEST_BASE_DIR },\n    );\n    await tl.flushed();\n\n    // Replace the thread dir with a file so subsequent appends fail.\n    const dir = path.dirname(\n      threadConversationLogPath(threadId, TEST_BASE_DIR),\n    );\n    await fs.rm(dir, { recursive: true, force: true });\n    await fs.mkdir(path.dirname(dir), { recursive: true });\n    await fs.writeFile(dir, \"not a dir\");\n\n    messages.push(msg(\"a\"));\n    expect(() =\u003e tl.onTurnEnded()).not.toThrow();\n    await tl.flushed();\n    expect(errors.length).toBeGreaterThan(0);\n\n    await fs.rm(dir, { force: true });\n  });",
+      "headingContext": "node/core/src/thread-logger.test.ts",
+      "startLine": 180,
+      "startCol": 3,
+      "endLine": 208,
+      "endCol": 6
+    }
+  ]
+}

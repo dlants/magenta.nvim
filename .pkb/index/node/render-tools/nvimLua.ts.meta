@@ -1,0 +1,42 @@
+{
+  "blobSha": "4a26d3265c49cce5d973909f92f5b761ea72b0cc",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type {\n  DisplayContext,\n  NvimLua,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode, withCode } from \"../tea/view.ts\";\n\ntype Input = NvimLua.Input;\n\nconst PREVIEW_MAX_LINES = 5;\nconst PREVIEW_MAX_LINE_LENGTH = 80;",
+      "contextualizedText": "// node/render-tools/nvimLua.ts\n\nimport type {\n  DisplayContext,\n  NvimLua,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode, withCode } from \"../tea/view.ts\";\n\ntype Input = NvimLua.Input;\n\nconst PREVIEW_MAX_LINES = 5;\nconst PREVIEW_MAX_LINE_LENGTH = 80;",
+      "headingContext": "node/render-tools/nvimLua.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 11,
+      "endCol": 36
+    },
+    {
+      "text": "function abridgeCode(code: string): string {\n  const lines = code.split(\"\\n\");\n  const preview = lines\n    .slice(0, PREVIEW_MAX_LINES)\n    .map((line) =\u003e\n      line.length \u003e PREVIEW_MAX_LINE_LENGTH\n        ? `${line.substring(0, PREVIEW_MAX_LINE_LENGTH)}...`\n        : line,\n    );\n  if (lines.length \u003e PREVIEW_MAX_LINES) {\n    preview.push(`... (${lines.length - PREVIEW_MAX_LINES} more lines)`);\n  }\n  return preview.join(\"\\n\");\n}",
+      "contextualizedText": "// node/render-tools/nvimLua.ts \u003e function abridgeCode\n\nfunction abridgeCode(code: string): string {\n  const lines = code.split(\"\\n\");\n  const preview = lines\n    .slice(0, PREVIEW_MAX_LINES)\n    .map((line) =\u003e\n      line.length \u003e PREVIEW_MAX_LINE_LENGTH\n        ? `${line.substring(0, PREVIEW_MAX_LINE_LENGTH)}...`\n        : line,\n    );\n  if (lines.length \u003e PREVIEW_MAX_LINES) {\n    preview.push(`... (${lines.length - PREVIEW_MAX_LINES} more lines)`);\n  }\n  return preview.join(\"\\n\");\n}",
+      "headingContext": "node/render-tools/nvimLua.ts \u003e function abridgeCode",
+      "startLine": 13,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderSummary(\n  _request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  return d`🌙 nvim_lua`;\n}",
+      "contextualizedText": "// node/render-tools/nvimLua.ts \u003e function renderSummary\n\nexport function renderSummary(\n  _request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  return d`🌙 nvim_lua`;\n}",
+      "headingContext": "node/render-tools/nvimLua.ts \u003e function renderSummary",
+      "startLine": 28,
+      "startCol": 1,
+      "endLine": 33,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderInput(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n  expanded: boolean,\n): VDOMNode | undefined {\n  const input = request.input as Input;\n  if (expanded) {\n    return withCode(d`${input.code}`);\n  }\n  return withCode(d`${abridgeCode(input.code)}`);\n}",
+      "contextualizedText": "// node/render-tools/nvimLua.ts \u003e function renderInput\n\nexport function renderInput(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n  expanded: boolean,\n): VDOMNode | undefined {\n  const input = request.input as Input;\n  if (expanded) {\n    return withCode(d`${input.code}`);\n  }\n  return withCode(d`${abridgeCode(input.code)}`);\n}",
+      "headingContext": "node/render-tools/nvimLua.ts \u003e function renderInput",
+      "startLine": 35,
+      "startCol": 1,
+      "endLine": 45,
+      "endCol": 2
+    }
+  ]
+}

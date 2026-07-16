@@ -1,0 +1,15 @@
+{
+  "blobSha": "719c29876064dc8151829b591ed1efd812d67b3f",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "type Nested = {\n  a: {\n    b: {\n      c: \"test\";\n    };\n  };\n};\n\nconst val: Nested = {\n  a: {\n    b: {\n      c: \"test\",\n    },\n  },\n};\n\nconsole.log(val.a.b.c);\n\nval.a.b.d = \"error\";",
+      "contextualizedText": "// node/test/fixtures/test.ts\n\ntype Nested = {\n  a: {\n    b: {\n      c: \"test\";\n    };\n  };\n};\n\nconst val: Nested = {\n  a: {\n    b: {\n      c: \"test\",\n    },\n  },\n};\n\nconsole.log(val.a.b.c);\n\nval.a.b.d = \"error\";",
+      "headingContext": "node/test/fixtures/test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 19,
+      "endCol": 21
+    }
+  ]
+}

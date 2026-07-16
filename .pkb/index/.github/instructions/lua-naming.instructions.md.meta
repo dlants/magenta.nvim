@@ -1,0 +1,15 @@
+{
+  "blobSha": "a32e0eb83b775a3fb34033ae53221b4b56182b2d",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "---\napplyTo: \"**/*.lua\"\n---\n\n# Lua Naming Review\n\nTo avoid complexity, keep variable names on the lua side camelCase, to match the\nvariables defined in typescript.",
+      "contextualizedText": "---\napplyTo: \"**/*.lua\"\n---\n\n# Lua Naming Review\n\nTo avoid complexity, keep variable names on the lua side camelCase, to match the\nvariables defined in typescript.",
+      "headingContext": "",
+      "startLine": 0,
+      "startCol": 0,
+      "endLine": 0,
+      "endCol": 0
+    }
+  ]
+}

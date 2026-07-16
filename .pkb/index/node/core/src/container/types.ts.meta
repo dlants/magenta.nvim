@@ -1,0 +1,33 @@
+{
+  "blobSha": "3269e19369303236e8b24c83ec9af131175eee1d",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export interface ContainerConfig {\n  dockerfile: string;\n  workspacePath: string;\n  installCommand?: string;\n}",
+      "contextualizedText": "// node/core/src/container/types.ts \u003e interface ContainerConfig\n\nexport interface ContainerConfig {\n  dockerfile: string;\n  workspacePath: string;\n  installCommand?: string;\n}",
+      "headingContext": "node/core/src/container/types.ts \u003e interface ContainerConfig",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 5,
+      "endCol": 2
+    },
+    {
+      "text": "export interface ProvisionResult {\n  containerName: string;\n  imageName: string;\n}",
+      "contextualizedText": "// node/core/src/container/types.ts \u003e interface ProvisionResult\n\nexport interface ProvisionResult {\n  containerName: string;\n  imageName: string;\n}",
+      "headingContext": "node/core/src/container/types.ts \u003e interface ProvisionResult",
+      "startLine": 7,
+      "startCol": 1,
+      "endLine": 10,
+      "endCol": 2
+    },
+    {
+      "text": "export interface TeardownResult {\n  syncedFiles: number;\n}",
+      "contextualizedText": "// node/core/src/container/types.ts \u003e interface TeardownResult\n\nexport interface TeardownResult {\n  syncedFiles: number;\n}",
+      "headingContext": "node/core/src/container/types.ts \u003e interface TeardownResult",
+      "startLine": 12,
+      "startCol": 1,
+      "endLine": 14,
+      "endCol": 2
+    }
+  ]
+}

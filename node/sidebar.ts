@@ -288,10 +288,6 @@ export class Sidebar {
     await inputWindow.setVar("magenta", true);
     await inputWindow.setOption("winfixheight", true);
     await inputWindow.setOption("winfixbuf", true);
-    // Track the desired input height so the lua side can restore it when the
-    // window layout changes. equalalways doesn't fully honor 'winfixheight'
-    // for our nested col-in-row layout, so we re-assert the height explicitly.
-    await inputWindow.setVar("magenta_input_height", inputHeight);
 
     this.nvim.logger.debug(`sidebar.create setting state`);
     this.state = {

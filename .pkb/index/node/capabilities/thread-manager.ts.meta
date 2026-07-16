@@ -1,0 +1,15 @@
+{
+  "blobSha": "2085d06b61265ed456e744b01a962c21c8371591",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export type { DockerSpawnConfig, ThreadManager } from \"@magenta/core\";",
+      "contextualizedText": "// node/capabilities/thread-manager.ts\n\nexport type { DockerSpawnConfig, ThreadManager } from \"@magenta/core\";",
+      "headingContext": "node/capabilities/thread-manager.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 1,
+      "endCol": 71
+    }
+  ]
+}

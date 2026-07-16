@@ -1,0 +1,15 @@
+{
+  "blobSha": "619008b121bf4ea652c8475d958f0dfa304ca6b4",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "# View System in magenta.nvim\n\n**THIS IS NOT REACT**. **DO NOT USE REACT VIEWS OR DOM** This uses a templating library for a TUI running inside a neovim buffer.\n\nViews in magenta.nvim are built using a declarative templating approach:\n\n## Template Literal and Composition\n\nThe `d` tag function is used for templates, similar to JSX but with template literals:\n\n```typescript\n// Basic text rendering\nd`This is some text`;\n\n// Dynamic content interpolation\nd`User: ${username}`;\n\n// Conditional rendering\nd`${isLoading ? d`Loading...` : d`Content loaded!`}`;\n\n// Rendering lists\nd`${items.map((item) =\u003e d`- ${item.name}\\n`)}`;\n\n// Component composition\nd`Header: ${headerView({ title })}\\nBody: ${bodyView({ content })}`;\n```\n\n## Adding Interactivity\n\nYou can attach keybindings to sections of text with `withBindings`:\n\n```typescript\nwithBindings(d`Press Enter to continue`, {\n  \"\u003cCR\u003e\": () =\u003e dispatch({ type: \"continue\" }),\n  q: () =\u003e dispatch({ type: \"quit\" }),\n});\n```\n\nViews render to a neovim buffer and update on every dispatch.",
+      "contextualizedText": "# View System in magenta.nvim\n\n**THIS IS NOT REACT**. **DO NOT USE REACT VIEWS OR DOM** This uses a templating library for a TUI running inside a neovim buffer.\n\nViews in magenta.nvim are built using a declarative templating approach:\n\n## Template Literal and Composition\n\nThe `d` tag function is used for templates, similar to JSX but with template literals:\n\n```typescript\n// Basic text rendering\nd`This is some text`;\n\n// Dynamic content interpolation\nd`User: ${username}`;\n\n// Conditional rendering\nd`${isLoading ? d`Loading...` : d`Content loaded!`}`;\n\n// Rendering lists\nd`${items.map((item) =\u003e d`- ${item.name}\\n`)}`;\n\n// Component composition\nd`Header: ${headerView({ title })}\\nBody: ${bodyView({ content })}`;\n```\n\n## Adding Interactivity\n\nYou can attach keybindings to sections of text with `withBindings`:\n\n```typescript\nwithBindings(d`Press Enter to continue`, {\n  \"\u003cCR\u003e\": () =\u003e dispatch({ type: \"continue\" }),\n  q: () =\u003e dispatch({ type: \"quit\" }),\n});\n```\n\nViews render to a neovim buffer and update on every dispatch.",
+      "headingContext": "",
+      "startLine": 0,
+      "startCol": 0,
+      "endLine": 0,
+      "endCol": 0
+    }
+  ]
+}

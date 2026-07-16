@@ -1,0 +1,429 @@
+{
+  "blobSha": "95550b21b62df227d61e97847993ee2ffbcbeef2",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import * as path from \"node:path\";\nimport type {\n  SandboxAskCallback,\n  SandboxRuntimeConfig,\n  SandboxViolationEvent,\n} from \"@anthropic-ai/sandbox-runtime\";\nimport { SandboxManager } from \"@anthropic-ai/sandbox-runtime\";\nimport { assertStraceAvailable } from \"./capabilities/strace.ts\";\nimport type { SandboxConfig } from \"./options.ts\";\nimport type { HomeDir, NvimCwd } from \"./utils/files.ts\";\n\nexport type SandboxState =\n  | { status: \"uninitialized\" }\n  | { status: \"ready\" }\n  | { status: \"unsupported\"; reason: string };\n\nexport type FsReadConfig = { denyOnly: string[]; allowWithinDeny?: string[] };\nexport type FsWriteConfig = { allowOnly: string[]; denyWithinAllow: string[] };\n\nexport type NetworkAskParams = { host: string; port: number | undefined };\nexport type NetworkAskTarget = (params: NetworkAskParams) =\u003e Promise\u003cboolean\u003e;",
+      "contextualizedText": "// node/sandbox-manager.ts\n\nimport * as path from \"node:path\";\nimport type {\n  SandboxAskCallback,\n  SandboxRuntimeConfig,\n  SandboxViolationEvent,\n} from \"@anthropic-ai/sandbox-runtime\";\nimport { SandboxManager } from \"@anthropic-ai/sandbox-runtime\";\nimport { assertStraceAvailable } from \"./capabilities/strace.ts\";\nimport type { SandboxConfig } from \"./options.ts\";\nimport type { HomeDir, NvimCwd } from \"./utils/files.ts\";\n\nexport type SandboxState =\n  | { status: \"uninitialized\" }\n  | { status: \"ready\" }\n  | { status: \"unsupported\"; reason: string };\n\nexport type FsReadConfig = { denyOnly: string[]; allowWithinDeny?: string[] };\nexport type FsWriteConfig = { allowOnly: string[]; denyWithinAllow: string[] };\n\nexport type NetworkAskParams = { host: string; port: number | undefined };\nexport type NetworkAskTarget = (params: NetworkAskParams) =\u003e Promise\u003cboolean\u003e;",
+      "headingContext": "node/sandbox-manager.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 79
+    },
+    {
+      "text": "export interface Sandbox",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox\n\nexport interface Sandbox",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox",
+      "startLine": 23,
+      "startCol": 1,
+      "endLine": 23,
+      "endCol": 25
+    },
+    {
+      "text": "  getState(): SandboxState",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method getState\n\n  getState(): SandboxState",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method getState",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 24,
+      "endCol": 27
+    },
+    {
+      "text": "  wrapWithSandbox(command: string): Promise\u003cstring\u003e",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method wrapWithSandbox\n\n  wrapWithSandbox(command: string): Promise\u003cstring\u003e",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method wrapWithSandbox",
+      "startLine": 25,
+      "startCol": 1,
+      "endLine": 25,
+      "endCol": 52
+    },
+    {
+      "text": "  getViolationStore()",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method getViolationStore\n\n  getViolationStore()",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method getViolationStore",
+      "startLine": 26,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 22
+    },
+    {
+      "text": "    getTotalCount(): number",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method getViolationStore \u003e method getTotalCount\n\n    getTotalCount(): number",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method getViolationStore \u003e method getTotalCount",
+      "startLine": 27,
+      "startCol": 1,
+      "endLine": 27,
+      "endCol": 28
+    },
+    {
+      "text": "    getViolations(count: number): SandboxViolationEvent[]",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method getViolationStore \u003e method getViolations\n\n    getViolations(count: number): SandboxViolationEvent[]",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method getViolationStore \u003e method getViolations",
+      "startLine": 28,
+      "startCol": 1,
+      "endLine": 28,
+      "endCol": 58
+    },
+    {
+      "text": "    addViolation(violation: SandboxViolationEvent): void",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method getViolationStore \u003e method addViolation\n\n    addViolation(violation: SandboxViolationEvent): void",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method getViolationStore \u003e method addViolation",
+      "startLine": 29,
+      "startCol": 1,
+      "endLine": 29,
+      "endCol": 57
+    },
+    {
+      "text": "  annotateStderrWithSandboxFailures(command: string, stderr: string): string",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method annotateStderrWithSandboxFailures\n\n  annotateStderrWithSandboxFailures(command: string, stderr: string): string",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method annotateStderrWithSandboxFailures",
+      "startLine": 31,
+      "startCol": 1,
+      "endLine": 31,
+      "endCol": 77
+    },
+    {
+      "text": "  getFsReadConfig(): FsReadConfig",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method getFsReadConfig\n\n  getFsReadConfig(): FsReadConfig",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method getFsReadConfig",
+      "startLine": 32,
+      "startCol": 1,
+      "endLine": 32,
+      "endCol": 34
+    },
+    {
+      "text": "  getFsWriteConfig(): FsWriteConfig",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method getFsWriteConfig\n\n  getFsWriteConfig(): FsWriteConfig",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method getFsWriteConfig",
+      "startLine": 33,
+      "startCol": 1,
+      "endLine": 33,
+      "endCol": 36
+    },
+    {
+      "text": "  updateConfigIfChanged(\n    config: SandboxConfig,\n    cwd: NvimCwd,\n    homeDir: HomeDir,\n  ): void",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method updateConfigIfChanged\n\n  updateConfigIfChanged(\n    config: SandboxConfig,\n    cwd: NvimCwd,\n    homeDir: HomeDir,\n  ): void",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method updateConfigIfChanged",
+      "startLine": 34,
+      "startCol": 1,
+      "endLine": 38,
+      "endCol": 10
+    },
+    {
+      "text": "  cleanupAfterCommand(): void",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method cleanupAfterCommand\n\n  cleanupAfterCommand(): void",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method cleanupAfterCommand",
+      "startLine": 39,
+      "startCol": 1,
+      "endLine": 39,
+      "endCol": 30
+    },
+    {
+      "text": "// The sandbox owns a single global network-ask callback, but UI prompts live\n  // in per-command handlers. Each in-flight sandboxed command pushes itself as\n  // the active target; routeNetworkAsk forwards to the top of the stack. An\n  // empty stack fails closed (deny).\n  pushNetworkAskTarget(target: NetworkAskTarget): void",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method pushNetworkAskTarget\n\n// The sandbox owns a single global network-ask callback, but UI prompts live\n  // in per-command handlers. Each in-flight sandboxed command pushes itself as\n  // the active target; routeNetworkAsk forwards to the top of the stack. An\n  // empty stack fails closed (deny).\n  pushNetworkAskTarget(target: NetworkAskTarget): void",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method pushNetworkAskTarget",
+      "startLine": 40,
+      "startCol": 3,
+      "endLine": 44,
+      "endCol": 55
+    },
+    {
+      "text": "  popNetworkAskTarget(target: NetworkAskTarget): void",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method popNetworkAskTarget\n\n  popNetworkAskTarget(target: NetworkAskTarget): void",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method popNetworkAskTarget",
+      "startLine": 45,
+      "startCol": 1,
+      "endLine": 45,
+      "endCol": 54
+    },
+    {
+      "text": "  routeNetworkAsk(params: NetworkAskParams): Promise\u003cboolean\u003e",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method routeNetworkAsk\n\n  routeNetworkAsk(params: NetworkAskParams): Promise\u003cboolean\u003e",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method routeNetworkAsk",
+      "startLine": 46,
+      "startCol": 1,
+      "endLine": 46,
+      "endCol": 62
+    },
+    {
+      "text": "// Remember a host approved by the user for the rest of the session so the\n  // network-ask callback (and the underlying proxy, via merged allowedDomains)\n  // stops prompting for it.\n  recordSessionApprovedHost(host: string): void",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e interface Sandbox \u003e method recordSessionApprovedHost\n\n// Remember a host approved by the user for the rest of the session so the\n  // network-ask callback (and the underlying proxy, via merged allowedDomains)\n  // stops prompting for it.\n  recordSessionApprovedHost(host: string): void",
+      "headingContext": "node/sandbox-manager.ts \u003e interface Sandbox \u003e method recordSessionApprovedHost",
+      "startLine": 47,
+      "startCol": 3,
+      "endLine": 50,
+      "endCol": 48
+    },
+    {
+      "text": "// -- Path resolution helpers --",
+      "contextualizedText": "// node/sandbox-manager.ts\n\n// -- Path resolution helpers --",
+      "headingContext": "node/sandbox-manager.ts",
+      "startLine": 53,
+      "startCol": 1,
+      "endLine": 53,
+      "endCol": 33
+    },
+    {
+      "text": "function resolvePath(p: string, cwd: NvimCwd, homeDir: HomeDir): string {\n  if (p.startsWith(\"~/\")) {\n    return path.join(homeDir, p.slice(2));\n  }\n  if (p.startsWith(\"./\")) {\n    return path.join(cwd, p.slice(2));\n  }\n  if (path.isAbsolute(p)) {\n    return p;\n  }\n  return path.join(cwd, p);\n}",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e function resolvePath\n\nfunction resolvePath(p: string, cwd: NvimCwd, homeDir: HomeDir): string {\n  if (p.startsWith(\"~/\")) {\n    return path.join(homeDir, p.slice(2));\n  }\n  if (p.startsWith(\"./\")) {\n    return path.join(cwd, p.slice(2));\n  }\n  if (path.isAbsolute(p)) {\n    return p;\n  }\n  return path.join(cwd, p);\n}",
+      "headingContext": "node/sandbox-manager.ts \u003e function resolvePath",
+      "startLine": 55,
+      "startCol": 1,
+      "endLine": 66,
+      "endCol": 2
+    },
+    {
+      "text": "function resolvePaths(\n  paths: string[],\n  cwd: NvimCwd,\n  homeDir: HomeDir,\n): string[] {\n  return paths.map((p) =\u003e resolvePath(p, cwd, homeDir));\n}",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e function resolvePaths\n\nfunction resolvePaths(\n  paths: string[],\n  cwd: NvimCwd,\n  homeDir: HomeDir,\n): string[] {\n  return paths.map((p) =\u003e resolvePath(p, cwd, homeDir));\n}",
+      "headingContext": "node/sandbox-manager.ts \u003e function resolvePaths",
+      "startLine": 68,
+      "startCol": 1,
+      "endLine": 74,
+      "endCol": 2
+    },
+    {
+      "text": "// Merge session-approved network hosts into the runtime allowedDomains list,\n// skipping any host that is already present so the proxy stops re-prompting.\nexport function mergeApprovedDomains(\n  allowedDomains: string[],\n  approvedHosts: string[],\n): string[] {\n  const merged = [...allowedDomains];\n  for (const host of approvedHosts) {\n    if (!merged.includes(host)) {\n      merged.push(host);\n    }\n  }\n  return merged;\n}",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e function mergeApprovedDomains\n\n// Merge session-approved network hosts into the runtime allowedDomains list,\n// skipping any host that is already present so the proxy stops re-prompting.\nexport function mergeApprovedDomains(\n  allowedDomains: string[],\n  approvedHosts: string[],\n): string[] {\n  const merged = [...allowedDomains];\n  for (const host of approvedHosts) {\n    if (!merged.includes(host)) {\n      merged.push(host);\n    }\n  }\n  return merged;\n}",
+      "headingContext": "node/sandbox-manager.ts \u003e function mergeApprovedDomains",
+      "startLine": 76,
+      "startCol": 1,
+      "endLine": 89,
+      "endCol": 2
+    },
+    {
+      "text": "function dedup(arr: string[]): string[] {\n  return [...new Set(arr)];\n}",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e function dedup\n\nfunction dedup(arr: string[]): string[] {\n  return [...new Set(arr)];\n}",
+      "headingContext": "node/sandbox-manager.ts \u003e function dedup",
+      "startLine": 91,
+      "startCol": 1,
+      "endLine": 93,
+      "endCol": 2
+    },
+    {
+      "text": "export function resolveConfigPaths(\n  config: SandboxConfig,\n  cwd: NvimCwd,\n  homeDir: HomeDir,\n): SandboxRuntimeConfig {\n  return {\n    filesystem: {\n      allowWrite: dedup(\n        resolvePaths(config.filesystem.allowWrite, cwd, homeDir),\n      ),\n      denyWrite: dedup(resolvePaths(config.filesystem.denyWrite, cwd, homeDir)),\n      denyRead: dedup(resolvePaths(config.filesystem.denyRead, cwd, homeDir)),\n      allowRead: dedup(resolvePaths(config.filesystem.allowRead, cwd, homeDir)),\n    },\n    network: {\n      allowedDomains: dedup(config.network.allowedDomains),\n      deniedDomains: dedup(config.network.deniedDomains),\n      allowUnixSockets: dedup(\n        resolvePaths(config.network.allowUnixSockets, cwd, homeDir),\n      ),\n      allowAllUnixSockets: config.network.allowAllUnixSockets,\n    },\n  };\n}",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e function resolveConfigPaths\n\nexport function resolveConfigPaths(\n  config: SandboxConfig,\n  cwd: NvimCwd,\n  homeDir: HomeDir,\n): SandboxRuntimeConfig {\n  return {\n    filesystem: {\n      allowWrite: dedup(\n        resolvePaths(config.filesystem.allowWrite, cwd, homeDir),\n      ),\n      denyWrite: dedup(resolvePaths(config.filesystem.denyWrite, cwd, homeDir)),\n      denyRead: dedup(resolvePaths(config.filesystem.denyRead, cwd, homeDir)),\n      allowRead: dedup(resolvePaths(config.filesystem.allowRead, cwd, homeDir)),\n    },\n    network: {\n      allowedDomains: dedup(config.network.allowedDomains),\n      deniedDomains: dedup(config.network.deniedDomains),\n      allowUnixSockets: dedup(\n        resolvePaths(config.network.allowUnixSockets, cwd, homeDir),\n      ),\n      allowAllUnixSockets: config.network.allowAllUnixSockets,\n    },\n  };\n}",
+      "headingContext": "node/sandbox-manager.ts \u003e function resolveConfigPaths",
+      "startLine": 95,
+      "startCol": 1,
+      "endLine": 118,
+      "endCol": 2
+    },
+    {
+      "text": "// Shared LIFO routing for the active network-ask target. Reused by RealSandbox\n// and test doubles so routing semantics stay identical.\nexport class NetworkAskStack {\n  private stack: NetworkAskTarget[] = [];\n  private approvedHosts = new Set\u003cstring\u003e()",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class NetworkAskStack\n\n// Shared LIFO routing for the active network-ask target. Reused by RealSandbox\n// and test doubles so routing semantics stay identical.\nexport class NetworkAskStack {\n  private stack: NetworkAskTarget[] = [];\n  private approvedHosts = new Set\u003cstring\u003e()",
+      "headingContext": "node/sandbox-manager.ts \u003e class NetworkAskStack",
+      "startLine": 120,
+      "startCol": 1,
+      "endLine": 124,
+      "endCol": 44
+    },
+    {
+      "text": "  push(target: NetworkAskTarget): void {\n    this.stack.push(target);\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class NetworkAskStack \u003e method push\n\n  push(target: NetworkAskTarget): void {\n    this.stack.push(target);\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class NetworkAskStack \u003e method push",
+      "startLine": 126,
+      "startCol": 1,
+      "endLine": 128,
+      "endCol": 4
+    },
+    {
+      "text": "  pop(target: NetworkAskTarget): void {\n    const idx = this.stack.lastIndexOf(target);\n    if (idx !== -1) {\n      this.stack.splice(idx, 1);\n    }\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class NetworkAskStack \u003e method pop\n\n  pop(target: NetworkAskTarget): void {\n    const idx = this.stack.lastIndexOf(target);\n    if (idx !== -1) {\n      this.stack.splice(idx, 1);\n    }\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class NetworkAskStack \u003e method pop",
+      "startLine": 130,
+      "startCol": 1,
+      "endLine": 135,
+      "endCol": 4
+    },
+    {
+      "text": "// A host approved during this session is remembered so subsequent requests to\n  // the same host (within the command or in later commands) are auto-approved\n  // without re-prompting. Rejections are intentionally not remembered.\n  recordApprovedHost(host: string): void {\n    this.approvedHosts.add(host);\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class NetworkAskStack \u003e method recordApprovedHost\n\n// A host approved during this session is remembered so subsequent requests to\n  // the same host (within the command or in later commands) are auto-approved\n  // without re-prompting. Rejections are intentionally not remembered.\n  recordApprovedHost(host: string): void {\n    this.approvedHosts.add(host);\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class NetworkAskStack \u003e method recordApprovedHost",
+      "startLine": 137,
+      "startCol": 3,
+      "endLine": 142,
+      "endCol": 4
+    },
+    {
+      "text": "  getApprovedHosts(): string[] {\n    return [...this.approvedHosts];\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class NetworkAskStack \u003e method getApprovedHosts\n\n  getApprovedHosts(): string[] {\n    return [...this.approvedHosts];\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class NetworkAskStack \u003e method getApprovedHosts",
+      "startLine": 144,
+      "startCol": 1,
+      "endLine": 146,
+      "endCol": 4
+    },
+    {
+      "text": "  route(params: NetworkAskParams): Promise\u003cboolean\u003e {\n    if (this.approvedHosts.has(params.host)) {\n      return Promise.resolve(true);\n    }\n    const target = this.stack[this.stack.length - 1];\n    if (!target) {\n      return Promise.resolve(false);\n    }\n    return target(params);\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class NetworkAskStack \u003e method route\n\n  route(params: NetworkAskParams): Promise\u003cboolean\u003e {\n    if (this.approvedHosts.has(params.host)) {\n      return Promise.resolve(true);\n    }\n    const target = this.stack[this.stack.length - 1];\n    if (!target) {\n      return Promise.resolve(false);\n    }\n    return target(params);\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class NetworkAskStack \u003e method route",
+      "startLine": 148,
+      "startCol": 1,
+      "endLine": 157,
+      "endCol": 4
+    },
+    {
+      "text": "// -- Real implementation wrapping @anthropic-ai/sandbox-runtime --",
+      "contextualizedText": "// node/sandbox-manager.ts\n\n// -- Real implementation wrapping @anthropic-ai/sandbox-runtime --",
+      "headingContext": "node/sandbox-manager.ts",
+      "startLine": 160,
+      "startCol": 1,
+      "endLine": 160,
+      "endCol": 68
+    },
+    {
+      "text": "class RealSandbox implements Sandbox {\n  private state: SandboxState;\n  private lastConfigJson: string | undefined;\n  private networkAskStack = new NetworkAskStack();\n\n  constructor(state: SandboxState, lastConfigJson?: string) {\n    this.state = state;\n    this.lastConfigJson = lastConfigJson;\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox\n\nclass RealSandbox implements Sandbox {\n  private state: SandboxState;\n  private lastConfigJson: string | undefined;\n  private networkAskStack = new NetworkAskStack();\n\n  constructor(state: SandboxState, lastConfigJson?: string) {\n    this.state = state;\n    this.lastConfigJson = lastConfigJson;\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox",
+      "startLine": 162,
+      "startCol": 1,
+      "endLine": 170,
+      "endCol": 4
+    },
+    {
+      "text": "  getState(): SandboxState {\n    return this.state;\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method getState\n\n  getState(): SandboxState {\n    return this.state;\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method getState",
+      "startLine": 172,
+      "startCol": 1,
+      "endLine": 174,
+      "endCol": 4
+    },
+    {
+      "text": "  wrapWithSandbox(command: string): Promise\u003cstring\u003e {\n    return SandboxManager.wrapWithSandbox(command);\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method wrapWithSandbox\n\n  wrapWithSandbox(command: string): Promise\u003cstring\u003e {\n    return SandboxManager.wrapWithSandbox(command);\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method wrapWithSandbox",
+      "startLine": 176,
+      "startCol": 1,
+      "endLine": 178,
+      "endCol": 4
+    },
+    {
+      "text": "  getViolationStore() {\n    return SandboxManager.getSandboxViolationStore();\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method getViolationStore\n\n  getViolationStore() {\n    return SandboxManager.getSandboxViolationStore();\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method getViolationStore",
+      "startLine": 180,
+      "startCol": 1,
+      "endLine": 182,
+      "endCol": 4
+    },
+    {
+      "text": "  annotateStderrWithSandboxFailures(command: string, stderr: string): string {\n    return SandboxManager.annotateStderrWithSandboxFailures(command, stderr);\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method annotateStderrWithSandboxFailures\n\n  annotateStderrWithSandboxFailures(command: string, stderr: string): string {\n    return SandboxManager.annotateStderrWithSandboxFailures(command, stderr);\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method annotateStderrWithSandboxFailures",
+      "startLine": 184,
+      "startCol": 1,
+      "endLine": 186,
+      "endCol": 4
+    },
+    {
+      "text": "  getFsReadConfig(): FsReadConfig {\n    return SandboxManager.getFsReadConfig();\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method getFsReadConfig\n\n  getFsReadConfig(): FsReadConfig {\n    return SandboxManager.getFsReadConfig();\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method getFsReadConfig",
+      "startLine": 188,
+      "startCol": 1,
+      "endLine": 190,
+      "endCol": 4
+    },
+    {
+      "text": "  getFsWriteConfig(): FsWriteConfig {\n    return SandboxManager.getFsWriteConfig();\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method getFsWriteConfig\n\n  getFsWriteConfig(): FsWriteConfig {\n    return SandboxManager.getFsWriteConfig();\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method getFsWriteConfig",
+      "startLine": 192,
+      "startCol": 1,
+      "endLine": 194,
+      "endCol": 4
+    },
+    {
+      "text": "  updateConfigIfChanged(\n    config: SandboxConfig,\n    cwd: NvimCwd,\n    homeDir: HomeDir,\n  ): void {\n    const runtimeConfig = resolveConfigPaths(config, cwd, homeDir);\n    runtimeConfig.network.allowedDomains = mergeApprovedDomains(\n      runtimeConfig.network.allowedDomains,\n      this.networkAskStack.getApprovedHosts(),\n    );\n    const configJson = JSON.stringify(runtimeConfig);\n    if (configJson === this.lastConfigJson) {\n      return;\n    }\n    this.lastConfigJson = configJson;\n    SandboxManager.updateConfig(runtimeConfig);\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method updateConfigIfChanged\n\n  updateConfigIfChanged(\n    config: SandboxConfig,\n    cwd: NvimCwd,\n    homeDir: HomeDir,\n  ): void {\n    const runtimeConfig = resolveConfigPaths(config, cwd, homeDir);\n    runtimeConfig.network.allowedDomains = mergeApprovedDomains(\n      runtimeConfig.network.allowedDomains,\n      this.networkAskStack.getApprovedHosts(),\n    );\n    const configJson = JSON.stringify(runtimeConfig);\n    if (configJson === this.lastConfigJson) {\n      return;\n    }\n    this.lastConfigJson = configJson;\n    SandboxManager.updateConfig(runtimeConfig);\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method updateConfigIfChanged",
+      "startLine": 196,
+      "startCol": 1,
+      "endLine": 212,
+      "endCol": 4
+    },
+    {
+      "text": "  cleanupAfterCommand(): void {\n    SandboxManager.cleanupAfterCommand();\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method cleanupAfterCommand\n\n  cleanupAfterCommand(): void {\n    SandboxManager.cleanupAfterCommand();\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method cleanupAfterCommand",
+      "startLine": 214,
+      "startCol": 1,
+      "endLine": 216,
+      "endCol": 4
+    },
+    {
+      "text": "  pushNetworkAskTarget(target: NetworkAskTarget): void {\n    this.networkAskStack.push(target);\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method pushNetworkAskTarget\n\n  pushNetworkAskTarget(target: NetworkAskTarget): void {\n    this.networkAskStack.push(target);\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method pushNetworkAskTarget",
+      "startLine": 218,
+      "startCol": 1,
+      "endLine": 220,
+      "endCol": 4
+    },
+    {
+      "text": "  popNetworkAskTarget(target: NetworkAskTarget): void {\n    this.networkAskStack.pop(target);\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method popNetworkAskTarget\n\n  popNetworkAskTarget(target: NetworkAskTarget): void {\n    this.networkAskStack.pop(target);\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method popNetworkAskTarget",
+      "startLine": 222,
+      "startCol": 1,
+      "endLine": 224,
+      "endCol": 4
+    },
+    {
+      "text": "  routeNetworkAsk(params: NetworkAskParams): Promise\u003cboolean\u003e {\n    return this.networkAskStack.route(params);\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method routeNetworkAsk\n\n  routeNetworkAsk(params: NetworkAskParams): Promise\u003cboolean\u003e {\n    return this.networkAskStack.route(params);\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method routeNetworkAsk",
+      "startLine": 226,
+      "startCol": 1,
+      "endLine": 228,
+      "endCol": 4
+    },
+    {
+      "text": "  recordSessionApprovedHost(host: string): void {\n    this.networkAskStack.recordApprovedHost(host);\n  }",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e class RealSandbox \u003e method recordSessionApprovedHost\n\n  recordSessionApprovedHost(host: string): void {\n    this.networkAskStack.recordApprovedHost(host);\n  }",
+      "headingContext": "node/sandbox-manager.ts \u003e class RealSandbox \u003e method recordSessionApprovedHost",
+      "startLine": 230,
+      "startCol": 1,
+      "endLine": 232,
+      "endCol": 4
+    },
+    {
+      "text": "// -- Factory --",
+      "contextualizedText": "// node/sandbox-manager.ts\n\n// -- Factory --",
+      "headingContext": "node/sandbox-manager.ts",
+      "startLine": 235,
+      "startCol": 1,
+      "endLine": 235,
+      "endCol": 17
+    },
+    {
+      "text": "export async function initializeSandbox(\n  config: SandboxConfig,\n  cwd: NvimCwd,\n  homeDir: HomeDir,\n  askCallback: SandboxAskCallback | undefined,\n",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e function initializeSandbox\n\nexport async function initializeSandbox(\n  config: SandboxConfig,\n  cwd: NvimCwd,\n  homeDir: HomeDir,\n  askCallback: SandboxAskCallback | undefined,\n",
+      "headingContext": "node/sandbox-manager.ts \u003e function initializeSandbox",
+      "startLine": 237,
+      "startCol": 1,
+      "endLine": 242,
+      "endCol": 1
+    },
+    {
+      "text": "  logger: { warn(msg: string): void",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e function initializeSandbox \u003e method warn\n\n  logger: { warn(msg: string): void",
+      "headingContext": "node/sandbox-manager.ts \u003e function initializeSandbox \u003e method warn",
+      "startLine": 242,
+      "startCol": 1,
+      "endLine": 242,
+      "endCol": 36
+    },
+    {
+      "text": ": Promise\u003cSandbox\u003e {\n  if (!SandboxManager.isSupportedPlatform()) {\n    const reason = \"Sandbox is not supported on this platform\";\n    logger.warn(reason);\n    return new RealSandbox({ status: \"unsupported\", reason });\n  }\n\n  const depCheck = SandboxManager.checkDependencies();\n  if (depCheck.errors.length \u003e 0) {\n    const reason = `Sandbox dependencies missing: ${depCheck.errors.join(\", \")}`;\n    logger.warn(reason);\n    return new RealSandbox({ status: \"unsupported\", reason });\n  }\n\n  if (depCheck.warnings.length \u003e 0) {\n    for (const warning of depCheck.warnings) {\n      logger.warn(`Sandbox dependency warning: ${warning}`);\n    }\n  }\n\n  // On Linux, sandbox violations are captured by running commands under strace.\n  // There is no regex fallback, so strace is a hard requirement: throw (refusing\n  // to start) if it is missing or cannot attach.\n  assertStraceAvailable(process.platform);\n\n  const runtimeConfig = resolveConfigPaths(config, cwd, homeDir);\n  await SandboxManager.initialize(runtimeConfig, askCallback, true);\n  const lastConfigJson = JSON.stringify(runtimeConfig);\n\n  return new RealSandbox({ status: \"ready\" }, lastConfigJson);\n}",
+      "contextualizedText": "// node/sandbox-manager.ts \u003e function initializeSandbox\n\n: Promise\u003cSandbox\u003e {\n  if (!SandboxManager.isSupportedPlatform()) {\n    const reason = \"Sandbox is not supported on this platform\";\n    logger.warn(reason);\n    return new RealSandbox({ status: \"unsupported\", reason });\n  }\n\n  const depCheck = SandboxManager.checkDependencies();\n  if (depCheck.errors.length \u003e 0) {\n    const reason = `Sandbox dependencies missing: ${depCheck.errors.join(\", \")}`;\n    logger.warn(reason);\n    return new RealSandbox({ status: \"unsupported\", reason });\n  }\n\n  if (depCheck.warnings.length \u003e 0) {\n    for (const warning of depCheck.warnings) {\n      logger.warn(`Sandbox dependency warning: ${warning}`);\n    }\n  }\n\n  // On Linux, sandbox violations are captured by running commands under strace.\n  // There is no regex fallback, so strace is a hard requirement: throw (refusing\n  // to start) if it is missing or cannot attach.\n  assertStraceAvailable(process.platform);\n\n  const runtimeConfig = resolveConfigPaths(config, cwd, homeDir);\n  await SandboxManager.initialize(runtimeConfig, askCallback, true);\n  const lastConfigJson = JSON.stringify(runtimeConfig);\n\n  return new RealSandbox({ status: \"ready\" }, lastConfigJson);\n}",
+      "headingContext": "node/sandbox-manager.ts \u003e function initializeSandbox",
+      "startLine": 243,
+      "startCol": 2,
+      "endLine": 273,
+      "endCol": 2
+    }
+  ]
+}

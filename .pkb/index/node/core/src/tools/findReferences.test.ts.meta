@@ -1,0 +1,87 @@
+{
+  "blobSha": "028385429f538bf5943503aad8573bcd2c6fdbf5",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { describe, expect, it, vi } from \"vitest\";\nimport type { FileIO } from \"../capabilities/file-io.ts\";\nimport type {\n  LspClient,\n  LspReferencesResponse,\n} from \"../capabilities/lsp-client.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport type { HomeDir, NvimCwd, UnresolvedFilePath } from \"../utils/files.ts\";\nimport * as FindReferences from \"./findReferences.ts\";\n\nconst CWD = \"/project\" as NvimCwd;\nconst HOME = \"/home/user\" as HomeDir;",
+      "contextualizedText": "// node/core/src/tools/findReferences.test.ts\n\nimport { describe, expect, it, vi } from \"vitest\";\nimport type { FileIO } from \"../capabilities/file-io.ts\";\nimport type {\n  LspClient,\n  LspReferencesResponse,\n} from \"../capabilities/lsp-client.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport type { HomeDir, NvimCwd, UnresolvedFilePath } from \"../utils/files.ts\";\nimport * as FindReferences from \"./findReferences.ts\";\n\nconst CWD = \"/project\" as NvimCwd;\nconst HOME = \"/home/user\" as HomeDir;",
+      "headingContext": "node/core/src/tools/findReferences.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 13,
+      "endCol": 38
+    },
+    {
+      "text": "function createMockLspClient(\n  referencesResponse: LspReferencesResponse,\n): LspClient {\n  return {\n    requestHover: vi.fn(),\n    requestReferences: vi.fn().mockResolvedValue(referencesResponse),\n    requestDefinition: vi.fn(),\n    requestTypeDefinition: vi.fn(),\n  };\n}",
+      "contextualizedText": "// node/core/src/tools/findReferences.test.ts \u003e function createMockLspClient\n\nfunction createMockLspClient(\n  referencesResponse: LspReferencesResponse,\n): LspClient {\n  return {\n    requestHover: vi.fn(),\n    requestReferences: vi.fn().mockResolvedValue(referencesResponse),\n    requestDefinition: vi.fn(),\n    requestTypeDefinition: vi.fn(),\n  };\n}",
+      "headingContext": "node/core/src/tools/findReferences.test.ts \u003e function createMockLspClient",
+      "startLine": 15,
+      "startCol": 1,
+      "endLine": 24,
+      "endCol": 2
+    },
+    {
+      "text": "function createMockFileIO(content: string): FileIO {\n  return {\n    readFile: vi.fn().mockResolvedValue(content),\n    readBinaryFile: vi.fn(),\n    writeFile: vi.fn(),\n    fileExists: vi.fn(),\n    mkdir: vi.fn(),\n    stat: vi.fn(),\n    readdir: vi.fn(),\n    isDirectory: vi.fn(),\n  };\n}",
+      "contextualizedText": "// node/core/src/tools/findReferences.test.ts \u003e function createMockFileIO\n\nfunction createMockFileIO(content: string): FileIO {\n  return {\n    readFile: vi.fn().mockResolvedValue(content),\n    readBinaryFile: vi.fn(),\n    writeFile: vi.fn(),\n    fileExists: vi.fn(),\n    mkdir: vi.fn(),\n    stat: vi.fn(),\n    readdir: vi.fn(),\n    isDirectory: vi.fn(),\n  };\n}",
+      "headingContext": "node/core/src/tools/findReferences.test.ts \u003e function createMockFileIO",
+      "startLine": 26,
+      "startCol": 1,
+      "endLine": 37,
+      "endCol": 2
+    },
+    {
+      "text": "function createFailingFileIO(error: Error): FileIO {\n  return {\n    readFile: vi.fn().mockRejectedValue(error),\n    readBinaryFile: vi.fn(),\n    writeFile: vi.fn(),\n    fileExists: vi.fn(),\n    mkdir: vi.fn(),\n    stat: vi.fn(),\n    readdir: vi.fn(),\n    isDirectory: vi.fn(),\n  };\n}",
+      "contextualizedText": "// node/core/src/tools/findReferences.test.ts \u003e function createFailingFileIO\n\nfunction createFailingFileIO(error: Error): FileIO {\n  return {\n    readFile: vi.fn().mockRejectedValue(error),\n    readBinaryFile: vi.fn(),\n    writeFile: vi.fn(),\n    fileExists: vi.fn(),\n    mkdir: vi.fn(),\n    stat: vi.fn(),\n    readdir: vi.fn(),\n    isDirectory: vi.fn(),\n  };\n}",
+      "headingContext": "node/core/src/tools/findReferences.test.ts \u003e function createFailingFileIO",
+      "startLine": 39,
+      "startCol": 1,
+      "endLine": 50,
+      "endCol": 2
+    },
+    {
+      "text": "async function getResultText(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003cstring\u003e {\n  const result = await invocation.promise;\n  if (result.result.status === \"ok\") {\n    return (result.result.value[0] as { type: \"text\"; text: string }).text;\n  }\n  return result.result.error;\n}",
+      "contextualizedText": "// node/core/src/tools/findReferences.test.ts \u003e function getResultText\n\nasync function getResultText(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003cstring\u003e {\n  const result = await invocation.promise;\n  if (result.result.status === \"ok\") {\n    return (result.result.value[0] as { type: \"text\"; text: string }).text;\n  }\n  return result.result.error;\n}",
+      "headingContext": "node/core/src/tools/findReferences.test.ts \u003e function getResultText",
+      "startLine": 52,
+      "startCol": 1,
+      "endLine": 60,
+      "endCol": 2
+    },
+    {
+      "text": "async function getResultStatus(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003c\"ok\" | \"error\"\u003e {\n  const result = await invocation.promise;\n  return result.result.status;\n}",
+      "contextualizedText": "// node/core/src/tools/findReferences.test.ts \u003e function getResultStatus\n\nasync function getResultStatus(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003c\"ok\" | \"error\"\u003e {\n  const result = await invocation.promise;\n  return result.result.status;\n}",
+      "headingContext": "node/core/src/tools/findReferences.test.ts \u003e function getResultStatus",
+      "startLine": 62,
+      "startCol": 1,
+      "endLine": 67,
+      "endCol": 2
+    },
+    {
+      "text": "describe(\"findReferences unit tests\", () =\u003e {\n  it(\"returns formatted reference locations\", async () =\u003e {\n    const fileContent = \"const foo = 42;\\nconsole.log(foo);\";\n    const referencesResponse: LspReferencesResponse = [\n      {\n        result: [\n          {\n            uri: \"file:///project/src/main.ts\",\n            range: {\n              start: { line: 0, character: 6 },\n              end: { line: 0, character: 9 },\n            },\n          },\n          {\n            uri: \"file:///project/src/utils.ts\",\n            range: {\n              start: { line: 4, character: 12 },\n              end: { line: 4, character: 15 },\n            },\n          },\n        ],\n      },\n    ];\n\n    const invocation = FindReferences.execute(\n      {\n        id: \"tool_1\" as ToolRequestId,\n        toolName: \"find_references\" as const,\n        input: {\n          filePath: \"/project/src/main.ts\" as UnresolvedFilePath,\n          symbol: \"foo\",\n        },\n      },\n      {\n        cwd: CWD,\n        homeDir: HOME,\n        lspClient: createMockLspClient(referencesResponse),\n        fileIO: createMockFileIO(fileContent),\n      },\n    );\n\n    const status = await getResultStatus(invocation);\n    expect(status).toBe(\"ok\");\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"/project/src/main.ts:1:6\");\n    expect(text).toContain(\"/project/src/utils.ts:5:12\");\n  });",
+      "contextualizedText": "// node/core/src/tools/findReferences.test.ts\n\ndescribe(\"findReferences unit tests\", () =\u003e {\n  it(\"returns formatted reference locations\", async () =\u003e {\n    const fileContent = \"const foo = 42;\\nconsole.log(foo);\";\n    const referencesResponse: LspReferencesResponse = [\n      {\n        result: [\n          {\n            uri: \"file:///project/src/main.ts\",\n            range: {\n              start: { line: 0, character: 6 },\n              end: { line: 0, character: 9 },\n            },\n          },\n          {\n            uri: \"file:///project/src/utils.ts\",\n            range: {\n              start: { line: 4, character: 12 },\n              end: { line: 4, character: 15 },\n            },\n          },\n        ],\n      },\n    ];\n\n    const invocation = FindReferences.execute(\n      {\n        id: \"tool_1\" as ToolRequestId,\n        toolName: \"find_references\" as const,\n        input: {\n          filePath: \"/project/src/main.ts\" as UnresolvedFilePath,\n          symbol: \"foo\",\n        },\n      },\n      {\n        cwd: CWD,\n        homeDir: HOME,\n        lspClient: createMockLspClient(referencesResponse),\n        fileIO: createMockFileIO(fileContent),\n      },\n    );\n\n    const status = await getResultStatus(invocation);\n    expect(status).toBe(\"ok\");\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"/project/src/main.ts:1:6\");\n    expect(text).toContain(\"/project/src/utils.ts:5:12\");\n  });",
+      "headingContext": "node/core/src/tools/findReferences.test.ts",
+      "startLine": 69,
+      "startCol": 1,
+      "endLine": 116,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"returns error when symbol not found\", async () =\u003e {\n    const fileContent = \"const foo = 42;\\nconsole.log(foo);\";\n\n    const invocation = FindReferences.execute(\n      {\n        id: \"tool_2\" as ToolRequestId,\n        toolName: \"find_references\" as const,\n        input: {\n          filePath: \"/project/src/main.ts\" as UnresolvedFilePath,\n          symbol: \"missing\",\n        },\n      },\n      {\n        cwd: CWD,\n        homeDir: HOME,\n        lspClient: createMockLspClient([]),\n        fileIO: createMockFileIO(fileContent),\n      },\n    );\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"error\");\n    if (result.result.status === \"error\") {\n      expect(result.result.error).toContain(\n        'Symbol \"missing\" not found in file.',\n      );\n    }\n  });\n\n  it(\"returns error when file read fails\", async () =\u003e {\n    const invocation = FindReferences.execute(\n      {\n        id: \"tool_3\" as ToolRequestId,\n        toolName: \"find_references\" as const,\n        input: {\n          filePath: \"/project/src/main.ts\" as UnresolvedFilePath,\n          symbol: \"foo\",\n        },\n      },\n      {\n        cwd: CWD,\n        homeDir: HOME,\n        lspClient: createMockLspClient([]),\n        fileIO: createFailingFileIO(new Error(\"ENOENT: no such file\")),\n      },\n    );\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"error\");\n    if (result.result.status === \"error\") {\n      expect(result.result.error).toContain(\"Failed to read file\");\n      expect(result.result.error).toContain(\"ENOENT\");\n    }\n  });",
+      "contextualizedText": "// node/core/src/tools/findReferences.test.ts\n\nit(\"returns error when symbol not found\", async () =\u003e {\n    const fileContent = \"const foo = 42;\\nconsole.log(foo);\";\n\n    const invocation = FindReferences.execute(\n      {\n        id: \"tool_2\" as ToolRequestId,\n        toolName: \"find_references\" as const,\n        input: {\n          filePath: \"/project/src/main.ts\" as UnresolvedFilePath,\n          symbol: \"missing\",\n        },\n      },\n      {\n        cwd: CWD,\n        homeDir: HOME,\n        lspClient: createMockLspClient([]),\n        fileIO: createMockFileIO(fileContent),\n      },\n    );\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"error\");\n    if (result.result.status === \"error\") {\n      expect(result.result.error).toContain(\n        'Symbol \"missing\" not found in file.',\n      );\n    }\n  });\n\n  it(\"returns error when file read fails\", async () =\u003e {\n    const invocation = FindReferences.execute(\n      {\n        id: \"tool_3\" as ToolRequestId,\n        toolName: \"find_references\" as const,\n        input: {\n          filePath: \"/project/src/main.ts\" as UnresolvedFilePath,\n          symbol: \"foo\",\n        },\n      },\n      {\n        cwd: CWD,\n        homeDir: HOME,\n        lspClient: createMockLspClient([]),\n        fileIO: createFailingFileIO(new Error(\"ENOENT: no such file\")),\n      },\n    );\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"error\");\n    if (result.result.status === \"error\") {\n      expect(result.result.error).toContain(\"Failed to read file\");\n      expect(result.result.error).toContain(\"ENOENT\");\n    }\n  });",
+      "headingContext": "node/core/src/tools/findReferences.test.ts",
+      "startLine": 118,
+      "startCol": 3,
+      "endLine": 171,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"returns No references found when LSP returns empty\", async () =\u003e {\n    const fileContent = \"const foo = 42;\";\n    const emptyResponse: LspReferencesResponse = [{ result: [] }];\n\n    const invocation = FindReferences.execute(\n      {\n        id: \"tool_4\" as ToolRequestId,\n        toolName: \"find_references\" as const,\n        input: {\n          filePath: \"/project/src/main.ts\" as UnresolvedFilePath,\n          symbol: \"foo\",\n        },\n      },\n      {\n        cwd: CWD,\n        homeDir: HOME,\n        lspClient: createMockLspClient(emptyResponse),\n        fileIO: createMockFileIO(fileContent),\n      },\n    );\n\n    const status = await getResultStatus(invocation);\n    expect(status).toBe(\"ok\");\n\n    const text = await getResultText(invocation);\n    expect(text).toBe(\"No references found\");\n  });",
+      "contextualizedText": "// node/core/src/tools/findReferences.test.ts\n\nit(\"returns No references found when LSP returns empty\", async () =\u003e {\n    const fileContent = \"const foo = 42;\";\n    const emptyResponse: LspReferencesResponse = [{ result: [] }];\n\n    const invocation = FindReferences.execute(\n      {\n        id: \"tool_4\" as ToolRequestId,\n        toolName: \"find_references\" as const,\n        input: {\n          filePath: \"/project/src/main.ts\" as UnresolvedFilePath,\n          symbol: \"foo\",\n        },\n      },\n      {\n        cwd: CWD,\n        homeDir: HOME,\n        lspClient: createMockLspClient(emptyResponse),\n        fileIO: createMockFileIO(fileContent),\n      },\n    );\n\n    const status = await getResultStatus(invocation);\n    expect(status).toBe(\"ok\");\n\n    const text = await getResultText(invocation);\n    expect(text).toBe(\"No references found\");\n  });",
+      "headingContext": "node/core/src/tools/findReferences.test.ts",
+      "startLine": 173,
+      "startCol": 3,
+      "endLine": 199,
+      "endCol": 6
+    }
+  ]
+}

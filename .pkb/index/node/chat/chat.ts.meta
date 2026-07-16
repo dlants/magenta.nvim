@@ -1,0 +1,690 @@
+{
+  "blobSha": "5a1a31ac5d0aa138b5a976f3f6d7b0f984b72f68",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type {\n  FileIO,\n  InputMessage,\n  NativeMessageIdx,\n  ScriptRunner,\n  SubagentConfig,\n  ThreadId,\n  ThreadType,\n} from \"@magenta/core\";\nimport {\n  AutoCompactSupervisor,\n  deleteArchivedThread,\n  listArchivedThreadIds,\n  loadAgents,\n  MCPToolManagerImpl,\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  readArchivedThreadLog,\n  readThreadMeta,\n  renderThreadLogToMarkdown,\n  SubagentSupervisor,\n  ThreadTitle,\n  threadCreatedAt,\n} from \"@magenta/core\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport { v7 as uuidv7 } from \"uuid\";\nimport type { Lsp } from \"../capabilities/lsp.ts\";\nimport type {\n  DockerSpawnConfig,\n  ThreadManager,\n} from \"../capabilities/thread-manager.ts\";\nimport {\n  autoContextFilesToInitialFiles,\n  discoverHierarchyContext,\n  resolveAutoContext,\n} from \"../context/auto-context.ts\";\nimport {\n  createDockerEnvironment,\n  createLocalEnvironment,\n  type EnvironmentConfig,\n} from \"../environment.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport { openScratchInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\nimport type { MagentaOptions, Profile } from \"../options.ts\";\nimport { getProvider } from \"../providers/provider.ts\";\nimport {\n  buildSystemInfo,\n  createSystemPrompt,\n} from \"../providers/system-prompt.ts\";\nimport type { RootMsg } from \"../root-msg.ts\";\nimport type { Sandbox } from \"../sandbox-manager.ts\";\nimport type { ScriptInvocationId } from \"../scripts/script-manager.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport { d, type VDOMNode, withBindings, withError } from \"../tea/view.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport type {\n  AbsFilePath,\n  HomeDir,\n  NvimCwd,\n  UnresolvedFilePath,\n} from \"../utils/files.ts\";\nimport type { Result } from \"../utils/result.ts\";\nimport { formatTokenCount } from \"../utils/tokens.ts\";\nimport type { SandboxRoot } from \"./thread.ts\";\nimport { Thread } from \"./thread.ts\";",
+      "contextualizedText": "// node/chat/chat.ts\n\nimport type {\n  FileIO,\n  InputMessage,\n  NativeMessageIdx,\n  ScriptRunner,\n  SubagentConfig,\n  ThreadId,\n  ThreadType,\n} from \"@magenta/core\";\nimport {\n  AutoCompactSupervisor,\n  deleteArchivedThread,\n  listArchivedThreadIds,\n  loadAgents,\n  MCPToolManagerImpl,\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  readArchivedThreadLog,\n  readThreadMeta,\n  renderThreadLogToMarkdown,\n  SubagentSupervisor,\n  ThreadTitle,\n  threadCreatedAt,\n} from \"@magenta/core\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport { v7 as uuidv7 } from \"uuid\";\nimport type { Lsp } from \"../capabilities/lsp.ts\";\nimport type {\n  DockerSpawnConfig,\n  ThreadManager,\n} from \"../capabilities/thread-manager.ts\";\nimport {\n  autoContextFilesToInitialFiles,\n  discoverHierarchyContext,\n  resolveAutoContext,\n} from \"../context/auto-context.ts\";\nimport {\n  createDockerEnvironment,\n  createLocalEnvironment,\n  type EnvironmentConfig,\n} from \"../environment.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport { openScratchInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\nimport type { MagentaOptions, Profile } from \"../options.ts\";\nimport { getProvider } from \"../providers/provider.ts\";\nimport {\n  buildSystemInfo,\n  createSystemPrompt,\n} from \"../providers/system-prompt.ts\";\nimport type { RootMsg } from \"../root-msg.ts\";\nimport type { Sandbox } from \"../sandbox-manager.ts\";\nimport type { ScriptInvocationId } from \"../scripts/script-manager.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport { d, type VDOMNode, withBindings, withError } from \"../tea/view.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport type {\n  AbsFilePath,\n  HomeDir,\n  NvimCwd,\n  UnresolvedFilePath,\n} from \"../utils/files.ts\";\nimport type { Result } from \"../utils/result.ts\";\nimport { formatTokenCount } from \"../utils/tokens.ts\";\nimport type { SandboxRoot } from \"./thread.ts\";\nimport { Thread } from \"./thread.ts\";",
+      "headingContext": "node/chat/chat.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 64,
+      "endCol": 38
+    },
+    {
+      "text": "import { DockerSupervisor } from \"./thread-supervisor.ts\";\nimport { view as threadView } from \"./thread-view.ts\";\n\nconst ARCHIVE_PAGE_SIZE = 50;\n\nconst ARCHIVE_DATE_FORMAT = new Intl.DateTimeFormat(\"en-US\", {\n  weekday: \"short\",\n  month: \"short\",\n  day: \"numeric\",\n  year: \"numeric\",\n  hour: \"numeric\",\n  minute: \"2-digit\",\n});\n\n/** Hydration state of an archived thread's title. Absence of a key in the\n * titles map means not-yet-hydrated; these variants describe a hydrated row. */\ntype ArchiveTitle =\n  | { status: \"untitled\" }\n  | { status: \"titled\"; title: string };\n\ntype ThreadWrapper = (\n  | {\n      state: \"pending\";\n    }\n  | {\n      state: \"initialized\";\n      thread: Thread;\n    }\n  | {\n      state: \"error\";\n      error: Error;\n    }\n) \u0026 {\n  parentThreadId: ThreadId | undefined;\n  scriptInvocationId?: ScriptInvocationId;\n  depth: number;\n  lastActivityTime: number;\n  lastViewedTime: number;\n};\n\ntype ChatState =\n  | {\n      state: \"thread-overview\";\n      activeThreadId: ThreadId | undefined;\n    }\n  | {\n      state: \"thread-selected\";\n      activeThreadId: ThreadId;\n    }\n  | {\n      state: \"archive\";\n      activeThreadId: ThreadId | undefined;\n      threadIds: ThreadId[];\n      loadedCount: number;\n      titles: { [id: ThreadId]: ArchiveTitle };\n    };",
+      "contextualizedText": "// node/chat/chat.ts\n\nimport { DockerSupervisor } from \"./thread-supervisor.ts\";\nimport { view as threadView } from \"./thread-view.ts\";\n\nconst ARCHIVE_PAGE_SIZE = 50;\n\nconst ARCHIVE_DATE_FORMAT = new Intl.DateTimeFormat(\"en-US\", {\n  weekday: \"short\",\n  month: \"short\",\n  day: \"numeric\",\n  year: \"numeric\",\n  hour: \"numeric\",\n  minute: \"2-digit\",\n});\n\n/** Hydration state of an archived thread's title. Absence of a key in the\n * titles map means not-yet-hydrated; these variants describe a hydrated row. */\ntype ArchiveTitle =\n  | { status: \"untitled\" }\n  | { status: \"titled\"; title: string };\n\ntype ThreadWrapper = (\n  | {\n      state: \"pending\";\n    }\n  | {\n      state: \"initialized\";\n      thread: Thread;\n    }\n  | {\n      state: \"error\";\n      error: Error;\n    }\n) \u0026 {\n  parentThreadId: ThreadId | undefined;\n  scriptInvocationId?: ScriptInvocationId;\n  depth: number;\n  lastActivityTime: number;\n  lastViewedTime: number;\n};\n\ntype ChatState =\n  | {\n      state: \"thread-overview\";\n      activeThreadId: ThreadId | undefined;\n    }\n  | {\n      state: \"thread-selected\";\n      activeThreadId: ThreadId;\n    }\n  | {\n      state: \"archive\";\n      activeThreadId: ThreadId | undefined;\n      threadIds: ThreadId[];\n      loadedCount: number;\n      titles: { [id: ThreadId]: ArchiveTitle };\n    };",
+      "headingContext": "node/chat/chat.ts",
+      "startLine": 65,
+      "startCol": 1,
+      "endLine": 120,
+      "endCol": 7
+    },
+    {
+      "text": "export type Msg =\n  | {\n      type: \"thread-initialized\";\n      thread: Thread;\n    }\n  | {\n      type: \"thread-error\";\n      id: ThreadId;\n      error: Error;\n    }\n  | {\n      type: \"set-active-thread\";\n      id: ThreadId;\n    }\n  | {\n      type: \"threads-navigate-up\";\n    }\n  | {\n      type: \"threads-overview\";\n    }\n  | {\n      type: \"toggle-thread-expand\";\n      id: ThreadId;\n    }\n  | {\n      type: \"delete-thread\";\n      id: ThreadId;\n    }\n  | {\n      type: \"delete-thread-subtree\";\n      id: ThreadId;\n    }\n  | {\n      type: \"archive-open\";\n    }\n  | {\n      type: \"archive-listed\";\n      threadIds: ThreadId[];\n    }\n  | {\n      type: \"archive-navigate-back\";\n    }\n  | {\n      type: \"archive-load-more\";\n    }\n  | {\n      type: \"archive-delete-thread\";\n      id: ThreadId;\n    }\n  | {\n      type: \"archive-delete-threads\";\n      ids: ThreadId[];\n    }\n  | {\n      type: \"archive-meta-loaded\";\n      id: ThreadId;\n      title: ArchiveTitle;\n    };\n\nexport type ChatMsg = {\n  type: \"chat-msg\";\n  msg: Msg;\n};",
+      "contextualizedText": "// node/chat/chat.ts\n\nexport type Msg =\n  | {\n      type: \"thread-initialized\";\n      thread: Thread;\n    }\n  | {\n      type: \"thread-error\";\n      id: ThreadId;\n      error: Error;\n    }\n  | {\n      type: \"set-active-thread\";\n      id: ThreadId;\n    }\n  | {\n      type: \"threads-navigate-up\";\n    }\n  | {\n      type: \"threads-overview\";\n    }\n  | {\n      type: \"toggle-thread-expand\";\n      id: ThreadId;\n    }\n  | {\n      type: \"delete-thread\";\n      id: ThreadId;\n    }\n  | {\n      type: \"delete-thread-subtree\";\n      id: ThreadId;\n    }\n  | {\n      type: \"archive-open\";\n    }\n  | {\n      type: \"archive-listed\";\n      threadIds: ThreadId[];\n    }\n  | {\n      type: \"archive-navigate-back\";\n    }\n  | {\n      type: \"archive-load-more\";\n    }\n  | {\n      type: \"archive-delete-thread\";\n      id: ThreadId;\n    }\n  | {\n      type: \"archive-delete-threads\";\n      ids: ThreadId[];\n    }\n  | {\n      type: \"archive-meta-loaded\";\n      id: ThreadId;\n      title: ArchiveTitle;\n    };\n\nexport type ChatMsg = {\n  type: \"chat-msg\";\n  msg: Msg;\n};",
+      "headingContext": "node/chat/chat.ts",
+      "startLine": 122,
+      "startCol": 1,
+      "endLine": 184,
+      "endCol": 3
+    },
+    {
+      "text": "export class Chat implements ThreadManager {\n  state: ChatState;\n  public threadWrappers: { [id: ThreadId]: ThreadWrapper };\n  public scriptRunner: ScriptRunner | undefined = undefined;\n  private mcpToolManager: MCPToolManagerImpl;\n  private expandedThreads: Set\u003cThreadId\u003e;\n  private threadYieldCallbacks: Map\u003cThreadId, Array\u003c() =\u003e void\u003e\u003e;\n\n  constructor(\n    private context: {\n      dispatch: Dispatch\u003cRootMsg\u003e;\n      getDisplayWidth: () =\u003e number;\n      getOptions: () =\u003e MagentaOptions;\n      cwd: NvimCwd;\n      homeDir: HomeDir;\n      nvim: Nvim;\n      lsp: Lsp;\n      sandbox: Sandbox;\n      removeThreadBuffers?: (ids: ThreadId[]) =\u003e void;\n    },\n  ) {\n    this.threadWrappers = {};\n    this.expandedThreads = new Set();\n    this.threadYieldCallbacks = new Map();\n    this.state = {\n      state: \"thread-overview\",\n      activeThreadId: undefined,\n    };\n\n    this.mcpToolManager = new MCPToolManagerImpl(\n      this.context.getOptions().mcpServers,\n      { logger: this.context.nvim.logger },\n    );\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat\n\nexport class Chat implements ThreadManager {\n  state: ChatState;\n  public threadWrappers: { [id: ThreadId]: ThreadWrapper };\n  public scriptRunner: ScriptRunner | undefined = undefined;\n  private mcpToolManager: MCPToolManagerImpl;\n  private expandedThreads: Set\u003cThreadId\u003e;\n  private threadYieldCallbacks: Map\u003cThreadId, Array\u003c() =\u003e void\u003e\u003e;\n\n  constructor(\n    private context: {\n      dispatch: Dispatch\u003cRootMsg\u003e;\n      getDisplayWidth: () =\u003e number;\n      getOptions: () =\u003e MagentaOptions;\n      cwd: NvimCwd;\n      homeDir: HomeDir;\n      nvim: Nvim;\n      lsp: Lsp;\n      sandbox: Sandbox;\n      removeThreadBuffers?: (ids: ThreadId[]) =\u003e void;\n    },\n  ) {\n    this.threadWrappers = {};\n    this.expandedThreads = new Set();\n    this.threadYieldCallbacks = new Map();\n    this.state = {\n      state: \"thread-overview\",\n      activeThreadId: undefined,\n    };\n\n    this.mcpToolManager = new MCPToolManagerImpl(\n      this.context.getOptions().mcpServers,\n      { logger: this.context.nvim.logger },\n    );\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat",
+      "startLine": 186,
+      "startCol": 1,
+      "endLine": 219,
+      "endCol": 4
+    },
+    {
+      "text": "  update(msg: RootMsg) {\n    if (msg.type === \"chat-msg\") {\n      this.myUpdate(msg.msg);\n      return;\n    }\n\n    if (msg.type === \"thread-msg\" \u0026\u0026 msg.id in this.threadWrappers) {\n      const threadState = this.threadWrappers[msg.id];\n      if (threadState.state === \"initialized\") {\n        const thread = threadState.thread;\n        thread.update(msg);\n\n        if (msg.msg.type === \"send-message\") {\n          const rootId = this.getRootAncestorId(msg.id);\n          this.threadWrappers[rootId].lastActivityTime = Date.now();\n        }\n\n        if (msg.msg.type === \"turn-ended\") {\n          this.threadWrappers[msg.id].lastActivityTime = Date.now();\n        }\n\n        if (msg.msg.type === \"permission-pending-change\") {\n          this.threadWrappers[msg.id].lastActivityTime = Date.now();\n        }\n\n        if (msg.msg.type === \"abort\") {\n          // Find all child threads of the parent thread and abort them directly\n          for (const [threadId, threadWrapper] of Object.entries(\n            this.threadWrappers,\n          )) {\n            if (\n              threadWrapper.parentThreadId === thread.id \u0026\u0026\n              threadWrapper.state === \"initialized\" \u0026\u0026\n              threadWrapper.thread.core.state.mode.type !== \"yielded\"\n            ) {\n              threadWrapper.thread.update({\n                type: \"thread-msg\",\n                id: threadId as ThreadId,\n                msg: {\n                  type: \"abort\",\n                },\n              });\n            }\n          }\n        }\n\n        if (this.getThreadResult(thread.id).status === \"done\") {\n          this.fireThreadYieldCallbacks(thread.id);\n        }\n      }\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method update\n\n  update(msg: RootMsg) {\n    if (msg.type === \"chat-msg\") {\n      this.myUpdate(msg.msg);\n      return;\n    }\n\n    if (msg.type === \"thread-msg\" \u0026\u0026 msg.id in this.threadWrappers) {\n      const threadState = this.threadWrappers[msg.id];\n      if (threadState.state === \"initialized\") {\n        const thread = threadState.thread;\n        thread.update(msg);\n\n        if (msg.msg.type === \"send-message\") {\n          const rootId = this.getRootAncestorId(msg.id);\n          this.threadWrappers[rootId].lastActivityTime = Date.now();\n        }\n\n        if (msg.msg.type === \"turn-ended\") {\n          this.threadWrappers[msg.id].lastActivityTime = Date.now();\n        }\n\n        if (msg.msg.type === \"permission-pending-change\") {\n          this.threadWrappers[msg.id].lastActivityTime = Date.now();\n        }\n\n        if (msg.msg.type === \"abort\") {\n          // Find all child threads of the parent thread and abort them directly\n          for (const [threadId, threadWrapper] of Object.entries(\n            this.threadWrappers,\n          )) {\n            if (\n              threadWrapper.parentThreadId === thread.id \u0026\u0026\n              threadWrapper.state === \"initialized\" \u0026\u0026\n              threadWrapper.thread.core.state.mode.type !== \"yielded\"\n            ) {\n              threadWrapper.thread.update({\n                type: \"thread-msg\",\n                id: threadId as ThreadId,\n                msg: {\n                  type: \"abort\",\n                },\n              });\n            }\n          }\n        }\n\n        if (this.getThreadResult(thread.id).status === \"done\") {\n          this.fireThreadYieldCallbacks(thread.id);\n        }\n      }\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method update",
+      "startLine": 221,
+      "startCol": 1,
+      "endLine": 272,
+      "endCol": 4
+    },
+    {
+      "text": "/** Record that we've stopped viewing the currently-selected thread, so that\n   * any activity from this point on counts as unviewed. */\n  private markActiveThreadViewed() {\n    if (\n      this.state.state === \"thread-selected\" \u0026\u0026\n      this.state.activeThreadId in this.threadWrappers\n    ) {\n      this.threadWrappers[this.state.activeThreadId].lastViewedTime =\n        Date.now();\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method markActiveThreadViewed\n\n/** Record that we've stopped viewing the currently-selected thread, so that\n   * any activity from this point on counts as unviewed. */\n  private markActiveThreadViewed() {\n    if (\n      this.state.state === \"thread-selected\" \u0026\u0026\n      this.state.activeThreadId in this.threadWrappers\n    ) {\n      this.threadWrappers[this.state.activeThreadId].lastViewedTime =\n        Date.now();\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method markActiveThreadViewed",
+      "startLine": 274,
+      "startCol": 3,
+      "endLine": 284,
+      "endCol": 4
+    },
+    {
+      "text": "  private myUpdate(msg: Msg) {\n    switch (msg.type) {\n      case \"thread-initialized\": {\n        const prev = this.threadWrappers[msg.thread.id];\n        const wrapper: ThreadWrapper = {\n          state: \"initialized\",\n          thread: msg.thread,\n          parentThreadId: prev.parentThreadId,\n          ...(prev.scriptInvocationId\n            ? { scriptInvocationId: prev.scriptInvocationId }\n            : {}),\n          depth: prev.depth,\n          lastActivityTime: prev.lastActivityTime,\n          lastViewedTime: prev.lastViewedTime,\n        };\n        this.threadWrappers[msg.thread.id] = wrapper;\n\n        return;\n      }\n\n      case \"thread-error\": {\n        const thread = this.threadWrappers[msg.id];\n        this.threadWrappers[msg.id] = {\n          state: \"error\",\n          error: msg.error,\n          parentThreadId: thread.parentThreadId,\n          ...(thread.scriptInvocationId\n            ? { scriptInvocationId: thread.scriptInvocationId }\n            : {}),\n          depth: thread.depth,\n          lastActivityTime: thread.lastActivityTime,\n          lastViewedTime: thread.lastViewedTime,\n        };\n\n        if (this.state.state === \"thread-selected\") {\n          this.state = {\n            state: \"thread-overview\",\n            activeThreadId: msg.id,\n          };\n        }\n\n        if (thread) {\n          this.fireThreadYieldCallbacks(msg.id);\n        }\n\n        return;\n      }\n\n      case \"set-active-thread\":\n        if (msg.id in this.threadWrappers) {\n          this.markActiveThreadViewed();\n          this.threadWrappers[msg.id].lastViewedTime = Date.now();\n          this.state = {\n            state: \"thread-selected\",\n            activeThreadId: msg.id,\n          };\n        }\n        return;",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method myUpdate\n\n  private myUpdate(msg: Msg) {\n    switch (msg.type) {\n      case \"thread-initialized\": {\n        const prev = this.threadWrappers[msg.thread.id];\n        const wrapper: ThreadWrapper = {\n          state: \"initialized\",\n          thread: msg.thread,\n          parentThreadId: prev.parentThreadId,\n          ...(prev.scriptInvocationId\n            ? { scriptInvocationId: prev.scriptInvocationId }\n            : {}),\n          depth: prev.depth,\n          lastActivityTime: prev.lastActivityTime,\n          lastViewedTime: prev.lastViewedTime,\n        };\n        this.threadWrappers[msg.thread.id] = wrapper;\n\n        return;\n      }\n\n      case \"thread-error\": {\n        const thread = this.threadWrappers[msg.id];\n        this.threadWrappers[msg.id] = {\n          state: \"error\",\n          error: msg.error,\n          parentThreadId: thread.parentThreadId,\n          ...(thread.scriptInvocationId\n            ? { scriptInvocationId: thread.scriptInvocationId }\n            : {}),\n          depth: thread.depth,\n          lastActivityTime: thread.lastActivityTime,\n          lastViewedTime: thread.lastViewedTime,\n        };\n\n        if (this.state.state === \"thread-selected\") {\n          this.state = {\n            state: \"thread-overview\",\n            activeThreadId: msg.id,\n          };\n        }\n\n        if (thread) {\n          this.fireThreadYieldCallbacks(msg.id);\n        }\n\n        return;\n      }\n\n      case \"set-active-thread\":\n        if (msg.id in this.threadWrappers) {\n          this.markActiveThreadViewed();\n          this.threadWrappers[msg.id].lastViewedTime = Date.now();\n          this.state = {\n            state: \"thread-selected\",\n            activeThreadId: msg.id,\n          };\n        }\n        return;",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method myUpdate",
+      "startLine": 286,
+      "startCol": 1,
+      "endLine": 343,
+      "endCol": 16
+    },
+    {
+      "text": "case \"threads-navigate-up\":\n        this.markActiveThreadViewed();\n        // If we're viewing a thread and it has a parent, navigate to parent\n        if (\n          this.state.state === \"thread-selected\" \u0026\u0026\n          this.state.activeThreadId\n        ) {\n          const threadWrapper = this.threadWrappers[this.state.activeThreadId];\n          if (threadWrapper?.parentThreadId) {\n            // Navigate to parent thread\n            this.state = {\n              state: \"thread-selected\",\n              activeThreadId: threadWrapper.parentThreadId,\n            };\n\n            // Scroll to bottom when navigating to parent\n            setTimeout(() =\u003e {\n              this.context.dispatch({\n                type: \"sidebar-msg\",\n                msg: {\n                  type: \"set-cursor-to-bottom\",\n                },\n              });\n            }, 100);\n\n            return;\n          }\n        }\n\n        // Otherwise, navigate to thread overview\n        this.state = {\n          state: \"thread-overview\",\n          activeThreadId: this.state.activeThreadId,\n        };\n        return;\n\n      case \"threads-overview\":\n        this.markActiveThreadViewed();\n        // Force navigation to thread overview regardless of current state\n        this.state = {\n          state: \"thread-overview\",\n          activeThreadId: this.state.activeThreadId,\n        };\n        return;\n\n      case \"delete-thread\": {\n        const rootId = this.getRootAncestorId(msg.id);\n        this.deleteThreadSubtree(rootId);\n        return;\n      }\n\n      case \"delete-thread-subtree\": {\n        this.deleteThreadSubtree(msg.id);\n        return;\n      }\n\n      case \"toggle-thread-expand\":\n        if (this.expandedThreads.has(msg.id)) {\n          this.expandedThreads.delete(msg.id);\n        } else {\n          this.expandedThreads.add(msg.id);\n        }\n        return;",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method myUpdate\n\ncase \"threads-navigate-up\":\n        this.markActiveThreadViewed();\n        // If we're viewing a thread and it has a parent, navigate to parent\n        if (\n          this.state.state === \"thread-selected\" \u0026\u0026\n          this.state.activeThreadId\n        ) {\n          const threadWrapper = this.threadWrappers[this.state.activeThreadId];\n          if (threadWrapper?.parentThreadId) {\n            // Navigate to parent thread\n            this.state = {\n              state: \"thread-selected\",\n              activeThreadId: threadWrapper.parentThreadId,\n            };\n\n            // Scroll to bottom when navigating to parent\n            setTimeout(() =\u003e {\n              this.context.dispatch({\n                type: \"sidebar-msg\",\n                msg: {\n                  type: \"set-cursor-to-bottom\",\n                },\n              });\n            }, 100);\n\n            return;\n          }\n        }\n\n        // Otherwise, navigate to thread overview\n        this.state = {\n          state: \"thread-overview\",\n          activeThreadId: this.state.activeThreadId,\n        };\n        return;\n\n      case \"threads-overview\":\n        this.markActiveThreadViewed();\n        // Force navigation to thread overview regardless of current state\n        this.state = {\n          state: \"thread-overview\",\n          activeThreadId: this.state.activeThreadId,\n        };\n        return;\n\n      case \"delete-thread\": {\n        const rootId = this.getRootAncestorId(msg.id);\n        this.deleteThreadSubtree(rootId);\n        return;\n      }\n\n      case \"delete-thread-subtree\": {\n        this.deleteThreadSubtree(msg.id);\n        return;\n      }\n\n      case \"toggle-thread-expand\":\n        if (this.expandedThreads.has(msg.id)) {\n          this.expandedThreads.delete(msg.id);\n        } else {\n          this.expandedThreads.add(msg.id);\n        }\n        return;",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method myUpdate",
+      "startLine": 345,
+      "startCol": 7,
+      "endLine": 407,
+      "endCol": 16
+    },
+    {
+      "text": "case \"archive-open\": {\n        this.markActiveThreadViewed();\n        this.state = {\n          state: \"archive\",\n          activeThreadId: this.state.activeThreadId,\n          threadIds: [],\n          loadedCount: ARCHIVE_PAGE_SIZE,\n          titles: {},\n        };\n        void this.loadArchiveList();\n        return;\n      }\n\n      case \"archive-listed\": {\n        if (this.state.state !== \"archive\") return;\n        this.state.threadIds = msg.threadIds;\n        this.hydrateArchiveTitles();\n        return;\n      }\n\n      case \"archive-navigate-back\": {\n        this.state = {\n          state: \"thread-overview\",\n          activeThreadId: this.state.activeThreadId,\n        };\n        return;\n      }\n\n      case \"archive-load-more\": {\n        if (this.state.state !== \"archive\") return;\n        this.state.loadedCount += ARCHIVE_PAGE_SIZE;\n        this.hydrateArchiveTitles();\n        return;\n      }\n\n      case \"archive-delete-thread\": {\n        if (this.state.state !== \"archive\") return;\n        this.state.threadIds = this.state.threadIds.filter(\n          (id) =\u003e id !== msg.id,\n        );\n        delete this.state.titles[msg.id];\n        void deleteArchivedThread(msg.id).catch((err: Error) =\u003e {\n          this.context.nvim.logger.error(\n            `Failed to delete archived thread ${msg.id}: ${err.message}`,\n          );\n        });\n        return;\n      }\n\n      case \"archive-delete-threads\": {\n        if (this.state.state !== \"archive\") return;\n        const idSet = new Set(msg.ids);\n        this.state.threadIds = this.state.threadIds.filter(\n          (id) =\u003e !idSet.has(id),\n        );\n        for (const id of msg.ids) {\n          delete this.state.titles[id];\n          void deleteArchivedThread(id).catch((err: Error) =\u003e {\n            this.context.nvim.logger.error(\n              `Failed to delete archived thread ${id}: ${err.message}`,\n            );\n          });\n        }\n        return;\n      }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method myUpdate\n\ncase \"archive-open\": {\n        this.markActiveThreadViewed();\n        this.state = {\n          state: \"archive\",\n          activeThreadId: this.state.activeThreadId,\n          threadIds: [],\n          loadedCount: ARCHIVE_PAGE_SIZE,\n          titles: {},\n        };\n        void this.loadArchiveList();\n        return;\n      }\n\n      case \"archive-listed\": {\n        if (this.state.state !== \"archive\") return;\n        this.state.threadIds = msg.threadIds;\n        this.hydrateArchiveTitles();\n        return;\n      }\n\n      case \"archive-navigate-back\": {\n        this.state = {\n          state: \"thread-overview\",\n          activeThreadId: this.state.activeThreadId,\n        };\n        return;\n      }\n\n      case \"archive-load-more\": {\n        if (this.state.state !== \"archive\") return;\n        this.state.loadedCount += ARCHIVE_PAGE_SIZE;\n        this.hydrateArchiveTitles();\n        return;\n      }\n\n      case \"archive-delete-thread\": {\n        if (this.state.state !== \"archive\") return;\n        this.state.threadIds = this.state.threadIds.filter(\n          (id) =\u003e id !== msg.id,\n        );\n        delete this.state.titles[msg.id];\n        void deleteArchivedThread(msg.id).catch((err: Error) =\u003e {\n          this.context.nvim.logger.error(\n            `Failed to delete archived thread ${msg.id}: ${err.message}`,\n          );\n        });\n        return;\n      }\n\n      case \"archive-delete-threads\": {\n        if (this.state.state !== \"archive\") return;\n        const idSet = new Set(msg.ids);\n        this.state.threadIds = this.state.threadIds.filter(\n          (id) =\u003e !idSet.has(id),\n        );\n        for (const id of msg.ids) {\n          delete this.state.titles[id];\n          void deleteArchivedThread(id).catch((err: Error) =\u003e {\n            this.context.nvim.logger.error(\n              `Failed to delete archived thread ${id}: ${err.message}`,\n            );\n          });\n        }\n        return;\n      }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method myUpdate",
+      "startLine": 409,
+      "startCol": 7,
+      "endLine": 473,
+      "endCol": 8
+    },
+    {
+      "text": "case \"archive-meta-loaded\": {\n        if (this.state.state !== \"archive\") return;\n        this.state.titles[msg.id] = msg.title;\n        return;\n      }\n\n      default:\n        assertUnreachable(msg);\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method myUpdate\n\ncase \"archive-meta-loaded\": {\n        if (this.state.state !== \"archive\") return;\n        this.state.titles[msg.id] = msg.title;\n        return;\n      }\n\n      default:\n        assertUnreachable(msg);\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method myUpdate",
+      "startLine": 475,
+      "startCol": 7,
+      "endLine": 484,
+      "endCol": 4
+    },
+    {
+      "text": "/** Read the archived thread id list off disk and dispatch it back into the\n   * archive state. Cheap: readdir + name parsing, no file contents. */\n  private async loadArchiveList(): Promise\u003cvoid\u003e {\n    try {\n      const threadIds = await listArchivedThreadIds();\n      this.myDispatch({ type: \"archive-listed\", threadIds });\n    } catch (err) {\n      this.context.nvim.logger.error(\n        `Failed to list archived threads: ${(err as Error).message}`,\n      );\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method loadArchiveList\n\n/** Read the archived thread id list off disk and dispatch it back into the\n   * archive state. Cheap: readdir + name parsing, no file contents. */\n  private async loadArchiveList(): Promise\u003cvoid\u003e {\n    try {\n      const threadIds = await listArchivedThreadIds();\n      this.myDispatch({ type: \"archive-listed\", threadIds });\n    } catch (err) {\n      this.context.nvim.logger.error(\n        `Failed to list archived threads: ${(err as Error).message}`,\n      );\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method loadArchiveList",
+      "startLine": 486,
+      "startCol": 3,
+      "endLine": 497,
+      "endCol": 4
+    },
+    {
+      "text": "/** Lazily read `meta.json` sidecars for the currently-visible window of\n   * archived threads, dispatching a message per row as its title arrives. Ids\n   * whose title is already hydrated are skipped. */\n  private hydrateArchiveTitles(): void {\n    if (this.state.state !== \"archive\") return;\n    const window = this.state.threadIds.slice(0, this.state.loadedCount);\n    for (const id of window) {\n      if (id in this.state.titles) continue;\n      void readThreadMeta(id)\n        .then((meta) =\u003e {\n          this.myDispatch({\n            type: \"archive-meta-loaded\",\n            id,\n            title:\n              meta.title === undefined\n                ? { status: \"untitled\" }\n                : { status: \"titled\", title: meta.title },\n          });\n        })\n        .catch((err: Error) =\u003e {\n          this.context.nvim.logger.error(\n            `Failed to read archived thread meta ${id}: ${err.message}`,\n          );\n        });\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method hydrateArchiveTitles\n\n/** Lazily read `meta.json` sidecars for the currently-visible window of\n   * archived threads, dispatching a message per row as its title arrives. Ids\n   * whose title is already hydrated are skipped. */\n  private hydrateArchiveTitles(): void {\n    if (this.state.state !== \"archive\") return;\n    const window = this.state.threadIds.slice(0, this.state.loadedCount);\n    for (const id of window) {\n      if (id in this.state.titles) continue;\n      void readThreadMeta(id)\n        .then((meta) =\u003e {\n          this.myDispatch({\n            type: \"archive-meta-loaded\",\n            id,\n            title:\n              meta.title === undefined\n                ? { status: \"untitled\" }\n                : { status: \"titled\", title: meta.title },\n          });\n        })\n        .catch((err: Error) =\u003e {\n          this.context.nvim.logger.error(\n            `Failed to read archived thread meta ${id}: ${err.message}`,\n          );\n        });\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method hydrateArchiveTitles",
+      "startLine": 499,
+      "startCol": 3,
+      "endLine": 524,
+      "endCol": 4
+    },
+    {
+      "text": "  private myDispatch(msg: Msg): void {\n    this.context.dispatch({ type: \"chat-msg\", msg });\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method myDispatch\n\n  private myDispatch(msg: Msg): void {\n    this.context.dispatch({ type: \"chat-msg\", msg });\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method myDispatch",
+      "startLine": 526,
+      "startCol": 1,
+      "endLine": 528,
+      "endCol": 4
+    },
+    {
+      "text": "  getMessages() {\n    if (\n      this.state.state === \"thread-selected\" \u0026\u0026\n      this.state.activeThreadId in this.threadWrappers\n    ) {\n      const threadState = this.threadWrappers[this.state.activeThreadId];\n      if (threadState.state === \"initialized\") {\n        return threadState.thread.getMessages();\n      }\n    }\n    return [];\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method getMessages\n\n  getMessages() {\n    if (\n      this.state.state === \"thread-selected\" \u0026\u0026\n      this.state.activeThreadId in this.threadWrappers\n    ) {\n      const threadState = this.threadWrappers[this.state.activeThreadId];\n      if (threadState.state === \"initialized\") {\n        return threadState.thread.getMessages();\n      }\n    }\n    return [];\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method getMessages",
+      "startLine": 530,
+      "startCol": 1,
+      "endLine": 541,
+      "endCol": 4
+    },
+    {
+      "text": "/** Get the active agent for use as context in forceToolUse calls */\n  getContextAgent() {\n    if (\n      this.state.state === \"thread-selected\" \u0026\u0026\n      this.state.activeThreadId in this.threadWrappers\n    ) {\n      const threadState = this.threadWrappers[this.state.activeThreadId];\n      if (threadState.state === \"initialized\") {\n        return threadState.thread.agent;\n      }\n    }\n    return undefined;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method getContextAgent\n\n/** Get the active agent for use as context in forceToolUse calls */\n  getContextAgent() {\n    if (\n      this.state.state === \"thread-selected\" \u0026\u0026\n      this.state.activeThreadId in this.threadWrappers\n    ) {\n      const threadState = this.threadWrappers[this.state.activeThreadId];\n      if (threadState.state === \"initialized\") {\n        return threadState.thread.agent;\n      }\n    }\n    return undefined;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method getContextAgent",
+      "startLine": 543,
+      "startCol": 3,
+      "endLine": 555,
+      "endCol": 4
+    },
+    {
+      "text": "  private triggerHierarchyDiscovery(\n    thread: Thread,\n    absFilePath: AbsFilePath,\n  ): void {\n    discoverHierarchyContext(absFilePath, {\n      nvim: this.context.nvim,\n      cwd: this.context.cwd,\n      homeDir: this.context.homeDir,\n      options: this.context.getOptions(),\n    })\n      .then((discovered) =\u003e {\n        for (const file of discovered) {\n          thread.contextManager.addFileContext(\n            file.absFilePath,\n            file.relFilePath,\n            file.fileTypeInfo,\n          );\n        }\n      })\n      .catch((err: Error) =\u003e {\n        this.context.nvim.logger.error(\n          `Error discovering hierarchy context for ${absFilePath}: ${err.message}`,\n        );\n      });\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method triggerHierarchyDiscovery\n\n  private triggerHierarchyDiscovery(\n    thread: Thread,\n    absFilePath: AbsFilePath,\n  ): void {\n    discoverHierarchyContext(absFilePath, {\n      nvim: this.context.nvim,\n      cwd: this.context.cwd,\n      homeDir: this.context.homeDir,\n      options: this.context.getOptions(),\n    })\n      .then((discovered) =\u003e {\n        for (const file of discovered) {\n          thread.contextManager.addFileContext(\n            file.absFilePath,\n            file.relFilePath,\n            file.fileTypeInfo,\n          );\n        }\n      })\n      .catch((err: Error) =\u003e {\n        this.context.nvim.logger.error(\n          `Error discovering hierarchy context for ${absFilePath}: ${err.message}`,\n        );\n      });\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method triggerHierarchyDiscovery",
+      "startLine": 557,
+      "startCol": 1,
+      "endLine": 581,
+      "endCol": 4
+    },
+    {
+      "text": "  private async createThreadWithContext({\n    threadId,\n    profile,\n    contextFiles = [],\n    parent,\n    inputMessages,\n    threadType,\n    subagentConfig,\n    fileIO,\n    environmentConfig,\n    dockerSpawnConfig,\n    getParentThread,\n    getSandboxRoot,\n    yieldSchema,\n    scriptInvocationId,\n    autoCompactThreshold,\n    autoCompactPrompt,\n  }: {\n    threadId: ThreadId;\n    profile: Profile;\n    contextFiles?: UnresolvedFilePath[];\n    parent?: ThreadId;\n    inputMessages?: InputMessage[];\n    threadType: ThreadType;\n    subagentConfig?: SubagentConfig;\n    fileIO?: FileIO;\n    environmentConfig?: EnvironmentConfig;\n    dockerSpawnConfig?: DockerSpawnConfig | undefined;\n    getParentThread?: () =\u003e Thread | undefined;\n    getSandboxRoot?: () =\u003e SandboxRoot | undefined;\n    yieldSchema?: JSONSchemaType;\n    scriptInvocationId?: ScriptInvocationId;\n    autoCompactThreshold?: number;\n    autoCompactPrompt?: string;\n  }) {\n    this.threadWrappers[threadId] = {\n      state: \"pending\",\n      parentThreadId: parent,\n      ...(scriptInvocationId ? { scriptInvocationId } : {}),\n      depth: parent ? (this.threadWrappers[parent]?.depth ?? 0) + 1 : 0,\n      lastActivityTime: Date.now(),\n      lastViewedTime: Date.now(),\n    };\n\n    const resolvedConfig: EnvironmentConfig = environmentConfig ?? {\n      type: \"local\",\n    };\n\n",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext\n\n  private async createThreadWithContext({\n    threadId,\n    profile,\n    contextFiles = [],\n    parent,\n    inputMessages,\n    threadType,\n    subagentConfig,\n    fileIO,\n    environmentConfig,\n    dockerSpawnConfig,\n    getParentThread,\n    getSandboxRoot,\n    yieldSchema,\n    scriptInvocationId,\n    autoCompactThreshold,\n    autoCompactPrompt,\n  }: {\n    threadId: ThreadId;\n    profile: Profile;\n    contextFiles?: UnresolvedFilePath[];\n    parent?: ThreadId;\n    inputMessages?: InputMessage[];\n    threadType: ThreadType;\n    subagentConfig?: SubagentConfig;\n    fileIO?: FileIO;\n    environmentConfig?: EnvironmentConfig;\n    dockerSpawnConfig?: DockerSpawnConfig | undefined;\n    getParentThread?: () =\u003e Thread | undefined;\n    getSandboxRoot?: () =\u003e SandboxRoot | undefined;\n    yieldSchema?: JSONSchemaType;\n    scriptInvocationId?: ScriptInvocationId;\n    autoCompactThreshold?: number;\n    autoCompactPrompt?: string;\n  }) {\n    this.threadWrappers[threadId] = {\n      state: \"pending\",\n      parentThreadId: parent,\n      ...(scriptInvocationId ? { scriptInvocationId } : {}),\n      depth: parent ? (this.threadWrappers[parent]?.depth ?? 0) + 1 : 0,\n      lastActivityTime: Date.now(),\n      lastViewedTime: Date.now(),\n    };\n\n    const resolvedConfig: EnvironmentConfig = environmentConfig ?? {\n      type: \"local\",\n    };\n\n",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext",
+      "startLine": 583,
+      "startCol": 1,
+      "endLine": 631,
+      "endCol": 1
+    },
+    {
+      "text": "    const bypassRef = { get: () =\u003e false as boolean",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext \u003e function get\n\n    const bypassRef = { get: () =\u003e false as boolean",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext \u003e function get",
+      "startLine": 631,
+      "startCol": 1,
+      "endLine": 631,
+      "endCol": 52
+    },
+    {
+      "text": "[autoContextFiles, environment] = await Promise.all([\n      resolveAutoContext({\n        ...this.context,\n        options: this.context.getOptions(),\n      }),\n      resolvedConfig.type === \"docker\"\n        ? createDockerEnvironment({\n            container: resolvedConfig.container,\n            cwd: resolvedConfig.cwd,\n            threadId,\n          })\n        : Promise.resolve(\n            createLocalEnvironment({\n              nvim: this.context.nvim,\n              lsp: this.context.lsp,\n\n              cwd: resolvedConfig.cwd ?? this.context.cwd,\n              homeDir: this.context.homeDir,\n              getOptions: this.context.getOptions,\n              threadId,\n              sandbox: this.context.sandbox",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext\n\n[autoContextFiles, environment] = await Promise.all([\n      resolveAutoContext({\n        ...this.context,\n        options: this.context.getOptions(),\n      }),\n      resolvedConfig.type === \"docker\"\n        ? createDockerEnvironment({\n            container: resolvedConfig.container,\n            cwd: resolvedConfig.cwd,\n            threadId,\n          })\n        : Promise.resolve(\n            createLocalEnvironment({\n              nvim: this.context.nvim,\n              lsp: this.context.lsp,\n\n              cwd: resolvedConfig.cwd ?? this.context.cwd,\n              homeDir: this.context.homeDir,\n              getOptions: this.context.getOptions,\n              threadId,\n              sandbox: this.context.sandbox",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext",
+      "startLine": 633,
+      "startCol": 11,
+      "endLine": 653,
+      "endCol": 44
+    },
+    {
+      "text": "              onPendingChange: () =\u003e\n                this.context.dispatch({\n                  type: \"thread-msg\",\n                  id: threadId,\n                  msg: { type: \"permission-pending-change\" },\n                })",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext \u003e function onPendingChange\n\n              onPendingChange: () =\u003e\n                this.context.dispatch({\n                  type: \"thread-msg\",\n                  id: threadId,\n                  msg: { type: \"permission-pending-change\" },\n                })",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext \u003e function onPendingChange",
+      "startLine": 654,
+      "startCol": 1,
+      "endLine": 659,
+      "endCol": 19
+    },
+    {
+      "text": "              isBypassed: () =\u003e bypassRef.get()",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext \u003e function isBypassed\n\n              isBypassed: () =\u003e bypassRef.get()",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext \u003e function isBypassed",
+      "startLine": 660,
+      "startCol": 1,
+      "endLine": 660,
+      "endCol": 48
+    },
+    {
+      "text": "this.scriptRunner?.discover(),\n    ]);\n\n    const initialFiles = autoContextFilesToInitialFiles(autoContextFiles);\n\n    if (fileIO) {\n      environment.fileIO = fileIO;\n      environment.sandboxViolationHandler = undefined;\n    }\n\n    const initialGitState = await environment.gitClient.getState();\n\n    const systemInfo = await buildSystemInfo({\n      nvim: this.context.nvim,\n      cwd: environment.cwd,\n      systemInfoOverrides: {\n        git: initialGitState,\n        ...(resolvedConfig.type === \"docker\"\n          ? { platform: \"linux (docker)\", cwd: environment.cwd }\n          : {}),\n      },\n    });\n\n    const systemPrompt = await createSystemPrompt(threadType, {\n      nvim: this.context.nvim,\n      cwd: environment.cwd,\n      options: this.context.getOptions(),\n      fileIO: environment.fileIO,\n      homeDir: environment.homeDir,\n      ...(subagentConfig ? { subagentConfig } : {}),\n    });\n\n    const thread = new Thread(threadId, threadType, systemPrompt, {\n      ...this.context,\n      options: this.context.getOptions(),\n      mcpToolManager: this.mcpToolManager,\n      profile,\n      chat: this,\n      environment,\n      initialFiles,\n      initialGitState,\n      systemInfo,\n      ...(subagentConfig ? { subagentConfig } : {}),\n      ...(getParentThread ? { getParentThread } : {}),\n      ...(getSandboxRoot ? { getSandboxRoot } : {}),\n      ...(yieldSchema ? { yieldSchema } : {}),\n    });\n\n    bypassRef.get = () =\u003e thread.isSandboxBypassed;\n\n    thread.contextManager.on(\"fileAdded\", (absFilePath) =\u003e {\n      this.triggerHierarchyDiscovery(thread, absFilePath);\n    });\n\n    for (const absFilePath of Object.keys(\n      thread.contextManager.files,\n    ) as AbsFilePath[]) {\n      this.triggerHierarchyDiscovery(thread, absFilePath);\n    }\n\n    if (contextFiles.length \u003e 0) {\n      await thread.contextManager.addFiles(contextFiles);\n    }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext\n\nthis.scriptRunner?.discover(),\n    ]);\n\n    const initialFiles = autoContextFilesToInitialFiles(autoContextFiles);\n\n    if (fileIO) {\n      environment.fileIO = fileIO;\n      environment.sandboxViolationHandler = undefined;\n    }\n\n    const initialGitState = await environment.gitClient.getState();\n\n    const systemInfo = await buildSystemInfo({\n      nvim: this.context.nvim,\n      cwd: environment.cwd,\n      systemInfoOverrides: {\n        git: initialGitState,\n        ...(resolvedConfig.type === \"docker\"\n          ? { platform: \"linux (docker)\", cwd: environment.cwd }\n          : {}),\n      },\n    });\n\n    const systemPrompt = await createSystemPrompt(threadType, {\n      nvim: this.context.nvim,\n      cwd: environment.cwd,\n      options: this.context.getOptions(),\n      fileIO: environment.fileIO,\n      homeDir: environment.homeDir,\n      ...(subagentConfig ? { subagentConfig } : {}),\n    });\n\n    const thread = new Thread(threadId, threadType, systemPrompt, {\n      ...this.context,\n      options: this.context.getOptions(),\n      mcpToolManager: this.mcpToolManager,\n      profile,\n      chat: this,\n      environment,\n      initialFiles,\n      initialGitState,\n      systemInfo,\n      ...(subagentConfig ? { subagentConfig } : {}),\n      ...(getParentThread ? { getParentThread } : {}),\n      ...(getSandboxRoot ? { getSandboxRoot } : {}),\n      ...(yieldSchema ? { yieldSchema } : {}),\n    });\n\n    bypassRef.get = () =\u003e thread.isSandboxBypassed;\n\n    thread.contextManager.on(\"fileAdded\", (absFilePath) =\u003e {\n      this.triggerHierarchyDiscovery(thread, absFilePath);\n    });\n\n    for (const absFilePath of Object.keys(\n      thread.contextManager.files,\n    ) as AbsFilePath[]) {\n      this.triggerHierarchyDiscovery(thread, absFilePath);\n    }\n\n    if (contextFiles.length \u003e 0) {\n      await thread.contextManager.addFiles(contextFiles);\n    }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext",
+      "startLine": 663,
+      "startCol": 7,
+      "endLine": 725,
+      "endCol": 6
+    },
+    {
+      "text": "const autoCompact =\n      threadType === \"compact\"\n        ? []\n        : [\n            new AutoCompactSupervisor({\n              threshold:\n                autoCompactThreshold ??\n                this.context.getOptions().autoCompactThreshold,\n              nextPrompt:\n                autoCompactPrompt ??\n                this.context.getOptions().autoCompactPrompt,\n            }),\n          ];\n\n    if (dockerSpawnConfig?.supervised) {\n      thread.supervisors = [\n        new DockerSupervisor(\n          dockerSpawnConfig.containerName,\n          dockerSpawnConfig.workspacePath,\n          dockerSpawnConfig.hostDir",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext\n\nconst autoCompact =\n      threadType === \"compact\"\n        ? []\n        : [\n            new AutoCompactSupervisor({\n              threshold:\n                autoCompactThreshold ??\n                this.context.getOptions().autoCompactThreshold,\n              nextPrompt:\n                autoCompactPrompt ??\n                this.context.getOptions().autoCompactPrompt,\n            }),\n          ];\n\n    if (dockerSpawnConfig?.supervised) {\n      thread.supervisors = [\n        new DockerSupervisor(\n          dockerSpawnConfig.containerName,\n          dockerSpawnConfig.workspacePath,\n          dockerSpawnConfig.hostDir",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext",
+      "startLine": 727,
+      "startCol": 5,
+      "endLine": 746,
+      "endCol": 36
+    },
+    {
+      "text": "            onProgress: (message) =\u003e {\n              thread.core.update({\n                type: \"set-teardown-message\",\n                message,\n              });\n              this.context.dispatch({\n                type: \"thread-msg\",\n                id: thread.id,\n                msg: { type: \"tool-progress\" },\n              });\n            }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext \u003e function onProgress\n\n            onProgress: (message) =\u003e {\n              thread.core.update({\n                type: \"set-teardown-message\",\n                message,\n              });\n              this.context.dispatch({\n                type: \"thread-msg\",\n                id: thread.id,\n                msg: { type: \"tool-progress\" },\n              });\n            }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext \u003e function onProgress",
+      "startLine": 748,
+      "startCol": 1,
+      "endLine": 758,
+      "endCol": 14
+    },
+    {
+      "text": "thread.supervisors.push(...autoCompact);\n    } else if (threadType === \"subagent\" || threadType === \"docker_root\") {\n      thread.supervisors = [new SubagentSupervisor(), ...autoCompact];\n    } else {\n      thread.supervisors = autoCompact;\n    }\n\n    this.context.dispatch({\n      type: \"chat-msg\",\n      msg: {\n        type: \"thread-initialized\",\n        thread,\n      },\n    });\n\n    if (inputMessages) {\n      this.context.dispatch({\n        type: \"thread-msg\",\n        id: threadId,\n        msg: {\n          type: \"send-message\",\n          messages: inputMessages,\n        },\n      });\n    }\n\n    return thread;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext\n\nthread.supervisors.push(...autoCompact);\n    } else if (threadType === \"subagent\" || threadType === \"docker_root\") {\n      thread.supervisors = [new SubagentSupervisor(), ...autoCompact];\n    } else {\n      thread.supervisors = autoCompact;\n    }\n\n    this.context.dispatch({\n      type: \"chat-msg\",\n      msg: {\n        type: \"thread-initialized\",\n        thread,\n      },\n    });\n\n    if (inputMessages) {\n      this.context.dispatch({\n        type: \"thread-msg\",\n        id: threadId,\n        msg: {\n          type: \"send-message\",\n          messages: inputMessages,\n        },\n      });\n    }\n\n    return thread;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method createThreadWithContext",
+      "startLine": 762,
+      "startCol": 7,
+      "endLine": 789,
+      "endCol": 4
+    },
+    {
+      "text": "  async createNewThread(): Promise\u003cThreadId\u003e {\n    const id = uuidv7() as ThreadId;\n\n    await this.createThreadWithContext({\n      threadId: id,\n      profile: getActiveProfile(\n        this.context.getOptions().profiles,\n        this.context.getOptions().activeProfile,\n      ),\n      threadType: \"root\",\n    });\n\n    return id;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method createNewThread\n\n  async createNewThread(): Promise\u003cThreadId\u003e {\n    const id = uuidv7() as ThreadId;\n\n    await this.createThreadWithContext({\n      threadId: id,\n      profile: getActiveProfile(\n        this.context.getOptions().profiles,\n        this.context.getOptions().activeProfile,\n      ),\n      threadType: \"root\",\n    });\n\n    return id;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method createNewThread",
+      "startLine": 791,
+      "startCol": 1,
+      "endLine": 804,
+      "endCol": 4
+    },
+    {
+      "text": "  async createNewAgentThread(agentName: string): Promise\u003cThreadId\u003e {\n    const agents = loadAgents({\n      cwd: this.context.cwd,\n      logger: this.context.nvim.logger,\n      options: this.context.getOptions(),\n    });\n    const agentDef = agents[agentName];\n    if (!agentDef) {\n      throw new Error(\n        `Agent \"${agentName}\" not found. Available agents: ${Object.keys(agents).join(\", \")}`,\n      );\n    }\n\n    const id = uuidv7() as ThreadId;\n    const subagentConfig: SubagentConfig = {\n      agentName: agentDef.name,\n      systemPrompt: agentDef.systemPrompt,\n      systemReminder: agentDef.systemReminder,\n      tier: agentDef.tier,\n    };\n\n    await this.createThreadWithContext({\n      threadId: id,\n      profile: getActiveProfile(\n        this.context.getOptions().profiles,\n        this.context.getOptions().activeProfile,\n      ),\n      threadType: \"root\",\n      ...(subagentConfig ? { subagentConfig } : {}),\n    });\n\n    return id;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method createNewAgentThread\n\n  async createNewAgentThread(agentName: string): Promise\u003cThreadId\u003e {\n    const agents = loadAgents({\n      cwd: this.context.cwd,\n      logger: this.context.nvim.logger,\n      options: this.context.getOptions(),\n    });\n    const agentDef = agents[agentName];\n    if (!agentDef) {\n      throw new Error(\n        `Agent \"${agentName}\" not found. Available agents: ${Object.keys(agents).join(\", \")}`,\n      );\n    }\n\n    const id = uuidv7() as ThreadId;\n    const subagentConfig: SubagentConfig = {\n      agentName: agentDef.name,\n      systemPrompt: agentDef.systemPrompt,\n      systemReminder: agentDef.systemReminder,\n      tier: agentDef.tier,\n    };\n\n    await this.createThreadWithContext({\n      threadId: id,\n      profile: getActiveProfile(\n        this.context.getOptions().profiles,\n        this.context.getOptions().activeProfile,\n      ),\n      threadType: \"root\",\n      ...(subagentConfig ? { subagentConfig } : {}),\n    });\n\n    return id;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method createNewAgentThread",
+      "startLine": 806,
+      "startCol": 1,
+      "endLine": 838,
+      "endCol": 4
+    },
+    {
+      "text": "  private getRootAncestorId(threadId: ThreadId): ThreadId {\n    let current = threadId;\n    let parentId = this.threadWrappers[current]?.parentThreadId;\n    while (parentId !== undefined) {\n      current = parentId;\n      parentId = this.threadWrappers[current]?.parentThreadId;\n    }\n    return current;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method getRootAncestorId\n\n  private getRootAncestorId(threadId: ThreadId): ThreadId {\n    let current = threadId;\n    let parentId = this.threadWrappers[current]?.parentThreadId;\n    while (parentId !== undefined) {\n      current = parentId;\n      parentId = this.threadWrappers[current]?.parentThreadId;\n    }\n    return current;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method getRootAncestorId",
+      "startLine": 840,
+      "startCol": 1,
+      "endLine": 848,
+      "endCol": 4
+    },
+    {
+      "text": "  private deleteThreadSubtree(rootId: ThreadId): void {\n    const childrenMap = this.buildChildrenMap();\n    const idsToDelete: ThreadId[] = [];",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method deleteThreadSubtree\n\n  private deleteThreadSubtree(rootId: ThreadId): void {\n    const childrenMap = this.buildChildrenMap();\n    const idsToDelete: ThreadId[] = [];",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method deleteThreadSubtree",
+      "startLine": 850,
+      "startCol": 1,
+      "endLine": 852,
+      "endCol": 40
+    },
+    {
+      "text": "    const collectIds = (id: ThreadId) =\u003e {\n      idsToDelete.push(id);\n      for (const childId of childrenMap.get(id) ?? []) {\n        collectIds(childId);\n      }\n    }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method deleteThreadSubtree \u003e function collectIds\n\n    const collectIds = (id: ThreadId) =\u003e {\n      idsToDelete.push(id);\n      for (const childId of childrenMap.get(id) ?? []) {\n        collectIds(childId);\n      }\n    }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method deleteThreadSubtree \u003e function collectIds",
+      "startLine": 853,
+      "startCol": 1,
+      "endLine": 858,
+      "endCol": 6
+    },
+    {
+      "text": "collectIds(rootId);\n\n    for (const id of idsToDelete) {\n      const wrapper = this.threadWrappers[id];\n      if (wrapper?.state === \"initialized\") {\n        wrapper.thread.destroy().catch((e: Error) =\u003e {\n          this.context.nvim.logger.error(\n            `Error destroying thread ${id} during delete: ${e.message}`,\n          );\n        });\n      }\n      delete this.threadWrappers[id];\n      this.threadYieldCallbacks.delete(id);\n    }\n\n    this.context.removeThreadBuffers?.(idsToDelete);\n\n    this.expandedThreads.delete(rootId);\n\n    if (\n      this.state.activeThreadId \u0026\u0026\n      idsToDelete.includes(this.state.activeThreadId)\n    ) {\n      this.state = {\n        state: \"thread-overview\",\n        activeThreadId: undefined,\n      };\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method deleteThreadSubtree\n\ncollectIds(rootId);\n\n    for (const id of idsToDelete) {\n      const wrapper = this.threadWrappers[id];\n      if (wrapper?.state === \"initialized\") {\n        wrapper.thread.destroy().catch((e: Error) =\u003e {\n          this.context.nvim.logger.error(\n            `Error destroying thread ${id} during delete: ${e.message}`,\n          );\n        });\n      }\n      delete this.threadWrappers[id];\n      this.threadYieldCallbacks.delete(id);\n    }\n\n    this.context.removeThreadBuffers?.(idsToDelete);\n\n    this.expandedThreads.delete(rootId);\n\n    if (\n      this.state.activeThreadId \u0026\u0026\n      idsToDelete.includes(this.state.activeThreadId)\n    ) {\n      this.state = {\n        state: \"thread-overview\",\n        activeThreadId: undefined,\n      };\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method deleteThreadSubtree",
+      "startLine": 859,
+      "startCol": 5,
+      "endLine": 887,
+      "endCol": 4
+    },
+    {
+      "text": "  private collectSubtreeViolationViews(\n    threadId: ThreadId,\n    childrenMap: Map\u003cThreadId, ThreadId[]\u003e,\n  ): VDOMNode[] {\n    const views: VDOMNode[] = [];\n    const wrapper = this.threadWrappers[threadId];\n    if (\n      wrapper?.state === \"initialized\" \u0026\u0026\n      wrapper.thread.sandboxViolationHandler\n    ) {\n      const handler = wrapper.thread.sandboxViolationHandler;\n      if (handler.getPendingViolations().size \u003e 0) {\n        views.push(handler.view());\n      }\n    }\n    const children = childrenMap.get(threadId) ?? [];\n    for (const childId of children) {\n      views.push(...this.collectSubtreeViolationViews(childId, childrenMap));\n    }\n    return views;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method collectSubtreeViolationViews\n\n  private collectSubtreeViolationViews(\n    threadId: ThreadId,\n    childrenMap: Map\u003cThreadId, ThreadId[]\u003e,\n  ): VDOMNode[] {\n    const views: VDOMNode[] = [];\n    const wrapper = this.threadWrappers[threadId];\n    if (\n      wrapper?.state === \"initialized\" \u0026\u0026\n      wrapper.thread.sandboxViolationHandler\n    ) {\n      const handler = wrapper.thread.sandboxViolationHandler;\n      if (handler.getPendingViolations().size \u003e 0) {\n        views.push(handler.view());\n      }\n    }\n    const children = childrenMap.get(threadId) ?? [];\n    for (const childId of children) {\n      views.push(...this.collectSubtreeViolationViews(childId, childrenMap));\n    }\n    return views;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method collectSubtreeViolationViews",
+      "startLine": 889,
+      "startCol": 1,
+      "endLine": 909,
+      "endCol": 4
+    },
+    {
+      "text": "/** A thread wants the user's attention if it has unviewed activity (a\n   * completed turn or a pending permission approval) and has not yielded. */\n  threadNeedsAttention(threadId: ThreadId): boolean {\n    const wrapper = this.threadWrappers[threadId];\n    if (wrapper === undefined || wrapper.state !== \"initialized\") return false;\n    const core = wrapper.thread.core;\n    // A yielded thread has finished its work; a streaming thread is actively\n    // working. Neither needs the user's attention.\n    if (core.state.mode.type === \"yielded\") return false;\n    if (core.getProviderStatus().type === \"streaming\") return false;\n    return wrapper.lastActivityTime \u003e wrapper.lastViewedTime;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method threadNeedsAttention\n\n/** A thread wants the user's attention if it has unviewed activity (a\n   * completed turn or a pending permission approval) and has not yielded. */\n  threadNeedsAttention(threadId: ThreadId): boolean {\n    const wrapper = this.threadWrappers[threadId];\n    if (wrapper === undefined || wrapper.state !== \"initialized\") return false;\n    const core = wrapper.thread.core;\n    // A yielded thread has finished its work; a streaming thread is actively\n    // working. Neither needs the user's attention.\n    if (core.state.mode.type === \"yielded\") return false;\n    if (core.getProviderStatus().type === \"streaming\") return false;\n    return wrapper.lastActivityTime \u003e wrapper.lastViewedTime;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method threadNeedsAttention",
+      "startLine": 911,
+      "startCol": 3,
+      "endLine": 922,
+      "endCol": 4
+    },
+    {
+      "text": "/** Whether any thread in a script-owned subtree wants attention. */\n  scriptSubtreeNeedsAttention(threadId: ThreadId): boolean {\n    const childrenMap = this.buildChildrenMap();",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method scriptSubtreeNeedsAttention\n\n/** Whether any thread in a script-owned subtree wants attention. */\n  scriptSubtreeNeedsAttention(threadId: ThreadId): boolean {\n    const childrenMap = this.buildChildrenMap();",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method scriptSubtreeNeedsAttention",
+      "startLine": 924,
+      "startCol": 3,
+      "endLine": 926,
+      "endCol": 49
+    },
+    {
+      "text": "    const visit = (id: ThreadId): boolean =\u003e\n      this.threadNeedsAttention(id) || (childrenMap.get(id) ?? []).some(visit)",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method scriptSubtreeNeedsAttention \u003e function visit\n\n    const visit = (id: ThreadId): boolean =\u003e\n      this.threadNeedsAttention(id) || (childrenMap.get(id) ?? []).some(visit)",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method scriptSubtreeNeedsAttention \u003e function visit",
+      "startLine": 927,
+      "startCol": 1,
+      "endLine": 928,
+      "endCol": 79
+    },
+    {
+      "text": "return visit(threadId);\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method scriptSubtreeNeedsAttention\n\nreturn visit(threadId);\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method scriptSubtreeNeedsAttention",
+      "startLine": 929,
+      "startCol": 5,
+      "endLine": 930,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Render a script-owned thread and its subtree, indented starting at the\n   * given base depth (the script row sits above at depth 0). Used by the\n   * Scripts section in the overview.\n   */\n  renderScriptThreadSubtree(threadId: ThreadId, baseDepth: number): VDOMNode[] {\n    const childrenMap = this.buildChildrenMap();\n    const views: VDOMNode[] = [];\n    this.renderScriptSubtreeInner(threadId, childrenMap, baseDepth, views);\n    return views;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderScriptThreadSubtree\n\n/**\n   * Render a script-owned thread and its subtree, indented starting at the\n   * given base depth (the script row sits above at depth 0). Used by the\n   * Scripts section in the overview.\n   */\n  renderScriptThreadSubtree(threadId: ThreadId, baseDepth: number): VDOMNode[] {\n    const childrenMap = this.buildChildrenMap();\n    const views: VDOMNode[] = [];\n    this.renderScriptSubtreeInner(threadId, childrenMap, baseDepth, views);\n    return views;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderScriptThreadSubtree",
+      "startLine": 932,
+      "startCol": 3,
+      "endLine": 942,
+      "endCol": 4
+    },
+    {
+      "text": "  private renderScriptSubtreeInner(\n    threadId: ThreadId,\n    childrenMap: Map\u003cThreadId, ThreadId[]\u003e,\n    depth: number,\n    views: VDOMNode[],\n  ) {\n    if (!this.threadWrappers[threadId]) return;\n    views.push(\n      this.renderThread(threadId, depth, this.state.activeThreadId, undefined, {\n        showTokenCount: true,\n      }),\n    );\n    for (const childId of childrenMap.get(threadId) ?? []) {\n      this.renderScriptSubtreeInner(childId, childrenMap, depth + 1, views);\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderScriptSubtreeInner\n\n  private renderScriptSubtreeInner(\n    threadId: ThreadId,\n    childrenMap: Map\u003cThreadId, ThreadId[]\u003e,\n    depth: number,\n    views: VDOMNode[],\n  ) {\n    if (!this.threadWrappers[threadId]) return;\n    views.push(\n      this.renderThread(threadId, depth, this.state.activeThreadId, undefined, {\n        showTokenCount: true,\n      }),\n    );\n    for (const childId of childrenMap.get(threadId) ?? []) {\n      this.renderScriptSubtreeInner(childId, childrenMap, depth + 1, views);\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderScriptSubtreeInner",
+      "startLine": 944,
+      "startCol": 1,
+      "endLine": 959,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Collect pending-permission views for a script-owned thread's subtree, so a\n   * collapsed script row never hides a blocking permission prompt.\n   */\n  approveAllPendingInSubtree(threadId: ThreadId): void {\n    this.approveSubtreePending(threadId, this.buildChildrenMap());\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method approveAllPendingInSubtree\n\n/**\n   * Collect pending-permission views for a script-owned thread's subtree, so a\n   * collapsed script row never hides a blocking permission prompt.\n   */\n  approveAllPendingInSubtree(threadId: ThreadId): void {\n    this.approveSubtreePending(threadId, this.buildChildrenMap());\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method approveAllPendingInSubtree",
+      "startLine": 961,
+      "startCol": 3,
+      "endLine": 967,
+      "endCol": 4
+    },
+    {
+      "text": "  private approveSubtreePending(\n    threadId: ThreadId,\n    childrenMap: Map\u003cThreadId, ThreadId[]\u003e,\n  ): void {\n    const wrapper = this.threadWrappers[threadId];\n    if (wrapper?.state === \"initialized\") {\n      wrapper.thread.sandboxViolationHandler?.approveAll();\n    }\n    for (const childId of childrenMap.get(threadId) ?? []) {\n      this.approveSubtreePending(childId, childrenMap);\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method approveSubtreePending\n\n  private approveSubtreePending(\n    threadId: ThreadId,\n    childrenMap: Map\u003cThreadId, ThreadId[]\u003e,\n  ): void {\n    const wrapper = this.threadWrappers[threadId];\n    if (wrapper?.state === \"initialized\") {\n      wrapper.thread.sandboxViolationHandler?.approveAll();\n    }\n    for (const childId of childrenMap.get(threadId) ?? []) {\n      this.approveSubtreePending(childId, childrenMap);\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method approveSubtreePending",
+      "startLine": 969,
+      "startCol": 1,
+      "endLine": 980,
+      "endCol": 4
+    },
+    {
+      "text": "  collectScriptSubtreeViolationViews(threadId: ThreadId): VDOMNode[] {\n    return this.collectSubtreeViolationViews(threadId, this.buildChildrenMap());\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method collectScriptSubtreeViolationViews\n\n  collectScriptSubtreeViolationViews(threadId: ThreadId): VDOMNode[] {\n    return this.collectSubtreeViolationViews(threadId, this.buildChildrenMap());\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method collectScriptSubtreeViolationViews",
+      "startLine": 982,
+      "startCol": 1,
+      "endLine": 984,
+      "endCol": 4
+    },
+    {
+      "text": "  private buildChildrenMap(): Map\u003cThreadId, ThreadId[]\u003e {\n    const childrenMap = new Map\u003cThreadId, ThreadId[]\u003e();\n    for (const [idStr, threadWrapper] of Object.entries(this.threadWrappers)) {\n      const parentId = threadWrapper.parentThreadId;\n      if (parentId !== undefined) {\n        if (!childrenMap.has(parentId)) {\n          childrenMap.set(parentId, []);\n        }\n        childrenMap.get(parentId)!.push(idStr as ThreadId);\n      }\n    }\n    return childrenMap;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method buildChildrenMap\n\n  private buildChildrenMap(): Map\u003cThreadId, ThreadId[]\u003e {\n    const childrenMap = new Map\u003cThreadId, ThreadId[]\u003e();\n    for (const [idStr, threadWrapper] of Object.entries(this.threadWrappers)) {\n      const parentId = threadWrapper.parentThreadId;\n      if (parentId !== undefined) {\n        if (!childrenMap.has(parentId)) {\n          childrenMap.set(parentId, []);\n        }\n        childrenMap.get(parentId)!.push(idStr as ThreadId);\n      }\n    }\n    return childrenMap;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method buildChildrenMap",
+      "startLine": 986,
+      "startCol": 1,
+      "endLine": 998,
+      "endCol": 4
+    },
+    {
+      "text": "  private formatThreadStatus(threadId: ThreadId): string {\n    const summary = this.getThreadSummary(threadId);\n\n    switch (summary.status.type) {\n      case \"missing\":\n        return \"❓ not found\";\n\n      case \"pending\":\n        return \"⏳ initializing\";\n\n      case \"running\":\n        return `⏳ ${summary.status.activity}`;\n\n      case \"stopped\":\n        return `⏹️ stopped (${summary.status.reason})`;\n\n      case \"yielded\":\n        return \"✅ yielded\";\n\n      case \"error\": {\n        const truncatedError =\n          summary.status.message.length \u003e 50\n            ? `${summary.status.message.substring(0, 47)}...`\n            : summary.status.message;\n        return `❌ error: ${truncatedError}`;\n      }\n\n      default:\n        return assertUnreachable(summary.status);\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method formatThreadStatus\n\n  private formatThreadStatus(threadId: ThreadId): string {\n    const summary = this.getThreadSummary(threadId);\n\n    switch (summary.status.type) {\n      case \"missing\":\n        return \"❓ not found\";\n\n      case \"pending\":\n        return \"⏳ initializing\";\n\n      case \"running\":\n        return `⏳ ${summary.status.activity}`;\n\n      case \"stopped\":\n        return `⏹️ stopped (${summary.status.reason})`;\n\n      case \"yielded\":\n        return \"✅ yielded\";\n\n      case \"error\": {\n        const truncatedError =\n          summary.status.message.length \u003e 50\n            ? `${summary.status.message.substring(0, 47)}...`\n            : summary.status.message;\n        return `❌ error: ${truncatedError}`;\n      }\n\n      default:\n        return assertUnreachable(summary.status);\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method formatThreadStatus",
+      "startLine": 1000,
+      "startCol": 1,
+      "endLine": 1030,
+      "endCol": 4
+    },
+    {
+      "text": "  getThreadDisplayName(threadId: ThreadId): string {\n    const threadWrapper = this.threadWrappers[threadId];\n    if (!threadWrapper || threadWrapper.state !== \"initialized\") {\n      return \"[Untitled]\";\n    }\n\n    const thread = threadWrapper.thread;\n    if (thread.core.state.title) {\n      return thread.core.state.title;\n    }\n\n    // Find the first user message text\n    const messages = thread.getProviderMessages();\n    for (const message of messages) {\n      if (message.role === \"user\") {\n        for (const content of message.content) {\n          if (content.type === \"text\" \u0026\u0026 content.text.trim()) {\n            const text = content.text.trim();\n            return text.length \u003e 50 ? `${text.substring(0, 50)}...` : text;\n          }\n        }\n      }\n    }\n\n    return \"[Untitled]\";\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method getThreadDisplayName\n\n  getThreadDisplayName(threadId: ThreadId): string {\n    const threadWrapper = this.threadWrappers[threadId];\n    if (!threadWrapper || threadWrapper.state !== \"initialized\") {\n      return \"[Untitled]\";\n    }\n\n    const thread = threadWrapper.thread;\n    if (thread.core.state.title) {\n      return thread.core.state.title;\n    }\n\n    // Find the first user message text\n    const messages = thread.getProviderMessages();\n    for (const message of messages) {\n      if (message.role === \"user\") {\n        for (const content of message.content) {\n          if (content.type === \"text\" \u0026\u0026 content.text.trim()) {\n            const text = content.text.trim();\n            return text.length \u003e 50 ? `${text.substring(0, 50)}...` : text;\n          }\n        }\n      }\n    }\n\n    return \"[Untitled]\";\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method getThreadDisplayName",
+      "startLine": 1032,
+      "startCol": 1,
+      "endLine": 1057,
+      "endCol": 4
+    },
+    {
+      "text": "  private renderThread(\n    threadId: ThreadId,\n    depth: number,\n    activeThreadId: ThreadId | undefined,\n    options?: {\n      hasChildren: boolean;\n      isExpanded: boolean;\n      childCount: number;\n    },\n    extra?: {\n      showTokenCount: boolean;\n    },\n  ): VDOMNode {\n    const displayName = this.getThreadDisplayName(threadId);\n    const status = this.formatThreadStatus(threadId);\n    const marker = threadId === activeThreadId ? \"*\" : \"-\";\n    const indent = \"  \".repeat(depth);\n    const threadWrapper = this.threadWrappers[threadId];\n    const threadType =\n      threadWrapper?.state === \"initialized\"\n        ? threadWrapper.thread.core.state.threadType\n        : undefined;\n    const icon = threadType === \"docker_root\" ? \"🐳 \" : \"\";\n\n    const isSandboxBypassed =\n      threadWrapper?.state === \"initialized\"\n        ? threadWrapper.thread.isSandboxBypassed\n        : false;\n    const sandboxIndicator =\n      depth === 0 \u0026\u0026 isSandboxBypassed ? withError(d` SANDBOX OFF `) : d``;\n\n    const bell = this.threadNeedsAttention(threadId) ? \"🔔 \" : \"\";\n\n    const expandIndicator = options?.hasChildren\n      ? options.isExpanded\n        ? \"▼ \"\n        : \"▶ \"\n      : \"\";\n    const childCountSuffix = options?.hasChildren\n      ? ` (${options.childCount} subthreads)`\n      : \"\";\n\n    let tokenSuffix = \"\";\n    if (extra?.showTokenCount \u0026\u0026 threadWrapper?.state === \"initialized\") {\n      const tokenCount = threadWrapper.thread.core.getLastStopTokenCount();\n      if (tokenCount \u003e 0) {\n        tokenSuffix = ` [${formatTokenCount(tokenCount)}]`;\n      }\n    }\n\n    const displayLine = d`${indent}${marker} ${bell}${expandIndicator}${icon}${sandboxIndicator}${displayName}: ${status}${childCountSuffix}${tokenSuffix}`;\n\n    const bindings: Record\u003cstring, () =\u003e void\u003e = {\n      \"\u003cCR\u003e\": () =\u003e\n        this.context.dispatch({\n          type: \"select-thread-effect\",\n          id: threadId,\n        })",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderThread\n\n  private renderThread(\n    threadId: ThreadId,\n    depth: number,\n    activeThreadId: ThreadId | undefined,\n    options?: {\n      hasChildren: boolean;\n      isExpanded: boolean;\n      childCount: number;\n    },\n    extra?: {\n      showTokenCount: boolean;\n    },\n  ): VDOMNode {\n    const displayName = this.getThreadDisplayName(threadId);\n    const status = this.formatThreadStatus(threadId);\n    const marker = threadId === activeThreadId ? \"*\" : \"-\";\n    const indent = \"  \".repeat(depth);\n    const threadWrapper = this.threadWrappers[threadId];\n    const threadType =\n      threadWrapper?.state === \"initialized\"\n        ? threadWrapper.thread.core.state.threadType\n        : undefined;\n    const icon = threadType === \"docker_root\" ? \"🐳 \" : \"\";\n\n    const isSandboxBypassed =\n      threadWrapper?.state === \"initialized\"\n        ? threadWrapper.thread.isSandboxBypassed\n        : false;\n    const sandboxIndicator =\n      depth === 0 \u0026\u0026 isSandboxBypassed ? withError(d` SANDBOX OFF `) : d``;\n\n    const bell = this.threadNeedsAttention(threadId) ? \"🔔 \" : \"\";\n\n    const expandIndicator = options?.hasChildren\n      ? options.isExpanded\n        ? \"▼ \"\n        : \"▶ \"\n      : \"\";\n    const childCountSuffix = options?.hasChildren\n      ? ` (${options.childCount} subthreads)`\n      : \"\";\n\n    let tokenSuffix = \"\";\n    if (extra?.showTokenCount \u0026\u0026 threadWrapper?.state === \"initialized\") {\n      const tokenCount = threadWrapper.thread.core.getLastStopTokenCount();\n      if (tokenCount \u003e 0) {\n        tokenSuffix = ` [${formatTokenCount(tokenCount)}]`;\n      }\n    }\n\n    const displayLine = d`${indent}${marker} ${bell}${expandIndicator}${icon}${sandboxIndicator}${displayName}: ${status}${childCountSuffix}${tokenSuffix}`;\n\n    const bindings: Record\u003cstring, () =\u003e void\u003e = {\n      \"\u003cCR\u003e\": () =\u003e\n        this.context.dispatch({\n          type: \"select-thread-effect\",\n          id: threadId,\n        })",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderThread",
+      "startLine": 1059,
+      "startCol": 1,
+      "endLine": 1116,
+      "endCol": 11
+    },
+    {
+      "text": "      dd: () =\u003e\n        this.context.dispatch({\n          type: \"chat-msg\",\n          msg: {\n            type: \"delete-thread\",\n            id: threadId,\n          },\n        })",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderThread \u003e function dd\n\n      dd: () =\u003e\n        this.context.dispatch({\n          type: \"chat-msg\",\n          msg: {\n            type: \"delete-thread\",\n            id: threadId,\n          },\n        })",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderThread \u003e function dd",
+      "startLine": 1117,
+      "startCol": 1,
+      "endLine": 1124,
+      "endCol": 11
+    },
+    {
+      "text": "bindings.t = () =\u003e\n      this.context.dispatch({\n        type: \"thread-msg\",\n        id: threadId,\n        msg: { type: \"toggle-sandbox-bypass\" },\n      });\n\n    if (options?.hasChildren) {\n      bindings[\"=\"] = () =\u003e\n        this.context.dispatch({\n          type: \"chat-msg\",\n          msg: {\n            type: \"toggle-thread-expand\",\n            id: threadId,\n          },\n        });\n    }\n\n    return withBindings(displayLine, bindings);\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderThread\n\nbindings.t = () =\u003e\n      this.context.dispatch({\n        type: \"thread-msg\",\n        id: threadId,\n        msg: { type: \"toggle-sandbox-bypass\" },\n      });\n\n    if (options?.hasChildren) {\n      bindings[\"=\"] = () =\u003e\n        this.context.dispatch({\n          type: \"chat-msg\",\n          msg: {\n            type: \"toggle-thread-expand\",\n            id: threadId,\n          },\n        });\n    }\n\n    return withBindings(displayLine, bindings);\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderThread",
+      "startLine": 1127,
+      "startCol": 5,
+      "endLine": 1146,
+      "endCol": 4
+    },
+    {
+      "text": "  private renderThreadSubtree(\n    threadId: ThreadId,\n    childrenMap: Map\u003cThreadId, ThreadId[]\u003e,\n    activeThreadId: ThreadId | undefined,\n    views: VDOMNode[],\n  ) {\n    const wrapper = this.threadWrappers[threadId];\n    views.push(this.renderThread(threadId, wrapper.depth, activeThreadId));\n    const children = childrenMap.get(threadId) || [];\n    for (const childId of children) {\n      this.renderThreadSubtree(childId, childrenMap, activeThreadId, views);\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderThreadSubtree\n\n  private renderThreadSubtree(\n    threadId: ThreadId,\n    childrenMap: Map\u003cThreadId, ThreadId[]\u003e,\n    activeThreadId: ThreadId | undefined,\n    views: VDOMNode[],\n  ) {\n    const wrapper = this.threadWrappers[threadId];\n    views.push(this.renderThread(threadId, wrapper.depth, activeThreadId));\n    const children = childrenMap.get(threadId) || [];\n    for (const childId of children) {\n      this.renderThreadSubtree(childId, childrenMap, activeThreadId, views);\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderThreadSubtree",
+      "startLine": 1148,
+      "startCol": 1,
+      "endLine": 1160,
+      "endCol": 4
+    },
+    {
+      "text": "  private countSubtreeThreads(\n    threadId: ThreadId,\n    childrenMap: Map\u003cThreadId, ThreadId[]\u003e,\n  ): number {\n    const children = childrenMap.get(threadId) ?? [];\n    let count = children.length;\n    for (const childId of children) {\n      count += this.countSubtreeThreads(childId, childrenMap);\n    }\n    return count;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method countSubtreeThreads\n\n  private countSubtreeThreads(\n    threadId: ThreadId,\n    childrenMap: Map\u003cThreadId, ThreadId[]\u003e,\n  ): number {\n    const children = childrenMap.get(threadId) ?? [];\n    let count = children.length;\n    for (const childId of children) {\n      count += this.countSubtreeThreads(childId, childrenMap);\n    }\n    return count;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method countSubtreeThreads",
+      "startLine": 1162,
+      "startCol": 1,
+      "endLine": 1172,
+      "endCol": 4
+    },
+    {
+      "text": "  renderThreadOverview() {\n    const archiveLink = withBindings(d`[archive]`, {\n      \"\u003cCR\u003e\": () =\u003e this.myDispatch({ type: \"archive-open\" }),\n    });\n\n    if (Object.keys(this.threadWrappers).length === 0) {\n      return d`# Threads ${archiveLink}\n\nNo threads yet`;\n    }\n\n    const childrenMap = this.buildChildrenMap();\n    const threadViews: VDOMNode[] = [];\n\n    const rootThreads: { id: ThreadId }[] = [];\n    for (const [idStr, wrapper] of Object.entries(this.threadWrappers)) {\n      // Script-owned threads are rendered nested under their script invocation\n      // in the Scripts section, not as top-level threads here.\n      if (\n        wrapper.parentThreadId === undefined \u0026\u0026\n        wrapper.scriptInvocationId === undefined\n      ) {\n        rootThreads.push({ id: idStr as ThreadId });\n      }\n    }\n\n    // ThreadIds are uuidv7 (time-ordered), so sorting by id descending yields\n    // most-recently-created first. This order is stable regardless of activity.\n    rootThreads.sort((a, b) =\u003e (a.id \u003c b.id ? 1 : a.id \u003e b.id ? -1 : 0));",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderThreadOverview\n\n  renderThreadOverview() {\n    const archiveLink = withBindings(d`[archive]`, {\n      \"\u003cCR\u003e\": () =\u003e this.myDispatch({ type: \"archive-open\" }),\n    });\n\n    if (Object.keys(this.threadWrappers).length === 0) {\n      return d`# Threads ${archiveLink}\n\nNo threads yet`;\n    }\n\n    const childrenMap = this.buildChildrenMap();\n    const threadViews: VDOMNode[] = [];\n\n    const rootThreads: { id: ThreadId }[] = [];\n    for (const [idStr, wrapper] of Object.entries(this.threadWrappers)) {\n      // Script-owned threads are rendered nested under their script invocation\n      // in the Scripts section, not as top-level threads here.\n      if (\n        wrapper.parentThreadId === undefined \u0026\u0026\n        wrapper.scriptInvocationId === undefined\n      ) {\n        rootThreads.push({ id: idStr as ThreadId });\n      }\n    }\n\n    // ThreadIds are uuidv7 (time-ordered), so sorting by id descending yields\n    // most-recently-created first. This order is stable regardless of activity.\n    rootThreads.sort((a, b) =\u003e (a.id \u003c b.id ? 1 : a.id \u003e b.id ? -1 : 0));",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderThreadOverview",
+      "startLine": 1174,
+      "startCol": 1,
+      "endLine": 1202,
+      "endCol": 74
+    },
+    {
+      "text": "for (const { id } of rootThreads) {\n      const hasChildren = (childrenMap.get(id)?.length ?? 0) \u003e 0;\n      const isExpanded = this.expandedThreads.has(id);\n      const childCount = hasChildren\n        ? this.countSubtreeThreads(id, childrenMap)\n        : 0;\n\n      threadViews.push(\n        this.renderThread(id, 0, this.state.activeThreadId, {\n          hasChildren,\n          isExpanded,\n          childCount,\n        }),\n      );\n\n      if (hasChildren \u0026\u0026 isExpanded) {\n        const children = childrenMap.get(id) ?? [];\n        for (const childId of children) {\n          this.renderThreadSubtree(\n            childId,\n            childrenMap,\n            this.state.activeThreadId,\n            threadViews,\n          );\n        }\n      } else if (hasChildren \u0026\u0026 !isExpanded) {\n        const violationViews = this.collectSubtreeViolationViews(\n          id,\n          childrenMap,\n        );\n        for (const violationView of violationViews) {\n          threadViews.push(violationView);\n        }\n      }\n    }\n\n    return d`# Threads ${archiveLink}\n\n${threadViews.map((view) =\u003e d`${view}\\n`)}`;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderThreadOverview\n\nfor (const { id } of rootThreads) {\n      const hasChildren = (childrenMap.get(id)?.length ?? 0) \u003e 0;\n      const isExpanded = this.expandedThreads.has(id);\n      const childCount = hasChildren\n        ? this.countSubtreeThreads(id, childrenMap)\n        : 0;\n\n      threadViews.push(\n        this.renderThread(id, 0, this.state.activeThreadId, {\n          hasChildren,\n          isExpanded,\n          childCount,\n        }),\n      );\n\n      if (hasChildren \u0026\u0026 isExpanded) {\n        const children = childrenMap.get(id) ?? [];\n        for (const childId of children) {\n          this.renderThreadSubtree(\n            childId,\n            childrenMap,\n            this.state.activeThreadId,\n            threadViews,\n          );\n        }\n      } else if (hasChildren \u0026\u0026 !isExpanded) {\n        const violationViews = this.collectSubtreeViolationViews(\n          id,\n          childrenMap,\n        );\n        for (const violationView of violationViews) {\n          threadViews.push(violationView);\n        }\n      }\n    }\n\n    return d`# Threads ${archiveLink}\n\n${threadViews.map((view) =\u003e d`${view}\\n`)}`;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderThreadOverview",
+      "startLine": 1204,
+      "startCol": 5,
+      "endLine": 1243,
+      "endCol": 4
+    },
+    {
+      "text": "  renderArchive(): VDOMNode {\n    if (this.state.state !== \"archive\") {\n      return d``;\n    }\n\n    const backLink = withBindings(d`\u003c back to threads`, {\n      \"\u003cCR\u003e\": () =\u003e this.myDispatch({ type: \"archive-navigate-back\" }),\n    });\n\n    if (this.state.threadIds.length === 0) {\n      return d`# Archived threads\n\n${backLink}\n\nNo archived threads`;\n    }\n\n    const rows: VDOMNode[] = [];\n    for (const id of this.state.threadIds) {\n      rows.push(d`${this.renderArchiveRow(id)}\\n`);\n    }\n\n    const remaining = this.state.threadIds.length - this.state.loadedCount;\n    const loadMore =\n      remaining \u003e 0\n        ? withBindings(d`\\n[load more] (${remaining.toString()} older)`, {\n            \"\u003cCR\u003e\": () =\u003e this.myDispatch({ type: \"archive-load-more\" }),\n          })\n        : d``;\n\n    return d`# Archived threads\n\n${backLink}\n\n${rows}${loadMore}`;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderArchive\n\n  renderArchive(): VDOMNode {\n    if (this.state.state !== \"archive\") {\n      return d``;\n    }\n\n    const backLink = withBindings(d`\u003c back to threads`, {\n      \"\u003cCR\u003e\": () =\u003e this.myDispatch({ type: \"archive-navigate-back\" }),\n    });\n\n    if (this.state.threadIds.length === 0) {\n      return d`# Archived threads\n\n${backLink}\n\nNo archived threads`;\n    }\n\n    const rows: VDOMNode[] = [];\n    for (const id of this.state.threadIds) {\n      rows.push(d`${this.renderArchiveRow(id)}\\n`);\n    }\n\n    const remaining = this.state.threadIds.length - this.state.loadedCount;\n    const loadMore =\n      remaining \u003e 0\n        ? withBindings(d`\\n[load more] (${remaining.toString()} older)`, {\n            \"\u003cCR\u003e\": () =\u003e this.myDispatch({ type: \"archive-load-more\" }),\n          })\n        : d``;\n\n    return d`# Archived threads\n\n${backLink}\n\n${rows}${loadMore}`;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderArchive",
+      "startLine": 1245,
+      "startCol": 1,
+      "endLine": 1280,
+      "endCol": 4
+    },
+    {
+      "text": "  private renderArchiveRow(threadId: ThreadId): VDOMNode {\n    if (this.state.state !== \"archive\") return d``;\n\n    const date = ARCHIVE_DATE_FORMAT.format(threadCreatedAt(threadId));\n    const titleEntry = this.state.titles[threadId];\n    const title =\n      titleEntry === undefined\n        ? \"…\"\n        : titleEntry.status === \"untitled\"\n          ? \"(untitled)\"\n          : titleEntry.title;\n\n    const line = d`- ${date}  ${title}`;\n\n    return withBindings(line, {\n      \"\u003cCR\u003e\": () =\u003e {\n        void (async () =\u003e {\n          try {\n            const entries = await readArchivedThreadLog(threadId);\n            const markdown = renderThreadLogToMarkdown(entries);\n            await openScratchInNonMagentaWindow(\n              markdown.split(\"\\n\"),\n              `archived-thread-${threadId}.md`,\n              {\n                nvim: this.context.nvim,\n                options: this.context.getOptions(),\n              },\n            );\n          } catch (error) {\n            this.context.nvim.logger.error(\n              `Error opening archived thread ${threadId}: ${error instanceof Error ? error.message : String(error)}`,\n            );\n          }\n        })();\n      }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderArchiveRow\n\n  private renderArchiveRow(threadId: ThreadId): VDOMNode {\n    if (this.state.state !== \"archive\") return d``;\n\n    const date = ARCHIVE_DATE_FORMAT.format(threadCreatedAt(threadId));\n    const titleEntry = this.state.titles[threadId];\n    const title =\n      titleEntry === undefined\n        ? \"…\"\n        : titleEntry.status === \"untitled\"\n          ? \"(untitled)\"\n          : titleEntry.title;\n\n    const line = d`- ${date}  ${title}`;\n\n    return withBindings(line, {\n      \"\u003cCR\u003e\": () =\u003e {\n        void (async () =\u003e {\n          try {\n            const entries = await readArchivedThreadLog(threadId);\n            const markdown = renderThreadLogToMarkdown(entries);\n            await openScratchInNonMagentaWindow(\n              markdown.split(\"\\n\"),\n              `archived-thread-${threadId}.md`,\n              {\n                nvim: this.context.nvim,\n                options: this.context.getOptions(),\n              },\n            );\n          } catch (error) {\n            this.context.nvim.logger.error(\n              `Error opening archived thread ${threadId}: ${error instanceof Error ? error.message : String(error)}`,\n            );\n          }\n        })();\n      }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderArchiveRow",
+      "startLine": 1282,
+      "startCol": 1,
+      "endLine": 1316,
+      "endCol": 8
+    },
+    {
+      "text": "      dd: () =\u003e\n        this.myDispatch({ type: \"archive-delete-thread\", id: threadId })",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderArchiveRow \u003e function dd\n\n      dd: () =\u003e\n        this.myDispatch({ type: \"archive-delete-thread\", id: threadId })",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderArchiveRow \u003e function dd",
+      "startLine": 1317,
+      "startCol": 1,
+      "endLine": 1318,
+      "endCol": 73
+    },
+    {
+      "text": "      d: (ctx) =\u003e {\n        if (this.state.state !== \"archive\") return;\n        const idx = this.state.threadIds.indexOf(threadId);\n        if (idx === -1) return;\n        const count = ctx?.selection?.length ?? 1;\n        const ids = this.state.threadIds.slice(idx, idx + count);\n        this.myDispatch({ type: \"archive-delete-threads\", ids });\n      }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderArchiveRow \u003e function d\n\n      d: (ctx) =\u003e {\n        if (this.state.state !== \"archive\") return;\n        const idx = this.state.threadIds.indexOf(threadId);\n        if (idx === -1) return;\n        const count = ctx?.selection?.length ?? 1;\n        const ids = this.state.threadIds.slice(idx, idx + count);\n        this.myDispatch({ type: \"archive-delete-threads\", ids });\n      }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderArchiveRow \u003e function d",
+      "startLine": 1319,
+      "startCol": 1,
+      "endLine": 1326,
+      "endCol": 8
+    },
+    {
+      "text": "  getActiveThread(): Thread {\n    if (!this.state.activeThreadId) {\n      throw new Error(`Chat is not initialized yet... no active thread`);\n    }\n    const threadWrapper = this.threadWrappers[this.state.activeThreadId];\n    if (!(threadWrapper \u0026\u0026 threadWrapper.state === \"initialized\")) {\n      throw new Error(\n        `Thread ${this.state.activeThreadId} not initialized yet...`,\n      );\n    }\n    return threadWrapper.thread;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method getActiveThread\n\n  getActiveThread(): Thread {\n    if (!this.state.activeThreadId) {\n      throw new Error(`Chat is not initialized yet... no active thread`);\n    }\n    const threadWrapper = this.threadWrappers[this.state.activeThreadId];\n    if (!(threadWrapper \u0026\u0026 threadWrapper.state === \"initialized\")) {\n      throw new Error(\n        `Thread ${this.state.activeThreadId} not initialized yet...`,\n      );\n    }\n    return threadWrapper.thread;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method getActiveThread",
+      "startLine": 1330,
+      "startCol": 1,
+      "endLine": 1341,
+      "endCol": 4
+    },
+    {
+      "text": "  async handleForkThread({\n    sourceThreadId,\n    truncateAtMessageIdx,\n  }: {\n    sourceThreadId: ThreadId;\n    truncateAtMessageIdx?: NativeMessageIdx;\n  }): Promise\u003cThreadId\u003e {\n    const sourceThreadWrapper = this.threadWrappers[sourceThreadId];\n    if (!sourceThreadWrapper || sourceThreadWrapper.state !== \"initialized\") {\n      throw new Error(`Thread ${sourceThreadId} not available for forking`);\n    }\n\n    const sourceThread = sourceThreadWrapper.thread;\n    const idx =\n      truncateAtMessageIdx ?? sourceThread.agent.getNativeMessageIdx();\n\n    const newThreadId = uuidv7() as ThreadId;\n    this.threadWrappers[newThreadId] = {\n      state: \"pending\",\n      parentThreadId: undefined,\n      depth: 0,\n      lastActivityTime: Date.now(),\n      lastViewedTime: Date.now(),\n    };\n\n    const thread = await Thread.cloneFromNativeMessageIdx({\n      sourceThread,\n      newThreadId,\n      nativeMessageIdx: idx,\n      chat: this,\n      mcpToolManager: this.mcpToolManager,\n      dispatch: this.context.dispatch,\n      nvim: this.context.nvim,\n      cwd: this.context.cwd,\n      homeDir: this.context.homeDir,\n      lsp: this.context.lsp,\n      sandbox: this.context.sandbox,\n      getOptions: this.context.getOptions,\n      getDisplayWidth: this.context.getDisplayWidth,\n    });\n\n    thread.contextManager.on(\"fileAdded\", (absFilePath) =\u003e {\n      this.triggerHierarchyDiscovery(thread, absFilePath);\n    });\n\n    const markerIdx = thread.core.getProviderMessages().length;\n    thread.agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: \"\u003cfork-notification\u003eThe user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.\u003c/fork-notification\u003e\",\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n    thread.state.messageViewState[markerIdx] = {\n      ...thread.state.messageViewState[markerIdx],\n      forkedFrom: sourceThreadId,\n    };",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method handleForkThread\n\n  async handleForkThread({\n    sourceThreadId,\n    truncateAtMessageIdx,\n  }: {\n    sourceThreadId: ThreadId;\n    truncateAtMessageIdx?: NativeMessageIdx;\n  }): Promise\u003cThreadId\u003e {\n    const sourceThreadWrapper = this.threadWrappers[sourceThreadId];\n    if (!sourceThreadWrapper || sourceThreadWrapper.state !== \"initialized\") {\n      throw new Error(`Thread ${sourceThreadId} not available for forking`);\n    }\n\n    const sourceThread = sourceThreadWrapper.thread;\n    const idx =\n      truncateAtMessageIdx ?? sourceThread.agent.getNativeMessageIdx();\n\n    const newThreadId = uuidv7() as ThreadId;\n    this.threadWrappers[newThreadId] = {\n      state: \"pending\",\n      parentThreadId: undefined,\n      depth: 0,\n      lastActivityTime: Date.now(),\n      lastViewedTime: Date.now(),\n    };\n\n    const thread = await Thread.cloneFromNativeMessageIdx({\n      sourceThread,\n      newThreadId,\n      nativeMessageIdx: idx,\n      chat: this,\n      mcpToolManager: this.mcpToolManager,\n      dispatch: this.context.dispatch,\n      nvim: this.context.nvim,\n      cwd: this.context.cwd,\n      homeDir: this.context.homeDir,\n      lsp: this.context.lsp,\n      sandbox: this.context.sandbox,\n      getOptions: this.context.getOptions,\n      getDisplayWidth: this.context.getDisplayWidth,\n    });\n\n    thread.contextManager.on(\"fileAdded\", (absFilePath) =\u003e {\n      this.triggerHierarchyDiscovery(thread, absFilePath);\n    });\n\n    const markerIdx = thread.core.getProviderMessages().length;\n    thread.agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: \"\u003cfork-notification\u003eThe user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.\u003c/fork-notification\u003e\",\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n    thread.state.messageViewState[markerIdx] = {\n      ...thread.state.messageViewState[markerIdx],\n      forkedFrom: sourceThreadId,\n    };",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method handleForkThread",
+      "startLine": 1343,
+      "startCol": 1,
+      "endLine": 1399,
+      "endCol": 7
+    },
+    {
+      "text": "sourceThread.state.forkedTo.push({\n      childThreadId: newThreadId,\n      atMessageIdx: idx,\n    });\n    this.context.dispatch({\n      type: \"chat-msg\",\n      msg: {\n        type: \"thread-initialized\",\n        thread,\n      },\n    });\n\n    return newThreadId;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method handleForkThread\n\nsourceThread.state.forkedTo.push({\n      childThreadId: newThreadId,\n      atMessageIdx: idx,\n    });\n    this.context.dispatch({\n      type: \"chat-msg\",\n      msg: {\n        type: \"thread-initialized\",\n        thread,\n      },\n    });\n\n    return newThreadId;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method handleForkThread",
+      "startLine": 1401,
+      "startCol": 5,
+      "endLine": 1414,
+      "endCol": 4
+    },
+    {
+      "text": "  getThreadResult(\n    threadId: ThreadId,\n  ): { status: \"done\"; result: Result\u003cstring\u003e } | { status: \"pending\" } {\n    const threadWrapper = this.threadWrappers[threadId];\n    if (!threadWrapper) {\n      return {\n        status: \"pending\",\n      };\n    }\n\n    switch (threadWrapper.state) {\n      case \"pending\":\n        return { status: \"pending\" };\n\n      case \"error\":\n        return {\n          status: \"done\",\n          result: {\n            status: \"error\",\n            error: threadWrapper.error.message,\n          },\n        };\n\n      case \"initialized\": {\n        const thread = threadWrapper.thread;\n\n        // Check for yielded state first\n        if (thread.core.state.mode.type === \"yielded\") {\n          return {\n            status: \"done\",\n            result: {\n              status: \"ok\",\n              value: thread.core.state.mode.response,\n            },\n          };\n        }\n\n        // All other states (including aborted and error) are considered\n        // pending. An aborted or errored thread can still be resumed and\n        // eventually yield.\n        return { status: \"pending\" };\n      }\n\n      default:\n        return assertUnreachable(threadWrapper);\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method getThreadResult\n\n  getThreadResult(\n    threadId: ThreadId,\n  ): { status: \"done\"; result: Result\u003cstring\u003e } | { status: \"pending\" } {\n    const threadWrapper = this.threadWrappers[threadId];\n    if (!threadWrapper) {\n      return {\n        status: \"pending\",\n      };\n    }\n\n    switch (threadWrapper.state) {\n      case \"pending\":\n        return { status: \"pending\" };\n\n      case \"error\":\n        return {\n          status: \"done\",\n          result: {\n            status: \"error\",\n            error: threadWrapper.error.message,\n          },\n        };\n\n      case \"initialized\": {\n        const thread = threadWrapper.thread;\n\n        // Check for yielded state first\n        if (thread.core.state.mode.type === \"yielded\") {\n          return {\n            status: \"done\",\n            result: {\n              status: \"ok\",\n              value: thread.core.state.mode.response,\n            },\n          };\n        }\n\n        // All other states (including aborted and error) are considered\n        // pending. An aborted or errored thread can still be resumed and\n        // eventually yield.\n        return { status: \"pending\" };\n      }\n\n      default:\n        return assertUnreachable(threadWrapper);\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method getThreadResult",
+      "startLine": 1416,
+      "startCol": 1,
+      "endLine": 1462,
+      "endCol": 4
+    },
+    {
+      "text": "  threadHasPendingApprovals(threadId: ThreadId): boolean {\n    if (this.getThreadPendingApprovalTools(threadId).length \u003e 0) return true;\n    const wrapper = this.threadWrappers[threadId];\n    if (!wrapper || wrapper.state !== \"initialized\") return false;\n    return (\n      (wrapper.thread.sandboxViolationHandler?.getPendingViolations().size ??\n        0) \u003e 0\n    );\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method threadHasPendingApprovals\n\n  threadHasPendingApprovals(threadId: ThreadId): boolean {\n    if (this.getThreadPendingApprovalTools(threadId).length \u003e 0) return true;\n    const wrapper = this.threadWrappers[threadId];\n    if (!wrapper || wrapper.state !== \"initialized\") return false;\n    return (\n      (wrapper.thread.sandboxViolationHandler?.getPendingViolations().size ??\n        0) \u003e 0\n    );\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method threadHasPendingApprovals",
+      "startLine": 1464,
+      "startCol": 1,
+      "endLine": 1472,
+      "endCol": 4
+    },
+    {
+      "text": "  getThreadPendingApprovalTools(_threadId: ThreadId): never[] {\n    return [];\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method getThreadPendingApprovalTools\n\n  getThreadPendingApprovalTools(_threadId: ThreadId): never[] {\n    return [];\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method getThreadPendingApprovalTools",
+      "startLine": 1473,
+      "startCol": 1,
+      "endLine": 1475,
+      "endCol": 4
+    },
+    {
+      "text": "  isSandboxBypassed(threadId: ThreadId | undefined): boolean {\n    if (!threadId) return false;\n    const wrapper = this.threadWrappers[threadId];\n    if (!wrapper || wrapper.state !== \"initialized\") return false;\n    return wrapper.thread.isSandboxBypassed;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method isSandboxBypassed\n\n  isSandboxBypassed(threadId: ThreadId | undefined): boolean {\n    if (!threadId) return false;\n    const wrapper = this.threadWrappers[threadId];\n    if (!wrapper || wrapper.state !== \"initialized\") return false;\n    return wrapper.thread.isSandboxBypassed;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method isSandboxBypassed",
+      "startLine": 1477,
+      "startCol": 1,
+      "endLine": 1482,
+      "endCol": 4
+    },
+    {
+      "text": "  getThreadSummary(threadId: ThreadId): {\n    title?: string | undefined;\n    status:\n      | { type: \"missing\" }\n      | { type: \"pending\" }\n      | { type: \"running\"; activity: string }\n      | { type: \"stopped\"; reason: string }\n      | { type: \"yielded\"; response: string }\n      | { type: \"error\"; message: string };\n  } {\n    const threadWrapper = this.threadWrappers[threadId];\n    if (!threadWrapper) {\n      return {\n        status: { type: \"missing\" },\n      };\n    }\n\n    switch (threadWrapper.state) {\n      case \"pending\":\n        return {\n          status: { type: \"pending\" },\n        };\n\n      case \"error\":\n        return {\n          status: {\n            type: \"error\",\n            message: threadWrapper.error.message,\n          },\n        };",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method getThreadSummary\n\n  getThreadSummary(threadId: ThreadId): {\n    title?: string | undefined;\n    status:\n      | { type: \"missing\" }\n      | { type: \"pending\" }\n      | { type: \"running\"; activity: string }\n      | { type: \"stopped\"; reason: string }\n      | { type: \"yielded\"; response: string }\n      | { type: \"error\"; message: string };\n  } {\n    const threadWrapper = this.threadWrappers[threadId];\n    if (!threadWrapper) {\n      return {\n        status: { type: \"missing\" },\n      };\n    }\n\n    switch (threadWrapper.state) {\n      case \"pending\":\n        return {\n          status: { type: \"pending\" },\n        };\n\n      case \"error\":\n        return {\n          status: {\n            type: \"error\",\n            message: threadWrapper.error.message,\n          },\n        };",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method getThreadSummary",
+      "startLine": 1484,
+      "startCol": 1,
+      "endLine": 1513,
+      "endCol": 11
+    },
+    {
+      "text": "case \"initialized\": {\n        const thread = threadWrapper.thread;\n        const mode = thread.core.state.mode;\n        const agentStatus = thread.agent.getState().status;\n\n        const summary = {\n          title: thread.core.state.title,\n          status: (() =\u003e {\n            // Check mode for thread-specific states first\n            if (mode.type === \"yielded\") {\n              if (mode.teardownMessage) {\n                return {\n                  type: \"running\" as const,\n                  activity: `🐳 ${mode.teardownMessage}`,\n                };\n              }\n              return {\n                type: \"yielded\" as const,\n                response: mode.response,\n              };\n            }\n\n            if (mode.type === \"tool_use\") {\n              const hasPendingApproval =\n                this.threadHasPendingApprovals(threadId);\n              return {\n                type: \"running\" as const,\n                activity: hasPendingApproval\n                  ? \"waiting for approval\"\n                  : \"executing tools\",\n              };\n            }\n\n            // Then check agent status\n            switch (agentStatus.type) {\n              case \"error\":\n                return {\n                  type: \"error\" as const,\n                  message: agentStatus.error.message,\n                };\n\n              case \"stopped\":\n                return {\n                  type: \"stopped\" as const,\n                  reason: agentStatus.stopReason,\n                };\n\n              case \"streaming\":\n                return {\n                  type: \"running\" as const,\n                  activity: \"streaming response\",\n                };\n\n              default:\n                return assertUnreachable(agentStatus);\n            }\n          })(),\n        };\n\n        return summary;\n      }\n\n      default:\n        return assertUnreachable(threadWrapper);\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method getThreadSummary\n\ncase \"initialized\": {\n        const thread = threadWrapper.thread;\n        const mode = thread.core.state.mode;\n        const agentStatus = thread.agent.getState().status;\n\n        const summary = {\n          title: thread.core.state.title,\n          status: (() =\u003e {\n            // Check mode for thread-specific states first\n            if (mode.type === \"yielded\") {\n              if (mode.teardownMessage) {\n                return {\n                  type: \"running\" as const,\n                  activity: `🐳 ${mode.teardownMessage}`,\n                };\n              }\n              return {\n                type: \"yielded\" as const,\n                response: mode.response,\n              };\n            }\n\n            if (mode.type === \"tool_use\") {\n              const hasPendingApproval =\n                this.threadHasPendingApprovals(threadId);\n              return {\n                type: \"running\" as const,\n                activity: hasPendingApproval\n                  ? \"waiting for approval\"\n                  : \"executing tools\",\n              };\n            }\n\n            // Then check agent status\n            switch (agentStatus.type) {\n              case \"error\":\n                return {\n                  type: \"error\" as const,\n                  message: agentStatus.error.message,\n                };\n\n              case \"stopped\":\n                return {\n                  type: \"stopped\" as const,\n                  reason: agentStatus.stopReason,\n                };\n\n              case \"streaming\":\n                return {\n                  type: \"running\" as const,\n                  activity: \"streaming response\",\n                };\n\n              default:\n                return assertUnreachable(agentStatus);\n            }\n          })(),\n        };\n\n        return summary;\n      }\n\n      default:\n        return assertUnreachable(threadWrapper);\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method getThreadSummary",
+      "startLine": 1515,
+      "startCol": 7,
+      "endLine": 1580,
+      "endCol": 4
+    },
+    {
+      "text": "  private fireThreadYieldCallbacks(threadId: ThreadId): void {\n    const callbacks = this.threadYieldCallbacks.get(threadId);\n    if (callbacks \u0026\u0026 callbacks.length \u003e 0) {\n      for (const callback of callbacks) {\n        callback();\n      }\n      this.threadYieldCallbacks.delete(threadId);\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method fireThreadYieldCallbacks\n\n  private fireThreadYieldCallbacks(threadId: ThreadId): void {\n    const callbacks = this.threadYieldCallbacks.get(threadId);\n    if (callbacks \u0026\u0026 callbacks.length \u003e 0) {\n      for (const callback of callbacks) {\n        callback();\n      }\n      this.threadYieldCallbacks.delete(threadId);\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method fireThreadYieldCallbacks",
+      "startLine": 1582,
+      "startCol": 1,
+      "endLine": 1590,
+      "endCol": 4
+    },
+    {
+      "text": "  async spawnThread(opts: {\n    parentThreadId: ThreadId;\n    prompt: string;\n    threadType: ThreadType;\n    subagentConfig?: SubagentConfig;\n    contextFiles?: UnresolvedFilePath[];\n    dockerSpawnConfig?: DockerSpawnConfig;\n    cwd?: string;\n  }): Promise\u003cThreadId\u003e {\n    const parentThreadId = opts.parentThreadId;\n    const parentThreadWrapper = this.threadWrappers[parentThreadId];\n    if (!parentThreadWrapper || parentThreadWrapper.state !== \"initialized\") {\n      throw new Error(`Parent thread ${parentThreadId} not available`);\n    }\n\n    const parentThread = parentThreadWrapper.thread;\n    const subagentThreadId = uuidv7() as ThreadId;\n\n    const subagentProfile: Profile = opts.subagentConfig?.fastModel\n      ? {\n          ...parentThread.context.profile,\n          model: parentThread.context.profile.fastModel,\n          thinking: undefined,\n          reasoning: undefined,\n        }\n      : opts.subagentConfig?.thinkingModel\n        ? {\n            ...parentThread.context.profile,\n            model: parentThread.context.profile.thinkingModel,\n          }\n        : parentThread.context.profile;\n\n    let environmentConfig: EnvironmentConfig;\n    if (opts.dockerSpawnConfig) {\n      environmentConfig = {\n        type: \"docker\",\n        container: opts.dockerSpawnConfig.containerName,\n        cwd: opts.dockerSpawnConfig.workspacePath,\n      };\n    } else if (opts.cwd) {\n      environmentConfig = {\n        type: \"local\",\n        cwd: opts.cwd as NvimCwd,\n      };\n    } else {\n      environmentConfig = parentThread.context.environment.environmentConfig;\n    }\n\n    const thread = await this.createThreadWithContext({\n      threadId: subagentThreadId,\n      profile: subagentProfile,\n      contextFiles: opts.contextFiles || [],\n      parent: parentThreadId,\n      inputMessages: [{ type: \"system\", text: opts.prompt }],\n      threadType: opts.threadType,\n      ...(opts.subagentConfig ? { subagentConfig: opts.subagentConfig } : {}),\n      environmentConfig",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method spawnThread\n\n  async spawnThread(opts: {\n    parentThreadId: ThreadId;\n    prompt: string;\n    threadType: ThreadType;\n    subagentConfig?: SubagentConfig;\n    contextFiles?: UnresolvedFilePath[];\n    dockerSpawnConfig?: DockerSpawnConfig;\n    cwd?: string;\n  }): Promise\u003cThreadId\u003e {\n    const parentThreadId = opts.parentThreadId;\n    const parentThreadWrapper = this.threadWrappers[parentThreadId];\n    if (!parentThreadWrapper || parentThreadWrapper.state !== \"initialized\") {\n      throw new Error(`Parent thread ${parentThreadId} not available`);\n    }\n\n    const parentThread = parentThreadWrapper.thread;\n    const subagentThreadId = uuidv7() as ThreadId;\n\n    const subagentProfile: Profile = opts.subagentConfig?.fastModel\n      ? {\n          ...parentThread.context.profile,\n          model: parentThread.context.profile.fastModel,\n          thinking: undefined,\n          reasoning: undefined,\n        }\n      : opts.subagentConfig?.thinkingModel\n        ? {\n            ...parentThread.context.profile,\n            model: parentThread.context.profile.thinkingModel,\n          }\n        : parentThread.context.profile;\n\n    let environmentConfig: EnvironmentConfig;\n    if (opts.dockerSpawnConfig) {\n      environmentConfig = {\n        type: \"docker\",\n        container: opts.dockerSpawnConfig.containerName,\n        cwd: opts.dockerSpawnConfig.workspacePath,\n      };\n    } else if (opts.cwd) {\n      environmentConfig = {\n        type: \"local\",\n        cwd: opts.cwd as NvimCwd,\n      };\n    } else {\n      environmentConfig = parentThread.context.environment.environmentConfig;\n    }\n\n    const thread = await this.createThreadWithContext({\n      threadId: subagentThreadId,\n      profile: subagentProfile,\n      contextFiles: opts.contextFiles || [],\n      parent: parentThreadId,\n      inputMessages: [{ type: \"system\", text: opts.prompt }],\n      threadType: opts.threadType,\n      ...(opts.subagentConfig ? { subagentConfig: opts.subagentConfig } : {}),\n      environmentConfig",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method spawnThread",
+      "startLine": 1592,
+      "startCol": 1,
+      "endLine": 1648,
+      "endCol": 24
+    },
+    {
+      "text": "dockerSpawnConfig: opts.dockerSpawnConfig",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method spawnThread\n\ndockerSpawnConfig: opts.dockerSpawnConfig",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method spawnThread",
+      "startLine": 1649,
+      "startCol": 7,
+      "endLine": 1649,
+      "endCol": 48
+    },
+    {
+      "text": "      getParentThread: () =\u003e {\n        const wrapper = this.threadWrappers[parentThreadId];\n        return wrapper?.state === \"initialized\" ? wrapper.thread : undefined;\n      }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method spawnThread \u003e function getParentThread\n\n      getParentThread: () =\u003e {\n        const wrapper = this.threadWrappers[parentThreadId];\n        return wrapper?.state === \"initialized\" ? wrapper.thread : undefined;\n      }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method spawnThread \u003e function getParentThread",
+      "startLine": 1650,
+      "startCol": 1,
+      "endLine": 1653,
+      "endCol": 8
+    },
+    {
+      "text": "return thread.id;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method spawnThread\n\nreturn thread.id;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method spawnThread",
+      "startLine": 1656,
+      "startCol": 5,
+      "endLine": 1657,
+      "endCol": 4
+    },
+    {
+      "text": "  async spawnScriptThread(opts: {\n    scriptInvocationId: ScriptInvocationId;\n    prompt: string;\n    yieldSchema: JSONSchemaType;\n    getSandboxRoot: () =\u003e SandboxRoot | undefined;\n    profile?: Profile;\n    cwd?: string;\n    contextFiles?: string[];\n    systemReminder?: string;\n    autoCompactThreshold?: number;\n    autoCompactPrompt?: string;\n  }): Promise\u003cThreadId\u003e {\n    const threadId = uuidv7() as ThreadId;\n    const profile =\n      opts.profile ??\n      getActiveProfile(\n        this.context.getOptions().profiles,\n        this.context.getOptions().activeProfile,\n      );\n\n    const environmentConfig: EnvironmentConfig = {\n      type: \"local\",\n      ...(opts.cwd ? { cwd: opts.cwd as NvimCwd } : {}),\n    };\n\n    const thread = await this.createThreadWithContext({\n      threadId,\n      profile,\n      ...(opts.contextFiles\n        ? { contextFiles: opts.contextFiles as UnresolvedFilePath[] }\n        : {}),\n      inputMessages: [{ type: \"system\", text: opts.prompt }],\n      threadType: \"subagent\",\n      environmentConfig,\n      ...(opts.systemReminder\n        ? { subagentConfig: { systemReminder: opts.systemReminder } }\n        : {}),\n      scriptInvocationId: opts.scriptInvocationId,\n      yieldSchema: opts.yieldSchema,\n      getSandboxRoot: opts.getSandboxRoot,\n      ...(opts.autoCompactThreshold !== undefined\n        ? { autoCompactThreshold: opts.autoCompactThreshold }\n        : {}),\n      ...(opts.autoCompactPrompt !== undefined\n        ? { autoCompactPrompt: opts.autoCompactPrompt }\n        : {}),\n    });\n\n    return thread.id;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method spawnScriptThread\n\n  async spawnScriptThread(opts: {\n    scriptInvocationId: ScriptInvocationId;\n    prompt: string;\n    yieldSchema: JSONSchemaType;\n    getSandboxRoot: () =\u003e SandboxRoot | undefined;\n    profile?: Profile;\n    cwd?: string;\n    contextFiles?: string[];\n    systemReminder?: string;\n    autoCompactThreshold?: number;\n    autoCompactPrompt?: string;\n  }): Promise\u003cThreadId\u003e {\n    const threadId = uuidv7() as ThreadId;\n    const profile =\n      opts.profile ??\n      getActiveProfile(\n        this.context.getOptions().profiles,\n        this.context.getOptions().activeProfile,\n      );\n\n    const environmentConfig: EnvironmentConfig = {\n      type: \"local\",\n      ...(opts.cwd ? { cwd: opts.cwd as NvimCwd } : {}),\n    };\n\n    const thread = await this.createThreadWithContext({\n      threadId,\n      profile,\n      ...(opts.contextFiles\n        ? { contextFiles: opts.contextFiles as UnresolvedFilePath[] }\n        : {}),\n      inputMessages: [{ type: \"system\", text: opts.prompt }],\n      threadType: \"subagent\",\n      environmentConfig,\n      ...(opts.systemReminder\n        ? { subagentConfig: { systemReminder: opts.systemReminder } }\n        : {}),\n      scriptInvocationId: opts.scriptInvocationId,\n      yieldSchema: opts.yieldSchema,\n      getSandboxRoot: opts.getSandboxRoot,\n      ...(opts.autoCompactThreshold !== undefined\n        ? { autoCompactThreshold: opts.autoCompactThreshold }\n        : {}),\n      ...(opts.autoCompactPrompt !== undefined\n        ? { autoCompactPrompt: opts.autoCompactPrompt }\n        : {}),\n    });\n\n    return thread.id;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method spawnScriptThread",
+      "startLine": 1659,
+      "startCol": 1,
+      "endLine": 1708,
+      "endCol": 4
+    },
+    {
+      "text": "/** Generate a concise title for a script invocation, mirroring how thread\n   * titles are generated: a fast-model forced tool-use call. */\n  async generateScriptTitle(\n    scriptName: string,\n    description: string,\n    parameters: unknown,\n  ): Promise\u003cstring | undefined\u003e {\n    const profile = getActiveProfile(\n      this.context.getOptions().profiles,\n      this.context.getOptions().activeProfile,\n    );\n    const request = getProvider(this.context.nvim, profile).forceToolUse({\n      model: profile.fastModel,\n      input: [\n        {\n          type: \"text\",\n          text: `\\\nA script has been invoked. Come up with a succinct title describing this specific invocation.\n\nScript name: ${scriptName}\nDescription: ${description}\nParameters: ${JSON.stringify(parameters)}\n\nThe title must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ],\n      spec: ThreadTitle.spec,\n      disableCaching: true,\n    });\n    const result = await request.promise;\n    if (result.toolRequest.status === \"ok\") {\n      return (result.toolRequest.value.input as ThreadTitle.Input).title;\n    }\n    return undefined;\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method generateScriptTitle\n\n/** Generate a concise title for a script invocation, mirroring how thread\n   * titles are generated: a fast-model forced tool-use call. */\n  async generateScriptTitle(\n    scriptName: string,\n    description: string,\n    parameters: unknown,\n  ): Promise\u003cstring | undefined\u003e {\n    const profile = getActiveProfile(\n      this.context.getOptions().profiles,\n      this.context.getOptions().activeProfile,\n    );\n    const request = getProvider(this.context.nvim, profile).forceToolUse({\n      model: profile.fastModel,\n      input: [\n        {\n          type: \"text\",\n          text: `\\\nA script has been invoked. Come up with a succinct title describing this specific invocation.\n\nScript name: ${scriptName}\nDescription: ${description}\nParameters: ${JSON.stringify(parameters)}\n\nThe title must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ],\n      spec: ThreadTitle.spec,\n      disableCaching: true,\n    });\n    const result = await request.promise;\n    if (result.toolRequest.status === \"ok\") {\n      return (result.toolRequest.value.input as ThreadTitle.Input).title;\n    }\n    return undefined;\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method generateScriptTitle",
+      "startLine": 1710,
+      "startCol": 3,
+      "endLine": 1745,
+      "endCol": 4
+    },
+    {
+      "text": "  onThreadYielded(threadId: ThreadId, callback: () =\u003e void): void {\n    let callbacks = this.threadYieldCallbacks.get(threadId);\n    if (!callbacks) {\n      callbacks = [];\n      this.threadYieldCallbacks.set(threadId, callbacks);\n    }\n    callbacks.push(callback);\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method onThreadYielded\n\n  onThreadYielded(threadId: ThreadId, callback: () =\u003e void): void {\n    let callbacks = this.threadYieldCallbacks.get(threadId);\n    if (!callbacks) {\n      callbacks = [];\n      this.threadYieldCallbacks.set(threadId, callbacks);\n    }\n    callbacks.push(callback);\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method onThreadYielded",
+      "startLine": 1747,
+      "startCol": 1,
+      "endLine": 1754,
+      "endCol": 4
+    },
+    {
+      "text": "  renderSingleThread(threadId: ThreadId) {\n    const threadWrapper = this.threadWrappers[threadId];\n\n    if (!threadWrapper) {\n      return d`Thread not found`;\n    }\n\n    switch (threadWrapper.state) {\n      case \"pending\":\n        return d`Initializing thread...`;\n      case \"initialized\": {\n        const thread = threadWrapper.thread;\n        let parentView: string | VDOMNode;\n\n        if (threadWrapper.parentThreadId) {\n          const parent = threadWrapper.parentThreadId;\n          const parentDisplayName = this.getThreadDisplayName(parent);\n          parentView = withBindings(d`Parent thread: ${parentDisplayName}\\n`, {\n            \"\u003cCR\u003e\": () =\u003e\n              this.context.dispatch({\n                type: \"select-thread-effect\",\n                id: parent,\n              }),\n          });\n        } else {\n          parentView = \"\";\n        }\n\n        return d`${parentView}${threadView({\n          thread",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderSingleThread\n\n  renderSingleThread(threadId: ThreadId) {\n    const threadWrapper = this.threadWrappers[threadId];\n\n    if (!threadWrapper) {\n      return d`Thread not found`;\n    }\n\n    switch (threadWrapper.state) {\n      case \"pending\":\n        return d`Initializing thread...`;\n      case \"initialized\": {\n        const thread = threadWrapper.thread;\n        let parentView: string | VDOMNode;\n\n        if (threadWrapper.parentThreadId) {\n          const parent = threadWrapper.parentThreadId;\n          const parentDisplayName = this.getThreadDisplayName(parent);\n          parentView = withBindings(d`Parent thread: ${parentDisplayName}\\n`, {\n            \"\u003cCR\u003e\": () =\u003e\n              this.context.dispatch({\n                type: \"select-thread-effect\",\n                id: parent,\n              }),\n          });\n        } else {\n          parentView = \"\";\n        }\n\n        return d`${parentView}${threadView({\n          thread",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderSingleThread",
+      "startLine": 1756,
+      "startCol": 1,
+      "endLine": 1785,
+      "endCol": 17
+    },
+    {
+      "text": "          dispatch: (msg) =\u003e\n            this.context.dispatch({\n              type: \"thread-msg\",\n              id: thread.id,\n              msg,\n            })",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderSingleThread \u003e function dispatch\n\n          dispatch: (msg) =\u003e\n            this.context.dispatch({\n              type: \"thread-msg\",\n              id: thread.id,\n              msg,\n            })",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderSingleThread \u003e function dispatch",
+      "startLine": 1786,
+      "startCol": 1,
+      "endLine": 1791,
+      "endCol": 15
+    },
+    {
+      "text": "case \"error\":\n        return d`Error: ${threadWrapper.error.message}`;\n      default:\n        assertUnreachable(threadWrapper);\n    }\n  }",
+      "contextualizedText": "// node/chat/chat.ts \u003e class Chat \u003e method renderSingleThread\n\ncase \"error\":\n        return d`Error: ${threadWrapper.error.message}`;\n      default:\n        assertUnreachable(threadWrapper);\n    }\n  }",
+      "headingContext": "node/chat/chat.ts \u003e class Chat \u003e method renderSingleThread",
+      "startLine": 1794,
+      "startCol": 7,
+      "endLine": 1799,
+      "endCol": 4
+    },
+    {
+      "text": "function getActiveProfile(profiles: Profile[], activeProfile: string) {\n  const profile = profiles.find((p) =\u003e p.name === activeProfile);\n  if (!profile) {\n    throw new Error(`Profile ${activeProfile} not found.`);\n  }\n  return profile;\n}",
+      "contextualizedText": "// node/chat/chat.ts \u003e function getActiveProfile\n\nfunction getActiveProfile(profiles: Profile[], activeProfile: string) {\n  const profile = profiles.find((p) =\u003e p.name === activeProfile);\n  if (!profile) {\n    throw new Error(`Profile ${activeProfile} not found.`);\n  }\n  return profile;\n}",
+      "headingContext": "node/chat/chat.ts \u003e function getActiveProfile",
+      "startLine": 1802,
+      "startCol": 1,
+      "endLine": 1808,
+      "endCol": 2
+    }
+  ]
+}

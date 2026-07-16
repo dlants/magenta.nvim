@@ -1,0 +1,15 @@
+{
+  "blobSha": "9c7954ac56a15c52cac3373962205cada12c3514",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export type Params = [type: string, name: string][];\n\nexport type ApiMeta = {\n  version: {\n    major: number;\n    minor: number;\n    patch: number;\n    prerelease: boolean;\n    api_level: number;\n    api_compatible: number;\n    api_prerelease: boolean;\n  };\n  functions: {\n    name: string;\n    since: number;\n    parameters: Params;\n    return_type: string;\n    method: boolean;\n    deprecated_since?: number;\n  }[];\n  ui_events: {\n    name: string;\n    parameters: Params;\n    since: number;\n  }[];\n  ui_options: string[];\n  error_types: Record\u003cstring, { id: number }\u003e;\n  types: Record\u003cstring, { id: number; prefix: string }\u003e;\n};",
+      "contextualizedText": "// node/nvim/nvim-node/cli/types.ts\n\nexport type Params = [type: string, name: string][];\n\nexport type ApiMeta = {\n  version: {\n    major: number;\n    minor: number;\n    patch: number;\n    prerelease: boolean;\n    api_level: number;\n    api_compatible: number;\n    api_prerelease: boolean;\n  };\n  functions: {\n    name: string;\n    since: number;\n    parameters: Params;\n    return_type: string;\n    method: boolean;\n    deprecated_since?: number;\n  }[];\n  ui_events: {\n    name: string;\n    parameters: Params;\n    since: number;\n  }[];\n  ui_options: string[];\n  error_types: Record\u003cstring, { id: number }\u003e;\n  types: Record\u003cstring, { id: number; prefix: string }\u003e;\n};",
+      "headingContext": "node/nvim/nvim-node/cli/types.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 29,
+      "endCol": 3
+    }
+  ]
+}

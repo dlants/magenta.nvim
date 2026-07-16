@@ -1,0 +1,15 @@
+{
+  "blobSha": "028cbd1e78ff36f38cc3ac3bb1829370cae36a4c",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "{\n  \"compilerOptions\": {\n    \"allowImportingTsExtensions\": true,\n    \"allowJs\": true,\n    \"lib\": [\"ESNext\"],\n    \"module\": \"NodeNext\",\n    \"moduleDetection\": \"force\",\n    \"moduleResolution\": \"NodeNext\",\n    \"noEmit\": true,\n    \"noFallthroughCasesInSwitch\": true,\n    \"skipLibCheck\": true,\n    \"strict\": true,\n    \"target\": \"ESNext\",\n    \"types\": [],\n    \"verbatimModuleSyntax\": true,\n    \"exactOptionalPropertyTypes\": true\n    // \"noPropertyAccessFromIndexSignature\": true,\n    // \"noUncheckedIndexedAccess\": true\n  },\n  \"references\": [{ \"path\": \"node/core\" }],\n  \"include\": [\n    \"node/**/*\",\n    \"sdk/**/*\",\n    \"package.json\",\n    \"eslint.confing.ms\",\n    \"vitest.config.ts\"\n  ],\n  \"exclude\": [\n    \"**/node_modules/**\",\n    \"**/test/fixtures/**\",\n    \"**/test/tmp\",\n    \"node/nvim/nvim-node/cli/**\",\n    \"node/core/**\",\n    \"node/packages/**\"\n  ]\n}",
+      "contextualizedText": "// tsconfig.json\n\n{\n  \"compilerOptions\": {\n    \"allowImportingTsExtensions\": true,\n    \"allowJs\": true,\n    \"lib\": [\"ESNext\"],\n    \"module\": \"NodeNext\",\n    \"moduleDetection\": \"force\",\n    \"moduleResolution\": \"NodeNext\",\n    \"noEmit\": true,\n    \"noFallthroughCasesInSwitch\": true,\n    \"skipLibCheck\": true,\n    \"strict\": true,\n    \"target\": \"ESNext\",\n    \"types\": [],\n    \"verbatimModuleSyntax\": true,\n    \"exactOptionalPropertyTypes\": true\n    // \"noPropertyAccessFromIndexSignature\": true,\n    // \"noUncheckedIndexedAccess\": true\n  },\n  \"references\": [{ \"path\": \"node/core\" }],\n  \"include\": [\n    \"node/**/*\",\n    \"sdk/**/*\",\n    \"package.json\",\n    \"eslint.confing.ms\",\n    \"vitest.config.ts\"\n  ],\n  \"exclude\": [\n    \"**/node_modules/**\",\n    \"**/test/fixtures/**\",\n    \"**/test/tmp\",\n    \"node/nvim/nvim-node/cli/**\",\n    \"node/core/**\",\n    \"node/packages/**\"\n  ]\n}",
+      "headingContext": "tsconfig.json",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 36,
+      "endCol": 2
+    }
+  ]
+}

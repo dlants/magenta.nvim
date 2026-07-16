@@ -1,0 +1,15 @@
+{
+  "blobSha": "827219dbee2f8150570a7a84e4adf5adcd3f4e4a",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export type Dispatch\u003cMsg\u003e = (msg: Msg) =\u003e void;",
+      "contextualizedText": "// node/core/src/dispatch.ts\n\nexport type Dispatch\u003cMsg\u003e = (msg: Msg) =\u003e void;",
+      "headingContext": "node/core/src/dispatch.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 1,
+      "endCol": 48
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "blobSha": "b17127dd4f3f8746693240af2688a7450e742c54",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { Position0Indexed } from \"../nvim/window.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport type { MountedVDOM } from \"./view.ts\";\n\nexport const BINDING_KEYS = [\"\u003cCR\u003e\", \"t\", \"dd\", \"=\", \"F\", \"d\", \"a\"] as const;\n\nexport type BindingKey = (typeof BINDING_KEYS)[number];\n\n/** Modes a binding key may be active in. Defaults to normal mode only. */\nexport const BINDING_MODES: Partial\u003c\n  Record\u003cBindingKey, ReadonlyArray\u003c\"n\" | \"v\"\u003e\u003e\n\u003e = {\n  F: [\"n\", \"v\"],\n  d: [\"v\"],\n};\n\n/** Optional context passed from lua → tea when invoking a binding. The visual\n * variant of `F` includes the visual selection text. */\nexport type BindingCtx = {\n  selection?: string[];\n};\n\nexport type Bindings = Partial\u003c{\n  [key in BindingKey]: (ctx?: BindingCtx) =\u003e void;\n}\u003e;",
+      "contextualizedText": "// node/tea/bindings.ts\n\nimport type { Position0Indexed } from \"../nvim/window.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport type { MountedVDOM } from \"./view.ts\";\n\nexport const BINDING_KEYS = [\"\u003cCR\u003e\", \"t\", \"dd\", \"=\", \"F\", \"d\", \"a\"] as const;\n\nexport type BindingKey = (typeof BINDING_KEYS)[number];\n\n/** Modes a binding key may be active in. Defaults to normal mode only. */\nexport const BINDING_MODES: Partial\u003c\n  Record\u003cBindingKey, ReadonlyArray\u003c\"n\" | \"v\"\u003e\u003e\n\u003e = {\n  F: [\"n\", \"v\"],\n  d: [\"v\"],\n};\n\n/** Optional context passed from lua → tea when invoking a binding. The visual\n * variant of `F` includes the visual selection text. */\nexport type BindingCtx = {\n  selection?: string[];\n};\n\nexport type Bindings = Partial\u003c{\n  [key in BindingKey]: (ctx?: BindingCtx) =\u003e void;\n}\u003e;",
+      "headingContext": "node/tea/bindings.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 25,
+      "endCol": 4
+    },
+    {
+      "text": "export function getBinding(\n  mountedNode: MountedVDOM,\n  cursor: Position0Indexed,\n  mode: \"n\" | \"v\",\n  key: BindingKey,\n): ((ctx?: BindingCtx) =\u003e void) | undefined {\n  if (\n    comparePos(cursor, mountedNode.startPos) === \"lt\" ||\n    [\"gt\", \"eq\"].includes(comparePos(cursor, mountedNode.endPos))\n  ) {\n    return undefined;\n  }\n\n  const allowedModes = BINDING_MODES[key] ?? [\"n\"];\n  if (!allowedModes.includes(mode)) {\n    return undefined;\n  }\n\n  switch (mountedNode.type) {\n    case \"string\":\n      return mountedNode.bindings?.[key];\n    case \"node\":\n    case \"array\": {\n      // Walk children to find the most specific (innermost) binding for this\n      // key. If no child has it, fall back to this node's binding.\n      for (const child of mountedNode.children) {\n        const childBinding = getBinding(child, cursor, mode, key);\n        if (childBinding) {\n          return childBinding;\n        }\n      }\n      return mountedNode.bindings?.[key];\n    }\n    default:\n      assertUnreachable(mountedNode);\n  }\n}",
+      "contextualizedText": "// node/tea/bindings.ts \u003e function getBinding\n\nexport function getBinding(\n  mountedNode: MountedVDOM,\n  cursor: Position0Indexed,\n  mode: \"n\" | \"v\",\n  key: BindingKey,\n): ((ctx?: BindingCtx) =\u003e void) | undefined {\n  if (\n    comparePos(cursor, mountedNode.startPos) === \"lt\" ||\n    [\"gt\", \"eq\"].includes(comparePos(cursor, mountedNode.endPos))\n  ) {\n    return undefined;\n  }\n\n  const allowedModes = BINDING_MODES[key] ?? [\"n\"];\n  if (!allowedModes.includes(mode)) {\n    return undefined;\n  }\n\n  switch (mountedNode.type) {\n    case \"string\":\n      return mountedNode.bindings?.[key];\n    case \"node\":\n    case \"array\": {\n      // Walk children to find the most specific (innermost) binding for this\n      // key. If no child has it, fall back to this node's binding.\n      for (const child of mountedNode.children) {\n        const childBinding = getBinding(child, cursor, mode, key);\n        if (childBinding) {\n          return childBinding;\n        }\n      }\n      return mountedNode.bindings?.[key];\n    }\n    default:\n      assertUnreachable(mountedNode);\n  }\n}",
+      "headingContext": "node/tea/bindings.ts \u003e function getBinding",
+      "startLine": 27,
+      "startCol": 1,
+      "endLine": 63,
+      "endCol": 2
+    },
+    {
+      "text": "/**\n * Compares two positions and returns \"lt\" if pos1 \u003c pos2, \"eq\" if pos1 === pos2, \"gt\" if pos1 \u003e pos2\n */\nfunction comparePos(\n  pos1: Position0Indexed,\n  pos2: Position0Indexed,\n): \"lt\" | \"eq\" | \"gt\" {\n  if (pos1.row \u003c pos2.row) {\n    return \"lt\";\n  } else if (pos1.row \u003e pos2.row) {\n    return \"gt\";\n  }\n\n  // Rows are equal, check columns\n  if (pos1.col \u003c pos2.col) {\n    return \"lt\";\n  } else if (pos1.col \u003e pos2.col) {\n    return \"gt\";\n  }\n\n  return \"eq\";\n}",
+      "contextualizedText": "// node/tea/bindings.ts \u003e function comparePos\n\n/**\n * Compares two positions and returns \"lt\" if pos1 \u003c pos2, \"eq\" if pos1 === pos2, \"gt\" if pos1 \u003e pos2\n */\nfunction comparePos(\n  pos1: Position0Indexed,\n  pos2: Position0Indexed,\n): \"lt\" | \"eq\" | \"gt\" {\n  if (pos1.row \u003c pos2.row) {\n    return \"lt\";\n  } else if (pos1.row \u003e pos2.row) {\n    return \"gt\";\n  }\n\n  // Rows are equal, check columns\n  if (pos1.col \u003c pos2.col) {\n    return \"lt\";\n  } else if (pos1.col \u003e pos2.col) {\n    return \"gt\";\n  }\n\n  return \"eq\";\n}",
+      "headingContext": "node/tea/bindings.ts \u003e function comparePos",
+      "startLine": 65,
+      "startCol": 1,
+      "endLine": 86,
+      "endCol": 2
+    }
+  ]
+}

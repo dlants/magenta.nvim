@@ -1,0 +1,42 @@
+{
+  "blobSha": "ac842dc3bca8dac0350a586217edd561d784389f",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport { getQuickfixList, quickfixListToString } from \"../../nvim/nvim.ts\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport type { Command } from \"./types.ts\";",
+      "contextualizedText": "// node/chat/commands/quickfix.ts\n\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport { getQuickfixList, quickfixListToString } from \"../../nvim/nvim.ts\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport type { Command } from \"./types.ts\";",
+      "headingContext": "node/chat/commands/quickfix.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 4,
+      "endCol": 43
+    },
+    {
+      "text": "const createQuickfixCommand = (name: string, pattern: RegExp): Command =\u003e ({\n  name,\n  pattern",
+      "contextualizedText": "// node/chat/commands/quickfix.ts \u003e function createQuickfixCommand\n\nconst createQuickfixCommand = (name: string, pattern: RegExp): Command =\u003e ({\n  name,\n  pattern",
+      "headingContext": "node/chat/commands/quickfix.ts \u003e function createQuickfixCommand",
+      "startLine": 6,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 10
+    },
+    {
+      "text": "  async execute(_match, context): Promise\u003cProviderMessageContent[]\u003e {\n    try {\n      const qflist = await getQuickfixList(context.nvim);\n      const quickfixStr = await quickfixListToString(qflist, context.nvim);\n      return [\n        {\n          type: \"text\",\n          text: `Current quickfix list:\\n${quickfixStr}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to fetch quickfix list for message: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error fetching quickfix list: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
+      "contextualizedText": "// node/chat/commands/quickfix.ts \u003e function createQuickfixCommand \u003e method execute\n\n  async execute(_match, context): Promise\u003cProviderMessageContent[]\u003e {\n    try {\n      const qflist = await getQuickfixList(context.nvim);\n      const quickfixStr = await quickfixListToString(qflist, context.nvim);\n      return [\n        {\n          type: \"text\",\n          text: `Current quickfix list:\\n${quickfixStr}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to fetch quickfix list for message: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error fetching quickfix list: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
+      "headingContext": "node/chat/commands/quickfix.ts \u003e function createQuickfixCommand \u003e method execute",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 32,
+      "endCol": 4
+    },
+    {
+      "text": "export const qfCommand: Command = createQuickfixCommand(\"@qf\", /@qf\\b/);\n\nexport const quickfixCommand: Command = createQuickfixCommand(\n  \"@quickfix\",\n  /@quickfix\\b/,\n);",
+      "contextualizedText": "// node/chat/commands/quickfix.ts\n\nexport const qfCommand: Command = createQuickfixCommand(\"@qf\", /@qf\\b/);\n\nexport const quickfixCommand: Command = createQuickfixCommand(\n  \"@quickfix\",\n  /@quickfix\\b/,\n);",
+      "headingContext": "node/chat/commands/quickfix.ts",
+      "startLine": 35,
+      "startCol": 1,
+      "endLine": 40,
+      "endCol": 3
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "blobSha": "7012654d2f42123488364658c2a2d269d91af561",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport { $, within } from \"zx\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport type { NvimCwd, UnresolvedFilePath } from \"../../utils/files.ts\";\nimport type { Command } from \"./types.ts\";",
+      "contextualizedText": "// node/chat/commands/diff.ts\n\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport { $, within } from \"zx\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport type { NvimCwd, UnresolvedFilePath } from \"../../utils/files.ts\";\nimport type { Command } from \"./types.ts\";",
+      "headingContext": "node/chat/commands/diff.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 5,
+      "endCol": 43
+    },
+    {
+      "text": "async function getGitDiff(\n  filePath: UnresolvedFilePath,\n  cwd: NvimCwd,\n): Promise\u003cstring\u003e {\n  try {\n    const result = await within(async () =\u003e {\n      $.cwd = cwd;\n      return await $`git diff ${filePath}`;\n    });\n    return result.stdout || \"(no unstaged changes)\";\n  } catch (error) {\n    throw new Error(\n      `Failed to get git diff: ${error instanceof Error ? error.message : String(error)}`,\n    );\n  }\n}",
+      "contextualizedText": "// node/chat/commands/diff.ts \u003e function getGitDiff\n\nasync function getGitDiff(\n  filePath: UnresolvedFilePath,\n  cwd: NvimCwd,\n): Promise\u003cstring\u003e {\n  try {\n    const result = await within(async () =\u003e {\n      $.cwd = cwd;\n      return await $`git diff ${filePath}`;\n    });\n    return result.stdout || \"(no unstaged changes)\";\n  } catch (error) {\n    throw new Error(\n      `Failed to get git diff: ${error instanceof Error ? error.message : String(error)}`,\n    );\n  }\n}",
+      "headingContext": "node/chat/commands/diff.ts \u003e function getGitDiff",
+      "startLine": 7,
+      "startCol": 1,
+      "endLine": 22,
+      "endCol": 2
+    },
+    {
+      "text": "async function getStagedDiff(\n  filePath: UnresolvedFilePath,\n  cwd: NvimCwd,\n): Promise\u003cstring\u003e {\n  try {\n    const result = await within(async () =\u003e {\n      $.cwd = cwd;\n      return await $`git diff --staged ${filePath}`;\n    });\n    return result.stdout || \"(no staged changes)\";\n  } catch (error) {\n    throw new Error(\n      `Failed to get staged diff: ${error instanceof Error ? error.message : String(error)}`,\n    );\n  }\n}",
+      "contextualizedText": "// node/chat/commands/diff.ts \u003e function getStagedDiff\n\nasync function getStagedDiff(\n  filePath: UnresolvedFilePath,\n  cwd: NvimCwd,\n): Promise\u003cstring\u003e {\n  try {\n    const result = await within(async () =\u003e {\n      $.cwd = cwd;\n      return await $`git diff --staged ${filePath}`;\n    });\n    return result.stdout || \"(no staged changes)\";\n  } catch (error) {\n    throw new Error(\n      `Failed to get staged diff: ${error instanceof Error ? error.message : String(error)}`,\n    );\n  }\n}",
+      "headingContext": "node/chat/commands/diff.ts \u003e function getStagedDiff",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 39,
+      "endCol": 2
+    },
+    {
+      "text": "diffCommand: Command = {\n  name: \"@diff:\",\n  pattern: /@diff:(\\S+)/g",
+      "contextualizedText": "// node/chat/commands/diff.ts\n\ndiffCommand: Command = {\n  name: \"@diff:\",\n  pattern: /@diff:(\\S+)/g",
+      "headingContext": "node/chat/commands/diff.ts",
+      "startLine": 41,
+      "startCol": 14,
+      "endLine": 43,
+      "endCol": 26
+    },
+    {
+      "text": "  async execute(match, context): Promise\u003cProviderMessageContent[]\u003e {\n    const filePath = match[1] as UnresolvedFilePath;\n    try {\n      const diffContent = await getGitDiff(filePath, context.cwd);\n      return [\n        {\n          type: \"text\",\n          text: `Git diff for \\`${filePath}\\`:\\n\\`\\`\\`diff\\n${diffContent}\\n\\`\\`\\``,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to fetch git diff for \\`${filePath}\\`: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error fetching git diff for \\`${filePath}\\`: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
+      "contextualizedText": "// node/chat/commands/diff.ts \u003e method execute\n\n  async execute(match, context): Promise\u003cProviderMessageContent[]\u003e {\n    const filePath = match[1] as UnresolvedFilePath;\n    try {\n      const diffContent = await getGitDiff(filePath, context.cwd);\n      return [\n        {\n          type: \"text\",\n          text: `Git diff for \\`${filePath}\\`:\\n\\`\\`\\`diff\\n${diffContent}\\n\\`\\`\\``,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to fetch git diff for \\`${filePath}\\`: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error fetching git diff for \\`${filePath}\\`: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
+      "headingContext": "node/chat/commands/diff.ts \u003e method execute",
+      "startLine": 44,
+      "startCol": 1,
+      "endLine": 67,
+      "endCol": 4
+    },
+    {
+      "text": "stagedCommand: Command = {\n  name: \"@staged:\",\n  pattern: /@staged:(\\S+)/g",
+      "contextualizedText": "// node/chat/commands/diff.ts\n\nstagedCommand: Command = {\n  name: \"@staged:\",\n  pattern: /@staged:(\\S+)/g",
+      "headingContext": "node/chat/commands/diff.ts",
+      "startLine": 70,
+      "startCol": 14,
+      "endLine": 72,
+      "endCol": 28
+    },
+    {
+      "text": "  async execute(match, context): Promise\u003cProviderMessageContent[]\u003e {\n    const filePath = match[1] as UnresolvedFilePath;\n    try {\n      const stagedContent = await getStagedDiff(filePath, context.cwd);\n      return [\n        {\n          type: \"text\",\n          text: `Staged diff for \\`${filePath}\\`:\\n\\`\\`\\`diff\\n${stagedContent}\\n\\`\\`\\``,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to fetch staged diff for \\`${filePath}\\`: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error fetching staged diff for \\`${filePath}\\`: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
+      "contextualizedText": "// node/chat/commands/diff.ts \u003e method execute\n\n  async execute(match, context): Promise\u003cProviderMessageContent[]\u003e {\n    const filePath = match[1] as UnresolvedFilePath;\n    try {\n      const stagedContent = await getStagedDiff(filePath, context.cwd);\n      return [\n        {\n          type: \"text\",\n          text: `Staged diff for \\`${filePath}\\`:\\n\\`\\`\\`diff\\n${stagedContent}\\n\\`\\`\\``,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to fetch staged diff for \\`${filePath}\\`: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error fetching staged diff for \\`${filePath}\\`: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
+      "headingContext": "node/chat/commands/diff.ts \u003e method execute",
+      "startLine": 73,
+      "startCol": 1,
+      "endLine": 96,
+      "endCol": 4
+    }
+  ]
+}

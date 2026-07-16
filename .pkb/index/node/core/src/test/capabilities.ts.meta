@@ -1,0 +1,15 @@
+{
+  "blobSha": "d4e59ec5b9dacf2d73125ffe3584f3699d3b2e40",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { existsSync } from \"node:fs\";\n\ntype TestMode = \"all\" | \"sandbox\";\n\nconst testMode: TestMode =\n  (process.env.TEST_MODE as TestMode | undefined) ?? \"all\";\n\nexport const FULL_CAPABILITIES = testMode === \"all\";\n\n// Docker-in-Docker doesn't work because `docker cp` writes to the host\n// filesystem while `rsync` runs inside the container, causing path mismatches.\n// These tests must run on the host directly.\nexport const HOST_DOCKER_AVAILABLE =\n  FULL_CAPABILITIES \u0026\u0026 !existsSync(\"/.dockerenv\");",
+      "contextualizedText": "// node/core/src/test/capabilities.ts\n\nimport { existsSync } from \"node:fs\";\n\ntype TestMode = \"all\" | \"sandbox\";\n\nconst testMode: TestMode =\n  (process.env.TEST_MODE as TestMode | undefined) ?? \"all\";\n\nexport const FULL_CAPABILITIES = testMode === \"all\";\n\n// Docker-in-Docker doesn't work because `docker cp` writes to the host\n// filesystem while `rsync` runs inside the container, causing path mismatches.\n// These tests must run on the host directly.\nexport const HOST_DOCKER_AVAILABLE =\n  FULL_CAPABILITIES \u0026\u0026 !existsSync(\"/.dockerenv\");",
+      "headingContext": "node/core/src/test/capabilities.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 14,
+      "endCol": 51
+    }
+  ]
+}

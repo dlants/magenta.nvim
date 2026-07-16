@@ -1,0 +1,24 @@
+{
+  "blobSha": "7a208362985223c6e1996deae273f7c8aca79bcc",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport type { Command } from \"./types.ts\";\n\nexport const compactCommand: Command = {\n  name: \"@compact\",\n  pattern: /@compact\\b/,\n  description: \"Compact the conversation thread and continue with a new prompt\"",
+      "contextualizedText": "// node/chat/commands/compact.ts\n\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport type { Command } from \"./types.ts\";\n\nexport const compactCommand: Command = {\n  name: \"@compact\",\n  pattern: /@compact\\b/,\n  description: \"Compact the conversation thread and continue with a new prompt\"",
+      "headingContext": "node/chat/commands/compact.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 7,
+      "endCol": 80
+    },
+    {
+      "text": "  execute(_match, _context): Promise\u003cProviderMessageContent[]\u003e {\n    // The compact command doesn't add content directly, it's handled by the thread\n    // This is a placeholder that will be handled specially in thread.ts\n    return Promise.resolve([]);\n  }",
+      "contextualizedText": "// node/chat/commands/compact.ts \u003e method execute\n\n  execute(_match, _context): Promise\u003cProviderMessageContent[]\u003e {\n    // The compact command doesn't add content directly, it's handled by the thread\n    // This is a placeholder that will be handled specially in thread.ts\n    return Promise.resolve([]);\n  }",
+      "headingContext": "node/chat/commands/compact.ts \u003e method execute",
+      "startLine": 8,
+      "startCol": 1,
+      "endLine": 12,
+      "endCol": 4
+    }
+  ]
+}

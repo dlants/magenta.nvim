@@ -1,0 +1,15 @@
+{
+  "blobSha": "469dc50130356503272783a12c65811d10feaca7",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "/// \u003creference types=\"vitest\" /\u003e\nimport { defineConfig } from \"vite\";\n\nexport default defineConfig({\n  test: {\n    globalSetup: [\"./node/test/global-setup.ts\"],\n    setupFiles: [\"./node/test/setup.ts\"],\n    // Each test file spawns its own nvim process; cap parallelism so we don't\n    // exhaust memory by spinning up too many at once.\n    pool: \"forks\",\n    poolOptions: {\n      forks: {\n        maxForks: 4,\n        minForks: 1,\n      },\n    },\n  },\n});",
+      "contextualizedText": "// vitest.config.ts\n\n/// \u003creference types=\"vitest\" /\u003e\nimport { defineConfig } from \"vite\";\n\nexport default defineConfig({\n  test: {\n    globalSetup: [\"./node/test/global-setup.ts\"],\n    setupFiles: [\"./node/test/setup.ts\"],\n    // Each test file spawns its own nvim process; cap parallelism so we don't\n    // exhaust memory by spinning up too many at once.\n    pool: \"forks\",\n    poolOptions: {\n      forks: {\n        maxForks: 4,\n        minForks: 1,\n      },\n    },\n  },\n});",
+      "headingContext": "vitest.config.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 18,
+      "endCol": 4
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "blobSha": "cf30f36dcbd20c9e2e5857ca87b63f667d7513c7",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type Anthropic from \"@anthropic-ai/sdk\";\nimport { afterEach, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport type { Logger } from \"../logger.ts\";\nimport { validateInput } from \"../tools/helpers.ts\";\nimport {\n  AnthropicAgent,\n  type AnthropicAgentOptions,\n} from \"./anthropic-agent.ts\";\nimport { MockAnthropicClient } from \"./mock-anthropic-client.ts\";\nimport type { ProviderToolSpec } from \"./provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"./provider-types.ts\";\n\nconst noopLogger: Logger",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-ticker.test.ts\n\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport { afterEach, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport type { Logger } from \"../logger.ts\";\nimport { validateInput } from \"../tools/helpers.ts\";\nimport {\n  AnthropicAgent,\n  type AnthropicAgentOptions,\n} from \"./anthropic-agent.ts\";\nimport { MockAnthropicClient } from \"./mock-anthropic-client.ts\";\nimport type { ProviderToolSpec } from \"./provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"./provider-types.ts\";\n\nconst noopLogger: Logger",
+      "headingContext": "node/core/src/providers/anthropic-agent-ticker.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 13,
+      "endCol": 25
+    },
+    {
+      "text": "  info: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function info\n\n  info: () =\u003e {}",
+      "headingContext": "node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function info",
+      "startLine": 14,
+      "startCol": 1,
+      "endLine": 14,
+      "endCol": 17
+    },
+    {
+      "text": "  warn: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function warn\n\n  warn: () =\u003e {}",
+      "headingContext": "node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function warn",
+      "startLine": 15,
+      "startCol": 1,
+      "endLine": 15,
+      "endCol": 17
+    },
+    {
+      "text": "  error: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function error\n\n  error: () =\u003e {}",
+      "headingContext": "node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function error",
+      "startLine": 16,
+      "startCol": 1,
+      "endLine": 16,
+      "endCol": 18
+    },
+    {
+      "text": "  debug: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function debug\n\n  debug: () =\u003e {}",
+      "headingContext": "node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function debug",
+      "startLine": 17,
+      "startCol": 1,
+      "endLine": 17,
+      "endCol": 18
+    },
+    {
+      "text": "const defaultOptions = {\n  model: \"claude-sonnet-4-20250514\",\n  systemPrompt: \"test\",\n  tools: [] as ProviderToolSpec[],\n  skipPostFlightTokenCount: true,\n};\n\nconst defaultAnthropicOptions: AnthropicAgentOptions = {\n  authType: \"key\",\n  includeWebSearch: false,\n  disableParallelToolUseFlag: true,\n  logger: noopLogger,\n  validateInput,\n};",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-ticker.test.ts\n\nconst defaultOptions = {\n  model: \"claude-sonnet-4-20250514\",\n  systemPrompt: \"test\",\n  tools: [] as ProviderToolSpec[],\n  skipPostFlightTokenCount: true,\n};\n\nconst defaultAnthropicOptions: AnthropicAgentOptions = {\n  authType: \"key\",\n  includeWebSearch: false,\n  disableParallelToolUseFlag: true,\n  logger: noopLogger,\n  validateInput,\n};",
+      "headingContext": "node/core/src/providers/anthropic-agent-ticker.test.ts",
+      "startLine": 20,
+      "startCol": 1,
+      "endLine": 33,
+      "endCol": 3
+    },
+    {
+      "text": "function createAgent(mockClient: MockAnthropicClient) {\n  return new AnthropicAgent(\n    defaultOptions,\n    mockClient as unknown as Anthropic,\n    defaultAnthropicOptions,\n  );\n}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function createAgent\n\nfunction createAgent(mockClient: MockAnthropicClient) {\n  return new AnthropicAgent(\n    defaultOptions,\n    mockClient as unknown as Anthropic,\n    defaultAnthropicOptions,\n  );\n}",
+      "headingContext": "node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function createAgent",
+      "startLine": 35,
+      "startCol": 1,
+      "endLine": 41,
+      "endCol": 2
+    },
+    {
+      "text": "function appendAndStart(agent: AnthropicAgent) {\n  agent.appendUserMessage([\n    {\n      type: \"text\",\n      text: \"hello\",\n      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n    },\n  ]);\n  agent.continueConversation();\n}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function appendAndStart\n\nfunction appendAndStart(agent: AnthropicAgent) {\n  agent.appendUserMessage([\n    {\n      type: \"text\",\n      text: \"hello\",\n      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n    },\n  ]);\n  agent.continueConversation();\n}",
+      "headingContext": "node/core/src/providers/anthropic-agent-ticker.test.ts \u003e function appendAndStart",
+      "startLine": 43,
+      "startCol": 1,
+      "endLine": 52,
+      "endCol": 2
+    },
+    {
+      "text": "describe(\"AnthropicAgent streaming ticker\", () =\u003e {\n  beforeEach(() =\u003e {\n    vi.useFakeTimers();\n  });\n\n  afterEach(() =\u003e {\n    vi.useRealTimers();\n  });\n\n  it(\"emits didUpdate ~1/sec while waiting and stops after the turn settles\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const agent = createAgent(mockClient);\n    let didUpdate = 0;\n    agent.on(\"didUpdate\", () =\u003e {\n      didUpdate++;\n    });\n\n    appendAndStart(agent);\n    const stream = await mockClient.awaitStream();\n\n    // Dead air: no stream events, only the heartbeat should fire.\n    const before = didUpdate;\n    await vi.advanceTimersByTimeAsync(3000);\n    expect(didUpdate - before).toBeGreaterThanOrEqual(3);\n\n    // Complete the turn.\n    stream.respond({ text: \"done\", toolRequests: [], stopReason: \"end_turn\" });\n    await vi.advanceTimersByTimeAsync(0);\n\n    // Ticker must be cleared: no further emissions after the turn settles.\n    const afterSettle = didUpdate;\n    await vi.advanceTimersByTimeAsync(5000);\n    expect(didUpdate).toBe(afterSettle);\n  });\n\n  it(\"clears the ticker on abort\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const agent = createAgent(mockClient);\n    let didUpdate = 0;\n    agent.on(\"didUpdate\", () =\u003e {\n      didUpdate++;\n    });\n\n    appendAndStart(agent);\n    await mockClient.awaitStream();\n\n    await vi.advanceTimersByTimeAsync(2000);\n    await agent.abort();\n    await vi.advanceTimersByTimeAsync(0);\n\n    const afterAbort = didUpdate;\n    await vi.advanceTimersByTimeAsync(5000);\n    expect(didUpdate).toBe(afterAbort);\n  });",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-ticker.test.ts\n\ndescribe(\"AnthropicAgent streaming ticker\", () =\u003e {\n  beforeEach(() =\u003e {\n    vi.useFakeTimers();\n  });\n\n  afterEach(() =\u003e {\n    vi.useRealTimers();\n  });\n\n  it(\"emits didUpdate ~1/sec while waiting and stops after the turn settles\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const agent = createAgent(mockClient);\n    let didUpdate = 0;\n    agent.on(\"didUpdate\", () =\u003e {\n      didUpdate++;\n    });\n\n    appendAndStart(agent);\n    const stream = await mockClient.awaitStream();\n\n    // Dead air: no stream events, only the heartbeat should fire.\n    const before = didUpdate;\n    await vi.advanceTimersByTimeAsync(3000);\n    expect(didUpdate - before).toBeGreaterThanOrEqual(3);\n\n    // Complete the turn.\n    stream.respond({ text: \"done\", toolRequests: [], stopReason: \"end_turn\" });\n    await vi.advanceTimersByTimeAsync(0);\n\n    // Ticker must be cleared: no further emissions after the turn settles.\n    const afterSettle = didUpdate;\n    await vi.advanceTimersByTimeAsync(5000);\n    expect(didUpdate).toBe(afterSettle);\n  });\n\n  it(\"clears the ticker on abort\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const agent = createAgent(mockClient);\n    let didUpdate = 0;\n    agent.on(\"didUpdate\", () =\u003e {\n      didUpdate++;\n    });\n\n    appendAndStart(agent);\n    await mockClient.awaitStream();\n\n    await vi.advanceTimersByTimeAsync(2000);\n    await agent.abort();\n    await vi.advanceTimersByTimeAsync(0);\n\n    const afterAbort = didUpdate;\n    await vi.advanceTimersByTimeAsync(5000);\n    expect(didUpdate).toBe(afterAbort);\n  });",
+      "headingContext": "node/core/src/providers/anthropic-agent-ticker.test.ts",
+      "startLine": 54,
+      "startCol": 1,
+      "endLine": 107,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"advances lastEventTime on each stream event\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const agent = createAgent(mockClient);\n\n    appendAndStart(agent);\n    const stream = await mockClient.awaitStream();\n\n    const initial = agent.getState().status;\n    expect(initial.type).toBe(\"streaming\");\n    if (initial.type !== \"streaming\") return;\n    const startEventTime = initial.lastEventTime.getTime();\n\n    // Dead air: lastEventTime should not advance.\n    await vi.advanceTimersByTimeAsync(2000);\n    const duringWait = agent.getState().status;\n    if (duringWait.type !== \"streaming\") throw new Error(\"expected streaming\");\n    expect(duringWait.lastEventTime.getTime()).toBe(startEventTime);\n\n    // A stream event arrives: lastEventTime should advance to now.\n    stream.emitEvent({\n      type: \"content_block_start\",\n      index: 0,\n      content_block: { type: \"text\", text: \"\", citations: null },\n    });\n    await stream.settle();\n\n    const afterEvent = agent.getState().status;\n    if (afterEvent.type !== \"streaming\") throw new Error(\"expected streaming\");\n    expect(afterEvent.lastEventTime.getTime()).toBeGreaterThan(startEventTime);\n  });",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-ticker.test.ts\n\nit(\"advances lastEventTime on each stream event\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const agent = createAgent(mockClient);\n\n    appendAndStart(agent);\n    const stream = await mockClient.awaitStream();\n\n    const initial = agent.getState().status;\n    expect(initial.type).toBe(\"streaming\");\n    if (initial.type !== \"streaming\") return;\n    const startEventTime = initial.lastEventTime.getTime();\n\n    // Dead air: lastEventTime should not advance.\n    await vi.advanceTimersByTimeAsync(2000);\n    const duringWait = agent.getState().status;\n    if (duringWait.type !== \"streaming\") throw new Error(\"expected streaming\");\n    expect(duringWait.lastEventTime.getTime()).toBe(startEventTime);\n\n    // A stream event arrives: lastEventTime should advance to now.\n    stream.emitEvent({\n      type: \"content_block_start\",\n      index: 0,\n      content_block: { type: \"text\", text: \"\", citations: null },\n    });\n    await stream.settle();\n\n    const afterEvent = agent.getState().status;\n    if (afterEvent.type !== \"streaming\") throw new Error(\"expected streaming\");\n    expect(afterEvent.lastEventTime.getTime()).toBeGreaterThan(startEventTime);\n  });",
+      "headingContext": "node/core/src/providers/anthropic-agent-ticker.test.ts",
+      "startLine": 109,
+      "startCol": 3,
+      "endLine": 138,
+      "endCol": 6
+    }
+  ]
+}

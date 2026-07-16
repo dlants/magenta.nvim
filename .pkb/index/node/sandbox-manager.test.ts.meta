@@ -1,0 +1,177 @@
+{
+  "blobSha": "867c3df1cd8996dd755d2618211645b150c3faff",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { beforeEach, describe, expect, it, vi } from \"vitest\";\nimport type { SandboxConfig } from \"./options.ts\";\nimport { DEFAULT_SANDBOX_CONFIG } from \"./options.ts\";\nimport { mergeApprovedDomains, NetworkAskStack } from \"./sandbox-manager.ts\";\nimport type { HomeDir, NvimCwd } from \"./utils/files.ts\";\n\nconst mockInitialize = vi.fn().mockResolvedValue(undefined);\nconst mockIsSupportedPlatform = vi.fn().mockReturnValue(true);\nconst mockCheckDependencies = vi\n  .fn()\n  .mockReturnValue({ warnings: [] as string[], errors: [] as string[] });\nconst mockUpdateConfig = vi.fn();\nconst mockReset = vi.fn().mockResolvedValue(undefined);\n\nvi.mock(\"@anthropic-ai/sandbox-runtime\", () =\u003e ({\n  SandboxManager",
+      "contextualizedText": "// node/sandbox-manager.test.ts\n\nimport { beforeEach, describe, expect, it, vi } from \"vitest\";\nimport type { SandboxConfig } from \"./options.ts\";\nimport { DEFAULT_SANDBOX_CONFIG } from \"./options.ts\";\nimport { mergeApprovedDomains, NetworkAskStack } from \"./sandbox-manager.ts\";\nimport type { HomeDir, NvimCwd } from \"./utils/files.ts\";\n\nconst mockInitialize = vi.fn().mockResolvedValue(undefined);\nconst mockIsSupportedPlatform = vi.fn().mockReturnValue(true);\nconst mockCheckDependencies = vi\n  .fn()\n  .mockReturnValue({ warnings: [] as string[], errors: [] as string[] });\nconst mockUpdateConfig = vi.fn();\nconst mockReset = vi.fn().mockResolvedValue(undefined);\n\nvi.mock(\"@anthropic-ai/sandbox-runtime\", () =\u003e ({\n  SandboxManager",
+      "headingContext": "node/sandbox-manager.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 16,
+      "endCol": 17
+    },
+    {
+      "text": "    initialize: (...args: unknown[]) =\u003e mockInitialize(...args)",
+      "contextualizedText": "// node/sandbox-manager.test.ts \u003e function initialize\n\n    initialize: (...args: unknown[]) =\u003e mockInitialize(...args)",
+      "headingContext": "node/sandbox-manager.test.ts \u003e function initialize",
+      "startLine": 17,
+      "startCol": 1,
+      "endLine": 17,
+      "endCol": 64
+    },
+    {
+      "text": "    isSupportedPlatform: () =\u003e mockIsSupportedPlatform()",
+      "contextualizedText": "// node/sandbox-manager.test.ts \u003e function isSupportedPlatform\n\n    isSupportedPlatform: () =\u003e mockIsSupportedPlatform()",
+      "headingContext": "node/sandbox-manager.test.ts \u003e function isSupportedPlatform",
+      "startLine": 18,
+      "startCol": 1,
+      "endLine": 18,
+      "endCol": 57
+    },
+    {
+      "text": "    checkDependencies: () =\u003e mockCheckDependencies()",
+      "contextualizedText": "// node/sandbox-manager.test.ts \u003e function checkDependencies\n\n    checkDependencies: () =\u003e mockCheckDependencies()",
+      "headingContext": "node/sandbox-manager.test.ts \u003e function checkDependencies",
+      "startLine": 19,
+      "startCol": 1,
+      "endLine": 19,
+      "endCol": 53
+    },
+    {
+      "text": "    updateConfig: (...args: unknown[]) =\u003e mockUpdateConfig(...args)",
+      "contextualizedText": "// node/sandbox-manager.test.ts \u003e function updateConfig\n\n    updateConfig: (...args: unknown[]) =\u003e mockUpdateConfig(...args)",
+      "headingContext": "node/sandbox-manager.test.ts \u003e function updateConfig",
+      "startLine": 20,
+      "startCol": 1,
+      "endLine": 20,
+      "endCol": 68
+    },
+    {
+      "text": "    reset: () =\u003e mockReset()",
+      "contextualizedText": "// node/sandbox-manager.test.ts \u003e function reset\n\n    reset: () =\u003e mockReset()",
+      "headingContext": "node/sandbox-manager.test.ts \u003e function reset",
+      "startLine": 21,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 29
+    },
+    {
+      "text": "const cwd = \"/home/user/project\" as NvimCwd;\nconst homeDir = \"/home/user\" as HomeDir;",
+      "contextualizedText": "// node/sandbox-manager.test.ts\n\nconst cwd = \"/home/user/project\" as NvimCwd;\nconst homeDir = \"/home/user\" as HomeDir;",
+      "headingContext": "node/sandbox-manager.test.ts",
+      "startLine": 25,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 41
+    },
+    {
+      "text": "function makeConfig(overrides?: Partial\u003cSandboxConfig\u003e): SandboxConfig {\n  return structuredClone({ ...DEFAULT_SANDBOX_CONFIG, ...overrides });\n}",
+      "contextualizedText": "// node/sandbox-manager.test.ts \u003e function makeConfig\n\nfunction makeConfig(overrides?: Partial\u003cSandboxConfig\u003e): SandboxConfig {\n  return structuredClone({ ...DEFAULT_SANDBOX_CONFIG, ...overrides });\n}",
+      "headingContext": "node/sandbox-manager.test.ts \u003e function makeConfig",
+      "startLine": 28,
+      "startCol": 1,
+      "endLine": 30,
+      "endCol": 2
+    },
+    {
+      "text": "describe(\"sandbox-manager\", () =\u003e {\n  let initializeSandbox: typeof import(\"./sandbox-manager.ts\").initializeSandbox;\n  let resolveConfigPaths: typeof import(\"./sandbox-manager.ts\").resolveConfigPaths;\n\n  beforeEach(async () =\u003e {\n    vi.resetModules();\n\n    mockInitialize.mockReset().mockResolvedValue(undefined);\n    mockIsSupportedPlatform.mockReset().mockReturnValue(true);\n    mockCheckDependencies\n      .mockReset()\n      .mockReturnValue({ warnings: [], errors: [] });\n    mockUpdateConfig.mockReset();\n    mockReset.mockReset().mockResolvedValue(undefined);\n    logger.warn.mockReset();\n\n    vi.doMock(\"@anthropic-ai/sandbox-runtime\", () =\u003e ({\n      SandboxManager",
+      "contextualizedText": "// node/sandbox-manager.test.ts\n\ndescribe(\"sandbox-manager\", () =\u003e {\n  let initializeSandbox: typeof import(\"./sandbox-manager.ts\").initializeSandbox;\n  let resolveConfigPaths: typeof import(\"./sandbox-manager.ts\").resolveConfigPaths;\n\n  beforeEach(async () =\u003e {\n    vi.resetModules();\n\n    mockInitialize.mockReset().mockResolvedValue(undefined);\n    mockIsSupportedPlatform.mockReset().mockReturnValue(true);\n    mockCheckDependencies\n      .mockReset()\n      .mockReturnValue({ warnings: [], errors: [] });\n    mockUpdateConfig.mockReset();\n    mockReset.mockReset().mockResolvedValue(undefined);\n    logger.warn.mockReset();\n\n    vi.doMock(\"@anthropic-ai/sandbox-runtime\", () =\u003e ({\n      SandboxManager",
+      "headingContext": "node/sandbox-manager.test.ts",
+      "startLine": 32,
+      "startCol": 1,
+      "endLine": 49,
+      "endCol": 21
+    },
+    {
+      "text": "        initialize: (...args: unknown[]) =\u003e mockInitialize(...args)",
+      "contextualizedText": "// node/sandbox-manager.test.ts \u003e function initialize\n\n        initialize: (...args: unknown[]) =\u003e mockInitialize(...args)",
+      "headingContext": "node/sandbox-manager.test.ts \u003e function initialize",
+      "startLine": 50,
+      "startCol": 1,
+      "endLine": 50,
+      "endCol": 68
+    },
+    {
+      "text": "        isSupportedPlatform: () =\u003e mockIsSupportedPlatform()",
+      "contextualizedText": "// node/sandbox-manager.test.ts \u003e function isSupportedPlatform\n\n        isSupportedPlatform: () =\u003e mockIsSupportedPlatform()",
+      "headingContext": "node/sandbox-manager.test.ts \u003e function isSupportedPlatform",
+      "startLine": 51,
+      "startCol": 1,
+      "endLine": 51,
+      "endCol": 61
+    },
+    {
+      "text": "        checkDependencies: () =\u003e mockCheckDependencies()",
+      "contextualizedText": "// node/sandbox-manager.test.ts \u003e function checkDependencies\n\n        checkDependencies: () =\u003e mockCheckDependencies()",
+      "headingContext": "node/sandbox-manager.test.ts \u003e function checkDependencies",
+      "startLine": 52,
+      "startCol": 1,
+      "endLine": 52,
+      "endCol": 57
+    },
+    {
+      "text": "        updateConfig: (...args: unknown[]) =\u003e mockUpdateConfig(...args)",
+      "contextualizedText": "// node/sandbox-manager.test.ts \u003e function updateConfig\n\n        updateConfig: (...args: unknown[]) =\u003e mockUpdateConfig(...args)",
+      "headingContext": "node/sandbox-manager.test.ts \u003e function updateConfig",
+      "startLine": 53,
+      "startCol": 1,
+      "endLine": 53,
+      "endCol": 72
+    },
+    {
+      "text": "        reset: () =\u003e mockReset()",
+      "contextualizedText": "// node/sandbox-manager.test.ts \u003e function reset\n\n        reset: () =\u003e mockReset()",
+      "headingContext": "node/sandbox-manager.test.ts \u003e function reset",
+      "startLine": 54,
+      "startCol": 1,
+      "endLine": 54,
+      "endCol": 33
+    },
+    {
+      "text": "const mod = await import(\"./sandbox-manager.ts\");\n    initializeSandbox = mod.initializeSandbox;\n    resolveConfigPaths = mod.resolveConfigPaths;\n  });\n\n  const logger = { warn: vi.fn() };\n\n  describe(\"initializeSandbox\", () =\u003e {\n    it(\"unsupported platform returns unsupported sandbox\", async () =\u003e {\n      mockIsSupportedPlatform.mockReturnValue(false);\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      expect(sandbox.getState()).toEqual({\n        status: \"unsupported\",\n        reason: \"Sandbox is not supported on this platform\",\n      });\n      expect(logger.warn).toHaveBeenCalled();\n      expect(mockInitialize).not.toHaveBeenCalled();\n    });\n\n    it(\"dependency errors return unsupported sandbox with reason\", async () =\u003e {\n      mockCheckDependencies.mockReturnValue({\n        warnings: [],\n        errors: [\"bwrap not found\"],\n      });\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      const state = sandbox.getState();\n      expect(state.status).toBe(\"unsupported\");\n      if (state.status === \"unsupported\") {\n        expect(state.reason).toContain(\"bwrap not found\");\n      }\n      expect(logger.warn).toHaveBeenCalled();\n      expect(mockInitialize).not.toHaveBeenCalled();\n    });",
+      "contextualizedText": "// node/sandbox-manager.test.ts\n\nconst mod = await import(\"./sandbox-manager.ts\");\n    initializeSandbox = mod.initializeSandbox;\n    resolveConfigPaths = mod.resolveConfigPaths;\n  });\n\n  const logger = { warn: vi.fn() };\n\n  describe(\"initializeSandbox\", () =\u003e {\n    it(\"unsupported platform returns unsupported sandbox\", async () =\u003e {\n      mockIsSupportedPlatform.mockReturnValue(false);\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      expect(sandbox.getState()).toEqual({\n        status: \"unsupported\",\n        reason: \"Sandbox is not supported on this platform\",\n      });\n      expect(logger.warn).toHaveBeenCalled();\n      expect(mockInitialize).not.toHaveBeenCalled();\n    });\n\n    it(\"dependency errors return unsupported sandbox with reason\", async () =\u003e {\n      mockCheckDependencies.mockReturnValue({\n        warnings: [],\n        errors: [\"bwrap not found\"],\n      });\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      const state = sandbox.getState();\n      expect(state.status).toBe(\"unsupported\");\n      if (state.status === \"unsupported\") {\n        expect(state.reason).toContain(\"bwrap not found\");\n      }\n      expect(logger.warn).toHaveBeenCalled();\n      expect(mockInitialize).not.toHaveBeenCalled();\n    });",
+      "headingContext": "node/sandbox-manager.test.ts",
+      "startLine": 58,
+      "startCol": 5,
+      "endLine": 104,
+      "endCol": 8
+    },
+    {
+      "text": "it(\"successful init returns ready sandbox\", async () =\u003e {\n      const config = makeConfig();\n      const askCallback = vi\n        .fn()\n        .mockResolvedValue(\n          true,\n        ) as unknown as import(\"@anthropic-ai/sandbox-runtime\").SandboxAskCallback;\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        askCallback,\n        logger,\n      );\n      expect(sandbox.getState()).toEqual({ status: \"ready\" });\n      expect(mockInitialize).toHaveBeenCalledOnce();\n      const calledConfig = mockInitialize.mock\n        .calls[0][0] as import(\"@anthropic-ai/sandbox-runtime\").SandboxRuntimeConfig;\n      expect(calledConfig.filesystem.allowWrite).toEqual(\n        expect.arrayContaining([\"/home/user/project\"]),\n      );\n      expect(mockInitialize.mock.calls[0][2]).toBe(true);\n    });\n\n    it(\"dependency warnings are logged but do not prevent initialization\", async () =\u003e {\n      mockCheckDependencies.mockReturnValue({\n        warnings: [\"seccomp not available\"],\n        errors: [],\n      });\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      expect(sandbox.getState()).toEqual({ status: \"ready\" });\n      expect(logger.warn).toHaveBeenCalledWith(\n        \"Sandbox dependency warning: seccomp not available\",\n      );\n      expect(mockInitialize).toHaveBeenCalledOnce();\n    });\n  });\n\n  describe(\"resolveConfigPaths\", () =\u003e {\n    it(\"expands ~/ to homeDir\", () =\u003e {\n      const config = makeConfig({\n        filesystem: {\n          allowWrite: [],\n          denyWrite: [],\n          denyRead: [\"~/.ssh\"],\n          allowRead: [],\n        },\n      });\n      const resolved = resolveConfigPaths(config, cwd, homeDir);\n      expect(resolved.filesystem.denyRead).toEqual([\"/home/user/.ssh\"]);\n    });",
+      "contextualizedText": "// node/sandbox-manager.test.ts\n\nit(\"successful init returns ready sandbox\", async () =\u003e {\n      const config = makeConfig();\n      const askCallback = vi\n        .fn()\n        .mockResolvedValue(\n          true,\n        ) as unknown as import(\"@anthropic-ai/sandbox-runtime\").SandboxAskCallback;\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        askCallback,\n        logger,\n      );\n      expect(sandbox.getState()).toEqual({ status: \"ready\" });\n      expect(mockInitialize).toHaveBeenCalledOnce();\n      const calledConfig = mockInitialize.mock\n        .calls[0][0] as import(\"@anthropic-ai/sandbox-runtime\").SandboxRuntimeConfig;\n      expect(calledConfig.filesystem.allowWrite).toEqual(\n        expect.arrayContaining([\"/home/user/project\"]),\n      );\n      expect(mockInitialize.mock.calls[0][2]).toBe(true);\n    });\n\n    it(\"dependency warnings are logged but do not prevent initialization\", async () =\u003e {\n      mockCheckDependencies.mockReturnValue({\n        warnings: [\"seccomp not available\"],\n        errors: [],\n      });\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      expect(sandbox.getState()).toEqual({ status: \"ready\" });\n      expect(logger.warn).toHaveBeenCalledWith(\n        \"Sandbox dependency warning: seccomp not available\",\n      );\n      expect(mockInitialize).toHaveBeenCalledOnce();\n    });\n  });\n\n  describe(\"resolveConfigPaths\", () =\u003e {\n    it(\"expands ~/ to homeDir\", () =\u003e {\n      const config = makeConfig({\n        filesystem: {\n          allowWrite: [],\n          denyWrite: [],\n          denyRead: [\"~/.ssh\"],\n          allowRead: [],\n        },\n      });\n      const resolved = resolveConfigPaths(config, cwd, homeDir);\n      expect(resolved.filesystem.denyRead).toEqual([\"/home/user/.ssh\"]);\n    });",
+      "headingContext": "node/sandbox-manager.test.ts",
+      "startLine": 106,
+      "startCol": 5,
+      "endLine": 163,
+      "endCol": 8
+    },
+    {
+      "text": "it(\"expands ./ to cwd\", () =\u003e {\n      const config = makeConfig({\n        filesystem: {\n          allowWrite: [\"./\"],\n          denyWrite: [],\n          denyRead: [],\n          allowRead: [],\n        },\n      });\n      const resolved = resolveConfigPaths(config, cwd, homeDir);\n      expect(resolved.filesystem.allowWrite).toEqual([\"/home/user/project\"]);\n    });\n\n    it(\"leaves absolute paths unchanged\", () =\u003e {\n      const config = makeConfig({\n        filesystem: {\n          allowWrite: [\"/tmp/build\"],\n          denyWrite: [],\n          denyRead: [],\n          allowRead: [],\n        },\n      });\n      const resolved = resolveConfigPaths(config, cwd, homeDir);\n      expect(resolved.filesystem.allowWrite).toEqual([\"/tmp/build\"]);\n    });\n\n    it(\"resolves relative paths to cwd-relative\", () =\u003e {\n      const config = makeConfig({\n        filesystem: {\n          allowWrite: [\"src/output\"],\n          denyWrite: [],\n          denyRead: [],\n          allowRead: [],\n        },\n      });\n      const resolved = resolveConfigPaths(config, cwd, homeDir);\n      expect(resolved.filesystem.allowWrite).toEqual([\n        \"/home/user/project/src/output\",\n      ]);\n    });\n\n    it(\"passes network config through unchanged\", () =\u003e {\n      const config = makeConfig({\n        network: {\n          allowedDomains: [\"example.com\"],\n          deniedDomains: [\"evil.com\"],\n          allowUnixSockets: [],\n          allowAllUnixSockets: false,\n          onUnknownHost: \"prompt\",\n        },\n      });\n      const resolved = resolveConfigPaths(config, cwd, homeDir);\n      expect(resolved.network.allowedDomains).toEqual([\"example.com\"]);\n      expect(resolved.network.deniedDomains).toEqual([\"evil.com\"]);\n    });",
+      "contextualizedText": "// node/sandbox-manager.test.ts\n\nit(\"expands ./ to cwd\", () =\u003e {\n      const config = makeConfig({\n        filesystem: {\n          allowWrite: [\"./\"],\n          denyWrite: [],\n          denyRead: [],\n          allowRead: [],\n        },\n      });\n      const resolved = resolveConfigPaths(config, cwd, homeDir);\n      expect(resolved.filesystem.allowWrite).toEqual([\"/home/user/project\"]);\n    });\n\n    it(\"leaves absolute paths unchanged\", () =\u003e {\n      const config = makeConfig({\n        filesystem: {\n          allowWrite: [\"/tmp/build\"],\n          denyWrite: [],\n          denyRead: [],\n          allowRead: [],\n        },\n      });\n      const resolved = resolveConfigPaths(config, cwd, homeDir);\n      expect(resolved.filesystem.allowWrite).toEqual([\"/tmp/build\"]);\n    });\n\n    it(\"resolves relative paths to cwd-relative\", () =\u003e {\n      const config = makeConfig({\n        filesystem: {\n          allowWrite: [\"src/output\"],\n          denyWrite: [],\n          denyRead: [],\n          allowRead: [],\n        },\n      });\n      const resolved = resolveConfigPaths(config, cwd, homeDir);\n      expect(resolved.filesystem.allowWrite).toEqual([\n        \"/home/user/project/src/output\",\n      ]);\n    });\n\n    it(\"passes network config through unchanged\", () =\u003e {\n      const config = makeConfig({\n        network: {\n          allowedDomains: [\"example.com\"],\n          deniedDomains: [\"evil.com\"],\n          allowUnixSockets: [],\n          allowAllUnixSockets: false,\n          onUnknownHost: \"prompt\",\n        },\n      });\n      const resolved = resolveConfigPaths(config, cwd, homeDir);\n      expect(resolved.network.allowedDomains).toEqual([\"example.com\"]);\n      expect(resolved.network.deniedDomains).toEqual([\"evil.com\"]);\n    });",
+      "headingContext": "node/sandbox-manager.test.ts",
+      "startLine": 165,
+      "startCol": 5,
+      "endLine": 219,
+      "endCol": 8
+    },
+    {
+      "text": "describe(\"updateConfigIfChanged on sandbox instance\", () =\u003e {\n    it(\"does not call updateConfig when config is unchanged\", async () =\u003e {\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      mockUpdateConfig.mockClear();\n\n      sandbox.updateConfigIfChanged(config, cwd, homeDir);\n      expect(mockUpdateConfig).not.toHaveBeenCalled();\n    });\n\n    it(\"calls updateConfig when config has changed\", async () =\u003e {\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      mockUpdateConfig.mockClear();\n\n      const changedConfig = makeConfig({\n        filesystem: {\n          allowWrite: [\"./\", \"/tmp\"],\n          denyWrite: [\".env\"],\n          denyRead: [],\n          allowRead: [],\n        },\n      });\n      sandbox.updateConfigIfChanged(changedConfig, cwd, homeDir);\n      expect(mockUpdateConfig).toHaveBeenCalledOnce();\n      const calledConfig = mockUpdateConfig.mock\n        .calls[0][0] as import(\"@anthropic-ai/sandbox-runtime\").SandboxRuntimeConfig;\n      expect(calledConfig.filesystem.allowWrite).toContain(\"/tmp\");\n    });\n    it(\"merges session-approved hosts into allowedDomains\", async () =\u003e {\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      sandbox.recordSessionApprovedHost(\"approved.example.com\");\n      mockUpdateConfig.mockClear();\n      sandbox.updateConfigIfChanged(config, cwd, homeDir);\n      expect(mockUpdateConfig).toHaveBeenCalledOnce();\n      const calledConfig = mockUpdateConfig.mock\n        .calls[0][0] as import(\"@anthropic-ai/sandbox-runtime\").SandboxRuntimeConfig;\n      expect(calledConfig.network.allowedDomains).toContain(\n        \"approved.example.com\",\n      );\n    });\n  });",
+      "contextualizedText": "// node/sandbox-manager.test.ts\n\ndescribe(\"updateConfigIfChanged on sandbox instance\", () =\u003e {\n    it(\"does not call updateConfig when config is unchanged\", async () =\u003e {\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      mockUpdateConfig.mockClear();\n\n      sandbox.updateConfigIfChanged(config, cwd, homeDir);\n      expect(mockUpdateConfig).not.toHaveBeenCalled();\n    });\n\n    it(\"calls updateConfig when config has changed\", async () =\u003e {\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      mockUpdateConfig.mockClear();\n\n      const changedConfig = makeConfig({\n        filesystem: {\n          allowWrite: [\"./\", \"/tmp\"],\n          denyWrite: [\".env\"],\n          denyRead: [],\n          allowRead: [],\n        },\n      });\n      sandbox.updateConfigIfChanged(changedConfig, cwd, homeDir);\n      expect(mockUpdateConfig).toHaveBeenCalledOnce();\n      const calledConfig = mockUpdateConfig.mock\n        .calls[0][0] as import(\"@anthropic-ai/sandbox-runtime\").SandboxRuntimeConfig;\n      expect(calledConfig.filesystem.allowWrite).toContain(\"/tmp\");\n    });\n    it(\"merges session-approved hosts into allowedDomains\", async () =\u003e {\n      const config = makeConfig();\n      const sandbox = await initializeSandbox(\n        config,\n        cwd,\n        homeDir,\n        undefined,\n        logger,\n      );\n      sandbox.recordSessionApprovedHost(\"approved.example.com\");\n      mockUpdateConfig.mockClear();\n      sandbox.updateConfigIfChanged(config, cwd, homeDir);\n      expect(mockUpdateConfig).toHaveBeenCalledOnce();\n      const calledConfig = mockUpdateConfig.mock\n        .calls[0][0] as import(\"@anthropic-ai/sandbox-runtime\").SandboxRuntimeConfig;\n      expect(calledConfig.network.allowedDomains).toContain(\n        \"approved.example.com\",\n      );\n    });\n  });",
+      "headingContext": "node/sandbox-manager.test.ts",
+      "startLine": 222,
+      "startCol": 3,
+      "endLine": 282,
+      "endCol": 6
+    },
+    {
+      "text": "describe(\"mergeApprovedDomains\", () =\u003e {\n  it(\"appends approved hosts not already present\", () =\u003e {\n    expect(mergeApprovedDomains([\"a.com\"], [\"b.com\"])).toEqual([\n      \"a.com\",\n      \"b.com\",\n    ]);\n  });\n  it(\"skips hosts already in allowedDomains (dedup)\", () =\u003e {\n    expect(mergeApprovedDomains([\"a.com\", \"b.com\"], [\"b.com\"])).toEqual([\n      \"a.com\",\n      \"b.com\",\n    ]);\n  });\n  it(\"does not mutate the input array\", () =\u003e {\n    const input = [\"a.com\"];\n    mergeApprovedDomains(input, [\"b.com\"]);\n    expect(input).toEqual([\"a.com\"]);\n  });\n});\n\ndescribe(\"NetworkAskStack\", () =\u003e {\n  it(\"denies when stack is empty\", async () =\u003e {\n    const stack = new NetworkAskStack();\n    await expect(stack.route({ host: \"example.com\", port: 443 })).resolves.toBe(\n      false,\n    );\n  });\n\n  it(\"routes to the top of the stack\", async () =\u003e {\n    const stack = new NetworkAskStack();\n    const a = vi.fn().mockResolvedValue(false);\n    const b = vi.fn().mockResolvedValue(true);\n    stack.push(a);\n    stack.push(b);\n\n    await expect(stack.route({ host: \"h\", port: undefined })).resolves.toBe(\n      true,\n    );\n    expect(a).not.toHaveBeenCalled();\n    expect(b).toHaveBeenCalledOnce();\n  });\n\n  it(\"pops back to the previous target\", async () =\u003e {\n    const stack = new NetworkAskStack();\n    const a = vi.fn().mockResolvedValue(false);\n    const b = vi.fn().mockResolvedValue(true);\n    stack.push(a);\n    stack.push(b);\n    stack.pop(b);\n\n    await expect(stack.route({ host: \"h\", port: undefined })).resolves.toBe(\n      false,\n    );\n    expect(a).toHaveBeenCalledOnce();\n  });\n});",
+      "contextualizedText": "// node/sandbox-manager.test.ts\n\ndescribe(\"mergeApprovedDomains\", () =\u003e {\n  it(\"appends approved hosts not already present\", () =\u003e {\n    expect(mergeApprovedDomains([\"a.com\"], [\"b.com\"])).toEqual([\n      \"a.com\",\n      \"b.com\",\n    ]);\n  });\n  it(\"skips hosts already in allowedDomains (dedup)\", () =\u003e {\n    expect(mergeApprovedDomains([\"a.com\", \"b.com\"], [\"b.com\"])).toEqual([\n      \"a.com\",\n      \"b.com\",\n    ]);\n  });\n  it(\"does not mutate the input array\", () =\u003e {\n    const input = [\"a.com\"];\n    mergeApprovedDomains(input, [\"b.com\"]);\n    expect(input).toEqual([\"a.com\"]);\n  });\n});\n\ndescribe(\"NetworkAskStack\", () =\u003e {\n  it(\"denies when stack is empty\", async () =\u003e {\n    const stack = new NetworkAskStack();\n    await expect(stack.route({ host: \"example.com\", port: 443 })).resolves.toBe(\n      false,\n    );\n  });\n\n  it(\"routes to the top of the stack\", async () =\u003e {\n    const stack = new NetworkAskStack();\n    const a = vi.fn().mockResolvedValue(false);\n    const b = vi.fn().mockResolvedValue(true);\n    stack.push(a);\n    stack.push(b);\n\n    await expect(stack.route({ host: \"h\", port: undefined })).resolves.toBe(\n      true,\n    );\n    expect(a).not.toHaveBeenCalled();\n    expect(b).toHaveBeenCalledOnce();\n  });\n\n  it(\"pops back to the previous target\", async () =\u003e {\n    const stack = new NetworkAskStack();\n    const a = vi.fn().mockResolvedValue(false);\n    const b = vi.fn().mockResolvedValue(true);\n    stack.push(a);\n    stack.push(b);\n    stack.pop(b);\n\n    await expect(stack.route({ host: \"h\", port: undefined })).resolves.toBe(\n      false,\n    );\n    expect(a).toHaveBeenCalledOnce();\n  });\n});",
+      "headingContext": "node/sandbox-manager.test.ts",
+      "startLine": 284,
+      "startCol": 1,
+      "endLine": 339,
+      "endCol": 4
+    }
+  ]
+}

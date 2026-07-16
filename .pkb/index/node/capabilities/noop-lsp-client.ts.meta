@@ -1,0 +1,60 @@
+{
+  "blobSha": "642fbafea19c119f56e6e1f7b7cdc47b9ac86f5e",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type {\n  AbsFilePath,\n  LspClient,\n  LspDefinitionResponse,\n  LspHoverResponse,\n  LspReferencesResponse,\n} from \"@magenta/core\";",
+      "contextualizedText": "// node/capabilities/noop-lsp-client.ts\n\nimport type {\n  AbsFilePath,\n  LspClient,\n  LspDefinitionResponse,\n  LspHoverResponse,\n  LspReferencesResponse,\n} from \"@magenta/core\";",
+      "headingContext": "node/capabilities/noop-lsp-client.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 7,
+      "endCol": 24
+    },
+    {
+      "text": "export class NoopLspClient implements LspClient",
+      "contextualizedText": "// node/capabilities/noop-lsp-client.ts \u003e class NoopLspClient\n\nexport class NoopLspClient implements LspClient",
+      "headingContext": "node/capabilities/noop-lsp-client.ts \u003e class NoopLspClient",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 9,
+      "endCol": 48
+    },
+    {
+      "text": "  requestHover(\n    _filePath: AbsFilePath,\n    _position: { line: number; character: number },\n  ): Promise\u003cLspHoverResponse\u003e {\n    return Promise.resolve([]);\n  }",
+      "contextualizedText": "// node/capabilities/noop-lsp-client.ts \u003e class NoopLspClient \u003e method requestHover\n\n  requestHover(\n    _filePath: AbsFilePath,\n    _position: { line: number; character: number },\n  ): Promise\u003cLspHoverResponse\u003e {\n    return Promise.resolve([]);\n  }",
+      "headingContext": "node/capabilities/noop-lsp-client.ts \u003e class NoopLspClient \u003e method requestHover",
+      "startLine": 10,
+      "startCol": 1,
+      "endLine": 15,
+      "endCol": 4
+    },
+    {
+      "text": "  requestReferences(\n    _filePath: AbsFilePath,\n    _position: { line: number; character: number },\n  ): Promise\u003cLspReferencesResponse\u003e {\n    return Promise.resolve([]);\n  }",
+      "contextualizedText": "// node/capabilities/noop-lsp-client.ts \u003e class NoopLspClient \u003e method requestReferences\n\n  requestReferences(\n    _filePath: AbsFilePath,\n    _position: { line: number; character: number },\n  ): Promise\u003cLspReferencesResponse\u003e {\n    return Promise.resolve([]);\n  }",
+      "headingContext": "node/capabilities/noop-lsp-client.ts \u003e class NoopLspClient \u003e method requestReferences",
+      "startLine": 17,
+      "startCol": 1,
+      "endLine": 22,
+      "endCol": 4
+    },
+    {
+      "text": "  requestDefinition(\n    _filePath: AbsFilePath,\n    _position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e {\n    return Promise.resolve([]);\n  }",
+      "contextualizedText": "// node/capabilities/noop-lsp-client.ts \u003e class NoopLspClient \u003e method requestDefinition\n\n  requestDefinition(\n    _filePath: AbsFilePath,\n    _position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e {\n    return Promise.resolve([]);\n  }",
+      "headingContext": "node/capabilities/noop-lsp-client.ts \u003e class NoopLspClient \u003e method requestDefinition",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 29,
+      "endCol": 4
+    },
+    {
+      "text": "  requestTypeDefinition(\n    _filePath: AbsFilePath,\n    _position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e {\n    return Promise.resolve([]);\n  }",
+      "contextualizedText": "// node/capabilities/noop-lsp-client.ts \u003e class NoopLspClient \u003e method requestTypeDefinition\n\n  requestTypeDefinition(\n    _filePath: AbsFilePath,\n    _position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e {\n    return Promise.resolve([]);\n  }",
+      "headingContext": "node/capabilities/noop-lsp-client.ts \u003e class NoopLspClient \u003e method requestTypeDefinition",
+      "startLine": 31,
+      "startCol": 1,
+      "endLine": 36,
+      "endCol": 4
+    }
+  ]
+}

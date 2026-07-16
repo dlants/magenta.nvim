@@ -1,0 +1,231 @@
+{
+  "blobSha": "643fb1e45725d619cccc503b830362757d8243d9",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { beforeEach, describe, expect, test, vi } from \"vitest\";\nimport type {\n  FsReadConfig,\n  FsWriteConfig,\n  Sandbox,\n  SandboxState,\n} from \"../sandbox-manager.ts\";\nimport type { HomeDir, NvimCwd } from \"../utils/files.ts\";\nimport { SandboxFileIO } from \"./sandbox-file-io.ts\";\n\nlet currentSandboxState: SandboxState = { status: \"uninitialized\" };\nlet mockFsReadConfig: FsReadConfig = { denyOnly: [] };\nlet mockFsWriteConfig: FsWriteConfig = {\n  allowOnly: [\"/\"],\n  denyWithinAllow: [],\n};",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts\n\nimport { beforeEach, describe, expect, test, vi } from \"vitest\";\nimport type {\n  FsReadConfig,\n  FsWriteConfig,\n  Sandbox,\n  SandboxState,\n} from \"../sandbox-manager.ts\";\nimport type { HomeDir, NvimCwd } from \"../utils/files.ts\";\nimport { SandboxFileIO } from \"./sandbox-file-io.ts\";\n\nlet currentSandboxState: SandboxState = { status: \"uninitialized\" };\nlet mockFsReadConfig: FsReadConfig = { denyOnly: [] };\nlet mockFsWriteConfig: FsWriteConfig = {\n  allowOnly: [\"/\"],\n  denyWithinAllow: [],\n};",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 16,
+      "endCol": 3
+    },
+    {
+      "text": "function createMockSandbox(): Sandbox",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox\n\nfunction createMockSandbox(): Sandbox",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox",
+      "startLine": 18,
+      "startCol": 1,
+      "endLine": 18,
+      "endCol": 38
+    },
+    {
+      "text": "    getState: () =\u003e currentSandboxState",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getState\n\n    getState: () =\u003e currentSandboxState",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getState",
+      "startLine": 20,
+      "startCol": 1,
+      "endLine": 20,
+      "endCol": 40
+    },
+    {
+      "text": "    getFsReadConfig: () =\u003e mockFsReadConfig",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getFsReadConfig\n\n    getFsReadConfig: () =\u003e mockFsReadConfig",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getFsReadConfig",
+      "startLine": 21,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 44
+    },
+    {
+      "text": "    getFsWriteConfig: () =\u003e mockFsWriteConfig",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getFsWriteConfig\n\n    getFsWriteConfig: () =\u003e mockFsWriteConfig",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getFsWriteConfig",
+      "startLine": 22,
+      "startCol": 1,
+      "endLine": 22,
+      "endCol": 46
+    },
+    {
+      "text": "    wrapWithSandbox: (cmd: string) =\u003e Promise.resolve(cmd)",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function wrapWithSandbox\n\n    wrapWithSandbox: (cmd: string) =\u003e Promise.resolve(cmd)",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function wrapWithSandbox",
+      "startLine": 23,
+      "startCol": 1,
+      "endLine": 23,
+      "endCol": 59
+    },
+    {
+      "text": "    getViolationStore: ()",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getViolationStore\n\n    getViolationStore: ()",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getViolationStore",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 24,
+      "endCol": 26
+    },
+    {
+      "text": "      getTotalCount: () =\u003e 0",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getViolationStore \u003e function getTotalCount\n\n      getTotalCount: () =\u003e 0",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getViolationStore \u003e function getTotalCount",
+      "startLine": 25,
+      "startCol": 1,
+      "endLine": 25,
+      "endCol": 29
+    },
+    {
+      "text": "      getViolations: () =\u003e []",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getViolationStore \u003e function getViolations\n\n      getViolations: () =\u003e []",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getViolationStore \u003e function getViolations",
+      "startLine": 26,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 30
+    },
+    {
+      "text": "      addViolation: () =\u003e {}",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getViolationStore \u003e function addViolation\n\n      addViolation: () =\u003e {}",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function getViolationStore \u003e function addViolation",
+      "startLine": 27,
+      "startCol": 1,
+      "endLine": 27,
+      "endCol": 29
+    },
+    {
+      "text": "    annotateStderrWithSandboxFailures: (_cmd: string, stderr: string) =\u003e stderr",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function annotateStderrWithSandboxFailures\n\n    annotateStderrWithSandboxFailures: (_cmd: string, stderr: string) =\u003e stderr",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function annotateStderrWithSandboxFailures",
+      "startLine": 29,
+      "startCol": 1,
+      "endLine": 29,
+      "endCol": 80
+    },
+    {
+      "text": "    updateConfigIfChanged: () =\u003e {}",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function updateConfigIfChanged\n\n    updateConfigIfChanged: () =\u003e {}",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function updateConfigIfChanged",
+      "startLine": 30,
+      "startCol": 1,
+      "endLine": 30,
+      "endCol": 36
+    },
+    {
+      "text": "    cleanupAfterCommand: () =\u003e {}",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function cleanupAfterCommand\n\n    cleanupAfterCommand: () =\u003e {}",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function cleanupAfterCommand",
+      "startLine": 31,
+      "startCol": 1,
+      "endLine": 31,
+      "endCol": 34
+    },
+    {
+      "text": "    pushNetworkAskTarget: () =\u003e {}",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function pushNetworkAskTarget\n\n    pushNetworkAskTarget: () =\u003e {}",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function pushNetworkAskTarget",
+      "startLine": 32,
+      "startCol": 1,
+      "endLine": 32,
+      "endCol": 35
+    },
+    {
+      "text": "    popNetworkAskTarget: () =\u003e {}",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function popNetworkAskTarget\n\n    popNetworkAskTarget: () =\u003e {}",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function popNetworkAskTarget",
+      "startLine": 33,
+      "startCol": 1,
+      "endLine": 33,
+      "endCol": 34
+    },
+    {
+      "text": "    routeNetworkAsk: () =\u003e Promise.resolve(false)",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function routeNetworkAsk\n\n    routeNetworkAsk: () =\u003e Promise.resolve(false)",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function routeNetworkAsk",
+      "startLine": 34,
+      "startCol": 1,
+      "endLine": 34,
+      "endCol": 50
+    },
+    {
+      "text": "    recordSessionApprovedHost: () =\u003e {}",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function recordSessionApprovedHost\n\n    recordSessionApprovedHost: () =\u003e {}",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createMockSandbox \u003e function recordSessionApprovedHost",
+      "startLine": 35,
+      "startCol": 1,
+      "endLine": 35,
+      "endCol": 40
+    },
+    {
+      "text": "const cwd = \"/test/cwd\" as NvimCwd;\nconst homeDir = \"/test/home\" as HomeDir;",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts\n\nconst cwd = \"/test/cwd\" as NvimCwd;\nconst homeDir = \"/test/home\" as HomeDir;",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts",
+      "startLine": 39,
+      "startCol": 1,
+      "endLine": 40,
+      "endCol": 41
+    },
+    {
+      "text": "function createSandboxIO(\n  promptForWriteApproval: (absPath: string) =\u003e Promise\u003cvoid\u003e = vi.fn(),\n  isBypassed: () =\u003e boolean = () =\u003e false,\n) {\n  return new SandboxFileIO(\n    { nvim: {} as never, cwd, homeDir },\n    createMockSandbox(),\n    promptForWriteApproval,\n    isBypassed,\n  );\n}",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts \u003e function createSandboxIO\n\nfunction createSandboxIO(\n  promptForWriteApproval: (absPath: string) =\u003e Promise\u003cvoid\u003e = vi.fn(),\n  isBypassed: () =\u003e boolean = () =\u003e false,\n) {\n  return new SandboxFileIO(\n    { nvim: {} as never, cwd, homeDir },\n    createMockSandbox(),\n    promptForWriteApproval,\n    isBypassed,\n  );\n}",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts \u003e function createSandboxIO",
+      "startLine": 42,
+      "startCol": 1,
+      "endLine": 52,
+      "endCol": 2
+    },
+    {
+      "text": "describe(\"SandboxFileIO\", () =\u003e {\n  beforeEach(() =\u003e {\n    vi.clearAllMocks();\n  });\n\n  describe(\"when sandbox is ready\", () =\u003e {\n    beforeEach(() =\u003e {\n      currentSandboxState = { status: \"ready\" };\n    });\n\n    describe(\"reads\", () =\u003e {\n      test(\"allowed path is not blocked\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.ssh\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/cwd/src/file.ts\")).toBe(false);\n      });\n\n      test(\"denied path is blocked\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.ssh\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.ssh/id_rsa\")).toBe(true);\n      });\n\n      test(\"deny exact path match\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.ssh\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.ssh\")).toBe(true);\n      });\n\n      test(\"deny prefix does not match non-child paths\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.ssh\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.sshrc\")).toBe(false);\n      });\n\n      test(\"readBinaryFile denied path throws\", async () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.aws\"],\n        };\n\n        const sio = createSandboxIO();\n        await expect(\n          sio.readBinaryFile(\"/test/home/.aws/credentials\"),\n        ).rejects.toThrow(\"Sandbox: read access denied\");\n      });\n\n      test(\"allowWithinDeny re-allows denied paths\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.config\"],\n          allowWithinDeny: [\"/test/home/.config/nvim\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.config/nvim/init.lua\")).toBe(\n          false,\n        );\n      });",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts\n\ndescribe(\"SandboxFileIO\", () =\u003e {\n  beforeEach(() =\u003e {\n    vi.clearAllMocks();\n  });\n\n  describe(\"when sandbox is ready\", () =\u003e {\n    beforeEach(() =\u003e {\n      currentSandboxState = { status: \"ready\" };\n    });\n\n    describe(\"reads\", () =\u003e {\n      test(\"allowed path is not blocked\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.ssh\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/cwd/src/file.ts\")).toBe(false);\n      });\n\n      test(\"denied path is blocked\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.ssh\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.ssh/id_rsa\")).toBe(true);\n      });\n\n      test(\"deny exact path match\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.ssh\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.ssh\")).toBe(true);\n      });\n\n      test(\"deny prefix does not match non-child paths\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.ssh\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.sshrc\")).toBe(false);\n      });\n\n      test(\"readBinaryFile denied path throws\", async () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.aws\"],\n        };\n\n        const sio = createSandboxIO();\n        await expect(\n          sio.readBinaryFile(\"/test/home/.aws/credentials\"),\n        ).rejects.toThrow(\"Sandbox: read access denied\");\n      });\n\n      test(\"allowWithinDeny re-allows denied paths\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.config\"],\n          allowWithinDeny: [\"/test/home/.config/nvim\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.config/nvim/init.lua\")).toBe(\n          false,\n        );\n      });",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts",
+      "startLine": 54,
+      "startCol": 1,
+      "endLine": 122,
+      "endCol": 10
+    },
+    {
+      "text": "test(\"allowWithinDeny does not re-allow sibling paths\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.config\"],\n          allowWithinDeny: [\"/test/home/.config/nvim\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.config/secrets/key\")).toBe(true);\n      });",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts\n\ntest(\"allowWithinDeny does not re-allow sibling paths\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.config\"],\n          allowWithinDeny: [\"/test/home/.config/nvim\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.config/secrets/key\")).toBe(true);\n      });",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts",
+      "startLine": 124,
+      "startCol": 7,
+      "endLine": 132,
+      "endCol": 10
+    },
+    {
+      "text": "describe(\"writes\", () =\u003e {\n      test(\"write to allowed path is not blocked\", () =\u003e {\n        mockFsWriteConfig = {\n          allowOnly: [\"/test/cwd\"],\n          denyWithinAllow: [],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isWriteBlocked(\"/test/cwd/src/file.ts\")).toBe(false);\n      });\n\n      test(\"write outside allowOnly is blocked\", () =\u003e {\n        mockFsWriteConfig = {\n          allowOnly: [\"/test/cwd\"],\n          denyWithinAllow: [],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isWriteBlocked(\"/outside/file.txt\")).toBe(true);\n      });\n\n      test(\"write to denyWithinAllow is blocked\", () =\u003e {\n        mockFsWriteConfig = {\n          allowOnly: [\"/test/cwd\"],\n          denyWithinAllow: [\"/test/cwd/.env\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isWriteBlocked(\"/test/cwd/.env\")).toBe(true);\n      });\n\n      test(\"write blocked path prompts for approval\", async () =\u003e {\n        mockFsWriteConfig = {\n          allowOnly: [\"/test/cwd\"],\n          denyWithinAllow: [],\n        };\n\n        const prompt = vi\n          .fn()\n          .mockRejectedValue(new Error(\"User denied write\"));\n        const sio = createSandboxIO(prompt);\n        await expect(\n          sio.writeFile(\"/outside/file.txt\", \"data\"),\n        ).rejects.toThrow(\"User denied write\");\n        expect(prompt).toHaveBeenCalledWith(\"/outside/file.txt\");\n      });\n\n      test(\"write denyWithinAllow prefix does not match non-child\", () =\u003e {\n        mockFsWriteConfig = {\n          allowOnly: [\"/test/cwd\"],\n          denyWithinAllow: [\"/test/cwd/.env\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isWriteBlocked(\"/test/cwd/.environment\")).toBe(false);\n      });\n    });",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts\n\ndescribe(\"writes\", () =\u003e {\n      test(\"write to allowed path is not blocked\", () =\u003e {\n        mockFsWriteConfig = {\n          allowOnly: [\"/test/cwd\"],\n          denyWithinAllow: [],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isWriteBlocked(\"/test/cwd/src/file.ts\")).toBe(false);\n      });\n\n      test(\"write outside allowOnly is blocked\", () =\u003e {\n        mockFsWriteConfig = {\n          allowOnly: [\"/test/cwd\"],\n          denyWithinAllow: [],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isWriteBlocked(\"/outside/file.txt\")).toBe(true);\n      });\n\n      test(\"write to denyWithinAllow is blocked\", () =\u003e {\n        mockFsWriteConfig = {\n          allowOnly: [\"/test/cwd\"],\n          denyWithinAllow: [\"/test/cwd/.env\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isWriteBlocked(\"/test/cwd/.env\")).toBe(true);\n      });\n\n      test(\"write blocked path prompts for approval\", async () =\u003e {\n        mockFsWriteConfig = {\n          allowOnly: [\"/test/cwd\"],\n          denyWithinAllow: [],\n        };\n\n        const prompt = vi\n          .fn()\n          .mockRejectedValue(new Error(\"User denied write\"));\n        const sio = createSandboxIO(prompt);\n        await expect(\n          sio.writeFile(\"/outside/file.txt\", \"data\"),\n        ).rejects.toThrow(\"User denied write\");\n        expect(prompt).toHaveBeenCalledWith(\"/outside/file.txt\");\n      });\n\n      test(\"write denyWithinAllow prefix does not match non-child\", () =\u003e {\n        mockFsWriteConfig = {\n          allowOnly: [\"/test/cwd\"],\n          denyWithinAllow: [\"/test/cwd/.env\"],\n        };\n\n        const sio = createSandboxIO();\n        expect(sio.isWriteBlocked(\"/test/cwd/.environment\")).toBe(false);\n      });\n    });",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts",
+      "startLine": 135,
+      "startCol": 5,
+      "endLine": 191,
+      "endCol": 8
+    },
+    {
+      "text": "describe(\"when sandbox is not ready\", () =\u003e {\n    test(\"reads are not blocked when unsupported\", () =\u003e {\n      currentSandboxState = { status: \"unsupported\", reason: \"disabled\" };\n      const sio = createSandboxIO();\n      expect(sio.isReadBlocked(\"/anywhere/file.txt\")).toBe(false);\n    });\n\n    test(\"reads are not blocked when uninitialized\", () =\u003e {\n      currentSandboxState = { status: \"uninitialized\" };\n      const sio = createSandboxIO();\n      expect(sio.isReadBlocked(\"/anywhere/file.txt\")).toBe(false);\n    });\n\n    test(\"writes are blocked when unsupported\", () =\u003e {\n      currentSandboxState = { status: \"unsupported\", reason: \"disabled\" };\n      const sio = createSandboxIO();\n      expect(sio.isWriteBlocked(\"/test/cwd/file.ts\")).toBe(true);\n    });\n\n    test(\"writes are blocked when uninitialized\", () =\u003e {\n      currentSandboxState = { status: \"uninitialized\" };\n      const sio = createSandboxIO();\n      expect(sio.isWriteBlocked(\"/test/cwd/file.ts\")).toBe(true);\n    });\n\n    test(\"writes are not blocked when bypassed\", () =\u003e {\n      currentSandboxState = { status: \"uninitialized\" };\n      const sio = createSandboxIO(vi.fn(), () =\u003e true);\n      expect(sio.isWriteBlocked(\"/test/cwd/file.ts\")).toBe(false);\n    });\n  });\n\n  describe(\"glob deny patterns\", () =\u003e {\n    beforeEach(() =\u003e {\n      currentSandboxState = { status: \"ready\" };\n    });",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts\n\ndescribe(\"when sandbox is not ready\", () =\u003e {\n    test(\"reads are not blocked when unsupported\", () =\u003e {\n      currentSandboxState = { status: \"unsupported\", reason: \"disabled\" };\n      const sio = createSandboxIO();\n      expect(sio.isReadBlocked(\"/anywhere/file.txt\")).toBe(false);\n    });\n\n    test(\"reads are not blocked when uninitialized\", () =\u003e {\n      currentSandboxState = { status: \"uninitialized\" };\n      const sio = createSandboxIO();\n      expect(sio.isReadBlocked(\"/anywhere/file.txt\")).toBe(false);\n    });\n\n    test(\"writes are blocked when unsupported\", () =\u003e {\n      currentSandboxState = { status: \"unsupported\", reason: \"disabled\" };\n      const sio = createSandboxIO();\n      expect(sio.isWriteBlocked(\"/test/cwd/file.ts\")).toBe(true);\n    });\n\n    test(\"writes are blocked when uninitialized\", () =\u003e {\n      currentSandboxState = { status: \"uninitialized\" };\n      const sio = createSandboxIO();\n      expect(sio.isWriteBlocked(\"/test/cwd/file.ts\")).toBe(true);\n    });\n\n    test(\"writes are not blocked when bypassed\", () =\u003e {\n      currentSandboxState = { status: \"uninitialized\" };\n      const sio = createSandboxIO(vi.fn(), () =\u003e true);\n      expect(sio.isWriteBlocked(\"/test/cwd/file.ts\")).toBe(false);\n    });\n  });\n\n  describe(\"glob deny patterns\", () =\u003e {\n    beforeEach(() =\u003e {\n      currentSandboxState = { status: \"ready\" };\n    });",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts",
+      "startLine": 194,
+      "startCol": 3,
+      "endLine": 229,
+      "endCol": 8
+    },
+    {
+      "text": "describe(\"dir/.* pattern\", () =\u003e {\n      test(\"blocks hidden file directly in dir\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/.*\"] };\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.hiddenfile\")).toBe(true);\n      });\n\n      test(\"does not block children of glob-matched dir (matches seatbelt regex behavior)\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/.*\"] };\n        const sio = createSandboxIO();\n        // globToRegex(\".*\") produces [^/]* which doesn't match paths with /\n        expect(sio.isReadBlocked(\"/test/home/.hiddendir/file\")).toBe(false);\n      });\n\n      test(\"allows non-hidden file in same dir\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/.*\"] };\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/visible_file\")).toBe(false);\n      });\n    });\n\n    describe(\"dir/**/.* pattern\", () =\u003e {\n      test(\"blocks hidden file in subdirectory\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/**/.*\"] };\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/subdir/.hiddenfile\")).toBe(true);\n      });\n\n      test(\"blocks hidden file directly in home (** matches zero dirs)\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/**/.*\"] };\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.bashrc\")).toBe(true);\n      });\n\n      test(\"allows non-hidden file in subdirectory\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/**/.*\"] };\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/subdir/visible_file\")).toBe(false);\n      });\n    });",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts\n\ndescribe(\"dir/.* pattern\", () =\u003e {\n      test(\"blocks hidden file directly in dir\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/.*\"] };\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.hiddenfile\")).toBe(true);\n      });\n\n      test(\"does not block children of glob-matched dir (matches seatbelt regex behavior)\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/.*\"] };\n        const sio = createSandboxIO();\n        // globToRegex(\".*\") produces [^/]* which doesn't match paths with /\n        expect(sio.isReadBlocked(\"/test/home/.hiddendir/file\")).toBe(false);\n      });\n\n      test(\"allows non-hidden file in same dir\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/.*\"] };\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/visible_file\")).toBe(false);\n      });\n    });\n\n    describe(\"dir/**/.* pattern\", () =\u003e {\n      test(\"blocks hidden file in subdirectory\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/**/.*\"] };\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/subdir/.hiddenfile\")).toBe(true);\n      });\n\n      test(\"blocks hidden file directly in home (** matches zero dirs)\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/**/.*\"] };\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/.bashrc\")).toBe(true);\n      });\n\n      test(\"allows non-hidden file in subdirectory\", () =\u003e {\n        mockFsReadConfig = { denyOnly: [\"/test/home/**/.*\"] };\n        const sio = createSandboxIO();\n        expect(sio.isReadBlocked(\"/test/home/subdir/visible_file\")).toBe(false);\n      });\n    });",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts",
+      "startLine": 231,
+      "startCol": 5,
+      "endLine": 270,
+      "endCol": 8
+    },
+    {
+      "text": "describe(\"combined default deny patterns\", () =\u003e {\n      test(\"both patterns together block hidden files at any depth\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.*\", \"/test/home/**/.*\"],\n        };\n        const sio = createSandboxIO();\n\n        // Direct hidden file\n        expect(sio.isReadBlocked(\"/test/home/.ssh\")).toBe(true);\n        // Hidden file in subdirectory\n        expect(sio.isReadBlocked(\"/test/home/subdir/.env\")).toBe(true);\n        // Non-hidden file is allowed\n        expect(sio.isReadBlocked(\"/test/home/visible\")).toBe(false);\n      });\n    });\n  });\n\n  describe(\"path resolution\", () =\u003e {\n    test(\"resolves relative paths before checking\", () =\u003e {\n      currentSandboxState = { status: \"ready\" };\n      mockFsReadConfig = { denyOnly: [\"/test/home/.ssh\"] };\n      const sio = createSandboxIO();\n      // \"src/file.ts\" resolves to \"/test/cwd/src/file.ts\" — not denied\n      expect(sio.isReadBlocked(\"/test/cwd/src/file.ts\")).toBe(false);\n    });\n\n    test(\"resolves tilde paths before checking\", async () =\u003e {\n      currentSandboxState = { status: \"ready\" };\n      mockFsReadConfig = { denyOnly: [\"/test/home/.ssh\"] };\n      const sio = createSandboxIO();\n      // \"~/.ssh/id_rsa\" resolves to \"/test/home/.ssh/id_rsa\" — denied\n      await expect(sio.readFile(\"~/.ssh/id_rsa\")).rejects.toThrow(\n        \"Sandbox: read access denied\",\n      );\n    });\n  });",
+      "contextualizedText": "// node/capabilities/sandbox-file-io.test.ts\n\ndescribe(\"combined default deny patterns\", () =\u003e {\n      test(\"both patterns together block hidden files at any depth\", () =\u003e {\n        mockFsReadConfig = {\n          denyOnly: [\"/test/home/.*\", \"/test/home/**/.*\"],\n        };\n        const sio = createSandboxIO();\n\n        // Direct hidden file\n        expect(sio.isReadBlocked(\"/test/home/.ssh\")).toBe(true);\n        // Hidden file in subdirectory\n        expect(sio.isReadBlocked(\"/test/home/subdir/.env\")).toBe(true);\n        // Non-hidden file is allowed\n        expect(sio.isReadBlocked(\"/test/home/visible\")).toBe(false);\n      });\n    });\n  });\n\n  describe(\"path resolution\", () =\u003e {\n    test(\"resolves relative paths before checking\", () =\u003e {\n      currentSandboxState = { status: \"ready\" };\n      mockFsReadConfig = { denyOnly: [\"/test/home/.ssh\"] };\n      const sio = createSandboxIO();\n      // \"src/file.ts\" resolves to \"/test/cwd/src/file.ts\" — not denied\n      expect(sio.isReadBlocked(\"/test/cwd/src/file.ts\")).toBe(false);\n    });\n\n    test(\"resolves tilde paths before checking\", async () =\u003e {\n      currentSandboxState = { status: \"ready\" };\n      mockFsReadConfig = { denyOnly: [\"/test/home/.ssh\"] };\n      const sio = createSandboxIO();\n      // \"~/.ssh/id_rsa\" resolves to \"/test/home/.ssh/id_rsa\" — denied\n      await expect(sio.readFile(\"~/.ssh/id_rsa\")).rejects.toThrow(\n        \"Sandbox: read access denied\",\n      );\n    });\n  });",
+      "headingContext": "node/capabilities/sandbox-file-io.test.ts",
+      "startLine": 272,
+      "startCol": 5,
+      "endLine": 307,
+      "endCol": 6
+    }
+  ]
+}

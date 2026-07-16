@@ -1,0 +1,42 @@
+{
+  "blobSha": "2f7b265326db145c545ab1173152970b86123d4d",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { AnthropicAuth } from \"../anthropic-auth.ts\";\nimport type { AuthUI } from \"../auth-ui.ts\";\nimport type { Logger } from \"../logger.ts\";\nimport type { ProviderProfile } from \"../provider-options.ts\";\nimport type { ValidateInput } from \"../tool-types.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport { AnthropicProvider } from \"./anthropic.ts\";\nimport { BedrockProvider } from \"./bedrock.ts\";\n// import { OpenAIProvider } from \"./openai.ts\";\nimport type { Provider } from \"./provider-types.ts\";\n\n// import { OllamaProvider } from \"./ollama.ts\";\n// import { CopilotProvider } from \"./copilot.ts\";\n\nexport * from \"./provider-types.ts\";\n\nconst clients: { [key: string]: Provider } = {};",
+      "contextualizedText": "// node/core/src/providers/provider.ts\n\nimport type { AnthropicAuth } from \"../anthropic-auth.ts\";\nimport type { AuthUI } from \"../auth-ui.ts\";\nimport type { Logger } from \"../logger.ts\";\nimport type { ProviderProfile } from \"../provider-options.ts\";\nimport type { ValidateInput } from \"../tool-types.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport { AnthropicProvider } from \"./anthropic.ts\";\nimport { BedrockProvider } from \"./bedrock.ts\";\n// import { OpenAIProvider } from \"./openai.ts\";\nimport type { Provider } from \"./provider-types.ts\";\n\n// import { OllamaProvider } from \"./ollama.ts\";\n// import { CopilotProvider } from \"./copilot.ts\";\n\nexport * from \"./provider-types.ts\";\n\nconst clients: { [key: string]: Provider } = {};",
+      "headingContext": "node/core/src/providers/provider.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 17,
+      "endCol": 49
+    },
+    {
+      "text": "// lazy load so we have a chance to init context before constructing the class\nexport function getProvider(\n  logger: Logger,\n  authUI: AuthUI | undefined,\n  validateInput: ValidateInput,\n  anthropicAuth: AnthropicAuth | undefined,\n  profile: ProviderProfile,\n): Provider {\n  const clientKey = profile.name;\n\n  if (!clients[clientKey]) {\n    let provider: Provider;\n    switch (profile.provider) {\n      case \"anthropic\":\n        provider = new AnthropicProvider(\n          logger,\n          authUI,\n          validateInput,\n          anthropicAuth,\n          {\n            baseUrl: profile.baseUrl,\n            apiKeyEnvVar: profile.apiKeyEnvVar,\n            authType: profile.authType,\n          },\n        );\n        break;\n      case \"bedrock\":\n        provider = new BedrockProvider(logger, validateInput, anthropicAuth, {\n          env: profile.env,\n          tokenRefreshCommand: profile.tokenRefreshCommand,\n        });\n        break;\n      case \"openai\":\n        throw new Error(\"Not implemented\");\n      case \"ollama\":\n        throw new Error(\"Not implemented\");\n      case \"copilot\":\n        throw new Error(\"Not implemented\");\n      case \"mock\":\n        return mockProvider!;\n      default:\n        assertUnreachable(profile.provider);\n    }\n    clients[clientKey] = provider;\n  }\n\n  return clients[clientKey];\n}",
+      "contextualizedText": "// node/core/src/providers/provider.ts \u003e function getProvider\n\n// lazy load so we have a chance to init context before constructing the class\nexport function getProvider(\n  logger: Logger,\n  authUI: AuthUI | undefined,\n  validateInput: ValidateInput,\n  anthropicAuth: AnthropicAuth | undefined,\n  profile: ProviderProfile,\n): Provider {\n  const clientKey = profile.name;\n\n  if (!clients[clientKey]) {\n    let provider: Provider;\n    switch (profile.provider) {\n      case \"anthropic\":\n        provider = new AnthropicProvider(\n          logger,\n          authUI,\n          validateInput,\n          anthropicAuth,\n          {\n            baseUrl: profile.baseUrl,\n            apiKeyEnvVar: profile.apiKeyEnvVar,\n            authType: profile.authType,\n          },\n        );\n        break;\n      case \"bedrock\":\n        provider = new BedrockProvider(logger, validateInput, anthropicAuth, {\n          env: profile.env,\n          tokenRefreshCommand: profile.tokenRefreshCommand,\n        });\n        break;\n      case \"openai\":\n        throw new Error(\"Not implemented\");\n      case \"ollama\":\n        throw new Error(\"Not implemented\");\n      case \"copilot\":\n        throw new Error(\"Not implemented\");\n      case \"mock\":\n        return mockProvider!;\n      default:\n        assertUnreachable(profile.provider);\n    }\n    clients[clientKey] = provider;\n  }\n\n  return clients[clientKey];\n}",
+      "headingContext": "node/core/src/providers/provider.ts \u003e function getProvider",
+      "startLine": 19,
+      "startCol": 1,
+      "endLine": 66,
+      "endCol": 2
+    },
+    {
+      "text": "let mockProvider: Provider | undefined;",
+      "contextualizedText": "// node/core/src/providers/provider.ts\n\nlet mockProvider: Provider | undefined;",
+      "headingContext": "node/core/src/providers/provider.ts",
+      "startLine": 68,
+      "startCol": 1,
+      "endLine": 68,
+      "endCol": 40
+    },
+    {
+      "text": "export function setMockProvider(provider: Provider | undefined) {\n  mockProvider = provider;\n}",
+      "contextualizedText": "// node/core/src/providers/provider.ts \u003e function setMockProvider\n\nexport function setMockProvider(provider: Provider | undefined) {\n  mockProvider = provider;\n}",
+      "headingContext": "node/core/src/providers/provider.ts \u003e function setMockProvider",
+      "startLine": 70,
+      "startCol": 1,
+      "endLine": 72,
+      "endCol": 2
+    }
+  ]
+}

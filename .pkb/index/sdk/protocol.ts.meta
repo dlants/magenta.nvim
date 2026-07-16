@@ -1,0 +1,24 @@
+{
+  "blobSha": "5613fa80d3b141d92d23d6f0326ff2840df7b5de",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "/**\n * Shared IPC protocol types exchanged over the child-process IPC channel\n * between the script process (SDK) and the magenta process (ScriptManager).\n *\n * This module is fully self-contained: it imports nothing (no node/core, no\n * root project, no third-party package). The root project imports these types\n * FROM here; the SDK never imports back.\n */\n\n/** A JSON Schema object. Kept permissive to avoid a third-party dependency. */\nexport type JSONSchema = { [key: string]: unknown };\n\nexport type Result\u003cT\u003e =\n  | { status: \"ok\"; value: T }\n  | { status: \"error\"; error: string };\n\n/**\n * Options for a thread() invocation. Designed to be extended later; unknown or\n * omitted fields fall back to the active profile and magenta cwd.\n */\nexport type ThreadOptions = {\n  profile?: string;\n  model?: string;\n  tools?: string[];\n  cwd?: string;\n  /** Files to seed into the thread's context (absolute, or relative to cwd). */\n  contextFiles?: string[];\n  /** A recurring system reminder injected into the thread. */\n  systemReminder?: string;\n  /** Override the global auto-compact input-token threshold for this thread. */\n  autoCompactThreshold?: number;\n  /** Override the global auto-compact prompt template for this thread. */\n  autoCompactPrompt?: string;\n};\n\nexport type ScriptMeta = {\n  name: string;\n  description: string;\n  parameterSchema: JSONSchema;\n};\n\n/** Messages sent from the script process to the magenta process. */\nexport type ScriptToMagenta =\n  | { type: \"register\"; scripts: ScriptMeta[] }\n  | {\n      type: \"create-thread\";\n      requestId: number;\n      prompt: string;\n      yieldSchema: JSONSchema;\n      options?: ThreadOptions;\n    }\n  | { type: \"log\"; message: string }\n  | { type: \"done\" }\n  | { type: \"error\"; message: string };",
+      "contextualizedText": "// sdk/protocol.ts\n\n/**\n * Shared IPC protocol types exchanged over the child-process IPC channel\n * between the script process (SDK) and the magenta process (ScriptManager).\n *\n * This module is fully self-contained: it imports nothing (no node/core, no\n * root project, no third-party package). The root project imports these types\n * FROM here; the SDK never imports back.\n */\n\n/** A JSON Schema object. Kept permissive to avoid a third-party dependency. */\nexport type JSONSchema = { [key: string]: unknown };\n\nexport type Result\u003cT\u003e =\n  | { status: \"ok\"; value: T }\n  | { status: \"error\"; error: string };\n\n/**\n * Options for a thread() invocation. Designed to be extended later; unknown or\n * omitted fields fall back to the active profile and magenta cwd.\n */\nexport type ThreadOptions = {\n  profile?: string;\n  model?: string;\n  tools?: string[];\n  cwd?: string;\n  /** Files to seed into the thread's context (absolute, or relative to cwd). */\n  contextFiles?: string[];\n  /** A recurring system reminder injected into the thread. */\n  systemReminder?: string;\n  /** Override the global auto-compact input-token threshold for this thread. */\n  autoCompactThreshold?: number;\n  /** Override the global auto-compact prompt template for this thread. */\n  autoCompactPrompt?: string;\n};\n\nexport type ScriptMeta = {\n  name: string;\n  description: string;\n  parameterSchema: JSONSchema;\n};\n\n/** Messages sent from the script process to the magenta process. */\nexport type ScriptToMagenta =\n  | { type: \"register\"; scripts: ScriptMeta[] }\n  | {\n      type: \"create-thread\";\n      requestId: number;\n      prompt: string;\n      yieldSchema: JSONSchema;\n      options?: ThreadOptions;\n    }\n  | { type: \"log\"; message: string }\n  | { type: \"done\" }\n  | { type: \"error\"; message: string };",
+      "headingContext": "sdk/protocol.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 54,
+      "endCol": 40
+    },
+    {
+      "text": "/** Messages sent from the magenta process to the script process. */\nexport type MagentaToScript =\n  | { type: \"run-script\"; scriptName: string; parameters: unknown }\n  | { type: \"thread-result\"; requestId: number; result: Result\u003cunknown\u003e };",
+      "contextualizedText": "// sdk/protocol.ts\n\n/** Messages sent from the magenta process to the script process. */\nexport type MagentaToScript =\n  | { type: \"run-script\"; scriptName: string; parameters: unknown }\n  | { type: \"thread-result\"; requestId: number; result: Result\u003cunknown\u003e };",
+      "headingContext": "sdk/protocol.ts",
+      "startLine": 56,
+      "startCol": 1,
+      "endLine": 59,
+      "endCol": 75
+    }
+  ]
+}

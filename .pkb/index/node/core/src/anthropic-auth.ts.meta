@@ -1,0 +1,69 @@
+{
+  "blobSha": "287be3916dd33b339c4b670b07321eaca0694e8b",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export interface OAuthTokens {\n  type: \"oauth\";\n  refresh: string;\n  access: string;\n  expires: number;\n}",
+      "contextualizedText": "// node/core/src/anthropic-auth.ts \u003e interface OAuthTokens\n\nexport interface OAuthTokens {\n  type: \"oauth\";\n  refresh: string;\n  access: string;\n  expires: number;\n}",
+      "headingContext": "node/core/src/anthropic-auth.ts \u003e interface OAuthTokens",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 6,
+      "endCol": 2
+    },
+    {
+      "text": "export interface AnthropicAuth",
+      "contextualizedText": "// node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth\n\nexport interface AnthropicAuth",
+      "headingContext": "node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth",
+      "startLine": 8,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 31
+    },
+    {
+      "text": "  isAuthenticated(): Promise\u003cboolean\u003e",
+      "contextualizedText": "// node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth \u003e method isAuthenticated\n\n  isAuthenticated(): Promise\u003cboolean\u003e",
+      "headingContext": "node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth \u003e method isAuthenticated",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 9,
+      "endCol": 38
+    },
+    {
+      "text": "  authorize(): Promise\u003c{ url: string; verifier: string }\u003e",
+      "contextualizedText": "// node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth \u003e method authorize\n\n  authorize(): Promise\u003c{ url: string; verifier: string }\u003e",
+      "headingContext": "node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth \u003e method authorize",
+      "startLine": 10,
+      "startCol": 1,
+      "endLine": 10,
+      "endCol": 58
+    },
+    {
+      "text": "  exchange(code: string, verifier: string): Promise\u003cOAuthTokens\u003e",
+      "contextualizedText": "// node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth \u003e method exchange\n\n  exchange(code: string, verifier: string): Promise\u003cOAuthTokens\u003e",
+      "headingContext": "node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth \u003e method exchange",
+      "startLine": 11,
+      "startCol": 1,
+      "endLine": 11,
+      "endCol": 65
+    },
+    {
+      "text": "  storeTokens(tokens: OAuthTokens): Promise\u003cvoid\u003e",
+      "contextualizedText": "// node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth \u003e method storeTokens\n\n  storeTokens(tokens: OAuthTokens): Promise\u003cvoid\u003e",
+      "headingContext": "node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth \u003e method storeTokens",
+      "startLine": 12,
+      "startCol": 1,
+      "endLine": 12,
+      "endCol": 50
+    },
+    {
+      "text": "  getAccessToken(): Promise\u003cstring | undefined\u003e",
+      "contextualizedText": "// node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth \u003e method getAccessToken\n\n  getAccessToken(): Promise\u003cstring | undefined\u003e",
+      "headingContext": "node/core/src/anthropic-auth.ts \u003e interface AnthropicAuth \u003e method getAccessToken",
+      "startLine": 13,
+      "startCol": 1,
+      "endLine": 13,
+      "endCol": 48
+    }
+  ]
+}

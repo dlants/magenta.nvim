@@ -1,0 +1,150 @@
+{
+  "blobSha": "4367fbfd5accb73798cc3ae802f3ac5f70e3baae",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import fs from \"node:fs/promises\";\nimport os from \"node:os\";\nimport path from \"node:path\";\nimport { generatePKCE } from \"@openauthjs/openauth/pkce\";\n\nconst CLIENT_ID = \"9d1c250a-e61b-44d9-88ed-5944d1962f5e\";",
+      "contextualizedText": "// node/auth/anthropic.ts\n\nimport fs from \"node:fs/promises\";\nimport os from \"node:os\";\nimport path from \"node:path\";\nimport { generatePKCE } from \"@openauthjs/openauth/pkce\";\n\nconst CLIENT_ID = \"9d1c250a-e61b-44d9-88ed-5944d1962f5e\";",
+      "headingContext": "node/auth/anthropic.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 6,
+      "endCol": 58
+    },
+    {
+      "text": "export interface OAuthTokens {\n  type: \"oauth\";\n  refresh: string;\n  access: string;\n  expires: number;\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e interface OAuthTokens\n\nexport interface OAuthTokens {\n  type: \"oauth\";\n  refresh: string;\n  access: string;\n  expires: number;\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e interface OAuthTokens",
+      "startLine": 8,
+      "startCol": 1,
+      "endLine": 13,
+      "endCol": 2
+    },
+    {
+      "text": "interface AuthData {\n  anthropic?: OAuthTokens;\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e interface AuthData\n\ninterface AuthData {\n  anthropic?: OAuthTokens;\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e interface AuthData",
+      "startLine": 15,
+      "startCol": 1,
+      "endLine": 17,
+      "endCol": 2
+    },
+    {
+      "text": "export class ExchangeFailed extends Error {\n  constructor(detail?: string) {\n    super(detail ? `Exchange failed: ${detail}` : \"Exchange failed\");\n  }\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e class ExchangeFailed\n\nexport class ExchangeFailed extends Error {\n  constructor(detail?: string) {\n    super(detail ? `Exchange failed: ${detail}` : \"Exchange failed\");\n  }\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e class ExchangeFailed",
+      "startLine": 19,
+      "startCol": 1,
+      "endLine": 23,
+      "endCol": 2
+    },
+    {
+      "text": "// Get XDG data directory or fallback to ~/.local/share\nfunction getDataDir(): string {\n  const xdgDataHome = process.env.XDG_DATA_HOME;\n  if (xdgDataHome) {\n    return path.join(xdgDataHome, \"magenta\");\n  }\n  return path.join(os.homedir(), \".local\", \"share\", \"magenta\");\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e function getDataDir\n\n// Get XDG data directory or fallback to ~/.local/share\nfunction getDataDir(): string {\n  const xdgDataHome = process.env.XDG_DATA_HOME;\n  if (xdgDataHome) {\n    return path.join(xdgDataHome, \"magenta\");\n  }\n  return path.join(os.homedir(), \".local\", \"share\", \"magenta\");\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e function getDataDir",
+      "startLine": 25,
+      "startCol": 1,
+      "endLine": 32,
+      "endCol": 2
+    },
+    {
+      "text": "function getAuthFilePath(): string {\n  return path.join(getDataDir(), \"auth.json\");\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e function getAuthFilePath\n\nfunction getAuthFilePath(): string {\n  return path.join(getDataDir(), \"auth.json\");\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e function getAuthFilePath",
+      "startLine": 34,
+      "startCol": 1,
+      "endLine": 36,
+      "endCol": 2
+    },
+    {
+      "text": "// Storage functions\nexport async function loadTokens(): Promise\u003cOAuthTokens | undefined\u003e {\n  try {\n    const filePath = getAuthFilePath();\n    const data = await fs.readFile(filePath, \"utf-8\");\n    const json = JSON.parse(data) as AuthData;\n    const tokens = json.anthropic;\n    return tokens?.type === \"oauth\" ? tokens : undefined;\n  } catch {\n    // File doesn't exist or is invalid\n    return undefined;\n  }\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e function loadTokens\n\n// Storage functions\nexport async function loadTokens(): Promise\u003cOAuthTokens | undefined\u003e {\n  try {\n    const filePath = getAuthFilePath();\n    const data = await fs.readFile(filePath, \"utf-8\");\n    const json = JSON.parse(data) as AuthData;\n    const tokens = json.anthropic;\n    return tokens?.type === \"oauth\" ? tokens : undefined;\n  } catch {\n    // File doesn't exist or is invalid\n    return undefined;\n  }\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e function loadTokens",
+      "startLine": 38,
+      "startCol": 1,
+      "endLine": 50,
+      "endCol": 2
+    },
+    {
+      "text": "export async function storeTokens(tokens: OAuthTokens): Promise\u003cvoid\u003e {\n  const filePath = getAuthFilePath();\n\n  // Ensure directory exists\n  await fs.mkdir(path.dirname(filePath), { recursive: true });\n\n  // Load existing data or create empty object\n  let data: AuthData = {};\n  try {\n    const existing = await fs.readFile(filePath, \"utf-8\");\n    data = JSON.parse(existing) as AuthData;\n  } catch {\n    // File doesn't exist or is invalid, start fresh\n  }\n\n  // Update with new tokens\n  data.anthropic = tokens;\n\n  // Write with secure permissions\n  await fs.writeFile(filePath, JSON.stringify(data, null, 2), { mode: 0o600 });\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e function storeTokens\n\nexport async function storeTokens(tokens: OAuthTokens): Promise\u003cvoid\u003e {\n  const filePath = getAuthFilePath();\n\n  // Ensure directory exists\n  await fs.mkdir(path.dirname(filePath), { recursive: true });\n\n  // Load existing data or create empty object\n  let data: AuthData = {};\n  try {\n    const existing = await fs.readFile(filePath, \"utf-8\");\n    data = JSON.parse(existing) as AuthData;\n  } catch {\n    // File doesn't exist or is invalid, start fresh\n  }\n\n  // Update with new tokens\n  data.anthropic = tokens;\n\n  // Write with secure permissions\n  await fs.writeFile(filePath, JSON.stringify(data, null, 2), { mode: 0o600 });\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e function storeTokens",
+      "startLine": 52,
+      "startCol": 1,
+      "endLine": 72,
+      "endCol": 2
+    },
+    {
+      "text": "export async function clearTokens(): Promise\u003cvoid\u003e {\n  const filePath = getAuthFilePath();\n\n  try {\n    const data = await fs.readFile(filePath, \"utf-8\");\n    const json = JSON.parse(data) as AuthData;\n    delete json.anthropic;\n    await fs.writeFile(filePath, JSON.stringify(json, null, 2), {\n      mode: 0o600,\n    });\n  } catch {\n    // File doesn't exist or is invalid, nothing to clear\n  }\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e function clearTokens\n\nexport async function clearTokens(): Promise\u003cvoid\u003e {\n  const filePath = getAuthFilePath();\n\n  try {\n    const data = await fs.readFile(filePath, \"utf-8\");\n    const json = JSON.parse(data) as AuthData;\n    delete json.anthropic;\n    await fs.writeFile(filePath, JSON.stringify(json, null, 2), {\n      mode: 0o600,\n    });\n  } catch {\n    // File doesn't exist or is invalid, nothing to clear\n  }\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e function clearTokens",
+      "startLine": 74,
+      "startCol": 1,
+      "endLine": 87,
+      "endCol": 2
+    },
+    {
+      "text": "// OAuth flow functions\nexport async function authorize(): Promise\u003c{ url: string; verifier: string }\u003e {\n  const pkce = await generatePKCE();\n\n  const url = new URL(\"https://claude.ai/oauth/authorize\");\n  url.searchParams.set(\"code\", \"true\");\n  url.searchParams.set(\"client_id\", CLIENT_ID);\n  url.searchParams.set(\"response_type\", \"code\");\n  url.searchParams.set(\n    \"redirect_uri\",\n    \"https://console.anthropic.com/oauth/code/callback\",\n  );\n  url.searchParams.set(\n    \"scope\",\n    \"org:create_api_key user:profile user:inference\",\n  );\n  url.searchParams.set(\"code_challenge\", pkce.challenge);\n  url.searchParams.set(\"code_challenge_method\", \"S256\");\n  url.searchParams.set(\"state\", pkce.verifier);\n\n  return {\n    url: url.toString(),\n    verifier: pkce.verifier,\n  };\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e function authorize\n\n// OAuth flow functions\nexport async function authorize(): Promise\u003c{ url: string; verifier: string }\u003e {\n  const pkce = await generatePKCE();\n\n  const url = new URL(\"https://claude.ai/oauth/authorize\");\n  url.searchParams.set(\"code\", \"true\");\n  url.searchParams.set(\"client_id\", CLIENT_ID);\n  url.searchParams.set(\"response_type\", \"code\");\n  url.searchParams.set(\n    \"redirect_uri\",\n    \"https://console.anthropic.com/oauth/code/callback\",\n  );\n  url.searchParams.set(\n    \"scope\",\n    \"org:create_api_key user:profile user:inference\",\n  );\n  url.searchParams.set(\"code_challenge\", pkce.challenge);\n  url.searchParams.set(\"code_challenge_method\", \"S256\");\n  url.searchParams.set(\"state\", pkce.verifier);\n\n  return {\n    url: url.toString(),\n    verifier: pkce.verifier,\n  };\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e function authorize",
+      "startLine": 89,
+      "startCol": 1,
+      "endLine": 113,
+      "endCol": 2
+    },
+    {
+      "text": "export async function exchange(\n  code: string,\n  verifier: string,\n): Promise\u003cOAuthTokens\u003e {\n  const splits = code.split(\"#\");\n  const result = await fetch(\"https://console.anthropic.com/v1/oauth/token\", {\n    method: \"POST\",\n    headers: {\n      \"Content-Type\": \"application/json\",\n    },\n    body: JSON.stringify({\n      code: splits[0],\n      state: splits[1],\n      grant_type: \"authorization_code\",\n      client_id: CLIENT_ID,\n      redirect_uri: \"https://console.anthropic.com/oauth/code/callback\",\n      code_verifier: verifier,\n    }),\n  });\n\n  if (!result.ok) {\n    let detail = `HTTP ${result.status}`;\n    try {\n      const body = await result.text();\n      if (body) {\n        detail += `: ${body.slice(0, 200)}`;\n      }\n    } catch {\n      // ignore body read errors\n    }\n    throw new ExchangeFailed(detail);\n  }\n\n  const json = (await result.json()) as {\n    refresh_token: string;\n    access_token: string;\n    expires_in: number;\n  };\n  return {\n    type: \"oauth\",\n    refresh: json.refresh_token,\n    access: json.access_token,\n    expires: Date.now() + json.expires_in * 1000,\n  };\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e function exchange\n\nexport async function exchange(\n  code: string,\n  verifier: string,\n): Promise\u003cOAuthTokens\u003e {\n  const splits = code.split(\"#\");\n  const result = await fetch(\"https://console.anthropic.com/v1/oauth/token\", {\n    method: \"POST\",\n    headers: {\n      \"Content-Type\": \"application/json\",\n    },\n    body: JSON.stringify({\n      code: splits[0],\n      state: splits[1],\n      grant_type: \"authorization_code\",\n      client_id: CLIENT_ID,\n      redirect_uri: \"https://console.anthropic.com/oauth/code/callback\",\n      code_verifier: verifier,\n    }),\n  });\n\n  if (!result.ok) {\n    let detail = `HTTP ${result.status}`;\n    try {\n      const body = await result.text();\n      if (body) {\n        detail += `: ${body.slice(0, 200)}`;\n      }\n    } catch {\n      // ignore body read errors\n    }\n    throw new ExchangeFailed(detail);\n  }\n\n  const json = (await result.json()) as {\n    refresh_token: string;\n    access_token: string;\n    expires_in: number;\n  };\n  return {\n    type: \"oauth\",\n    refresh: json.refresh_token,\n    access: json.access_token,\n    expires: Date.now() + json.expires_in * 1000,\n  };\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e function exchange",
+      "startLine": 115,
+      "startCol": 1,
+      "endLine": 159,
+      "endCol": 2
+    },
+    {
+      "text": "export async function refresh(refreshToken: string): Promise\u003cOAuthTokens\u003e {\n  const response = await fetch(\"https://console.anthropic.com/v1/oauth/token\", {\n    method: \"POST\",\n    headers: {\n      \"Content-Type\": \"application/json\",\n    },\n    body: JSON.stringify({\n      grant_type: \"refresh_token\",\n      refresh_token: refreshToken,\n      client_id: CLIENT_ID,\n    }),\n  });\n\n  if (!response.ok) {\n    let detail = `HTTP ${response.status}`;\n    try {\n      const body = await response.text();\n      if (body) {\n        detail += `: ${body.slice(0, 200)}`;\n      }\n    } catch {\n      // ignore body read errors\n    }\n    throw new ExchangeFailed(detail);\n  }\n\n  const json = (await response.json()) as {\n    refresh_token: string;\n    access_token: string;\n    expires_in: number;\n  };\n  return {\n    type: \"oauth\",\n    refresh: json.refresh_token,\n    access: json.access_token,\n    expires: Date.now() + json.expires_in * 1000,\n  };\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e function refresh\n\nexport async function refresh(refreshToken: string): Promise\u003cOAuthTokens\u003e {\n  const response = await fetch(\"https://console.anthropic.com/v1/oauth/token\", {\n    method: \"POST\",\n    headers: {\n      \"Content-Type\": \"application/json\",\n    },\n    body: JSON.stringify({\n      grant_type: \"refresh_token\",\n      refresh_token: refreshToken,\n      client_id: CLIENT_ID,\n    }),\n  });\n\n  if (!response.ok) {\n    let detail = `HTTP ${response.status}`;\n    try {\n      const body = await response.text();\n      if (body) {\n        detail += `: ${body.slice(0, 200)}`;\n      }\n    } catch {\n      // ignore body read errors\n    }\n    throw new ExchangeFailed(detail);\n  }\n\n  const json = (await response.json()) as {\n    refresh_token: string;\n    access_token: string;\n    expires_in: number;\n  };\n  return {\n    type: \"oauth\",\n    refresh: json.refresh_token,\n    access: json.access_token,\n    expires: Date.now() + json.expires_in * 1000,\n  };\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e function refresh",
+      "startLine": 161,
+      "startCol": 1,
+      "endLine": 198,
+      "endCol": 2
+    },
+    {
+      "text": "// Coalesces concurrent token refreshes. Anthropic rotates refresh tokens, so\n// firing two refreshes with the same refresh token (e.g. the agent stream and\n// the thread-title forceToolUse request) makes the second fail and clear the\n// freshly-stored tokens, which would then trigger a spurious interactive login.\nlet pendingRefresh: Promise\u003cstring | undefined\u003e | undefined;",
+      "contextualizedText": "// node/auth/anthropic.ts\n\n// Coalesces concurrent token refreshes. Anthropic rotates refresh tokens, so\n// firing two refreshes with the same refresh token (e.g. the agent stream and\n// the thread-title forceToolUse request) makes the second fail and clear the\n// freshly-stored tokens, which would then trigger a spurious interactive login.\nlet pendingRefresh: Promise\u003cstring | undefined\u003e | undefined;",
+      "headingContext": "node/auth/anthropic.ts",
+      "startLine": 200,
+      "startCol": 1,
+      "endLine": 204,
+      "endCol": 61
+    },
+    {
+      "text": "async function refreshAccessToken(\n  refreshToken: string,\n): Promise\u003cstring | undefined\u003e {\n  try {\n    const newTokens = await refresh(refreshToken);\n    await storeTokens(newTokens);\n    return newTokens.access;\n  } catch {\n    // Refresh failed, clear invalid tokens\n    await clearTokens();\n    return undefined;\n  }\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e function refreshAccessToken\n\nasync function refreshAccessToken(\n  refreshToken: string,\n): Promise\u003cstring | undefined\u003e {\n  try {\n    const newTokens = await refresh(refreshToken);\n    await storeTokens(newTokens);\n    return newTokens.access;\n  } catch {\n    // Refresh failed, clear invalid tokens\n    await clearTokens();\n    return undefined;\n  }\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e function refreshAccessToken",
+      "startLine": 206,
+      "startCol": 1,
+      "endLine": 218,
+      "endCol": 2
+    },
+    {
+      "text": "export async function getAccessToken(): Promise\u003cstring | undefined\u003e {\n  const tokens = await loadTokens();\n  if (!tokens) {\n    return undefined;\n  }\n\n  // Check if token is still valid (with 5 minute buffer)\n  if (tokens.expires \u003e Date.now() + 5 * 60 * 1000) {\n    return tokens.access;\n  }\n\n  if (!pendingRefresh) {\n    pendingRefresh = refreshAccessToken(tokens.refresh).finally(() =\u003e {\n      pendingRefresh = undefined;\n    });\n  }\n  return pendingRefresh;\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e function getAccessToken\n\nexport async function getAccessToken(): Promise\u003cstring | undefined\u003e {\n  const tokens = await loadTokens();\n  if (!tokens) {\n    return undefined;\n  }\n\n  // Check if token is still valid (with 5 minute buffer)\n  if (tokens.expires \u003e Date.now() + 5 * 60 * 1000) {\n    return tokens.access;\n  }\n\n  if (!pendingRefresh) {\n    pendingRefresh = refreshAccessToken(tokens.refresh).finally(() =\u003e {\n      pendingRefresh = undefined;\n    });\n  }\n  return pendingRefresh;\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e function getAccessToken",
+      "startLine": 220,
+      "startCol": 1,
+      "endLine": 237,
+      "endCol": 2
+    },
+    {
+      "text": "export async function isAuthenticated(): Promise\u003cboolean\u003e {\n  const accessToken = await getAccessToken();\n  return accessToken !== undefined;\n}",
+      "contextualizedText": "// node/auth/anthropic.ts \u003e function isAuthenticated\n\nexport async function isAuthenticated(): Promise\u003cboolean\u003e {\n  const accessToken = await getAccessToken();\n  return accessToken !== undefined;\n}",
+      "headingContext": "node/auth/anthropic.ts \u003e function isAuthenticated",
+      "startLine": 239,
+      "startCol": 1,
+      "endLine": 242,
+      "endCol": 2
+    }
+  ]
+}

@@ -1,0 +1,348 @@
+{
+  "blobSha": "761a7c3dbc6609ae885d16d5582a308879213fa7",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { existsSync, promises as fs } from \"node:fs\";\nimport path from \"node:path\";\nimport type { ToolName, ToolRequestId } from \"@magenta/core\";\nimport { expect, it } from \"vitest\";\nimport { BUILTIN_SDK_PATH } from \"../options.ts\";\nimport { pollForToolResult, withDriver } from \"../test/preamble.ts\";\nimport type { ScriptInvocationId } from \"./script-manager.ts\";",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nimport { existsSync, promises as fs } from \"node:fs\";\nimport path from \"node:path\";\nimport type { ToolName, ToolRequestId } from \"@magenta/core\";\nimport { expect, it } from \"vitest\";\nimport { BUILTIN_SDK_PATH } from \"../options.ts\";\nimport { pollForToolResult, withDriver } from \"../test/preamble.ts\";\nimport type { ScriptInvocationId } from \"./script-manager.ts\";",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 7,
+      "endCol": 63
+    },
+    {
+      "text": "// Magenta no longer manages the magenta-sdk shim; the user/agent is expected to\n// create the `magenta-sdk` symlink when authoring a script package. Tests do\n// the same here.\nasync function createSdkSymlink(pkgDir: string): Promise\u003cvoid\u003e {\n  await fs.symlink(BUILTIN_SDK_PATH, path.join(pkgDir, \"magenta-sdk\"));\n}",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function createSdkSymlink\n\n// Magenta no longer manages the magenta-sdk shim; the user/agent is expected to\n// create the `magenta-sdk` symlink when authoring a script package. Tests do\n// the same here.\nasync function createSdkSymlink(pkgDir: string): Promise\u003cvoid\u003e {\n  await fs.symlink(BUILTIN_SDK_PATH, path.join(pkgDir, \"magenta-sdk\"));\n}",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function createSdkSymlink",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 14,
+      "endCol": 2
+    },
+    {
+      "text": "async function setupScript(tmpDir: string, body: string): Promise\u003cvoid\u003e {\n  const pkgDir = path.join(tmpDir, \".magenta\", \"scripts\", \"pkg\");\n  await fs.mkdir(pkgDir, { recursive: true });\n  await fs.writeFile(path.join(pkgDir, \"index.ts\"), body);\n  await createSdkSymlink(pkgDir);\n}",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupScript\n\nasync function setupScript(tmpDir: string, body: string): Promise\u003cvoid\u003e {\n  const pkgDir = path.join(tmpDir, \".magenta\", \"scripts\", \"pkg\");\n  await fs.mkdir(pkgDir, { recursive: true });\n  await fs.writeFile(path.join(pkgDir, \"index.ts\"), body);\n  await createSdkSymlink(pkgDir);\n}",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupScript",
+      "startLine": 16,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 2
+    },
+    {
+      "text": "async function pollUntil(fn: () =\u003e boolean, timeoutMs = 10000): Promise\u003cvoid\u003e {\n  const start = Date.now();\n  while (!fn()) {\n    if (Date.now() - start \u003e timeoutMs) {\n      throw new Error(\"pollUntil timed out\");\n    }\n    await new Promise((r) =\u003e setTimeout(r, 50));\n  }\n}",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function pollUntil\n\nasync function pollUntil(fn: () =\u003e boolean, timeoutMs = 10000): Promise\u003cvoid\u003e {\n  const start = Date.now();\n  while (!fn()) {\n    if (Date.now() - start \u003e timeoutMs) {\n      throw new Error(\"pollUntil timed out\");\n    }\n    await new Promise((r) =\u003e setTimeout(r, 50));\n  }\n}",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function pollUntil",
+      "startLine": 23,
+      "startCol": 1,
+      "endLine": 31,
+      "endCol": 2
+    },
+    {
+      "text": "const FOO_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\n\nregisterScript(\n  \"foo\",\n  \"does foo\",\n  { type: \"object\", properties: { x: { type: \"string\" } }, required: [\"x\"] },\n  async (params, thread, log) =\u003e {\n    log(\"starting\");\n    const r = await thread(\"work on \" + params.x, {\n      type: \"object\",\n      properties: { ok: { type: \"boolean\" } },\n      required: [\"ok\"],\n    });\n    log(\"got \" + JSON.stringify(r));\n  },\n);\n`;\n\nit(\"discovers via index.ts and ignores sibling library files\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nconst FOO_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\n\nregisterScript(\n  \"foo\",\n  \"does foo\",\n  { type: \"object\", properties: { x: { type: \"string\" } }, required: [\"x\"] },\n  async (params, thread, log) =\u003e {\n    log(\"starting\");\n    const r = await thread(\"work on \" + params.x, {\n      type: \"object\",\n      properties: { ok: { type: \"boolean\" } },\n      required: [\"ok\"],\n    });\n    log(\"got \" + JSON.stringify(r));\n  },\n);\n`;\n\nit(\"discovers via index.ts and ignores sibling library files\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 33,
+      "startCol": 1,
+      "endLine": 53,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n        const pkgDir = path.join(tmpDir, \".magenta\", \"scripts\", \"pkg\");\n        await fs.writeFile(\n          path.join(pkgDir, \"shared-lib.ts\"),\n          \"export const helper = () =\u003e 42;\\n\",\n        );\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n        const pkgDir = path.join(tmpDir, \".magenta\", \"scripts\", \"pkg\");\n        await fs.writeFile(\n          path.join(pkgDir, \"shared-lib.ts\"),\n          \"export const helper = () =\u003e 42;\\n\",\n        );\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 55,
+      "startCol": 1,
+      "endLine": 62,
+      "endCol": 8
+    },
+    {
+      "text": "async (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(\n        () =\u003e scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n        8000,\n      );\n      expect(scriptManager.getCatalog().map((s) =\u003e s.name)).toEqual([\"foo\"]);\n    },\n  );\n});\n\nit(\"discovers scripts from the global ~/.magenta/scripts path\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nasync (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(\n        () =\u003e scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n        8000,\n      );\n      expect(scriptManager.getCatalog().map((s) =\u003e s.name)).toEqual([\"foo\"]);\n    },\n  );\n});\n\nit(\"discovers scripts from the global ~/.magenta/scripts path\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 64,
+      "startCol": 5,
+      "endLine": 76,
+      "endCol": 19
+    },
+    {
+      "text": "      setupHome: async (homeDir) =\u003e {\n        const pkgDir = path.join(homeDir, \".magenta\", \"scripts\", \"pkg\");\n        await fs.mkdir(pkgDir, { recursive: true });\n        await fs.writeFile(path.join(pkgDir, \"index.ts\"), FOO_SCRIPT);\n        await createSdkSymlink(pkgDir);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupHome\n\n      setupHome: async (homeDir) =\u003e {\n        const pkgDir = path.join(homeDir, \".magenta\", \"scripts\", \"pkg\");\n        await fs.mkdir(pkgDir, { recursive: true });\n        await fs.writeFile(path.join(pkgDir, \"index.ts\"), FOO_SCRIPT);\n        await createSdkSymlink(pkgDir);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupHome",
+      "startLine": 78,
+      "startCol": 1,
+      "endLine": 83,
+      "endCol": 8
+    },
+    {
+      "text": "async (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n    },\n  );\n});\n\nit(\"invokes a script that spawns a thread and resolves with the structured yield\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nasync (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n    },\n  );\n});\n\nit(\"invokes a script that spawns a thread and resolves with the structured yield\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 85,
+      "startCol": 5,
+      "endLine": 95,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 97,
+      "startCol": 1,
+      "endLine": 99,
+      "endCol": 8
+    },
+    {
+      "text": "async (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      expect(\n        existsSync(\n          path.join(\n            driver.magenta.cwd,\n            \".magenta\",\n            \"scripts\",\n            \"pkg\",\n            \"magenta-sdk\",\n            \"index.ts\",\n          ),\n        ),\n      ).toBe(true);\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e {\n        const inv = scriptManager.invocations.get(id);\n        return inv?.status === \"done\";\n      });\n\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"invocation missing\");\n      expect(inv.threadIds.length).toBe(1);\n      expect(inv.logs).toContain(\"starting\");\n      expect(inv.logs.some((l) =\u003e l.includes('\"ok\":true'))).toBe(true);\n    },\n  );\n});\n\nit(\"does not resolve a script's createThread() await on a subagent error\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nasync (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      expect(\n        existsSync(\n          path.join(\n            driver.magenta.cwd,\n            \".magenta\",\n            \"scripts\",\n            \"pkg\",\n            \"magenta-sdk\",\n            \"index.ts\",\n          ),\n        ),\n      ).toBe(true);\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e {\n        const inv = scriptManager.invocations.get(id);\n        return inv?.status === \"done\";\n      });\n\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"invocation missing\");\n      expect(inv.threadIds.length).toBe(1);\n      expect(inv.logs).toContain(\"starting\");\n      expect(inv.logs.some((l) =\u003e l.includes('\"ok\":true'))).toBe(true);\n    },\n  );\n});\n\nit(\"does not resolve a script's createThread() await on a subagent error\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 101,
+      "startCol": 5,
+      "endLine": 159,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 161,
+      "startCol": 1,
+      "endLine": 163,
+      "endCol": 8
+    },
+    {
+      "text": "(driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respondWithError(new Error(\"Simulated subagent error\"));\n\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"invocation missing\");\n      await pollUntil(() =\u003e inv.threadIds.length \u003e 0);\n      const threadId = inv.threadIds[0];\n      const threadWrapper = driver.magenta.chat.threadWrappers[threadId];\n      if (threadWrapper.state !== \"initialized\") {\n        throw new Error(\"expected thread to be initialized\");\n      }\n\n      await pollUntil(\n        () =\u003e threadWrapper.thread.agent.getState().status.type === \"error\",\n      );\n\n      // The script's createThread() await must not resolve while the\n      // subagent thread is merely in an error state -- it should keep\n      // waiting until the thread actually yields.\n      await new Promise((resolve) =\u003e setTimeout(resolve, 100));\n      expect(inv.status).toBe(\"running\");\n\n      // Manually recover the errored subagent (this simulates the\n      // auto-resubmit mechanism that a later stage will add).\n      threadWrapper.thread.core.discardFailedSubmit();\n      await threadWrapper.thread.core.sendMessage([\n        { type: \"user\", text: \"work on thing\" },\n      ]);\n\n      const retryStream = await driver.mockAnthropic.awaitPendingStream",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\n(driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respondWithError(new Error(\"Simulated subagent error\"));\n\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"invocation missing\");\n      await pollUntil(() =\u003e inv.threadIds.length \u003e 0);\n      const threadId = inv.threadIds[0];\n      const threadWrapper = driver.magenta.chat.threadWrappers[threadId];\n      if (threadWrapper.state !== \"initialized\") {\n        throw new Error(\"expected thread to be initialized\");\n      }\n\n      await pollUntil(\n        () =\u003e threadWrapper.thread.agent.getState().status.type === \"error\",\n      );\n\n      // The script's createThread() await must not resolve while the\n      // subagent thread is merely in an error state -- it should keep\n      // waiting until the thread actually yields.\n      await new Promise((resolve) =\u003e setTimeout(resolve, 100));\n      expect(inv.status).toBe(\"running\");\n\n      // Manually recover the errored subagent (this simulates the\n      // auto-resubmit mechanism that a later stage will add).\n      threadWrapper.thread.core.discardFailedSubmit();\n      await threadWrapper.thread.core.sendMessage([\n        { type: \"user\", text: \"work on thing\" },\n      ]);\n\n      const retryStream = await driver.mockAnthropic.awaitPendingStream",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 165,
+      "startCol": 11,
+      "endLine": 208,
+      "endCol": 72
+    },
+    {
+      "text": "        predicate: (s) =\u003e s !== stream \u0026\u0026 !s.resolved",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function predicate\n\n        predicate: (s) =\u003e s !== stream \u0026\u0026 !s.resolved",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function predicate",
+      "startLine": 209,
+      "startCol": 1,
+      "endLine": 209,
+      "endCol": 54
+    },
+    {
+      "text": "message: \"waiting for the retried subagent stream\",\n      });\n      retryStream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-retry\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e inv.status === \"done\");\n      expect(inv.logs.some((l) =\u003e l.includes('\"ok\":true'))).toBe(true);\n    },\n  );\n});\n\nconst CONTEXT_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\n\nregisterScript(\n  \"ctx\",\n  \"spawns a thread with a context file and a system reminder\",\n  { type: \"object\", properties: {}, required: [] },\n  async (_params, thread, log) =\u003e {\n    const file = \"seed.txt\";\n    await thread(\n      \"do the work\",\n      { type: \"object\", properties: { ok: { type: \"boolean\" } }, required: [\"ok\"] },\n      { contextFiles: [file], systemReminder: \"REMEMBER_SENTINEL_XYZ\" },\n    );\n    log(\"done\");\n  },\n);\n`;\n\nit(\"passes contextFiles and systemReminder through to the spawned thread\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nmessage: \"waiting for the retried subagent stream\",\n      });\n      retryStream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-retry\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e inv.status === \"done\");\n      expect(inv.logs.some((l) =\u003e l.includes('\"ok\":true'))).toBe(true);\n    },\n  );\n});\n\nconst CONTEXT_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\n\nregisterScript(\n  \"ctx\",\n  \"spawns a thread with a context file and a system reminder\",\n  { type: \"object\", properties: {}, required: [] },\n  async (_params, thread, log) =\u003e {\n    const file = \"seed.txt\";\n    await thread(\n      \"do the work\",\n      { type: \"object\", properties: { ok: { type: \"boolean\" } }, required: [\"ok\"] },\n      { contextFiles: [file], systemReminder: \"REMEMBER_SENTINEL_XYZ\" },\n    );\n    log(\"done\");\n  },\n);\n`;\n\nit(\"passes contextFiles and systemReminder through to the spawned thread\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 210,
+      "startCol": 9,
+      "endLine": 253,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        const pkgDir = path.join(tmpDir, \".magenta\", \"scripts\", \"pkg\");\n        await fs.mkdir(pkgDir, { recursive: true });\n        await fs.writeFile(path.join(pkgDir, \"index.ts\"), CONTEXT_SCRIPT);\n        await createSdkSymlink(pkgDir);\n        await fs.writeFile(\n          path.join(tmpDir, \"seed.txt\"),\n          \"SEED_CONTENT_SENTINEL\\n\",\n        );\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        const pkgDir = path.join(tmpDir, \".magenta\", \"scripts\", \"pkg\");\n        await fs.mkdir(pkgDir, { recursive: true });\n        await fs.writeFile(path.join(pkgDir, \"index.ts\"), CONTEXT_SCRIPT);\n        await createSdkSymlink(pkgDir);\n        await fs.writeFile(\n          path.join(tmpDir, \"seed.txt\"),\n          \"SEED_CONTENT_SENTINEL\\n\",\n        );\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 255,
+      "startCol": 1,
+      "endLine": 264,
+      "endCol": 8
+    },
+    {
+      "text": "(driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"ctx\"),\n      );\n\n      scriptManager.runScript(\"ctx\", {}, { sandboxBypassed: false });\n\n      const stream = await driver.mockAnthropic.awaitPendingStream",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\n(driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"ctx\"),\n      );\n\n      scriptManager.runScript(\"ctx\", {}, { sandboxBypassed: false });\n\n      const stream = await driver.mockAnthropic.awaitPendingStream",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 266,
+      "startCol": 11,
+      "endLine": 274,
+      "endCol": 67
+    },
+    {
+      "text": "        predicate: (s) =\u003e\n          JSON.stringify(s.messages).includes(\"SEED_CONTENT_SENTINEL\")",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function predicate\n\n        predicate: (s) =\u003e\n          JSON.stringify(s.messages).includes(\"SEED_CONTENT_SENTINEL\")",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function predicate",
+      "startLine": 275,
+      "startCol": 1,
+      "endLine": 276,
+      "endCol": 71
+    },
+    {
+      "text": "message: \"waiting for thread seeded with the context file\",\n      });\n\n      const serialized = `${stream.systemPrompt ?? \"\"}${JSON.stringify(stream.messages)}`;\n      expect(serialized).toContain(\"SEED_CONTENT_SENTINEL\");\n      expect(serialized).toContain(\"REMEMBER_SENTINEL_XYZ\");\n    },\n  );\n});\n\nconst CRASH_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\n\nregisterScript(\n  \"foo\",\n  \"throws after thread\",\n  { type: \"object\", properties: {}, required: [] },\n  async (_params, _thread, log) =\u003e {\n    log(\"starting\");\n    throw new Error(\"boom\");\n  },\n);\n`;\n\nit(\"marks the invocation error when the runner throws\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nmessage: \"waiting for thread seeded with the context file\",\n      });\n\n      const serialized = `${stream.systemPrompt ?? \"\"}${JSON.stringify(stream.messages)}`;\n      expect(serialized).toContain(\"SEED_CONTENT_SENTINEL\");\n      expect(serialized).toContain(\"REMEMBER_SENTINEL_XYZ\");\n    },\n  );\n});\n\nconst CRASH_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\n\nregisterScript(\n  \"foo\",\n  \"throws after thread\",\n  { type: \"object\", properties: {}, required: [] },\n  async (_params, _thread, log) =\u003e {\n    log(\"starting\");\n    throw new Error(\"boom\");\n  },\n);\n`;\n\nit(\"marks the invocation error when the runner throws\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 277,
+      "startCol": 9,
+      "endLine": 302,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, CRASH_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, CRASH_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 304,
+      "startCol": 1,
+      "endLine": 306,
+      "endCol": 8
+    },
+    {
+      "text": "async (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        {},\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      await pollUntil(\n        () =\u003e scriptManager.invocations.get(id)?.status === \"error\",\n      );\n      expect(scriptManager.invocations.get(id)?.status).toBe(\"error\");\n    },\n  );\n});\n\nconst LONG_LIVED_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\nimport { spawn } from \"node:child_process\";\n\nregisterScript(\n  \"foo\",\n  \"spawns a long-lived child\",\n  { type: \"object\", properties: {}, required: [] },\n  async (_params, _thread, log) =\u003e {\n    const child = spawn(\"sleep\", [\"120\"], { detached: false });\n    log(\"child \" + child.pid);\n    await new Promise((r) =\u003e setTimeout(r, 60000));\n  },\n);\n`;\n\nit(\"group-kills the subprocess tree on terminate\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nasync (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        {},\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      await pollUntil(\n        () =\u003e scriptManager.invocations.get(id)?.status === \"error\",\n      );\n      expect(scriptManager.invocations.get(id)?.status).toBe(\"error\");\n    },\n  );\n});\n\nconst LONG_LIVED_SCRIPT = `\nimport { registerScript } from \"./magenta-sdk/index.ts\";\nimport { spawn } from \"node:child_process\";\n\nregisterScript(\n  \"foo\",\n  \"spawns a long-lived child\",\n  { type: \"object\", properties: {}, required: [] },\n  async (_params, _thread, log) =\u003e {\n    const child = spawn(\"sleep\", [\"120\"], { detached: false });\n    log(\"child \" + child.pid);\n    await new Promise((r) =\u003e setTimeout(r, 60000));\n  },\n);\n`;\n\nit(\"group-kills the subprocess tree on terminate\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 308,
+      "startCol": 5,
+      "endLine": 345,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, LONG_LIVED_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, LONG_LIVED_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 347,
+      "startCol": 1,
+      "endLine": 349,
+      "endCol": 8
+    },
+    {
+      "text": "async (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        {},\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      await pollUntil(() =\u003e\n        (scriptManager.invocations.get(id)?.logs ?? []).some((l) =\u003e\n          l.startsWith(\"child \"),\n        ),\n      );\n\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"missing invocation\");\n      const childPid = inv.child.pid;\n      const grandchildPid = Number(\n        inv.logs.find((l) =\u003e l.startsWith(\"child \"))!.slice(\"child \".length),\n      );\n\n      scriptManager.terminateAll();\n\n      await pollUntil(() =\u003e {\n        for (const pid of [childPid, grandchildPid]) {\n          if (pid === undefined) continue;\n          try {\n            process.kill(pid, 0);\n            return false;\n          } catch {\n            // process gone\n          }\n        }\n        return true;\n      });\n    },\n  );\n});\n\nit(\"renders running invocations, logs, and spawned threads in the Scripts overview section\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nasync (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        {},\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      await pollUntil(() =\u003e\n        (scriptManager.invocations.get(id)?.logs ?? []).some((l) =\u003e\n          l.startsWith(\"child \"),\n        ),\n      );\n\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"missing invocation\");\n      const childPid = inv.child.pid;\n      const grandchildPid = Number(\n        inv.logs.find((l) =\u003e l.startsWith(\"child \"))!.slice(\"child \".length),\n      );\n\n      scriptManager.terminateAll();\n\n      await pollUntil(() =\u003e {\n        for (const pid of [childPid, grandchildPid]) {\n          if (pid === undefined) continue;\n          try {\n            process.kill(pid, 0);\n            return false;\n          } catch {\n            // process gone\n          }\n        }\n        return true;\n      });\n    },\n  );\n});\n\nit(\"renders running invocations, logs, and spawned threads in the Scripts overview section\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 351,
+      "startCol": 5,
+      "endLine": 395,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 397,
+      "startCol": 1,
+      "endLine": 399,
+      "endCol": 8
+    },
+    {
+      "text": "async (driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(\n        () =\u003e scriptManager.invocations.get(id)?.status === \"done\",\n      );\n\n      await driver.magenta.command(\"threads-overview\");\n\n      await driver.assertDisplayBufferContains(\"# SCRIPTS\");\n      await driver.assertDisplayBufferContains(\"foo\");\n\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"missing invocation\");\n\n      // The script row starts collapsed, hiding the whole invocation body\n      // (parameters, logs, spawned threads). Expanding reveals them.\n      await driver.assertDisplayBufferDoesNotContain(\"starting\");\n\n      await driver.triggerDisplayBufferKeyOnContent(\"foo (done)\", \"=\");\n      await driver.assertDisplayBufferContains(\"starting\");\n      await driver.assertDisplayBufferContains(`parameters: {\"x\":\"thing\"}`);\n      await driver.assertDisplayBufferContains(\"yielded\");\n    },\n  );\n});\n\nit(\"toggles sandbox bypass for the whole invocation from the script root row\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nasync (driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(\n        () =\u003e scriptManager.invocations.get(id)?.status === \"done\",\n      );\n\n      await driver.magenta.command(\"threads-overview\");\n\n      await driver.assertDisplayBufferContains(\"# SCRIPTS\");\n      await driver.assertDisplayBufferContains(\"foo\");\n\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"missing invocation\");\n\n      // The script row starts collapsed, hiding the whole invocation body\n      // (parameters, logs, spawned threads). Expanding reveals them.\n      await driver.assertDisplayBufferDoesNotContain(\"starting\");\n\n      await driver.triggerDisplayBufferKeyOnContent(\"foo (done)\", \"=\");\n      await driver.assertDisplayBufferContains(\"starting\");\n      await driver.assertDisplayBufferContains(`parameters: {\"x\":\"thing\"}`);\n      await driver.assertDisplayBufferContains(\"yielded\");\n    },\n  );\n});\n\nit(\"toggles sandbox bypass for the whole invocation from the script root row\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 401,
+      "startCol": 5,
+      "endLine": 456,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 458,
+      "startCol": 1,
+      "endLine": 460,
+      "endCol": 8
+    },
+    {
+      "text": "async (driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(\n        () =\u003e scriptManager.invocations.get(id)?.status === \"done\",\n      );\n\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"missing invocation\");\n      const threadId = inv.threadIds[0];\n      expect(driver.magenta.chat.isSandboxBypassed(threadId)).toBe(false);\n\n      await driver.magenta.command(\"threads-overview\");\n      await driver.assertDisplayBufferContains(\"foo (done)\");\n      // toggling with `t` flips the invocation sandbox flag.\n      await driver.triggerDisplayBufferKeyOnContent(\"foo (done)\", \"t\");\n\n      await pollUntil(() =\u003e inv.sandboxBypassed === true);\n      expect(driver.magenta.chat.isSandboxBypassed(threadId)).toBe(true);\n      await driver.assertDisplayBufferContains(\"SANDBOX OFF\");\n    },\n  );\n});\n\nit(\"expands and collapses the script row to show/hide spawned threads\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nasync (driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(\n        () =\u003e scriptManager.invocations.get(id)?.status === \"done\",\n      );\n\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"missing invocation\");\n      const threadId = inv.threadIds[0];\n      expect(driver.magenta.chat.isSandboxBypassed(threadId)).toBe(false);\n\n      await driver.magenta.command(\"threads-overview\");\n      await driver.assertDisplayBufferContains(\"foo (done)\");\n      // toggling with `t` flips the invocation sandbox flag.\n      await driver.triggerDisplayBufferKeyOnContent(\"foo (done)\", \"t\");\n\n      await pollUntil(() =\u003e inv.sandboxBypassed === true);\n      expect(driver.magenta.chat.isSandboxBypassed(threadId)).toBe(true);\n      await driver.assertDisplayBufferContains(\"SANDBOX OFF\");\n    },\n  );\n});\n\nit(\"expands and collapses the script row to show/hide spawned threads\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 462,
+      "startCol": 5,
+      "endLine": 514,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 516,
+      "startCol": 1,
+      "endLine": 518,
+      "endCol": 8
+    },
+    {
+      "text": "async (driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(\n        () =\u003e scriptManager.invocations.get(id)?.status === \"done\",\n      );\n\n      await driver.magenta.command(\"threads-overview\");\n      await driver.assertDisplayBufferContains(\"foo (done)\");\n      await driver.assertDisplayBufferDoesNotContain(\"yielded\");\n\n      await driver.triggerDisplayBufferKeyOnContent(\"foo (done)\", \"=\");\n      await driver.assertDisplayBufferContains(\"yielded\");\n\n      await driver.triggerDisplayBufferKeyOnContent(\"foo (done)\", \"=\");\n      await driver.assertDisplayBufferDoesNotContain(\"yielded\");\n    },\n  );\n});\n\nit(\"surfaces a spawned thread's pending permission under a collapsed script row and approves it\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nasync (driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(\n        () =\u003e scriptManager.invocations.get(id)?.status === \"done\",\n      );\n\n      await driver.magenta.command(\"threads-overview\");\n      await driver.assertDisplayBufferContains(\"foo (done)\");\n      await driver.assertDisplayBufferDoesNotContain(\"yielded\");\n\n      await driver.triggerDisplayBufferKeyOnContent(\"foo (done)\", \"=\");\n      await driver.assertDisplayBufferContains(\"yielded\");\n\n      await driver.triggerDisplayBufferKeyOnContent(\"foo (done)\", \"=\");\n      await driver.assertDisplayBufferDoesNotContain(\"yielded\");\n    },\n  );\n});\n\nit(\"surfaces a spawned thread's pending permission under a collapsed script row and approves it\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 520,
+      "startCol": 5,
+      "endLine": 568,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 570,
+      "startCol": 1,
+      "endLine": 572,
+      "endCol": 8
+    },
+    {
+      "text": "(driver) =\u003e {\n      driver.mockSandbox.setState({\n        status: \"unsupported\",\n        reason: \"disabled\",\n      });\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      // The spawned thread runs a command, which blocks on approval because the\n      // sandbox is disabled and the invocation is not bypassed.\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"running\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"bash-tool\" as ToolRequestId,\n              toolName: \"bash_command\" as ToolName,\n              input: { command: \"echo hi\" },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(\n        () =\u003e (scriptManager.invocations.get(id)?.threadIds.length ?? 0) \u003e 0,\n      );\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"missing invocation\");\n      const threadId = inv.threadIds[0];\n\n      await driver.magenta.command(\"threads-overview\");\n\n      // The script row is collapsed, but the pending permission must still\n      // surface so the user is never blocked invisibly.\n      await driver.assertDisplayBufferContains(\"foo (running)\");\n      await driver.assertDisplayBufferContains(\"May I run command\");\n\n      const thread = driver.magenta.chat.threadWrappers[threadId];\n      if (thread.state !== \"initialized\")\n        throw new Error(\"thread not initialized\");\n      expect(\n        thread.thread.sandboxViolationHandler!.getPendingViolations().size,\n      ).toBe(1);\n\n      await driver.triggerDisplayBufferKeyOnContent(\"\u003e YES\", \"\u003cCR\u003e\");",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\n(driver) =\u003e {\n      driver.mockSandbox.setState({\n        status: \"unsupported\",\n        reason: \"disabled\",\n      });\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      const id = scriptManager.runScript(\n        \"foo\",\n        { x: \"thing\" },\n        { sandboxBypassed: false },\n      ) as ScriptInvocationId;\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      // The spawned thread runs a command, which blocks on approval because the\n      // sandbox is disabled and the invocation is not bypassed.\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"running\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"bash-tool\" as ToolRequestId,\n              toolName: \"bash_command\" as ToolName,\n              input: { command: \"echo hi\" },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(\n        () =\u003e (scriptManager.invocations.get(id)?.threadIds.length ?? 0) \u003e 0,\n      );\n      const inv = scriptManager.invocations.get(id);\n      if (!inv) throw new Error(\"missing invocation\");\n      const threadId = inv.threadIds[0];\n\n      await driver.magenta.command(\"threads-overview\");\n\n      // The script row is collapsed, but the pending permission must still\n      // surface so the user is never blocked invisibly.\n      await driver.assertDisplayBufferContains(\"foo (running)\");\n      await driver.assertDisplayBufferContains(\"May I run command\");\n\n      const thread = driver.magenta.chat.threadWrappers[threadId];\n      if (thread.state !== \"initialized\")\n        throw new Error(\"thread not initialized\");\n      expect(\n        thread.thread.sandboxViolationHandler!.getPendingViolations().size,\n      ).toBe(1);\n\n      await driver.triggerDisplayBufferKeyOnContent(\"\u003e YES\", \"\u003cCR\u003e\");",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 574,
+      "startCol": 11,
+      "endLine": 631,
+      "endCol": 70
+    },
+    {
+      "text": "await pollUntil(\n        () =\u003e\n          thread.thread.sandboxViolationHandler!.getPendingViolations().size ===\n          0,\n      );\n    },\n  );\n});\n\nit(\"lets an in-magenta agent trigger a script via run_script\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nawait pollUntil(\n        () =\u003e\n          thread.thread.sandboxViolationHandler!.getPendingViolations().size ===\n          0,\n      );\n    },\n  );\n});\n\nit(\"lets an in-magenta agent trigger a script via run_script\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 633,
+      "startCol": 7,
+      "endLine": 643,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 645,
+      "startCol": 1,
+      "endLine": 647,
+      "endCol": 8
+    },
+    {
+      "text": "async (driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      await driver.inputMagentaText(\"please run foo\");\n      driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"running the script\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"run-1\" as ToolRequestId,\n              toolName: \"run_script\" as ToolName,\n              input: { scriptName: \"foo\", parameters: { x: \"thing\" } },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e scriptManager.invocations.size \u003e 0);\n      const inv = [...scriptManager.invocations.values()][0];\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e inv.status === \"done\");\n      expect(inv.scriptName).toBe(\"foo\");\n    },\n  );\n});\n\nit(\"returns the script's parameter schema when run_script is called without parameters\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nasync (driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      await driver.inputMagentaText(\"please run foo\");\n      driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"running the script\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"run-1\" as ToolRequestId,\n              toolName: \"run_script\" as ToolName,\n              input: { scriptName: \"foo\", parameters: { x: \"thing\" } },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e scriptManager.invocations.size \u003e 0);\n      const inv = [...scriptManager.invocations.values()][0];\n\n      const stream =\n        await driver.mockAnthropic.awaitPendingStreamWithText(\"work on thing\");\n      stream.respond({\n        stopReason: \"tool_use\",\n        text: \"done\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"yield-1\" as ToolRequestId,\n              toolName: \"yield_to_parent\" as ToolName,\n              input: { ok: true },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e inv.status === \"done\");\n      expect(inv.scriptName).toBe(\"foo\");\n    },\n  );\n});\n\nit(\"returns the script's parameter schema when run_script is called without parameters\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 649,
+      "startCol": 5,
+      "endLine": 702,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 704,
+      "startCol": 1,
+      "endLine": 706,
+      "endCol": 8
+    },
+    {
+      "text": "async (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      await driver.inputMagentaText(\"what params does foo take?\");\n      driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"checking\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"disc-1\" as ToolRequestId,\n              toolName: \"run_script\" as ToolName,\n              input: { scriptName: \"foo\" },\n            },\n          },\n        ],\n      });\n\n      const result = await pollForToolResult(driver, \"disc-1\" as ToolRequestId);\n      expect(result.result.status).toBe(\"ok\");\n      const text =\n        result.result.status === \"ok\" ? result.result.value[0] : undefined;\n      const schemaText = text \u0026\u0026 \"text\" in text ? text.text : \"\";\n      expect(schemaText).toContain('\"required\"');\n      // The discovery step must not start an invocation.\n      expect(scriptManager.invocations.size).toBe(0);\n    },\n  );\n});\n\nit(\"seeds the invocation as bypassed when triggered from a sandbox-disabled thread\", async () =\u003e {\n  await withDriver",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nasync (driver) =\u003e {\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      await driver.inputMagentaText(\"what params does foo take?\");\n      driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"checking\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"disc-1\" as ToolRequestId,\n              toolName: \"run_script\" as ToolName,\n              input: { scriptName: \"foo\" },\n            },\n          },\n        ],\n      });\n\n      const result = await pollForToolResult(driver, \"disc-1\" as ToolRequestId);\n      expect(result.result.status).toBe(\"ok\");\n      const text =\n        result.result.status === \"ok\" ? result.result.value[0] : undefined;\n      const schemaText = text \u0026\u0026 \"text\" in text ? text.text : \"\";\n      expect(schemaText).toContain('\"required\"');\n      // The discovery step must not start an invocation.\n      expect(scriptManager.invocations.size).toBe(0);\n    },\n  );\n});\n\nit(\"seeds the invocation as bypassed when triggered from a sandbox-disabled thread\", async () =\u003e {\n  await withDriver",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 708,
+      "startCol": 5,
+      "endLine": 746,
+      "endCol": 19
+    },
+    {
+      "text": "      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        await setupScript(tmpDir, FOO_SCRIPT);\n      }",
+      "headingContext": "node/scripts/script-manager.test.ts \u003e function setupFiles",
+      "startLine": 748,
+      "startCol": 1,
+      "endLine": 750,
+      "endCol": 8
+    },
+    {
+      "text": "async (driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      await driver.inputMagentaText(\"please run foo\");\n      driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      // Disable the sandbox (bypass) on the triggering thread before it calls\n      // run_script.\n      await driver.magenta.command(\"sandbox-bypass\");\n\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"running the script\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"run-1\" as ToolRequestId,\n              toolName: \"run_script\" as ToolName,\n              input: { scriptName: \"foo\", parameters: { x: \"thing\" } },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e scriptManager.invocations.size \u003e 0);\n      const inv = [...scriptManager.invocations.values()][0];\n      expect(inv.sandboxBypassed).toBe(true);\n    }",
+      "contextualizedText": "// node/scripts/script-manager.test.ts\n\nasync (driver) =\u003e {\n      await driver.showSidebar();\n      const scriptManager = driver.magenta.scriptManager;\n      await pollUntil(() =\u003e\n        scriptManager.getCatalog().some((s) =\u003e s.name === \"foo\"),\n      );\n\n      await driver.inputMagentaText(\"please run foo\");\n      driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      // Disable the sandbox (bypass) on the triggering thread before it calls\n      // run_script.\n      await driver.magenta.command(\"sandbox-bypass\");\n\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"running the script\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: \"run-1\" as ToolRequestId,\n              toolName: \"run_script\" as ToolName,\n              input: { scriptName: \"foo\", parameters: { x: \"thing\" } },\n            },\n          },\n        ],\n      });\n\n      await pollUntil(() =\u003e scriptManager.invocations.size \u003e 0);\n      const inv = [...scriptManager.invocations.values()][0];\n      expect(inv.sandboxBypassed).toBe(true);\n    }",
+      "headingContext": "node/scripts/script-manager.test.ts",
+      "startLine": 752,
+      "startCol": 5,
+      "endLine": 785,
+      "endCol": 6
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "blobSha": "3be8360a3644617d4c5487adcf969281beba0bee",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "I've noticed some performance degradation since we've split the project into a core \u0026 main, especially after we ported threads into core.\n\nThe observed effect is that the CPU spikes, the rendering becomes slow, and I notice lag during rendering, especially in applying marks/colors to the views.\n\nIt seems to occur once the plugin is in use for a while - so it could be that we're attaching more and more listeners to the core, and causing multiple dispatches for every action, which are causing a lot of compute to happen.\n\nSome possible reasons to investigate:\n\n- maybe there's some looping that's happening between the core thread and the root thread. Maybe we're causing a lot of cycles of update -\u003e event emitted -\u003e dispatch -\u003e update, etc...\n\n- subscription around the root \u003c-\u003e core thread. Is it possible we're oversubscribing or over-dispatching, so we're ending up doing many view updates for every dispatch?\n\n- expensive computation. We end up parsing out info from the completed results on every update... maybe we need to memoize that (once the completed response is seen once, it's immutable nad it won't change).",
+      "contextualizedText": "I've noticed some performance degradation since we've split the project into a core \u0026 main, especially after we ported threads into core.\n\nThe observed effect is that the CPU spikes, the rendering becomes slow, and I notice lag during rendering, especially in applying marks/colors to the views.\n\nIt seems to occur once the plugin is in use for a while - so it could be that we're attaching more and more listeners to the core, and causing multiple dispatches for every action, which are causing a lot of compute to happen.\n\nSome possible reasons to investigate:\n\n- maybe there's some looping that's happening between the core thread and the root thread. Maybe we're causing a lot of cycles of update -\u003e event emitted -\u003e dispatch -\u003e update, etc...\n\n- subscription around the root \u003c-\u003e core thread. Is it possible we're oversubscribing or over-dispatching, so we're ending up doing many view updates for every dispatch?\n\n- expensive computation. We end up parsing out info from the completed results on every update... maybe we need to memoize that (once the completed response is seen once, it's immutable nad it won't change).",
+      "headingContext": "",
+      "startLine": 0,
+      "startCol": 0,
+      "endLine": 0,
+      "endCol": 0
+    }
+  ]
+}

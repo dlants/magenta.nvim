@@ -1,0 +1,42 @@
+{
+  "blobSha": "8724db046a34491baca896ef3fc1c8819571f353",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { describe, expect, it } from \"vitest\";\nimport {\n  AT_FILE_PATTERN,\n  extractFileRefPath,\n  formatFileRef,\n  unescapeFenceBody,\n} from \"./files.ts\";\n\ndescribe(\"unescapeFenceBody\", () =\u003e {\n  it(\"decodes \\\\\\\\ to a single backslash\", () =\u003e {\n    expect(unescapeFenceBody(\"a\\\\\\\\b\")).toBe(\"a\\\\b\");\n  });\n\n  it(\"decodes \\\\` to a single backtick\", () =\u003e {\n    expect(unescapeFenceBody(\"a\\\\`b\")).toBe(\"a`b\");\n  });\n\n  it(\"preserves unknown escape pairs literally\", () =\u003e {\n    expect(unescapeFenceBody(\"a\\\\nb\")).toBe(\"a\\\\nb\");\n  });\n\n  it(\"preserves trailing lone backslash\", () =\u003e {\n    expect(unescapeFenceBody(\"a\\\\\")).toBe(\"a\\\\\");\n  });\n});\n\ndescribe(\"AT_FILE_PATTERN + extractFileRefPath\", ()",
+      "contextualizedText": "// node/core/src/utils/at-file-ref.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport {\n  AT_FILE_PATTERN,\n  extractFileRefPath,\n  formatFileRef,\n  unescapeFenceBody,\n} from \"./files.ts\";\n\ndescribe(\"unescapeFenceBody\", () =\u003e {\n  it(\"decodes \\\\\\\\ to a single backslash\", () =\u003e {\n    expect(unescapeFenceBody(\"a\\\\\\\\b\")).toBe(\"a\\\\b\");\n  });\n\n  it(\"decodes \\\\` to a single backtick\", () =\u003e {\n    expect(unescapeFenceBody(\"a\\\\`b\")).toBe(\"a`b\");\n  });\n\n  it(\"preserves unknown escape pairs literally\", () =\u003e {\n    expect(unescapeFenceBody(\"a\\\\nb\")).toBe(\"a\\\\nb\");\n  });\n\n  it(\"preserves trailing lone backslash\", () =\u003e {\n    expect(unescapeFenceBody(\"a\\\\\")).toBe(\"a\\\\\");\n  });\n});\n\ndescribe(\"AT_FILE_PATTERN + extractFileRefPath\", ()",
+      "headingContext": "node/core/src/utils/at-file-ref.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 27,
+      "endCol": 52
+    },
+    {
+      "text": "  function parseAll(input: string): string[] {\n    const regex = new RegExp(AT_FILE_PATTERN.source, \"g\");\n    const results: string[] = [];\n    let m: RegExpExecArray | null;\n    while ((m = regex.exec(input)) !== null) {\n      results.push(extractFileRefPath(m));\n    }\n    return results;\n  }",
+      "contextualizedText": "// node/core/src/utils/at-file-ref.test.ts \u003e function parseAll\n\n  function parseAll(input: string): string[] {\n    const regex = new RegExp(AT_FILE_PATTERN.source, \"g\");\n    const results: string[] = [];\n    let m: RegExpExecArray | null;\n    while ((m = regex.exec(input)) !== null) {\n      results.push(extractFileRefPath(m));\n    }\n    return results;\n  }",
+      "headingContext": "node/core/src/utils/at-file-ref.test.ts \u003e function parseAll",
+      "startLine": 28,
+      "startCol": 1,
+      "endLine": 36,
+      "endCol": 4
+    },
+    {
+      "text": "it(\"matches a bare path\", () =\u003e {\n    expect(parseAll(\"@file:foo/bar.txt\")).toEqual([\"foo/bar.txt\"]);\n  });\n\n  it(\"matches a length-1 fenced path with spaces\", () =\u003e {\n    expect(parseAll(\"@file:`foo bar.txt`\")).toEqual([\"foo bar.txt\"]);\n  });\n\n  it(\"matches a length-2 fenced path with a single backtick\", () =\u003e {\n    expect(parseAll(\"@file:``foo`bar.txt``\")).toEqual([\"foo`bar.txt\"]);\n  });\n\n  it(\"matches a length-2 fenced path with escaped backticks\", () =\u003e {\n    expect(parseAll(\"@file:``foo\\\\`\\\\`bar.txt``\")).toEqual([\"foo``bar.txt\"]);\n  });\n\n  it(\"matches a length-2 fenced path with escaped backslashes\", () =\u003e {\n    expect(parseAll(\"@file:``C:\\\\\\\\path``\")).toEqual([\"C:\\\\path\"]);\n  });\n\n  it(\"finds multiple refs in one string\", () =\u003e {\n    expect(parseAll(\"start @file:a.txt middle @file:`b c.txt` end\")).toEqual([\n      \"a.txt\",\n      \"b c.txt\",\n    ]);\n  });\n});\n\ndescribe(\"formatFileRef\", () =\u003e {\n  it(\"uses bare form for simple paths\", () =\u003e {\n    expect(formatFileRef(\"foo/bar.txt\")).toBe(\"@file:foo/bar.txt\");\n  });\n\n  it(\"uses length-1 fence for whitespace-only paths\", () =\u003e {\n    expect(formatFileRef(\"foo bar.txt\")).toBe(\"@file:`foo bar.txt`\");\n  });\n\n  it(\"uses length-2 fence when path contains backticks\", () =\u003e {\n    expect(formatFileRef(\"foo`bar.txt\")).toBe(\"@file:``foo\\\\`bar.txt``\");\n  });\n\n  it(\"escapes backslashes in length-2 fence bodies\", () =\u003e {\n    expect(formatFileRef(\"a\\\\`b\")).toBe(\"@file:``a\\\\\\\\\\\\`b``\");\n  });\n});",
+      "contextualizedText": "// node/core/src/utils/at-file-ref.test.ts\n\nit(\"matches a bare path\", () =\u003e {\n    expect(parseAll(\"@file:foo/bar.txt\")).toEqual([\"foo/bar.txt\"]);\n  });\n\n  it(\"matches a length-1 fenced path with spaces\", () =\u003e {\n    expect(parseAll(\"@file:`foo bar.txt`\")).toEqual([\"foo bar.txt\"]);\n  });\n\n  it(\"matches a length-2 fenced path with a single backtick\", () =\u003e {\n    expect(parseAll(\"@file:``foo`bar.txt``\")).toEqual([\"foo`bar.txt\"]);\n  });\n\n  it(\"matches a length-2 fenced path with escaped backticks\", () =\u003e {\n    expect(parseAll(\"@file:``foo\\\\`\\\\`bar.txt``\")).toEqual([\"foo``bar.txt\"]);\n  });\n\n  it(\"matches a length-2 fenced path with escaped backslashes\", () =\u003e {\n    expect(parseAll(\"@file:``C:\\\\\\\\path``\")).toEqual([\"C:\\\\path\"]);\n  });\n\n  it(\"finds multiple refs in one string\", () =\u003e {\n    expect(parseAll(\"start @file:a.txt middle @file:`b c.txt` end\")).toEqual([\n      \"a.txt\",\n      \"b c.txt\",\n    ]);\n  });\n});\n\ndescribe(\"formatFileRef\", () =\u003e {\n  it(\"uses bare form for simple paths\", () =\u003e {\n    expect(formatFileRef(\"foo/bar.txt\")).toBe(\"@file:foo/bar.txt\");\n  });\n\n  it(\"uses length-1 fence for whitespace-only paths\", () =\u003e {\n    expect(formatFileRef(\"foo bar.txt\")).toBe(\"@file:`foo bar.txt`\");\n  });\n\n  it(\"uses length-2 fence when path contains backticks\", () =\u003e {\n    expect(formatFileRef(\"foo`bar.txt\")).toBe(\"@file:``foo\\\\`bar.txt``\");\n  });\n\n  it(\"escapes backslashes in length-2 fence bodies\", () =\u003e {\n    expect(formatFileRef(\"a\\\\`b\")).toBe(\"@file:``a\\\\\\\\\\\\`b``\");\n  });\n});",
+      "headingContext": "node/core/src/utils/at-file-ref.test.ts",
+      "startLine": 38,
+      "startCol": 3,
+      "endLine": 82,
+      "endCol": 4
+    },
+    {
+      "text": "describe(\"formatFileRef + parser roundtrip\", () =\u003e {\n  const paths = [\n    \"simple.txt\",\n    \"path/with/dirs.txt\",\n    \"path with spaces.txt\",\n    \"a`b.txt\",\n    \"a``b.txt\",\n    \"a```b.txt\",\n    \"a\\\\b.txt\",\n    \"a\\\\`b.txt\",\n    \"C:\\\\path\\\\file.txt\",\n    \"/tmp/Screenshot 2024-01-01 at 10.00.00.png\",\n  ];\n  for (const p of paths) {\n    it(`roundtrips ${JSON.stringify(p)}`, () =\u003e {\n      const formatted = formatFileRef(p);\n      const regex = new RegExp(AT_FILE_PATTERN.source, \"g\");\n      const match = regex.exec(formatted);\n      expect(match).not.toBeNull();\n      expect(extractFileRefPath(match!)).toBe(p);\n    });\n  }\n});",
+      "contextualizedText": "// node/core/src/utils/at-file-ref.test.ts\n\ndescribe(\"formatFileRef + parser roundtrip\", () =\u003e {\n  const paths = [\n    \"simple.txt\",\n    \"path/with/dirs.txt\",\n    \"path with spaces.txt\",\n    \"a`b.txt\",\n    \"a``b.txt\",\n    \"a```b.txt\",\n    \"a\\\\b.txt\",\n    \"a\\\\`b.txt\",\n    \"C:\\\\path\\\\file.txt\",\n    \"/tmp/Screenshot 2024-01-01 at 10.00.00.png\",\n  ];\n  for (const p of paths) {\n    it(`roundtrips ${JSON.stringify(p)}`, () =\u003e {\n      const formatted = formatFileRef(p);\n      const regex = new RegExp(AT_FILE_PATTERN.source, \"g\");\n      const match = regex.exec(formatted);\n      expect(match).not.toBeNull();\n      expect(extractFileRefPath(match!)).toBe(p);\n    });\n  }\n});",
+      "headingContext": "node/core/src/utils/at-file-ref.test.ts",
+      "startLine": 84,
+      "startCol": 1,
+      "endLine": 106,
+      "endCol": 4
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "blobSha": "98cffa9f8103464309c46d9b20031e1928158faf",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "This is test auto-context content\nMultiple lines\nfor testing",
+      "contextualizedText": "This is test auto-context content\nMultiple lines\nfor testing",
+      "headingContext": "",
+      "startLine": 0,
+      "startCol": 0,
+      "endLine": 0,
+      "endCol": 0
+    }
+  ]
+}

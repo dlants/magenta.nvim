@@ -1,0 +1,177 @@
+{
+  "blobSha": "79b0c151769da73df7ba091fc8b617f310377849",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import * as fs from \"node:fs/promises\";",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts\n\nimport * as fs from \"node:fs/promises\";",
+      "headingContext": "node/core/src/capabilities/file-io.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 1,
+      "endCol": 40
+    },
+    {
+      "text": "export interface FileIO",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e interface FileIO\n\nexport interface FileIO",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e interface FileIO",
+      "startLine": 3,
+      "startCol": 1,
+      "endLine": 3,
+      "endCol": 24
+    },
+    {
+      "text": "  readFile(path: string): Promise\u003cstring\u003e",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method readFile\n\n  readFile(path: string): Promise\u003cstring\u003e",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method readFile",
+      "startLine": 4,
+      "startCol": 1,
+      "endLine": 4,
+      "endCol": 42
+    },
+    {
+      "text": "  readBinaryFile(path: string): Promise\u003cBuffer\u003e",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method readBinaryFile\n\n  readBinaryFile(path: string): Promise\u003cBuffer\u003e",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method readBinaryFile",
+      "startLine": 5,
+      "startCol": 1,
+      "endLine": 5,
+      "endCol": 48
+    },
+    {
+      "text": "  writeFile(path: string, content: string): Promise\u003cvoid\u003e",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method writeFile\n\n  writeFile(path: string, content: string): Promise\u003cvoid\u003e",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method writeFile",
+      "startLine": 6,
+      "startCol": 1,
+      "endLine": 6,
+      "endCol": 58
+    },
+    {
+      "text": "  fileExists(path: string): Promise\u003cboolean\u003e",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method fileExists\n\n  fileExists(path: string): Promise\u003cboolean\u003e",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method fileExists",
+      "startLine": 7,
+      "startCol": 1,
+      "endLine": 7,
+      "endCol": 45
+    },
+    {
+      "text": "  mkdir(path: string): Promise\u003cvoid\u003e",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method mkdir\n\n  mkdir(path: string): Promise\u003cvoid\u003e",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method mkdir",
+      "startLine": 8,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 37
+    },
+    {
+      "text": "  stat(path: string): Promise\u003c{ mtimeMs: number; size: number } | undefined\u003e",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method stat\n\n  stat(path: string): Promise\u003c{ mtimeMs: number; size: number } | undefined\u003e",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method stat",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 9,
+      "endCol": 77
+    },
+    {
+      "text": "  readdir(path: string): Promise\u003cstring[]\u003e",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method readdir\n\n  readdir(path: string): Promise\u003cstring[]\u003e",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method readdir",
+      "startLine": 10,
+      "startCol": 1,
+      "endLine": 10,
+      "endCol": 43
+    },
+    {
+      "text": "  isDirectory(path: string): Promise\u003cboolean\u003e",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method isDirectory\n\n  isDirectory(path: string): Promise\u003cboolean\u003e",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e interface FileIO \u003e method isDirectory",
+      "startLine": 11,
+      "startCol": 1,
+      "endLine": 11,
+      "endCol": 46
+    },
+    {
+      "text": "export class FsFileIO implements FileIO",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e class FsFileIO\n\nexport class FsFileIO implements FileIO",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e class FsFileIO",
+      "startLine": 14,
+      "startCol": 1,
+      "endLine": 14,
+      "endCol": 40
+    },
+    {
+      "text": "  async readFile(path: string): Promise\u003cstring\u003e {\n    return fs.readFile(path, \"utf-8\");\n  }",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method readFile\n\n  async readFile(path: string): Promise\u003cstring\u003e {\n    return fs.readFile(path, \"utf-8\");\n  }",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method readFile",
+      "startLine": 15,
+      "startCol": 1,
+      "endLine": 17,
+      "endCol": 4
+    },
+    {
+      "text": "  async readBinaryFile(path: string): Promise\u003cBuffer\u003e {\n    return fs.readFile(path);\n  }",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method readBinaryFile\n\n  async readBinaryFile(path: string): Promise\u003cBuffer\u003e {\n    return fs.readFile(path);\n  }",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method readBinaryFile",
+      "startLine": 18,
+      "startCol": 1,
+      "endLine": 20,
+      "endCol": 4
+    },
+    {
+      "text": "  async writeFile(path: string, content: string): Promise\u003cvoid\u003e {\n    await fs.writeFile(path, content, \"utf-8\");\n  }",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method writeFile\n\n  async writeFile(path: string, content: string): Promise\u003cvoid\u003e {\n    await fs.writeFile(path, content, \"utf-8\");\n  }",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method writeFile",
+      "startLine": 22,
+      "startCol": 1,
+      "endLine": 24,
+      "endCol": 4
+    },
+    {
+      "text": "  async fileExists(path: string): Promise\u003cboolean\u003e {\n    try {\n      await fs.access(path);\n      return true;\n    } catch {\n      return false;\n    }\n  }",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method fileExists\n\n  async fileExists(path: string): Promise\u003cboolean\u003e {\n    try {\n      await fs.access(path);\n      return true;\n    } catch {\n      return false;\n    }\n  }",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method fileExists",
+      "startLine": 26,
+      "startCol": 1,
+      "endLine": 33,
+      "endCol": 4
+    },
+    {
+      "text": "  async mkdir(path: string): Promise\u003cvoid\u003e {\n    await fs.mkdir(path, { recursive: true });\n  }",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method mkdir\n\n  async mkdir(path: string): Promise\u003cvoid\u003e {\n    await fs.mkdir(path, { recursive: true });\n  }",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method mkdir",
+      "startLine": 35,
+      "startCol": 1,
+      "endLine": 37,
+      "endCol": 4
+    },
+    {
+      "text": "  async stat(\n    path: string,\n  ): Promise\u003c{ mtimeMs: number; size: number } | undefined\u003e {\n    try {\n      const stats = await fs.stat(path);\n      return { mtimeMs: stats.mtimeMs, size: stats.size };\n    } catch {\n      return undefined;\n    }\n  }",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method stat\n\n  async stat(\n    path: string,\n  ): Promise\u003c{ mtimeMs: number; size: number } | undefined\u003e {\n    try {\n      const stats = await fs.stat(path);\n      return { mtimeMs: stats.mtimeMs, size: stats.size };\n    } catch {\n      return undefined;\n    }\n  }",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method stat",
+      "startLine": 38,
+      "startCol": 1,
+      "endLine": 47,
+      "endCol": 4
+    },
+    {
+      "text": "  async readdir(path: string): Promise\u003cstring[]\u003e {\n    return fs.readdir(path);\n  }",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method readdir\n\n  async readdir(path: string): Promise\u003cstring[]\u003e {\n    return fs.readdir(path);\n  }",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method readdir",
+      "startLine": 49,
+      "startCol": 1,
+      "endLine": 51,
+      "endCol": 4
+    },
+    {
+      "text": "  async isDirectory(path: string): Promise\u003cboolean\u003e {\n    try {\n      const stats = await fs.stat(path);\n      return stats.isDirectory();\n    } catch {\n      return false;\n    }\n  }",
+      "contextualizedText": "// node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method isDirectory\n\n  async isDirectory(path: string): Promise\u003cboolean\u003e {\n    try {\n      const stats = await fs.stat(path);\n      return stats.isDirectory();\n    } catch {\n      return false;\n    }\n  }",
+      "headingContext": "node/core/src/capabilities/file-io.ts \u003e class FsFileIO \u003e method isDirectory",
+      "startLine": 53,
+      "startCol": 1,
+      "endLine": 60,
+      "endCol": 4
+    }
+  ]
+}

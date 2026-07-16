@@ -1,0 +1,276 @@
+{
+  "blobSha": "4ede64b99787a4224db946fa517bd693bea33fd5",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { withTimeout } from \"../utils/async.ts\";\nimport type { AbsFilePath, UnresolvedFilePath } from \"../utils/files.ts\";\nimport type { ExtmarkId, ExtmarkOptions } from \"./extmarks.ts\";\nimport type { Nvim } from \"./nvim-node/index.ts\";\nimport type {\n  Position0Indexed,\n  Position1Indexed,\n  Row0Indexed,\n} from \"./window.ts\";\n\nexport type Line = string \u0026 { __line: true };\nexport type BufNr = number \u0026 { __bufnr: true };\nexport type Mode = \"n\" | \"i\" | \"v\";\n\n/**\n * Branded type for Neovim namespace IDs.\n */\nexport type NamespaceId = number \u0026 { __namespaceId: true };\n\n/**\n * Well-known namespace for magenta highlighting system.\n * This ensures all magenta highlights are grouped together and can be cleared as a unit.\n */\nexport const MAGENTA_HIGHLIGHT_NAMESPACE = \"magenta-highlights\";",
+      "contextualizedText": "// node/nvim/buffer.ts\n\nimport { withTimeout } from \"../utils/async.ts\";\nimport type { AbsFilePath, UnresolvedFilePath } from \"../utils/files.ts\";\nimport type { ExtmarkId, ExtmarkOptions } from \"./extmarks.ts\";\nimport type { Nvim } from \"./nvim-node/index.ts\";\nimport type {\n  Position0Indexed,\n  Position1Indexed,\n  Row0Indexed,\n} from \"./window.ts\";\n\nexport type Line = string \u0026 { __line: true };\nexport type BufNr = number \u0026 { __bufnr: true };\nexport type Mode = \"n\" | \"i\" | \"v\";\n\n/**\n * Branded type for Neovim namespace IDs.\n */\nexport type NamespaceId = number \u0026 { __namespaceId: true };\n\n/**\n * Well-known namespace for magenta highlighting system.\n * This ensures all magenta highlights are grouped together and can be cleared as a unit.\n */\nexport const MAGENTA_HIGHLIGHT_NAMESPACE = \"magenta-highlights\";",
+      "headingContext": "node/nvim/buffer.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 24,
+      "endCol": 65
+    },
+    {
+      "text": "export class NvimBuffer {\n  constructor(\n    public readonly id: BufNr,\n    private nvim: Nvim,\n  ) {}",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer\n\nexport class NvimBuffer {\n  constructor(\n    public readonly id: BufNr,\n    private nvim: Nvim,\n  ) {}",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer",
+      "startLine": 26,
+      "startCol": 1,
+      "endLine": 30,
+      "endCol": 7
+    },
+    {
+      "text": "  getOption(option: string) {\n    return this.nvim.call(\"nvim_buf_get_option\", [this.id, option]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getOption\n\n  getOption(option: string) {\n    return this.nvim.call(\"nvim_buf_get_option\", [this.id, option]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getOption",
+      "startLine": 32,
+      "startCol": 1,
+      "endLine": 34,
+      "endCol": 4
+    },
+    {
+      "text": "  setOption(option: string, value: unknown) {\n    return this.nvim.call(\"nvim_buf_set_option\", [this.id, option, value]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setOption\n\n  setOption(option: string, value: unknown) {\n    return this.nvim.call(\"nvim_buf_set_option\", [this.id, option, value]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setOption",
+      "startLine": 36,
+      "startCol": 1,
+      "endLine": 38,
+      "endCol": 4
+    },
+    {
+      "text": "  getChangeTick() {\n    return this.nvim.call(\"nvim_buf_get_changedtick\", [\n      this.id,\n    ]) as unknown as Promise\u003cnumber\u003e;\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getChangeTick\n\n  getChangeTick() {\n    return this.nvim.call(\"nvim_buf_get_changedtick\", [\n      this.id,\n    ]) as unknown as Promise\u003cnumber\u003e;\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getChangeTick",
+      "startLine": 40,
+      "startCol": 1,
+      "endLine": 44,
+      "endCol": 4
+    },
+    {
+      "text": "  setLines({\n    start,\n    end,\n    lines,\n  }: {\n    start: Row0Indexed;\n    end: Row0Indexed;\n    lines: Line[];\n  }) {\n    return this.nvim.call(\"nvim_buf_set_lines\", [\n      this.id,\n      start,\n      end,\n      false,\n      lines,\n    ]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setLines\n\n  setLines({\n    start,\n    end,\n    lines,\n  }: {\n    start: Row0Indexed;\n    end: Row0Indexed;\n    lines: Line[];\n  }) {\n    return this.nvim.call(\"nvim_buf_set_lines\", [\n      this.id,\n      start,\n      end,\n      false,\n      lines,\n    ]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setLines",
+      "startLine": 46,
+      "startCol": 1,
+      "endLine": 62,
+      "endCol": 4
+    },
+    {
+      "text": "  async getLines({\n    start,\n    end,\n  }: {\n    start: Row0Indexed;\n    end: Row0Indexed;\n  }): Promise\u003cLine[]\u003e {\n    // Ensure buffer is loaded before getting lines\n    // unloaded buffers return no lines, see https://github.com/neovim/neovim/pull/8660\n    await this.nvim.call(\"nvim_eval\", [`bufload(${this.id})`]);\n\n    const lines = await this.nvim.call(\"nvim_buf_get_lines\", [\n      this.id,\n      start,\n      end,\n      false,\n    ]);\n    return lines as Line[];\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getLines\n\n  async getLines({\n    start,\n    end,\n  }: {\n    start: Row0Indexed;\n    end: Row0Indexed;\n  }): Promise\u003cLine[]\u003e {\n    // Ensure buffer is loaded before getting lines\n    // unloaded buffers return no lines, see https://github.com/neovim/neovim/pull/8660\n    await this.nvim.call(\"nvim_eval\", [`bufload(${this.id})`]);\n\n    const lines = await this.nvim.call(\"nvim_buf_get_lines\", [\n      this.id,\n      start,\n      end,\n      false,\n    ]);\n    return lines as Line[];\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getLines",
+      "startLine": 64,
+      "startCol": 1,
+      "endLine": 82,
+      "endCol": 4
+    },
+    {
+      "text": "  async getText({\n    startPos,\n    endPos,\n  }: {\n    startPos: Position0Indexed;\n    endPos: Position0Indexed;\n  }): Promise\u003cLine[]\u003e {\n    const lines = await this.nvim.call(\"nvim_buf_get_text\", [\n      this.id,\n      startPos.row,\n      startPos.col,\n      endPos.row,\n      endPos.col,\n      {},\n    ]);\n    return lines as Line[];\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getText\n\n  async getText({\n    startPos,\n    endPos,\n  }: {\n    startPos: Position0Indexed;\n    endPos: Position0Indexed;\n  }): Promise\u003cLine[]\u003e {\n    const lines = await this.nvim.call(\"nvim_buf_get_text\", [\n      this.id,\n      startPos.row,\n      startPos.col,\n      endPos.row,\n      endPos.col,\n      {},\n    ]);\n    return lines as Line[];\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getText",
+      "startLine": 84,
+      "startCol": 1,
+      "endLine": 100,
+      "endCol": 4
+    },
+    {
+      "text": "  setText({\n    startPos,\n    endPos,\n    lines,\n  }: {\n    startPos: Position0Indexed;\n    endPos: Position0Indexed;\n    lines: Line[];\n  }): Promise\u003cvoid\u003e {\n    return this.nvim.call(\"nvim_buf_set_text\", [\n      this.id,\n      startPos.row,\n      startPos.col,\n      endPos.row,\n      endPos.col,\n      lines,\n    ]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setText\n\n  setText({\n    startPos,\n    endPos,\n    lines,\n  }: {\n    startPos: Position0Indexed;\n    endPos: Position0Indexed;\n    lines: Line[];\n  }): Promise\u003cvoid\u003e {\n    return this.nvim.call(\"nvim_buf_set_text\", [\n      this.id,\n      startPos.row,\n      startPos.col,\n      endPos.row,\n      endPos.col,\n      lines,\n    ]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setText",
+      "startLine": 102,
+      "startCol": 1,
+      "endLine": 119,
+      "endCol": 4
+    },
+    {
+      "text": "  setMark({ mark, pos }: { mark: string; pos: Position1Indexed }) {\n    return this.nvim.call(\"nvim_buf_set_mark\", [\n      this.id,\n      mark,\n      pos.row,\n      pos.col,\n      {},\n    ]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setMark\n\n  setMark({ mark, pos }: { mark: string; pos: Position1Indexed }) {\n    return this.nvim.call(\"nvim_buf_set_mark\", [\n      this.id,\n      mark,\n      pos.row,\n      pos.col,\n      {},\n    ]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setMark",
+      "startLine": 121,
+      "startCol": 1,
+      "endLine": 129,
+      "endCol": 4
+    },
+    {
+      "text": "  setSiderbarKeymaps() {\n    return this.nvim.call(\"nvim_exec_lua\", [\n      `require(\"magenta.keymaps\").set_sidebar_buffer_keymaps(${this.id})`,\n      [],\n    ]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setSiderbarKeymaps\n\n  setSiderbarKeymaps() {\n    return this.nvim.call(\"nvim_exec_lua\", [\n      `require(\"magenta.keymaps\").set_sidebar_buffer_keymaps(${this.id})`,\n      [],\n    ]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setSiderbarKeymaps",
+      "startLine": 131,
+      "startCol": 1,
+      "endLine": 136,
+      "endCol": 4
+    },
+    {
+      "text": "  setupPasteHandlers() {\n    return this.nvim.call(\"nvim_exec_lua\", [\n      `require(\"magenta.keymaps\").set_paste_handlers(${this.id}, ${this.nvim.channelId})`,\n      [],\n    ]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setupPasteHandlers\n\n  setupPasteHandlers() {\n    return this.nvim.call(\"nvim_exec_lua\", [\n      `require(\"magenta.keymaps\").set_paste_handlers(${this.id}, ${this.nvim.channelId})`,\n      [],\n    ]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setupPasteHandlers",
+      "startLine": 138,
+      "startCol": 1,
+      "endLine": 143,
+      "endCol": 4
+    },
+    {
+      "text": "  setDisplayKeymaps() {\n    return this.nvim.call(\"nvim_exec_lua\", [\n      `require(\"magenta.keymaps\").set_display_buffer_keymaps(${this.id})`,\n      [],\n    ]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setDisplayKeymaps\n\n  setDisplayKeymaps() {\n    return this.nvim.call(\"nvim_exec_lua\", [\n      `require(\"magenta.keymaps\").set_display_buffer_keymaps(${this.id})`,\n      [],\n    ]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setDisplayKeymaps",
+      "startLine": 145,
+      "startCol": 1,
+      "endLine": 150,
+      "endCol": 4
+    },
+    {
+      "text": "  setInlineKeymaps(targetBufnr: BufNr) {\n    return this.nvim.call(\"nvim_exec_lua\", [\n      `require(\"magenta.keymaps\").set_inline_buffer_keymaps(${this.id}, ${targetBufnr})`,\n      [],\n    ]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setInlineKeymaps\n\n  setInlineKeymaps(targetBufnr: BufNr) {\n    return this.nvim.call(\"nvim_exec_lua\", [\n      `require(\"magenta.keymaps\").set_inline_buffer_keymaps(${this.id}, ${targetBufnr})`,\n      [],\n    ]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setInlineKeymaps",
+      "startLine": 152,
+      "startCol": 1,
+      "endLine": 157,
+      "endCol": 4
+    },
+    {
+      "text": "  getName(): Promise\u003cUnresolvedFilePath\u003e {\n    return this.nvim.call(\"nvim_buf_get_name\", [\n      this.id,\n    ]) as Promise\u003cUnresolvedFilePath\u003e;\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getName\n\n  getName(): Promise\u003cUnresolvedFilePath\u003e {\n    return this.nvim.call(\"nvim_buf_get_name\", [\n      this.id,\n    ]) as Promise\u003cUnresolvedFilePath\u003e;\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getName",
+      "startLine": 159,
+      "startCol": 1,
+      "endLine": 163,
+      "endCol": 4
+    },
+    {
+      "text": "  setName(name: string) {\n    // nvim_buf_set_name uses `:file` semantics: renaming a buffer that already\n    // has a name leaves behind a new empty buffer holding the OLD name. These\n    // orphans accumulate and cause E95 (\"Buffer with this name already exists\")\n    // when a later setName targets a name that another buffer still holds. Wipe\n    // any buffer already holding the target name *before* renaming (so the\n    // rename can't fail with E95), then wipe orphans left holding the old name.\n    return this.nvim.call(\"nvim_exec_lua\", [\n      `\\\nlocal bufId, name = ...\n-- nvim_buf_set_name stores the name resolved to an absolute path, so match\n-- against the resolved form rather than the raw argument.\nlocal resolved = vim.fn.fnamemodify(name, \":p\")\nfor _, other in ipairs(vim.api.nvim_list_bufs()) do\n  if other ~= bufId then\n    local otherName = vim.api.nvim_buf_get_name(other)\n    if otherName == name or otherName == resolved then\n      pcall(vim.api.nvim_buf_delete, other, { force = true })\n    end\n  end\nend\nlocal oldName = vim.api.nvim_buf_get_name(bufId)\nvim.api.nvim_buf_set_name(bufId, name)\nif oldName ~= \"\" then\n  for _, orphan in ipairs(vim.api.nvim_list_bufs()) do\n    if orphan ~= bufId and vim.api.nvim_buf_get_name(orphan) == oldName then\n      pcall(vim.api.nvim_buf_delete, orphan, { force = true })\n    end\n  end\nend`,\n      [this.id, name],\n    ]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setName\n\n  setName(name: string) {\n    // nvim_buf_set_name uses `:file` semantics: renaming a buffer that already\n    // has a name leaves behind a new empty buffer holding the OLD name. These\n    // orphans accumulate and cause E95 (\"Buffer with this name already exists\")\n    // when a later setName targets a name that another buffer still holds. Wipe\n    // any buffer already holding the target name *before* renaming (so the\n    // rename can't fail with E95), then wipe orphans left holding the old name.\n    return this.nvim.call(\"nvim_exec_lua\", [\n      `\\\nlocal bufId, name = ...\n-- nvim_buf_set_name stores the name resolved to an absolute path, so match\n-- against the resolved form rather than the raw argument.\nlocal resolved = vim.fn.fnamemodify(name, \":p\")\nfor _, other in ipairs(vim.api.nvim_list_bufs()) do\n  if other ~= bufId then\n    local otherName = vim.api.nvim_buf_get_name(other)\n    if otherName == name or otherName == resolved then\n      pcall(vim.api.nvim_buf_delete, other, { force = true })\n    end\n  end\nend\nlocal oldName = vim.api.nvim_buf_get_name(bufId)\nvim.api.nvim_buf_set_name(bufId, name)\nif oldName ~= \"\" then\n  for _, orphan in ipairs(vim.api.nvim_list_bufs()) do\n    if orphan ~= bufId and vim.api.nvim_buf_get_name(orphan) == oldName then\n      pcall(vim.api.nvim_buf_delete, orphan, { force = true })\n    end\n  end\nend`,\n      [this.id, name],\n    ]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setName",
+      "startLine": 165,
+      "startCol": 1,
+      "endLine": 197,
+      "endCol": 4
+    },
+    {
+      "text": "  async attemptEdit() {\n    return withTimeout(\n      this.nvim.call(\"nvim_exec_lua\", [\n        `\\\nvim.api.nvim_buf_call(${this.id}, function()\n  vim.cmd(\"silent! edit\")\nend)`,\n        [],\n      ]),\n      1000,\n    );\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method attemptEdit\n\n  async attemptEdit() {\n    return withTimeout(\n      this.nvim.call(\"nvim_exec_lua\", [\n        `\\\nvim.api.nvim_buf_call(${this.id}, function()\n  vim.cmd(\"silent! edit\")\nend)`,\n        [],\n      ]),\n      1000,\n    );\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method attemptEdit",
+      "startLine": 199,
+      "startCol": 1,
+      "endLine": 210,
+      "endCol": 4
+    },
+    {
+      "text": "  static async create(listed: boolean, scratch: boolean, nvim: Nvim) {\n    const bufNr = (await nvim.call(\"nvim_create_buf\", [\n      listed,\n      scratch,\n    ])) as BufNr;\n    return new NvimBuffer(bufNr, nvim);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method create\n\n  static async create(listed: boolean, scratch: boolean, nvim: Nvim) {\n    const bufNr = (await nvim.call(\"nvim_create_buf\", [\n      listed,\n      scratch,\n    ])) as BufNr;\n    return new NvimBuffer(bufNr, nvim);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method create",
+      "startLine": 212,
+      "startCol": 1,
+      "endLine": 218,
+      "endCol": 4
+    },
+    {
+      "text": "  delete(options?: { force?: boolean; unload?: boolean }) {\n    return this.nvim.call(\"nvim_buf_delete\", [this.id, options || {}]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method delete\n\n  delete(options?: { force?: boolean; unload?: boolean }) {\n    return this.nvim.call(\"nvim_buf_delete\", [this.id, options || {}]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method delete",
+      "startLine": 220,
+      "startCol": 1,
+      "endLine": 222,
+      "endCol": 4
+    },
+    {
+      "text": "  isValid(): Promise\u003cboolean\u003e {\n    return this.nvim.call(\"nvim_buf_is_valid\", [this.id]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method isValid\n\n  isValid(): Promise\u003cboolean\u003e {\n    return this.nvim.call(\"nvim_buf_is_valid\", [this.id]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method isValid",
+      "startLine": 224,
+      "startCol": 1,
+      "endLine": 226,
+      "endCol": 4
+    },
+    {
+      "text": "  static async bufadd(absolutePath: AbsFilePath, nvim: Nvim) {\n    const bufNr = (await nvim.call(\"nvim_eval\", [\n      `bufadd(\"${absolutePath}\")`,\n    ])) as BufNr;\n    await nvim.call(\"nvim_eval\", [`bufload(${bufNr})`]);\n    return new NvimBuffer(bufNr, nvim);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method bufadd\n\n  static async bufadd(absolutePath: AbsFilePath, nvim: Nvim) {\n    const bufNr = (await nvim.call(\"nvim_eval\", [\n      `bufadd(\"${absolutePath}\")`,\n    ])) as BufNr;\n    await nvim.call(\"nvim_eval\", [`bufload(${bufNr})`]);\n    return new NvimBuffer(bufNr, nvim);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method bufadd",
+      "startLine": 228,
+      "startCol": 1,
+      "endLine": 234,
+      "endCol": 4
+    },
+    {
+      "text": "// Extmark methods",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer\n\n// Extmark methods",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer",
+      "startLine": 236,
+      "startCol": 3,
+      "endLine": 236,
+      "endCol": 21
+    },
+    {
+      "text": "/**\n   * Set an extmark in this buffer with the given options.\n   * Returns the extmark ID for later updates or deletion.\n   */\n  async setExtmark({\n    startPos,\n    endPos,\n    options,\n  }: {\n    startPos: Position0Indexed;\n    endPos: Position0Indexed;\n    options: ExtmarkOptions;\n  }): Promise\u003cExtmarkId\u003e {\n    const namespaceId = await this.getMagentaNamespace();\n\n    // Prepare extmark options with end position\n    const extmarkOpts = {\n      ...options,\n      end_row: endPos.row,\n      end_col: endPos.col,\n    };\n\n    const extmarkId = await this.nvim.call(\"nvim_buf_set_extmark\", [\n      this.id,\n      namespaceId,\n      startPos.row,\n      startPos.col,\n      extmarkOpts,\n    ]);\n\n    return extmarkId as ExtmarkId;\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setExtmark\n\n/**\n   * Set an extmark in this buffer with the given options.\n   * Returns the extmark ID for later updates or deletion.\n   */\n  async setExtmark({\n    startPos,\n    endPos,\n    options,\n  }: {\n    startPos: Position0Indexed;\n    endPos: Position0Indexed;\n    options: ExtmarkOptions;\n  }): Promise\u003cExtmarkId\u003e {\n    const namespaceId = await this.getMagentaNamespace();\n\n    // Prepare extmark options with end position\n    const extmarkOpts = {\n      ...options,\n      end_row: endPos.row,\n      end_col: endPos.col,\n    };\n\n    const extmarkId = await this.nvim.call(\"nvim_buf_set_extmark\", [\n      this.id,\n      namespaceId,\n      startPos.row,\n      startPos.col,\n      extmarkOpts,\n    ]);\n\n    return extmarkId as ExtmarkId;\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method setExtmark",
+      "startLine": 238,
+      "startCol": 3,
+      "endLine": 269,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Delete a specific extmark from this buffer.\n   */\n  async deleteExtmark(extmarkId: ExtmarkId): Promise\u003cvoid\u003e {\n    const namespaceId = await this.getMagentaNamespace();\n    await this.nvim.call(\"nvim_buf_del_extmark\", [\n      this.id,\n      namespaceId,\n      extmarkId,\n    ]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method deleteExtmark\n\n/**\n   * Delete a specific extmark from this buffer.\n   */\n  async deleteExtmark(extmarkId: ExtmarkId): Promise\u003cvoid\u003e {\n    const namespaceId = await this.getMagentaNamespace();\n    await this.nvim.call(\"nvim_buf_del_extmark\", [\n      this.id,\n      namespaceId,\n      extmarkId,\n    ]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method deleteExtmark",
+      "startLine": 271,
+      "startCol": 3,
+      "endLine": 281,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Clear all extmarks in the magenta highlight namespace for this buffer.\n   * This is useful for bulk cleanup when unmounting views or clearing highlights.\n   */\n  async clearAllExtmarks(): Promise\u003cvoid\u003e {\n    const namespaceId = await this.getMagentaNamespace();\n\n    // Clear all extmarks in the namespace for this buffer\n    await this.nvim.call(\"nvim_buf_clear_namespace\", [\n      this.id,\n      namespaceId,\n      0, // start line\n      -1, // end line (-1 means end of buffer)\n    ]);\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method clearAllExtmarks\n\n/**\n   * Clear all extmarks in the magenta highlight namespace for this buffer.\n   * This is useful for bulk cleanup when unmounting views or clearing highlights.\n   */\n  async clearAllExtmarks(): Promise\u003cvoid\u003e {\n    const namespaceId = await this.getMagentaNamespace();\n\n    // Clear all extmarks in the namespace for this buffer\n    await this.nvim.call(\"nvim_buf_clear_namespace\", [\n      this.id,\n      namespaceId,\n      0, // start line\n      -1, // end line (-1 means end of buffer)\n    ]);\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method clearAllExtmarks",
+      "startLine": 283,
+      "startCol": 3,
+      "endLine": 297,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Update an existing extmark with new options and/or position.\n   * This is more efficient than deleting and recreating for position/style changes.\n   */\n  async updateExtmark({\n    extmarkId,\n    startPos,\n    endPos,\n    options,\n  }: {\n    extmarkId: ExtmarkId;\n    startPos: Position0Indexed;\n    endPos: Position0Indexed;\n    options: ExtmarkOptions;\n  }): Promise\u003cExtmarkId\u003e {\n    const namespaceId = await this.getMagentaNamespace();\n\n    // Prepare extmark options with end position and existing ID\n    const extmarkOpts = {\n      ...options,\n      id: extmarkId,\n      end_row: endPos.row,\n      end_col: endPos.col,\n    };\n\n    const updatedId = await this.nvim.call(\"nvim_buf_set_extmark\", [\n      this.id,\n      namespaceId,\n      startPos.row,\n      startPos.col,\n      extmarkOpts,\n    ]);\n\n    return updatedId as ExtmarkId;\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method updateExtmark\n\n/**\n   * Update an existing extmark with new options and/or position.\n   * This is more efficient than deleting and recreating for position/style changes.\n   */\n  async updateExtmark({\n    extmarkId,\n    startPos,\n    endPos,\n    options,\n  }: {\n    extmarkId: ExtmarkId;\n    startPos: Position0Indexed;\n    endPos: Position0Indexed;\n    options: ExtmarkOptions;\n  }): Promise\u003cExtmarkId\u003e {\n    const namespaceId = await this.getMagentaNamespace();\n\n    // Prepare extmark options with end position and existing ID\n    const extmarkOpts = {\n      ...options,\n      id: extmarkId,\n      end_row: endPos.row,\n      end_col: endPos.col,\n    };\n\n    const updatedId = await this.nvim.call(\"nvim_buf_set_extmark\", [\n      this.id,\n      namespaceId,\n      startPos.row,\n      startPos.col,\n      extmarkOpts,\n    ]);\n\n    return updatedId as ExtmarkId;\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method updateExtmark",
+      "startLine": 299,
+      "startCol": 3,
+      "endLine": 333,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Get all extmarks in the magenta namespace for this buffer.\n   * Returns an array of extmark information including ID, position, and options.\n   */\n  async getExtmarks(): Promise\u003c\n    Array\u003c{\n      id: ExtmarkId;\n      startPos: Position0Indexed;\n      endPos: Position0Indexed;\n      options: ExtmarkOptions;\n    }\u003e\n  \u003e {\n    const namespaceId = await this.getMagentaNamespace();\n\n    // Get all extmarks in the namespace\n    const extmarks = await this.nvim.call(\"nvim_buf_get_extmarks\", [\n      this.id,\n      namespaceId,\n      0, // start position\n      -1, // end position (-1 means end of buffer)\n      { details: true }, // include details like end position and options\n    ]);\n\n    return (extmarks as unknown[][]).map((extmarkData) =\u003e\n      this.parseExtmarkData(extmarkData),\n    );\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getExtmarks\n\n/**\n   * Get all extmarks in the magenta namespace for this buffer.\n   * Returns an array of extmark information including ID, position, and options.\n   */\n  async getExtmarks(): Promise\u003c\n    Array\u003c{\n      id: ExtmarkId;\n      startPos: Position0Indexed;\n      endPos: Position0Indexed;\n      options: ExtmarkOptions;\n    }\u003e\n  \u003e {\n    const namespaceId = await this.getMagentaNamespace();\n\n    // Get all extmarks in the namespace\n    const extmarks = await this.nvim.call(\"nvim_buf_get_extmarks\", [\n      this.id,\n      namespaceId,\n      0, // start position\n      -1, // end position (-1 means end of buffer)\n      { details: true }, // include details like end position and options\n    ]);\n\n    return (extmarks as unknown[][]).map((extmarkData) =\u003e\n      this.parseExtmarkData(extmarkData),\n    );\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getExtmarks",
+      "startLine": 335,
+      "startCol": 3,
+      "endLine": 361,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Get a specific extmark by its ID from the magenta namespace.\n   * Returns undefined if the extmark doesn't exist.\n   */\n  async getExtmarkById(extmarkId: ExtmarkId): Promise\u003c\n    | {\n        id: ExtmarkId;\n        startPos: Position0Indexed;\n        endPos: Position0Indexed;\n        options: ExtmarkOptions;\n      }\n    | undefined\n  \u003e {\n    const namespaceId = await this.getMagentaNamespace();\n\n    try {\n      // Get the specific extmark by ID\n      const extmarksResult = await this.nvim.call(\"nvim_buf_get_extmarks\", [\n        this.id,\n        namespaceId,\n        extmarkId, // start from this specific extmark ID\n        extmarkId, // end at this specific extmark ID\n        { details: true, limit: 1 }, // include details and limit to 1 result\n      ]);\n\n      const extmarksArray = extmarksResult as unknown[][];\n      if (extmarksArray.length === 0) {\n        return undefined;\n      }\n\n      return this.parseExtmarkData(extmarksArray[0]);\n    } catch {\n      // If the extmark doesn't exist, nvim_buf_get_extmarks may throw\n      return undefined;\n    }\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getExtmarkById\n\n/**\n   * Get a specific extmark by its ID from the magenta namespace.\n   * Returns undefined if the extmark doesn't exist.\n   */\n  async getExtmarkById(extmarkId: ExtmarkId): Promise\u003c\n    | {\n        id: ExtmarkId;\n        startPos: Position0Indexed;\n        endPos: Position0Indexed;\n        options: ExtmarkOptions;\n      }\n    | undefined\n  \u003e {\n    const namespaceId = await this.getMagentaNamespace();\n\n    try {\n      // Get the specific extmark by ID\n      const extmarksResult = await this.nvim.call(\"nvim_buf_get_extmarks\", [\n        this.id,\n        namespaceId,\n        extmarkId, // start from this specific extmark ID\n        extmarkId, // end at this specific extmark ID\n        { details: true, limit: 1 }, // include details and limit to 1 result\n      ]);\n\n      const extmarksArray = extmarksResult as unknown[][];\n      if (extmarksArray.length === 0) {\n        return undefined;\n      }\n\n      return this.parseExtmarkData(extmarksArray[0]);\n    } catch {\n      // If the extmark doesn't exist, nvim_buf_get_extmarks may throw\n      return undefined;\n    }\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getExtmarkById",
+      "startLine": 363,
+      "startCol": 3,
+      "endLine": 398,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Parse raw extmark data from nvim_buf_get_extmarks into our structured format.\n   */\n  private parseExtmarkData(extmarkData: unknown[]): {\n    id: ExtmarkId;\n    startPos: Position0Indexed;\n    endPos: Position0Indexed;\n    options: ExtmarkOptions;\n  } {\n    const [id, startRow, startCol, details] = extmarkData;\n    return {\n      id: id as ExtmarkId,\n      startPos: { row: startRow, col: startCol } as Position0Indexed,\n      endPos: {\n        row: (details as { end_row: unknown }).end_row || startRow,\n        col: (details as { end_col: unknown }).end_col || startCol,\n      } as Position0Indexed,\n      options: details as ExtmarkOptions,\n    };\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method parseExtmarkData\n\n/**\n   * Parse raw extmark data from nvim_buf_get_extmarks into our structured format.\n   */\n  private parseExtmarkData(extmarkData: unknown[]): {\n    id: ExtmarkId;\n    startPos: Position0Indexed;\n    endPos: Position0Indexed;\n    options: ExtmarkOptions;\n  } {\n    const [id, startRow, startCol, details] = extmarkData;\n    return {\n      id: id as ExtmarkId,\n      startPos: { row: startRow, col: startCol } as Position0Indexed,\n      endPos: {\n        row: (details as { end_row: unknown }).end_row || startRow,\n        col: (details as { end_col: unknown }).end_col || startCol,\n      } as Position0Indexed,\n      options: details as ExtmarkOptions,\n    };\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method parseExtmarkData",
+      "startLine": 400,
+      "startCol": 3,
+      "endLine": 419,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Create or get the magenta highlighting namespace.\n   * Uses a well-known namespace name for consistency across views.\n   */\n  async getMagentaNamespace(): Promise\u003cNamespaceId\u003e {\n    const namespaceId = await this.nvim.call(\"nvim_create_namespace\", [\n      MAGENTA_HIGHLIGHT_NAMESPACE,\n    ]);\n    return namespaceId as NamespaceId;\n  }",
+      "contextualizedText": "// node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getMagentaNamespace\n\n/**\n   * Create or get the magenta highlighting namespace.\n   * Uses a well-known namespace name for consistency across views.\n   */\n  async getMagentaNamespace(): Promise\u003cNamespaceId\u003e {\n    const namespaceId = await this.nvim.call(\"nvim_create_namespace\", [\n      MAGENTA_HIGHLIGHT_NAMESPACE,\n    ]);\n    return namespaceId as NamespaceId;\n  }",
+      "headingContext": "node/nvim/buffer.ts \u003e class NvimBuffer \u003e method getMagentaNamespace",
+      "startLine": 421,
+      "startCol": 3,
+      "endLine": 430,
+      "endCol": 4
+    }
+  ]
+}

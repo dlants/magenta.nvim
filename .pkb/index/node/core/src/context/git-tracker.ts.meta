@@ -1,0 +1,60 @@
+{
+  "blobSha": "1127a4ad09b03e86da1f23c0175681ed06156845",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { GitClient, GitState } from \"../capabilities/git-client.ts\";\nimport { formatGitHead } from \"../capabilities/git-client.ts\";\nimport type { Logger } from \"../logger.ts\";\n\nexport type GitContextUpdate = {\n  previous: GitState | undefined;\n  current: GitState | undefined;\n};",
+      "contextualizedText": "// node/core/src/context/git-tracker.ts\n\nimport type { GitClient, GitState } from \"../capabilities/git-client.ts\";\nimport { formatGitHead } from \"../capabilities/git-client.ts\";\nimport type { Logger } from \"../logger.ts\";\n\nexport type GitContextUpdate = {\n  previous: GitState | undefined;\n  current: GitState | undefined;\n};",
+      "headingContext": "node/core/src/context/git-tracker.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 3
+    },
+    {
+      "text": "/** True when the coarse-grained identity of the repo changed: presence,\n * branch, or HEAD commit. File counts deliberately do not trigger an update,\n * since the agent already knows about its own edits. */\nfunction coarseChanged(\n  a: GitState | undefined,\n  b: GitState | undefined,\n): boolean {\n  if (!a \u0026\u0026 !b) return false;\n  if (!a || !b) return true;\n  return (\n    a.branch !== b.branch ||\n    a.headSha !== b.headSha ||\n    a.headSubject !== b.headSubject\n  );\n}",
+      "contextualizedText": "// node/core/src/context/git-tracker.ts \u003e function coarseChanged\n\n/** True when the coarse-grained identity of the repo changed: presence,\n * branch, or HEAD commit. File counts deliberately do not trigger an update,\n * since the agent already knows about its own edits. */\nfunction coarseChanged(\n  a: GitState | undefined,\n  b: GitState | undefined,\n): boolean {\n  if (!a \u0026\u0026 !b) return false;\n  if (!a || !b) return true;\n  return (\n    a.branch !== b.branch ||\n    a.headSha !== b.headSha ||\n    a.headSubject !== b.headSubject\n  );\n}",
+      "headingContext": "node/core/src/context/git-tracker.ts \u003e function coarseChanged",
+      "startLine": 10,
+      "startCol": 1,
+      "endLine": 24,
+      "endCol": 2
+    },
+    {
+      "text": "export class GitTracker {\n  /** What the agent has been told about git state. */\n  private agentView: GitState | undefined;\n\n  constructor(\n    private gitClient: GitClient,\n    initialState: GitState | undefined,\n    private logger: Logger,\n  ) {\n    this.agentView = initialState;\n  }",
+      "contextualizedText": "// node/core/src/context/git-tracker.ts \u003e class GitTracker\n\nexport class GitTracker {\n  /** What the agent has been told about git state. */\n  private agentView: GitState | undefined;\n\n  constructor(\n    private gitClient: GitClient,\n    initialState: GitState | undefined,\n    private logger: Logger,\n  ) {\n    this.agentView = initialState;\n  }",
+      "headingContext": "node/core/src/context/git-tracker.ts \u003e class GitTracker",
+      "startLine": 26,
+      "startCol": 1,
+      "endLine": 36,
+      "endCol": 4
+    },
+    {
+      "text": "  getAgentView(): GitState | undefined {\n    return this.agentView;\n  }",
+      "contextualizedText": "// node/core/src/context/git-tracker.ts \u003e class GitTracker \u003e method getAgentView\n\n  getAgentView(): GitState | undefined {\n    return this.agentView;\n  }",
+      "headingContext": "node/core/src/context/git-tracker.ts \u003e class GitTracker \u003e method getAgentView",
+      "startLine": 38,
+      "startCol": 1,
+      "endLine": 40,
+      "endCol": 4
+    },
+    {
+      "text": "/** Polls current git state and, if the coarse identity changed since the\n   * agent last saw it, commits the new state to the agent view and returns the\n   * update. Returns undefined when nothing worth reporting changed. */\n  async getUpdate(): Promise\u003cGitContextUpdate | undefined\u003e {\n    let current: GitState | undefined;\n    try {\n      current = await this.gitClient.getState();\n    } catch (error) {\n      this.logger.error(\n        `GitTracker failed to read git state: ${String(error)}`,\n      );\n      return undefined;\n    }\n\n    if (!coarseChanged(this.agentView, current)) {\n      // Keep counts fresh without reporting, so the agent view stays accurate.\n      this.agentView = current;\n      return undefined;\n    }\n\n    const previous = this.agentView;\n    this.agentView = current;\n    return { previous, current };\n  }",
+      "contextualizedText": "// node/core/src/context/git-tracker.ts \u003e class GitTracker \u003e method getUpdate\n\n/** Polls current git state and, if the coarse identity changed since the\n   * agent last saw it, commits the new state to the agent view and returns the\n   * update. Returns undefined when nothing worth reporting changed. */\n  async getUpdate(): Promise\u003cGitContextUpdate | undefined\u003e {\n    let current: GitState | undefined;\n    try {\n      current = await this.gitClient.getState();\n    } catch (error) {\n      this.logger.error(\n        `GitTracker failed to read git state: ${String(error)}`,\n      );\n      return undefined;\n    }\n\n    if (!coarseChanged(this.agentView, current)) {\n      // Keep counts fresh without reporting, so the agent view stays accurate.\n      this.agentView = current;\n      return undefined;\n    }\n\n    const previous = this.agentView;\n    this.agentView = current;\n    return { previous, current };\n  }",
+      "headingContext": "node/core/src/context/git-tracker.ts \u003e class GitTracker \u003e method getUpdate",
+      "startLine": 42,
+      "startCol": 3,
+      "endLine": 65,
+      "endCol": 4
+    },
+    {
+      "text": "/** Builds the message text describing a git context update shown to the agent. */\nexport function gitUpdateToText(update: GitContextUpdate): string {\n  const { current } = update;\n  if (!current) {\n    return \"# Git status update\\n\\nThe working directory is no longer inside a git repository.\";\n  }\n\n  const lines = [\n    \"# Git status update\",\n    \"\",\n    \"The git repository state has changed:\",\n    `- Repository root: ${current.repoRoot}`,\n    `- Branch: ${current.branch ?? \"(detached HEAD)\"}`,\n    `- HEAD: ${formatGitHead(current)}`,\n    `- Changes: ${current.stagedCount} staged, ${current.unstagedCount} unstaged, ${current.untrackedCount} untracked`,\n  ];\n  return lines.join(\"\\n\");\n}",
+      "contextualizedText": "// node/core/src/context/git-tracker.ts \u003e function gitUpdateToText\n\n/** Builds the message text describing a git context update shown to the agent. */\nexport function gitUpdateToText(update: GitContextUpdate): string {\n  const { current } = update;\n  if (!current) {\n    return \"# Git status update\\n\\nThe working directory is no longer inside a git repository.\";\n  }\n\n  const lines = [\n    \"# Git status update\",\n    \"\",\n    \"The git repository state has changed:\",\n    `- Repository root: ${current.repoRoot}`,\n    `- Branch: ${current.branch ?? \"(detached HEAD)\"}`,\n    `- HEAD: ${formatGitHead(current)}`,\n    `- Changes: ${current.stagedCount} staged, ${current.unstagedCount} unstaged, ${current.untrackedCount} untracked`,\n  ];\n  return lines.join(\"\\n\");\n}",
+      "headingContext": "node/core/src/context/git-tracker.ts \u003e function gitUpdateToText",
+      "startLine": 68,
+      "startCol": 1,
+      "endLine": 85,
+      "endCol": 2
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "blobSha": "cd2a36b82ff04d2bc48804e60cc4299d77b147be",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export interface Logger",
+      "contextualizedText": "// node/core/src/logger.ts \u003e interface Logger\n\nexport interface Logger",
+      "headingContext": "node/core/src/logger.ts \u003e interface Logger",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 1,
+      "endCol": 24
+    },
+    {
+      "text": "  info(...args: unknown[]): void",
+      "contextualizedText": "// node/core/src/logger.ts \u003e interface Logger \u003e method info\n\n  info(...args: unknown[]): void",
+      "headingContext": "node/core/src/logger.ts \u003e interface Logger \u003e method info",
+      "startLine": 2,
+      "startCol": 1,
+      "endLine": 2,
+      "endCol": 33
+    },
+    {
+      "text": "  warn(...args: unknown[]): void",
+      "contextualizedText": "// node/core/src/logger.ts \u003e interface Logger \u003e method warn\n\n  warn(...args: unknown[]): void",
+      "headingContext": "node/core/src/logger.ts \u003e interface Logger \u003e method warn",
+      "startLine": 3,
+      "startCol": 1,
+      "endLine": 3,
+      "endCol": 33
+    },
+    {
+      "text": "  error(...args: unknown[]): void",
+      "contextualizedText": "// node/core/src/logger.ts \u003e interface Logger \u003e method error\n\n  error(...args: unknown[]): void",
+      "headingContext": "node/core/src/logger.ts \u003e interface Logger \u003e method error",
+      "startLine": 4,
+      "startCol": 1,
+      "endLine": 4,
+      "endCol": 34
+    },
+    {
+      "text": "  debug(...args: unknown[]): void",
+      "contextualizedText": "// node/core/src/logger.ts \u003e interface Logger \u003e method debug\n\n  debug(...args: unknown[]): void",
+      "headingContext": "node/core/src/logger.ts \u003e interface Logger \u003e method debug",
+      "startLine": 5,
+      "startCol": 1,
+      "endLine": 5,
+      "endCol": 34
+    }
+  ]
+}

@@ -1,0 +1,240 @@
+{
+  "blobSha": "da09499b5c6b38606371e19be310192c814cae87",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import * as fs from \"node:fs\";\nimport * as path from \"node:path\";\nimport {\n  FsFileIO,\n  type Logger,\n  loadSkills,\n  type ProviderOptions,\n} from \"@magenta/core\";\nimport { describe, expect, it } from \"vitest\";\nimport { BUILTIN_SKILLS_PATH } from \"../options.ts\";\nimport { withDriver } from \"../test/preamble.ts\";\nimport type { HomeDir, NvimCwd } from \"../utils/files.ts\";\n\ndescribe(\"Skills\", () =\u003e {\n  it(\"discovers the built-in authoring-magenta-scripts skill and it documents the harness\", async () =\u003e {\n    const skills = await loadSkills({\n      cwd: \"/nonexistent\" as NvimCwd,\n      homeDir: \"/nonexistent\" as HomeDir,\n      logger",
+      "contextualizedText": "// node/providers/skills.test.ts\n\nimport * as fs from \"node:fs\";\nimport * as path from \"node:path\";\nimport {\n  FsFileIO,\n  type Logger,\n  loadSkills,\n  type ProviderOptions,\n} from \"@magenta/core\";\nimport { describe, expect, it } from \"vitest\";\nimport { BUILTIN_SKILLS_PATH } from \"../options.ts\";\nimport { withDriver } from \"../test/preamble.ts\";\nimport type { HomeDir, NvimCwd } from \"../utils/files.ts\";\n\ndescribe(\"Skills\", () =\u003e {\n  it(\"discovers the built-in authoring-magenta-scripts skill and it documents the harness\", async () =\u003e {\n    const skills = await loadSkills({\n      cwd: \"/nonexistent\" as NvimCwd,\n      homeDir: \"/nonexistent\" as HomeDir,\n      logger",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 19,
+      "endCol": 13
+    },
+    {
+      "text": "        debug: () =\u003e {}",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function debug\n\n        debug: () =\u003e {}",
+      "headingContext": "node/providers/skills.test.ts \u003e function debug",
+      "startLine": 20,
+      "startCol": 1,
+      "endLine": 20,
+      "endCol": 24
+    },
+    {
+      "text": "        info: () =\u003e {}",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function info\n\n        info: () =\u003e {}",
+      "headingContext": "node/providers/skills.test.ts \u003e function info",
+      "startLine": 21,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 23
+    },
+    {
+      "text": "        warn: () =\u003e {}",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function warn\n\n        warn: () =\u003e {}",
+      "headingContext": "node/providers/skills.test.ts \u003e function warn",
+      "startLine": 22,
+      "startCol": 1,
+      "endLine": 22,
+      "endCol": 23
+    },
+    {
+      "text": "        error: () =\u003e {}",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function error\n\n        error: () =\u003e {}",
+      "headingContext": "node/providers/skills.test.ts \u003e function error",
+      "startLine": 23,
+      "startCol": 1,
+      "endLine": 23,
+      "endCol": 24
+    },
+    {
+      "text": "        trace: () =\u003e {}",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function trace\n\n        trace: () =\u003e {}",
+      "headingContext": "node/providers/skills.test.ts \u003e function trace",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 24,
+      "endCol": 24
+    },
+    {
+      "text": "unknown as Logger,\n      fileIO: new FsFileIO(),\n      options: { skillsPaths: [BUILTIN_SKILLS_PATH] } as ProviderOptions,\n    });\n\n    expect(skills[\"authoring-magenta-scripts\"]).toBeDefined();\n\n    const body = await fs.promises.readFile(\n      skills[\"authoring-magenta-scripts\"].skillFile,\n      \"utf-8\",\n    );\n    expect(body).toContain(\"registerScript\");\n    expect(body).toContain(\"./magenta-sdk/testing.ts\");\n    expect(body).toContain(\"runScript\");\n  });\n\n  it(\"loads skills from a directory with skill.md\", async () =\u003e {\n    await withDriver",
+      "contextualizedText": "// node/providers/skills.test.ts\n\nunknown as Logger,\n      fileIO: new FsFileIO(),\n      options: { skillsPaths: [BUILTIN_SKILLS_PATH] } as ProviderOptions,\n    });\n\n    expect(skills[\"authoring-magenta-scripts\"]).toBeDefined();\n\n    const body = await fs.promises.readFile(\n      skills[\"authoring-magenta-scripts\"].skillFile,\n      \"utf-8\",\n    );\n    expect(body).toContain(\"registerScript\");\n    expect(body).toContain(\"./magenta-sdk/testing.ts\");\n    expect(body).toContain(\"runScript\");\n  });\n\n  it(\"loads skills from a directory with skill.md\", async () =\u003e {\n    await withDriver",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 25,
+      "startCol": 12,
+      "endLine": 42,
+      "endCol": 21
+    },
+    {
+      "text": "        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(tmpDir, \".claude\", \"skills\", \"test-skill\");\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"skill.md\"),\n            `---\nname: test-skill\ndescription: A test skill for testing\n---\n\n# Test Skill\n\nThis is the content of the test skill.\n`,\n          );\n        }",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(tmpDir, \".claude\", \"skills\", \"test-skill\");\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"skill.md\"),\n            `---\nname: test-skill\ndescription: A test skill for testing\n---\n\n# Test Skill\n\nThis is the content of the test skill.\n`,\n          );\n        }",
+      "headingContext": "node/providers/skills.test.ts \u003e function setupFiles",
+      "startLine": 44,
+      "startCol": 1,
+      "endLine": 59,
+      "endCol": 10
+    },
+    {
+      "text": "options: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"test-skill\");\n        expect(systemPrompt).toContain(\"A test skill for testing\");\n      },\n    );\n  });\n\n  it(\"handles case-insensitive skill.md filename\", async () =\u003e {\n    await withDriver",
+      "contextualizedText": "// node/providers/skills.test.ts\n\noptions: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"test-skill\");\n        expect(systemPrompt).toContain(\"A test skill for testing\");\n      },\n    );\n  });\n\n  it(\"handles case-insensitive skill.md filename\", async () =\u003e {\n    await withDriver",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 60,
+      "startCol": 9,
+      "endLine": 78,
+      "endCol": 21
+    },
+    {
+      "text": "        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(tmpDir, \".claude\", \"skills\", \"case-test\");\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"SKILL.MD\"),\n            `---\nname: case-test-skill\ndescription: Testing case insensitivity\n---\nContent here\n`,\n          );\n        }",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(tmpDir, \".claude\", \"skills\", \"case-test\");\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"SKILL.MD\"),\n            `---\nname: case-test-skill\ndescription: Testing case insensitivity\n---\nContent here\n`,\n          );\n        }",
+      "headingContext": "node/providers/skills.test.ts \u003e function setupFiles",
+      "startLine": 80,
+      "startCol": 1,
+      "endLine": 92,
+      "endCol": 10
+    },
+    {
+      "text": "options: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        expect(systemPrompt).toContain(\"case-test-skill\");\n        expect(systemPrompt).toContain(\"Testing case insensitivity\");\n      },\n    );\n  });\n\n  it(\"skips skills with missing YAML frontmatter\", async () =\u003e {\n    await withDriver",
+      "contextualizedText": "// node/providers/skills.test.ts\n\noptions: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        expect(systemPrompt).toContain(\"case-test-skill\");\n        expect(systemPrompt).toContain(\"Testing case insensitivity\");\n      },\n    );\n  });\n\n  it(\"skips skills with missing YAML frontmatter\", async () =\u003e {\n    await withDriver",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 93,
+      "startCol": 9,
+      "endLine": 110,
+      "endCol": 21
+    },
+    {
+      "text": "        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(\n            tmpDir,\n            \".claude\",\n            \"skills\",\n            \"no-frontmatter\",\n          );\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"skill.md\"),\n            `# No Frontmatter\n\nJust regular markdown content without frontmatter.\n`,\n          );\n        }",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(\n            tmpDir,\n            \".claude\",\n            \"skills\",\n            \"no-frontmatter\",\n          );\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"skill.md\"),\n            `# No Frontmatter\n\nJust regular markdown content without frontmatter.\n`,\n          );\n        }",
+      "headingContext": "node/providers/skills.test.ts \u003e function setupFiles",
+      "startLine": 112,
+      "startCol": 1,
+      "endLine": 127,
+      "endCol": 10
+    },
+    {
+      "text": "options: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        // The invalid skill should not appear\n        expect(systemPrompt).not.toContain(\"no-frontmatter\");\n      },\n    );\n  });\n\n  it(\"skips skills with missing required fields\", async () =\u003e {\n    await withDriver",
+      "contextualizedText": "// node/providers/skills.test.ts\n\noptions: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        // The invalid skill should not appear\n        expect(systemPrompt).not.toContain(\"no-frontmatter\");\n      },\n    );\n  });\n\n  it(\"skips skills with missing required fields\", async () =\u003e {\n    await withDriver",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 128,
+      "startCol": 9,
+      "endLine": 145,
+      "endCol": 21
+    },
+    {
+      "text": "        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(\n            tmpDir,\n            \".claude\",\n            \"skills\",\n            \"missing-fields\",\n          );\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"skill.md\"),\n            `---\nname: only-name\n---\nContent\n`,\n          );\n        }",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(\n            tmpDir,\n            \".claude\",\n            \"skills\",\n            \"missing-fields\",\n          );\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"skill.md\"),\n            `---\nname: only-name\n---\nContent\n`,\n          );\n        }",
+      "headingContext": "node/providers/skills.test.ts \u003e function setupFiles",
+      "startLine": 147,
+      "startCol": 1,
+      "endLine": 163,
+      "endCol": 10
+    },
+    {
+      "text": "options: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        // The invalid skill should not appear\n        expect(systemPrompt).not.toContain(\"only-name\");\n      },\n    );\n  });\n\n  it(\"warns about duplicate skill names\", async () =\u003e {\n    await withDriver",
+      "contextualizedText": "// node/providers/skills.test.ts\n\noptions: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        // The invalid skill should not appear\n        expect(systemPrompt).not.toContain(\"only-name\");\n      },\n    );\n  });\n\n  it(\"warns about duplicate skill names\", async () =\u003e {\n    await withDriver",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 164,
+      "startCol": 9,
+      "endLine": 181,
+      "endCol": 21
+    },
+    {
+      "text": "        setupFiles: async (tmpDir) =\u003e {\n          const skill1Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill1\");\n          const skill2Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill2\");\n\n          await fs.promises.mkdir(skill1Dir, { recursive: true });\n          await fs.promises.mkdir(skill2Dir, { recursive: true });\n\n          await fs.promises.writeFile(\n            path.join(skill1Dir, \"skill.md\"),\n            `---\nname: duplicate-name\ndescription: First skill with this name\n---\nContent 1\n`,\n          );\n\n          await fs.promises.writeFile(\n            path.join(skill2Dir, \"skill.md\"),\n            `---\nname: duplicate-name\ndescription: Second skill with this name\n---\nContent 2\n`,\n          );\n        }",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          const skill1Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill1\");\n          const skill2Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill2\");\n\n          await fs.promises.mkdir(skill1Dir, { recursive: true });\n          await fs.promises.mkdir(skill2Dir, { recursive: true });\n\n          await fs.promises.writeFile(\n            path.join(skill1Dir, \"skill.md\"),\n            `---\nname: duplicate-name\ndescription: First skill with this name\n---\nContent 1\n`,\n          );\n\n          await fs.promises.writeFile(\n            path.join(skill2Dir, \"skill.md\"),\n            `---\nname: duplicate-name\ndescription: Second skill with this name\n---\nContent 2\n`,\n          );\n        }",
+      "headingContext": "node/providers/skills.test.ts \u003e function setupFiles",
+      "startLine": 183,
+      "startCol": 1,
+      "endLine": 209,
+      "endCol": 10
+    },
+    {
+      "text": "options: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        // Should contain the duplicate-name skill\n        expect(systemPrompt).toContain(\"duplicate-name\");\n\n        // The description should be one of the two (whichever was found first)\n        const hasFirstSkill = systemPrompt.includes(\n          \"First skill with this name\",\n        );\n        const hasSecondSkill = systemPrompt.includes(\n          \"Second skill with this name\",\n        );\n        expect(hasFirstSkill || hasSecondSkill).toBe(true);\n        // Should only have one of them, not both\n        expect(hasFirstSkill \u0026\u0026 hasSecondSkill).toBe(false);\n      },\n    );\n  });\n\n  it(\"includes skills in system prompt\", async () =\u003e {\n    await withDriver",
+      "contextualizedText": "// node/providers/skills.test.ts\n\noptions: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        // Should contain the duplicate-name skill\n        expect(systemPrompt).toContain(\"duplicate-name\");\n\n        // The description should be one of the two (whichever was found first)\n        const hasFirstSkill = systemPrompt.includes(\n          \"First skill with this name\",\n        );\n        const hasSecondSkill = systemPrompt.includes(\n          \"Second skill with this name\",\n        );\n        expect(hasFirstSkill || hasSecondSkill).toBe(true);\n        // Should only have one of them, not both\n        expect(hasFirstSkill \u0026\u0026 hasSecondSkill).toBe(false);\n      },\n    );\n  });\n\n  it(\"includes skills in system prompt\", async () =\u003e {\n    await withDriver",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 210,
+      "startCol": 9,
+      "endLine": 238,
+      "endCol": 21
+    },
+    {
+      "text": "        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(tmpDir, \".claude\", \"skills\", \"intro-test\");\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"skill.md\"),\n            `---\nname: intro-skill\ndescription: Testing introduction generation\n---\nContent\n`,\n          );\n        }",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(tmpDir, \".claude\", \"skills\", \"intro-test\");\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"skill.md\"),\n            `---\nname: intro-skill\ndescription: Testing introduction generation\n---\nContent\n`,\n          );\n        }",
+      "headingContext": "node/providers/skills.test.ts \u003e function setupFiles",
+      "startLine": 240,
+      "startCol": 1,
+      "endLine": 252,
+      "endCol": 10
+    },
+    {
+      "text": "options: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"intro-skill\");\n        expect(systemPrompt).toContain(\"Testing introduction generation\");\n        expect(systemPrompt).toContain(\"get_file tool\");\n      },\n    );\n  });\n\n  it(\"shows only the built-in skill when no user skills are configured\", async () =\u003e {\n    await withDriver(\n      {\n        options: {\n          skillsPaths: [],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        // The built-in skill is always discovered, so the section is present,\n        // but no user-configured skills should appear.\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"authoring-magenta-scripts\");\n      },\n    );\n  });\n\n  it(\"handles multiple skills from different directories\", async () =\u003e {\n    await withDriver",
+      "contextualizedText": "// node/providers/skills.test.ts\n\noptions: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"intro-skill\");\n        expect(systemPrompt).toContain(\"Testing introduction generation\");\n        expect(systemPrompt).toContain(\"get_file tool\");\n      },\n    );\n  });\n\n  it(\"shows only the built-in skill when no user skills are configured\", async () =\u003e {\n    await withDriver(\n      {\n        options: {\n          skillsPaths: [],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        // The built-in skill is always discovered, so the section is present,\n        // but no user-configured skills should appear.\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"authoring-magenta-scripts\");\n      },\n    );\n  });\n\n  it(\"handles multiple skills from different directories\", async () =\u003e {\n    await withDriver",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 253,
+      "startCol": 9,
+      "endLine": 293,
+      "endCol": 21
+    },
+    {
+      "text": "        setupFiles: async (tmpDir) =\u003e {\n          const skill1Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill-a\");\n          const skill2Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill-b\");\n\n          await fs.promises.mkdir(skill1Dir, { recursive: true });\n          await fs.promises.mkdir(skill2Dir, { recursive: true });\n\n          await fs.promises.writeFile(\n            path.join(skill1Dir, \"skill.md\"),\n            `---\nname: skill-a\ndescription: First skill\n---\nContent A\n`,\n          );\n\n          await fs.promises.writeFile(\n            path.join(skill2Dir, \"skill.md\"),\n            `---\nname: skill-b\ndescription: Second skill\n---\nContent B\n`,\n          );\n        }",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          const skill1Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill-a\");\n          const skill2Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill-b\");\n\n          await fs.promises.mkdir(skill1Dir, { recursive: true });\n          await fs.promises.mkdir(skill2Dir, { recursive: true });\n\n          await fs.promises.writeFile(\n            path.join(skill1Dir, \"skill.md\"),\n            `---\nname: skill-a\ndescription: First skill\n---\nContent A\n`,\n          );\n\n          await fs.promises.writeFile(\n            path.join(skill2Dir, \"skill.md\"),\n            `---\nname: skill-b\ndescription: Second skill\n---\nContent B\n`,\n          );\n        }",
+      "headingContext": "node/providers/skills.test.ts \u003e function setupFiles",
+      "startLine": 295,
+      "startCol": 1,
+      "endLine": 321,
+      "endCol": 10
+    },
+    {
+      "text": "options: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"skill-a\");\n        expect(systemPrompt).toContain(\"skill-b\");\n        expect(systemPrompt).toContain(\"First skill\");\n        expect(systemPrompt).toContain(\"Second skill\");\n      },\n    );\n  });\n\n  it(\"handles frontmatter with values that are invalid in strict YAML\", async () =\u003e {\n    await withDriver",
+      "contextualizedText": "// node/providers/skills.test.ts\n\noptions: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"skill-a\");\n        expect(systemPrompt).toContain(\"skill-b\");\n        expect(systemPrompt).toContain(\"First skill\");\n        expect(systemPrompt).toContain(\"Second skill\");\n      },\n    );\n  });\n\n  it(\"handles frontmatter with values that are invalid in strict YAML\", async () =\u003e {\n    await withDriver",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 322,
+      "startCol": 9,
+      "endLine": 342,
+      "endCol": 21
+    },
+    {
+      "text": "        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(\n            tmpDir,\n            \".claude\",\n            \"skills\",\n            \"claude-code-skill\",\n          );\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"skill.md\"),\n            `---\nname: fix-ci-failures\ndescription: Fix failing tests\nallowed-tools: Bash(git show:*), Bash(git fetch: *), Bash(git diff:*)\n---\n\n# Fix CI Failures\n`,\n          );\n        }",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          const skillDir = path.join(\n            tmpDir,\n            \".claude\",\n            \"skills\",\n            \"claude-code-skill\",\n          );\n          await fs.promises.mkdir(skillDir, { recursive: true });\n          await fs.promises.writeFile(\n            path.join(skillDir, \"skill.md\"),\n            `---\nname: fix-ci-failures\ndescription: Fix failing tests\nallowed-tools: Bash(git show:*), Bash(git fetch: *), Bash(git diff:*)\n---\n\n# Fix CI Failures\n`,\n          );\n        }",
+      "headingContext": "node/providers/skills.test.ts \u003e function setupFiles",
+      "startLine": 344,
+      "startCol": 1,
+      "endLine": 363,
+      "endCol": 10
+    },
+    {
+      "text": "options: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        expect(systemPrompt).toContain(\"fix-ci-failures\");\n        expect(systemPrompt).toContain(\"Fix failing tests\");\n      },\n    );\n  });\n  it(\"handles non-existent skills directory gracefully\", async () =\u003e {\n    await withDriver(\n      {\n        options: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        // The user-configured directory does not exist, but the built-in\n        // skill is still discovered, so the section is present.\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"authoring-magenta-scripts\");\n      },\n    );\n  });\n\n  it(\"includes skills in system prompt not user messages\", async () =\u003e {\n    await withDriver",
+      "contextualizedText": "// node/providers/skills.test.ts\n\noptions: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        expect(systemPrompt).toContain(\"fix-ci-failures\");\n        expect(systemPrompt).toContain(\"Fix failing tests\");\n      },\n    );\n  });\n  it(\"handles non-existent skills directory gracefully\", async () =\u003e {\n    await withDriver(\n      {\n        options: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        const thread = driver.magenta.chat.getActiveThread();\n        const systemPrompt = thread.core.state.systemPrompt;\n\n        // The user-configured directory does not exist, but the built-in\n        // skill is still discovered, so the section is present.\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"authoring-magenta-scripts\");\n      },\n    );\n  });\n\n  it(\"includes skills in system prompt not user messages\", async () =\u003e {\n    await withDriver",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 364,
+      "startCol": 9,
+      "endLine": 401,
+      "endCol": 21
+    },
+    {
+      "text": "        setupFiles: async (tmpDir) =\u003e {\n          const skill1Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill-a\");\n          const skill2Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill-b\");\n\n          await fs.promises.mkdir(skill1Dir, { recursive: true });\n          await fs.promises.mkdir(skill2Dir, { recursive: true });\n\n          await fs.promises.writeFile(\n            path.join(skill1Dir, \"skill.md\"),\n            `---\nname: skill-a\ndescription: First skill description\n---\nContent A\n`,\n          );\n\n          await fs.promises.writeFile(\n            path.join(skill2Dir, \"skill.md\"),\n            `---\nname: skill-b\ndescription: Second skill description\n---\nContent B\n`,\n          );\n        }",
+      "contextualizedText": "// node/providers/skills.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          const skill1Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill-a\");\n          const skill2Dir = path.join(tmpDir, \".claude\", \"skills\", \"skill-b\");\n\n          await fs.promises.mkdir(skill1Dir, { recursive: true });\n          await fs.promises.mkdir(skill2Dir, { recursive: true });\n\n          await fs.promises.writeFile(\n            path.join(skill1Dir, \"skill.md\"),\n            `---\nname: skill-a\ndescription: First skill description\n---\nContent A\n`,\n          );\n\n          await fs.promises.writeFile(\n            path.join(skill2Dir, \"skill.md\"),\n            `---\nname: skill-b\ndescription: Second skill description\n---\nContent B\n`,\n          );\n        }",
+      "headingContext": "node/providers/skills.test.ts \u003e function setupFiles",
+      "startLine": 403,
+      "startCol": 1,
+      "endLine": 429,
+      "endCol": 10
+    },
+    {
+      "text": "options: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        // Send first user message\n        await driver.inputMagentaText(\"hello\");\n        await driver.send();\n\n        const firstRequest = await driver.mockAnthropic.awaitPendingStream();\n\n        // Check that skills are in the system prompt\n        const systemPrompt = firstRequest.systemPrompt;\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"skill-a\");\n        expect(systemPrompt).toContain(\"skill-b\");\n        expect(systemPrompt).toContain(\"First skill description\");\n        expect(systemPrompt).toContain(\"Second skill description\");\n        expect(systemPrompt).toContain(\"get_file tool\");\n\n        // Check that skills are NOT in the first user message\n        const firstMessageContent = firstRequest.messages[0].content;\n        const textContent = Array.isArray(firstMessageContent)\n          ? firstMessageContent.find((c) =\u003e c.type === \"text\")?.text\n          : firstMessageContent;\n\n        expect(textContent).not.toContain(\"Available Skills\");\n        expect(textContent).toContain(\"hello\");\n\n        firstRequest.respond({\n          stopReason: \"end_turn\",\n          text: \"Got it!\",\n          toolRequests: [],\n        });\n\n        // Send second user message\n        await driver.inputMagentaText(\"second message\");\n        await driver.send();\n\n        const secondRequest = await driver.mockAnthropic.awaitPendingStream();\n\n        // Check that skills are still in system prompt\n        const secondSystemPrompt = secondRequest.systemPrompt;\n        expect(secondSystemPrompt).toContain(\"Available Skills\");\n\n        // Check that skills are NOT in the second user message\n        const secondMessageContent =\n          secondRequest.messages[secondRequest.messages.length - 1].content;",
+      "contextualizedText": "// node/providers/skills.test.ts\n\noptions: {\n          skillsPaths: [\".claude/skills\"],\n        },\n      },\n      async (driver) =\u003e {\n        await driver.showSidebar();\n\n        // Send first user message\n        await driver.inputMagentaText(\"hello\");\n        await driver.send();\n\n        const firstRequest = await driver.mockAnthropic.awaitPendingStream();\n\n        // Check that skills are in the system prompt\n        const systemPrompt = firstRequest.systemPrompt;\n        expect(systemPrompt).toContain(\"Available Skills\");\n        expect(systemPrompt).toContain(\"skill-a\");\n        expect(systemPrompt).toContain(\"skill-b\");\n        expect(systemPrompt).toContain(\"First skill description\");\n        expect(systemPrompt).toContain(\"Second skill description\");\n        expect(systemPrompt).toContain(\"get_file tool\");\n\n        // Check that skills are NOT in the first user message\n        const firstMessageContent = firstRequest.messages[0].content;\n        const textContent = Array.isArray(firstMessageContent)\n          ? firstMessageContent.find((c) =\u003e c.type === \"text\")?.text\n          : firstMessageContent;\n\n        expect(textContent).not.toContain(\"Available Skills\");\n        expect(textContent).toContain(\"hello\");\n\n        firstRequest.respond({\n          stopReason: \"end_turn\",\n          text: \"Got it!\",\n          toolRequests: [],\n        });\n\n        // Send second user message\n        await driver.inputMagentaText(\"second message\");\n        await driver.send();\n\n        const secondRequest = await driver.mockAnthropic.awaitPendingStream();\n\n        // Check that skills are still in system prompt\n        const secondSystemPrompt = secondRequest.systemPrompt;\n        expect(secondSystemPrompt).toContain(\"Available Skills\");\n\n        // Check that skills are NOT in the second user message\n        const secondMessageContent =\n          secondRequest.messages[secondRequest.messages.length - 1].content;",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 430,
+      "startCol": 9,
+      "endLine": 479,
+      "endCol": 77
+    },
+    {
+      "text": "const secondTextContent = Array.isArray(secondMessageContent)\n          ? secondMessageContent.find((c) =\u003e c.type === \"text\")?.text\n          : secondMessageContent;\n\n        expect(secondTextContent).not.toContain(\"Available Skills\");\n        expect(secondTextContent).toContain(\"second message\");",
+      "contextualizedText": "// node/providers/skills.test.ts\n\nconst secondTextContent = Array.isArray(secondMessageContent)\n          ? secondMessageContent.find((c) =\u003e c.type === \"text\")?.text\n          : secondMessageContent;\n\n        expect(secondTextContent).not.toContain(\"Available Skills\");\n        expect(secondTextContent).toContain(\"second message\");",
+      "headingContext": "node/providers/skills.test.ts",
+      "startLine": 480,
+      "startCol": 9,
+      "endLine": 485,
+      "endCol": 63
+    }
+  ]
+}

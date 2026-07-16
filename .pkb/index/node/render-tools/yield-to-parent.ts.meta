@@ -1,0 +1,33 @@
+{
+  "blobSha": "efa6bd1c4066574efe384bdee5483492c78edf11",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type {\n  CompletedToolInfo,\n  DisplayContext,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode } from \"../tea/view.ts\";\n\ntype Input = {\n  result: string;\n};",
+      "contextualizedText": "// node/render-tools/yield-to-parent.ts\n\nimport type {\n  CompletedToolInfo,\n  DisplayContext,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode } from \"../tea/view.ts\";\n\ntype Input = {\n  result: string;\n};",
+      "headingContext": "node/render-tools/yield-to-parent.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 10,
+      "endCol": 3
+    },
+    {
+      "text": "export function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  const resultPreview =\n    input.result?.length \u003e 50\n      ? `${input.result.substring(0, 50)}...`\n      : (input.result ?? \"\");\n  return d`↩️ yield_to_parent: ${resultPreview}`;\n}",
+      "contextualizedText": "// node/render-tools/yield-to-parent.ts \u003e function renderSummary\n\nexport function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  const resultPreview =\n    input.result?.length \u003e 50\n      ? `${input.result.substring(0, 50)}...`\n      : (input.result ?? \"\");\n  return d`↩️ yield_to_parent: ${resultPreview}`;\n}",
+      "headingContext": "node/render-tools/yield-to-parent.ts \u003e function renderSummary",
+      "startLine": 12,
+      "startCol": 1,
+      "endLine": 22,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderResultSummary(_info: CompletedToolInfo): VDOMNode {\n  return d``;\n}",
+      "contextualizedText": "// node/render-tools/yield-to-parent.ts \u003e function renderResultSummary\n\nexport function renderResultSummary(_info: CompletedToolInfo): VDOMNode {\n  return d``;\n}",
+      "headingContext": "node/render-tools/yield-to-parent.ts \u003e function renderResultSummary",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 2
+    }
+  ]
+}

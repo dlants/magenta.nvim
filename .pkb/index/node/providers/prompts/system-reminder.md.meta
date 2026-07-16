@@ -1,0 +1,15 @@
+{
+  "blobSha": "fbf652be5e4cbb57d3162468cf11ade5bae3a6dc",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "\u003csystem_reminder\u003e\nIf the user asks you a general question and doesn't mention their project, answer the question without looking at the code base. You may still do an internet search. Do not mention this to the user as they are already aware.\nCRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only extract and report relevant line ranges and descriptions.\nWRONG: spawn explore agent to read the full contents of a large file\nRIGHT: spawn explore agent to find where X is handled, getting back line ranges and descriptions\u003c/system_reminder\u003e",
+      "contextualizedText": "\u003csystem_reminder\u003e\nIf the user asks you a general question and doesn't mention their project, answer the question without looking at the code base. You may still do an internet search. Do not mention this to the user as they are already aware.\nCRITICAL: The explore subagent should NEVER be used to read the full contents of a file. It should only extract and report relevant line ranges and descriptions.\nWRONG: spawn explore agent to read the full contents of a large file\nRIGHT: spawn explore agent to find where X is handled, getting back line ranges and descriptions\u003c/system_reminder\u003e",
+      "headingContext": "",
+      "startLine": 0,
+      "startCol": 0,
+      "endLine": 0,
+      "endCol": 0
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "blobSha": "88ec1de4b4af740fe3c0934e28589ab729c5b4af",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export type {\n  Agent,\n  AgentInput,\n  AgentMsg,\n  AgentOptions,\n  AgentState,\n  AgentStatus,\n  AgentStreamingBlock,\n  NativeMessageIdx,\n  Provider,\n  ProviderBlockDeltaEvent,\n  ProviderBlockStartEvent,\n  ProviderBlockStopEvent,\n  ProviderContextUpdateContent,\n  ProviderDocumentContent,\n  ProviderImageContent,\n  ProviderMessage,\n  ProviderMessageContent,\n  ProviderMetadata,\n  ProviderName,\n  ProviderRedactedThinkingContent,\n  ProviderServerToolUseContent,\n  ProviderSetting,\n  ProviderStreamEvent,\n  ProviderStreamRequest,\n  ProviderSystemReminderContent,\n  ProviderTextContent,\n  ProviderThinkingContent,\n  ProviderToolResult,\n  ProviderToolResultContent,\n  ProviderToolSpec,\n  ProviderToolUseContent,\n  ProviderToolUseRequest,\n  ProviderToolUseResponse,\n  ProviderWebSearchCitation,\n  ProviderWebSearchToolResult,\n  RetryStatus,\n  StopReason,\n  Usage,\n} from \"@magenta/core\";\nexport { PLACEHOLDER_NATIVE_MESSAGE_IDX, PROVIDER_NAMES } from \"@magenta/core\";",
+      "contextualizedText": "// node/providers/provider-types.ts\n\nexport type {\n  Agent,\n  AgentInput,\n  AgentMsg,\n  AgentOptions,\n  AgentState,\n  AgentStatus,\n  AgentStreamingBlock,\n  NativeMessageIdx,\n  Provider,\n  ProviderBlockDeltaEvent,\n  ProviderBlockStartEvent,\n  ProviderBlockStopEvent,\n  ProviderContextUpdateContent,\n  ProviderDocumentContent,\n  ProviderImageContent,\n  ProviderMessage,\n  ProviderMessageContent,\n  ProviderMetadata,\n  ProviderName,\n  ProviderRedactedThinkingContent,\n  ProviderServerToolUseContent,\n  ProviderSetting,\n  ProviderStreamEvent,\n  ProviderStreamRequest,\n  ProviderSystemReminderContent,\n  ProviderTextContent,\n  ProviderThinkingContent,\n  ProviderToolResult,\n  ProviderToolResultContent,\n  ProviderToolSpec,\n  ProviderToolUseContent,\n  ProviderToolUseRequest,\n  ProviderToolUseResponse,\n  ProviderWebSearchCitation,\n  ProviderWebSearchToolResult,\n  RetryStatus,\n  StopReason,\n  Usage,\n} from \"@magenta/core\";\nexport { PLACEHOLDER_NATIVE_MESSAGE_IDX, PROVIDER_NAMES } from \"@magenta/core\";",
+      "headingContext": "node/providers/provider-types.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 41,
+      "endCol": 80
+    }
+  ]
+}

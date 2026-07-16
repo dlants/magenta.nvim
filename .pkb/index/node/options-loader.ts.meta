@@ -1,0 +1,51 @@
+{
+  "blobSha": "8a87e82c52664e98de7da84031dabc4938896ce0",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import * as fs from \"node:fs\";\nimport * as path from \"node:path\";\nimport {\n  loadProjectSettings,\n  loadUserSettings,\n  type MagentaOptions,\n  mergeOptions,\n} from \"./options.ts\";\nimport type { HomeDir, NvimCwd } from \"./utils/files.ts\";",
+      "contextualizedText": "// node/options-loader.ts\n\nimport * as fs from \"node:fs\";\nimport * as path from \"node:path\";\nimport {\n  loadProjectSettings,\n  loadUserSettings,\n  type MagentaOptions,\n  mergeOptions,\n} from \"./options.ts\";\nimport type { HomeDir, NvimCwd } from \"./utils/files.ts\";",
+      "headingContext": "node/options-loader.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 9,
+      "endCol": 58
+    },
+    {
+      "text": "export class DynamicOptionsLoader {\n  private baseOptions: MagentaOptions;\n  private cwd: NvimCwd;\n  private homeDir: HomeDir;\n  private logger: { warn: (msg: string) =\u003e void };\n\n  private cachedOptions: MagentaOptions;\n  private userSettingsMtime: number | undefined = undefined;\n  private projectSettingsMtime: number | undefined = undefined;\n  private userSettingsExisted = false;\n  private projectSettingsExisted = false;\n\n  constructor(\n    baseOptions: MagentaOptions,\n    cwd: NvimCwd,\n    homeDir: HomeDir,\n    logger: { warn: (msg: string) =\u003e void },\n  ) {\n    this.baseOptions = baseOptions;\n    this.cwd = cwd;\n    this.homeDir = homeDir;\n    this.logger = logger;\n    this.cachedOptions = this.reloadAndMerge();\n  }",
+      "contextualizedText": "// node/options-loader.ts \u003e class DynamicOptionsLoader\n\nexport class DynamicOptionsLoader {\n  private baseOptions: MagentaOptions;\n  private cwd: NvimCwd;\n  private homeDir: HomeDir;\n  private logger: { warn: (msg: string) =\u003e void };\n\n  private cachedOptions: MagentaOptions;\n  private userSettingsMtime: number | undefined = undefined;\n  private projectSettingsMtime: number | undefined = undefined;\n  private userSettingsExisted = false;\n  private projectSettingsExisted = false;\n\n  constructor(\n    baseOptions: MagentaOptions,\n    cwd: NvimCwd,\n    homeDir: HomeDir,\n    logger: { warn: (msg: string) =\u003e void },\n  ) {\n    this.baseOptions = baseOptions;\n    this.cwd = cwd;\n    this.homeDir = homeDir;\n    this.logger = logger;\n    this.cachedOptions = this.reloadAndMerge();\n  }",
+      "headingContext": "node/options-loader.ts \u003e class DynamicOptionsLoader",
+      "startLine": 11,
+      "startCol": 1,
+      "endLine": 34,
+      "endCol": 4
+    },
+    {
+      "text": "  getOptions(): MagentaOptions {\n    const userSettingsPath = path.join(\n      this.homeDir,\n      \".magenta\",\n      \"options.json\",\n    );\n    const projectSettingsPath = path.join(this.cwd, \".magenta\", \"options.json\");\n\n    const userSettingsMtime = this.getFileMtime(userSettingsPath);\n    const projectSettingsMtime = this.getFileMtime(projectSettingsPath);\n\n    const userSettingsExistsNow = userSettingsMtime !== undefined;\n    const projectSettingsExistsNow = projectSettingsMtime !== undefined;\n\n    const needsReload =\n      this.userSettingsMtime !== userSettingsMtime ||\n      this.projectSettingsMtime !== projectSettingsMtime ||\n      this.userSettingsExisted !== userSettingsExistsNow ||\n      this.projectSettingsExisted !== projectSettingsExistsNow;\n\n    if (needsReload) {\n      this.userSettingsMtime = userSettingsMtime;\n      this.projectSettingsMtime = projectSettingsMtime;\n      this.userSettingsExisted = userSettingsExistsNow;\n      this.projectSettingsExisted = projectSettingsExistsNow;\n      this.cachedOptions = this.reloadAndMerge();\n    }\n\n    return this.cachedOptions;\n  }",
+      "contextualizedText": "// node/options-loader.ts \u003e class DynamicOptionsLoader \u003e method getOptions\n\n  getOptions(): MagentaOptions {\n    const userSettingsPath = path.join(\n      this.homeDir,\n      \".magenta\",\n      \"options.json\",\n    );\n    const projectSettingsPath = path.join(this.cwd, \".magenta\", \"options.json\");\n\n    const userSettingsMtime = this.getFileMtime(userSettingsPath);\n    const projectSettingsMtime = this.getFileMtime(projectSettingsPath);\n\n    const userSettingsExistsNow = userSettingsMtime !== undefined;\n    const projectSettingsExistsNow = projectSettingsMtime !== undefined;\n\n    const needsReload =\n      this.userSettingsMtime !== userSettingsMtime ||\n      this.projectSettingsMtime !== projectSettingsMtime ||\n      this.userSettingsExisted !== userSettingsExistsNow ||\n      this.projectSettingsExisted !== projectSettingsExistsNow;\n\n    if (needsReload) {\n      this.userSettingsMtime = userSettingsMtime;\n      this.projectSettingsMtime = projectSettingsMtime;\n      this.userSettingsExisted = userSettingsExistsNow;\n      this.projectSettingsExisted = projectSettingsExistsNow;\n      this.cachedOptions = this.reloadAndMerge();\n    }\n\n    return this.cachedOptions;\n  }",
+      "headingContext": "node/options-loader.ts \u003e class DynamicOptionsLoader \u003e method getOptions",
+      "startLine": 36,
+      "startCol": 1,
+      "endLine": 65,
+      "endCol": 4
+    },
+    {
+      "text": "  private getFileMtime(filePath: string): number | undefined {\n    try {\n      return fs.statSync(filePath).mtimeMs;\n    } catch {\n      return undefined;\n    }\n  }",
+      "contextualizedText": "// node/options-loader.ts \u003e class DynamicOptionsLoader \u003e method getFileMtime\n\n  private getFileMtime(filePath: string): number | undefined {\n    try {\n      return fs.statSync(filePath).mtimeMs;\n    } catch {\n      return undefined;\n    }\n  }",
+      "headingContext": "node/options-loader.ts \u003e class DynamicOptionsLoader \u003e method getFileMtime",
+      "startLine": 67,
+      "startCol": 1,
+      "endLine": 73,
+      "endCol": 4
+    },
+    {
+      "text": "  private reloadAndMerge(): MagentaOptions {\n    const userSettings = loadUserSettings(this.homeDir, this.logger);\n    let merged = mergeOptions(this.baseOptions, userSettings ?? {});\n    const projectSettings = loadProjectSettings(this.cwd, this.logger);\n    merged = mergeOptions(merged, projectSettings ?? {});\n    return merged;\n  }",
+      "contextualizedText": "// node/options-loader.ts \u003e class DynamicOptionsLoader \u003e method reloadAndMerge\n\n  private reloadAndMerge(): MagentaOptions {\n    const userSettings = loadUserSettings(this.homeDir, this.logger);\n    let merged = mergeOptions(this.baseOptions, userSettings ?? {});\n    const projectSettings = loadProjectSettings(this.cwd, this.logger);\n    merged = mergeOptions(merged, projectSettings ?? {});\n    return merged;\n  }",
+      "headingContext": "node/options-loader.ts \u003e class DynamicOptionsLoader \u003e method reloadAndMerge",
+      "startLine": 75,
+      "startCol": 1,
+      "endLine": 81,
+      "endCol": 4
+    }
+  ]
+}

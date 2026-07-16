@@ -1,0 +1,51 @@
+{
+  "blobSha": "86e19abe1ddce71805d3d463c71cbcbb142dd5f8",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { promises as fs } from \"node:fs\";\nimport { vi } from \"vitest\";\n\nconst isRecording = process.env.RECORD === \"true\";",
+      "contextualizedText": "// node/test/mock-fs.ts\n\nimport { promises as fs } from \"node:fs\";\nimport { vi } from \"vitest\";\n\nconst isRecording = process.env.RECORD === \"true\";",
+      "headingContext": "node/test/mock-fs.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 4,
+      "endCol": 51
+    },
+    {
+      "text": "// Mock filesystem helpers for GitHub token files\nexport class MockFileSystem {\n  private files: Map\u003cstring, string\u003e = new Map()",
+      "contextualizedText": "// node/test/mock-fs.ts \u003e class MockFileSystem\n\n// Mock filesystem helpers for GitHub token files\nexport class MockFileSystem {\n  private files: Map\u003cstring, string\u003e = new Map()",
+      "headingContext": "node/test/mock-fs.ts \u003e class MockFileSystem",
+      "startLine": 6,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 49
+    },
+    {
+      "text": "  setFile(filePath: string, content: string) {\n    this.files.set(filePath, content);\n  }",
+      "contextualizedText": "// node/test/mock-fs.ts \u003e class MockFileSystem \u003e method setFile\n\n  setFile(filePath: string, content: string) {\n    this.files.set(filePath, content);\n  }",
+      "headingContext": "node/test/mock-fs.ts \u003e class MockFileSystem \u003e method setFile",
+      "startLine": 10,
+      "startCol": 1,
+      "endLine": 12,
+      "endCol": 4
+    },
+    {
+      "text": "  clear() {\n    this.files.clear();\n  }",
+      "contextualizedText": "// node/test/mock-fs.ts \u003e class MockFileSystem \u003e method clear\n\n  clear() {\n    this.files.clear();\n  }",
+      "headingContext": "node/test/mock-fs.ts \u003e class MockFileSystem \u003e method clear",
+      "startLine": 14,
+      "startCol": 1,
+      "endLine": 16,
+      "endCol": 4
+    },
+    {
+      "text": "  mockFsPromises() {\n    // When recording, don't intercept filesystem calls\n    if (isRecording) {\n      return () =\u003e {}; // Return no-op cleanup function\n    }\n\n    const originalAccess = fs.access;\n    const originalReadFile = fs.readFile;\n\n    vi.spyOn(fs, \"access\").mockImplementation(async (path) =\u003e {\n      const pathStr = path.toString();\n      if (this.files.has(pathStr)) {\n        return Promise.resolve();\n      }\n      // Fall back to real filesystem\n      return originalAccess(path);\n    });\n\n    vi.spyOn(fs, \"readFile\").mockImplementation((path, encoding) =\u003e {\n      const pathStr = path.toString();\n      const content = this.files.get(pathStr);\n      if (content !== undefined) {\n        return Promise.resolve(\n          encoding === \"utf-8\" ? content : Buffer.from(content),\n        );\n      }\n      // Fall back to real filesystem\n      return originalReadFile(path, encoding);\n    });\n\n    return () =\u003e {\n      vi.mocked(fs.access).mockRestore();\n      vi.mocked(fs.readFile).mockRestore();\n    };\n  }",
+      "contextualizedText": "// node/test/mock-fs.ts \u003e class MockFileSystem \u003e method mockFsPromises\n\n  mockFsPromises() {\n    // When recording, don't intercept filesystem calls\n    if (isRecording) {\n      return () =\u003e {}; // Return no-op cleanup function\n    }\n\n    const originalAccess = fs.access;\n    const originalReadFile = fs.readFile;\n\n    vi.spyOn(fs, \"access\").mockImplementation(async (path) =\u003e {\n      const pathStr = path.toString();\n      if (this.files.has(pathStr)) {\n        return Promise.resolve();\n      }\n      // Fall back to real filesystem\n      return originalAccess(path);\n    });\n\n    vi.spyOn(fs, \"readFile\").mockImplementation((path, encoding) =\u003e {\n      const pathStr = path.toString();\n      const content = this.files.get(pathStr);\n      if (content !== undefined) {\n        return Promise.resolve(\n          encoding === \"utf-8\" ? content : Buffer.from(content),\n        );\n      }\n      // Fall back to real filesystem\n      return originalReadFile(path, encoding);\n    });\n\n    return () =\u003e {\n      vi.mocked(fs.access).mockRestore();\n      vi.mocked(fs.readFile).mockRestore();\n    };\n  }",
+      "headingContext": "node/test/mock-fs.ts \u003e class MockFileSystem \u003e method mockFsPromises",
+      "startLine": 18,
+      "startCol": 1,
+      "endLine": 52,
+      "endCol": 4
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "blobSha": "04c3696927a0e50ef13414962aadc75307100be5",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export interface AuthUI",
+      "contextualizedText": "// node/core/src/auth-ui.ts \u003e interface AuthUI\n\nexport interface AuthUI",
+      "headingContext": "node/core/src/auth-ui.ts \u003e interface AuthUI",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 1,
+      "endCol": 24
+    },
+    {
+      "text": "  showOAuthFlow(authUrl: string): Promise\u003cstring\u003e",
+      "contextualizedText": "// node/core/src/auth-ui.ts \u003e interface AuthUI \u003e method showOAuthFlow\n\n  showOAuthFlow(authUrl: string): Promise\u003cstring\u003e",
+      "headingContext": "node/core/src/auth-ui.ts \u003e interface AuthUI \u003e method showOAuthFlow",
+      "startLine": 2,
+      "startCol": 1,
+      "endLine": 2,
+      "endCol": 50
+    },
+    {
+      "text": "  showError(message: string): void",
+      "contextualizedText": "// node/core/src/auth-ui.ts \u003e interface AuthUI \u003e method showError\n\n  showError(message: string): void",
+      "headingContext": "node/core/src/auth-ui.ts \u003e interface AuthUI \u003e method showError",
+      "startLine": 3,
+      "startCol": 1,
+      "endLine": 3,
+      "endCol": 35
+    }
+  ]
+}

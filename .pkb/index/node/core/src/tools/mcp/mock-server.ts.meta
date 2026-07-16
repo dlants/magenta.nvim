@@ -1,0 +1,159 @@
+{
+  "blobSha": "41a54c6880e4cd37b5a45aedbaf45133b330f2b0",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { InMemoryTransport } from \"@modelcontextprotocol/sdk/inMemory.js\";\nimport { McpServer } from \"@modelcontextprotocol/sdk/server/mcp.js\";\nimport { z } from \"zod\";\nimport { assertUnreachable } from \"../../utils/assertUnreachable.ts\";\nimport { Defer, pollUntil } from \"../../utils/async.ts\";\nimport type { MCPMockToolConfig, MCPMockToolSchemaType } from \"./options.ts\";\nimport type { ServerName } from \"./types.ts\";",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts\n\nimport { InMemoryTransport } from \"@modelcontextprotocol/sdk/inMemory.js\";\nimport { McpServer } from \"@modelcontextprotocol/sdk/server/mcp.js\";\nimport { z } from \"zod\";\nimport { assertUnreachable } from \"../../utils/assertUnreachable.ts\";\nimport { Defer, pollUntil } from \"../../utils/async.ts\";\nimport type { MCPMockToolConfig, MCPMockToolSchemaType } from \"./options.ts\";\nimport type { ServerName } from \"./types.ts\";",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 7,
+      "endCol": 46
+    },
+    {
+      "text": "export class MockToolStub {\n  public calls: Array\u003c{ args: unknown; result: unknown }\u003e = [];\n  private pendingCalls: Array\u003c{ args: unknown; defer: Defer\u003cunknown\u003e }\u003e = [];\n\n  constructor(public name: string) {}",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub\n\nexport class MockToolStub {\n  public calls: Array\u003c{ args: unknown; result: unknown }\u003e = [];\n  private pendingCalls: Array\u003c{ args: unknown; defer: Defer\u003cunknown\u003e }\u003e = [];\n\n  constructor(public name: string) {}",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 13,
+      "endCol": 38
+    },
+    {
+      "text": "  async awaitCall(timeout = 1000): Promise\u003c{ args: unknown }\u003e {\n    return pollUntil(\n      () =\u003e {\n        const call = this.pendingCalls[0];\n        if (!call) {\n          throw new Error(`No pending call to tool ${this.name}`);\n        }\n        return call;\n      },\n      { timeout },\n    );\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub \u003e method awaitCall\n\n  async awaitCall(timeout = 1000): Promise\u003c{ args: unknown }\u003e {\n    return pollUntil(\n      () =\u003e {\n        const call = this.pendingCalls[0];\n        if (!call) {\n          throw new Error(`No pending call to tool ${this.name}`);\n        }\n        return call;\n      },\n      { timeout },\n    );\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub \u003e method awaitCall",
+      "startLine": 15,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 4
+    },
+    {
+      "text": "  respondWith(result: unknown): void {\n    const call = this.pendingCalls.shift();\n    if (call) {\n      call.defer.resolve(result);\n      this.calls.push({ args: call.args, result });\n    }\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub \u003e method respondWith\n\n  respondWith(result: unknown): void {\n    const call = this.pendingCalls.shift();\n    if (call) {\n      call.defer.resolve(result);\n      this.calls.push({ args: call.args, result });\n    }\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub \u003e method respondWith",
+      "startLine": 28,
+      "startCol": 1,
+      "endLine": 34,
+      "endCol": 4
+    },
+    {
+      "text": "  respondWithError(error: string): void {\n    const call = this.pendingCalls.shift();\n    if (call) {\n      call.defer.reject(new Error(error));\n      this.calls.push({ args: call.args, result: error });\n    }\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub \u003e method respondWithError\n\n  respondWithError(error: string): void {\n    const call = this.pendingCalls.shift();\n    if (call) {\n      call.defer.reject(new Error(error));\n      this.calls.push({ args: call.args, result: error });\n    }\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub \u003e method respondWithError",
+      "startLine": 36,
+      "startCol": 1,
+      "endLine": 42,
+      "endCol": 4
+    },
+    {
+      "text": "  async invoke(args: unknown): Promise\u003cunknown\u003e {\n    const defer = new Defer\u003cunknown\u003e();\n    this.pendingCalls.push({ args, defer });\n    return defer.promise;\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub \u003e method invoke\n\n  async invoke(args: unknown): Promise\u003cunknown\u003e {\n    const defer = new Defer\u003cunknown\u003e();\n    this.pendingCalls.push({ args, defer });\n    return defer.promise;\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub \u003e method invoke",
+      "startLine": 44,
+      "startCol": 1,
+      "endLine": 48,
+      "endCol": 4
+    },
+    {
+      "text": "  clearCalls(): void {\n    this.calls = [];\n    this.pendingCalls = [];\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub \u003e method clearCalls\n\n  clearCalls(): void {\n    this.calls = [];\n    this.pendingCalls = [];\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockToolStub \u003e method clearCalls",
+      "startLine": 50,
+      "startCol": 1,
+      "endLine": 53,
+      "endCol": 4
+    },
+    {
+      "text": "export class MockMCPServer {\n  private server: McpServer;\n  private transport: InMemoryTransport | undefined;\n  private clientTransport: InMemoryTransport | undefined;\n  private tools: MCPMockToolConfig[];\n  public toolCalls: Array\u003c{ name: string; args: unknown; result: unknown }\u003e =\n    [];\n  private toolStubs: Map\u003cstring, MockToolStub\u003e = new Map();\n\n  constructor(\n    public serverName: ServerName,\n    tools: MCPMockToolConfig[] = [],\n  ) {\n    this.tools = tools;\n    this.server = new McpServer(\n      {\n        name: serverName,\n        version: \"1.0.0\",\n      },\n      {\n        capabilities: {\n          tools: {},\n        },\n      },\n    );\n\n    this.setupTools();\n    mockServers[this.serverName] = this;\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer\n\nexport class MockMCPServer {\n  private server: McpServer;\n  private transport: InMemoryTransport | undefined;\n  private clientTransport: InMemoryTransport | undefined;\n  private tools: MCPMockToolConfig[];\n  public toolCalls: Array\u003c{ name: string; args: unknown; result: unknown }\u003e =\n    [];\n  private toolStubs: Map\u003cstring, MockToolStub\u003e = new Map();\n\n  constructor(\n    public serverName: ServerName,\n    tools: MCPMockToolConfig[] = [],\n  ) {\n    this.tools = tools;\n    this.server = new McpServer(\n      {\n        name: serverName,\n        version: \"1.0.0\",\n      },\n      {\n        capabilities: {\n          tools: {},\n        },\n      },\n    );\n\n    this.setupTools();\n    mockServers[this.serverName] = this;\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer",
+      "startLine": 56,
+      "startCol": 1,
+      "endLine": 84,
+      "endCol": 4
+    },
+    {
+      "text": "  private createZodSchema(inputSchema: {\n    [param: string]: MCPMockToolSchemaType;\n  }): z.ZodRawShape {\n    const shape: z.ZodRawShape = {};\n\n    for (const [key, type] of Object.entries(inputSchema)) {\n      switch (type) {\n        case \"string\":\n          shape[key] = z.string();\n          break;\n        case \"number\":\n          shape[key] = z.number();\n          break;\n        case \"boolean\":\n          shape[key] = z.boolean();\n          break;\n\n        default:\n          assertUnreachable(type);\n      }\n    }\n\n    return shape;\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method createZodSchema\n\n  private createZodSchema(inputSchema: {\n    [param: string]: MCPMockToolSchemaType;\n  }): z.ZodRawShape {\n    const shape: z.ZodRawShape = {};\n\n    for (const [key, type] of Object.entries(inputSchema)) {\n      switch (type) {\n        case \"string\":\n          shape[key] = z.string();\n          break;\n        case \"number\":\n          shape[key] = z.number();\n          break;\n        case \"boolean\":\n          shape[key] = z.boolean();\n          break;\n\n        default:\n          assertUnreachable(type);\n      }\n    }\n\n    return shape;\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method createZodSchema",
+      "startLine": 86,
+      "startCol": 1,
+      "endLine": 109,
+      "endCol": 4
+    },
+    {
+      "text": "  private setupTools(): void {\n    // Create stubs and register tools with the server using the proper API\n    for (const tool of this.tools",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method setupTools\n\n  private setupTools(): void {\n    // Create stubs and register tools with the server using the proper API\n    for (const tool of this.tools",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method setupTools",
+      "startLine": 111,
+      "startCol": 1,
+      "endLine": 113,
+      "endCol": 34
+    },
+    {
+      "text": "{\n      const stub = new MockToolStub(tool.name);\n      this.toolStubs.set(tool.name, stub);\n\n      if (tool.inputSchema \u0026\u0026 Object.keys(tool.inputSchema).length \u003e 0) {\n        const zodShape = this.createZodSchema(tool.inputSchema);\n\n        this.server.registerTool(\n          tool.name,\n          {\n            description: tool.description || \"\",\n            inputSchema: zodShape,\n          },\n          async (args) =\u003e {\n            try {\n              const result = await stub.invoke(args);\n              return {\n                content: [\n                  {\n                    type: \"text\",\n                    text:\n                      typeof result === \"string\"\n                        ? result\n                        : JSON.stringify(result),\n                  },\n                ],\n              };\n            } catch (error) {\n              return {\n                content: [\n                  {\n                    type: \"text\",\n                    text: `Error: ${error instanceof Error ? error.message : String(error)}`,\n                  },\n                ],\n                isError: true,\n              };\n            }\n          },\n        );\n      } else {\n        // Tool without input schema\n        this.server.tool(tool.name, tool.description || \"\", async () =\u003e {\n          try {\n            const result = await stub.invoke(undefined);\n            return {\n              content: [\n                {\n                  type: \"text\",\n                  text:\n                    typeof result === \"string\"\n                      ? result\n                      : JSON.stringify(result),\n                },\n              ],\n            };\n          } catch (error) {\n            return {\n              content: [\n                {\n                  type: \"text\",\n                  text: `Error: ${error instanceof Error ? error.message : String(error)}`,\n                },\n              ],\n              isError: true,\n            };\n          }\n        });\n      }\n    }\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method setupTools\n\n{\n      const stub = new MockToolStub(tool.name);\n      this.toolStubs.set(tool.name, stub);\n\n      if (tool.inputSchema \u0026\u0026 Object.keys(tool.inputSchema).length \u003e 0) {\n        const zodShape = this.createZodSchema(tool.inputSchema);\n\n        this.server.registerTool(\n          tool.name,\n          {\n            description: tool.description || \"\",\n            inputSchema: zodShape,\n          },\n          async (args) =\u003e {\n            try {\n              const result = await stub.invoke(args);\n              return {\n                content: [\n                  {\n                    type: \"text\",\n                    text:\n                      typeof result === \"string\"\n                        ? result\n                        : JSON.stringify(result),\n                  },\n                ],\n              };\n            } catch (error) {\n              return {\n                content: [\n                  {\n                    type: \"text\",\n                    text: `Error: ${error instanceof Error ? error.message : String(error)}`,\n                  },\n                ],\n                isError: true,\n              };\n            }\n          },\n        );\n      } else {\n        // Tool without input schema\n        this.server.tool(tool.name, tool.description || \"\", async () =\u003e {\n          try {\n            const result = await stub.invoke(undefined);\n            return {\n              content: [\n                {\n                  type: \"text\",\n                  text:\n                    typeof result === \"string\"\n                      ? result\n                      : JSON.stringify(result),\n                },\n              ],\n            };\n          } catch (error) {\n            return {\n              content: [\n                {\n                  type: \"text\",\n                  text: `Error: ${error instanceof Error ? error.message : String(error)}`,\n                },\n              ],\n              isError: true,\n            };\n          }\n        });\n      }\n    }\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method setupTools",
+      "startLine": 113,
+      "startCol": 36,
+      "endLine": 183,
+      "endCol": 4
+    },
+    {
+      "text": "  async start(): Promise\u003cInMemoryTransport\u003e {\n    // Create paired transports for in-memory communication\n    const [clientTransport, serverTransport] =\n      InMemoryTransport.createLinkedPair();\n\n    this.transport = serverTransport;\n    this.clientTransport = clientTransport;\n\n    await this.server.connect(this.transport);\n\n    return this.clientTransport;\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method start\n\n  async start(): Promise\u003cInMemoryTransport\u003e {\n    // Create paired transports for in-memory communication\n    const [clientTransport, serverTransport] =\n      InMemoryTransport.createLinkedPair();\n\n    this.transport = serverTransport;\n    this.clientTransport = clientTransport;\n\n    await this.server.connect(this.transport);\n\n    return this.clientTransport;\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method start",
+      "startLine": 185,
+      "startCol": 1,
+      "endLine": 196,
+      "endCol": 4
+    },
+    {
+      "text": "  async stop(): Promise\u003cvoid\u003e {\n    if (this.transport) {\n      await this.transport.close();\n      this.transport = undefined;\n    }\n    if (this.clientTransport) {\n      await this.clientTransport.close();\n      this.clientTransport = undefined;\n    }\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method stop\n\n  async stop(): Promise\u003cvoid\u003e {\n    if (this.transport) {\n      await this.transport.close();\n      this.transport = undefined;\n    }\n    if (this.clientTransport) {\n      await this.clientTransport.close();\n      this.clientTransport = undefined;\n    }\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method stop",
+      "startLine": 198,
+      "startCol": 1,
+      "endLine": 207,
+      "endCol": 4
+    },
+    {
+      "text": "  async awaitToolCall(\n    toolName: string,\n    timeout = 1000,\n  ): Promise\u003c{ name: string; args: unknown; result: unknown }\u003e {\n    return pollUntil(\n      () =\u003e {\n        const call = this.toolCalls.find((c) =\u003e c.name === toolName);\n        if (!call) {\n          throw new Error(`No call to tool ${toolName} found`);\n        }\n        return call;\n      },\n      { timeout },\n    );\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method awaitToolCall\n\n  async awaitToolCall(\n    toolName: string,\n    timeout = 1000,\n  ): Promise\u003c{ name: string; args: unknown; result: unknown }\u003e {\n    return pollUntil(\n      () =\u003e {\n        const call = this.toolCalls.find((c) =\u003e c.name === toolName);\n        if (!call) {\n          throw new Error(`No call to tool ${toolName} found`);\n        }\n        return call;\n      },\n      { timeout },\n    );\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method awaitToolCall",
+      "startLine": 209,
+      "startCol": 1,
+      "endLine": 223,
+      "endCol": 4
+    },
+    {
+      "text": "  async awaitToolStub(toolName: string, timeout = 1000): Promise\u003cMockToolStub\u003e {\n    return pollUntil(\n      () =\u003e {\n        const stub = this.toolStubs.get(toolName);\n        if (!stub) {\n          throw new Error(`Tool stub ${toolName} not found`);\n        }\n        return stub;\n      },\n      { timeout },\n    );\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method awaitToolStub\n\n  async awaitToolStub(toolName: string, timeout = 1000): Promise\u003cMockToolStub\u003e {\n    return pollUntil(\n      () =\u003e {\n        const stub = this.toolStubs.get(toolName);\n        if (!stub) {\n          throw new Error(`Tool stub ${toolName} not found`);\n        }\n        return stub;\n      },\n      { timeout },\n    );\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method awaitToolStub",
+      "startLine": 225,
+      "startCol": 1,
+      "endLine": 236,
+      "endCol": 4
+    },
+    {
+      "text": "  clearToolCalls(): void {\n    this.toolCalls = [];\n  }",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method clearToolCalls\n\n  clearToolCalls(): void {\n    this.toolCalls = [];\n  }",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts \u003e class MockMCPServer \u003e method clearToolCalls",
+      "startLine": 238,
+      "startCol": 1,
+      "endLine": 240,
+      "endCol": 4
+    },
+    {
+      "text": "export const mockServers: { [serverName: ServerName]: MockMCPServer } = {};",
+      "contextualizedText": "// node/core/src/tools/mcp/mock-server.ts\n\nexport const mockServers: { [serverName: ServerName]: MockMCPServer } = {};",
+      "headingContext": "node/core/src/tools/mcp/mock-server.ts",
+      "startLine": 243,
+      "startCol": 1,
+      "endLine": 243,
+      "endCol": 76
+    }
+  ]
+}

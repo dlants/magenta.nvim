@@ -1,0 +1,150 @@
+{
+  "blobSha": "9b8ffd3036203cb266aace2f645eef23bed01f3c",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { Nvim } from \"../../nvim/nvim-node/index.ts\";\nimport { pollUntil } from \"../../utils/async.ts\";",
+      "contextualizedText": "// node/test/driver/completions.ts\n\nimport type { Nvim } from \"../../nvim/nvim-node/index.ts\";\nimport { pollUntil } from \"../../utils/async.ts\";",
+      "headingContext": "node/test/driver/completions.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 2,
+      "endCol": 50
+    },
+    {
+      "text": "export class CompletionsInteraction {\n  constructor(private nvim: Nvim) {}",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction\n\nexport class CompletionsInteraction {\n  constructor(private nvim: Nvim) {}",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction",
+      "startLine": 4,
+      "startCol": 1,
+      "endLine": 5,
+      "endCol": 37
+    },
+    {
+      "text": "/**\n   * Check if blink.cmp is available\n   */\n  async isAvailable(): Promise\u003cboolean\u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `\n      local ok = pcall(require, 'blink.cmp')\n      return ok\n      `,\n      [],\n    ])) as boolean;\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method isAvailable\n\n/**\n   * Check if blink.cmp is available\n   */\n  async isAvailable(): Promise\u003cboolean\u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `\n      local ok = pcall(require, 'blink.cmp')\n      return ok\n      `,\n      [],\n    ])) as boolean;\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method isAvailable",
+      "startLine": 7,
+      "startCol": 3,
+      "endLine": 18,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Check whether the magenta blink.cmp source provider is registered\n   */\n  async getSetupInfo(): Promise\u003c{\n    has_sources: boolean;\n    has_magenta_provider: boolean;\n  }\u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `\n      local config = require('blink.cmp.config')\n      local providers = config.sources.providers or {}\n      local has_sources = false\n      for _ in pairs(providers) do\n        has_sources = true\n        break\n      end\n      return {\n        has_sources = has_sources,\n        has_magenta_provider = providers.magenta ~= nil\n      }\n      `,\n      [],\n    ])) as { has_sources: boolean; has_magenta_provider: boolean };\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method getSetupInfo\n\n/**\n   * Check whether the magenta blink.cmp source provider is registered\n   */\n  async getSetupInfo(): Promise\u003c{\n    has_sources: boolean;\n    has_magenta_provider: boolean;\n  }\u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `\n      local config = require('blink.cmp.config')\n      local providers = config.sources.providers or {}\n      local has_sources = false\n      for _ in pairs(providers) do\n        has_sources = true\n        break\n      end\n      return {\n        has_sources = has_sources,\n        has_magenta_provider = providers.magenta ~= nil\n      }\n      `,\n      [],\n    ])) as { has_sources: boolean; has_magenta_provider: boolean };\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method getSetupInfo",
+      "startLine": 20,
+      "startCol": 3,
+      "endLine": 43,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Check if the blink.cmp completion menu is visible\n   */\n  async isVisible(): Promise\u003cboolean\u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `return require('blink.cmp').is_menu_visible()`,\n      [],\n    ])) as boolean;\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method isVisible\n\n/**\n   * Check if the blink.cmp completion menu is visible\n   */\n  async isVisible(): Promise\u003cboolean\u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `return require('blink.cmp').is_menu_visible()`,\n      [],\n    ])) as boolean;\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method isVisible",
+      "startLine": 45,
+      "startCol": 3,
+      "endLine": 53,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Get all completion entries\n   */\n  async getEntries(): Promise\u003cArray\u003c{ word: string; kind?: number }\u003e\u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `\n      local items = require('blink.cmp').get_items() or {}\n      local result = {}\n      for _, item in ipairs(items) do\n        table.insert(result, {\n          word = item.label,\n          kind = item.kind\n        })\n      end\n      return result\n      `,\n      [],\n    ])) as Array\u003c{ word: string; kind?: number }\u003e;\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method getEntries\n\n/**\n   * Get all completion entries\n   */\n  async getEntries(): Promise\u003cArray\u003c{ word: string; kind?: number }\u003e\u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `\n      local items = require('blink.cmp').get_items() or {}\n      local result = {}\n      for _, item in ipairs(items) do\n        table.insert(result, {\n          word = item.label,\n          kind = item.kind\n        })\n      end\n      return result\n      `,\n      [],\n    ])) as Array\u003c{ word: string; kind?: number }\u003e;\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method getEntries",
+      "startLine": 55,
+      "startCol": 3,
+      "endLine": 73,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Get the currently selected completion entry\n   */\n  async getSelectedEntry(): Promise\u003c\n    { word: string; kind?: number } | undefined\n  \u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `\n      local selected = require('blink.cmp').get_selected_item()\n      return selected and {\n        word = selected.label,\n        kind = selected.kind\n      } or nil\n      `,\n      [],\n    ])) as { word: string; kind?: number } | undefined;\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method getSelectedEntry\n\n/**\n   * Get the currently selected completion entry\n   */\n  async getSelectedEntry(): Promise\u003c\n    { word: string; kind?: number } | undefined\n  \u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `\n      local selected = require('blink.cmp').get_selected_item()\n      return selected and {\n        word = selected.label,\n        kind = selected.kind\n      } or nil\n      `,\n      [],\n    ])) as { word: string; kind?: number } | undefined;\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method getSelectedEntry",
+      "startLine": 75,
+      "startCol": 3,
+      "endLine": 91,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Manually trigger completion\n   */\n  async trigger(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec_lua\", [`require('blink.cmp').show()`, []]);\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method trigger\n\n/**\n   * Manually trigger completion\n   */\n  async trigger(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec_lua\", [`require('blink.cmp').show()`, []]);\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method trigger",
+      "startLine": 93,
+      "startCol": 3,
+      "endLine": 98,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Accept/confirm the current completion\n   */\n  async accept(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec_lua\", [\n      `require('blink.cmp').select_and_accept()`,\n      [],\n    ]);\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method accept\n\n/**\n   * Accept/confirm the current completion\n   */\n  async accept(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec_lua\", [\n      `require('blink.cmp').select_and_accept()`,\n      [],\n    ]);\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method accept",
+      "startLine": 100,
+      "startCol": 3,
+      "endLine": 108,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Navigate to next completion item\n   */\n  async selectNext(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec_lua\", [\n      `require('blink.cmp').select_next()`,\n      [],\n    ]);\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method selectNext\n\n/**\n   * Navigate to next completion item\n   */\n  async selectNext(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec_lua\", [\n      `require('blink.cmp').select_next()`,\n      [],\n    ]);\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method selectNext",
+      "startLine": 110,
+      "startCol": 3,
+      "endLine": 118,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Navigate to previous completion item\n   */\n  async selectPrev(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec_lua\", [\n      `require('blink.cmp').select_prev()`,\n      [],\n    ]);\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method selectPrev\n\n/**\n   * Navigate to previous completion item\n   */\n  async selectPrev(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec_lua\", [\n      `require('blink.cmp').select_prev()`,\n      [],\n    ]);\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method selectPrev",
+      "startLine": 120,
+      "startCol": 3,
+      "endLine": 128,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Close/abort completion menu\n   */\n  async close(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec_lua\", [`require('blink.cmp').hide()`, []]);\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method close\n\n/**\n   * Close/abort completion menu\n   */\n  async close(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec_lua\", [`require('blink.cmp').hide()`, []]);\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method close",
+      "startLine": 130,
+      "startCol": 3,
+      "endLine": 135,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Get debug information about blink.cmp state\n   */\n  async getDebugInfo(): Promise\u003c{\n    mode: string;\n    cmp_visible: boolean;\n    cursor_pos: [number, number];\n    buffer_lines: string[];\n    entries_count: number;\n  }\u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `\n      local blink = require('blink.cmp')\n      return {\n        mode = vim.fn.mode(),\n        cmp_visible = blink.is_menu_visible(),\n        cursor_pos = vim.api.nvim_win_get_cursor(0),\n        buffer_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false),\n        entries_count = #(blink.get_items() or {})\n      }\n      `,\n      [],\n    ])) as {\n      mode: string;\n      cmp_visible: boolean;\n      cursor_pos: [number, number];\n      buffer_lines: string[];\n      entries_count: number;\n    };\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method getDebugInfo\n\n/**\n   * Get debug information about blink.cmp state\n   */\n  async getDebugInfo(): Promise\u003c{\n    mode: string;\n    cmp_visible: boolean;\n    cursor_pos: [number, number];\n    buffer_lines: string[];\n    entries_count: number;\n  }\u003e {\n    return (await this.nvim.call(\"nvim_exec_lua\", [\n      `\n      local blink = require('blink.cmp')\n      return {\n        mode = vim.fn.mode(),\n        cmp_visible = blink.is_menu_visible(),\n        cursor_pos = vim.api.nvim_win_get_cursor(0),\n        buffer_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false),\n        entries_count = #(blink.get_items() or {})\n      }\n      `,\n      [],\n    ])) as {\n      mode: string;\n      cmp_visible: boolean;\n      cursor_pos: [number, number];\n      buffer_lines: string[];\n      entries_count: number;\n    };\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method getDebugInfo",
+      "startLine": 137,
+      "startCol": 3,
+      "endLine": 166,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Wait for completion menu to become visible\n   */\n  async waitForVisible(timeout: number = 3000): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const visible = await this.isVisible();\n        if (!visible) {\n          const debug = await this.getDebugInfo();\n          throw new Error(\n            `blink.cmp completion menu not visible yet. Debug: ${JSON.stringify(debug)}`,\n          );\n        }\n        return true;\n      },\n      { timeout },\n    );\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method waitForVisible\n\n/**\n   * Wait for completion menu to become visible\n   */\n  async waitForVisible(timeout: number = 3000): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const visible = await this.isVisible();\n        if (!visible) {\n          const debug = await this.getDebugInfo();\n          throw new Error(\n            `blink.cmp completion menu not visible yet. Debug: ${JSON.stringify(debug)}`,\n          );\n        }\n        return true;\n      },\n      { timeout },\n    );\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method waitForVisible",
+      "startLine": 168,
+      "startCol": 3,
+      "endLine": 185,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Wait for completion menu to close/become invisible\n   */\n  async waitForInvisible(timeout: number = 3000): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const visible = await this.isVisible();\n        if (visible) {\n          throw new Error(\"Completion menu should be closed\");\n        }\n        return true;\n      },\n      { timeout },\n    );\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method waitForInvisible\n\n/**\n   * Wait for completion menu to close/become invisible\n   */\n  async waitForInvisible(timeout: number = 3000): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const visible = await this.isVisible();\n        if (visible) {\n          throw new Error(\"Completion menu should be closed\");\n        }\n        return true;\n      },\n      { timeout },\n    );\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method waitForInvisible",
+      "startLine": 187,
+      "startCol": 3,
+      "endLine": 201,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Wait for a completion entry containing the specified substring to appear\n   */\n  async waitForCompletionContaining(\n    substring: string,\n    timeout: number = 5000,\n  ): Promise\u003cArray\u003c{ word: string; kind?: number }\u003e\u003e {\n    return await pollUntil(\n      async () =\u003e {\n        const entries = await this.getEntries();\n        const entryWords = entries.map((e) =\u003e e.word);\n\n        const hasSubstring = entryWords.some((word) =\u003e\n          word.includes(substring),\n        );\n        if (!hasSubstring) {\n          throw new Error(\n            `No completion entry containing \"${substring}\" found yet. Current entries: ${JSON.stringify(entryWords)}`,\n          );\n        }\n\n        return entries;\n      },\n      { timeout },\n    );\n  }",
+      "contextualizedText": "// node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method waitForCompletionContaining\n\n/**\n   * Wait for a completion entry containing the specified substring to appear\n   */\n  async waitForCompletionContaining(\n    substring: string,\n    timeout: number = 5000,\n  ): Promise\u003cArray\u003c{ word: string; kind?: number }\u003e\u003e {\n    return await pollUntil(\n      async () =\u003e {\n        const entries = await this.getEntries();\n        const entryWords = entries.map((e) =\u003e e.word);\n\n        const hasSubstring = entryWords.some((word) =\u003e\n          word.includes(substring),\n        );\n        if (!hasSubstring) {\n          throw new Error(\n            `No completion entry containing \"${substring}\" found yet. Current entries: ${JSON.stringify(entryWords)}`,\n          );\n        }\n\n        return entries;\n      },\n      { timeout },\n    );\n  }",
+      "headingContext": "node/test/driver/completions.ts \u003e class CompletionsInteraction \u003e method waitForCompletionContaining",
+      "startLine": 203,
+      "startCol": 3,
+      "endLine": 228,
+      "endCol": 4
+    }
+  ]
+}

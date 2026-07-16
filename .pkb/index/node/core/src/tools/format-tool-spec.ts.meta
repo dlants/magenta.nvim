@@ -1,0 +1,87 @@
+{
+  "blobSha": "2e1c2e2c365006f259d4b664f84de2396f6a8f2f",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { ProviderToolSpec } from \"../providers/provider-types.ts\";\n\nconst INDENT = \"  \";",
+      "contextualizedText": "// node/core/src/tools/format-tool-spec.ts\n\nimport type { ProviderToolSpec } from \"../providers/provider-types.ts\";\n\nconst INDENT = \"  \";",
+      "headingContext": "node/core/src/tools/format-tool-spec.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 3,
+      "endCol": 21
+    },
+    {
+      "text": "function isRecord(value: unknown): value is Record\u003cstring, unknown\u003e {\n  return typeof value === \"object\" \u0026\u0026 value !== null \u0026\u0026 !Array.isArray(value);\n}",
+      "contextualizedText": "// node/core/src/tools/format-tool-spec.ts \u003e function isRecord\n\nfunction isRecord(value: unknown): value is Record\u003cstring, unknown\u003e {\n  return typeof value === \"object\" \u0026\u0026 value !== null \u0026\u0026 !Array.isArray(value);\n}",
+      "headingContext": "node/core/src/tools/format-tool-spec.ts \u003e function isRecord",
+      "startLine": 5,
+      "startCol": 1,
+      "endLine": 7,
+      "endCol": 2
+    },
+    {
+      "text": "function getString(\n  node: Record\u003cstring, unknown\u003e,\n  key: string,\n): string | undefined {\n  const value = node[key];\n  return typeof value === \"string\" ? value : undefined;\n}",
+      "contextualizedText": "// node/core/src/tools/format-tool-spec.ts \u003e function getString\n\nfunction getString(\n  node: Record\u003cstring, unknown\u003e,\n  key: string,\n): string | undefined {\n  const value = node[key];\n  return typeof value === \"string\" ? value : undefined;\n}",
+      "headingContext": "node/core/src/tools/format-tool-spec.ts \u003e function getString",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 15,
+      "endCol": 2
+    },
+    {
+      "text": "function getStringArray(\n  node: Record\u003cstring, unknown\u003e,\n  key: string,\n): string[] | undefined {\n  const value = node[key];\n  if (Array.isArray(value) \u0026\u0026 value.every((v) =\u003e typeof v === \"string\")) {\n    return value as string[];\n  }\n  return undefined;\n}",
+      "contextualizedText": "// node/core/src/tools/format-tool-spec.ts \u003e function getStringArray\n\nfunction getStringArray(\n  node: Record\u003cstring, unknown\u003e,\n  key: string,\n): string[] | undefined {\n  const value = node[key];\n  if (Array.isArray(value) \u0026\u0026 value.every((v) =\u003e typeof v === \"string\")) {\n    return value as string[];\n  }\n  return undefined;\n}",
+      "headingContext": "node/core/src/tools/format-tool-spec.ts \u003e function getStringArray",
+      "startLine": 17,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 2
+    },
+    {
+      "text": "function indentText(text: string, indent: string): string {\n  return text\n    .split(\"\\n\")\n    .map((line) =\u003e `${indent}${line}`)\n    .join(\"\\n\");\n}",
+      "contextualizedText": "// node/core/src/tools/format-tool-spec.ts \u003e function indentText\n\nfunction indentText(text: string, indent: string): string {\n  return text\n    .split(\"\\n\")\n    .map((line) =\u003e `${indent}${line}`)\n    .join(\"\\n\");\n}",
+      "headingContext": "node/core/src/tools/format-tool-spec.ts \u003e function indentText",
+      "startLine": 28,
+      "startCol": 1,
+      "endLine": 33,
+      "endCol": 2
+    },
+    {
+      "text": "function describeType(node: Record\u003cstring, unknown\u003e): string {\n  const enumValues = node.enum;\n  if (Array.isArray(enumValues)) {\n    return `enum(${enumValues.map((v) =\u003e JSON.stringify(v)).join(\", \")})`;\n  }\n  for (const key of [\"anyOf\", \"oneOf\", \"allOf\"] as const) {\n    const variants = node[key];\n    if (Array.isArray(variants)) {\n      return key;\n    }\n  }\n  const type = getString(node, \"type\");\n  if (type) {\n    return type;\n  }\n  return \"unknown\";\n}",
+      "contextualizedText": "// node/core/src/tools/format-tool-spec.ts \u003e function describeType\n\nfunction describeType(node: Record\u003cstring, unknown\u003e): string {\n  const enumValues = node.enum;\n  if (Array.isArray(enumValues)) {\n    return `enum(${enumValues.map((v) =\u003e JSON.stringify(v)).join(\", \")})`;\n  }\n  for (const key of [\"anyOf\", \"oneOf\", \"allOf\"] as const) {\n    const variants = node[key];\n    if (Array.isArray(variants)) {\n      return key;\n    }\n  }\n  const type = getString(node, \"type\");\n  if (type) {\n    return type;\n  }\n  return \"unknown\";\n}",
+      "headingContext": "node/core/src/tools/format-tool-spec.ts \u003e function describeType",
+      "startLine": 35,
+      "startCol": 1,
+      "endLine": 51,
+      "endCol": 2
+    },
+    {
+      "text": "function formatSchemaNode(schema: unknown, indent: string): string {\n  if (!isRecord(schema)) {\n    return `${indent}${JSON.stringify(schema)}`;\n  }\n\n  const lines: string[] = [];\n  lines.push(`${indent}(${describeType(schema)})`);\n\n  const description = getString(schema, \"description\");\n  if (description !== undefined) {\n    lines.push(indentText(description, `${indent}${INDENT}`));\n  }\n\n  const type = getString(schema, \"type\");\n\n  if (type === \"object\" \u0026\u0026 isRecord(schema.properties)) {\n    const properties = schema.properties;\n    const required = getStringArray(schema, \"required\") ?? [];\n    lines.push(`${indent}Parameters:`);\n    for (const [propName, propSchema] of Object.entries(properties)) {\n      const isRequired = required.includes(propName);\n      lines.push(\n        `${indent}${INDENT}${propName}${isRequired ? \", required\" : \"\"}:`,\n      );\n      lines.push(formatSchemaNode(propSchema, `${indent}${INDENT}${INDENT}`));\n    }\n  } else if (type === \"array\" \u0026\u0026 schema.items !== undefined) {\n    lines.push(`${indent}${INDENT}items:`);\n    lines.push(formatSchemaNode(schema.items, `${indent}${INDENT}${INDENT}`));\n  } else {\n    for (const key of [\"anyOf\", \"oneOf\", \"allOf\"] as const) {\n      const variants = schema[key];\n      if (Array.isArray(variants)) {\n        lines.push(`${indent}${INDENT}${key}:`);\n        for (const variant of variants) {\n          lines.push(formatSchemaNode(variant, `${indent}${INDENT}${INDENT}`));\n        }\n      }\n    }\n  }\n\n  return lines.join(\"\\n\");\n}",
+      "contextualizedText": "// node/core/src/tools/format-tool-spec.ts \u003e function formatSchemaNode\n\nfunction formatSchemaNode(schema: unknown, indent: string): string {\n  if (!isRecord(schema)) {\n    return `${indent}${JSON.stringify(schema)}`;\n  }\n\n  const lines: string[] = [];\n  lines.push(`${indent}(${describeType(schema)})`);\n\n  const description = getString(schema, \"description\");\n  if (description !== undefined) {\n    lines.push(indentText(description, `${indent}${INDENT}`));\n  }\n\n  const type = getString(schema, \"type\");\n\n  if (type === \"object\" \u0026\u0026 isRecord(schema.properties)) {\n    const properties = schema.properties;\n    const required = getStringArray(schema, \"required\") ?? [];\n    lines.push(`${indent}Parameters:`);\n    for (const [propName, propSchema] of Object.entries(properties)) {\n      const isRequired = required.includes(propName);\n      lines.push(\n        `${indent}${INDENT}${propName}${isRequired ? \", required\" : \"\"}:`,\n      );\n      lines.push(formatSchemaNode(propSchema, `${indent}${INDENT}${INDENT}`));\n    }\n  } else if (type === \"array\" \u0026\u0026 schema.items !== undefined) {\n    lines.push(`${indent}${INDENT}items:`);\n    lines.push(formatSchemaNode(schema.items, `${indent}${INDENT}${INDENT}`));\n  } else {\n    for (const key of [\"anyOf\", \"oneOf\", \"allOf\"] as const) {\n      const variants = schema[key];\n      if (Array.isArray(variants)) {\n        lines.push(`${indent}${INDENT}${key}:`);\n        for (const variant of variants) {\n          lines.push(formatSchemaNode(variant, `${indent}${INDENT}${INDENT}`));\n        }\n      }\n    }\n  }\n\n  return lines.join(\"\\n\");\n}",
+      "headingContext": "node/core/src/tools/format-tool-spec.ts \u003e function formatSchemaNode",
+      "startLine": 53,
+      "startCol": 1,
+      "endLine": 95,
+      "endCol": 2
+    },
+    {
+      "text": "export function formatToolSpec(spec: ProviderToolSpec): string {\n  const lines: string[] = [];\n  lines.push(`## ${spec.name}`);\n  lines.push(\"\");\n  lines.push(spec.description);\n  lines.push(\"\");\n  lines.push(formatSchemaNode(spec.input_schema, INDENT));\n  return lines.join(\"\\n\");\n}",
+      "contextualizedText": "// node/core/src/tools/format-tool-spec.ts \u003e function formatToolSpec\n\nexport function formatToolSpec(spec: ProviderToolSpec): string {\n  const lines: string[] = [];\n  lines.push(`## ${spec.name}`);\n  lines.push(\"\");\n  lines.push(spec.description);\n  lines.push(\"\");\n  lines.push(formatSchemaNode(spec.input_schema, INDENT));\n  return lines.join(\"\\n\");\n}",
+      "headingContext": "node/core/src/tools/format-tool-spec.ts \u003e function formatToolSpec",
+      "startLine": 97,
+      "startCol": 1,
+      "endLine": 105,
+      "endCol": 2
+    },
+    {
+      "text": "export function formatToolSpecs(specs: ProviderToolSpec[]): string {\n  return specs.map(formatToolSpec).join(\"\\n\\n\");\n}",
+      "contextualizedText": "// node/core/src/tools/format-tool-spec.ts \u003e function formatToolSpecs\n\nexport function formatToolSpecs(specs: ProviderToolSpec[]): string {\n  return specs.map(formatToolSpec).join(\"\\n\\n\");\n}",
+      "headingContext": "node/core/src/tools/format-tool-spec.ts \u003e function formatToolSpecs",
+      "startLine": 107,
+      "startCol": 1,
+      "endLine": 109,
+      "endCol": 2
+    }
+  ]
+}

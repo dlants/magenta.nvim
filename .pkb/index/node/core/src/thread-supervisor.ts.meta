@@ -1,0 +1,132 @@
+{
+  "blobSha": "f87102868330cb3715ae0ed45ac598ae3b46cd6b",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type {\n  ProviderMessageContent,\n  StopReason,\n} from \"./providers/provider-types.ts\";\n\n/** Action returned from the `onEndTurnWithoutYield` hook. */\nexport type EndTurnAction =\n  | { type: \"send-message\"; text: string }\n  | { type: \"none\" };\n\n/** Action returned from the `onYield` hook. */\nexport type YieldAction =\n  | { type: \"accept\"; resultPrefix?: string }\n  | { type: \"reject\"; message: string }\n  | { type: \"send-message\"; text: string }\n  | { type: \"none\" };\n\n/** Action returned from the `onHandoff` hook. */\nexport type HandoffAction =\n  | { type: \"compact\"; nextPrompt?: string }\n  | { type: \"none\" };\n\n/** Union of all hook action types. Prefer the narrower per-hook types\n *  where possible so that a hook cannot return an action it does not\n *  own (e.g. `compact` is only representable from `onHandoff`). */\nexport type SupervisorAction = EndTurnAction | YieldAction | HandoffAction;\n\nexport type EndTurnContext = {\n  stopReason: string;\n  lastAssistantMessage: ReadonlyArray\u003cProviderMessageContent\u003e | undefined;\n};\n\nexport type HandoffContext = {\n  inputTokenCount: number | undefined;\n  stopReason: StopReason;\n};",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts\n\nimport type {\n  ProviderMessageContent,\n  StopReason,\n} from \"./providers/provider-types.ts\";\n\n/** Action returned from the `onEndTurnWithoutYield` hook. */\nexport type EndTurnAction =\n  | { type: \"send-message\"; text: string }\n  | { type: \"none\" };\n\n/** Action returned from the `onYield` hook. */\nexport type YieldAction =\n  | { type: \"accept\"; resultPrefix?: string }\n  | { type: \"reject\"; message: string }\n  | { type: \"send-message\"; text: string }\n  | { type: \"none\" };\n\n/** Action returned from the `onHandoff` hook. */\nexport type HandoffAction =\n  | { type: \"compact\"; nextPrompt?: string }\n  | { type: \"none\" };\n\n/** Union of all hook action types. Prefer the narrower per-hook types\n *  where possible so that a hook cannot return an action it does not\n *  own (e.g. `compact` is only representable from `onHandoff`). */\nexport type SupervisorAction = EndTurnAction | YieldAction | HandoffAction;\n\nexport type EndTurnContext = {\n  stopReason: string;\n  lastAssistantMessage: ReadonlyArray\u003cProviderMessageContent\u003e | undefined;\n};\n\nexport type HandoffContext = {\n  inputTokenCount: number | undefined;\n  stopReason: StopReason;\n};",
+      "headingContext": "node/core/src/thread-supervisor.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 36,
+      "endCol": 3
+    },
+    {
+      "text": "export interface ThreadSupervisor",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e interface ThreadSupervisor\n\nexport interface ThreadSupervisor",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e interface ThreadSupervisor",
+      "startLine": 38,
+      "startCol": 1,
+      "endLine": 38,
+      "endCol": 34
+    },
+    {
+      "text": "  onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e interface ThreadSupervisor \u003e method onEndTurnWithoutYield\n\n  onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e interface ThreadSupervisor \u003e method onEndTurnWithoutYield",
+      "startLine": 39,
+      "startCol": 1,
+      "endLine": 39,
+      "endCol": 65
+    },
+    {
+      "text": "  onYield?(result: string): Promise\u003cYieldAction\u003e",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e interface ThreadSupervisor \u003e method onYield\n\n  onYield?(result: string): Promise\u003cYieldAction\u003e",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e interface ThreadSupervisor \u003e method onYield",
+      "startLine": 40,
+      "startCol": 1,
+      "endLine": 40,
+      "endCol": 49
+    },
+    {
+      "text": "  onHandoff?(context: HandoffContext): HandoffAction",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e interface ThreadSupervisor \u003e method onHandoff\n\n  onHandoff?(context: HandoffContext): HandoffAction",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e interface ThreadSupervisor \u003e method onHandoff",
+      "startLine": 41,
+      "startCol": 1,
+      "endLine": 41,
+      "endCol": 53
+    },
+    {
+      "text": "function containsYieldTag(\n  content: ReadonlyArray\u003cProviderMessageContent\u003e | undefined,\n): boolean {\n  if (!content) return false;\n  for (const block of content) {\n    if (block.type === \"text\" \u0026\u0026 /\u003c\\/?yield[\\w_]*[\\s/\u003e]/i.test(block.text)) {\n      return true;\n    }\n  }\n  return false;\n}",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e function containsYieldTag\n\nfunction containsYieldTag(\n  content: ReadonlyArray\u003cProviderMessageContent\u003e | undefined,\n): boolean {\n  if (!content) return false;\n  for (const block of content) {\n    if (block.type === \"text\" \u0026\u0026 /\u003c\\/?yield[\\w_]*[\\s/\u003e]/i.test(block.text)) {\n      return true;\n    }\n  }\n  return false;\n}",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e function containsYieldTag",
+      "startLine": 44,
+      "startCol": 1,
+      "endLine": 54,
+      "endCol": 2
+    },
+    {
+      "text": "/** For regular subagents. Only intervenes when the agent writes a\n *  `\u003cyield\u003e` XML tag instead of calling the tool. Otherwise allows\n *  the agent to stop normally. */\nexport class SubagentSupervisor implements ThreadSupervisor",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e class SubagentSupervisor\n\n/** For regular subagents. Only intervenes when the agent writes a\n *  `\u003cyield\u003e` XML tag instead of calling the tool. Otherwise allows\n *  the agent to stop normally. */\nexport class SubagentSupervisor implements ThreadSupervisor",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e class SubagentSupervisor",
+      "startLine": 56,
+      "startCol": 1,
+      "endLine": 59,
+      "endCol": 60
+    },
+    {
+      "text": "  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {\n    if (containsYieldTag(context.lastAssistantMessage)) {\n      return {\n        type: \"send-message\",\n        text: \"You wrote a yield XML tag in your text. XML tags in your response are not parsed as tool calls. You must invoke the yield_to_parent tool (via a proper tool call) to return results to the parent agent.\",\n      };\n    }\n    return { type: \"none\" };\n  }",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e class SubagentSupervisor \u003e method onEndTurnWithoutYield\n\n  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {\n    if (containsYieldTag(context.lastAssistantMessage)) {\n      return {\n        type: \"send-message\",\n        text: \"You wrote a yield XML tag in your text. XML tags in your response are not parsed as tool calls. You must invoke the yield_to_parent tool (via a proper tool call) to return results to the parent agent.\",\n      };\n    }\n    return { type: \"none\" };\n  }",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e class SubagentSupervisor \u003e method onEndTurnWithoutYield",
+      "startLine": 60,
+      "startCol": 1,
+      "endLine": 68,
+      "endCol": 4
+    },
+    {
+      "text": "  async onYield(_result: string): Promise\u003cYieldAction\u003e {\n    return { type: \"none\" };\n  }",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e class SubagentSupervisor \u003e method onYield\n\n  async onYield(_result: string): Promise\u003cYieldAction\u003e {\n    return { type: \"none\" };\n  }",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e class SubagentSupervisor \u003e method onYield",
+      "startLine": 70,
+      "startCol": 1,
+      "endLine": 72,
+      "endCol": 4
+    },
+    {
+      "text": "/** For unsupervised threads (e.g. docker_unsupervised). Always prompts\n *  the agent to resume work when it stops without yielding. */\nexport class UnsupervisedSupervisor implements ThreadSupervisor {\n  private restartCount = 0;\n  private readonly maxRestarts: number;\n\n  constructor(opts?: { maxRestarts?: number }) {\n    this.maxRestarts = opts?.maxRestarts ?? 5;\n  }",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e class UnsupervisedSupervisor\n\n/** For unsupervised threads (e.g. docker_unsupervised). Always prompts\n *  the agent to resume work when it stops without yielding. */\nexport class UnsupervisedSupervisor implements ThreadSupervisor {\n  private restartCount = 0;\n  private readonly maxRestarts: number;\n\n  constructor(opts?: { maxRestarts?: number }) {\n    this.maxRestarts = opts?.maxRestarts ?? 5;\n  }",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e class UnsupervisedSupervisor",
+      "startLine": 75,
+      "startCol": 1,
+      "endLine": 83,
+      "endCol": 4
+    },
+    {
+      "text": "  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {\n    if (\n      context.stopReason === \"aborted\" ||\n      this.restartCount \u003e= this.maxRestarts\n    ) {\n      return { type: \"none\" };\n    }\n    this.restartCount++;\n\n    if (containsYieldTag(context.lastAssistantMessage)) {\n      return {\n        type: \"send-message\",\n        text: \"You wrote a yield XML tag in your text. XML tags in your response are not parsed as tool calls. You must invoke the yield_to_parent tool (via a proper tool call) to return results to the parent agent.\",\n      };\n    }\n\n    return {\n      type: \"send-message\",\n      text: `You stopped without yielding. You must complete your task and call yield_to_parent when done. (auto-restart ${this.restartCount}/${this.maxRestarts})`,\n    };\n  }",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e class UnsupervisedSupervisor \u003e method onEndTurnWithoutYield\n\n  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {\n    if (\n      context.stopReason === \"aborted\" ||\n      this.restartCount \u003e= this.maxRestarts\n    ) {\n      return { type: \"none\" };\n    }\n    this.restartCount++;\n\n    if (containsYieldTag(context.lastAssistantMessage)) {\n      return {\n        type: \"send-message\",\n        text: \"You wrote a yield XML tag in your text. XML tags in your response are not parsed as tool calls. You must invoke the yield_to_parent tool (via a proper tool call) to return results to the parent agent.\",\n      };\n    }\n\n    return {\n      type: \"send-message\",\n      text: `You stopped without yielding. You must complete your task and call yield_to_parent when done. (auto-restart ${this.restartCount}/${this.maxRestarts})`,\n    };\n  }",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e class UnsupervisedSupervisor \u003e method onEndTurnWithoutYield",
+      "startLine": 85,
+      "startCol": 1,
+      "endLine": 105,
+      "endCol": 4
+    },
+    {
+      "text": "  async onYield(_result: string): Promise\u003cYieldAction\u003e {\n    return { type: \"none\" };\n  }",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e class UnsupervisedSupervisor \u003e method onYield\n\n  async onYield(_result: string): Promise\u003cYieldAction\u003e {\n    return { type: \"none\" };\n  }",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e class UnsupervisedSupervisor \u003e method onYield",
+      "startLine": 107,
+      "startCol": 1,
+      "endLine": 109,
+      "endCol": 4
+    },
+    {
+      "text": "/** Triggers auto-compaction when the thread's input token count breaches\n *  a configurable threshold. Only implements the handoff hook. */\nexport class AutoCompactSupervisor implements ThreadSupervisor {\n  private readonly threshold: number;\n  private readonly nextPrompt: string;\n\n  constructor(opts: { nextPrompt: string; threshold?: number }) {\n    this.threshold = opts.threshold ?? 300000;\n    this.nextPrompt = opts.nextPrompt;\n  }",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e class AutoCompactSupervisor\n\n/** Triggers auto-compaction when the thread's input token count breaches\n *  a configurable threshold. Only implements the handoff hook. */\nexport class AutoCompactSupervisor implements ThreadSupervisor {\n  private readonly threshold: number;\n  private readonly nextPrompt: string;\n\n  constructor(opts: { nextPrompt: string; threshold?: number }) {\n    this.threshold = opts.threshold ?? 300000;\n    this.nextPrompt = opts.nextPrompt;\n  }",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e class AutoCompactSupervisor",
+      "startLine": 112,
+      "startCol": 1,
+      "endLine": 121,
+      "endCol": 4
+    },
+    {
+      "text": "  onHandoff(context: HandoffContext): HandoffAction {\n    if (\n      context.inputTokenCount !== undefined \u0026\u0026\n      context.inputTokenCount \u003e= this.threshold\n    ) {\n      return { type: \"compact\", nextPrompt: this.nextPrompt };\n    }\n    return { type: \"none\" };\n  }",
+      "contextualizedText": "// node/core/src/thread-supervisor.ts \u003e class AutoCompactSupervisor \u003e method onHandoff\n\n  onHandoff(context: HandoffContext): HandoffAction {\n    if (\n      context.inputTokenCount !== undefined \u0026\u0026\n      context.inputTokenCount \u003e= this.threshold\n    ) {\n      return { type: \"compact\", nextPrompt: this.nextPrompt };\n    }\n    return { type: \"none\" };\n  }",
+      "headingContext": "node/core/src/thread-supervisor.ts \u003e class AutoCompactSupervisor \u003e method onHandoff",
+      "startLine": 123,
+      "startCol": 1,
+      "endLine": 131,
+      "endCol": 4
+    }
+  ]
+}

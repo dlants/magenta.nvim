@@ -1,0 +1,24 @@
+{
+  "blobSha": "6a35a27a8499efb03469f2e357811ce2f5db5a3c",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { ThreadId } from \"@magenta/core\";\nimport type { Chat } from \"../chat/chat.ts\";\nimport { d, type VDOMNode } from \"../tea/view.ts\";",
+      "contextualizedText": "// node/capabilities/render-pending-approvals.ts\n\nimport type { ThreadId } from \"@magenta/core\";\nimport type { Chat } from \"../chat/chat.ts\";\nimport { d, type VDOMNode } from \"../tea/view.ts\";",
+      "headingContext": "node/capabilities/render-pending-approvals.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 3,
+      "endCol": 51
+    },
+    {
+      "text": "export function renderPendingApprovals(\n  chat: Chat,\n  threadId: ThreadId,\n): VDOMNode | undefined {\n  const wrapper = chat.threadWrappers[threadId];\n  if (wrapper?.state === \"initialized\") {\n    const handler = wrapper.thread.sandboxViolationHandler;\n    if (handler \u0026\u0026 handler.getPendingViolations().size \u003e 0) {\n      return d`\\n${handler.view()}`;\n    }\n  }\n\n  return undefined;\n}",
+      "contextualizedText": "// node/capabilities/render-pending-approvals.ts \u003e function renderPendingApprovals\n\nexport function renderPendingApprovals(\n  chat: Chat,\n  threadId: ThreadId,\n): VDOMNode | undefined {\n  const wrapper = chat.threadWrappers[threadId];\n  if (wrapper?.state === \"initialized\") {\n    const handler = wrapper.thread.sandboxViolationHandler;\n    if (handler \u0026\u0026 handler.getPendingViolations().size \u003e 0) {\n      return d`\\n${handler.view()}`;\n    }\n  }\n\n  return undefined;\n}",
+      "headingContext": "node/capabilities/render-pending-approvals.ts \u003e function renderPendingApprovals",
+      "startLine": 5,
+      "startCol": 1,
+      "endLine": 18,
+      "endCol": 2
+    }
+  ]
+}

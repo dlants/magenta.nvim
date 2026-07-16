@@ -1,0 +1,15 @@
+{
+  "blobSha": "019c332e12280eb2fa44dd9ca3b8848c35ede4d8",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { describe, expect, it } from \"vitest\";\nimport { withNvimClient } from \"../../test/preamble.ts\";\n\ndescribe(\"src/attach.test.ts\", () =\u003e {\n  it(\"nvim_buf_set_lines with a large file\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const lines: string[] = [];\n      for (let line = 0; line \u003c 500; line += 1) {\n        lines.push(\"x\".repeat(100));\n      }\n      await nvim.call(\"nvim_buf_set_lines\", [0, 0, -1, false, lines]);\n      const roundtripLines = await nvim.call(\"nvim_buf_get_lines\", [\n        0,\n        0,\n        -1,\n        false,\n      ]);\n      expect(roundtripLines).toEqual(lines);\n    });\n  });\n});",
+      "contextualizedText": "// node/nvim/nvim-node/attach.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport { withNvimClient } from \"../../test/preamble.ts\";\n\ndescribe(\"src/attach.test.ts\", () =\u003e {\n  it(\"nvim_buf_set_lines with a large file\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const lines: string[] = [];\n      for (let line = 0; line \u003c 500; line += 1) {\n        lines.push(\"x\".repeat(100));\n      }\n      await nvim.call(\"nvim_buf_set_lines\", [0, 0, -1, false, lines]);\n      const roundtripLines = await nvim.call(\"nvim_buf_get_lines\", [\n        0,\n        0,\n        -1,\n        false,\n      ]);\n      expect(roundtripLines).toEqual(lines);\n    });\n  });\n});",
+      "headingContext": "node/nvim/nvim-node/attach.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 4
+    }
+  ]
+}

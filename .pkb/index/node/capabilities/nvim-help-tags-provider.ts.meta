@@ -1,0 +1,33 @@
+{
+  "blobSha": "379d259755afdae785e4be9f26a302cc018b2534",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { HelpTagsProvider } from \"@magenta/core\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";",
+      "contextualizedText": "// node/capabilities/nvim-help-tags-provider.ts\n\nimport type { HelpTagsProvider } from \"@magenta/core\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";",
+      "headingContext": "node/capabilities/nvim-help-tags-provider.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 2,
+      "endCol": 56
+    },
+    {
+      "text": "export class NvimHelpTagsProvider implements HelpTagsProvider {\n  constructor(private nvim: Nvim) {}",
+      "contextualizedText": "// node/capabilities/nvim-help-tags-provider.ts \u003e class NvimHelpTagsProvider\n\nexport class NvimHelpTagsProvider implements HelpTagsProvider {\n  constructor(private nvim: Nvim) {}",
+      "headingContext": "node/capabilities/nvim-help-tags-provider.ts \u003e class NvimHelpTagsProvider",
+      "startLine": 4,
+      "startCol": 1,
+      "endLine": 5,
+      "endCol": 37
+    },
+    {
+      "text": "  async listTagFiles(): Promise\u003cstring[]\u003e {\n    const paths = await this.nvim.call(\"nvim_get_runtime_file\", [\n      \"doc/tags\",\n      true,\n    ]);\n    return paths;\n  }",
+      "contextualizedText": "// node/capabilities/nvim-help-tags-provider.ts \u003e class NvimHelpTagsProvider \u003e method listTagFiles\n\n  async listTagFiles(): Promise\u003cstring[]\u003e {\n    const paths = await this.nvim.call(\"nvim_get_runtime_file\", [\n      \"doc/tags\",\n      true,\n    ]);\n    return paths;\n  }",
+      "headingContext": "node/capabilities/nvim-help-tags-provider.ts \u003e class NvimHelpTagsProvider \u003e method listTagFiles",
+      "startLine": 7,
+      "startCol": 1,
+      "endLine": 13,
+      "endCol": 4
+    }
+  ]
+}

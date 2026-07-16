@@ -1,0 +1,33 @@
+{
+  "blobSha": "715c38e1b601ee3f2063e442329cd6e6dbf5beef",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { ProviderMessage } from \"./providers/provider-types.ts\";\n\nexport type CompactionStep = {\n  chunkIndex: number;\n  totalChunks: number;\n  messages: ProviderMessage[];\n};\n\nexport type CompactionRecord = {\n  steps: CompactionStep[];\n  finalSummary: string | undefined;\n};\n\nexport type CompactionResult =\n  | {\n      type: \"complete\";\n      summary: string;\n      steps: CompactionStep[];\n      nextPrompt: string | undefined;\n    }\n  | { type: \"error\"; steps: CompactionStep[] };",
+      "contextualizedText": "// node/core/src/compaction-controller.ts\n\nimport type { ProviderMessage } from \"./providers/provider-types.ts\";\n\nexport type CompactionStep = {\n  chunkIndex: number;\n  totalChunks: number;\n  messages: ProviderMessage[];\n};\n\nexport type CompactionRecord = {\n  steps: CompactionStep[];\n  finalSummary: string | undefined;\n};\n\nexport type CompactionResult =\n  | {\n      type: \"complete\";\n      summary: string;\n      steps: CompactionStep[];\n      nextPrompt: string | undefined;\n    }\n  | { type: \"error\"; steps: CompactionStep[] };",
+      "headingContext": "node/core/src/compaction-controller.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 48
+    },
+    {
+      "text": "export interface CompactionController {\n  chunks: string[];\n  steps: CompactionStep[];\n  nextPrompt: string | undefined",
+      "contextualizedText": "// node/core/src/compaction-controller.ts \u003e interface CompactionController\n\nexport interface CompactionController {\n  chunks: string[];\n  steps: CompactionStep[];\n  nextPrompt: string | undefined",
+      "headingContext": "node/core/src/compaction-controller.ts \u003e interface CompactionController",
+      "startLine": 23,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 33
+    },
+    {
+      "text": "  start(messages: ReadonlyArray\u003cProviderMessage\u003e, nextPrompt?: string): void",
+      "contextualizedText": "// node/core/src/compaction-controller.ts \u003e interface CompactionController \u003e method start\n\n  start(messages: ReadonlyArray\u003cProviderMessage\u003e, nextPrompt?: string): void",
+      "headingContext": "node/core/src/compaction-controller.ts \u003e interface CompactionController \u003e method start",
+      "startLine": 28,
+      "startCol": 1,
+      "endLine": 28,
+      "endCol": 77
+    }
+  ]
+}

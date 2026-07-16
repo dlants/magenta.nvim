@@ -1,0 +1,42 @@
+{
+  "blobSha": "f266cdefa6b9fdfdd3e3f79d0a483dbe06fc378e",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { promises as fs } from \"node:fs\";\nimport path from \"node:path\";\nimport nock from \"nock\";\nimport { expect } from \"vitest\";\n\n// Recording/playback helpers\nconst isRecording = process.env.RECORD === \"true\";\nconst recordingsDir = path.join(__dirname, \"recordings\");",
+      "contextualizedText": "// node/test/recording.ts\n\nimport { promises as fs } from \"node:fs\";\nimport path from \"node:path\";\nimport nock from \"nock\";\nimport { expect } from \"vitest\";\n\n// Recording/playback helpers\nconst isRecording = process.env.RECORD === \"true\";\nconst recordingsDir = path.join(__dirname, \"recordings\");",
+      "headingContext": "node/test/recording.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 58
+    },
+    {
+      "text": "export function withRecording\u003cT\u003e(testName: string, testFn: () =\u003e Promise\u003cT\u003e) {\n  if (isRecording) {\n    return recordTest(testName, testFn);\n  } else {\n    return replayTest(testName, testFn);\n  }\n}",
+      "contextualizedText": "// node/test/recording.ts \u003e function withRecording\n\nexport function withRecording\u003cT\u003e(testName: string, testFn: () =\u003e Promise\u003cT\u003e) {\n  if (isRecording) {\n    return recordTest(testName, testFn);\n  } else {\n    return replayTest(testName, testFn);\n  }\n}",
+      "headingContext": "node/test/recording.ts \u003e function withRecording",
+      "startLine": 10,
+      "startCol": 1,
+      "endLine": 16,
+      "endCol": 2
+    },
+    {
+      "text": "async function recordTest\u003cT\u003e(\n  testName: string,\n  testFn: () =\u003e Promise\u003cT\u003e,\n): Promise\u003cT\u003e {\n  nock.recorder.rec({\n    dont_print: true,\n    output_objects: true,\n    enable_reqheaders_recording: true,\n  });\n\n  const result = await testFn();\n\n  const recordings = nock.recorder.play();\n  await fs.mkdir(recordingsDir, { recursive: true });\n  const recordingPath = path.join(recordingsDir, `${testName}.json`);\n  await fs.writeFile(recordingPath, JSON.stringify(recordings, null, 2));\n\n  nock.recorder.clear();\n  return result;\n}",
+      "contextualizedText": "// node/test/recording.ts \u003e function recordTest\n\nasync function recordTest\u003cT\u003e(\n  testName: string,\n  testFn: () =\u003e Promise\u003cT\u003e,\n): Promise\u003cT\u003e {\n  nock.recorder.rec({\n    dont_print: true,\n    output_objects: true,\n    enable_reqheaders_recording: true,\n  });\n\n  const result = await testFn();\n\n  const recordings = nock.recorder.play();\n  await fs.mkdir(recordingsDir, { recursive: true });\n  const recordingPath = path.join(recordingsDir, `${testName}.json`);\n  await fs.writeFile(recordingPath, JSON.stringify(recordings, null, 2));\n\n  nock.recorder.clear();\n  return result;\n}",
+      "headingContext": "node/test/recording.ts \u003e function recordTest",
+      "startLine": 18,
+      "startCol": 1,
+      "endLine": 37,
+      "endCol": 2
+    },
+    {
+      "text": "async function replayTest\u003cT\u003e(\n  testName: string,\n  testFn: () =\u003e Promise\u003cT\u003e,\n): Promise\u003cT\u003e {\n  const recordingPath = path.join(recordingsDir, `${testName}.json`);\n\n  const content = await fs.readFile(recordingPath, \"utf8\");\n  const recordings = JSON.parse(content) as nock.Definition[];\n\n  const scopes = nock.define(recordings);\n\n  const result = await testFn();\n\n  scopes.forEach((scope) =\u003e {\n    expect(scope.isDone()).toBe(true);\n  });\n\n  return result;\n}",
+      "contextualizedText": "// node/test/recording.ts \u003e function replayTest\n\nasync function replayTest\u003cT\u003e(\n  testName: string,\n  testFn: () =\u003e Promise\u003cT\u003e,\n): Promise\u003cT\u003e {\n  const recordingPath = path.join(recordingsDir, `${testName}.json`);\n\n  const content = await fs.readFile(recordingPath, \"utf8\");\n  const recordings = JSON.parse(content) as nock.Definition[];\n\n  const scopes = nock.define(recordings);\n\n  const result = await testFn();\n\n  scopes.forEach((scope) =\u003e {\n    expect(scope.isDone()).toBe(true);\n  });\n\n  return result;\n}",
+      "headingContext": "node/test/recording.ts \u003e function replayTest",
+      "startLine": 39,
+      "startCol": 1,
+      "endLine": 57,
+      "endCol": 2
+    }
+  ]
+}

@@ -1,0 +1,159 @@
+{
+  "blobSha": "dfffff4ac2752bdedbb8aeb8f9bd7fda25b0d2eb",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { FileIO } from \"../capabilities/file-io.ts\";\nimport { type HomeDir, type NvimCwd, resolveFilePath } from \"../utils/files.ts\";\nimport { ExecutionError, Executor } from \"./executor.ts\";\nimport { lexWithPos, ParseError, parse } from \"./parser.ts\";\nimport type {\n  FileMutationSummary,\n  Pos,\n  RangeWithPos,\n  ScriptResult,\n  TraceEntry,\n} from \"./types.ts\";\n\nexport { parse, ParseError, ExecutionError, Executor };\nexport type { FileMutationSummary, ScriptResult, TraceEntry } from \"./types.ts\";\n\nexport type EdlRegisters = {\n  registers: Map\u003cstring, string\u003e;\n  nextSavedId: number;\n};\nexport type RangeInfo = {\n  startPos: Pos;\n  endPos: Pos;\n  content: string;\n};\n\nexport type FileErrorInfo = {\n  path: string;\n  error: string;\n  failedMutations: number;\n  trace: { command: string; snippet: string }[];\n  savedRegisters: { name: string; sizeChars: number }[];\n};\n\nexport type EdlResultData = {\n  warnings: string[];\n  trace: { command: string; snippet: string }[];\n  mutations: {\n    path: string;\n    summary: FileMutationSummary;\n    content: string;\n    previousContent: string;\n  }[];\n  finalSelection: { ranges: RangeInfo[] } | undefined;\n  fileErrors: FileErrorInfo[];\n};\n\nexport type RunScriptResult =\n  | {\n      status: \"ok\";\n      data: EdlResultData;\n      formatted: string;\n      edlRegisters: EdlRegisters;\n    }\n  | { status: \"error\"; error: string };",
+      "contextualizedText": "// node/core/src/edl/index.ts\n\nimport type { FileIO } from \"../capabilities/file-io.ts\";\nimport { type HomeDir, type NvimCwd, resolveFilePath } from \"../utils/files.ts\";\nimport { ExecutionError, Executor } from \"./executor.ts\";\nimport { lexWithPos, ParseError, parse } from \"./parser.ts\";\nimport type {\n  FileMutationSummary,\n  Pos,\n  RangeWithPos,\n  ScriptResult,\n  TraceEntry,\n} from \"./types.ts\";\n\nexport { parse, ParseError, ExecutionError, Executor };\nexport type { FileMutationSummary, ScriptResult, TraceEntry } from \"./types.ts\";\n\nexport type EdlRegisters = {\n  registers: Map\u003cstring, string\u003e;\n  nextSavedId: number;\n};\nexport type RangeInfo = {\n  startPos: Pos;\n  endPos: Pos;\n  content: string;\n};\n\nexport type FileErrorInfo = {\n  path: string;\n  error: string;\n  failedMutations: number;\n  trace: { command: string; snippet: string }[];\n  savedRegisters: { name: string; sizeChars: number }[];\n};\n\nexport type EdlResultData = {\n  warnings: string[];\n  trace: { command: string; snippet: string }[];\n  mutations: {\n    path: string;\n    summary: FileMutationSummary;\n    content: string;\n    previousContent: string;\n  }[];\n  finalSelection: { ranges: RangeInfo[] } | undefined;\n  fileErrors: FileErrorInfo[];\n};\n\nexport type RunScriptResult =\n  | {\n      status: \"ok\";\n      data: EdlResultData;\n      formatted: string;\n      edlRegisters: EdlRegisters;\n    }\n  | { status: \"error\"; error: string };",
+      "headingContext": "node/core/src/edl/index.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 54,
+      "endCol": 40
+    },
+    {
+      "text": "function formatTrace(trace: TraceEntry[]): string {\n  if (trace.length === 0) return \"\";\n  return trace.map((t) =\u003e `  ${t.command} → ${t.snippet}`).join(\"\\n\");\n}",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function formatTrace\n\nfunction formatTrace(trace: TraceEntry[]): string {\n  if (trace.length === 0) return \"\";\n  return trace.map((t) =\u003e `  ${t.command} → ${t.snippet}`).join(\"\\n\");\n}",
+      "headingContext": "node/core/src/edl/index.ts \u003e function formatTrace",
+      "startLine": 56,
+      "startCol": 1,
+      "endLine": 59,
+      "endCol": 2
+    },
+    {
+      "text": "function formatMutations(mutations: Map\u003cstring, FileMutationSummary\u003e): string {\n  if (mutations.size === 0) return \"No files modified.\";\n  const lines: string[] = [];\n  for (const [path, m] of mutations) {\n    const parts: string[] = [];\n    if (m.replacements \u003e 0) parts.push(`${m.replacements} replacements`);\n    if (m.insertions \u003e 0) parts.push(`${m.insertions} insertions`);\n    if (m.deletions \u003e 0) parts.push(`${m.deletions} deletions`);\n    parts.push(`+${m.linesAdded}/-${m.linesRemoved} lines`);\n    lines.push(`  ${path}: ${parts.join(\", \")}`);\n  }\n  return lines.join(\"\\n\");\n}",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function formatMutations\n\nfunction formatMutations(mutations: Map\u003cstring, FileMutationSummary\u003e): string {\n  if (mutations.size === 0) return \"No files modified.\";\n  const lines: string[] = [];\n  for (const [path, m] of mutations) {\n    const parts: string[] = [];\n    if (m.replacements \u003e 0) parts.push(`${m.replacements} replacements`);\n    if (m.insertions \u003e 0) parts.push(`${m.insertions} insertions`);\n    if (m.deletions \u003e 0) parts.push(`${m.deletions} deletions`);\n    parts.push(`+${m.linesAdded}/-${m.linesRemoved} lines`);\n    lines.push(`  ${path}: ${parts.join(\", \")}`);\n  }\n  return lines.join(\"\\n\");\n}",
+      "headingContext": "node/core/src/edl/index.ts \u003e function formatMutations",
+      "startLine": 61,
+      "startCol": 1,
+      "endLine": 73,
+      "endCol": 2
+    },
+    {
+      "text": "export type FileAccessInfo = {\n  path: string;\n  read: boolean;\n  write: boolean;\n};\n\nconst MUTATION_COMMANDS = new Set([\n  \"replace\",\n  \"delete\",\n  \"insert_before\",\n  \"insert_after\",\n  \"cut\",\n]);",
+      "contextualizedText": "// node/core/src/edl/index.ts\n\nexport type FileAccessInfo = {\n  path: string;\n  read: boolean;\n  write: boolean;\n};\n\nconst MUTATION_COMMANDS = new Set([\n  \"replace\",\n  \"delete\",\n  \"insert_before\",\n  \"insert_after\",\n  \"cut\",\n]);",
+      "headingContext": "node/core/src/edl/index.ts",
+      "startLine": 75,
+      "startCol": 1,
+      "endLine": 87,
+      "endCol": 4
+    },
+    {
+      "text": "export function analyzeFileAccess(script: string): FileAccessInfo[] {\n  const commands = parse(script);\n  const fileAccess = new Map\u003cstring, { read: boolean; write: boolean }\u003e();\n  let currentFile: string | undefined;\n\n  for (const cmd of commands) {\n    if (cmd.type === \"file\") {\n      currentFile = cmd.path;\n      if (!fileAccess.has(cmd.path)) {\n        fileAccess.set(cmd.path, { read: true, write: false });\n      }\n    } else if (cmd.type === \"newfile\") {\n      currentFile = cmd.path;\n      fileAccess.set(cmd.path, { read: false, write: true });\n    } else if (MUTATION_COMMANDS.has(cmd.type) \u0026\u0026 currentFile) {\n      const access = fileAccess.get(currentFile);\n      if (access) {\n        access.write = true;\n      }\n    }\n  }\n\n  return Array.from(fileAccess.entries()).map(([path, access]) =\u003e ({\n    path,\n    ...access,\n  }));\n}",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function analyzeFileAccess\n\nexport function analyzeFileAccess(script: string): FileAccessInfo[] {\n  const commands = parse(script);\n  const fileAccess = new Map\u003cstring, { read: boolean; write: boolean }\u003e();\n  let currentFile: string | undefined;\n\n  for (const cmd of commands) {\n    if (cmd.type === \"file\") {\n      currentFile = cmd.path;\n      if (!fileAccess.has(cmd.path)) {\n        fileAccess.set(cmd.path, { read: true, write: false });\n      }\n    } else if (cmd.type === \"newfile\") {\n      currentFile = cmd.path;\n      fileAccess.set(cmd.path, { read: false, write: true });\n    } else if (MUTATION_COMMANDS.has(cmd.type) \u0026\u0026 currentFile) {\n      const access = fileAccess.get(currentFile);\n      if (access) {\n        access.write = true;\n      }\n    }\n  }\n\n  return Array.from(fileAccess.entries()).map(([path, access]) =\u003e ({\n    path,\n    ...access,\n  }));\n}",
+      "headingContext": "node/core/src/edl/index.ts \u003e function analyzeFileAccess",
+      "startLine": 89,
+      "startCol": 1,
+      "endLine": 115,
+      "endCol": 2
+    },
+    {
+      "text": "export type ScriptFileSegment = { path: string; segment: string };",
+      "contextualizedText": "// node/core/src/edl/index.ts\n\nexport type ScriptFileSegment = { path: string; segment: string };",
+      "headingContext": "node/core/src/edl/index.ts",
+      "startLine": 116,
+      "startCol": 1,
+      "endLine": 116,
+      "endCol": 67
+    },
+    {
+      "text": "/**\n * Display-only, tolerant per-file splitter. Given a (possibly partial/streaming)\n * script, returns one entry per `file`/`newfile` directive with the raw script\n * substring belonging to that directive (up to the next directive). Heredoc-aware\n * and never throws. Commands before the first directive are dropped.\n */\nexport function splitScriptByFile(script: string): ScriptFileSegment[] {\n  const boundaries: { path: string; start: number }[] = [];\n  const tokens = Array.from(lexWithPos(script));\n\n  for (let i = 0; i \u003c tokens.length; i++) {\n    const { token } = tokens[i];\n    if (\n      token.type === \"word\" \u0026\u0026\n      (token.value === \"file\" || token.value === \"newfile\")\n    ) {\n      const pathTok = tokens[i + 1]?.token;\n      if (pathTok \u0026\u0026 (pathTok.type === \"path\" || pathTok.type === \"word\")) {\n        boundaries.push({ path: pathTok.value, start: tokens[i].start });\n      }\n    }\n  }\n\n  return boundaries.map((b, idx) =\u003e {\n    const end =\n      idx + 1 \u003c boundaries.length ? boundaries[idx + 1].start : script.length;\n    return { path: b.path, segment: script.slice(b.start, end) };\n  });\n}",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function splitScriptByFile\n\n/**\n * Display-only, tolerant per-file splitter. Given a (possibly partial/streaming)\n * script, returns one entry per `file`/`newfile` directive with the raw script\n * substring belonging to that directive (up to the next directive). Heredoc-aware\n * and never throws. Commands before the first directive are dropped.\n */\nexport function splitScriptByFile(script: string): ScriptFileSegment[] {\n  const boundaries: { path: string; start: number }[] = [];\n  const tokens = Array.from(lexWithPos(script));\n\n  for (let i = 0; i \u003c tokens.length; i++) {\n    const { token } = tokens[i];\n    if (\n      token.type === \"word\" \u0026\u0026\n      (token.value === \"file\" || token.value === \"newfile\")\n    ) {\n      const pathTok = tokens[i + 1]?.token;\n      if (pathTok \u0026\u0026 (pathTok.type === \"path\" || pathTok.type === \"word\")) {\n        boundaries.push({ path: pathTok.value, start: tokens[i].start });\n      }\n    }\n  }\n\n  return boundaries.map((b, idx) =\u003e {\n    const end =\n      idx + 1 \u003c boundaries.length ? boundaries[idx + 1].start : script.length;\n    return { path: b.path, segment: script.slice(b.start, end) };\n  });\n}",
+      "headingContext": "node/core/src/edl/index.ts \u003e function splitScriptByFile",
+      "startLine": 118,
+      "startCol": 1,
+      "endLine": 146,
+      "endCol": 2
+    },
+    {
+      "text": "function formatPos(pos: Pos): string {\n  return `${pos.line}:${pos.col}`;\n}",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function formatPos\n\nfunction formatPos(pos: Pos): string {\n  return `${pos.line}:${pos.col}`;\n}",
+      "headingContext": "node/core/src/edl/index.ts \u003e function formatPos",
+      "startLine": 148,
+      "startCol": 1,
+      "endLine": 150,
+      "endCol": 2
+    },
+    {
+      "text": "const MAX_CONTENT_CHARS = 800;",
+      "contextualizedText": "// node/core/src/edl/index.ts\n\nconst MAX_CONTENT_CHARS = 800;",
+      "headingContext": "node/core/src/edl/index.ts",
+      "startLine": 152,
+      "startCol": 1,
+      "endLine": 152,
+      "endCol": 31
+    },
+    {
+      "text": "function abridgeContent(content: string): string {\n  if (content.length \u003c= MAX_CONTENT_CHARS) {\n    return content;\n  }\n  const half = Math.floor((MAX_CONTENT_CHARS - 5) / 2);\n  return `${content.slice(0, half)}\\n...\\n${content.slice(-half)}`;\n}",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function abridgeContent\n\nfunction abridgeContent(content: string): string {\n  if (content.length \u003c= MAX_CONTENT_CHARS) {\n    return content;\n  }\n  const half = Math.floor((MAX_CONTENT_CHARS - 5) / 2);\n  return `${content.slice(0, half)}\\n...\\n${content.slice(-half)}`;\n}",
+      "headingContext": "node/core/src/edl/index.ts \u003e function abridgeContent",
+      "startLine": 154,
+      "startCol": 1,
+      "endLine": 160,
+      "endCol": 2
+    },
+    {
+      "text": "function formatRangeInfo(r: RangeWithPos): string {\n  const posInfo = `[${formatPos(r.startPos)} - ${formatPos(r.endPos)}]`;\n  const abridged = abridgeContent(r.content);\n  return `${posInfo}\\n${abridged}`;\n}",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function formatRangeInfo\n\nfunction formatRangeInfo(r: RangeWithPos): string {\n  const posInfo = `[${formatPos(r.startPos)} - ${formatPos(r.endPos)}]`;\n  const abridged = abridgeContent(r.content);\n  return `${posInfo}\\n${abridged}`;\n}",
+      "headingContext": "node/core/src/edl/index.ts \u003e function formatRangeInfo",
+      "startLine": 162,
+      "startCol": 1,
+      "endLine": 166,
+      "endCol": 2
+    },
+    {
+      "text": "function formatFileErrors(\n  fileErrors: ScriptResult[\"fileErrors\"],\n): string | undefined {\n  if (fileErrors.length === 0) return undefined;\n  const lines: string[] = [];\n  for (const fe of fileErrors) {\n    lines.push(\n      `  ${fe.path}: ${fe.error} (${fe.failedMutations} mutation${fe.failedMutations !== 1 ? \"s\" : \"\"} not applied)`,\n    );\n    if (fe.trace.length \u003e 0) {\n      lines.push(\n        `    Trace:\\n${fe.trace.map((t) =\u003e `      ${t.command} → ${t.snippet}`).join(\"\\n\")}`,\n      );\n    }\n    for (const reg of fe.savedRegisters) {\n      lines.push(\n        `    Text saved to register ${reg.name} (${reg.sizeChars} chars). Use \\`replace ${reg.name}\\` to reference it.`,\n      );\n    }\n  }\n  return lines.join(\"\\n\");\n}",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function formatFileErrors\n\nfunction formatFileErrors(\n  fileErrors: ScriptResult[\"fileErrors\"],\n): string | undefined {\n  if (fileErrors.length === 0) return undefined;\n  const lines: string[] = [];\n  for (const fe of fileErrors) {\n    lines.push(\n      `  ${fe.path}: ${fe.error} (${fe.failedMutations} mutation${fe.failedMutations !== 1 ? \"s\" : \"\"} not applied)`,\n    );\n    if (fe.trace.length \u003e 0) {\n      lines.push(\n        `    Trace:\\n${fe.trace.map((t) =\u003e `      ${t.command} → ${t.snippet}`).join(\"\\n\")}`,\n      );\n    }\n    for (const reg of fe.savedRegisters) {\n      lines.push(\n        `    Text saved to register ${reg.name} (${reg.sizeChars} chars). Use \\`replace ${reg.name}\\` to reference it.`,\n      );\n    }\n  }\n  return lines.join(\"\\n\");\n}",
+      "headingContext": "node/core/src/edl/index.ts \u003e function formatFileErrors",
+      "startLine": 168,
+      "startCol": 1,
+      "endLine": 189,
+      "endCol": 2
+    },
+    {
+      "text": "function formatResult(result: ScriptResult): string {\n  const sections: string[] = [];\n\n  if (result.warnings.length \u003e 0) {\n    sections.push(\n      `Warnings:\\n${result.warnings.map((w) =\u003e `  ${w}`).join(\"\\n\")}`,\n    );\n  }\n\n  sections.push(`Trace:\\n${formatTrace(result.trace)}`);\n\n  sections.push(`Mutations:\\n${formatMutations(result.mutations)}`);\n\n  if (result.finalSelection) {\n    const rangeStrs = result.finalSelection.ranges.map(\n      (r, i) =\u003e `  Range ${i + 1}: ${formatRangeInfo(r)}`,\n    );\n    sections.push(\n      `Final selection (${result.finalSelection.ranges.length} ranges):\\n${rangeStrs.join(\"\\n\\n\")}`,\n    );\n  }\n\n  const fileErrorsStr = formatFileErrors(result.fileErrors);\n  if (fileErrorsStr) {\n    sections.push(`File errors:\\n${fileErrorsStr}`);\n  }\n\n  return sections.join(\"\\n\\n\");\n}",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function formatResult\n\nfunction formatResult(result: ScriptResult): string {\n  const sections: string[] = [];\n\n  if (result.warnings.length \u003e 0) {\n    sections.push(\n      `Warnings:\\n${result.warnings.map((w) =\u003e `  ${w}`).join(\"\\n\")}`,\n    );\n  }\n\n  sections.push(`Trace:\\n${formatTrace(result.trace)}`);\n\n  sections.push(`Mutations:\\n${formatMutations(result.mutations)}`);\n\n  if (result.finalSelection) {\n    const rangeStrs = result.finalSelection.ranges.map(\n      (r, i) =\u003e `  Range ${i + 1}: ${formatRangeInfo(r)}`,\n    );\n    sections.push(\n      `Final selection (${result.finalSelection.ranges.length} ranges):\\n${rangeStrs.join(\"\\n\\n\")}`,\n    );\n  }\n\n  const fileErrorsStr = formatFileErrors(result.fileErrors);\n  if (fileErrorsStr) {\n    sections.push(`File errors:\\n${fileErrorsStr}`);\n  }\n\n  return sections.join(\"\\n\\n\");\n}",
+      "headingContext": "node/core/src/edl/index.ts \u003e function formatResult",
+      "startLine": 190,
+      "startCol": 1,
+      "endLine": 218,
+      "endCol": 2
+    },
+    {
+      "text": "export async function runScript(\n  script: string,\n  fileIO?: FileIO,\n  edlRegisters?: EdlRegisters,\n  pathContext?: { cwd: NvimCwd; homeDir: HomeDir },\n): Promise\u003cRunScriptResult\u003e",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function runScript\n\nexport async function runScript(\n  script: string,\n  fileIO?: FileIO,\n  edlRegisters?: EdlRegisters,\n  pathContext?: { cwd: NvimCwd; homeDir: HomeDir },\n): Promise\u003cRunScriptResult\u003e",
+      "headingContext": "node/core/src/edl/index.ts \u003e function runScript",
+      "startLine": 220,
+      "startCol": 1,
+      "endLine": 225,
+      "endCol": 28
+    },
+    {
+      "text": "  const toDisplayPath = (p: string): string =\u003e\n    pathContext\n      ? resolveFilePath(\n          pathContext.cwd,\n          p as Parameters\u003ctypeof resolveFilePath\u003e[1],\n          pathContext.homeDir,\n        )\n      : p",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function runScript \u003e function toDisplayPath\n\n  const toDisplayPath = (p: string): string =\u003e\n    pathContext\n      ? resolveFilePath(\n          pathContext.cwd,\n          p as Parameters\u003ctypeof resolveFilePath\u003e[1],\n          pathContext.homeDir,\n        )\n      : p",
+      "headingContext": "node/core/src/edl/index.ts \u003e function runScript \u003e function toDisplayPath",
+      "startLine": 226,
+      "startCol": 1,
+      "endLine": 233,
+      "endCol": 10
+    },
+    {
+      "text": "{\n    const commands = parse(script);\n    const executor = new Executor(fileIO);\n    if (edlRegisters) {\n      for (const [key, value] of edlRegisters.registers) {\n        executor.registers.set(key, value);\n      }\n      executor.savedRegisterCount = edlRegisters.nextSavedId;\n    }\n    const result = await executor.execute(commands);\n\n    const data: EdlResultData = {\n      warnings: result.warnings,\n      trace: result.trace.map((t) =\u003e ({\n        command: t.command,\n        snippet: t.snippet,\n      })),\n      mutations: Array.from(result.mutations.entries()).map(\n        ([path, summary]) =\u003e ({\n          path: toDisplayPath(path),\n          summary,\n          content: result.fileContents.get(path)?.content ?? \"\",\n          previousContent: result.fileContents.get(path)?.previousContent ?? \"\",\n        }),\n      ),\n      finalSelection: result.finalSelection\n        ? {\n            ranges: result.finalSelection.ranges.map((r) =\u003e ({\n              startPos: r.startPos,\n              endPos: r.endPos,\n              content: abridgeContent(r.content),\n            })),\n          }\n        : undefined,\n      fileErrors: result.fileErrors.map((fe) =\u003e ({\n        path: toDisplayPath(fe.path),\n        error: fe.error,\n        failedMutations: fe.failedMutations,\n        trace: fe.trace.map((t) =\u003e ({\n          command: t.command,\n          snippet: t.snippet,\n        })),\n        savedRegisters: fe.savedRegisters,\n      })),\n    };\n\n    const updatedRegisters: EdlRegisters = {\n      registers: new Map(executor.registers),\n      nextSavedId: executor.savedRegisterCount,\n    };\n\n    return {\n      status: \"ok\",\n      data,\n      formatted: formatResult({\n        ...result,\n        mutations: new Map(\n          Array.from(result.mutations, ([p, m]) =\u003e [toDisplayPath(p), m]),\n        ),\n        fileErrors: result.fileErrors.map((fe) =\u003e ({\n          ...fe,\n          path: toDisplayPath(fe.path),\n        })),\n      }),\n      edlRegisters: updatedRegisters,\n    };\n  }",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function runScript\n\n{\n    const commands = parse(script);\n    const executor = new Executor(fileIO);\n    if (edlRegisters) {\n      for (const [key, value] of edlRegisters.registers) {\n        executor.registers.set(key, value);\n      }\n      executor.savedRegisterCount = edlRegisters.nextSavedId;\n    }\n    const result = await executor.execute(commands);\n\n    const data: EdlResultData = {\n      warnings: result.warnings,\n      trace: result.trace.map((t) =\u003e ({\n        command: t.command,\n        snippet: t.snippet,\n      })),\n      mutations: Array.from(result.mutations.entries()).map(\n        ([path, summary]) =\u003e ({\n          path: toDisplayPath(path),\n          summary,\n          content: result.fileContents.get(path)?.content ?? \"\",\n          previousContent: result.fileContents.get(path)?.previousContent ?? \"\",\n        }),\n      ),\n      finalSelection: result.finalSelection\n        ? {\n            ranges: result.finalSelection.ranges.map((r) =\u003e ({\n              startPos: r.startPos,\n              endPos: r.endPos,\n              content: abridgeContent(r.content),\n            })),\n          }\n        : undefined,\n      fileErrors: result.fileErrors.map((fe) =\u003e ({\n        path: toDisplayPath(fe.path),\n        error: fe.error,\n        failedMutations: fe.failedMutations,\n        trace: fe.trace.map((t) =\u003e ({\n          command: t.command,\n          snippet: t.snippet,\n        })),\n        savedRegisters: fe.savedRegisters,\n      })),\n    };\n\n    const updatedRegisters: EdlRegisters = {\n      registers: new Map(executor.registers),\n      nextSavedId: executor.savedRegisterCount,\n    };\n\n    return {\n      status: \"ok\",\n      data,\n      formatted: formatResult({\n        ...result,\n        mutations: new Map(\n          Array.from(result.mutations, ([p, m]) =\u003e [toDisplayPath(p), m]),\n        ),\n        fileErrors: result.fileErrors.map((fe) =\u003e ({\n          ...fe,\n          path: toDisplayPath(fe.path),\n        })),\n      }),\n      edlRegisters: updatedRegisters,\n    };\n  }",
+      "headingContext": "node/core/src/edl/index.ts \u003e function runScript",
+      "startLine": 234,
+      "startCol": 7,
+      "endLine": 300,
+      "endCol": 4
+    },
+    {
+      "text": "catch (e) {\n    if (e instanceof ParseError) {\n      return { status: \"error\", error: `Parse error: ${e.message}` };\n    }\n    if (e instanceof ExecutionError) {\n      const sections: string[] = [`Error: ${e.message}`];\n      if (e.trace.length \u003e 0) {\n        sections.push(`Trace:\\n${formatTrace(e.trace)}`);\n      }\n      return { status: \"error\", error: sections.join(\"\\n\\n\") };\n    }\n    return {\n      status: \"error\",\n      error: `Unexpected error: ${e instanceof Error ? e.message : String(e)}`,\n    };\n  }\n}",
+      "contextualizedText": "// node/core/src/edl/index.ts \u003e function runScript\n\ncatch (e) {\n    if (e instanceof ParseError) {\n      return { status: \"error\", error: `Parse error: ${e.message}` };\n    }\n    if (e instanceof ExecutionError) {\n      const sections: string[] = [`Error: ${e.message}`];\n      if (e.trace.length \u003e 0) {\n        sections.push(`Trace:\\n${formatTrace(e.trace)}`);\n      }\n      return { status: \"error\", error: sections.join(\"\\n\\n\") };\n    }\n    return {\n      status: \"error\",\n      error: `Unexpected error: ${e instanceof Error ? e.message : String(e)}`,\n    };\n  }\n}",
+      "headingContext": "node/core/src/edl/index.ts \u003e function runScript",
+      "startLine": 300,
+      "startCol": 5,
+      "endLine": 316,
+      "endCol": 2
+    }
+  ]
+}

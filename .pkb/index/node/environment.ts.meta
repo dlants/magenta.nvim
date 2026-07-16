@@ -1,0 +1,60 @@
+{
+  "blobSha": "ce1d8aa676a4893245c30b5ca5337b1b039750a2",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type {\n  FileIO,\n  GitClient,\n  HelpTagsProvider,\n  LspClient,\n  LuaExecutor,\n  ThreadId,\n  ToolCapability,\n} from \"@magenta/core\";\nimport type { SandboxViolationHandler } from \"./capabilities/sandbox-violation-handler.ts\";\nimport type { Shell } from \"./capabilities/shell.ts\";\nimport type { Sandbox } from \"./sandbox-manager.ts\";\nimport type { HomeDir, NvimCwd } from \"./utils/files.ts\";\n\nexport type EnvironmentConfig =\n  | { type: \"local\"; cwd?: NvimCwd }\n  | { type: \"docker\"; container: string; cwd: string };",
+      "contextualizedText": "// node/environment.ts\n\nimport type {\n  FileIO,\n  GitClient,\n  HelpTagsProvider,\n  LspClient,\n  LuaExecutor,\n  ThreadId,\n  ToolCapability,\n} from \"@magenta/core\";\nimport type { SandboxViolationHandler } from \"./capabilities/sandbox-violation-handler.ts\";\nimport type { Shell } from \"./capabilities/shell.ts\";\nimport type { Sandbox } from \"./sandbox-manager.ts\";\nimport type { HomeDir, NvimCwd } from \"./utils/files.ts\";\n\nexport type EnvironmentConfig =\n  | { type: \"local\"; cwd?: NvimCwd }\n  | { type: \"docker\"; container: string; cwd: string };",
+      "headingContext": "node/environment.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 17,
+      "endCol": 56
+    },
+    {
+      "text": "export interface Environment {\n  fileIO: FileIO;\n  shell: Shell;\n  gitClient: GitClient;\n  sandboxViolationHandler?: SandboxViolationHandler | undefined;\n  lspClient: LspClient;\n  helpTagsProvider: HelpTagsProvider;\n  luaExecutor?: LuaExecutor | undefined;\n  cwd: NvimCwd;\n  homeDir: HomeDir;\n  availableCapabilities: Set\u003cToolCapability\u003e;\n  environmentConfig: EnvironmentConfig;\n}",
+      "contextualizedText": "// node/environment.ts \u003e interface Environment\n\nexport interface Environment {\n  fileIO: FileIO;\n  shell: Shell;\n  gitClient: GitClient;\n  sandboxViolationHandler?: SandboxViolationHandler | undefined;\n  lspClient: LspClient;\n  helpTagsProvider: HelpTagsProvider;\n  luaExecutor?: LuaExecutor | undefined;\n  cwd: NvimCwd;\n  homeDir: HomeDir;\n  availableCapabilities: Set\u003cToolCapability\u003e;\n  environmentConfig: EnvironmentConfig;\n}",
+      "headingContext": "node/environment.ts \u003e interface Environment",
+      "startLine": 19,
+      "startCol": 1,
+      "endLine": 31,
+      "endCol": 2
+    },
+    {
+      "text": "import { execFile as execFileCb } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport { DockerFileIO } from \"./capabilities/docker-file-io.ts\";\nimport { DockerShell } from \"./capabilities/docker-shell.ts\";\nimport { DockerGitClient, LocalGitClient } from \"./capabilities/git-client.ts\";\nimport type { Lsp } from \"./capabilities/lsp.ts\";\nimport { NvimLspClient } from \"./capabilities/lsp-client-adapter.ts\";\nimport { NoopHelpTagsProvider } from \"./capabilities/noop-help-tags-provider.ts\";\nimport { NoopLspClient } from \"./capabilities/noop-lsp-client.ts\";\nimport { NvimHelpTagsProvider } from \"./capabilities/nvim-help-tags-provider.ts\";\nimport { NvimLuaExecutor } from \"./capabilities/nvim-lua-executor.ts\";\nimport { SandboxFileIO } from \"./capabilities/sandbox-file-io.ts\";\nimport { SandboxShell } from \"./capabilities/sandbox-shell.ts\";\nimport { SandboxViolationHandler as SandboxViolationHandlerImpl } from \"./capabilities/sandbox-violation-handler.ts\";\nimport type { Nvim } from \"./nvim/nvim-node/index.ts\";\nimport type { MagentaOptions } from \"./options.ts\";",
+      "contextualizedText": "// node/environment.ts\n\nimport { execFile as execFileCb } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport { DockerFileIO } from \"./capabilities/docker-file-io.ts\";\nimport { DockerShell } from \"./capabilities/docker-shell.ts\";\nimport { DockerGitClient, LocalGitClient } from \"./capabilities/git-client.ts\";\nimport type { Lsp } from \"./capabilities/lsp.ts\";\nimport { NvimLspClient } from \"./capabilities/lsp-client-adapter.ts\";\nimport { NoopHelpTagsProvider } from \"./capabilities/noop-help-tags-provider.ts\";\nimport { NoopLspClient } from \"./capabilities/noop-lsp-client.ts\";\nimport { NvimHelpTagsProvider } from \"./capabilities/nvim-help-tags-provider.ts\";\nimport { NvimLuaExecutor } from \"./capabilities/nvim-lua-executor.ts\";\nimport { SandboxFileIO } from \"./capabilities/sandbox-file-io.ts\";\nimport { SandboxShell } from \"./capabilities/sandbox-shell.ts\";\nimport { SandboxViolationHandler as SandboxViolationHandlerImpl } from \"./capabilities/sandbox-violation-handler.ts\";\nimport type { Nvim } from \"./nvim/nvim-node/index.ts\";\nimport type { MagentaOptions } from \"./options.ts\";",
+      "headingContext": "node/environment.ts",
+      "startLine": 33,
+      "startCol": 1,
+      "endLine": 48,
+      "endCol": 52
+    },
+    {
+      "text": "export function createLocalEnvironment({\n  nvim,\n  lsp,\n  cwd,\n  homeDir,\n  getOptions,\n  threadId,\n  sandbox,\n  onPendingChange,\n  isBypassed,\n}: {\n  nvim: Nvim;\n  lsp: Lsp;\n  cwd: NvimCwd;\n  homeDir: HomeDir;\n  getOptions: () =\u003e MagentaOptions;\n  threadId: ThreadId;\n  sandbox: Sandbox;\n  onPendingChange: () =\u003e void;\n  isBypassed: () =\u003e boolean;\n}): Environment {\n  const violationHandler = new SandboxViolationHandlerImpl(onPendingChange);\n\n  const sandboxFileIO = new SandboxFileIO(\n    { nvim, cwd, homeDir },\n    sandbox,\n    (absPath) =\u003e violationHandler.promptForWriteApproval(absPath),\n    isBypassed,\n  );\n\n  const sandboxShell = new SandboxShell(\n    { cwd, homeDir, threadId, getOptions, isBypassed },\n    sandbox,\n    violationHandler,\n  );\n\n  const lspClient = new NvimLspClient(lsp, nvim, cwd, homeDir);\n  const luaExecutor = new NvimLuaExecutor(nvim);\n  const helpTagsProvider = new NvimHelpTagsProvider(nvim);\n\n  return {\n    fileIO: sandboxFileIO,\n    shell: sandboxShell,\n    gitClient: new LocalGitClient(cwd),\n    sandboxViolationHandler: violationHandler,\n    lspClient,\n    helpTagsProvider,\n    luaExecutor,\n    cwd,\n    homeDir,\n    availableCapabilities: new Set([\n      \"lsp\",\n      \"shell\",\n      \"threads\",\n      \"file-io\",\n      \"scripts\",\n      \"nvim\",\n    ]),\n    environmentConfig: { type: \"local\" },\n  };\n}",
+      "contextualizedText": "// node/environment.ts \u003e function createLocalEnvironment\n\nexport function createLocalEnvironment({\n  nvim,\n  lsp,\n  cwd,\n  homeDir,\n  getOptions,\n  threadId,\n  sandbox,\n  onPendingChange,\n  isBypassed,\n}: {\n  nvim: Nvim;\n  lsp: Lsp;\n  cwd: NvimCwd;\n  homeDir: HomeDir;\n  getOptions: () =\u003e MagentaOptions;\n  threadId: ThreadId;\n  sandbox: Sandbox;\n  onPendingChange: () =\u003e void;\n  isBypassed: () =\u003e boolean;\n}): Environment {\n  const violationHandler = new SandboxViolationHandlerImpl(onPendingChange);\n\n  const sandboxFileIO = new SandboxFileIO(\n    { nvim, cwd, homeDir },\n    sandbox,\n    (absPath) =\u003e violationHandler.promptForWriteApproval(absPath),\n    isBypassed,\n  );\n\n  const sandboxShell = new SandboxShell(\n    { cwd, homeDir, threadId, getOptions, isBypassed },\n    sandbox,\n    violationHandler,\n  );\n\n  const lspClient = new NvimLspClient(lsp, nvim, cwd, homeDir);\n  const luaExecutor = new NvimLuaExecutor(nvim);\n  const helpTagsProvider = new NvimHelpTagsProvider(nvim);\n\n  return {\n    fileIO: sandboxFileIO,\n    shell: sandboxShell,\n    gitClient: new LocalGitClient(cwd),\n    sandboxViolationHandler: violationHandler,\n    lspClient,\n    helpTagsProvider,\n    luaExecutor,\n    cwd,\n    homeDir,\n    availableCapabilities: new Set([\n      \"lsp\",\n      \"shell\",\n      \"threads\",\n      \"file-io\",\n      \"scripts\",\n      \"nvim\",\n    ]),\n    environmentConfig: { type: \"local\" },\n  };\n}",
+      "headingContext": "node/environment.ts \u003e function createLocalEnvironment",
+      "startLine": 50,
+      "startCol": 1,
+      "endLine": 110,
+      "endCol": 2
+    },
+    {
+      "text": "const execFile = promisify(execFileCb);",
+      "contextualizedText": "// node/environment.ts\n\nconst execFile = promisify(execFileCb);",
+      "headingContext": "node/environment.ts",
+      "startLine": 111,
+      "startCol": 1,
+      "endLine": 111,
+      "endCol": 40
+    },
+    {
+      "text": "export async function createDockerEnvironment({\n  container,\n  cwd: cwdParam,\n  threadId,\n}: {\n  container: string;\n  cwd?: string;\n  threadId: ThreadId;\n}): Promise\u003cEnvironment\u003e {\n  const resolvedCwd: string =\n    cwdParam ??\n    (await execFile(\"docker\", [\"exec\", container, \"pwd\"]).then((r) =\u003e\n      r.stdout.trim(),\n    ));\n  const resolvedHome = await execFile(\"docker\", [\n    \"exec\",\n    container,\n    \"sh\",\n    \"-c\",\n    \"echo $HOME\",\n  ]).then((r) =\u003e r.stdout.trim());\n\n  const fileIO = new DockerFileIO({ container });\n  const shell = new DockerShell({ container, cwd: resolvedCwd, threadId });\n  const lspClient = new NoopLspClient();\n  const helpTagsProvider = new NoopHelpTagsProvider();\n\n  return {\n    fileIO,\n    shell,\n    gitClient: new DockerGitClient(container, resolvedCwd),\n    sandboxViolationHandler: undefined,\n    lspClient,\n    helpTagsProvider,\n    cwd: resolvedCwd as NvimCwd,\n    homeDir: resolvedHome as HomeDir,\n    availableCapabilities: new Set([\"file-io\", \"shell\", \"threads\"]),\n    environmentConfig: { type: \"docker\", container, cwd: resolvedCwd },\n  };\n}",
+      "contextualizedText": "// node/environment.ts \u003e function createDockerEnvironment\n\nexport async function createDockerEnvironment({\n  container,\n  cwd: cwdParam,\n  threadId,\n}: {\n  container: string;\n  cwd?: string;\n  threadId: ThreadId;\n}): Promise\u003cEnvironment\u003e {\n  const resolvedCwd: string =\n    cwdParam ??\n    (await execFile(\"docker\", [\"exec\", container, \"pwd\"]).then((r) =\u003e\n      r.stdout.trim(),\n    ));\n  const resolvedHome = await execFile(\"docker\", [\n    \"exec\",\n    container,\n    \"sh\",\n    \"-c\",\n    \"echo $HOME\",\n  ]).then((r) =\u003e r.stdout.trim());\n\n  const fileIO = new DockerFileIO({ container });\n  const shell = new DockerShell({ container, cwd: resolvedCwd, threadId });\n  const lspClient = new NoopLspClient();\n  const helpTagsProvider = new NoopHelpTagsProvider();\n\n  return {\n    fileIO,\n    shell,\n    gitClient: new DockerGitClient(container, resolvedCwd),\n    sandboxViolationHandler: undefined,\n    lspClient,\n    helpTagsProvider,\n    cwd: resolvedCwd as NvimCwd,\n    homeDir: resolvedHome as HomeDir,\n    availableCapabilities: new Set([\"file-io\", \"shell\", \"threads\"]),\n    environmentConfig: { type: \"docker\", container, cwd: resolvedCwd },\n  };\n}",
+      "headingContext": "node/environment.ts \u003e function createDockerEnvironment",
+      "startLine": 113,
+      "startCol": 1,
+      "endLine": 152,
+      "endCol": 2
+    }
+  ]
+}

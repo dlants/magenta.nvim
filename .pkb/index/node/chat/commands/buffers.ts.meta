@@ -1,0 +1,42 @@
+{
+  "blobSha": "11db31186bd3bd1835877e7ebb3ea5e3557a593d",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport { getBuffersList } from \"../../utils/listBuffers.ts\";\nimport type { Command } from \"./types.ts\";",
+      "contextualizedText": "// node/chat/commands/buffers.ts\n\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport { getBuffersList } from \"../../utils/listBuffers.ts\";\nimport type { Command } from \"./types.ts\";",
+      "headingContext": "node/chat/commands/buffers.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 4,
+      "endCol": 43
+    },
+    {
+      "text": "const createBuffersCommand = (name: string, pattern: RegExp): Command =\u003e ({\n  name,\n  pattern",
+      "contextualizedText": "// node/chat/commands/buffers.ts \u003e function createBuffersCommand\n\nconst createBuffersCommand = (name: string, pattern: RegExp): Command =\u003e ({\n  name,\n  pattern",
+      "headingContext": "node/chat/commands/buffers.ts \u003e function createBuffersCommand",
+      "startLine": 6,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 10
+    },
+    {
+      "text": "  async execute(_match, context): Promise\u003cProviderMessageContent[]\u003e {\n    try {\n      const buffersList = await getBuffersList(context.nvim);\n      return [\n        {\n          type: \"text\",\n          text: `Current buffers list:\\n${buffersList}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to fetch buffers list for message: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error fetching buffers list: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
+      "contextualizedText": "// node/chat/commands/buffers.ts \u003e function createBuffersCommand \u003e method execute\n\n  async execute(_match, context): Promise\u003cProviderMessageContent[]\u003e {\n    try {\n      const buffersList = await getBuffersList(context.nvim);\n      return [\n        {\n          type: \"text\",\n          text: `Current buffers list:\\n${buffersList}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to fetch buffers list for message: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error fetching buffers list: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
+      "headingContext": "node/chat/commands/buffers.ts \u003e function createBuffersCommand \u003e method execute",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 31,
+      "endCol": 4
+    },
+    {
+      "text": "export const bufCommand: Command = createBuffersCommand(\"@buf\", /@buf\\b/);\n\nexport const buffersCommand: Command = createBuffersCommand(\n  \"@buffers\",\n  /@buffers\\b/,\n);",
+      "contextualizedText": "// node/chat/commands/buffers.ts\n\nexport const bufCommand: Command = createBuffersCommand(\"@buf\", /@buf\\b/);\n\nexport const buffersCommand: Command = createBuffersCommand(\n  \"@buffers\",\n  /@buffers\\b/,\n);",
+      "headingContext": "node/chat/commands/buffers.ts",
+      "startLine": 34,
+      "startCol": 1,
+      "endLine": 39,
+      "endCol": 3
+    }
+  ]
+}

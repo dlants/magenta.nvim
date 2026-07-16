@@ -1,0 +1,105 @@
+{
+  "blobSha": "5a9f393e2bd7b33a70e677e33174db1c75159dc0",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { EventEmitter } from \"node:events\";\nimport net from \"node:net\";\nimport { addExtension, Packr, UnpackrStream, unpack } from \"msgpackr\";\nimport { createLogger, prettyRPCMessage } from \"./logger.ts\";\nimport {\n  type AttachParams,\n  type BaseEvents,\n  type EventHandler,\n  MessageType,\n  type Nvim,\n  type RPCMessage,\n  type RPCNotification,\n  type RPCRequest,\n  type RPCResponse,\n} from \"./types.ts\";\n\nconst packr = new Packr({ useRecords: false });\n\n[0, 1, 2].forEach((type) =\u003e {\n  // https://neovim.io/doc/user/api.html#api-definitions\n  // decode Buffer, Window, and Tabpage as numbers\n  // Buffer   id: 0    prefix: nvim_buf_\n  // Window   id: 1    prefix: nvim_win_\n  // Tabpage  id: 2    prefix: nvim_tabpage_\n",
+      "contextualizedText": "// node/nvim/nvim-node/attach.ts\n\nimport { EventEmitter } from \"node:events\";\nimport net from \"node:net\";\nimport { addExtension, Packr, UnpackrStream, unpack } from \"msgpackr\";\nimport { createLogger, prettyRPCMessage } from \"./logger.ts\";\nimport {\n  type AttachParams,\n  type BaseEvents,\n  type EventHandler,\n  MessageType,\n  type Nvim,\n  type RPCMessage,\n  type RPCNotification,\n  type RPCRequest,\n  type RPCResponse,\n} from \"./types.ts\";\n\nconst packr = new Packr({ useRecords: false });\n\n[0, 1, 2].forEach((type) =\u003e {\n  // https://neovim.io/doc/user/api.html#api-definitions\n  // decode Buffer, Window, and Tabpage as numbers\n  // Buffer   id: 0    prefix: nvim_buf_\n  // Window   id: 1    prefix: nvim_win_\n  // Tabpage  id: 2    prefix: nvim_tabpage_\n",
+      "headingContext": "node/nvim/nvim-node/attach.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 25,
+      "endCol": 1
+    },
+    {
+      "text": "  addExtension({ type, unpack: (buffer) =\u003e unpack(buffer) as number",
+      "contextualizedText": "// node/nvim/nvim-node/attach.ts \u003e function unpack\n\n  addExtension({ type, unpack: (buffer) =\u003e unpack(buffer) as number",
+      "headingContext": "node/nvim/nvim-node/attach.ts \u003e function unpack",
+      "startLine": 25,
+      "startCol": 1,
+      "endLine": 25,
+      "endCol": 68
+    },
+    {
+      "text": "export async function attach\u003cApiInfo extends BaseEvents = BaseEvents\u003e({\n  socket,\n  client,\n  logging,\n}: AttachParams): Promise\u003cNvim\u003cApiInfo\u003e\u003e {\n  const logger = createLogger(client, logging?.level ?? \"info\", logging?.file);\n  const messageOutQueue: RPCMessage[] = [];\n  const notificationHandlers = new Map\u003c\n    string,\n    // biome-ignore lint/suspicious/noExplicitAny: EventHandler generic parameter varies per notification type\n    Record\u003cstring, EventHandler\u003cany, unknown\u003e\u003e\n  \u003e();\n  // biome-ignore lint/suspicious/noExplicitAny: EventHandler generic parameter varies per request type\n  const requestHandlers = new Map\u003cstring, EventHandler\u003cany, unknown\u003e\u003e();\n  const emitter = new EventEmitter({ captureRejections: true });\n\n  let lastReqId = 0;\n  let handlerId = 0;\n\n  const unpackrStream = new UnpackrStream({ useRecords: false });\n  const nvimSocket = await new Promise\u003cnet.Socket\u003e((resolve, reject) =\u003e {\n    const client = new net.Socket();\n    client.once(\"error\", reject);\n    client.once(\"connect\", () =\u003e {\n      client\n        .removeListener(\"error\", reject)\n        .on(\"data\", (data: Buffer) =\u003e {\n          unpackrStream.write(data);\n        })\n        .on(\"error\", (error) =\u003e {\n          logger.error(\"socket error\", error);\n        })\n        .on(\"end\", () =\u003e {\n          logger.debug(\"connection closed by neovim\");\n        })\n        .on(\"close\", () =\u003e {\n          logger.debug(\"connection closed by node\");\n        });\n      resolve(client);\n    });\n\n    client.connect(socket);\n  });",
+      "contextualizedText": "// node/nvim/nvim-node/attach.ts \u003e function attach\n\nexport async function attach\u003cApiInfo extends BaseEvents = BaseEvents\u003e({\n  socket,\n  client,\n  logging,\n}: AttachParams): Promise\u003cNvim\u003cApiInfo\u003e\u003e {\n  const logger = createLogger(client, logging?.level ?? \"info\", logging?.file);\n  const messageOutQueue: RPCMessage[] = [];\n  const notificationHandlers = new Map\u003c\n    string,\n    // biome-ignore lint/suspicious/noExplicitAny: EventHandler generic parameter varies per notification type\n    Record\u003cstring, EventHandler\u003cany, unknown\u003e\u003e\n  \u003e();\n  // biome-ignore lint/suspicious/noExplicitAny: EventHandler generic parameter varies per request type\n  const requestHandlers = new Map\u003cstring, EventHandler\u003cany, unknown\u003e\u003e();\n  const emitter = new EventEmitter({ captureRejections: true });\n\n  let lastReqId = 0;\n  let handlerId = 0;\n\n  const unpackrStream = new UnpackrStream({ useRecords: false });\n  const nvimSocket = await new Promise\u003cnet.Socket\u003e((resolve, reject) =\u003e {\n    const client = new net.Socket();\n    client.once(\"error\", reject);\n    client.once(\"connect\", () =\u003e {\n      client\n        .removeListener(\"error\", reject)\n        .on(\"data\", (data: Buffer) =\u003e {\n          unpackrStream.write(data);\n        })\n        .on(\"error\", (error) =\u003e {\n          logger.error(\"socket error\", error);\n        })\n        .on(\"end\", () =\u003e {\n          logger.debug(\"connection closed by neovim\");\n        })\n        .on(\"close\", () =\u003e {\n          logger.debug(\"connection closed by node\");\n        });\n      resolve(client);\n    });\n\n    client.connect(socket);\n  });",
+      "headingContext": "node/nvim/nvim-node/attach.ts \u003e function attach",
+      "startLine": 28,
+      "startCol": 1,
+      "endLine": 70,
+      "endCol": 6
+    },
+    {
+      "text": "  function processMessageOutQueue() {\n    // All writing to neovim happens through this function.\n    // Outgoing RPC messages are added to the `messageOutQueue` and sent ASAP\n    if (!messageOutQueue.length) return;\n\n    const message = messageOutQueue.shift();\n    if (!message) {\n      logger.error(\"Cannot process undefined message\");\n      return;\n    }\n\n    logger.debug(prettyRPCMessage(message, \"out\"));\n    nvimSocket.write(packr.pack(message) as unknown as Uint8Array);\n    processMessageOutQueue();\n  }",
+      "contextualizedText": "// node/nvim/nvim-node/attach.ts \u003e function attach \u003e function processMessageOutQueue\n\n  function processMessageOutQueue() {\n    // All writing to neovim happens through this function.\n    // Outgoing RPC messages are added to the `messageOutQueue` and sent ASAP\n    if (!messageOutQueue.length) return;\n\n    const message = messageOutQueue.shift();\n    if (!message) {\n      logger.error(\"Cannot process undefined message\");\n      return;\n    }\n\n    logger.debug(prettyRPCMessage(message, \"out\"));\n    nvimSocket.write(packr.pack(message) as unknown as Uint8Array);\n    processMessageOutQueue();\n  }",
+      "headingContext": "node/nvim/nvim-node/attach.ts \u003e function attach \u003e function processMessageOutQueue",
+      "startLine": 72,
+      "startCol": 1,
+      "endLine": 86,
+      "endCol": 4
+    },
+    {
+      "text": "  function runNotificationHandlers(message: RPCNotification) {\n    // message[1] notification name\n    // message[2] args\n    const handlers = notificationHandlers.get(message[1]);\n    if (!handlers) return;\n\n    Object.entries(handlers).forEach(async ([id, handler]) =\u003e {\n      const result = await handler(message[2]);\n      // remove notification handler if it returns specifically `true`\n      // other truthy values won't trigger the removal\n      if (result === true) delete handlers[id];\n    });\n  }",
+      "contextualizedText": "// node/nvim/nvim-node/attach.ts \u003e function attach \u003e function runNotificationHandlers\n\n  function runNotificationHandlers(message: RPCNotification) {\n    // message[1] notification name\n    // message[2] args\n    const handlers = notificationHandlers.get(message[1]);\n    if (!handlers) return;\n\n    Object.entries(handlers).forEach(async ([id, handler]) =\u003e {\n      const result = await handler(message[2]);\n      // remove notification handler if it returns specifically `true`\n      // other truthy values won't trigger the removal\n      if (result === true) delete handlers[id];\n    });\n  }",
+      "headingContext": "node/nvim/nvim-node/attach.ts \u003e function attach \u003e function runNotificationHandlers",
+      "startLine": 88,
+      "startCol": 1,
+      "endLine": 100,
+      "endCol": 4
+    },
+    {
+      "text": "unpackrStream.on(\"data\", (message: RPCMessage) =\u003e {\n    (async () =\u003e {\n      logger.debug(prettyRPCMessage(message, \"in\"));\n      if (message[0] === MessageType.NOTIFY) {\n        // asynchronously run notification handlers.\n        // RPCNotifications don't need a response\n        runNotificationHandlers(message);\n      }\n\n      if (message[0] === MessageType.RESPONSE) {\n        // message[1] reqId\n        // message[2] error\n        // message[3] result\n        emitter.emit(`response-${message[1]}`, message[2], message[3]);\n      }\n\n      if (message[0] === MessageType.REQUEST) {\n        // message[1] reqId\n        // message[2] method name\n        // message[3] args\n        const handler = requestHandlers.get(message[2]);\n\n        // RPCRequests block neovim until a response is received.\n        // RPCResponse is added to beginning of queue to be sent ASAP.\n        if (!handler) {\n          const notFound: RPCResponse = [\n            MessageType.RESPONSE,\n            message[1],\n            `no handler for method ${message[2]} found`,\n            null,\n          ];\n          messageOutQueue.unshift(notFound);\n        } else {\n          try {\n            const result = await handler(message[3]);\n            const response: RPCResponse = [\n              MessageType.RESPONSE,\n              message[1],\n              null,\n              result,\n            ];\n            messageOutQueue.unshift(response);\n          } catch (err) {\n            const response: RPCResponse = [\n              MessageType.RESPONSE,\n              message[1],\n              String(err),\n              null,\n            ];\n            messageOutQueue.unshift(response);\n          }\n        }\n      }\n\n      // Continue processing queue\n      processMessageOutQueue();\n    })().catch((err: unknown) =\u003e logger.error(\"unpackrStream error\", err));\n  });",
+      "contextualizedText": "// node/nvim/nvim-node/attach.ts \u003e function attach\n\nunpackrStream.on(\"data\", (message: RPCMessage) =\u003e {\n    (async () =\u003e {\n      logger.debug(prettyRPCMessage(message, \"in\"));\n      if (message[0] === MessageType.NOTIFY) {\n        // asynchronously run notification handlers.\n        // RPCNotifications don't need a response\n        runNotificationHandlers(message);\n      }\n\n      if (message[0] === MessageType.RESPONSE) {\n        // message[1] reqId\n        // message[2] error\n        // message[3] result\n        emitter.emit(`response-${message[1]}`, message[2], message[3]);\n      }\n\n      if (message[0] === MessageType.REQUEST) {\n        // message[1] reqId\n        // message[2] method name\n        // message[3] args\n        const handler = requestHandlers.get(message[2]);\n\n        // RPCRequests block neovim until a response is received.\n        // RPCResponse is added to beginning of queue to be sent ASAP.\n        if (!handler) {\n          const notFound: RPCResponse = [\n            MessageType.RESPONSE,\n            message[1],\n            `no handler for method ${message[2]} found`,\n            null,\n          ];\n          messageOutQueue.unshift(notFound);\n        } else {\n          try {\n            const result = await handler(message[3]);\n            const response: RPCResponse = [\n              MessageType.RESPONSE,\n              message[1],\n              null,\n              result,\n            ];\n            messageOutQueue.unshift(response);\n          } catch (err) {\n            const response: RPCResponse = [\n              MessageType.RESPONSE,\n              message[1],\n              String(err),\n              null,\n            ];\n            messageOutQueue.unshift(response);\n          }\n        }\n      }\n\n      // Continue processing queue\n      processMessageOutQueue();\n    })().catch((err: unknown) =\u003e logger.error(\"unpackrStream error\", err));\n  });",
+      "headingContext": "node/nvim/nvim-node/attach.ts \u003e function attach",
+      "startLine": 102,
+      "startCol": 3,
+      "endLine": 159,
+      "endCol": 6
+    },
+    {
+      "text": "  const call: Nvim[\"call\"] = (func, args) =\u003e {\n    const reqId = ++lastReqId;\n    const request: RPCRequest = [\n      MessageType.REQUEST,\n      reqId,\n      func as string,\n      args,\n    ];\n\n    return new Promise((resolve, reject) =\u003e {\n      // Register response listener before adding request to queue to avoid\n      // response coming in before listener was set up.\n      emitter.once(`response-${reqId}`, (error, result) =\u003e {\n        if (error) reject(error as Error);\n        resolve(result as unknown);\n      });\n\n      messageOutQueue.push(request);\n      // Start processing queue if we're not already\n      processMessageOutQueue();\n    });\n  }",
+      "contextualizedText": "// node/nvim/nvim-node/attach.ts \u003e function attach \u003e function call\n\n  const call: Nvim[\"call\"] = (func, args) =\u003e {\n    const reqId = ++lastReqId;\n    const request: RPCRequest = [\n      MessageType.REQUEST,\n      reqId,\n      func as string,\n      args,\n    ];\n\n    return new Promise((resolve, reject) =\u003e {\n      // Register response listener before adding request to queue to avoid\n      // response coming in before listener was set up.\n      emitter.once(`response-${reqId}`, (error, result) =\u003e {\n        if (error) reject(error as Error);\n        resolve(result as unknown);\n      });\n\n      messageOutQueue.push(request);\n      // Start processing queue if we're not already\n      processMessageOutQueue();\n    });\n  }",
+      "headingContext": "node/nvim/nvim-node/attach.ts \u003e function attach \u003e function call",
+      "startLine": 161,
+      "startCol": 1,
+      "endLine": 182,
+      "endCol": 4
+    },
+    {
+      "text": "await call(\"nvim_set_client_info\", [\n    client.name,\n    client.version ?? {},\n    client.type ?? \"msgpack-rpc\",\n    client.methods ?? {},\n    client.attributes ?? {},\n  ]);\n\n  const channelId = (await call(\"nvim_get_api_info\", []))[0] as number;\n\n  return {\n    call,\n    channelId,\n    logger: logger",
+      "contextualizedText": "// node/nvim/nvim-node/attach.ts \u003e function attach\n\nawait call(\"nvim_set_client_info\", [\n    client.name,\n    client.version ?? {},\n    client.type ?? \"msgpack-rpc\",\n    client.methods ?? {},\n    client.attributes ?? {},\n  ]);\n\n  const channelId = (await call(\"nvim_get_api_info\", []))[0] as number;\n\n  return {\n    call,\n    channelId,\n    logger: logger",
+      "headingContext": "node/nvim/nvim-node/attach.ts \u003e function attach",
+      "startLine": 184,
+      "startCol": 3,
+      "endLine": 197,
+      "endCol": 19
+    },
+    {
+      "text": "    onNotification(notification, callback) {\n      const handlers = notificationHandlers.get(notification as string) ?? {};\n      handlers[++handlerId] = callback;\n      notificationHandlers.set(notification as string, handlers);\n    }",
+      "contextualizedText": "// node/nvim/nvim-node/attach.ts \u003e function attach \u003e method onNotification\n\n    onNotification(notification, callback) {\n      const handlers = notificationHandlers.get(notification as string) ?? {};\n      handlers[++handlerId] = callback;\n      notificationHandlers.set(notification as string, handlers);\n    }",
+      "headingContext": "node/nvim/nvim-node/attach.ts \u003e function attach \u003e method onNotification",
+      "startLine": 198,
+      "startCol": 1,
+      "endLine": 202,
+      "endCol": 6
+    },
+    {
+      "text": "    onRequest(method, callback) {\n      requestHandlers.set(method as string, callback);\n    }",
+      "contextualizedText": "// node/nvim/nvim-node/attach.ts \u003e function attach \u003e method onRequest\n\n    onRequest(method, callback) {\n      requestHandlers.set(method as string, callback);\n    }",
+      "headingContext": "node/nvim/nvim-node/attach.ts \u003e function attach \u003e method onRequest",
+      "startLine": 203,
+      "startCol": 1,
+      "endLine": 205,
+      "endCol": 6
+    },
+    {
+      "text": "    detach() {\n      nvimSocket.destroy();\n      unpackrStream.end();\n    }",
+      "contextualizedText": "// node/nvim/nvim-node/attach.ts \u003e function attach \u003e method detach\n\n    detach() {\n      nvimSocket.destroy();\n      unpackrStream.end();\n    }",
+      "headingContext": "node/nvim/nvim-node/attach.ts \u003e function attach \u003e method detach",
+      "startLine": 206,
+      "startCol": 1,
+      "endLine": 209,
+      "endCol": 6
+    }
+  ]
+}

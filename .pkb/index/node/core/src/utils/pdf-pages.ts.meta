@@ -1,0 +1,42 @@
+{
+  "blobSha": "3042d1826cfd14870283ed575acb8ff3464968b9",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import fs from \"node:fs\";\nimport { PDFDocument } from \"pdf-lib\";\nimport type { ProviderToolResultContent } from \"../providers/provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"../providers/provider-types.ts\";\nimport type { AbsFilePath } from \"./files.ts\";\nimport type { Result } from \"./result.ts\";",
+      "contextualizedText": "// node/core/src/utils/pdf-pages.ts\n\nimport fs from \"node:fs\";\nimport { PDFDocument } from \"pdf-lib\";\nimport type { ProviderToolResultContent } from \"../providers/provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"../providers/provider-types.ts\";\nimport type { AbsFilePath } from \"./files.ts\";\nimport type { Result } from \"./result.ts\";",
+      "headingContext": "node/core/src/utils/pdf-pages.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 6,
+      "endCol": 43
+    },
+    {
+      "text": "export async function extractPDFPage(\n  filePath: AbsFilePath,\n  pageIndex: number,\n): Promise\u003cResult\u003cUint8Array\u003e\u003e {\n  try {\n    // Read the PDF file\n    const existingPdfBytes = await fs.promises.readFile(filePath);\n\n    // Load the PDF document\n    const pdfDoc = await PDFDocument.load(existingPdfBytes);\n\n    // Check if page index is valid\n    const pageCount = pdfDoc.getPageCount();\n    if (pageIndex \u003c 1 || pageIndex \u003e pageCount) {\n      return {\n        status: \"error\",\n        error: `Page index ${pageIndex} is out of range. Document has ${pageCount} pages (1-${pageCount}).`,\n      };\n    }\n\n    // Create a new PDF document for the single page\n    const newPdfDoc = await PDFDocument.create();\n\n    // Copy the specific page\n    const [copiedPage] = await newPdfDoc.copyPages(pdfDoc, [pageIndex - 1]);\n    newPdfDoc.addPage(copiedPage);\n\n    // Save the new PDF as bytes\n    const pdfBytes = await newPdfDoc.save();\n\n    return {\n      status: \"ok\",\n      value: new Uint8Array(pdfBytes),\n    };\n  } catch (error) {\n    return {\n      status: \"error\",\n      error: `Failed to extract PDF page ${pageIndex}: ${(error as Error).message}`,\n    };\n  }\n}",
+      "contextualizedText": "// node/core/src/utils/pdf-pages.ts \u003e function extractPDFPage\n\nexport async function extractPDFPage(\n  filePath: AbsFilePath,\n  pageIndex: number,\n): Promise\u003cResult\u003cUint8Array\u003e\u003e {\n  try {\n    // Read the PDF file\n    const existingPdfBytes = await fs.promises.readFile(filePath);\n\n    // Load the PDF document\n    const pdfDoc = await PDFDocument.load(existingPdfBytes);\n\n    // Check if page index is valid\n    const pageCount = pdfDoc.getPageCount();\n    if (pageIndex \u003c 1 || pageIndex \u003e pageCount) {\n      return {\n        status: \"error\",\n        error: `Page index ${pageIndex} is out of range. Document has ${pageCount} pages (1-${pageCount}).`,\n      };\n    }\n\n    // Create a new PDF document for the single page\n    const newPdfDoc = await PDFDocument.create();\n\n    // Copy the specific page\n    const [copiedPage] = await newPdfDoc.copyPages(pdfDoc, [pageIndex - 1]);\n    newPdfDoc.addPage(copiedPage);\n\n    // Save the new PDF as bytes\n    const pdfBytes = await newPdfDoc.save();\n\n    return {\n      status: \"ok\",\n      value: new Uint8Array(pdfBytes),\n    };\n  } catch (error) {\n    return {\n      status: \"error\",\n      error: `Failed to extract PDF page ${pageIndex}: ${(error as Error).message}`,\n    };\n  }\n}",
+      "headingContext": "node/core/src/utils/pdf-pages.ts \u003e function extractPDFPage",
+      "startLine": 8,
+      "startCol": 1,
+      "endLine": 48,
+      "endCol": 2
+    },
+    {
+      "text": "export async function getPDFPageCount(\n  filePath: AbsFilePath,\n): Promise\u003cResult\u003cnumber\u003e\u003e {\n  try {\n    // Read the PDF file\n    const existingPdfBytes = await fs.promises.readFile(filePath);\n\n    // Load the PDF document\n    const pdfDoc = await PDFDocument.load(existingPdfBytes);\n\n    // Get page count\n    const pageCount = pdfDoc.getPageCount();\n\n    return {\n      status: \"ok\",\n      value: pageCount,\n    };\n  } catch (error) {\n    return {\n      status: \"error\",\n      error: `Failed to get PDF page count: ${(error as Error).message}`,\n    };\n  }\n}",
+      "contextualizedText": "// node/core/src/utils/pdf-pages.ts \u003e function getPDFPageCount\n\nexport async function getPDFPageCount(\n  filePath: AbsFilePath,\n): Promise\u003cResult\u003cnumber\u003e\u003e {\n  try {\n    // Read the PDF file\n    const existingPdfBytes = await fs.promises.readFile(filePath);\n\n    // Load the PDF document\n    const pdfDoc = await PDFDocument.load(existingPdfBytes);\n\n    // Get page count\n    const pageCount = pdfDoc.getPageCount();\n\n    return {\n      status: \"ok\",\n      value: pageCount,\n    };\n  } catch (error) {\n    return {\n      status: \"error\",\n      error: `Failed to get PDF page count: ${(error as Error).message}`,\n    };\n  }\n}",
+      "headingContext": "node/core/src/utils/pdf-pages.ts \u003e function getPDFPageCount",
+      "startLine": 50,
+      "startCol": 1,
+      "endLine": 73,
+      "endCol": 2
+    },
+    {
+      "text": "export async function getSummaryAsProviderContent(\n  filePath: AbsFilePath,\n): Promise\u003cResult\u003cProviderToolResultContent[]\u003e\u003e {\n  const pageCountResult = await getPDFPageCount(filePath);\n\n  if (pageCountResult.status === \"error\") {\n    return pageCountResult;\n  }\n\n  return {\n    status: \"ok\",\n    value: [\n      {\n        type: \"text\",\n        text: `PDF Document: ${filePath}\nPages: ${pageCountResult.value}\n\nUse get-file tool with a pdfPage parameter to access specific pages.`,\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ],\n  };\n}",
+      "contextualizedText": "// node/core/src/utils/pdf-pages.ts \u003e function getSummaryAsProviderContent\n\nexport async function getSummaryAsProviderContent(\n  filePath: AbsFilePath,\n): Promise\u003cResult\u003cProviderToolResultContent[]\u003e\u003e {\n  const pageCountResult = await getPDFPageCount(filePath);\n\n  if (pageCountResult.status === \"error\") {\n    return pageCountResult;\n  }\n\n  return {\n    status: \"ok\",\n    value: [\n      {\n        type: \"text\",\n        text: `PDF Document: ${filePath}\nPages: ${pageCountResult.value}\n\nUse get-file tool with a pdfPage parameter to access specific pages.`,\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ],\n  };\n}",
+      "headingContext": "node/core/src/utils/pdf-pages.ts \u003e function getSummaryAsProviderContent",
+      "startLine": 75,
+      "startCol": 1,
+      "endLine": 97,
+      "endCol": 2
+    }
+  ]
+}

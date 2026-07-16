@@ -1,0 +1,33 @@
+{
+  "blobSha": "d67a18ab4ba0d85f79cb7640cc3b408efd86cf65",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { NvimBuffer } from \"../nvim/buffer.ts\";\nimport { getAllBuffers } from \"../nvim/nvim.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport {\n  type AbsFilePath,\n  type HomeDir,\n  type NvimCwd,\n  type RelFilePath,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"./files.ts\";",
+      "contextualizedText": "// node/utils/buffers.ts\n\nimport { NvimBuffer } from \"../nvim/buffer.ts\";\nimport { getAllBuffers } from \"../nvim/nvim.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport {\n  type AbsFilePath,\n  type HomeDir,\n  type NvimCwd,\n  type RelFilePath,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"./files.ts\";",
+      "headingContext": "node/utils/buffers.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 11,
+      "endCol": 21
+    },
+    {
+      "text": "export async function getBufferIfOpen({\n  unresolvedPath,\n  context,\n}: {\n  unresolvedPath: UnresolvedFilePath | AbsFilePath | RelFilePath;\n  context: { nvim: Nvim; cwd: NvimCwd; homeDir: HomeDir };\n}): Promise\u003c\n  | { status: \"ok\"; buffer: NvimBuffer }\n  | { status: \"error\"; error: string }\n  | { status: \"not-found\" }\n\u003e {\n  // Get all buffers and nvim's cwd\n  const buffers = await getAllBuffers(context.nvim);\n  const absolutePath = resolveFilePath(\n    context.cwd,\n    unresolvedPath,\n    context.homeDir,\n  );\n\n  // Find buffer with matching path\n  for (const buffer of buffers) {\n    const bufferName = await buffer.getName();\n\n    if (\n      resolveFilePath(context.cwd, bufferName, context.homeDir) === absolutePath\n    ) {\n      return { status: \"ok\", buffer };\n    }\n  }\n\n  return { status: \"not-found\" };\n}",
+      "contextualizedText": "// node/utils/buffers.ts \u003e function getBufferIfOpen\n\nexport async function getBufferIfOpen({\n  unresolvedPath,\n  context,\n}: {\n  unresolvedPath: UnresolvedFilePath | AbsFilePath | RelFilePath;\n  context: { nvim: Nvim; cwd: NvimCwd; homeDir: HomeDir };\n}): Promise\u003c\n  | { status: \"ok\"; buffer: NvimBuffer }\n  | { status: \"error\"; error: string }\n  | { status: \"not-found\" }\n\u003e {\n  // Get all buffers and nvim's cwd\n  const buffers = await getAllBuffers(context.nvim);\n  const absolutePath = resolveFilePath(\n    context.cwd,\n    unresolvedPath,\n    context.homeDir,\n  );\n\n  // Find buffer with matching path\n  for (const buffer of buffers) {\n    const bufferName = await buffer.getName();\n\n    if (\n      resolveFilePath(context.cwd, bufferName, context.homeDir) === absolutePath\n    ) {\n      return { status: \"ok\", buffer };\n    }\n  }\n\n  return { status: \"not-found\" };\n}",
+      "headingContext": "node/utils/buffers.ts \u003e function getBufferIfOpen",
+      "startLine": 13,
+      "startCol": 1,
+      "endLine": 44,
+      "endCol": 2
+    },
+    {
+      "text": "export async function getOrOpenBuffer({\n  unresolvedPath,\n  context,\n}: {\n  unresolvedPath: UnresolvedFilePath;\n  context: { nvim: Nvim; cwd: NvimCwd; homeDir: HomeDir };\n}): Promise\u003c\n  { status: \"ok\"; buffer: NvimBuffer } | { status: \"error\"; error: string }\n\u003e {\n  // First try to get the buffer if it's already open\n  const existingBuffer = await getBufferIfOpen({\n    unresolvedPath,\n    context,\n  });\n\n  if (existingBuffer.status === \"error\") {\n    return existingBuffer;\n  }\n\n  if (existingBuffer.status === \"ok\") {\n    return existingBuffer;\n  }\n\n  const absolutePath = resolveFilePath(\n    context.cwd,\n    unresolvedPath,\n    context.homeDir,\n  );\n\n  try {\n    await NvimBuffer.bufadd(absolutePath, context.nvim);\n\n    const existingBuffer = await getBufferIfOpen({\n      unresolvedPath,\n      context,\n    });\n    if (existingBuffer.status === \"error\" || existingBuffer.status === \"ok\") {\n      return existingBuffer;\n    } else {\n      return { status: \"error\", error: \"Unable to open file.\" };\n    }\n  } catch (error) {\n    return {\n      status: \"error\",\n      error: `Failed to open buffer: ${(error as Error).message}`,\n    };\n  }\n}",
+      "contextualizedText": "// node/utils/buffers.ts \u003e function getOrOpenBuffer\n\nexport async function getOrOpenBuffer({\n  unresolvedPath,\n  context,\n}: {\n  unresolvedPath: UnresolvedFilePath;\n  context: { nvim: Nvim; cwd: NvimCwd; homeDir: HomeDir };\n}): Promise\u003c\n  { status: \"ok\"; buffer: NvimBuffer } | { status: \"error\"; error: string }\n\u003e {\n  // First try to get the buffer if it's already open\n  const existingBuffer = await getBufferIfOpen({\n    unresolvedPath,\n    context,\n  });\n\n  if (existingBuffer.status === \"error\") {\n    return existingBuffer;\n  }\n\n  if (existingBuffer.status === \"ok\") {\n    return existingBuffer;\n  }\n\n  const absolutePath = resolveFilePath(\n    context.cwd,\n    unresolvedPath,\n    context.homeDir,\n  );\n\n  try {\n    await NvimBuffer.bufadd(absolutePath, context.nvim);\n\n    const existingBuffer = await getBufferIfOpen({\n      unresolvedPath,\n      context,\n    });\n    if (existingBuffer.status === \"error\" || existingBuffer.status === \"ok\") {\n      return existingBuffer;\n    } else {\n      return { status: \"error\", error: \"Unable to open file.\" };\n    }\n  } catch (error) {\n    return {\n      status: \"error\",\n      error: `Failed to open buffer: ${(error as Error).message}`,\n    };\n  }\n}",
+      "headingContext": "node/utils/buffers.ts \u003e function getOrOpenBuffer",
+      "startLine": 46,
+      "startCol": 1,
+      "endLine": 93,
+      "endCol": 2
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "blobSha": "705a5e22ea678e1728d35fb9f23a6e61b53e17fa",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export {\n  FULL_CAPABILITIES,\n  HOST_DOCKER_AVAILABLE,\n} from \"../core/src/test/capabilities.ts\";",
+      "contextualizedText": "// node/test/capabilities.ts\n\nexport {\n  FULL_CAPABILITIES,\n  HOST_DOCKER_AVAILABLE,\n} from \"../core/src/test/capabilities.ts\";",
+      "headingContext": "node/test/capabilities.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 4,
+      "endCol": 43
+    }
+  ]
+}

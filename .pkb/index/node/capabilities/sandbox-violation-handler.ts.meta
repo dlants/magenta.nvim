@@ -1,0 +1,168 @@
+{
+  "blobSha": "6fe3910f6a69007d28f4b91c20dfad478dbfae24",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { SandboxViolationEvent } from \"@anthropic-ai/sandbox-runtime\";\nimport type { VDOMNode } from \"../tea/view.ts\";\nimport { d, withBindings, withExtmark, withInlineCode } from \"../tea/view.ts\";\nimport type { OutputLine, ShellResult } from \"./shell.ts\";\n\nexport type SandboxViolation = {\n  command: string;\n  violations: SandboxViolationEvent[];\n  stderr: string;\n  result: ShellResult;\n};\n\ntype PendingApprovalPrompt = {\n  kind: \"approval-prompt\";\n  command: string;\n  execute: () =\u003e Promise\u003cShellResult\u003e;\n};\n\ntype PendingViolationPrompt = {\n  kind: \"violation\";\n  violation: SandboxViolation;\n  retryUnsandboxed: () =\u003e Promise\u003cShellResult\u003e;\n};\n\ntype PendingWriteApprovalPrompt = {\n  kind: \"write-approval\";\n  absPath: string;\n};\n\ntype PendingNetworkAccessPrompt = {\n  kind: \"network-access\";\n  host: string;\n  port: number | undefined;\n};\n\ntype PendingShellPrompt = PendingApprovalPrompt | PendingViolationPrompt;\n\n// Different prompt kinds resolve to different result types, so the pending\n// union encodes each kind's resolve signature directly rather than widening to\n// a single shared resolve. Shell prompts resolve to a ShellResult, write\n// approvals resolve to void, and network-access resolves to a boolean\n// (allow/deny the connection).\nexport type PendingViolation =\n  | {\n      id: string;\n      prompt: PendingShellPrompt;\n      resolve: (result: ShellResult) =\u003e void;\n      reject: (err: Error) =\u003e void;\n    }\n  | {\n      id: string;\n      prompt: PendingWriteApprovalPrompt;\n      resolve: () =\u003e void;\n      reject: (err: Error) =\u003e void;\n    }\n  | {\n      id: string;\n      prompt: PendingNetworkAccessPrompt;\n      resolve: (allowed: boolean) =\u003e void;\n      reject: (err: Error) =\u003e void;\n    };\n\ntype NetworkPending = Extract\u003c\n  PendingViolation,\n  { prompt: PendingNetworkAccessPrompt }\n\u003e;",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts\n\nimport type { SandboxViolationEvent } from \"@anthropic-ai/sandbox-runtime\";\nimport type { VDOMNode } from \"../tea/view.ts\";\nimport { d, withBindings, withExtmark, withInlineCode } from \"../tea/view.ts\";\nimport type { OutputLine, ShellResult } from \"./shell.ts\";\n\nexport type SandboxViolation = {\n  command: string;\n  violations: SandboxViolationEvent[];\n  stderr: string;\n  result: ShellResult;\n};\n\ntype PendingApprovalPrompt = {\n  kind: \"approval-prompt\";\n  command: string;\n  execute: () =\u003e Promise\u003cShellResult\u003e;\n};\n\ntype PendingViolationPrompt = {\n  kind: \"violation\";\n  violation: SandboxViolation;\n  retryUnsandboxed: () =\u003e Promise\u003cShellResult\u003e;\n};\n\ntype PendingWriteApprovalPrompt = {\n  kind: \"write-approval\";\n  absPath: string;\n};\n\ntype PendingNetworkAccessPrompt = {\n  kind: \"network-access\";\n  host: string;\n  port: number | undefined;\n};\n\ntype PendingShellPrompt = PendingApprovalPrompt | PendingViolationPrompt;\n\n// Different prompt kinds resolve to different result types, so the pending\n// union encodes each kind's resolve signature directly rather than widening to\n// a single shared resolve. Shell prompts resolve to a ShellResult, write\n// approvals resolve to void, and network-access resolves to a boolean\n// (allow/deny the connection).\nexport type PendingViolation =\n  | {\n      id: string;\n      prompt: PendingShellPrompt;\n      resolve: (result: ShellResult) =\u003e void;\n      reject: (err: Error) =\u003e void;\n    }\n  | {\n      id: string;\n      prompt: PendingWriteApprovalPrompt;\n      resolve: () =\u003e void;\n      reject: (err: Error) =\u003e void;\n    }\n  | {\n      id: string;\n      prompt: PendingNetworkAccessPrompt;\n      resolve: (allowed: boolean) =\u003e void;\n      reject: (err: Error) =\u003e void;\n    };\n\ntype NetworkPending = Extract\u003c\n  PendingViolation,\n  { prompt: PendingNetworkAccessPrompt }\n\u003e;",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 66,
+      "endCol": 3
+    },
+    {
+      "text": "function isNetworkPending(entry: PendingViolation): entry is NetworkPending {\n  return entry.prompt.kind === \"network-access\";\n}",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e function isNetworkPending\n\nfunction isNetworkPending(entry: PendingViolation): entry is NetworkPending {\n  return entry.prompt.kind === \"network-access\";\n}",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e function isNetworkPending",
+      "startLine": 68,
+      "startCol": 1,
+      "endLine": 70,
+      "endCol": 2
+    },
+    {
+      "text": "type WritePending = Extract\u003c\n  PendingViolation,\n  { prompt: PendingWriteApprovalPrompt }\n\u003e;",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts\n\ntype WritePending = Extract\u003c\n  PendingViolation,\n  { prompt: PendingWriteApprovalPrompt }\n\u003e;",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts",
+      "startLine": 72,
+      "startCol": 1,
+      "endLine": 75,
+      "endCol": 3
+    },
+    {
+      "text": "function isWritePending(entry: PendingViolation): entry is WritePending {\n  return entry.prompt.kind === \"write-approval\";\n}",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e function isWritePending\n\nfunction isWritePending(entry: PendingViolation): entry is WritePending {\n  return entry.prompt.kind === \"write-approval\";\n}",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e function isWritePending",
+      "startLine": 77,
+      "startCol": 1,
+      "endLine": 79,
+      "endCol": 2
+    },
+    {
+      "text": "function normalizeViolationLine(line: string): string {\n  // Strip process-specific PIDs so e.g. \"sysctl(77444)\" and \"sysctl(77445)\"\n  // are treated as the same violation.\n  return line.replace(/\\(\\d+\\)/g, \"(*)\");\n}",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e function normalizeViolationLine\n\nfunction normalizeViolationLine(line: string): string {\n  // Strip process-specific PIDs so e.g. \"sysctl(77444)\" and \"sysctl(77445)\"\n  // are treated as the same violation.\n  return line.replace(/\\(\\d+\\)/g, \"(*)\");\n}",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e function normalizeViolationLine",
+      "startLine": 81,
+      "startCol": 1,
+      "endLine": 85,
+      "endCol": 2
+    },
+    {
+      "text": "function deduplicateViolations(\n  violations: SandboxViolationEvent[],\n): { line: string; count: number }[] {\n  const counts = new Map\u003cstring, number\u003e();\n  for (const v of violations) {\n    const key = normalizeViolationLine(v.line);\n    counts.set(key, (counts.get(key) ?? 0) + 1);\n  }\n  return [...counts.entries()].map(([line, count]) =\u003e ({ line, count }));\n}",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e function deduplicateViolations\n\nfunction deduplicateViolations(\n  violations: SandboxViolationEvent[],\n): { line: string; count: number }[] {\n  const counts = new Map\u003cstring, number\u003e();\n  for (const v of violations) {\n    const key = normalizeViolationLine(v.line);\n    counts.set(key, (counts.get(key) ?? 0) + 1);\n  }\n  return [...counts.entries()].map(([line, count]) =\u003e ({ line, count }));\n}",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e function deduplicateViolations",
+      "startLine": 87,
+      "startCol": 1,
+      "endLine": 96,
+      "endCol": 2
+    },
+    {
+      "text": "export class SandboxViolationHandler {\n  private pending: Map\u003cstring, PendingViolation\u003e = new Map();\n  private nextId = 0;\n\n  constructor(private onPendingChange: () =\u003e void) {}",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler\n\nexport class SandboxViolationHandler {\n  private pending: Map\u003cstring, PendingViolation\u003e = new Map();\n  private nextId = 0;\n\n  constructor(private onPendingChange: () =\u003e void) {}",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler",
+      "startLine": 98,
+      "startCol": 1,
+      "endLine": 102,
+      "endCol": 54
+    },
+    {
+      "text": "  addViolation(\n    violation: SandboxViolation,\n    retryUnsandboxed: () =\u003e Promise\u003cShellResult\u003e,\n  ): Promise\u003cShellResult\u003e {\n    return new Promise\u003cShellResult\u003e((resolve, reject) =\u003e {\n      const id = String(this.nextId++);\n      this.pending.set(id, {\n        id,\n        prompt: { kind: \"violation\", violation, retryUnsandboxed },\n        resolve,\n        reject,\n      });\n      this.onPendingChange();\n    });\n  }",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method addViolation\n\n  addViolation(\n    violation: SandboxViolation,\n    retryUnsandboxed: () =\u003e Promise\u003cShellResult\u003e,\n  ): Promise\u003cShellResult\u003e {\n    return new Promise\u003cShellResult\u003e((resolve, reject) =\u003e {\n      const id = String(this.nextId++);\n      this.pending.set(id, {\n        id,\n        prompt: { kind: \"violation\", violation, retryUnsandboxed },\n        resolve,\n        reject,\n      });\n      this.onPendingChange();\n    });\n  }",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method addViolation",
+      "startLine": 104,
+      "startCol": 1,
+      "endLine": 118,
+      "endCol": 4
+    },
+    {
+      "text": "  promptForApproval(\n    command: string,\n    execute: () =\u003e Promise\u003cShellResult\u003e,\n  ): Promise\u003cShellResult\u003e {\n    return new Promise\u003cShellResult\u003e((resolve, reject) =\u003e {\n      const id = String(this.nextId++);\n      this.pending.set(id, {\n        id,\n        prompt: { kind: \"approval-prompt\", command, execute },\n        resolve,\n        reject,\n      });\n      this.onPendingChange();\n    });\n  }",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method promptForApproval\n\n  promptForApproval(\n    command: string,\n    execute: () =\u003e Promise\u003cShellResult\u003e,\n  ): Promise\u003cShellResult\u003e {\n    return new Promise\u003cShellResult\u003e((resolve, reject) =\u003e {\n      const id = String(this.nextId++);\n      this.pending.set(id, {\n        id,\n        prompt: { kind: \"approval-prompt\", command, execute },\n        resolve,\n        reject,\n      });\n      this.onPendingChange();\n    });\n  }",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method promptForApproval",
+      "startLine": 120,
+      "startCol": 1,
+      "endLine": 134,
+      "endCol": 4
+    },
+    {
+      "text": "  promptForWriteApproval(absPath: string): Promise\u003cvoid\u003e {\n    return new Promise\u003cvoid\u003e((resolve, reject) =\u003e {\n      const id = String(this.nextId++);\n      this.pending.set(id, {\n        id,\n        prompt: { kind: \"write-approval\", absPath },\n        resolve,\n        reject,\n      });\n      this.onPendingChange();\n    });\n  }",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method promptForWriteApproval\n\n  promptForWriteApproval(absPath: string): Promise\u003cvoid\u003e {\n    return new Promise\u003cvoid\u003e((resolve, reject) =\u003e {\n      const id = String(this.nextId++);\n      this.pending.set(id, {\n        id,\n        prompt: { kind: \"write-approval\", absPath },\n        resolve,\n        reject,\n      });\n      this.onPendingChange();\n    });\n  }",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method promptForWriteApproval",
+      "startLine": 136,
+      "startCol": 1,
+      "endLine": 147,
+      "endCol": 4
+    },
+    {
+      "text": "  promptForNetworkAccess(params: {\n    host: string;\n    port: number | undefined;\n  }): Promise\u003cboolean\u003e {\n    return new Promise\u003cboolean\u003e((resolve, reject) =\u003e {\n      const id = String(this.nextId++);\n      this.pending.set(id, {\n        id,\n        prompt: {\n          kind: \"network-access\",\n          host: params.host,\n          port: params.port,\n        },\n        resolve,\n        reject,\n      });\n      this.onPendingChange();\n    });\n  }",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method promptForNetworkAccess\n\n  promptForNetworkAccess(params: {\n    host: string;\n    port: number | undefined;\n  }): Promise\u003cboolean\u003e {\n    return new Promise\u003cboolean\u003e((resolve, reject) =\u003e {\n      const id = String(this.nextId++);\n      this.pending.set(id, {\n        id,\n        prompt: {\n          kind: \"network-access\",\n          host: params.host,\n          port: params.port,\n        },\n        resolve,\n        reject,\n      });\n      this.onPendingChange();\n    });\n  }",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method promptForNetworkAccess",
+      "startLine": 149,
+      "startCol": 1,
+      "endLine": 167,
+      "endCol": 4
+    },
+    {
+      "text": "  approve(id: string): void {\n    const entry = this.pending.get(id);\n    if (!entry) return;\n\n    this.pending.delete(id);\n\n    if (isNetworkPending(entry)) {\n      entry.resolve(true);\n      this.onPendingChange();\n      return;\n    }\n\n    if (isWritePending(entry)) {\n      entry.resolve();\n    } else {\n      const executeFn =\n        entry.prompt.kind === \"violation\"\n          ? entry.prompt.retryUnsandboxed\n          : entry.prompt.execute;\n      executeFn().then(entry.resolve).catch(entry.reject);\n    }\n\n    this.onPendingChange();\n  }",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method approve\n\n  approve(id: string): void {\n    const entry = this.pending.get(id);\n    if (!entry) return;\n\n    this.pending.delete(id);\n\n    if (isNetworkPending(entry)) {\n      entry.resolve(true);\n      this.onPendingChange();\n      return;\n    }\n\n    if (isWritePending(entry)) {\n      entry.resolve();\n    } else {\n      const executeFn =\n        entry.prompt.kind === \"violation\"\n          ? entry.prompt.retryUnsandboxed\n          : entry.prompt.execute;\n      executeFn().then(entry.resolve).catch(entry.reject);\n    }\n\n    this.onPendingChange();\n  }",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method approve",
+      "startLine": 169,
+      "startCol": 1,
+      "endLine": 192,
+      "endCol": 4
+    },
+    {
+      "text": "  reject(id: string): void {\n    const entry = this.pending.get(id);\n    if (!entry) return;\n\n    this.pending.delete(id);\n\n    if (isNetworkPending(entry)) {\n      entry.resolve(false);\n      this.onPendingChange();\n      return;\n    }\n\n    if (entry.prompt.kind === \"violation\") {\n      const { result } = entry.prompt.violation;\n      const rejectionNote: OutputLine = {\n        stream: \"stderr\",\n        text: \"The user rejected re-running this command outside the sandbox.\",\n      };\n      entry.resolve({\n        ...result,\n        output: [...result.output, rejectionNote],\n      });\n    } else if (entry.prompt.kind === \"write-approval\") {\n      entry.reject(\n        new Error(`The user did not allow writing to ${entry.prompt.absPath}.`),\n      );\n    } else {\n      entry.reject(new Error(\"The user did not allow running this command.\"));\n    }\n\n    this.onPendingChange();\n  }",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method reject\n\n  reject(id: string): void {\n    const entry = this.pending.get(id);\n    if (!entry) return;\n\n    this.pending.delete(id);\n\n    if (isNetworkPending(entry)) {\n      entry.resolve(false);\n      this.onPendingChange();\n      return;\n    }\n\n    if (entry.prompt.kind === \"violation\") {\n      const { result } = entry.prompt.violation;\n      const rejectionNote: OutputLine = {\n        stream: \"stderr\",\n        text: \"The user rejected re-running this command outside the sandbox.\",\n      };\n      entry.resolve({\n        ...result,\n        output: [...result.output, rejectionNote],\n      });\n    } else if (entry.prompt.kind === \"write-approval\") {\n      entry.reject(\n        new Error(`The user did not allow writing to ${entry.prompt.absPath}.`),\n      );\n    } else {\n      entry.reject(new Error(\"The user did not allow running this command.\"));\n    }\n\n    this.onPendingChange();\n  }",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method reject",
+      "startLine": 194,
+      "startCol": 1,
+      "endLine": 225,
+      "endCol": 4
+    },
+    {
+      "text": "  approveAll(): void {\n    for (const [id] of this.pending) {\n      this.approve(id);\n    }\n  }",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method approveAll\n\n  approveAll(): void {\n    for (const [id] of this.pending) {\n      this.approve(id);\n    }\n  }",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method approveAll",
+      "startLine": 227,
+      "startCol": 1,
+      "endLine": 231,
+      "endCol": 4
+    },
+    {
+      "text": "  rejectAll(): void {\n    for (const [id] of this.pending) {\n      this.reject(id);\n    }\n  }",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method rejectAll\n\n  rejectAll(): void {\n    for (const [id] of this.pending) {\n      this.reject(id);\n    }\n  }",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method rejectAll",
+      "startLine": 233,
+      "startCol": 1,
+      "endLine": 237,
+      "endCol": 4
+    },
+    {
+      "text": "  getPendingViolations(): Map\u003cstring, PendingViolation\u003e {\n    return this.pending;\n  }",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method getPendingViolations\n\n  getPendingViolations(): Map\u003cstring, PendingViolation\u003e {\n    return this.pending;\n  }",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method getPendingViolations",
+      "startLine": 239,
+      "startCol": 1,
+      "endLine": 241,
+      "endCol": 4
+    },
+    {
+      "text": "  view(): VDOMNode {\n    if (this.pending.size === 0) {\n      return d``;\n    }\n\n    const entries = [...this.pending.entries()];\n\n    return d`\n${entries.map(([id, entry]) =\u003e {\n  if (entry.prompt.kind === \"violation\") {\n    const dedupedViolations = deduplicateViolations(\n      entry.prompt.violation.violations,\n    );\n    return d`🔒 Sandbox blocked: ${withInlineCode(d`\\`${entry.prompt.violation.command}\\``)}\n${dedupedViolations.map(\n  (v) =\u003e\n    d`${withExtmark(d`\u003e ${v.line}${v.count \u003e 1 ? ` (x${v.count})` : \"\"}`, {\n      hl_group: \"WarningMsg\",\n    })}\\n`,\n)}\n${withBindings(\n  withExtmark(d`\u003e APPROVE`, {\n    hl_group: [\"String\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.approve(id),\n  },\n)}\n${withBindings(\n  withExtmark(d`\u003e REJECT`, {\n    hl_group: [\"ErrorMsg\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.reject(id),\n  },\n)}\n`;\n  }\n  if (entry.prompt.kind === \"network-access\") {\n    const target =\n      entry.prompt.port !== undefined\n        ? `${entry.prompt.host}:${entry.prompt.port}`\n        : entry.prompt.host;\n    return d`🌐 Allow network access to ${withInlineCode(d`\\`${target}\\``)}?\n${withBindings(\n  withExtmark(d`\u003e REJECT`, {\n    hl_group: [\"ErrorMsg\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.reject(id),\n  },\n)}\n${withBindings(\n  withExtmark(d`\u003e APPROVE`, {\n    hl_group: [\"String\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.approve(id),\n  },\n)}\n`;\n  }\n  if (entry.prompt.kind === \"write-approval\") {\n    return d`📝 May I write to ${withInlineCode(d`\\`${entry.prompt.absPath}\\``)}?\n${withBindings(\n  withExtmark(d`\u003e NO`, {\n    hl_group: [\"ErrorMsg\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.reject(id),\n  },\n)}\n${withBindings(\n  withExtmark(d`\u003e YES`, {\n    hl_group: [\"String\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.approve(id),\n  },\n)}\n`;\n  }",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method view\n\n  view(): VDOMNode {\n    if (this.pending.size === 0) {\n      return d``;\n    }\n\n    const entries = [...this.pending.entries()];\n\n    return d`\n${entries.map(([id, entry]) =\u003e {\n  if (entry.prompt.kind === \"violation\") {\n    const dedupedViolations = deduplicateViolations(\n      entry.prompt.violation.violations,\n    );\n    return d`🔒 Sandbox blocked: ${withInlineCode(d`\\`${entry.prompt.violation.command}\\``)}\n${dedupedViolations.map(\n  (v) =\u003e\n    d`${withExtmark(d`\u003e ${v.line}${v.count \u003e 1 ? ` (x${v.count})` : \"\"}`, {\n      hl_group: \"WarningMsg\",\n    })}\\n`,\n)}\n${withBindings(\n  withExtmark(d`\u003e APPROVE`, {\n    hl_group: [\"String\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.approve(id),\n  },\n)}\n${withBindings(\n  withExtmark(d`\u003e REJECT`, {\n    hl_group: [\"ErrorMsg\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.reject(id),\n  },\n)}\n`;\n  }\n  if (entry.prompt.kind === \"network-access\") {\n    const target =\n      entry.prompt.port !== undefined\n        ? `${entry.prompt.host}:${entry.prompt.port}`\n        : entry.prompt.host;\n    return d`🌐 Allow network access to ${withInlineCode(d`\\`${target}\\``)}?\n${withBindings(\n  withExtmark(d`\u003e REJECT`, {\n    hl_group: [\"ErrorMsg\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.reject(id),\n  },\n)}\n${withBindings(\n  withExtmark(d`\u003e APPROVE`, {\n    hl_group: [\"String\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.approve(id),\n  },\n)}\n`;\n  }\n  if (entry.prompt.kind === \"write-approval\") {\n    return d`📝 May I write to ${withInlineCode(d`\\`${entry.prompt.absPath}\\``)}?\n${withBindings(\n  withExtmark(d`\u003e NO`, {\n    hl_group: [\"ErrorMsg\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.reject(id),\n  },\n)}\n${withBindings(\n  withExtmark(d`\u003e YES`, {\n    hl_group: [\"String\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.approve(id),\n  },\n)}\n`;\n  }",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method view",
+      "startLine": 243,
+      "startCol": 1,
+      "endLine": 324,
+      "endCol": 4
+    },
+    {
+      "text": "return d`⚡ May I run command ${withInlineCode(d`\\`${entry.prompt.command}\\``)}?\n${withBindings(\n  withExtmark(d`\u003e NO`, {\n    hl_group: [\"ErrorMsg\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.reject(id),\n  },\n)}\n${withBindings(\n  withExtmark(d`\u003e YES`, {\n    hl_group: [\"String\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.approve(id),\n  },\n)}\n`;\n})}${\n  entries.length \u003e 1\n    ? d`${withBindings(\n        withExtmark(d`\u003e REJECT ALL`, {\n          hl_group: [\"ErrorMsg\", \"@markup.strong.markdown\"],\n        }),\n        {\n          \"\u003cCR\u003e\": () =\u003e this.rejectAll(),\n        },\n      )}\n${withBindings(\n  withExtmark(d`\u003e APPROVE ALL`, {\n    hl_group: [\"String\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.approveAll(),\n  },\n)}\n`\n    : d``\n}`;\n  }",
+      "contextualizedText": "// node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method view\n\nreturn d`⚡ May I run command ${withInlineCode(d`\\`${entry.prompt.command}\\``)}?\n${withBindings(\n  withExtmark(d`\u003e NO`, {\n    hl_group: [\"ErrorMsg\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.reject(id),\n  },\n)}\n${withBindings(\n  withExtmark(d`\u003e YES`, {\n    hl_group: [\"String\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.approve(id),\n  },\n)}\n`;\n})}${\n  entries.length \u003e 1\n    ? d`${withBindings(\n        withExtmark(d`\u003e REJECT ALL`, {\n          hl_group: [\"ErrorMsg\", \"@markup.strong.markdown\"],\n        }),\n        {\n          \"\u003cCR\u003e\": () =\u003e this.rejectAll(),\n        },\n      )}\n${withBindings(\n  withExtmark(d`\u003e APPROVE ALL`, {\n    hl_group: [\"String\", \"@markup.strong.markdown\"],\n  }),\n  {\n    \"\u003cCR\u003e\": () =\u003e this.approveAll(),\n  },\n)}\n`\n    : d``\n}`;\n  }",
+      "headingContext": "node/capabilities/sandbox-violation-handler.ts \u003e class SandboxViolationHandler \u003e method view",
+      "startLine": 325,
+      "startCol": 3,
+      "endLine": 364,
+      "endCol": 4
+    }
+  ]
+}

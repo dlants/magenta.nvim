@@ -1,0 +1,42 @@
+{
+  "blobSha": "c60ccb7fcad7533ffb3de1df593e5e0baecbb04d",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport { getDiagnostics } from \"../../utils/diagnostics.ts\";\nimport type { Command } from \"./types.ts\";",
+      "contextualizedText": "// node/chat/commands/diagnostics.ts\n\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport { getDiagnostics } from \"../../utils/diagnostics.ts\";\nimport type { Command } from \"./types.ts\";",
+      "headingContext": "node/chat/commands/diagnostics.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 4,
+      "endCol": 43
+    },
+    {
+      "text": "const createDiagnosticsCommand = (name: string, pattern: RegExp): Command =\u003e ({\n  name,\n  pattern",
+      "contextualizedText": "// node/chat/commands/diagnostics.ts \u003e function createDiagnosticsCommand\n\nconst createDiagnosticsCommand = (name: string, pattern: RegExp): Command =\u003e ({\n  name,\n  pattern",
+      "headingContext": "node/chat/commands/diagnostics.ts \u003e function createDiagnosticsCommand",
+      "startLine": 6,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 10
+    },
+    {
+      "text": "  async execute(_match, context): Promise\u003cProviderMessageContent[]\u003e {\n    try {\n      const diagnostics = await getDiagnostics(\n        context.nvim,\n        context.cwd,\n        context.homeDir,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Current diagnostics:\\n${diagnostics}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to fetch diagnostics for message: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error fetching diagnostics: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
+      "contextualizedText": "// node/chat/commands/diagnostics.ts \u003e function createDiagnosticsCommand \u003e method execute\n\n  async execute(_match, context): Promise\u003cProviderMessageContent[]\u003e {\n    try {\n      const diagnostics = await getDiagnostics(\n        context.nvim,\n        context.cwd,\n        context.homeDir,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Current diagnostics:\\n${diagnostics}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to fetch diagnostics for message: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error fetching diagnostics: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
+      "headingContext": "node/chat/commands/diagnostics.ts \u003e function createDiagnosticsCommand \u003e method execute",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 35,
+      "endCol": 4
+    },
+    {
+      "text": "export const diagCommand: Command = createDiagnosticsCommand(\n  \"@diag\",\n  /@diag\\b/,\n);\n\nexport const diagnosticsCommand: Command = createDiagnosticsCommand(\n  \"@diagnostics\",\n  /@diagnostics\\b/,\n);",
+      "contextualizedText": "// node/chat/commands/diagnostics.ts\n\nexport const diagCommand: Command = createDiagnosticsCommand(\n  \"@diag\",\n  /@diag\\b/,\n);\n\nexport const diagnosticsCommand: Command = createDiagnosticsCommand(\n  \"@diagnostics\",\n  /@diagnostics\\b/,\n);",
+      "headingContext": "node/chat/commands/diagnostics.ts",
+      "startLine": 38,
+      "startCol": 1,
+      "endLine": 46,
+      "endCol": 3
+    }
+  ]
+}

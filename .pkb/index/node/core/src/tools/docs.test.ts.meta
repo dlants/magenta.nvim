@@ -1,0 +1,159 @@
+{
+  "blobSha": "86ad6cfc7d495d7fa457ec1c0e5b53d507b7c30d",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { describe, expect, it } from \"vitest\";\nimport type { FileIO } from \"../capabilities/file-io.ts\";\nimport type { HelpTagsProvider } from \"../capabilities/help-tags-provider.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport * as Docs from \"./docs.ts\";\n\ntype FileMap = Record\u003cstring, string\u003e;",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport type { FileIO } from \"../capabilities/file-io.ts\";\nimport type { HelpTagsProvider } from \"../capabilities/help-tags-provider.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport * as Docs from \"./docs.ts\";\n\ntype FileMap = Record\u003cstring, string\u003e;",
+      "headingContext": "node/core/src/tools/docs.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 39
+    },
+    {
+      "text": "function makeFileIO(files: FileMap): FileIO",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function makeFileIO\n\nfunction makeFileIO(files: FileMap): FileIO",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function makeFileIO",
+      "startLine": 10,
+      "startCol": 1,
+      "endLine": 10,
+      "endCol": 44
+    },
+    {
+      "text": "    readFile: async (path: string) =\u003e {\n      if (path in files) return files[path];\n      throw new Error(`no such file: ${path}`);\n    }",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function readFile\n\n    readFile: async (path: string) =\u003e {\n      if (path in files) return files[path];\n      throw new Error(`no such file: ${path}`);\n    }",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function readFile",
+      "startLine": 12,
+      "startCol": 1,
+      "endLine": 15,
+      "endCol": 6
+    },
+    {
+      "text": "    readBinaryFile: async () =\u003e {\n      throw new Error(\"unused\");\n    }",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function readBinaryFile\n\n    readBinaryFile: async () =\u003e {\n      throw new Error(\"unused\");\n    }",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function readBinaryFile",
+      "startLine": 16,
+      "startCol": 1,
+      "endLine": 18,
+      "endCol": 6
+    },
+    {
+      "text": "    writeFile: async () =\u003e {}",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function writeFile\n\n    writeFile: async () =\u003e {}",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function writeFile",
+      "startLine": 19,
+      "startCol": 1,
+      "endLine": 19,
+      "endCol": 30
+    },
+    {
+      "text": "    fileExists: async (path: string) =\u003e path in files",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function fileExists\n\n    fileExists: async (path: string) =\u003e path in files",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function fileExists",
+      "startLine": 20,
+      "startCol": 1,
+      "endLine": 20,
+      "endCol": 54
+    },
+    {
+      "text": "    mkdir: async () =\u003e {}",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function mkdir\n\n    mkdir: async () =\u003e {}",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function mkdir",
+      "startLine": 21,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 26
+    },
+    {
+      "text": "    stat: async () =\u003e undefined",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function stat\n\n    stat: async () =\u003e undefined",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function stat",
+      "startLine": 22,
+      "startCol": 1,
+      "endLine": 22,
+      "endCol": 32
+    },
+    {
+      "text": "    readdir: async () =\u003e []",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function readdir\n\n    readdir: async () =\u003e []",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function readdir",
+      "startLine": 23,
+      "startCol": 1,
+      "endLine": 23,
+      "endCol": 28
+    },
+    {
+      "text": "    isDirectory: async () =\u003e false",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function isDirectory\n\n    isDirectory: async () =\u003e false",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function makeFileIO \u003e function isDirectory",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 24,
+      "endCol": 35
+    },
+    {
+      "text": "function makeProvider(paths: string[]): HelpTagsProvider",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function makeProvider\n\nfunction makeProvider(paths: string[]): HelpTagsProvider",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function makeProvider",
+      "startLine": 28,
+      "startCol": 1,
+      "endLine": 28,
+      "endCol": 57
+    },
+    {
+      "text": "  return { listTagFiles: async () =\u003e paths",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function makeProvider \u003e function listTagFiles\n\n  return { listTagFiles: async () =\u003e paths",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function makeProvider \u003e function listTagFiles",
+      "startLine": 29,
+      "startCol": 1,
+      "endLine": 29,
+      "endCol": 43
+    },
+    {
+      "text": "async function resultText(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003cstring\u003e {\n  const { result } = await invocation.promise;\n  if (result.status === \"ok\") {\n    return (result.value[0] as { type: \"text\"; text: string }).text;\n  }\n  return result.error;\n}",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function resultText\n\nasync function resultText(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003cstring\u003e {\n  const { result } = await invocation.promise;\n  if (result.status === \"ok\") {\n    return (result.value[0] as { type: \"text\"; text: string }).text;\n  }\n  return result.error;\n}",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function resultText",
+      "startLine": 32,
+      "startCol": 1,
+      "endLine": 40,
+      "endCol": 2
+    },
+    {
+      "text": "const request = (query: string, id = \"t1\") =\u003e ({\n  id: id as ToolRequestId,\n  toolName: \"docs\" as const,\n  input: { query },\n})",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts \u003e function request\n\nconst request = (query: string, id = \"t1\") =\u003e ({\n  id: id as ToolRequestId,\n  toolName: \"docs\" as const,\n  input: { query },\n})",
+      "headingContext": "node/core/src/tools/docs.test.ts \u003e function request",
+      "startLine": 42,
+      "startCol": 1,
+      "endLine": 46,
+      "endCol": 3
+    },
+    {
+      "text": "describe(\"docs tool\", () =\u003e {\n  it(\"returns matching tags with resolved line numbers\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const helpPath = \"/rt/doc/magenta-skills.txt\";\n    const files: FileMap = {\n      [tagsPath]: [\n        \"magenta-skills\\tmagenta-skills.txt\\t/*magenta-skills*\",\n        \"magenta-other\\tmagenta-other.txt\\t/*magenta-other*\",\n      ].join(\"\\n\"),\n      [helpPath]: [\"intro\", \"more\", \"see *magenta-skills* here\", \"tail\"].join(\n        \"\\n\",\n      ),\n    };\n\n    const invocation = Docs.execute(request(\"skills\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    expect(text).toContain(\"/rt/doc/\");\n    expect(text).toContain(\"magenta-skills.txt\");\n    expect(text).toContain(\"magenta-skills:3\");\n    expect(text).not.toContain(\"magenta-other\");\n  });\n\n  it(\"resolves multiple tags in the same file independently\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const helpPath = \"/rt/doc/multi.txt\";\n    const files: FileMap = {\n      [tagsPath]: [\"tag1\\tmulti.txt\\t/*tag1*\", \"tag2\\tmulti.txt\\t/*tag2*\"].join(\n        \"\\n\",\n      ),\n      [helpPath]: [\n        \"\",\n        \"\",\n        \"first *tag1* here\",\n        \"\",\n        \"\",\n        \"\",\n        \"second *tag2*\",\n      ].join(\"\\n\"),\n    };\n\n    const invocation = Docs.execute(request(\"tag\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    const helpPathOccurrences = text.split(helpPath).length - 1;\n    expect(helpPathOccurrences).toBe(0);\n    expect(text).toContain(\"multi.txt\");\n    const fileCount = text.split(\"multi.txt\").length - 1;\n    expect(fileCount).toBe(1);\n    expect(text).toContain(\"tag1:3\");\n    expect(text).toContain(\"tag2:7\");\n  });",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts\n\ndescribe(\"docs tool\", () =\u003e {\n  it(\"returns matching tags with resolved line numbers\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const helpPath = \"/rt/doc/magenta-skills.txt\";\n    const files: FileMap = {\n      [tagsPath]: [\n        \"magenta-skills\\tmagenta-skills.txt\\t/*magenta-skills*\",\n        \"magenta-other\\tmagenta-other.txt\\t/*magenta-other*\",\n      ].join(\"\\n\"),\n      [helpPath]: [\"intro\", \"more\", \"see *magenta-skills* here\", \"tail\"].join(\n        \"\\n\",\n      ),\n    };\n\n    const invocation = Docs.execute(request(\"skills\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    expect(text).toContain(\"/rt/doc/\");\n    expect(text).toContain(\"magenta-skills.txt\");\n    expect(text).toContain(\"magenta-skills:3\");\n    expect(text).not.toContain(\"magenta-other\");\n  });\n\n  it(\"resolves multiple tags in the same file independently\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const helpPath = \"/rt/doc/multi.txt\";\n    const files: FileMap = {\n      [tagsPath]: [\"tag1\\tmulti.txt\\t/*tag1*\", \"tag2\\tmulti.txt\\t/*tag2*\"].join(\n        \"\\n\",\n      ),\n      [helpPath]: [\n        \"\",\n        \"\",\n        \"first *tag1* here\",\n        \"\",\n        \"\",\n        \"\",\n        \"second *tag2*\",\n      ].join(\"\\n\"),\n    };\n\n    const invocation = Docs.execute(request(\"tag\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    const helpPathOccurrences = text.split(helpPath).length - 1;\n    expect(helpPathOccurrences).toBe(0);\n    expect(text).toContain(\"multi.txt\");\n    const fileCount = text.split(\"multi.txt\").length - 1;\n    expect(fileCount).toBe(1);\n    expect(text).toContain(\"tag1:3\");\n    expect(text).toContain(\"tag2:7\");\n  });",
+      "headingContext": "node/core/src/tools/docs.test.ts",
+      "startLine": 48,
+      "startCol": 1,
+      "endLine": 105,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"falls back to line 1 when tag marker is missing\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const helpPath = \"/rt/doc/nomarker.txt\";\n    const files: FileMap = {\n      [tagsPath]: \"orphan\\tnomarker.txt\\t/*orphan*\",\n      [helpPath]: \"no markers here at all\",\n    };\n\n    const invocation = Docs.execute(request(\"orphan\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    expect(text).toContain(\"nomarker.txt\");\n    expect(text).toContain(\"orphan:1\");\n  });\n\n  it(\"reports no matches for a query that does not match any tag\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const files: FileMap = {\n      [tagsPath]: \"alpha\\tfoo.txt\\t/*alpha*\",\n    };\n\n    const invocation = Docs.execute(request(\"zzzznope\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    expect(text).toContain(\"No matches\");\n  });",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts\n\nit(\"falls back to line 1 when tag marker is missing\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const helpPath = \"/rt/doc/nomarker.txt\";\n    const files: FileMap = {\n      [tagsPath]: \"orphan\\tnomarker.txt\\t/*orphan*\",\n      [helpPath]: \"no markers here at all\",\n    };\n\n    const invocation = Docs.execute(request(\"orphan\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    expect(text).toContain(\"nomarker.txt\");\n    expect(text).toContain(\"orphan:1\");\n  });\n\n  it(\"reports no matches for a query that does not match any tag\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const files: FileMap = {\n      [tagsPath]: \"alpha\\tfoo.txt\\t/*alpha*\",\n    };\n\n    const invocation = Docs.execute(request(\"zzzznope\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    expect(text).toContain(\"No matches\");\n  });",
+      "headingContext": "node/core/src/tools/docs.test.ts",
+      "startLine": 107,
+      "startCol": 3,
+      "endLine": 138,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"truncates when matches exceed the cap\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const helpPath = \"/rt/doc/many.txt\";\n    const tagLines: string[] = [];\n    const helpLines: string[] = [];\n    for (let i = 0; i \u003c 250; i++) {\n      tagLines.push(`common-${i}\\tmany.txt\\t/*common-${i}*`);\n      helpLines.push(`line *common-${i}*`);\n    }\n    const files: FileMap = {\n      [tagsPath]: tagLines.join(\"\\n\"),\n      [helpPath]: helpLines.join(\"\\n\"),\n    };\n\n    const invocation = Docs.execute(request(\"common\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    expect(text).toContain(\"truncated\");\n    const tagLineCount = text\n      .split(\"\\n\")\n      .filter((l) =\u003e /^\\s{4}common-\\d+:\\d+$/.test(l)).length;\n    expect(tagLineCount).toBeLessThanOrEqual(200);\n    const filePathCount = text.split(helpPath).length - 1;\n    expect(filePathCount).toBe(0);\n    const fileHeaderCount = text.split(\"many.txt\").length - 1;\n    expect(fileHeaderCount).toBe(1);\n  });\n\n  it(\"skips metadata lines starting with !\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const files: FileMap = {\n      [tagsPath]: [\n        \"!_TAG_FILE_FORMAT\\t2\",\n        \"realtag\\tfile.txt\\t/*realtag*\",\n      ].join(\"\\n\"),\n      \"/rt/doc/file.txt\": \"a *realtag* b\",\n    };\n\n    const invocation = Docs.execute(request(\"realtag\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    expect(text).toContain(\"realtag\");\n    expect(text).not.toContain(\"_TAG_FILE_FORMAT\");\n  });",
+      "contextualizedText": "// node/core/src/tools/docs.test.ts\n\nit(\"truncates when matches exceed the cap\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const helpPath = \"/rt/doc/many.txt\";\n    const tagLines: string[] = [];\n    const helpLines: string[] = [];\n    for (let i = 0; i \u003c 250; i++) {\n      tagLines.push(`common-${i}\\tmany.txt\\t/*common-${i}*`);\n      helpLines.push(`line *common-${i}*`);\n    }\n    const files: FileMap = {\n      [tagsPath]: tagLines.join(\"\\n\"),\n      [helpPath]: helpLines.join(\"\\n\"),\n    };\n\n    const invocation = Docs.execute(request(\"common\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    expect(text).toContain(\"truncated\");\n    const tagLineCount = text\n      .split(\"\\n\")\n      .filter((l) =\u003e /^\\s{4}common-\\d+:\\d+$/.test(l)).length;\n    expect(tagLineCount).toBeLessThanOrEqual(200);\n    const filePathCount = text.split(helpPath).length - 1;\n    expect(filePathCount).toBe(0);\n    const fileHeaderCount = text.split(\"many.txt\").length - 1;\n    expect(fileHeaderCount).toBe(1);\n  });\n\n  it(\"skips metadata lines starting with !\", async () =\u003e {\n    const tagsPath = \"/rt/doc/tags\";\n    const files: FileMap = {\n      [tagsPath]: [\n        \"!_TAG_FILE_FORMAT\\t2\",\n        \"realtag\\tfile.txt\\t/*realtag*\",\n      ].join(\"\\n\"),\n      \"/rt/doc/file.txt\": \"a *realtag* b\",\n    };\n\n    const invocation = Docs.execute(request(\"realtag\"), {\n      fileIO: makeFileIO(files),\n      helpTagsProvider: makeProvider([tagsPath]),\n    });\n\n    const text = await resultText(invocation);\n    expect(text).toContain(\"realtag\");\n    expect(text).not.toContain(\"_TAG_FILE_FORMAT\");\n  });",
+      "headingContext": "node/core/src/tools/docs.test.ts",
+      "startLine": 140,
+      "startCol": 3,
+      "endLine": 189,
+      "endCol": 6
+    }
+  ]
+}

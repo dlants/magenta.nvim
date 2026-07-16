@@ -1,0 +1,60 @@
+{
+  "blobSha": "b00d264982255c07b7bc2fa3573d16b21ee7fd5e",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { LuaExecutor } from \"../capabilities/lua-executor.ts\";\nimport {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolResult,\n  type ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type { ToolInvocation, ToolName, ToolRequestId } from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport type ToolRequest = {\n  id: ToolRequestId;\n  toolName: \"nvim_lua\";\n  input: Input;\n};\nexport type StructuredResult = { toolName: \"nvim_lua\" };",
+      "contextualizedText": "// node/core/src/tools/nvimLua.ts\n\nimport type { LuaExecutor } from \"../capabilities/lua-executor.ts\";\nimport {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolResult,\n  type ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type { ToolInvocation, ToolName, ToolRequestId } from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport type ToolRequest = {\n  id: ToolRequestId;\n  toolName: \"nvim_lua\";\n  input: Input;\n};\nexport type StructuredResult = { toolName: \"nvim_lua\" };",
+      "headingContext": "node/core/src/tools/nvimLua.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 15,
+      "endCol": 57
+    },
+    {
+      "text": "function formatResult(value: unknown): string {\n  if (value === undefined || value === null) {\n    return \"Executed successfully, no return value.\";\n  }\n\n  try {\n    return JSON.stringify(value, null, 2);\n  } catch {\n    return String(value);\n  }\n}",
+      "contextualizedText": "// node/core/src/tools/nvimLua.ts \u003e function formatResult\n\nfunction formatResult(value: unknown): string {\n  if (value === undefined || value === null) {\n    return \"Executed successfully, no return value.\";\n  }\n\n  try {\n    return JSON.stringify(value, null, 2);\n  } catch {\n    return String(value);\n  }\n}",
+      "headingContext": "node/core/src/tools/nvimLua.ts \u003e function formatResult",
+      "startLine": 17,
+      "startCol": 1,
+      "endLine": 27,
+      "endCol": 2
+    },
+    {
+      "text": "export function execute(\n  request: ToolRequest,\n  context: {\n    luaExecutor: LuaExecutor;\n  },\n): ToolInvocation {\n  let aborted = false;\n\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    try {\n      const value = await context.luaExecutor.execLua(request.input.code);\n\n      if (aborted) {\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error: \"Request was aborted by the user.\",\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text: formatResult(value),\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          ],\n          structuredResult: { toolName: \"nvim_lua\" as ToolName },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    } catch (error) {\n      if (aborted) {\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error: \"Request was aborted by the user.\",\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: `Error executing Lua: ${error instanceof Error ? error.message : String(error)}`,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n  })();\n\n  return {\n    promise",
+      "contextualizedText": "// node/core/src/tools/nvimLua.ts \u003e function execute\n\nexport function execute(\n  request: ToolRequest,\n  context: {\n    luaExecutor: LuaExecutor;\n  },\n): ToolInvocation {\n  let aborted = false;\n\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    try {\n      const value = await context.luaExecutor.execLua(request.input.code);\n\n      if (aborted) {\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error: \"Request was aborted by the user.\",\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text: formatResult(value),\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          ],\n          structuredResult: { toolName: \"nvim_lua\" as ToolName },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    } catch (error) {\n      if (aborted) {\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error: \"Request was aborted by the user.\",\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: `Error executing Lua: ${error instanceof Error ? error.message : String(error)}`,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n  })();\n\n  return {\n    promise",
+      "headingContext": "node/core/src/tools/nvimLua.ts \u003e function execute",
+      "startLine": 29,
+      "startCol": 1,
+      "endLine": 94,
+      "endCol": 12
+    },
+    {
+      "text": "    abort: () =\u003e {\n      aborted = true;\n    }",
+      "contextualizedText": "// node/core/src/tools/nvimLua.ts \u003e function execute \u003e function abort\n\n    abort: () =\u003e {\n      aborted = true;\n    }",
+      "headingContext": "node/core/src/tools/nvimLua.ts \u003e function execute \u003e function abort",
+      "startLine": 95,
+      "startCol": 1,
+      "endLine": 97,
+      "endCol": 6
+    },
+    {
+      "text": "export const spec: ProviderToolSpec = {\n  name: \"nvim_lua\" as ToolName,\n  description: `Execute a chunk of Lua code in the host neovim instance and get the result back.\nThe code is run via nvim_exec_lua. Whatever the chunk \\`return\\`s is sent back to you (JSON-formatted when possible).\nUse this to inspect or manipulate the live editor state.`,\n  input_schema: {\n    type: \"object\",\n    properties: {\n      code: {\n        type: \"string\",\n        description:\n          \"The Lua source to evaluate in neovim. Use a `return` statement to send a value back.\",\n      },\n    },\n    required: [\"code\"],\n  },\n};\n\nexport type Input = {\n  code: string;\n};",
+      "contextualizedText": "// node/core/src/tools/nvimLua.ts\n\nexport const spec: ProviderToolSpec = {\n  name: \"nvim_lua\" as ToolName,\n  description: `Execute a chunk of Lua code in the host neovim instance and get the result back.\nThe code is run via nvim_exec_lua. Whatever the chunk \\`return\\`s is sent back to you (JSON-formatted when possible).\nUse this to inspect or manipulate the live editor state.`,\n  input_schema: {\n    type: \"object\",\n    properties: {\n      code: {\n        type: \"string\",\n        description:\n          \"The Lua source to evaluate in neovim. Use a `return` statement to send a value back.\",\n      },\n    },\n    required: [\"code\"],\n  },\n};\n\nexport type Input = {\n  code: string;\n};",
+      "headingContext": "node/core/src/tools/nvimLua.ts",
+      "startLine": 101,
+      "startCol": 1,
+      "endLine": 121,
+      "endCol": 3
+    },
+    {
+      "text": "export function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (typeof input.code !== \"string\") {\n    return { status: \"error\", error: \"expected input.code to be a string\" };\n  }\n\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
+      "contextualizedText": "// node/core/src/tools/nvimLua.ts \u003e function validateInput\n\nexport function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (typeof input.code !== \"string\") {\n    return { status: \"error\", error: \"expected input.code to be a string\" };\n  }\n\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
+      "headingContext": "node/core/src/tools/nvimLua.ts \u003e function validateInput",
+      "startLine": 123,
+      "startCol": 1,
+      "endLine": 134,
+      "endCol": 2
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "blobSha": "dbd5b7f5598273a7b2229f8d42032486b0011d7b",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { JSONSchema, ThreadOptions } from \"./protocol.ts\";\n\n/** Reports progress, surfaced in the magenta UI. */\nexport type LogFn = (message: string) =\u003e void;\n\n/**\n * Spawns a real, sidebar-visible magenta thread seeded with `prompt`, equips it\n * with a `yield_to_parent` tool whose input_schema is `yieldSchema`, and\n * resolves to the structured value the agent yields. The generic `T` is\n * advisory typing only.\n */\nexport type ThreadFn = \u003cT\u003e(\n  prompt: string,\n  yieldSchema: JSONSchema,\n  options?: ThreadOptions,\n) =\u003e Promise\u003cT\u003e;\n\nexport type Runner\u003cP = unknown\u003e = (\n  parameters: P,\n  thread: ThreadFn,\n  log: LogFn,\n) =\u003e Promise\u003cvoid\u003e;\n\nexport type RegisteredScript = {\n  name: string;\n  description: string;\n  parameterSchema: JSONSchema;\n  runner: Runner;\n};\n\nconst registry = new Map\u003cstring, RegisteredScript\u003e();",
+      "contextualizedText": "// sdk/registry.ts\n\nimport type { JSONSchema, ThreadOptions } from \"./protocol.ts\";\n\n/** Reports progress, surfaced in the magenta UI. */\nexport type LogFn = (message: string) =\u003e void;\n\n/**\n * Spawns a real, sidebar-visible magenta thread seeded with `prompt`, equips it\n * with a `yield_to_parent` tool whose input_schema is `yieldSchema`, and\n * resolves to the structured value the agent yields. The generic `T` is\n * advisory typing only.\n */\nexport type ThreadFn = \u003cT\u003e(\n  prompt: string,\n  yieldSchema: JSONSchema,\n  options?: ThreadOptions,\n) =\u003e Promise\u003cT\u003e;\n\nexport type Runner\u003cP = unknown\u003e = (\n  parameters: P,\n  thread: ThreadFn,\n  log: LogFn,\n) =\u003e Promise\u003cvoid\u003e;\n\nexport type RegisteredScript = {\n  name: string;\n  description: string;\n  parameterSchema: JSONSchema;\n  runner: Runner;\n};\n\nconst registry = new Map\u003cstring, RegisteredScript\u003e();",
+      "headingContext": "sdk/registry.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 31,
+      "endCol": 54
+    },
+    {
+      "text": "/**\n * Record a script into the module-level registry. Decoupled from how the runner\n * is driven, so both the production IPC client and the test harness can invoke\n * the same runner.\n */\nexport function registerScript\u003cP = unknown\u003e(\n  name: string,\n  description: string,\n  parameterSchema: JSONSchema,\n  runner: Runner\u003cP\u003e,\n): void {\n  registry.set(name, {\n    name,\n    description,\n    parameterSchema,\n    runner: runner as Runner,\n  });\n}",
+      "contextualizedText": "// sdk/registry.ts \u003e function registerScript\n\n/**\n * Record a script into the module-level registry. Decoupled from how the runner\n * is driven, so both the production IPC client and the test harness can invoke\n * the same runner.\n */\nexport function registerScript\u003cP = unknown\u003e(\n  name: string,\n  description: string,\n  parameterSchema: JSONSchema,\n  runner: Runner\u003cP\u003e,\n): void {\n  registry.set(name, {\n    name,\n    description,\n    parameterSchema,\n    runner: runner as Runner,\n  });\n}",
+      "headingContext": "sdk/registry.ts \u003e function registerScript",
+      "startLine": 33,
+      "startCol": 1,
+      "endLine": 50,
+      "endCol": 2
+    },
+    {
+      "text": "export function getRegistry(): Map\u003cstring, RegisteredScript\u003e {\n  return registry;\n}",
+      "contextualizedText": "// sdk/registry.ts \u003e function getRegistry\n\nexport function getRegistry(): Map\u003cstring, RegisteredScript\u003e {\n  return registry;\n}",
+      "headingContext": "sdk/registry.ts \u003e function getRegistry",
+      "startLine": 52,
+      "startCol": 1,
+      "endLine": 54,
+      "endCol": 2
+    },
+    {
+      "text": "export function clearRegistry(): void {\n  registry.clear();\n}",
+      "contextualizedText": "// sdk/registry.ts \u003e function clearRegistry\n\nexport function clearRegistry(): void {\n  registry.clear();\n}",
+      "headingContext": "sdk/registry.ts \u003e function clearRegistry",
+      "startLine": 56,
+      "startCol": 1,
+      "endLine": 58,
+      "endCol": 2
+    }
+  ]
+}

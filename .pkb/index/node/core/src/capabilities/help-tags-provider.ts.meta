@@ -1,0 +1,24 @@
+{
+  "blobSha": "29e13b35c3f9671ea336d1b594b0cc0a9bd9b45e",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export interface HelpTagsProvider",
+      "contextualizedText": "// node/core/src/capabilities/help-tags-provider.ts \u003e interface HelpTagsProvider\n\nexport interface HelpTagsProvider",
+      "headingContext": "node/core/src/capabilities/help-tags-provider.ts \u003e interface HelpTagsProvider",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 1,
+      "endCol": 34
+    },
+    {
+      "text": "/** Absolute paths to all discovered `doc/tags` files on the runtime path. */\n  listTagFiles(): Promise\u003cstring[]\u003e",
+      "contextualizedText": "// node/core/src/capabilities/help-tags-provider.ts \u003e interface HelpTagsProvider \u003e method listTagFiles\n\n/** Absolute paths to all discovered `doc/tags` files on the runtime path. */\n  listTagFiles(): Promise\u003cstring[]\u003e",
+      "headingContext": "node/core/src/capabilities/help-tags-provider.ts \u003e interface HelpTagsProvider \u003e method listTagFiles",
+      "startLine": 2,
+      "startCol": 3,
+      "endLine": 3,
+      "endCol": 36
+    }
+  ]
+}

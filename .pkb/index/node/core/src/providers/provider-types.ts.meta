@@ -1,0 +1,285 @@
+{
+  "blobSha": "6b66ede4def25184fd3d1bf26a22021ab3d3ca61",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type Anthropic from \"@anthropic-ai/sdk\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport type * as ToolManager from \"../tool-types.ts\";\nimport type { ToolName, ToolRequest } from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport const PROVIDER_NAMES = [\n  \"anthropic\",\n  \"openai\",\n  \"bedrock\",\n  \"ollama\",\n  \"copilot\",\n  \"mock\",\n] as const;\nexport type { ProviderName } from \"../provider-options.ts\";\n\nimport type { ProviderName } from \"../provider-options.ts\";\n\nexport type ProviderSetting = {\n  provider: ProviderName;\n  model: string;\n  baseUrl?: string;\n  apiKeyEnvVar?: string;\n  promptCaching?: boolean;\n};\n\nexport type StopReason =\n  | \"end_turn\"\n  | \"tool_use\"\n  | \"max_tokens\"\n  | \"pause_turn\"\n  | \"content\"\n  | \"refusal\"\n  | \"aborted\"\n  | \"model_context_window_exceeded\"\n  | \"stop_sequence\";\n\nexport type Usage = {\n  inputTokens: number;\n  outputTokens: number;\n  cacheHits?: number;\n  cacheMisses?: number;\n};\n\nexport type ProviderMessage = {\n  role: \"user\" | \"assistant\";\n  content: Array\u003cProviderMessageContent\u003e;\n  stopReason?: StopReason;\n  usage?: Usage;\n};\n\nexport type ProviderWebSearchCitation = {\n  cited_text: string;\n  encrypted_index: string;\n  title: string;\n  type: \"web_search_citation\";\n  url: string;\n};\n\nexport type ProviderTextContent = {\n  type: \"text\";\n  text: string;\n  citations?: ProviderWebSearchCitation[] | undefined;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderThinkingContent = {\n  type: \"thinking\";\n  thinking: string;\n  signature: string;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderRedactedThinkingContent = {\n  type: \"redacted_thinking\";\n  data: string;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderSystemReminderContent = {\n  type: \"system_reminder\";\n  text: string;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderSystemInfoContent = {\n  type: \"system_info\";\n  text: string;\n  nativeMessageIdx: NativeMessageIdx;\n};",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts\n\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport type * as ToolManager from \"../tool-types.ts\";\nimport type { ToolName, ToolRequest } from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport const PROVIDER_NAMES = [\n  \"anthropic\",\n  \"openai\",\n  \"bedrock\",\n  \"ollama\",\n  \"copilot\",\n  \"mock\",\n] as const;\nexport type { ProviderName } from \"../provider-options.ts\";\n\nimport type { ProviderName } from \"../provider-options.ts\";\n\nexport type ProviderSetting = {\n  provider: ProviderName;\n  model: string;\n  baseUrl?: string;\n  apiKeyEnvVar?: string;\n  promptCaching?: boolean;\n};\n\nexport type StopReason =\n  | \"end_turn\"\n  | \"tool_use\"\n  | \"max_tokens\"\n  | \"pause_turn\"\n  | \"content\"\n  | \"refusal\"\n  | \"aborted\"\n  | \"model_context_window_exceeded\"\n  | \"stop_sequence\";\n\nexport type Usage = {\n  inputTokens: number;\n  outputTokens: number;\n  cacheHits?: number;\n  cacheMisses?: number;\n};\n\nexport type ProviderMessage = {\n  role: \"user\" | \"assistant\";\n  content: Array\u003cProviderMessageContent\u003e;\n  stopReason?: StopReason;\n  usage?: Usage;\n};\n\nexport type ProviderWebSearchCitation = {\n  cited_text: string;\n  encrypted_index: string;\n  title: string;\n  type: \"web_search_citation\";\n  url: string;\n};\n\nexport type ProviderTextContent = {\n  type: \"text\";\n  text: string;\n  citations?: ProviderWebSearchCitation[] | undefined;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderThinkingContent = {\n  type: \"thinking\";\n  thinking: string;\n  signature: string;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderRedactedThinkingContent = {\n  type: \"redacted_thinking\";\n  data: string;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderSystemReminderContent = {\n  type: \"system_reminder\";\n  text: string;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderSystemInfoContent = {\n  type: \"system_info\";\n  text: string;\n  nativeMessageIdx: NativeMessageIdx;\n};",
+      "headingContext": "node/core/src/providers/provider-types.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 90,
+      "endCol": 3
+    },
+    {
+      "text": "export type ProviderContextUpdateContent = {\n  type: \"context_update\";\n  text: string;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderForkNotificationContent = {\n  type: \"fork_notification\";\n  text: string;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderImageContent = {\n  type: \"image\";\n  source: {\n    type: \"base64\";\n    media_type: \"image/jpeg\" | \"image/png\" | \"image/gif\" | \"image/webp\";\n    data: string;\n  };\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderDocumentContent = {\n  type: \"document\";\n  source: {\n    type: \"base64\";\n    media_type: \"application/pdf\";\n    data: string;\n  };\n  title?: string | null;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderToolUseContent = {\n  type: \"tool_use\";\n  id: ToolManager.ToolRequestId;\n  name: ToolName;\n  request: Result\u003cToolRequest, { rawRequest: unknown }\u003e;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderServerToolUseContent = {\n  type: \"server_tool_use\";\n  id: string;\n  name: \"web_search\";\n  input: {\n    query: string;\n  };\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderWebSearchToolResult = {\n  type: \"web_search_tool_result\";\n  tool_use_id: string;\n  content: Anthropic.WebSearchToolResultBlockContent;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderToolResultContent =\n  | ProviderTextContent\n  | ProviderImageContent\n  | ProviderDocumentContent;\n\nexport type ProviderToolResult = {\n  type: \"tool_result\";\n  id: ToolManager.ToolRequestId;\n  result:\n    | {\n        status: \"ok\";\n        value: ProviderToolResultContent[];\n        structuredResult: ToolManager.ToolStructuredResult;\n      }\n    | { status: \"error\"; error: string };\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderToolSpec = {\n  name: ToolName;\n  description: string;\n  input_schema: JSONSchemaType;\n};",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts\n\nexport type ProviderContextUpdateContent = {\n  type: \"context_update\";\n  text: string;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderForkNotificationContent = {\n  type: \"fork_notification\";\n  text: string;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderImageContent = {\n  type: \"image\";\n  source: {\n    type: \"base64\";\n    media_type: \"image/jpeg\" | \"image/png\" | \"image/gif\" | \"image/webp\";\n    data: string;\n  };\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderDocumentContent = {\n  type: \"document\";\n  source: {\n    type: \"base64\";\n    media_type: \"application/pdf\";\n    data: string;\n  };\n  title?: string | null;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderToolUseContent = {\n  type: \"tool_use\";\n  id: ToolManager.ToolRequestId;\n  name: ToolName;\n  request: Result\u003cToolRequest, { rawRequest: unknown }\u003e;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderServerToolUseContent = {\n  type: \"server_tool_use\";\n  id: string;\n  name: \"web_search\";\n  input: {\n    query: string;\n  };\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderWebSearchToolResult = {\n  type: \"web_search_tool_result\";\n  tool_use_id: string;\n  content: Anthropic.WebSearchToolResultBlockContent;\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderToolResultContent =\n  | ProviderTextContent\n  | ProviderImageContent\n  | ProviderDocumentContent;\n\nexport type ProviderToolResult = {\n  type: \"tool_result\";\n  id: ToolManager.ToolRequestId;\n  result:\n    | {\n        status: \"ok\";\n        value: ProviderToolResultContent[];\n        structuredResult: ToolManager.ToolStructuredResult;\n      }\n    | { status: \"error\"; error: string };\n  nativeMessageIdx: NativeMessageIdx;\n};\n\nexport type ProviderToolSpec = {\n  name: ToolName;\n  description: string;\n  input_schema: JSONSchemaType;\n};",
+      "headingContext": "node/core/src/providers/provider-types.ts",
+      "startLine": 92,
+      "startCol": 1,
+      "endLine": 172,
+      "endCol": 3
+    },
+    {
+      "text": "export type ProviderMessageContent =\n  | ProviderTextContent\n  | ProviderImageContent\n  | ProviderDocumentContent\n  | ProviderToolUseContent\n  | ProviderServerToolUseContent\n  | ProviderWebSearchToolResult\n  | ProviderToolResult\n  | ProviderThinkingContent\n  | ProviderRedactedThinkingContent\n  | ProviderSystemReminderContent\n  | ProviderSystemInfoContent\n  | ProviderContextUpdateContent\n  | ProviderForkNotificationContent;",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts\n\nexport type ProviderMessageContent =\n  | ProviderTextContent\n  | ProviderImageContent\n  | ProviderDocumentContent\n  | ProviderToolUseContent\n  | ProviderServerToolUseContent\n  | ProviderWebSearchToolResult\n  | ProviderToolResult\n  | ProviderThinkingContent\n  | ProviderRedactedThinkingContent\n  | ProviderSystemReminderContent\n  | ProviderSystemInfoContent\n  | ProviderContextUpdateContent\n  | ProviderForkNotificationContent;",
+      "headingContext": "node/core/src/providers/provider-types.ts",
+      "startLine": 174,
+      "startCol": 1,
+      "endLine": 187,
+      "endCol": 37
+    },
+    {
+      "text": "export interface Provider",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Provider\n\nexport interface Provider",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Provider",
+      "startLine": 189,
+      "startCol": 1,
+      "endLine": 189,
+      "endCol": 26
+    },
+    {
+      "text": "  forceToolUse(options: {\n    model: string;\n    input: AgentInput[];\n    spec: ProviderToolSpec;\n    systemPrompt?: string;\n    disableCaching?: boolean;\n    contextAgent?: Agent;\n    thinking?: {\n      enabled: boolean;\n      budgetTokens?: number;\n      displayThinking?: boolean;\n      effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\";\n    };\n  }): ProviderToolUseRequest",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Provider \u003e method forceToolUse\n\n  forceToolUse(options: {\n    model: string;\n    input: AgentInput[];\n    spec: ProviderToolSpec;\n    systemPrompt?: string;\n    disableCaching?: boolean;\n    contextAgent?: Agent;\n    thinking?: {\n      enabled: boolean;\n      budgetTokens?: number;\n      displayThinking?: boolean;\n      effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\";\n    };\n  }): ProviderToolUseRequest",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Provider \u003e method forceToolUse",
+      "startLine": 190,
+      "startCol": 1,
+      "endLine": 203,
+      "endCol": 29
+    },
+    {
+      "text": "  createAgent(options: AgentOptions): Agent",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Provider \u003e method createAgent\n\n  createAgent(options: AgentOptions): Agent",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Provider \u003e method createAgent",
+      "startLine": 205,
+      "startCol": 1,
+      "endLine": 205,
+      "endCol": 44
+    },
+    {
+      "text": "export type ProviderMetadata = {\n  openai?: {\n    itemId?: string | undefined;\n  };\n};\n\nexport type ProviderBlockStartEvent = Anthropic.RawContentBlockStartEvent \u0026 {\n  providerMetadata?: ProviderMetadata;\n};\n\nexport type ProviderBlockDeltaEvent = Anthropic.RawContentBlockDeltaEvent;\n\nexport type ProviderBlockStopEvent = Anthropic.RawContentBlockStopEvent;\n\nexport type ProviderStreamEvent =\n  | ProviderBlockStartEvent\n  | ProviderBlockDeltaEvent\n  | ProviderBlockStopEvent;",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts\n\nexport type ProviderMetadata = {\n  openai?: {\n    itemId?: string | undefined;\n  };\n};\n\nexport type ProviderBlockStartEvent = Anthropic.RawContentBlockStartEvent \u0026 {\n  providerMetadata?: ProviderMetadata;\n};\n\nexport type ProviderBlockDeltaEvent = Anthropic.RawContentBlockDeltaEvent;\n\nexport type ProviderBlockStopEvent = Anthropic.RawContentBlockStopEvent;\n\nexport type ProviderStreamEvent =\n  | ProviderBlockStartEvent\n  | ProviderBlockDeltaEvent\n  | ProviderBlockStopEvent;",
+      "headingContext": "node/core/src/providers/provider-types.ts",
+      "startLine": 208,
+      "startCol": 1,
+      "endLine": 225,
+      "endCol": 28
+    },
+    {
+      "text": "export interface ProviderStreamRequest",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface ProviderStreamRequest\n\nexport interface ProviderStreamRequest",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface ProviderStreamRequest",
+      "startLine": 227,
+      "startCol": 1,
+      "endLine": 227,
+      "endCol": 39
+    },
+    {
+      "text": "  abort(): void",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface ProviderStreamRequest \u003e method abort\n\n  abort(): void",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface ProviderStreamRequest \u003e method abort",
+      "startLine": 228,
+      "startCol": 1,
+      "endLine": 228,
+      "endCol": 16
+    },
+    {
+      "text": "aborted: boolean;\n  promise: Promise\u003c{\n    stopReason: StopReason;\n    usage: Usage;\n  }\u003e;\n}",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface ProviderStreamRequest\n\naborted: boolean;\n  promise: Promise\u003c{\n    stopReason: StopReason;\n    usage: Usage;\n  }\u003e;\n}",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface ProviderStreamRequest",
+      "startLine": 229,
+      "startCol": 3,
+      "endLine": 234,
+      "endCol": 2
+    },
+    {
+      "text": "export type ProviderToolUseResponse = {\n  toolRequest: Result\u003cToolRequest, { rawRequest: unknown }\u003e;\n  stopReason: StopReason;\n  usage: Usage;\n};",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts\n\nexport type ProviderToolUseResponse = {\n  toolRequest: Result\u003cToolRequest, { rawRequest: unknown }\u003e;\n  stopReason: StopReason;\n  usage: Usage;\n};",
+      "headingContext": "node/core/src/providers/provider-types.ts",
+      "startLine": 236,
+      "startCol": 1,
+      "endLine": 240,
+      "endCol": 3
+    },
+    {
+      "text": "export interface ProviderToolUseRequest",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface ProviderToolUseRequest\n\nexport interface ProviderToolUseRequest",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface ProviderToolUseRequest",
+      "startLine": 242,
+      "startCol": 1,
+      "endLine": 242,
+      "endCol": 40
+    },
+    {
+      "text": "  abort(): void",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface ProviderToolUseRequest \u003e method abort\n\n  abort(): void",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface ProviderToolUseRequest \u003e method abort",
+      "startLine": 243,
+      "startCol": 1,
+      "endLine": 243,
+      "endCol": 16
+    },
+    {
+      "text": "aborted: boolean;\n  promise: Promise\u003cProviderToolUseResponse\u003e;\n}",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface ProviderToolUseRequest\n\naborted: boolean;\n  promise: Promise\u003cProviderToolUseResponse\u003e;\n}",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface ProviderToolUseRequest",
+      "startLine": 244,
+      "startCol": 3,
+      "endLine": 246,
+      "endCol": 2
+    },
+    {
+      "text": "// ============================================================================\n// Agent - Stateful conversation agent interface\n// ============================================================================\n\nexport type RetryStatus = {\n  attempt: number;\n  nextRetryAt: Date;\n  error: Error;\n};\n\nexport type AgentStatus =\n  | {\n      type: \"streaming\";\n      startTime: Date;\n      /** Timestamp of the most recent sign of life from the server during the\n       * current turn: set when each attempt's request is sent, and advanced on\n       * every received stream event. Used to show a \"waiting\" timer during dead\n       * air (no events for \u003e3s). */\n      lastEventTime: Date;\n      retryStatus?: RetryStatus;\n    }\n  | { type: \"stopped\"; stopReason: StopReason }\n  | { type: \"error\"; error: Error };\n\n/** Branded type for native message index within an Agent.\n * This is opaque to external code - only the Agent knows how to use it.\n */\nexport type NativeMessageIdx = number \u0026 { __nativeMessageIdx: true };\n\n/** Placeholder used when constructing content blocks before they are attached\n * to a native message array (e.g. tool results, AgentInput). The actual\n * `nativeMessageIdx` is stamped by `convertAnthropicMessagesToProvider` on the\n * agent's `cachedProviderMessages`, so the input value is discarded. */\nexport const PLACEHOLDER_NATIVE_MESSAGE_IDX = -1 as NativeMessageIdx;\n\nexport type AgentStreamingBlock =\n  | { type: \"text\"; text: string }\n  | { type: \"thinking\"; thinking: string; signature: string }\n  | {\n      type: \"tool_use\";\n      id: ToolManager.ToolRequestId;\n      name: ToolName;\n      inputJson: string;\n    };",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts\n\n// ============================================================================\n// Agent - Stateful conversation agent interface\n// ============================================================================\n\nexport type RetryStatus = {\n  attempt: number;\n  nextRetryAt: Date;\n  error: Error;\n};\n\nexport type AgentStatus =\n  | {\n      type: \"streaming\";\n      startTime: Date;\n      /** Timestamp of the most recent sign of life from the server during the\n       * current turn: set when each attempt's request is sent, and advanced on\n       * every received stream event. Used to show a \"waiting\" timer during dead\n       * air (no events for \u003e3s). */\n      lastEventTime: Date;\n      retryStatus?: RetryStatus;\n    }\n  | { type: \"stopped\"; stopReason: StopReason }\n  | { type: \"error\"; error: Error };\n\n/** Branded type for native message index within an Agent.\n * This is opaque to external code - only the Agent knows how to use it.\n */\nexport type NativeMessageIdx = number \u0026 { __nativeMessageIdx: true };\n\n/** Placeholder used when constructing content blocks before they are attached\n * to a native message array (e.g. tool results, AgentInput). The actual\n * `nativeMessageIdx` is stamped by `convertAnthropicMessagesToProvider` on the\n * agent's `cachedProviderMessages`, so the input value is discarded. */\nexport const PLACEHOLDER_NATIVE_MESSAGE_IDX = -1 as NativeMessageIdx;\n\nexport type AgentStreamingBlock =\n  | { type: \"text\"; text: string }\n  | { type: \"thinking\"; thinking: string; signature: string }\n  | {\n      type: \"tool_use\";\n      id: ToolManager.ToolRequestId;\n      name: ToolName;\n      inputJson: string;\n    };",
+      "headingContext": "node/core/src/providers/provider-types.ts",
+      "startLine": 248,
+      "startCol": 1,
+      "endLine": 291,
+      "endCol": 7
+    },
+    {
+      "text": "export interface AgentState {\n  status: AgentStatus;\n  messages: ReadonlyArray\u003cProviderMessage\u003e;\n  streamingBlock?: AgentStreamingBlock | undefined;\n  latestUsage?: Usage | undefined;\n  inputTokenCount?: number | undefined;\n}",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface AgentState\n\nexport interface AgentState {\n  status: AgentStatus;\n  messages: ReadonlyArray\u003cProviderMessage\u003e;\n  streamingBlock?: AgentStreamingBlock | undefined;\n  latestUsage?: Usage | undefined;\n  inputTokenCount?: number | undefined;\n}",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface AgentState",
+      "startLine": 293,
+      "startCol": 1,
+      "endLine": 299,
+      "endCol": 2
+    },
+    {
+      "text": "export type AgentInput =\n  | ProviderTextContent\n  | ProviderImageContent\n  | ProviderDocumentContent;\n\n/** Messages dispatched from Agent to Thread */\nexport type AgentMsg =\n  | { type: \"agent-content-updated\" }\n  | { type: \"agent-stopped\"; stopReason: StopReason; usage?: Usage }\n  | { type: \"agent-error\"; error: Error };\n\nexport type AgentEvents = {\n  didUpdate: [];\n  stopped: [stopReason: StopReason, usage: Usage | undefined];\n  error: [error: Error];\n};",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts\n\nexport type AgentInput =\n  | ProviderTextContent\n  | ProviderImageContent\n  | ProviderDocumentContent;\n\n/** Messages dispatched from Agent to Thread */\nexport type AgentMsg =\n  | { type: \"agent-content-updated\" }\n  | { type: \"agent-stopped\"; stopReason: StopReason; usage?: Usage }\n  | { type: \"agent-error\"; error: Error };\n\nexport type AgentEvents = {\n  didUpdate: [];\n  stopped: [stopReason: StopReason, usage: Usage | undefined];\n  error: [error: Error];\n};",
+      "headingContext": "node/core/src/providers/provider-types.ts",
+      "startLine": 301,
+      "startCol": 1,
+      "endLine": 316,
+      "endCol": 3
+    },
+    {
+      "text": "export interface Agent",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent\n\nexport interface Agent",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent",
+      "startLine": 318,
+      "startCol": 1,
+      "endLine": 318,
+      "endCol": 23
+    },
+    {
+      "text": "  on\u003cK extends keyof AgentEvents\u003e(\n    event: K,\n    listener: (...args: AgentEvents[K]) =\u003e void,\n  ): void",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method on\n\n  on\u003cK extends keyof AgentEvents\u003e(\n    event: K,\n    listener: (...args: AgentEvents[K]) =\u003e void,\n  ): void",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method on",
+      "startLine": 319,
+      "startCol": 1,
+      "endLine": 322,
+      "endCol": 10
+    },
+    {
+      "text": "  off\u003cK extends keyof AgentEvents\u003e(\n    event: K,\n    listener: (...args: AgentEvents[K]) =\u003e void,\n  ): void",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method off\n\n  off\u003cK extends keyof AgentEvents\u003e(\n    event: K,\n    listener: (...args: AgentEvents[K]) =\u003e void,\n  ): void",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method off",
+      "startLine": 323,
+      "startCol": 1,
+      "endLine": 326,
+      "endCol": 10
+    },
+    {
+      "text": "  getState(): AgentState",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method getState\n\n  getState(): AgentState",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method getState",
+      "startLine": 328,
+      "startCol": 1,
+      "endLine": 328,
+      "endCol": 25
+    },
+    {
+      "text": "  getStreamingBlock(): AgentStreamingBlock | undefined",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method getStreamingBlock\n\n  getStreamingBlock(): AgentStreamingBlock | undefined",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method getStreamingBlock",
+      "startLine": 330,
+      "startCol": 1,
+      "endLine": 330,
+      "endCol": 55
+    },
+    {
+      "text": "/** Get the current native message index. Use this to capture a position\n   * that can later be passed to truncateMessages.\n   */\n  getNativeMessageIdx(): NativeMessageIdx",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method getNativeMessageIdx\n\n/** Get the current native message index. Use this to capture a position\n   * that can later be passed to truncateMessages.\n   */\n  getNativeMessageIdx(): NativeMessageIdx",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method getNativeMessageIdx",
+      "startLine": 332,
+      "startCol": 3,
+      "endLine": 335,
+      "endCol": 42
+    },
+    {
+      "text": "  appendUserMessage(content: AgentInput[]): void",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method appendUserMessage\n\n  appendUserMessage(content: AgentInput[]): void",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method appendUserMessage",
+      "startLine": 337,
+      "startCol": 1,
+      "endLine": 337,
+      "endCol": 49
+    },
+    {
+      "text": "  toolResult(\n    toolUseId: ToolManager.ToolRequestId,\n    result: ProviderToolResult,\n  ): void",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method toolResult\n\n  toolResult(\n    toolUseId: ToolManager.ToolRequestId,\n    result: ProviderToolResult,\n  ): void",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method toolResult",
+      "startLine": 339,
+      "startCol": 1,
+      "endLine": 342,
+      "endCol": 10
+    },
+    {
+      "text": "  continueConversation(): void",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method continueConversation\n\n  continueConversation(): void",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method continueConversation",
+      "startLine": 344,
+      "startCol": 1,
+      "endLine": 344,
+      "endCol": 31
+    },
+    {
+      "text": "/** Abort the current operation.\n   * Returns a promise that resolves when the abort is complete.\n   * - If streaming: resolves when the stream is terminated\n   * - If not streaming: resolves immediately\n   */\n  abort(): Promise\u003cvoid\u003e",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method abort\n\n/** Abort the current operation.\n   * Returns a promise that resolves when the abort is complete.\n   * - If streaming: resolves when the stream is terminated\n   * - If not streaming: resolves immediately\n   */\n  abort(): Promise\u003cvoid\u003e",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method abort",
+      "startLine": 346,
+      "startCol": 3,
+      "endLine": 351,
+      "endCol": 25
+    },
+    {
+      "text": "/** Transition from stopped/tool_use to stopped/aborted.\n   * Call this after providing all tool results during an abort.\n   * @throws Error if not in stopped/tool_use state\n   */\n  abortToolUse(): void",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method abortToolUse\n\n/** Transition from stopped/tool_use to stopped/aborted.\n   * Call this after providing all tool results during an abort.\n   * @throws Error if not in stopped/tool_use state\n   */\n  abortToolUse(): void",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method abortToolUse",
+      "startLine": 353,
+      "startCol": 3,
+      "endLine": 357,
+      "endCol": 23
+    },
+    {
+      "text": "/** Truncate messages to keep only messages 0..messageIdx (inclusive).\n   * Sets status to stopped with end_turn.\n   */\n  truncateMessages(messageIdx: NativeMessageIdx): void",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method truncateMessages\n\n/** Truncate messages to keep only messages 0..messageIdx (inclusive).\n   * Sets status to stopped with end_turn.\n   */\n  truncateMessages(messageIdx: NativeMessageIdx): void",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method truncateMessages",
+      "startLine": 359,
+      "startCol": 3,
+      "endLine": 362,
+      "endCol": 55
+    },
+    {
+      "text": "/** Create a deep copy of this agent.\n   * Can be called in any state (stopped, streaming, tool_use).\n   * The cloned agent will always be in stopped/end_turn state.\n   * Incomplete blocks and pending tool_use are cleaned up in the clone.\n   */\n  clone(): Agent",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method clone\n\n/** Create a deep copy of this agent.\n   * Can be called in any state (stopped, streaming, tool_use).\n   * The cloned agent will always be in stopped/end_turn state.\n   * Incomplete blocks and pending tool_use are cleaned up in the clone.\n   */\n  clone(): Agent",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface Agent \u003e method clone",
+      "startLine": 364,
+      "startCol": 3,
+      "endLine": 369,
+      "endCol": 17
+    },
+    {
+      "text": "export interface AgentOptions {\n  model: string;\n  systemPrompt: string;\n  tools: ProviderToolSpec[];\n  thinking?: {\n    enabled: boolean;\n    budgetTokens?: number;\n    displayThinking?: boolean;\n    effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\";\n  };\n  reasoning?: {\n    effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\";\n    summary?: string;\n  };\n  skipPostFlightTokenCount?: boolean;\n}",
+      "contextualizedText": "// node/core/src/providers/provider-types.ts \u003e interface AgentOptions\n\nexport interface AgentOptions {\n  model: string;\n  systemPrompt: string;\n  tools: ProviderToolSpec[];\n  thinking?: {\n    enabled: boolean;\n    budgetTokens?: number;\n    displayThinking?: boolean;\n    effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\";\n  };\n  reasoning?: {\n    effort?: \"low\" | \"medium\" | \"high\" | \"xhigh\";\n    summary?: string;\n  };\n  skipPostFlightTokenCount?: boolean;\n}",
+      "headingContext": "node/core/src/providers/provider-types.ts \u003e interface AgentOptions",
+      "startLine": 372,
+      "startCol": 1,
+      "endLine": 387,
+      "endCol": 2
+    }
+  ]
+}

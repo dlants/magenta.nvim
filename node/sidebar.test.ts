@@ -45,6 +45,26 @@ describe("node/sidebar.test.ts", () => {
     });
   });
 
+  it("hiding sidebar should not inflate cmdheight", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.editFile("poem.txt");
+
+      const cmdheightBefore = await driver.nvim.call("nvim_get_option_value", [
+        "cmdheight",
+        {},
+      ]);
+
+      await driver.showSidebar();
+      await driver.sidebar.hide();
+
+      const cmdheightAfter = await driver.nvim.call("nvim_get_option_value", [
+        "cmdheight",
+        {},
+      ]);
+      expect(cmdheightAfter).toBe(cmdheightBefore);
+    });
+  });
+
   it("send command should scroll to last user message", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();

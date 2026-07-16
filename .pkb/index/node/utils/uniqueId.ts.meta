@@ -1,0 +1,60 @@
+{
+  "blobSha": "bfbac39166dfa0bed476d7f265b4a61f098248bb",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export class IdCounter {\n  private counter: Counter = new Counter();\n  constructor(private prefix: string) {}",
+      "contextualizedText": "// node/utils/uniqueId.ts \u003e class IdCounter\n\nexport class IdCounter {\n  private counter: Counter = new Counter();\n  constructor(private prefix: string) {}",
+      "headingContext": "node/utils/uniqueId.ts \u003e class IdCounter",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 3,
+      "endCol": 41
+    },
+    {
+      "text": "  get() {\n    return this.prefix + this.counter.get();\n  }",
+      "contextualizedText": "// node/utils/uniqueId.ts \u003e class IdCounter \u003e method get\n\n  get() {\n    return this.prefix + this.counter.get();\n  }",
+      "headingContext": "node/utils/uniqueId.ts \u003e class IdCounter \u003e method get",
+      "startLine": 5,
+      "startCol": 1,
+      "endLine": 7,
+      "endCol": 4
+    },
+    {
+      "text": "  last() {\n    return this.prefix + this.counter.last();\n  }",
+      "contextualizedText": "// node/utils/uniqueId.ts \u003e class IdCounter \u003e method last\n\n  last() {\n    return this.prefix + this.counter.last();\n  }",
+      "headingContext": "node/utils/uniqueId.ts \u003e class IdCounter \u003e method last",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 11,
+      "endCol": 4
+    },
+    {
+      "text": "export class Counter {\n  private counter: number = 1",
+      "contextualizedText": "// node/utils/uniqueId.ts \u003e class Counter\n\nexport class Counter {\n  private counter: number = 1",
+      "headingContext": "node/utils/uniqueId.ts \u003e class Counter",
+      "startLine": 14,
+      "startCol": 1,
+      "endLine": 15,
+      "endCol": 30
+    },
+    {
+      "text": "  get() {\n    const val = this.counter;\n    this.counter += 1;\n    return val;\n  }",
+      "contextualizedText": "// node/utils/uniqueId.ts \u003e class Counter \u003e method get\n\n  get() {\n    const val = this.counter;\n    this.counter += 1;\n    return val;\n  }",
+      "headingContext": "node/utils/uniqueId.ts \u003e class Counter \u003e method get",
+      "startLine": 17,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 4
+    },
+    {
+      "text": "  last() {\n    return this.counter - 1;\n  }",
+      "contextualizedText": "// node/utils/uniqueId.ts \u003e class Counter \u003e method last\n\n  last() {\n    return this.counter - 1;\n  }",
+      "headingContext": "node/utils/uniqueId.ts \u003e class Counter \u003e method last",
+      "startLine": 23,
+      "startCol": 1,
+      "endLine": 25,
+      "endCol": 4
+    }
+  ]
+}

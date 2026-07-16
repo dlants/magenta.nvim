@@ -1,0 +1,159 @@
+{
+  "blobSha": "7967d38894ec5bd4805e6553de335448094ed27e",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { NvimCwd } from \"../utils/files.ts\";\nimport { type BufNr, NvimBuffer } from \"./buffer.ts\";\nimport type { Nvim } from \"./nvim-node/index.ts\";\nimport {\n  NvimWindow,\n  type Position1IndexedCol1Indexed,\n  type WindowId,\n} from \"./window.ts\";",
+      "contextualizedText": "// node/nvim/nvim.ts\n\nimport type { NvimCwd } from \"../utils/files.ts\";\nimport { type BufNr, NvimBuffer } from \"./buffer.ts\";\nimport type { Nvim } from \"./nvim-node/index.ts\";\nimport {\n  NvimWindow,\n  type Position1IndexedCol1Indexed,\n  type WindowId,\n} from \"./window.ts\";",
+      "headingContext": "node/nvim/nvim.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 22
+    },
+    {
+      "text": "export function getOption(option: string, nvim: Nvim) {\n  return nvim.call(\"nvim_get_option\", [option]);\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function getOption\n\nexport function getOption(option: string, nvim: Nvim) {\n  return nvim.call(\"nvim_get_option\", [option]);\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function getOption",
+      "startLine": 10,
+      "startCol": 1,
+      "endLine": 12,
+      "endCol": 2
+    },
+    {
+      "text": "export async function getCurrentWindow(nvim: Nvim) {\n  const winId = (await nvim.call(\"nvim_get_current_win\", [])) as WindowId;\n  return new NvimWindow(winId, nvim);\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function getCurrentWindow\n\nexport async function getCurrentWindow(nvim: Nvim) {\n  const winId = (await nvim.call(\"nvim_get_current_win\", [])) as WindowId;\n  return new NvimWindow(winId, nvim);\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function getCurrentWindow",
+      "startLine": 14,
+      "startCol": 1,
+      "endLine": 17,
+      "endCol": 2
+    },
+    {
+      "text": "export async function getCurrentBuffer(nvim: Nvim) {\n  const bufnr = (await nvim.call(\"nvim_get_current_buf\", [])) as BufNr;\n  return new NvimBuffer(bufnr, nvim);\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function getCurrentBuffer\n\nexport async function getCurrentBuffer(nvim: Nvim) {\n  const bufnr = (await nvim.call(\"nvim_get_current_buf\", [])) as BufNr;\n  return new NvimBuffer(bufnr, nvim);\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function getCurrentBuffer",
+      "startLine": 19,
+      "startCol": 1,
+      "endLine": 22,
+      "endCol": 2
+    },
+    {
+      "text": "export async function getAllBuffers(nvim: Nvim) {\n  const bufs = (await nvim.call(\"nvim_list_bufs\", [])) as BufNr[];\n  return bufs.map((bufnr) =\u003e new NvimBuffer(bufnr, nvim));\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function getAllBuffers\n\nexport async function getAllBuffers(nvim: Nvim) {\n  const bufs = (await nvim.call(\"nvim_list_bufs\", [])) as BufNr[];\n  return bufs.map((bufnr) =\u003e new NvimBuffer(bufnr, nvim));\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function getAllBuffers",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 27,
+      "endCol": 2
+    },
+    {
+      "text": "export async function getAllWindows(nvim: Nvim) {\n  const winIds = (await nvim.call(\"nvim_list_wins\", [])) as WindowId[];\n  return winIds.map((winId) =\u003e new NvimWindow(winId, nvim));\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function getAllWindows\n\nexport async function getAllWindows(nvim: Nvim) {\n  const winIds = (await nvim.call(\"nvim_list_wins\", [])) as WindowId[];\n  return winIds.map((winId) =\u003e new NvimWindow(winId, nvim));\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function getAllWindows",
+      "startLine": 29,
+      "startCol": 1,
+      "endLine": 32,
+      "endCol": 2
+    },
+    {
+      "text": "export async function getcwd(nvim: Nvim): Promise\u003cNvimCwd\u003e {\n  const res = await nvim.call(\"nvim_exec2\", [\n    \"echo getcwd()\",\n    { output: true },\n  ]);\n  if (typeof res.output !== \"string\") {\n    throw new Error(`Unable to get cwd`);\n  }\n  return res.output as NvimCwd;\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function getcwd\n\nexport async function getcwd(nvim: Nvim): Promise\u003cNvimCwd\u003e {\n  const res = await nvim.call(\"nvim_exec2\", [\n    \"echo getcwd()\",\n    { output: true },\n  ]);\n  if (typeof res.output !== \"string\") {\n    throw new Error(`Unable to get cwd`);\n  }\n  return res.output as NvimCwd;\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function getcwd",
+      "startLine": 34,
+      "startCol": 1,
+      "endLine": 43,
+      "endCol": 2
+    },
+    {
+      "text": "export async function mode(nvim: Nvim) {\n  const res = await nvim.call(\"nvim_exec2\", [\"echo mode()\", { output: true }]);\n  if (typeof res.output !== \"string\") {\n    throw new Error(`Unable to get mode`);\n  }\n  return res.output;\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function mode\n\nexport async function mode(nvim: Nvim) {\n  const res = await nvim.call(\"nvim_exec2\", [\"echo mode()\", { output: true }]);\n  if (typeof res.output !== \"string\") {\n    throw new Error(`Unable to get mode`);\n  }\n  return res.output;\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function mode",
+      "startLine": 45,
+      "startCol": 1,
+      "endLine": 51,
+      "endCol": 2
+    },
+    {
+      "text": "export async function getpos(\n  nvim: Nvim,\n  str: string,\n): Promise\u003cPosition1IndexedCol1Indexed\u003e {\n  const res = await nvim.call(\"nvim_exec2\", [\n    `echo getpos(\"${str}\")`,\n    { output: true },\n  ]);\n  if (typeof res.output !== \"string\") {\n    throw new Error(`Unable to getpos`);\n  }\n  const posStr = res.output;\n\n  const [_, row, col] = posStr\n    .replace(/[[\\]]/g, \"\")\n    .split(\",\")\n    .map((n) =\u003e parseInt(n.trim(), 10));\n\n  return {\n    row,\n    col,\n  } as Position1IndexedCol1Indexed;\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function getpos\n\nexport async function getpos(\n  nvim: Nvim,\n  str: string,\n): Promise\u003cPosition1IndexedCol1Indexed\u003e {\n  const res = await nvim.call(\"nvim_exec2\", [\n    `echo getpos(\"${str}\")`,\n    { output: true },\n  ]);\n  if (typeof res.output !== \"string\") {\n    throw new Error(`Unable to getpos`);\n  }\n  const posStr = res.output;\n\n  const [_, row, col] = posStr\n    .replace(/[[\\]]/g, \"\")\n    .split(\",\")\n    .map((n) =\u003e parseInt(n.trim(), 10));\n\n  return {\n    row,\n    col,\n  } as Position1IndexedCol1Indexed;\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function getpos",
+      "startLine": 53,
+      "startCol": 1,
+      "endLine": 75,
+      "endCol": 2
+    },
+    {
+      "text": "export function diffthis(nvim: Nvim) {\n  return nvim.call(\"nvim_command\", [\"diffthis\"]);\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function diffthis\n\nexport function diffthis(nvim: Nvim) {\n  return nvim.call(\"nvim_command\", [\"diffthis\"]);\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function diffthis",
+      "startLine": 77,
+      "startCol": 1,
+      "endLine": 79,
+      "endCol": 2
+    },
+    {
+      "text": "export interface QuickfixEntry {\n  bufnr: number;\n  lnum: number;\n  col: number;\n  text: string;\n  type?: string;\n  filename?: string;\n  valid?: number;\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e interface QuickfixEntry\n\nexport interface QuickfixEntry {\n  bufnr: number;\n  lnum: number;\n  col: number;\n  text: string;\n  type?: string;\n  filename?: string;\n  valid?: number;\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e interface QuickfixEntry",
+      "startLine": 81,
+      "startCol": 1,
+      "endLine": 89,
+      "endCol": 2
+    },
+    {
+      "text": "export async function getQuickfixList(nvim: Nvim): Promise\u003cQuickfixEntry[]\u003e {\n  const qflist = await nvim.call(\"nvim_exec2\", [\n    \"echo json_encode(getqflist())\",\n    { output: true },\n  ]);\n  if (typeof qflist.output !== \"string\") {\n    throw new Error(\"Unable to get quickfix list\");\n  }\n  return JSON.parse(qflist.output) as QuickfixEntry[];\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function getQuickfixList\n\nexport async function getQuickfixList(nvim: Nvim): Promise\u003cQuickfixEntry[]\u003e {\n  const qflist = await nvim.call(\"nvim_exec2\", [\n    \"echo json_encode(getqflist())\",\n    { output: true },\n  ]);\n  if (typeof qflist.output !== \"string\") {\n    throw new Error(\"Unable to get quickfix list\");\n  }\n  return JSON.parse(qflist.output) as QuickfixEntry[];\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function getQuickfixList",
+      "startLine": 91,
+      "startCol": 1,
+      "endLine": 100,
+      "endCol": 2
+    },
+    {
+      "text": "export async function quickfixListToString(\n  entries: QuickfixEntry[],\n  nvim: Nvim,\n): Promise\u003cstring\u003e {\n  const lines: string[] = [];\n\n  for (const entry of entries) {\n    let filename: string;\n    if (entry.filename) {\n      filename = entry.filename;\n    } else if (entry.bufnr \u003e 0) {\n      // Get the filename from buffer number\n      const bufname = await nvim.call(\"nvim_buf_get_name\", [entry.bufnr]);\n      filename = bufname ? bufname : `buffer ${entry.bufnr}`;\n    } else {\n      filename = `buffer ${entry.bufnr}`;\n    }\n\n    const line = entry.lnum \u003e 0 ? `:${entry.lnum}` : \"\";\n    const col = entry.col \u003e 0 ? `:${entry.col}` : \"\";\n    lines.push(`${filename}${line}${col}: ${entry.text}`);\n  }\n\n  return lines.join(\"\\n\");\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function quickfixListToString\n\nexport async function quickfixListToString(\n  entries: QuickfixEntry[],\n  nvim: Nvim,\n): Promise\u003cstring\u003e {\n  const lines: string[] = [];\n\n  for (const entry of entries) {\n    let filename: string;\n    if (entry.filename) {\n      filename = entry.filename;\n    } else if (entry.bufnr \u003e 0) {\n      // Get the filename from buffer number\n      const bufname = await nvim.call(\"nvim_buf_get_name\", [entry.bufnr]);\n      filename = bufname ? bufname : `buffer ${entry.bufnr}`;\n    } else {\n      filename = `buffer ${entry.bufnr}`;\n    }\n\n    const line = entry.lnum \u003e 0 ? `:${entry.lnum}` : \"\";\n    const col = entry.col \u003e 0 ? `:${entry.col}` : \"\";\n    lines.push(`${filename}${line}${col}: ${entry.text}`);\n  }\n\n  return lines.join(\"\\n\");\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function quickfixListToString",
+      "startLine": 102,
+      "startCol": 1,
+      "endLine": 126,
+      "endCol": 2
+    },
+    {
+      "text": "/** Capture the scroll/cursor view (winsaveview) of every window currently\n * displaying `bufId`. Returns an opaque value to pass back to restoreWinViews.\n * No-op (empty result) when the buffer is not visible in any window. */\nexport async function saveWinViews(nvim: Nvim, bufId: BufNr): Promise\u003cunknown\u003e {\n  return nvim.call(\"nvim_exec_lua\", [\n    `\nlocal bufid = ...\nlocal res = {}\nlocal lastline = vim.api.nvim_buf_line_count(bufid)\nfor _, win in ipairs(vim.fn.win_findbuf(bufid)) do\n  local v = vim.api.nvim_win_call(win, function() return vim.fn.winsaveview() end)\n  table.insert(res, { win = win, view = v, atBottom = (v.lnum \u003e= lastline) })\nend\nreturn res\n`,\n    [bufId],\n  ]);\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function saveWinViews\n\n/** Capture the scroll/cursor view (winsaveview) of every window currently\n * displaying `bufId`. Returns an opaque value to pass back to restoreWinViews.\n * No-op (empty result) when the buffer is not visible in any window. */\nexport async function saveWinViews(nvim: Nvim, bufId: BufNr): Promise\u003cunknown\u003e {\n  return nvim.call(\"nvim_exec_lua\", [\n    `\nlocal bufid = ...\nlocal res = {}\nlocal lastline = vim.api.nvim_buf_line_count(bufid)\nfor _, win in ipairs(vim.fn.win_findbuf(bufid)) do\n  local v = vim.api.nvim_win_call(win, function() return vim.fn.winsaveview() end)\n  table.insert(res, { win = win, view = v, atBottom = (v.lnum \u003e= lastline) })\nend\nreturn res\n`,\n    [bufId],\n  ]);\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function saveWinViews",
+      "startLine": 128,
+      "startCol": 1,
+      "endLine": 145,
+      "endCol": 2
+    },
+    {
+      "text": "/** Restore views captured by saveWinViews, but only for windows that are still\n * valid and still display `bufId` (so we don't clobber a window the user moved\n * to a different buffer). */\nexport async function restoreWinViews(\n  nvim: Nvim,\n  bufId: BufNr,\n  saved: unknown,\n): Promise\u003cvoid\u003e {\n  await nvim.call(\"nvim_exec_lua\", [\n    `\nlocal bufid, saved = ...\nfor _, item in ipairs(saved) do\n  if vim.api.nvim_win_is_valid(item.win) and vim.api.nvim_win_get_buf(item.win) == bufid then\n    vim.api.nvim_win_call(item.win, function()\n      if item.atBottom then\n        -- cursor was pinned to the last line: follow the new bottom as content streams in\n        vim.cmd(\"normal! G\")\n      else\n        vim.fn.winrestview(item.view)\n      end\n    end)\n  end\nend\n`,\n    [bufId, saved],\n  ]);\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function restoreWinViews\n\n/** Restore views captured by saveWinViews, but only for windows that are still\n * valid and still display `bufId` (so we don't clobber a window the user moved\n * to a different buffer). */\nexport async function restoreWinViews(\n  nvim: Nvim,\n  bufId: BufNr,\n  saved: unknown,\n): Promise\u003cvoid\u003e {\n  await nvim.call(\"nvim_exec_lua\", [\n    `\nlocal bufid, saved = ...\nfor _, item in ipairs(saved) do\n  if vim.api.nvim_win_is_valid(item.win) and vim.api.nvim_win_get_buf(item.win) == bufid then\n    vim.api.nvim_win_call(item.win, function()\n      if item.atBottom then\n        -- cursor was pinned to the last line: follow the new bottom as content streams in\n        vim.cmd(\"normal! G\")\n      else\n        vim.fn.winrestview(item.view)\n      end\n    end)\n  end\nend\n`,\n    [bufId, saved],\n  ]);\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function restoreWinViews",
+      "startLine": 147,
+      "startCol": 1,
+      "endLine": 173,
+      "endCol": 2
+    },
+    {
+      "text": "export async function notify(nvim: Nvim, message: string) {\n  const luaScript = `\n      vim.notify(\n        [[${message}]],\n        vim.log.levels.INFO\n      )\n    `;\n\n  return nvim.call(\"nvim_exec_lua\", [luaScript, []]);\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function notify\n\nexport async function notify(nvim: Nvim, message: string) {\n  const luaScript = `\n      vim.notify(\n        [[${message}]],\n        vim.log.levels.INFO\n      )\n    `;\n\n  return nvim.call(\"nvim_exec_lua\", [luaScript, []]);\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function notify",
+      "startLine": 175,
+      "startCol": 1,
+      "endLine": 184,
+      "endCol": 2
+    },
+    {
+      "text": "export function notifyErr(nvim: Nvim, err: Error | string, ...rest: unknown[]) {\n  return nvim.call(\"nvim_notify\", [\n    `Unexpected error:\n${err instanceof Error ? err.message : JSON.stringify(err)}\n${err instanceof Error ? err.stack : \"\"}\n${rest.length ? JSON.stringify(rest) : \"\"}`,\n    3,\n    {},\n  ]);\n}",
+      "contextualizedText": "// node/nvim/nvim.ts \u003e function notifyErr\n\nexport function notifyErr(nvim: Nvim, err: Error | string, ...rest: unknown[]) {\n  return nvim.call(\"nvim_notify\", [\n    `Unexpected error:\n${err instanceof Error ? err.message : JSON.stringify(err)}\n${err instanceof Error ? err.stack : \"\"}\n${rest.length ? JSON.stringify(rest) : \"\"}`,\n    3,\n    {},\n  ]);\n}",
+      "headingContext": "node/nvim/nvim.ts \u003e function notifyErr",
+      "startLine": 186,
+      "startCol": 1,
+      "endLine": 195,
+      "endCol": 2
+    }
+  ]
+}

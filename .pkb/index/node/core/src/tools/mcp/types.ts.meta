@@ -1,0 +1,42 @@
+{
+  "blobSha": "801f6033120befd79d9d4adcc6a5031bc55e5b55",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { ToolName } from \"../../tool-types.ts\";\n\n/** The tool name wihtout the mcp_serverName prefix\n */\nexport type MCPToolName = string \u0026 { __MCPToolName: true };\nexport type MCPToolRequestParams = {} \u0026 { __MCPTooRequestParams: true };\nexport type ServerName = string \u0026 { __ServerName: true };",
+      "contextualizedText": "// node/core/src/tools/mcp/types.ts\n\nimport type { ToolName } from \"../../tool-types.ts\";\n\n/** The tool name wihtout the mcp_serverName prefix\n */\nexport type MCPToolName = string \u0026 { __MCPToolName: true };\nexport type MCPToolRequestParams = {} \u0026 { __MCPTooRequestParams: true };\nexport type ServerName = string \u0026 { __ServerName: true };",
+      "headingContext": "node/core/src/tools/mcp/types.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 7,
+      "endCol": 58
+    },
+    {
+      "text": "export function validateServerName(name: string): ServerName {\n  if (!/^[a-zA-Z0-9-]+$/.test(name)) {\n    throw new Error(\n      `Invalid server name \"${name}\". Server names must only contain alphanumeric characters and hyphens.`,\n    );\n  }\n  return name as ServerName;\n}",
+      "contextualizedText": "// node/core/src/tools/mcp/types.ts \u003e function validateServerName\n\nexport function validateServerName(name: string): ServerName {\n  if (!/^[a-zA-Z0-9-]+$/.test(name)) {\n    throw new Error(\n      `Invalid server name \"${name}\". Server names must only contain alphanumeric characters and hyphens.`,\n    );\n  }\n  return name as ServerName;\n}",
+      "headingContext": "node/core/src/tools/mcp/types.ts \u003e function validateServerName",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 16,
+      "endCol": 2
+    },
+    {
+      "text": "export function mcpToolNameToToolName(opts: {\n  mcpToolName: MCPToolName;\n  serverName: ServerName;\n}) {\n  return `mcp_${opts.serverName}_${opts.mcpToolName}` as ToolName;\n}",
+      "contextualizedText": "// node/core/src/tools/mcp/types.ts \u003e function mcpToolNameToToolName\n\nexport function mcpToolNameToToolName(opts: {\n  mcpToolName: MCPToolName;\n  serverName: ServerName;\n}) {\n  return `mcp_${opts.serverName}_${opts.mcpToolName}` as ToolName;\n}",
+      "headingContext": "node/core/src/tools/mcp/types.ts \u003e function mcpToolNameToToolName",
+      "startLine": 18,
+      "startCol": 1,
+      "endLine": 23,
+      "endCol": 2
+    },
+    {
+      "text": "export function parseToolName(toolName: ToolName) {\n  if (!toolName.startsWith(\"mcp_\")) {\n    throw new Error(`Tool name ${toolName} is not an MCP tool`);\n  }\n  const parts = toolName.split(\"_\");\n  if (parts.length \u003c 3) {\n    throw new Error(`Tool name ${toolName} is not a valid MCP tool name`);\n  }\n  const serverName = parts[1] as ServerName;\n  const mcpToolName = parts.slice(2).join(\"_\") as MCPToolName;\n  return { serverName, mcpToolName };\n}",
+      "contextualizedText": "// node/core/src/tools/mcp/types.ts \u003e function parseToolName\n\nexport function parseToolName(toolName: ToolName) {\n  if (!toolName.startsWith(\"mcp_\")) {\n    throw new Error(`Tool name ${toolName} is not an MCP tool`);\n  }\n  const parts = toolName.split(\"_\");\n  if (parts.length \u003c 3) {\n    throw new Error(`Tool name ${toolName} is not a valid MCP tool name`);\n  }\n  const serverName = parts[1] as ServerName;\n  const mcpToolName = parts.slice(2).join(\"_\") as MCPToolName;\n  return { serverName, mcpToolName };\n}",
+      "headingContext": "node/core/src/tools/mcp/types.ts \u003e function parseToolName",
+      "startLine": 25,
+      "startCol": 1,
+      "endLine": 36,
+      "endCol": 2
+    }
+  ]
+}

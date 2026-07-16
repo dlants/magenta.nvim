@@ -1,0 +1,42 @@
+{
+  "blobSha": "7482f53fd7710adc2f9d96df24d63f3da2947dbf",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { AbsFilePath, FileTypeInfo } from \"../utils/files.ts\";",
+      "contextualizedText": "// node/core/src/capabilities/context-tracker.ts\n\nimport type { AbsFilePath, FileTypeInfo } from \"../utils/files.ts\";",
+      "headingContext": "node/core/src/capabilities/context-tracker.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 1,
+      "endCol": 68
+    },
+    {
+      "text": "export interface TrackedFileInfo {\n  agentView:\n    | { type: \"text\"; content: string }\n    | { type: \"binary\" }\n    | {\n        type: \"pdf\";\n        summary: boolean;\n        pages: number[];\n        supportsPageExtraction: boolean;\n      }\n    | { type: \"summary\" }\n    | undefined;\n}",
+      "contextualizedText": "// node/core/src/capabilities/context-tracker.ts \u003e interface TrackedFileInfo\n\nexport interface TrackedFileInfo {\n  agentView:\n    | { type: \"text\"; content: string }\n    | { type: \"binary\" }\n    | {\n        type: \"pdf\";\n        summary: boolean;\n        pages: number[];\n        supportsPageExtraction: boolean;\n      }\n    | { type: \"summary\" }\n    | undefined;\n}",
+      "headingContext": "node/core/src/capabilities/context-tracker.ts \u003e interface TrackedFileInfo",
+      "startLine": 3,
+      "startCol": 1,
+      "endLine": 15,
+      "endCol": 2
+    },
+    {
+      "text": "export type ToolApplied =\n  | {\n      type: \"get-file\";\n      content: string;\n    }\n  | {\n      type: \"get-file-pdf\";\n      content: { type: \"summary\" } | { type: \"page\"; pdfPage: number };\n    }\n  | {\n      type: \"get-file-binary\";\n      mtime: number;\n    }\n  | {\n      type: \"edl-edit\";\n      content: string;\n      previousContent: string;\n    };\n\nexport type OnToolApplied = (\n  absFilePath: AbsFilePath,\n  tool: ToolApplied,\n  fileTypeInfo: FileTypeInfo,\n) =\u003e void;",
+      "contextualizedText": "// node/core/src/capabilities/context-tracker.ts\n\nexport type ToolApplied =\n  | {\n      type: \"get-file\";\n      content: string;\n    }\n  | {\n      type: \"get-file-pdf\";\n      content: { type: \"summary\" } | { type: \"page\"; pdfPage: number };\n    }\n  | {\n      type: \"get-file-binary\";\n      mtime: number;\n    }\n  | {\n      type: \"edl-edit\";\n      content: string;\n      previousContent: string;\n    };\n\nexport type OnToolApplied = (\n  absFilePath: AbsFilePath,\n  tool: ToolApplied,\n  fileTypeInfo: FileTypeInfo,\n) =\u003e void;",
+      "headingContext": "node/core/src/capabilities/context-tracker.ts",
+      "startLine": 17,
+      "startCol": 1,
+      "endLine": 40,
+      "endCol": 11
+    },
+    {
+      "text": "export interface ContextTracker {\n  files: { [filePath: AbsFilePath]: TrackedFileInfo | undefined };\n}",
+      "contextualizedText": "// node/core/src/capabilities/context-tracker.ts \u003e interface ContextTracker\n\nexport interface ContextTracker {\n  files: { [filePath: AbsFilePath]: TrackedFileInfo | undefined };\n}",
+      "headingContext": "node/core/src/capabilities/context-tracker.ts \u003e interface ContextTracker",
+      "startLine": 42,
+      "startCol": 1,
+      "endLine": 44,
+      "endCol": 2
+    }
+  ]
+}

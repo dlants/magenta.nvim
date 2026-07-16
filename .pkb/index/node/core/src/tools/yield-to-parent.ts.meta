@@ -1,0 +1,69 @@
+{
+  "blobSha": "6e1600a07d07e2268c9b3dbb2cc6a995522ea2fb",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type {\n  GenericToolRequest,\n  ToolInvocation,\n  ToolName,\n} from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport type Input = {\n  result?: string;\n  [key: string]: unknown;\n};\n\nexport type StructuredResult = { toolName: \"yield_to_parent\" };\n\nexport type ToolRequest = GenericToolRequest\u003c\"yield_to_parent\", Input\u003e;",
+      "contextualizedText": "// node/core/src/tools/yield-to-parent.ts\n\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type {\n  GenericToolRequest,\n  ToolInvocation,\n  ToolName,\n} from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport type Input = {\n  result?: string;\n  [key: string]: unknown;\n};\n\nexport type StructuredResult = { toolName: \"yield_to_parent\" };\n\nexport type ToolRequest = GenericToolRequest\u003c\"yield_to_parent\", Input\u003e;",
+      "headingContext": "node/core/src/tools/yield-to-parent.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 20,
+      "endCol": 72
+    },
+    {
+      "text": "export function execute(request: ToolRequest): ToolInvocation {\n  return {\n    promise: Promise.resolve({\n      type: \"tool_result\" as const,\n      id: request.id,\n      result: {\n        status: \"ok\" as const,\n        value: [\n          {\n            type: \"text\" as const,\n            text:\n              typeof request.input.result === \"string\"\n                ? request.input.result\n                : JSON.stringify(request.input),\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          },\n        ],\n        structuredResult: { toolName: \"yield_to_parent\" as const },\n      },\n      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n    })",
+      "contextualizedText": "// node/core/src/tools/yield-to-parent.ts \u003e function execute\n\nexport function execute(request: ToolRequest): ToolInvocation {\n  return {\n    promise: Promise.resolve({\n      type: \"tool_result\" as const,\n      id: request.id,\n      result: {\n        status: \"ok\" as const,\n        value: [\n          {\n            type: \"text\" as const,\n            text:\n              typeof request.input.result === \"string\"\n                ? request.input.result\n                : JSON.stringify(request.input),\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          },\n        ],\n        structuredResult: { toolName: \"yield_to_parent\" as const },\n      },\n      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n    })",
+      "headingContext": "node/core/src/tools/yield-to-parent.ts \u003e function execute",
+      "startLine": 22,
+      "startCol": 1,
+      "endLine": 42,
+      "endCol": 7
+    },
+    {
+      "text": "    abort: () =\u003e {}",
+      "contextualizedText": "// node/core/src/tools/yield-to-parent.ts \u003e function execute \u003e function abort\n\n    abort: () =\u003e {}",
+      "headingContext": "node/core/src/tools/yield-to-parent.ts \u003e function execute \u003e function abort",
+      "startLine": 43,
+      "startCol": 1,
+      "endLine": 43,
+      "endCol": 20
+    },
+    {
+      "text": "const DEFAULT_INPUT_SCHEMA: JSONSchemaType = {\n  type: \"object\",\n  properties: {\n    result: {\n      type: \"string\",\n      description: \"The result or information to return to the parent agent\",\n    },\n  },\n  required: [\"result\"],\n};",
+      "contextualizedText": "// node/core/src/tools/yield-to-parent.ts\n\nconst DEFAULT_INPUT_SCHEMA: JSONSchemaType = {\n  type: \"object\",\n  properties: {\n    result: {\n      type: \"string\",\n      description: \"The result or information to return to the parent agent\",\n    },\n  },\n  required: [\"result\"],\n};",
+      "headingContext": "node/core/src/tools/yield-to-parent.ts",
+      "startLine": 47,
+      "startCol": 1,
+      "endLine": 56,
+      "endCol": 3
+    },
+    {
+      "text": "export function getSpec(yieldSchema?: JSONSchemaType): ProviderToolSpec {\n  return {\n    ...spec,\n    input_schema: yieldSchema ?? DEFAULT_INPUT_SCHEMA,\n  };\n}",
+      "contextualizedText": "// node/core/src/tools/yield-to-parent.ts \u003e function getSpec\n\nexport function getSpec(yieldSchema?: JSONSchemaType): ProviderToolSpec {\n  return {\n    ...spec,\n    input_schema: yieldSchema ?? DEFAULT_INPUT_SCHEMA,\n  };\n}",
+      "headingContext": "node/core/src/tools/yield-to-parent.ts \u003e function getSpec",
+      "startLine": 58,
+      "startCol": 1,
+      "endLine": 63,
+      "endCol": 2
+    },
+    {
+      "text": "export const spec: ProviderToolSpec = {\n  name: \"yield_to_parent\" as ToolName,\n  description: `\\\nYield results to the parent agent.\n\nCRITICAL: You MUST use this tool when your task is complete, or the parent agent will never receive your results.\n\nMake sure you address every part of the original prompt you were given.\nThe parent agent can only observe your final yield message - none of the rest of the text is visible to the parent.\nAfter using this tool, the sub-agent thread will be terminated.`,\n  input_schema: {\n    type: \"object\",\n    properties: {\n      result: {\n        type: \"string\",\n        description: \"The result or information to return to the parent agent\",\n      },\n    },\n    required: [\"result\"],\n  },\n};",
+      "contextualizedText": "// node/core/src/tools/yield-to-parent.ts\n\nexport const spec: ProviderToolSpec = {\n  name: \"yield_to_parent\" as ToolName,\n  description: `\\\nYield results to the parent agent.\n\nCRITICAL: You MUST use this tool when your task is complete, or the parent agent will never receive your results.\n\nMake sure you address every part of the original prompt you were given.\nThe parent agent can only observe your final yield message - none of the rest of the text is visible to the parent.\nAfter using this tool, the sub-agent thread will be terminated.`,\n  input_schema: {\n    type: \"object\",\n    properties: {\n      result: {\n        type: \"string\",\n        description: \"The result or information to return to the parent agent\",\n      },\n    },\n    required: [\"result\"],\n  },\n};",
+      "headingContext": "node/core/src/tools/yield-to-parent.ts",
+      "startLine": 65,
+      "startCol": 1,
+      "endLine": 85,
+      "endCol": 3
+    },
+    {
+      "text": "export function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (\"result\" in input \u0026\u0026 typeof input.result !== \"string\") {\n    return {\n      status: \"error\",\n      error: `expected req.input.result to be a string but it was ${JSON.stringify(input.result)}`,\n    };\n  }\n\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
+      "contextualizedText": "// node/core/src/tools/yield-to-parent.ts \u003e function validateInput\n\nexport function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (\"result\" in input \u0026\u0026 typeof input.result !== \"string\") {\n    return {\n      status: \"error\",\n      error: `expected req.input.result to be a string but it was ${JSON.stringify(input.result)}`,\n    };\n  }\n\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
+      "headingContext": "node/core/src/tools/yield-to-parent.ts \u003e function validateInput",
+      "startLine": 87,
+      "startCol": 1,
+      "endLine": 101,
+      "endCol": 2
+    }
+  ]
+}

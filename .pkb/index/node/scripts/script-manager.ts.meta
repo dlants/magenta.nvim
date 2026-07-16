@@ -1,0 +1,321 @@
+{
+  "blobSha": "3747353f017ef82be6584c386e92976dba848dca",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { type ChildProcess, spawn } from \"node:child_process\";\nimport { existsSync, readdirSync } from \"node:fs\";\nimport path from \"node:path\";\nimport type { ScriptCatalogEntry, ThreadId } from \"@magenta/core\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport { v7 as uuidv7 } from \"uuid\";\nimport type {\n  MagentaToScript,\n  ScriptMeta,\n  ScriptToMagenta,\n  Result as SdkResult,\n} from \"../../sdk/protocol.ts\";\nimport {\n  escalateToSigkill,\n  terminateProcess,\n} from \"../capabilities/shell-utils.ts\";\nimport type { Chat } from \"../chat/chat.ts\";\nimport { notifyUser } from \"../chat/notify.ts\";\nimport type { SandboxRoot } from \"../chat/thread.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport { openFileInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\nimport type { MagentaOptions } from \"../options.ts\";\nimport type { RootMsg } from \"../root-msg.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport { d, type VDOMNode, withBindings, withError } from \"../tea/view.ts\";\nimport {\n  type AbsFilePath,\n  expandTilde,\n  type HomeDir,\n  type NvimCwd,\n} from \"../utils/files.ts\";\n\nexport type ScriptInvocationId = string \u0026 { __scriptInvocationId: true };\n\nexport type Msg =\n  | { type: \"catalog-updated\" }\n  | { type: \"invocation-updated\"; id: ScriptInvocationId }\n  | { type: \"toggle-invocation-expand\"; id: ScriptInvocationId }\n  | { type: \"toggle-thread-yield\"; id: ThreadId }\n  | { type: \"toggle-invocation-sandbox\"; id: ScriptInvocationId }\n  | { type: \"abort-invocation\"; id: ScriptInvocationId }\n  | { type: \"delete-invocation\"; id: ScriptInvocationId }\n  | { type: \"set-invocation-title\"; id: ScriptInvocationId; title: string };\n\nexport type ScriptMsg = {\n  type: \"script-msg\";\n  msg: Msg;\n};\n\nexport type ScriptInvocationStatus = \"running\" | \"done\" | \"error\" | \"aborted\";\n\nexport type ScriptInvocationEntry =\n  | { type: \"log\"; message: string }\n  | { type: \"thread\"; threadId: ThreadId };",
+      "contextualizedText": "// node/scripts/script-manager.ts\n\nimport { type ChildProcess, spawn } from \"node:child_process\";\nimport { existsSync, readdirSync } from \"node:fs\";\nimport path from \"node:path\";\nimport type { ScriptCatalogEntry, ThreadId } from \"@magenta/core\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport { v7 as uuidv7 } from \"uuid\";\nimport type {\n  MagentaToScript,\n  ScriptMeta,\n  ScriptToMagenta,\n  Result as SdkResult,\n} from \"../../sdk/protocol.ts\";\nimport {\n  escalateToSigkill,\n  terminateProcess,\n} from \"../capabilities/shell-utils.ts\";\nimport type { Chat } from \"../chat/chat.ts\";\nimport { notifyUser } from \"../chat/notify.ts\";\nimport type { SandboxRoot } from \"../chat/thread.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport { openFileInNonMagentaWindow } from \"../nvim/openFileInNonMagentaWindow.ts\";\nimport type { MagentaOptions } from \"../options.ts\";\nimport type { RootMsg } from \"../root-msg.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport { d, type VDOMNode, withBindings, withError } from \"../tea/view.ts\";\nimport {\n  type AbsFilePath,\n  expandTilde,\n  type HomeDir,\n  type NvimCwd,\n} from \"../utils/files.ts\";\n\nexport type ScriptInvocationId = string \u0026 { __scriptInvocationId: true };\n\nexport type Msg =\n  | { type: \"catalog-updated\" }\n  | { type: \"invocation-updated\"; id: ScriptInvocationId }\n  | { type: \"toggle-invocation-expand\"; id: ScriptInvocationId }\n  | { type: \"toggle-thread-yield\"; id: ThreadId }\n  | { type: \"toggle-invocation-sandbox\"; id: ScriptInvocationId }\n  | { type: \"abort-invocation\"; id: ScriptInvocationId }\n  | { type: \"delete-invocation\"; id: ScriptInvocationId }\n  | { type: \"set-invocation-title\"; id: ScriptInvocationId; title: string };\n\nexport type ScriptMsg = {\n  type: \"script-msg\";\n  msg: Msg;\n};\n\nexport type ScriptInvocationStatus = \"running\" | \"done\" | \"error\" | \"aborted\";\n\nexport type ScriptInvocationEntry =\n  | { type: \"log\"; message: string }\n  | { type: \"thread\"; threadId: ThreadId };",
+      "headingContext": "node/scripts/script-manager.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 54,
+      "endCol": 44
+    },
+    {
+      "text": "export type ScriptInvocation = {\n  id: ScriptInvocationId;\n  scriptName: string;\n  title?: string;\n  file: string;\n  parameters: unknown;\n  status: ScriptInvocationStatus;\n  logs: string[];\n  threadIds: ThreadId[];\n  entries: ScriptInvocationEntry[];\n  sandboxBypassed: boolean;\n  child: ChildProcess;\n  pendingThreads: Map\u003cnumber, ThreadId\u003e;\n};\n\nconst REGISTRATION_TIMEOUT_MS = 5000;\nconst SIGKILL_GRACE_MS = 2000;",
+      "contextualizedText": "// node/scripts/script-manager.ts\n\nexport type ScriptInvocation = {\n  id: ScriptInvocationId;\n  scriptName: string;\n  title?: string;\n  file: string;\n  parameters: unknown;\n  status: ScriptInvocationStatus;\n  logs: string[];\n  threadIds: ThreadId[];\n  entries: ScriptInvocationEntry[];\n  sandboxBypassed: boolean;\n  child: ChildProcess;\n  pendingThreads: Map\u003cnumber, ThreadId\u003e;\n};\n\nconst REGISTRATION_TIMEOUT_MS = 5000;\nconst SIGKILL_GRACE_MS = 2000;",
+      "headingContext": "node/scripts/script-manager.ts",
+      "startLine": 56,
+      "startCol": 1,
+      "endLine": 72,
+      "endCol": 31
+    },
+    {
+      "text": "export class ScriptManager {\n  private catalog: Map\u003cstring, { file: string; meta: ScriptMeta }\u003e = new Map();\n  public invocations: Map\u003cScriptInvocationId, ScriptInvocation\u003e = new Map();\n  private expandedInvocations: Set\u003cScriptInvocationId\u003e = new Set();\n  private expandedThreads: Set\u003cThreadId\u003e = new Set();\n  private myDispatch: Dispatch\u003cMsg\u003e;\n\n  constructor(\n    private context: {\n      dispatch: Dispatch\u003cRootMsg\u003e;\n      chat: Chat;\n      nvim: Nvim;\n      cwd: NvimCwd;\n      homeDir: HomeDir;\n      getScriptsPaths: () =\u003e string[];\n      getOptions: () =\u003e MagentaOptions;\n    },\n  ) {\n    this.myDispatch = (msg) =\u003e\n      this.context.dispatch({ type: \"script-msg\", msg });",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager\n\nexport class ScriptManager {\n  private catalog: Map\u003cstring, { file: string; meta: ScriptMeta }\u003e = new Map();\n  public invocations: Map\u003cScriptInvocationId, ScriptInvocation\u003e = new Map();\n  private expandedInvocations: Set\u003cScriptInvocationId\u003e = new Set();\n  private expandedThreads: Set\u003cThreadId\u003e = new Set();\n  private myDispatch: Dispatch\u003cMsg\u003e;\n\n  constructor(\n    private context: {\n      dispatch: Dispatch\u003cRootMsg\u003e;\n      chat: Chat;\n      nvim: Nvim;\n      cwd: NvimCwd;\n      homeDir: HomeDir;\n      getScriptsPaths: () =\u003e string[];\n      getOptions: () =\u003e MagentaOptions;\n    },\n  ) {\n    this.myDispatch = (msg) =\u003e\n      this.context.dispatch({ type: \"script-msg\", msg });",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager",
+      "startLine": 74,
+      "startCol": 1,
+      "endLine": 93,
+      "endCol": 58
+    },
+    {
+      "text": "  update(msg: RootMsg): void {\n    // Most state is mutated directly as IPC events arrive; script-msg dispatches\n    // exist mainly to trigger a re-render through the central loop. Expand and\n    // sandbox-toggle messages are the exception: they mutate state here.\n    if (msg.type !== \"script-msg\") return;\n    switch (msg.msg.type) {\n      case \"toggle-invocation-expand\":\n        if (this.expandedInvocations.has(msg.msg.id)) {\n          this.expandedInvocations.delete(msg.msg.id);\n        } else {\n          this.expandedInvocations.add(msg.msg.id);\n        }\n        return;\n      case \"toggle-thread-yield\":\n        if (this.expandedThreads.has(msg.msg.id)) {\n          this.expandedThreads.delete(msg.msg.id);\n        } else {\n          this.expandedThreads.add(msg.msg.id);\n        }\n        return;\n      case \"toggle-invocation-sandbox\": {\n        this.toggleInvocationSandbox(msg.msg.id);\n        return;\n      }\n      case \"abort-invocation\":\n        this.abortInvocation(msg.msg.id);\n        return;\n      case \"delete-invocation\":\n        this.deleteInvocation(msg.msg.id);\n        return;\n      case \"set-invocation-title\": {\n        const inv = this.invocations.get(msg.msg.id);\n        if (inv) inv.title = msg.msg.title;\n        return;\n      }\n      case \"catalog-updated\":\n      case \"invocation-updated\":\n        return;\n    }\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method update\n\n  update(msg: RootMsg): void {\n    // Most state is mutated directly as IPC events arrive; script-msg dispatches\n    // exist mainly to trigger a re-render through the central loop. Expand and\n    // sandbox-toggle messages are the exception: they mutate state here.\n    if (msg.type !== \"script-msg\") return;\n    switch (msg.msg.type) {\n      case \"toggle-invocation-expand\":\n        if (this.expandedInvocations.has(msg.msg.id)) {\n          this.expandedInvocations.delete(msg.msg.id);\n        } else {\n          this.expandedInvocations.add(msg.msg.id);\n        }\n        return;\n      case \"toggle-thread-yield\":\n        if (this.expandedThreads.has(msg.msg.id)) {\n          this.expandedThreads.delete(msg.msg.id);\n        } else {\n          this.expandedThreads.add(msg.msg.id);\n        }\n        return;\n      case \"toggle-invocation-sandbox\": {\n        this.toggleInvocationSandbox(msg.msg.id);\n        return;\n      }\n      case \"abort-invocation\":\n        this.abortInvocation(msg.msg.id);\n        return;\n      case \"delete-invocation\":\n        this.deleteInvocation(msg.msg.id);\n        return;\n      case \"set-invocation-title\": {\n        const inv = this.invocations.get(msg.msg.id);\n        if (inv) inv.title = msg.msg.title;\n        return;\n      }\n      case \"catalog-updated\":\n      case \"invocation-updated\":\n        return;\n    }\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method update",
+      "startLine": 96,
+      "startCol": 1,
+      "endLine": 135,
+      "endCol": 4
+    },
+    {
+      "text": "  getCatalog(): ScriptMeta[] {\n    return [...this.catalog.values()].map((c) =\u003e c.meta);\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method getCatalog\n\n  getCatalog(): ScriptMeta[] {\n    return [...this.catalog.values()].map((c) =\u003e c.meta);\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method getCatalog",
+      "startLine": 137,
+      "startCol": 1,
+      "endLine": 139,
+      "endCol": 4
+    },
+    {
+      "text": "  getScriptCatalog(): ScriptCatalogEntry[] {\n    return [...this.catalog.values()].map((c) =\u003e ({\n      ...c.meta,\n      file: c.file,\n    }));\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method getScriptCatalog\n\n  getScriptCatalog(): ScriptCatalogEntry[] {\n    return [...this.catalog.values()].map((c) =\u003e ({\n      ...c.meta,\n      file: c.file,\n    }));\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method getScriptCatalog",
+      "startLine": 141,
+      "startCol": 1,
+      "endLine": 146,
+      "endCol": 4
+    },
+    {
+      "text": "  private fork(file: string): ChildProcess {\n    return spawn(\n      process.execPath,\n      [\n        \"--disable-warning=ExperimentalWarning\",\n        \"--experimental-transform-types\",\n        file,\n      ],\n      {\n        stdio: [\"inherit\", \"inherit\", \"inherit\", \"ipc\"],\n        detached: true,\n        env: { ...process.env, MAGENTA_SDK_CHILD: \"1\" },\n      },\n    );\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method fork\n\n  private fork(file: string): ChildProcess {\n    return spawn(\n      process.execPath,\n      [\n        \"--disable-warning=ExperimentalWarning\",\n        \"--experimental-transform-types\",\n        file,\n      ],\n      {\n        stdio: [\"inherit\", \"inherit\", \"inherit\", \"ipc\"],\n        detached: true,\n        env: { ...process.env, MAGENTA_SDK_CHILD: \"1\" },\n      },\n    );\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method fork",
+      "startLine": 148,
+      "startCol": 1,
+      "endLine": 162,
+      "endCol": 4
+    },
+    {
+      "text": "/**\n   * Resolve the configured `scriptsPaths` to absolute directories, expanding\n   * `~` and resolving relative entries against the cwd. Later paths take\n   * precedence on name collisions (project scripts override global ones), so we\n   * order earlier entries first and let `discover()` overwrite as it goes.\n   */\n  private resolveScriptsDirs(): string[] {\n    const seen = new Set\u003cstring\u003e();\n    const dirs: string[] = [];\n    for (const entry of this.context.getScriptsPaths()) {\n      const expanded = expandTilde(entry, this.context.homeDir);\n      const abs = path.resolve(this.context.cwd, expanded);\n      if (seen.has(abs)) continue;\n      seen.add(abs);\n      dirs.push(abs);\n    }\n    return dirs;\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method resolveScriptsDirs\n\n/**\n   * Resolve the configured `scriptsPaths` to absolute directories, expanding\n   * `~` and resolving relative entries against the cwd. Later paths take\n   * precedence on name collisions (project scripts override global ones), so we\n   * order earlier entries first and let `discover()` overwrite as it goes.\n   */\n  private resolveScriptsDirs(): string[] {\n    const seen = new Set\u003cstring\u003e();\n    const dirs: string[] = [];\n    for (const entry of this.context.getScriptsPaths()) {\n      const expanded = expandTilde(entry, this.context.homeDir);\n      const abs = path.resolve(this.context.cwd, expanded);\n      if (seen.has(abs)) continue;\n      seen.add(abs);\n      dirs.push(abs);\n    }\n    return dirs;\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method resolveScriptsDirs",
+      "startLine": 164,
+      "startCol": 3,
+      "endLine": 181,
+      "endCol": 4
+    },
+    {
+      "text": "  async discover(): Promise\u003cvoid\u003e {\n    // Yield off the synchronous construction stack: discover() is kicked off\n    // from the Magenta constructor, and dispatching `catalog-updated` before\n    // construction finishes would touch not-yet-assigned fields (bufferManager).\n    await Promise.resolve();\n    this.catalog.clear();\n    for (const dir of this.resolveScriptsDirs()) {\n      if (!existsSync(dir)) continue;\n\n      // Each scripts directory holds independent script installations, one per\n      // subdirectory, with a single `index.ts` entry point. That file is\n      // responsible for importing every script module so all `registerScript`\n      // calls run. Other `.ts` files (shared libs, individual script modules)\n      // are never forked directly, which keeps discovery and thread creation\n      // predictable.\n      let entries: { name: string; isDir: boolean }[];\n      try {\n        entries = readdirSync(dir, { withFileTypes: true }).map((e) =\u003e ({\n          name: e.name,\n          isDir: e.isDirectory(),\n        }));\n      } catch {\n        continue;\n      }\n\n      for (const entry of entries) {\n        if (!entry.isDir) continue;\n        const indexFile = path.join(dir, entry.name, \"index.ts\");\n        if (!existsSync(indexFile)) continue;\n\n        const metas = await this.captureRegistration(indexFile);\n        for (const meta of metas) {\n          this.catalog.set(meta.name, { file: indexFile, meta });\n        }\n      }\n    }\n    this.myDispatch({ type: \"catalog-updated\" });\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method discover\n\n  async discover(): Promise\u003cvoid\u003e {\n    // Yield off the synchronous construction stack: discover() is kicked off\n    // from the Magenta constructor, and dispatching `catalog-updated` before\n    // construction finishes would touch not-yet-assigned fields (bufferManager).\n    await Promise.resolve();\n    this.catalog.clear();\n    for (const dir of this.resolveScriptsDirs()) {\n      if (!existsSync(dir)) continue;\n\n      // Each scripts directory holds independent script installations, one per\n      // subdirectory, with a single `index.ts` entry point. That file is\n      // responsible for importing every script module so all `registerScript`\n      // calls run. Other `.ts` files (shared libs, individual script modules)\n      // are never forked directly, which keeps discovery and thread creation\n      // predictable.\n      let entries: { name: string; isDir: boolean }[];\n      try {\n        entries = readdirSync(dir, { withFileTypes: true }).map((e) =\u003e ({\n          name: e.name,\n          isDir: e.isDirectory(),\n        }));\n      } catch {\n        continue;\n      }\n\n      for (const entry of entries) {\n        if (!entry.isDir) continue;\n        const indexFile = path.join(dir, entry.name, \"index.ts\");\n        if (!existsSync(indexFile)) continue;\n\n        const metas = await this.captureRegistration(indexFile);\n        for (const meta of metas) {\n          this.catalog.set(meta.name, { file: indexFile, meta });\n        }\n      }\n    }\n    this.myDispatch({ type: \"catalog-updated\" });\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method discover",
+      "startLine": 183,
+      "startCol": 1,
+      "endLine": 220,
+      "endCol": 4
+    },
+    {
+      "text": "  private captureRegistration(file: string): Promise\u003cScriptMeta[]\u003e {\n    return new Promise((resolve) =\u003e {\n      const child = this.fork(file);\n      const timeout = setTimeout(() =\u003e {\n        terminateProcess(child);\n        resolve([]);\n      }, REGISTRATION_TIMEOUT_MS);\n      child.once(\"message\", (raw) =\u003e {\n        const msg = raw as ScriptToMagenta;\n        clearTimeout(timeout);\n        terminateProcess(child);\n        resolve(msg.type === \"register\" ? msg.scripts : []);\n      });\n      child.once(\"error\", () =\u003e {\n        clearTimeout(timeout);\n        resolve([]);\n      });\n      // A file that never registers a script (e.g. a shared library module\n      // alongside the scripts) exits without sending a message. Resolve\n      // immediately on exit rather than waiting out the registration timeout.\n      child.once(\"exit\", () =\u003e {\n        clearTimeout(timeout);\n        resolve([]);\n      });\n    });\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method captureRegistration\n\n  private captureRegistration(file: string): Promise\u003cScriptMeta[]\u003e {\n    return new Promise((resolve) =\u003e {\n      const child = this.fork(file);\n      const timeout = setTimeout(() =\u003e {\n        terminateProcess(child);\n        resolve([]);\n      }, REGISTRATION_TIMEOUT_MS);\n      child.once(\"message\", (raw) =\u003e {\n        const msg = raw as ScriptToMagenta;\n        clearTimeout(timeout);\n        terminateProcess(child);\n        resolve(msg.type === \"register\" ? msg.scripts : []);\n      });\n      child.once(\"error\", () =\u003e {\n        clearTimeout(timeout);\n        resolve([]);\n      });\n      // A file that never registers a script (e.g. a shared library module\n      // alongside the scripts) exits without sending a message. Resolve\n      // immediately on exit rather than waiting out the registration timeout.\n      child.once(\"exit\", () =\u003e {\n        clearTimeout(timeout);\n        resolve([]);\n      });\n    });\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method captureRegistration",
+      "startLine": 222,
+      "startCol": 1,
+      "endLine": 247,
+      "endCol": 4
+    },
+    {
+      "text": "  runScript(\n    scriptName: string,\n    parameters: unknown,\n    opts: { sandboxBypassed: boolean },\n  ): ScriptInvocationId {\n    const entry = this.catalog.get(scriptName);\n    if (!entry) {\n      throw new Error(`unknown script ${scriptName}`);\n    }\n\n    const id = uuidv7() as ScriptInvocationId;\n    const child = this.fork(entry.file);\n    const invocation: ScriptInvocation = {\n      id,\n      scriptName,\n      file: entry.file,\n      parameters,\n      status: \"running\",\n      logs: [],\n      threadIds: [],\n      entries: [],\n      sandboxBypassed: opts.sandboxBypassed,\n      child,\n      pendingThreads: new Map(),\n    };\n    this.invocations.set(id, invocation);\n\n    child.on(\"message\", (raw) =\u003e {\n      this.handleChildMessage(id, raw as ScriptToMagenta);\n    });\n    child.on(\"exit\", () =\u003e this.handleChildExit(id));\n\n    this.context.chat\n      .generateScriptTitle(scriptName, entry.meta.description, parameters)\n      .then((title) =\u003e {\n        if (title) {\n          this.myDispatch({ type: \"set-invocation-title\", id, title });\n        }\n      })\n      .catch((e: unknown) =\u003e {\n        this.context.nvim.logger.error(\n          `Failed to generate script title: ${e instanceof Error ? e.message : String(e)}`,\n        );\n      });\n\n    this.myDispatch({ type: \"invocation-updated\", id });\n    return id;\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method runScript\n\n  runScript(\n    scriptName: string,\n    parameters: unknown,\n    opts: { sandboxBypassed: boolean },\n  ): ScriptInvocationId {\n    const entry = this.catalog.get(scriptName);\n    if (!entry) {\n      throw new Error(`unknown script ${scriptName}`);\n    }\n\n    const id = uuidv7() as ScriptInvocationId;\n    const child = this.fork(entry.file);\n    const invocation: ScriptInvocation = {\n      id,\n      scriptName,\n      file: entry.file,\n      parameters,\n      status: \"running\",\n      logs: [],\n      threadIds: [],\n      entries: [],\n      sandboxBypassed: opts.sandboxBypassed,\n      child,\n      pendingThreads: new Map(),\n    };\n    this.invocations.set(id, invocation);\n\n    child.on(\"message\", (raw) =\u003e {\n      this.handleChildMessage(id, raw as ScriptToMagenta);\n    });\n    child.on(\"exit\", () =\u003e this.handleChildExit(id));\n\n    this.context.chat\n      .generateScriptTitle(scriptName, entry.meta.description, parameters)\n      .then((title) =\u003e {\n        if (title) {\n          this.myDispatch({ type: \"set-invocation-title\", id, title });\n        }\n      })\n      .catch((e: unknown) =\u003e {\n        this.context.nvim.logger.error(\n          `Failed to generate script title: ${e instanceof Error ? e.message : String(e)}`,\n        );\n      });\n\n    this.myDispatch({ type: \"invocation-updated\", id });\n    return id;\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method runScript",
+      "startLine": 249,
+      "startCol": 1,
+      "endLine": 296,
+      "endCol": 4
+    },
+    {
+      "text": "  private abortInvocation(id: ScriptInvocationId): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n    if (invocation.status === \"running\") {\n      invocation.status = \"aborted\";\n    }\n    for (const threadId of invocation.threadIds) {\n      this.context.dispatch({\n        type: \"thread-msg\",\n        id: threadId,\n        msg: { type: \"abort\" },\n      });\n    }\n    this.terminateInvocation(id);\n    this.myDispatch({ type: \"invocation-updated\", id });\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method abortInvocation\n\n  private abortInvocation(id: ScriptInvocationId): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n    if (invocation.status === \"running\") {\n      invocation.status = \"aborted\";\n    }\n    for (const threadId of invocation.threadIds) {\n      this.context.dispatch({\n        type: \"thread-msg\",\n        id: threadId,\n        msg: { type: \"abort\" },\n      });\n    }\n    this.terminateInvocation(id);\n    this.myDispatch({ type: \"invocation-updated\", id });\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method abortInvocation",
+      "startLine": 298,
+      "startCol": 1,
+      "endLine": 313,
+      "endCol": 4
+    },
+    {
+      "text": "  private deleteInvocation(id: ScriptInvocationId): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n    this.abortInvocation(id);\n    for (const threadId of invocation.threadIds) {\n      this.context.dispatch({\n        type: \"chat-msg\",\n        msg: { type: \"delete-thread-subtree\", id: threadId },\n      });\n    }\n    this.invocations.delete(id);\n    this.expandedInvocations.delete(id);\n    this.myDispatch({ type: \"catalog-updated\" });\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method deleteInvocation\n\n  private deleteInvocation(id: ScriptInvocationId): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n    this.abortInvocation(id);\n    for (const threadId of invocation.threadIds) {\n      this.context.dispatch({\n        type: \"chat-msg\",\n        msg: { type: \"delete-thread-subtree\", id: threadId },\n      });\n    }\n    this.invocations.delete(id);\n    this.expandedInvocations.delete(id);\n    this.myDispatch({ type: \"catalog-updated\" });\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method deleteInvocation",
+      "startLine": 315,
+      "startCol": 1,
+      "endLine": 328,
+      "endCol": 4
+    },
+    {
+      "text": "  private send(invocation: ScriptInvocation, msg: MagentaToScript): void {\n    invocation.child.send(msg);\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method send\n\n  private send(invocation: ScriptInvocation, msg: MagentaToScript): void {\n    invocation.child.send(msg);\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method send",
+      "startLine": 330,
+      "startCol": 1,
+      "endLine": 332,
+      "endCol": 4
+    },
+    {
+      "text": "  private toggleInvocationSandbox(id: ScriptInvocationId): void {\n    const inv = this.invocations.get(id);\n    if (!inv) return;\n    inv.sandboxBypassed = !inv.sandboxBypassed;\n    if (inv.sandboxBypassed) {\n      for (const entry of inv.entries) {\n        if (entry.type === \"thread\") {\n          this.context.chat.approveAllPendingInSubtree(entry.threadId);\n        }\n      }\n    }\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method toggleInvocationSandbox\n\n  private toggleInvocationSandbox(id: ScriptInvocationId): void {\n    const inv = this.invocations.get(id);\n    if (!inv) return;\n    inv.sandboxBypassed = !inv.sandboxBypassed;\n    if (inv.sandboxBypassed) {\n      for (const entry of inv.entries) {\n        if (entry.type === \"thread\") {\n          this.context.chat.approveAllPendingInSubtree(entry.threadId);\n        }\n      }\n    }\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method toggleInvocationSandbox",
+      "startLine": 334,
+      "startCol": 1,
+      "endLine": 345,
+      "endCol": 4
+    },
+    {
+      "text": "  private getSandboxRoot(id: ScriptInvocationId): SandboxRoot | undefined {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return undefined;",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method getSandboxRoot\n\n  private getSandboxRoot(id: ScriptInvocationId): SandboxRoot | undefined {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return undefined;",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method getSandboxRoot",
+      "startLine": 347,
+      "startCol": 1,
+      "endLine": 349,
+      "endCol": 39
+    },
+    {
+      "text": "      get isSandboxBypassed() {\n        return invocation.sandboxBypassed;\n      }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method getSandboxRoot \u003e method isSandboxBypassed\n\n      get isSandboxBypassed() {\n        return invocation.sandboxBypassed;\n      }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method getSandboxRoot \u003e method isSandboxBypassed",
+      "startLine": 351,
+      "startCol": 1,
+      "endLine": 353,
+      "endCol": 8
+    },
+    {
+      "text": "      toggle: () =\u003e {\n        this.toggleInvocationSandbox(id);\n        this.myDispatch({ type: \"invocation-updated\", id });\n      }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method getSandboxRoot \u003e function toggle\n\n      toggle: () =\u003e {\n        this.toggleInvocationSandbox(id);\n        this.myDispatch({ type: \"invocation-updated\", id });\n      }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method getSandboxRoot \u003e function toggle",
+      "startLine": 354,
+      "startCol": 1,
+      "endLine": 357,
+      "endCol": 8
+    },
+    {
+      "text": "  private handleChildMessage(\n    id: ScriptInvocationId,\n    msg: ScriptToMagenta,\n  ): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n\n    switch (msg.type) {\n      case \"register\":\n        this.send(invocation, {\n          type: \"run-script\",\n          scriptName: invocation.scriptName,\n          parameters: invocation.parameters,\n        });\n        return;\n\n      case \"log\":\n        invocation.logs.push(msg.message);\n        invocation.entries.push({ type: \"log\", message: msg.message });\n        this.myDispatch({ type: \"invocation-updated\", id });\n        return;\n\n      case \"create-thread\": {\n        const requestId = msg.requestId;\n        const options = msg.options;\n        this.context.chat\n          .spawnScriptThread({\n            scriptInvocationId: id,\n            prompt: msg.prompt,\n            yieldSchema: msg.yieldSchema as JSONSchemaType",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method handleChildMessage\n\n  private handleChildMessage(\n    id: ScriptInvocationId,\n    msg: ScriptToMagenta,\n  ): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n\n    switch (msg.type) {\n      case \"register\":\n        this.send(invocation, {\n          type: \"run-script\",\n          scriptName: invocation.scriptName,\n          parameters: invocation.parameters,\n        });\n        return;\n\n      case \"log\":\n        invocation.logs.push(msg.message);\n        invocation.entries.push({ type: \"log\", message: msg.message });\n        this.myDispatch({ type: \"invocation-updated\", id });\n        return;\n\n      case \"create-thread\": {\n        const requestId = msg.requestId;\n        const options = msg.options;\n        this.context.chat\n          .spawnScriptThread({\n            scriptInvocationId: id,\n            prompt: msg.prompt,\n            yieldSchema: msg.yieldSchema as JSONSchemaType",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method handleChildMessage",
+      "startLine": 361,
+      "startCol": 1,
+      "endLine": 390,
+      "endCol": 59
+    },
+    {
+      "text": "            getSandboxRoot: () =\u003e this.getSandboxRoot(id)",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method handleChildMessage \u003e function getSandboxRoot\n\n            getSandboxRoot: () =\u003e this.getSandboxRoot(id)",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method handleChildMessage \u003e function getSandboxRoot",
+      "startLine": 391,
+      "startCol": 1,
+      "endLine": 391,
+      "endCol": 58
+    },
+    {
+      "text": "...(options?.cwd ? { cwd: options.cwd } : {}),\n            ...(options?.contextFiles\n              ? { contextFiles: options.contextFiles }\n              : {}),\n            ...(options?.systemReminder\n              ? { systemReminder: options.systemReminder }\n              : {}),\n            ...(options?.autoCompactThreshold !== undefined\n              ? { autoCompactThreshold: options.autoCompactThreshold }\n              : {}),\n            ...(options?.autoCompactPrompt !== undefined\n              ? { autoCompactPrompt: options.autoCompactPrompt }\n              : {}),\n          })\n          .then((threadId) =\u003e {\n            invocation.threadIds.push(threadId);\n            invocation.entries.push({ type: \"thread\", threadId });\n            invocation.pendingThreads.set(requestId, threadId);\n            this.context.chat.onThreadYielded(threadId, () =\u003e {\n              const result = this.context.chat.getThreadResult(threadId);\n              if (result.status === \"done\") {\n                this.resolveThread(id, requestId, result.result);\n              }\n            });\n            this.myDispatch({ type: \"invocation-updated\", id });\n          })\n          .catch((err: unknown) =\u003e {\n            this.send(invocation, {\n              type: \"thread-result\",\n              requestId,\n              result: {\n                status: \"error\",\n                error: err instanceof Error ? err.message : String(err),\n              },\n            });\n          });\n        return;\n      }\n\n      case \"done\":\n        invocation.status = \"done\";\n        this.notifyFinished();\n        this.myDispatch({ type: \"invocation-updated\", id });\n        this.terminateInvocation(id);\n        return;",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method handleChildMessage\n\n...(options?.cwd ? { cwd: options.cwd } : {}),\n            ...(options?.contextFiles\n              ? { contextFiles: options.contextFiles }\n              : {}),\n            ...(options?.systemReminder\n              ? { systemReminder: options.systemReminder }\n              : {}),\n            ...(options?.autoCompactThreshold !== undefined\n              ? { autoCompactThreshold: options.autoCompactThreshold }\n              : {}),\n            ...(options?.autoCompactPrompt !== undefined\n              ? { autoCompactPrompt: options.autoCompactPrompt }\n              : {}),\n          })\n          .then((threadId) =\u003e {\n            invocation.threadIds.push(threadId);\n            invocation.entries.push({ type: \"thread\", threadId });\n            invocation.pendingThreads.set(requestId, threadId);\n            this.context.chat.onThreadYielded(threadId, () =\u003e {\n              const result = this.context.chat.getThreadResult(threadId);\n              if (result.status === \"done\") {\n                this.resolveThread(id, requestId, result.result);\n              }\n            });\n            this.myDispatch({ type: \"invocation-updated\", id });\n          })\n          .catch((err: unknown) =\u003e {\n            this.send(invocation, {\n              type: \"thread-result\",\n              requestId,\n              result: {\n                status: \"error\",\n                error: err instanceof Error ? err.message : String(err),\n              },\n            });\n          });\n        return;\n      }\n\n      case \"done\":\n        invocation.status = \"done\";\n        this.notifyFinished();\n        this.myDispatch({ type: \"invocation-updated\", id });\n        this.terminateInvocation(id);\n        return;",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method handleChildMessage",
+      "startLine": 392,
+      "startCol": 13,
+      "endLine": 436,
+      "endCol": 16
+    },
+    {
+      "text": "case \"error\":\n        invocation.status = \"error\";\n        this.notifyFinished();\n        invocation.logs.push(`error: ${msg.message}`);\n        invocation.entries.push({\n          type: \"log\",\n          message: `error: ${msg.message}`,\n        });\n        this.myDispatch({ type: \"invocation-updated\", id });\n        this.terminateInvocation(id);\n        return;\n    }\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method handleChildMessage\n\ncase \"error\":\n        invocation.status = \"error\";\n        this.notifyFinished();\n        invocation.logs.push(`error: ${msg.message}`);\n        invocation.entries.push({\n          type: \"log\",\n          message: `error: ${msg.message}`,\n        });\n        this.myDispatch({ type: \"invocation-updated\", id });\n        this.terminateInvocation(id);\n        return;\n    }\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method handleChildMessage",
+      "startLine": 438,
+      "startCol": 7,
+      "endLine": 450,
+      "endCol": 4
+    },
+    {
+      "text": "  private resolveThread(\n    id: ScriptInvocationId,\n    requestId: number,\n    result:\n      | { status: \"ok\"; value: string }\n      | { status: \"error\"; error: string },\n  ): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n    if (!invocation.pendingThreads.has(requestId)) return;\n    invocation.pendingThreads.delete(requestId);\n\n    let sdkResult: SdkResult\u003cunknown\u003e;\n    if (result.status === \"ok\") {\n      let value: unknown;\n      try {\n        value = JSON.parse(result.value);\n      } catch {\n        value = result.value;\n      }\n      sdkResult = { status: \"ok\", value };\n    } else {\n      sdkResult = { status: \"error\", error: result.error };\n    }\n\n    this.send(invocation, {\n      type: \"thread-result\",\n      requestId,\n      result: sdkResult,\n    });\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method resolveThread\n\n  private resolveThread(\n    id: ScriptInvocationId,\n    requestId: number,\n    result:\n      | { status: \"ok\"; value: string }\n      | { status: \"error\"; error: string },\n  ): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n    if (!invocation.pendingThreads.has(requestId)) return;\n    invocation.pendingThreads.delete(requestId);\n\n    let sdkResult: SdkResult\u003cunknown\u003e;\n    if (result.status === \"ok\") {\n      let value: unknown;\n      try {\n        value = JSON.parse(result.value);\n      } catch {\n        value = result.value;\n      }\n      sdkResult = { status: \"ok\", value };\n    } else {\n      sdkResult = { status: \"error\", error: result.error };\n    }\n\n    this.send(invocation, {\n      type: \"thread-result\",\n      requestId,\n      result: sdkResult,\n    });\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method resolveThread",
+      "startLine": 452,
+      "startCol": 1,
+      "endLine": 482,
+      "endCol": 4
+    },
+    {
+      "text": "  private handleChildExit(id: ScriptInvocationId): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n    if (invocation.status === \"running\") {\n      invocation.status = \"error\";\n      this.myDispatch({ type: \"invocation-updated\", id });\n    }\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method handleChildExit\n\n  private handleChildExit(id: ScriptInvocationId): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n    if (invocation.status === \"running\") {\n      invocation.status = \"error\";\n      this.myDispatch({ type: \"invocation-updated\", id });\n    }\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method handleChildExit",
+      "startLine": 484,
+      "startCol": 1,
+      "endLine": 491,
+      "endCol": 4
+    },
+    {
+      "text": "  private terminateInvocation(id: ScriptInvocationId): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n    terminateProcess(invocation.child);\n    const child = invocation.child;\n    setTimeout(() =\u003e {\n      if (child.exitCode === null \u0026\u0026 child.signalCode === null) {\n        escalateToSigkill(child);\n      }\n    }, SIGKILL_GRACE_MS);\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method terminateInvocation\n\n  private terminateInvocation(id: ScriptInvocationId): void {\n    const invocation = this.invocations.get(id);\n    if (!invocation) return;\n    terminateProcess(invocation.child);\n    const child = invocation.child;\n    setTimeout(() =\u003e {\n      if (child.exitCode === null \u0026\u0026 child.signalCode === null) {\n        escalateToSigkill(child);\n      }\n    }, SIGKILL_GRACE_MS);\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method terminateInvocation",
+      "startLine": 493,
+      "startCol": 1,
+      "endLine": 503,
+      "endCol": 4
+    },
+    {
+      "text": "  terminateAll(): void {\n    for (const id of this.invocations.keys()) {\n      this.terminateInvocation(id);\n    }\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method terminateAll\n\n  terminateAll(): void {\n    for (const id of this.invocations.keys()) {\n      this.terminateInvocation(id);\n    }\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method terminateAll",
+      "startLine": 505,
+      "startCol": 1,
+      "endLine": 509,
+      "endCol": 4
+    },
+    {
+      "text": "  private notifyFinished(): void {\n    notifyUser(\n      { nvim: this.context.nvim, options: this.context.getOptions() },\n      \"script-finished\",\n    );\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method notifyFinished\n\n  private notifyFinished(): void {\n    notifyUser(\n      { nvim: this.context.nvim, options: this.context.getOptions() },\n      \"script-finished\",\n    );\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method notifyFinished",
+      "startLine": 511,
+      "startCol": 1,
+      "endLine": 516,
+      "endCol": 4
+    },
+    {
+      "text": "  private openScriptFile(file: string): void {\n    openFileInNonMagentaWindow(file as AbsFilePath, {\n      nvim: this.context.nvim,\n      cwd: this.context.cwd,\n      homeDir: this.context.homeDir,\n      options: this.context.getOptions(),\n    }).catch((e: Error) =\u003e this.context.nvim.logger.error(e.message));\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method openScriptFile\n\n  private openScriptFile(file: string): void {\n    openFileInNonMagentaWindow(file as AbsFilePath, {\n      nvim: this.context.nvim,\n      cwd: this.context.cwd,\n      homeDir: this.context.homeDir,\n      options: this.context.getOptions(),\n    }).catch((e: Error) =\u003e this.context.nvim.logger.error(e.message));\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method openScriptFile",
+      "startLine": 518,
+      "startCol": 1,
+      "endLine": 525,
+      "endCol": 4
+    },
+    {
+      "text": "  private renderThreadYield(threadId: ThreadId): VDOMNode {\n    const result = this.context.chat.getThreadResult(threadId);\n    if (result.status !== \"done\") {\n      return d``;\n    }\n    if (result.result.status === \"ok\") {\n      return d`\\n  ⮑ yielded: ${result.result.value}`;\n    }\n    return d`\\n  ⮑ error: ${result.result.error}`;\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method renderThreadYield\n\n  private renderThreadYield(threadId: ThreadId): VDOMNode {\n    const result = this.context.chat.getThreadResult(threadId);\n    if (result.status !== \"done\") {\n      return d``;\n    }\n    if (result.result.status === \"ok\") {\n      return d`\\n  ⮑ yielded: ${result.result.value}`;\n    }\n    return d`\\n  ⮑ error: ${result.result.error}`;\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method renderThreadYield",
+      "startLine": 527,
+      "startCol": 1,
+      "endLine": 536,
+      "endCol": 4
+    },
+    {
+      "text": "  view(): VDOMNode {\n    if (this.invocations.size === 0) {\n      return d``;\n    }\n\n    const rows: VDOMNode[] = [];\n    const sortedInvocations = [...this.invocations.values()].sort((a, b) =\u003e\n      a.id \u003c b.id ? 1 : a.id \u003e b.id ? -1 : 0,\n    );\n    for (const inv of sortedInvocations) {\n      const icon =\n        inv.status === \"running\"\n          ? \"⏳\"\n          : inv.status === \"done\"\n            ? \"✅\"\n            : inv.status === \"aborted\"\n              ? \"⛔\"\n              : \"❌\";\n      const sandboxIndicator = inv.sandboxBypassed\n        ? withError(d` SANDBOX OFF `)\n        : d``;\n      const isExpanded = this.expandedInvocations.has(inv.id);\n      const expandIndicator = isExpanded ? \"▼ \" : \"▶ \";\n      const needsAttention =\n        inv.status !== \"running\" ||\n        inv.entries.some(\n          (e) =\u003e\n            e.type === \"thread\" \u0026\u0026\n            this.context.chat.scriptSubtreeNeedsAttention(e.threadId),\n        );\n      const bell = needsAttention ? \"🔔 \" : \"\";\n\n      const invRows: VDOMNode[] = [];\n      const headerLine = withBindings(\n        d`\\n${icon} ${expandIndicator}${bell}${sandboxIndicator}${inv.title ?? inv.scriptName} (${inv.status})`",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view\n\n  view(): VDOMNode {\n    if (this.invocations.size === 0) {\n      return d``;\n    }\n\n    const rows: VDOMNode[] = [];\n    const sortedInvocations = [...this.invocations.values()].sort((a, b) =\u003e\n      a.id \u003c b.id ? 1 : a.id \u003e b.id ? -1 : 0,\n    );\n    for (const inv of sortedInvocations) {\n      const icon =\n        inv.status === \"running\"\n          ? \"⏳\"\n          : inv.status === \"done\"\n            ? \"✅\"\n            : inv.status === \"aborted\"\n              ? \"⛔\"\n              : \"❌\";\n      const sandboxIndicator = inv.sandboxBypassed\n        ? withError(d` SANDBOX OFF `)\n        : d``;\n      const isExpanded = this.expandedInvocations.has(inv.id);\n      const expandIndicator = isExpanded ? \"▼ \" : \"▶ \";\n      const needsAttention =\n        inv.status !== \"running\" ||\n        inv.entries.some(\n          (e) =\u003e\n            e.type === \"thread\" \u0026\u0026\n            this.context.chat.scriptSubtreeNeedsAttention(e.threadId),\n        );\n      const bell = needsAttention ? \"🔔 \" : \"\";\n\n      const invRows: VDOMNode[] = [];\n      const headerLine = withBindings(\n        d`\\n${icon} ${expandIndicator}${bell}${sandboxIndicator}${inv.title ?? inv.scriptName} (${inv.status})`",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view",
+      "startLine": 538,
+      "startCol": 1,
+      "endLine": 572,
+      "endCol": 112
+    },
+    {
+      "text": "          dd: () =\u003e this.myDispatch({ type: \"delete-invocation\", id: inv.id })",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view \u003e function dd\n\n          dd: () =\u003e this.myDispatch({ type: \"delete-invocation\", id: inv.id })",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view \u003e function dd",
+      "startLine": 574,
+      "startCol": 1,
+      "endLine": 574,
+      "endCol": 79
+    },
+    {
+      "text": "          t: () =\u003e\n            this.myDispatch({\n              type: \"toggle-invocation-sandbox\",\n              id: inv.id,\n            })",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view \u003e function t\n\n          t: () =\u003e\n            this.myDispatch({\n              type: \"toggle-invocation-sandbox\",\n              id: inv.id,\n            })",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view \u003e function t",
+      "startLine": 575,
+      "startCol": 1,
+      "endLine": 579,
+      "endCol": 15
+    },
+    {
+      "text": "const fileLine = withBindings(d`\\n  ${inv.file}`, {\n        \"\u003cCR\u003e\": () =\u003e this.openScriptFile(inv.file),\n      });\n      invRows.push(headerLine);\n      invRows.push(fileLine);\n\n      if (isExpanded) {\n        invRows.push(d`\\n  parameters: ${JSON.stringify(inv.parameters)}`);\n        for (const entry of inv.entries) {\n          if (entry.type === \"log\") {\n            invRows.push(d`\\n  \u003e ${entry.message}`);\n            continue;\n          }\n\n          const threadViews = this.context.chat.renderScriptThreadSubtree(\n            entry.threadId,\n            1,\n          );\n          const threadId = entry.threadId;\n          threadViews.forEach((view, idx) =\u003e {\n            if (idx === 0) {\n              invRows.push(\n                d`\\n🧵 ${withBindings(view, {\n                  ...view.bindings,\n                  \"=\": () =\u003e\n                    this.myDispatch({\n                      type: \"toggle-thread-yield\",\n                      id: threadId,\n                    }),\n                })}`,\n              );\n            } else {\n              invRows.push(d`\\n${view}`);\n            }\n          });\n\n          if (this.expandedThreads.has(threadId)) {\n            invRows.push(this.renderThreadYield(threadId));\n          }\n        }\n      } else {\n        for (const entry of inv.entries) {\n          if (entry.type !== \"thread\") continue;\n          for (const view of this.context.chat.collectScriptSubtreeViolationViews(\n            entry.threadId,\n          )) {\n            invRows.push(d`\\n${view}`);\n          }\n        }\n      }\n\n      rows.push(\n        withBindings(d`${invRows}`, {\n          \"=\": () =\u003e\n            this.myDispatch({ type: \"toggle-invocation-expand\", id: inv.id })",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view\n\nconst fileLine = withBindings(d`\\n  ${inv.file}`, {\n        \"\u003cCR\u003e\": () =\u003e this.openScriptFile(inv.file),\n      });\n      invRows.push(headerLine);\n      invRows.push(fileLine);\n\n      if (isExpanded) {\n        invRows.push(d`\\n  parameters: ${JSON.stringify(inv.parameters)}`);\n        for (const entry of inv.entries) {\n          if (entry.type === \"log\") {\n            invRows.push(d`\\n  \u003e ${entry.message}`);\n            continue;\n          }\n\n          const threadViews = this.context.chat.renderScriptThreadSubtree(\n            entry.threadId,\n            1,\n          );\n          const threadId = entry.threadId;\n          threadViews.forEach((view, idx) =\u003e {\n            if (idx === 0) {\n              invRows.push(\n                d`\\n🧵 ${withBindings(view, {\n                  ...view.bindings,\n                  \"=\": () =\u003e\n                    this.myDispatch({\n                      type: \"toggle-thread-yield\",\n                      id: threadId,\n                    }),\n                })}`,\n              );\n            } else {\n              invRows.push(d`\\n${view}`);\n            }\n          });\n\n          if (this.expandedThreads.has(threadId)) {\n            invRows.push(this.renderThreadYield(threadId));\n          }\n        }\n      } else {\n        for (const entry of inv.entries) {\n          if (entry.type !== \"thread\") continue;\n          for (const view of this.context.chat.collectScriptSubtreeViolationViews(\n            entry.threadId,\n          )) {\n            invRows.push(d`\\n${view}`);\n          }\n        }\n      }\n\n      rows.push(\n        withBindings(d`${invRows}`, {\n          \"=\": () =\u003e\n            this.myDispatch({ type: \"toggle-invocation-expand\", id: inv.id })",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view",
+      "startLine": 582,
+      "startCol": 7,
+      "endLine": 636,
+      "endCol": 78
+    },
+    {
+      "text": "          a: () =\u003e this.myDispatch({ type: \"abort-invocation\", id: inv.id })",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view \u003e function a\n\n          a: () =\u003e this.myDispatch({ type: \"abort-invocation\", id: inv.id })",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view \u003e function a",
+      "startLine": 637,
+      "startCol": 1,
+      "endLine": 637,
+      "endCol": 77
+    },
+    {
+      "text": "const hr = \"─\".repeat(40);\n    return d`\\n${hr}\\n# SCRIPTS\\n${hr}\\n${rows}`;\n  }",
+      "contextualizedText": "// node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view\n\nconst hr = \"─\".repeat(40);\n    return d`\\n${hr}\\n# SCRIPTS\\n${hr}\\n${rows}`;\n  }",
+      "headingContext": "node/scripts/script-manager.ts \u003e class ScriptManager \u003e method view",
+      "startLine": 642,
+      "startCol": 5,
+      "endLine": 644,
+      "endCol": 4
+    }
+  ]
+}

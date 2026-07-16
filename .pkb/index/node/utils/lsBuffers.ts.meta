@@ -1,0 +1,42 @@
+{
+  "blobSha": "d7054d2e5ed7c0a2466c95a11c05336d88b97a7c",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "interface BufferFlags {\n  hidden: boolean; // 'h' flag\n  active: boolean; // 'a' flag\n  current: boolean; // '%' flag\n  alternate: boolean; // '#' flag\n  modified: boolean; // '+' flag\n  readonly: boolean; // '-' flag\n  terminal: boolean; // 'terminal' flag\n}",
+      "contextualizedText": "// node/utils/lsBuffers.ts \u003e interface BufferFlags\n\ninterface BufferFlags {\n  hidden: boolean; // 'h' flag\n  active: boolean; // 'a' flag\n  current: boolean; // '%' flag\n  alternate: boolean; // '#' flag\n  modified: boolean; // '+' flag\n  readonly: boolean; // '-' flag\n  terminal: boolean; // 'terminal' flag\n}",
+      "headingContext": "node/utils/lsBuffers.ts \u003e interface BufferFlags",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 9,
+      "endCol": 2
+    },
+    {
+      "text": "interface BufferEntry {\n  id: number; // Buffer number\n  flags: BufferFlags; // Parsed status flags\n  filePath: string; // File path\n  lineNumber: number; // Current line number\n}",
+      "contextualizedText": "// node/utils/lsBuffers.ts \u003e interface BufferEntry\n\ninterface BufferEntry {\n  id: number; // Buffer number\n  flags: BufferFlags; // Parsed status flags\n  filePath: string; // File path\n  lineNumber: number; // Current line number\n}",
+      "headingContext": "node/utils/lsBuffers.ts \u003e interface BufferEntry",
+      "startLine": 11,
+      "startCol": 1,
+      "endLine": 16,
+      "endCol": 2
+    },
+    {
+      "text": "function parseFlags(flagStr: string): BufferFlags {\n  return {\n    hidden: flagStr.includes(\"h\"),\n    active: flagStr.includes(\"a\"),\n    current: flagStr.includes(\"%\"),\n    alternate: flagStr.includes(\"#\"),\n    modified: flagStr.includes(\"+\"),\n    readonly: flagStr.includes(\"-\"),\n    terminal: flagStr.includes(\"t\"),\n  };\n}",
+      "contextualizedText": "// node/utils/lsBuffers.ts \u003e function parseFlags\n\nfunction parseFlags(flagStr: string): BufferFlags {\n  return {\n    hidden: flagStr.includes(\"h\"),\n    active: flagStr.includes(\"a\"),\n    current: flagStr.includes(\"%\"),\n    alternate: flagStr.includes(\"#\"),\n    modified: flagStr.includes(\"+\"),\n    readonly: flagStr.includes(\"-\"),\n    terminal: flagStr.includes(\"t\"),\n  };\n}",
+      "headingContext": "node/utils/lsBuffers.ts \u003e function parseFlags",
+      "startLine": 18,
+      "startCol": 1,
+      "endLine": 28,
+      "endCol": 2
+    },
+    {
+      "text": "/**\n * Parses the output of Neovim's :buffers command into structured data\n *lsResponse.output is like:  \"  1  h   \\\"poem.txt\\\"   line 1\\n  2  a   \\\"poem2.txt\\\"  line 1\"\n * see docfiles for :buffers to understand output format\n */\nexport function parseLsResponse(response: string): BufferEntry[] {\n  // Split the response into lines and filter out empty lines\n  const lines = response.split(\"\\n\").filter((line) =\u003e line.trim());\n\n  return lines.map((line) =\u003e {\n    // Remove extra whitespace and split by multiple spaces\n    const parts = line.trim().split(/\\s+/);\n\n    // Extract filepath by finding the quoted string\n    const filepathStart = line.indexOf('\"');\n    const filepathEnd = line.lastIndexOf('\"');\n    const filePath = line.slice(filepathStart + 1, filepathEnd);\n\n    return {\n      id: parseInt(parts[0], 10),\n      flags: parseFlags(parts[1]),\n      filePath,\n      lineNumber: parseInt(parts[parts.length - 1], 10),\n    };\n  });\n}",
+      "contextualizedText": "// node/utils/lsBuffers.ts \u003e function parseLsResponse\n\n/**\n * Parses the output of Neovim's :buffers command into structured data\n *lsResponse.output is like:  \"  1  h   \\\"poem.txt\\\"   line 1\\n  2  a   \\\"poem2.txt\\\"  line 1\"\n * see docfiles for :buffers to understand output format\n */\nexport function parseLsResponse(response: string): BufferEntry[] {\n  // Split the response into lines and filter out empty lines\n  const lines = response.split(\"\\n\").filter((line) =\u003e line.trim());\n\n  return lines.map((line) =\u003e {\n    // Remove extra whitespace and split by multiple spaces\n    const parts = line.trim().split(/\\s+/);\n\n    // Extract filepath by finding the quoted string\n    const filepathStart = line.indexOf('\"');\n    const filepathEnd = line.lastIndexOf('\"');\n    const filePath = line.slice(filepathStart + 1, filepathEnd);\n\n    return {\n      id: parseInt(parts[0], 10),\n      flags: parseFlags(parts[1]),\n      filePath,\n      lineNumber: parseInt(parts[parts.length - 1], 10),\n    };\n  });\n}",
+      "headingContext": "node/utils/lsBuffers.ts \u003e function parseLsResponse",
+      "startLine": 30,
+      "startCol": 1,
+      "endLine": 55,
+      "endCol": 2
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "blobSha": "311c662d5b2383041829d8078839c2ebccd47e21",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport type { Command } from \"./types.ts\";\n\nconst IMPLEMENT_PLAN_INSTRUCTION = `Implement the current plan. Work through the plan's stages in order, verifying each stage before moving on to the next.`;\n\nconst PLAN_MAINTENANCE_REMINDER = `You are implementing a plan. As you work, keep the plan file updated: record progress as stages are completed, and note any implementation choices, decisions, or deviations from the plan so the plan stays an accurate reflection of the work.`;\n\nexport const implementPlanCommand: Command = {\n  name: \"@implementplan\",\n  description: \"Instruct the agent to implement the current plan\",\n  pattern: /@implementplan\\b/,\n  systemReminder: PLAN_MAINTENANCE_REMINDER",
+      "contextualizedText": "// node/chat/commands/implementplan.ts\n\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport type { Command } from \"./types.ts\";\n\nconst IMPLEMENT_PLAN_INSTRUCTION = `Implement the current plan. Work through the plan's stages in order, verifying each stage before moving on to the next.`;\n\nconst PLAN_MAINTENANCE_REMINDER = `You are implementing a plan. As you work, keep the plan file updated: record progress as stages are completed, and note any implementation choices, decisions, or deviations from the plan so the plan stays an accurate reflection of the work.`;\n\nexport const implementPlanCommand: Command = {\n  name: \"@implementplan\",\n  description: \"Instruct the agent to implement the current plan\",\n  pattern: /@implementplan\\b/,\n  systemReminder: PLAN_MAINTENANCE_REMINDER",
+      "headingContext": "node/chat/commands/implementplan.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 13,
+      "endCol": 44
+    },
+    {
+      "text": "  execute(): Promise\u003cProviderMessageContent[]\u003e {\n    return Promise.resolve([\n      {\n        type: \"text\",\n        text: IMPLEMENT_PLAN_INSTRUCTION,\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n  }",
+      "contextualizedText": "// node/chat/commands/implementplan.ts \u003e method execute\n\n  execute(): Promise\u003cProviderMessageContent[]\u003e {\n    return Promise.resolve([\n      {\n        type: \"text\",\n        text: IMPLEMENT_PLAN_INSTRUCTION,\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n  }",
+      "headingContext": "node/chat/commands/implementplan.ts \u003e method execute",
+      "startLine": 14,
+      "startCol": 1,
+      "endLine": 22,
+      "endCol": 4
+    }
+  ]
+}

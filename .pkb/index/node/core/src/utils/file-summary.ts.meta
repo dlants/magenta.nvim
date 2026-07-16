@@ -1,0 +1,96 @@
+{
+  "blobSha": "0820eb67af40aa605df210496e7ca9edb9f7656a",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "export type Chunk = {\n  text: string;\n  line: number;\n  col: number;\n  tokens: Map\u003cstring, number\u003e;\n};\n\nexport type FileSummary = {\n  totalLines: number;\n  totalChars: number;\n  selectedChunks: Chunk[];\n};\n\nconst TOKEN_PATTERN = /[a-zA-Z0-9_]+/g;\nconst MAX_CHUNK_CHARS = 200;\nconst SUB_CHUNK_TARGET = 100;\nconst FIRST_OCCURRENCE_BONUS = 2;",
+      "contextualizedText": "// node/core/src/utils/file-summary.ts\n\nexport type Chunk = {\n  text: string;\n  line: number;\n  col: number;\n  tokens: Map\u003cstring, number\u003e;\n};\n\nexport type FileSummary = {\n  totalLines: number;\n  totalChars: number;\n  selectedChunks: Chunk[];\n};\n\nconst TOKEN_PATTERN = /[a-zA-Z0-9_]+/g;\nconst MAX_CHUNK_CHARS = 200;\nconst SUB_CHUNK_TARGET = 100;\nconst FIRST_OCCURRENCE_BONUS = 2;",
+      "headingContext": "node/core/src/utils/file-summary.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 17,
+      "endCol": 34
+    },
+    {
+      "text": "export function tokenize(text: string): string[] {\n  return Array.from(text.matchAll(TOKEN_PATTERN), (m) =\u003e m[0]);\n}",
+      "contextualizedText": "// node/core/src/utils/file-summary.ts \u003e function tokenize\n\nexport function tokenize(text: string): string[] {\n  return Array.from(text.matchAll(TOKEN_PATTERN), (m) =\u003e m[0]);\n}",
+      "headingContext": "node/core/src/utils/file-summary.ts \u003e function tokenize",
+      "startLine": 19,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 2
+    },
+    {
+      "text": "export function buildFrequencyTable(tokens: string[]): Map\u003cstring, number\u003e {\n  const freq = new Map\u003cstring, number\u003e();\n  for (const token of tokens) {\n    freq.set(token, (freq.get(token) ?? 0) + 1);\n  }\n  return freq;\n}",
+      "contextualizedText": "// node/core/src/utils/file-summary.ts \u003e function buildFrequencyTable\n\nexport function buildFrequencyTable(tokens: string[]): Map\u003cstring, number\u003e {\n  const freq = new Map\u003cstring, number\u003e();\n  for (const token of tokens) {\n    freq.set(token, (freq.get(token) ?? 0) + 1);\n  }\n  return freq;\n}",
+      "headingContext": "node/core/src/utils/file-summary.ts \u003e function buildFrequencyTable",
+      "startLine": 23,
+      "startCol": 1,
+      "endLine": 29,
+      "endCol": 2
+    },
+    {
+      "text": "export function chunkFile(content: string): Chunk[] {\n  const lines = content.split(\"\\n\");\n  const chunks: Chunk[] = [];\n\n  for (let i = 0; i \u003c lines.length; i++) {\n    const line = lines[i];\n    if (line.length \u003c= MAX_CHUNK_CHARS) {\n      chunks.push({\n        text: line,\n        line: i + 1,\n        col: 0,\n        tokens: buildFrequencyTable(tokenize(line)),\n      });\n    } else {\n      // Split long lines into sub-chunks at token boundaries\n      let col = 0;\n      while (col \u003c line.length) {\n        let end = Math.min(col + SUB_CHUNK_TARGET, line.length);\n        // Try to break at a word boundary if not at end of line\n        if (end \u003c line.length) {\n          const boundary = line.lastIndexOf(\" \", end);\n          if (boundary \u003e col) {\n            end = boundary + 1;\n          }\n        }\n        const text = line.slice(col, end);\n        chunks.push({\n          text,\n          line: i + 1,\n          col,\n          tokens: buildFrequencyTable(tokenize(text)),\n        });\n        col = end;\n      }\n    }\n  }\n\n  return chunks;\n}",
+      "contextualizedText": "// node/core/src/utils/file-summary.ts \u003e function chunkFile\n\nexport function chunkFile(content: string): Chunk[] {\n  const lines = content.split(\"\\n\");\n  const chunks: Chunk[] = [];\n\n  for (let i = 0; i \u003c lines.length; i++) {\n    const line = lines[i];\n    if (line.length \u003c= MAX_CHUNK_CHARS) {\n      chunks.push({\n        text: line,\n        line: i + 1,\n        col: 0,\n        tokens: buildFrequencyTable(tokenize(line)),\n      });\n    } else {\n      // Split long lines into sub-chunks at token boundaries\n      let col = 0;\n      while (col \u003c line.length) {\n        let end = Math.min(col + SUB_CHUNK_TARGET, line.length);\n        // Try to break at a word boundary if not at end of line\n        if (end \u003c line.length) {\n          const boundary = line.lastIndexOf(\" \", end);\n          if (boundary \u003e col) {\n            end = boundary + 1;\n          }\n        }\n        const text = line.slice(col, end);\n        chunks.push({\n          text,\n          line: i + 1,\n          col,\n          tokens: buildFrequencyTable(tokenize(text)),\n        });\n        col = end;\n      }\n    }\n  }\n\n  return chunks;\n}",
+      "headingContext": "node/core/src/utils/file-summary.ts \u003e function chunkFile",
+      "startLine": 31,
+      "startCol": 1,
+      "endLine": 69,
+      "endCol": 2
+    },
+    {
+      "text": "export function computeScopeSize(lines: string[], lineIndex: number): number {\n  const baseIndent = getIndentLevel(lines[lineIndex]);\n  let count = 0;\n  for (let i = lineIndex + 1; i \u003c lines.length; i++) {\n    // Skip blank lines\n    if (lines[i].trim().length === 0) continue;\n    const indent = getIndentLevel(lines[i]);\n    if (indent \u003c= baseIndent) break;\n    count++;\n  }\n  return count;\n}",
+      "contextualizedText": "// node/core/src/utils/file-summary.ts \u003e function computeScopeSize\n\nexport function computeScopeSize(lines: string[], lineIndex: number): number {\n  const baseIndent = getIndentLevel(lines[lineIndex]);\n  let count = 0;\n  for (let i = lineIndex + 1; i \u003c lines.length; i++) {\n    // Skip blank lines\n    if (lines[i].trim().length === 0) continue;\n    const indent = getIndentLevel(lines[i]);\n    if (indent \u003c= baseIndent) break;\n    count++;\n  }\n  return count;\n}",
+      "headingContext": "node/core/src/utils/file-summary.ts \u003e function computeScopeSize",
+      "startLine": 71,
+      "startCol": 1,
+      "endLine": 82,
+      "endCol": 2
+    },
+    {
+      "text": "function getIndentLevel(line: string): number {\n  const match = line.match(/^(\\s*)/);\n  return match ? match[1].length : 0;\n}",
+      "contextualizedText": "// node/core/src/utils/file-summary.ts \u003e function getIndentLevel\n\nfunction getIndentLevel(line: string): number {\n  const match = line.match(/^(\\s*)/);\n  return match ? match[1].length : 0;\n}",
+      "headingContext": "node/core/src/utils/file-summary.ts \u003e function getIndentLevel",
+      "startLine": 84,
+      "startCol": 1,
+      "endLine": 87,
+      "endCol": 2
+    },
+    {
+      "text": "export function scoreChunk(\n  chunk: Chunk,\n  freqTable: Map\u003cstring, number\u003e,\n  totalTokens: number,\n  scopeSize: number,\n  seenTokens: Set\u003cstring\u003e,\n): number {\n  if (chunk.tokens.size === 0) return 0;\n\n  // Surprise: average self-information with first-occurrence bonus\n  let totalSurprise = 0;\n  let totalCount = 0;\n  for (const [token, count] of chunk.tokens) {\n    const freq = freqTable.get(token) ?? 1;\n    const selfInfo = -Math.log2(freq / totalTokens);\n    const multiplier = seenTokens.has(token) ? 1 : FIRST_OCCURRENCE_BONUS;\n    totalSurprise += selfInfo * multiplier * count;\n    totalCount += count;\n  }\n  const surprise = totalCount === 0 ? 0 : totalSurprise / totalCount;\n\n  // Scope bonus\n  const scopeBonus = Math.log2(1 + scopeSize);\n\n  // Indentation weight\n  const indentLevel = getIndentLevel(chunk.text);\n  const indentWeight = 1 / (1 + indentLevel);\n\n  return surprise * (1 + scopeBonus) * indentWeight;\n}",
+      "contextualizedText": "// node/core/src/utils/file-summary.ts \u003e function scoreChunk\n\nexport function scoreChunk(\n  chunk: Chunk,\n  freqTable: Map\u003cstring, number\u003e,\n  totalTokens: number,\n  scopeSize: number,\n  seenTokens: Set\u003cstring\u003e,\n): number {\n  if (chunk.tokens.size === 0) return 0;\n\n  // Surprise: average self-information with first-occurrence bonus\n  let totalSurprise = 0;\n  let totalCount = 0;\n  for (const [token, count] of chunk.tokens) {\n    const freq = freqTable.get(token) ?? 1;\n    const selfInfo = -Math.log2(freq / totalTokens);\n    const multiplier = seenTokens.has(token) ? 1 : FIRST_OCCURRENCE_BONUS;\n    totalSurprise += selfInfo * multiplier * count;\n    totalCount += count;\n  }\n  const surprise = totalCount === 0 ? 0 : totalSurprise / totalCount;\n\n  // Scope bonus\n  const scopeBonus = Math.log2(1 + scopeSize);\n\n  // Indentation weight\n  const indentLevel = getIndentLevel(chunk.text);\n  const indentWeight = 1 / (1 + indentLevel);\n\n  return surprise * (1 + scopeBonus) * indentWeight;\n}",
+      "headingContext": "node/core/src/utils/file-summary.ts \u003e function scoreChunk",
+      "startLine": 89,
+      "startCol": 1,
+      "endLine": 118,
+      "endCol": 2
+    },
+    {
+      "text": "export function selectChunks(\n  chunks: Chunk[],\n  scores: number[],\n  charBudget: number,\n): Chunk[] {\n  if (chunks.length === 0) return [];\n\n  // Create indices sorted by score descending\n  const indices = chunks.map((_, i) =\u003e i);\n  indices.sort((a, b) =\u003e scores[b] - scores[a]);\n\n  const selected = new Set\u003cnumber\u003e();\n  // Always include the first chunk\n  selected.add(0);\n  let totalChars = chunks[0].text.length;\n\n  for (const idx of indices) {\n    if (selected.has(idx)) continue;\n    const chunkChars = chunks[idx].text.length;\n    if (totalChars + chunkChars \u003e charBudget) continue;\n    selected.add(idx);\n    totalChars += chunkChars;\n  }\n\n  // Return in file order\n  return Array.from(selected)\n    .sort((a, b) =\u003e a - b)\n    .map((i) =\u003e chunks[i]);\n}",
+      "contextualizedText": "// node/core/src/utils/file-summary.ts \u003e function selectChunks\n\nexport function selectChunks(\n  chunks: Chunk[],\n  scores: number[],\n  charBudget: number,\n): Chunk[] {\n  if (chunks.length === 0) return [];\n\n  // Create indices sorted by score descending\n  const indices = chunks.map((_, i) =\u003e i);\n  indices.sort((a, b) =\u003e scores[b] - scores[a]);\n\n  const selected = new Set\u003cnumber\u003e();\n  // Always include the first chunk\n  selected.add(0);\n  let totalChars = chunks[0].text.length;\n\n  for (const idx of indices) {\n    if (selected.has(idx)) continue;\n    const chunkChars = chunks[idx].text.length;\n    if (totalChars + chunkChars \u003e charBudget) continue;\n    selected.add(idx);\n    totalChars += chunkChars;\n  }\n\n  // Return in file order\n  return Array.from(selected)\n    .sort((a, b) =\u003e a - b)\n    .map((i) =\u003e chunks[i]);\n}",
+      "headingContext": "node/core/src/utils/file-summary.ts \u003e function selectChunks",
+      "startLine": 120,
+      "startCol": 1,
+      "endLine": 148,
+      "endCol": 2
+    },
+    {
+      "text": "export function summarizeFile(\n  content: string,\n  options?: { charBudget?: number },\n): FileSummary {\n  const charBudget = options?.charBudget ?? 10000;\n  const lines = content.split(\"\\n\");\n  const totalLines = lines.length;\n  const totalChars = content.length;\n\n  const chunks = chunkFile(content);\n  if (chunks.length === 0) {\n    return { totalLines, totalChars, selectedChunks: [] };\n  }\n\n  // If the file fits in the budget, return all chunks\n  if (totalChars \u003c= charBudget) {\n    return { totalLines, totalChars, selectedChunks: chunks };\n  }\n\n  const allTokens = tokenize(content);\n  const freqTable = buildFrequencyTable(allTokens);\n  const totalTokens = allTokens.length;\n\n  // Track first occurrences for bonus scoring\n  const seenTokens = new Set\u003cstring\u003e();\n\n  const scores: number[] = [];\n  for (const chunk of chunks) {\n    const scopeSize = computeScopeSize(lines, chunk.line - 1);\n    const score = scoreChunk(\n      chunk,\n      freqTable,\n      totalTokens,\n      scopeSize,\n      seenTokens,\n    );\n    scores.push(score);\n    for (const token of chunk.tokens.keys()) {\n      seenTokens.add(token);\n    }\n  }\n\n  const selectedChunks = selectChunks(chunks, scores, charBudget);\n  return { totalLines, totalChars, selectedChunks };\n}",
+      "contextualizedText": "// node/core/src/utils/file-summary.ts \u003e function summarizeFile\n\nexport function summarizeFile(\n  content: string,\n  options?: { charBudget?: number },\n): FileSummary {\n  const charBudget = options?.charBudget ?? 10000;\n  const lines = content.split(\"\\n\");\n  const totalLines = lines.length;\n  const totalChars = content.length;\n\n  const chunks = chunkFile(content);\n  if (chunks.length === 0) {\n    return { totalLines, totalChars, selectedChunks: [] };\n  }\n\n  // If the file fits in the budget, return all chunks\n  if (totalChars \u003c= charBudget) {\n    return { totalLines, totalChars, selectedChunks: chunks };\n  }\n\n  const allTokens = tokenize(content);\n  const freqTable = buildFrequencyTable(allTokens);\n  const totalTokens = allTokens.length;\n\n  // Track first occurrences for bonus scoring\n  const seenTokens = new Set\u003cstring\u003e();\n\n  const scores: number[] = [];\n  for (const chunk of chunks) {\n    const scopeSize = computeScopeSize(lines, chunk.line - 1);\n    const score = scoreChunk(\n      chunk,\n      freqTable,\n      totalTokens,\n      scopeSize,\n      seenTokens,\n    );\n    scores.push(score);\n    for (const token of chunk.tokens.keys()) {\n      seenTokens.add(token);\n    }\n  }\n\n  const selectedChunks = selectChunks(chunks, scores, charBudget);\n  return { totalLines, totalChars, selectedChunks };\n}",
+      "headingContext": "node/core/src/utils/file-summary.ts \u003e function summarizeFile",
+      "startLine": 150,
+      "startCol": 1,
+      "endLine": 194,
+      "endCol": 2
+    },
+    {
+      "text": "export function formatSummary(summary: FileSummary): string {\n  const { totalLines, totalChars, selectedChunks } = summary;\n  if (selectedChunks.length === 0) {\n    return `[File summary: ${totalLines} lines, ${totalChars} chars (empty)]`;\n  }\n\n  const parts: string[] = [];\n  parts.push(\n    `[File summary: ${totalLines} lines, ${totalChars} chars. Showing ${selectedChunks.length} key segments]`,\n  );\n\n  const lineNumWidth = String(totalLines).length;\n\n  let prevEndLine = 0;\n\n  for (const chunk of selectedChunks) {\n    // Gap summary\n    if (chunk.line \u003e prevEndLine + 1) {\n      const gapLines = chunk.line - prevEndLine - 1;\n      parts.push(`  ... (${gapLines} lines omitted) ...`);\n    }\n\n    const lineStr = String(chunk.line).padStart(lineNumWidth);\n    if (chunk.col \u003e 0) {\n      parts.push(`${lineStr}:${chunk.col}| ${chunk.text}`);\n    } else {\n      parts.push(`${lineStr}| ${chunk.text}`);\n    }\n\n    prevEndLine = chunk.line;\n  }\n\n  // Trailing gap\n  if (prevEndLine \u003c totalLines) {\n    const gapLines = totalLines - prevEndLine;\n    parts.push(`  ... (${gapLines} lines omitted) ...`);\n  }\n\n  return parts.join(\"\\n\");\n}",
+      "contextualizedText": "// node/core/src/utils/file-summary.ts \u003e function formatSummary\n\nexport function formatSummary(summary: FileSummary): string {\n  const { totalLines, totalChars, selectedChunks } = summary;\n  if (selectedChunks.length === 0) {\n    return `[File summary: ${totalLines} lines, ${totalChars} chars (empty)]`;\n  }\n\n  const parts: string[] = [];\n  parts.push(\n    `[File summary: ${totalLines} lines, ${totalChars} chars. Showing ${selectedChunks.length} key segments]`,\n  );\n\n  const lineNumWidth = String(totalLines).length;\n\n  let prevEndLine = 0;\n\n  for (const chunk of selectedChunks) {\n    // Gap summary\n    if (chunk.line \u003e prevEndLine + 1) {\n      const gapLines = chunk.line - prevEndLine - 1;\n      parts.push(`  ... (${gapLines} lines omitted) ...`);\n    }\n\n    const lineStr = String(chunk.line).padStart(lineNumWidth);\n    if (chunk.col \u003e 0) {\n      parts.push(`${lineStr}:${chunk.col}| ${chunk.text}`);\n    } else {\n      parts.push(`${lineStr}| ${chunk.text}`);\n    }\n\n    prevEndLine = chunk.line;\n  }\n\n  // Trailing gap\n  if (prevEndLine \u003c totalLines) {\n    const gapLines = totalLines - prevEndLine;\n    parts.push(`  ... (${gapLines} lines omitted) ...`);\n  }\n\n  return parts.join(\"\\n\");\n}",
+      "headingContext": "node/core/src/utils/file-summary.ts \u003e function formatSummary",
+      "startLine": 196,
+      "startCol": 1,
+      "endLine": 235,
+      "endCol": 2
+    }
+  ]
+}

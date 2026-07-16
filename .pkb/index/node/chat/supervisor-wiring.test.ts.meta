@@ -1,0 +1,87 @@
+{
+  "blobSha": "6f6eea608e6943965b87824d07f94149d7665793",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import {\n  AutoCompactSupervisor,\n  SubagentSupervisor,\n  type ThreadId,\n  type ToolName,\n  type ToolRequestId,\n} from \"@magenta/core\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport { expect, it } from \"vitest\";\nimport type { ScriptInvocationId } from \"../scripts/script-manager.ts\";\nimport { withDriver } from \"../test/preamble.ts\";\n\nit(\"root/user threads get an AutoCompactSupervisor\", async () =\u003e {\n  await withDriver({}, async (driver) =\u003e {\n    await driver.showSidebar();\n\n    const thread = driver.magenta.chat.getActiveThread();\n\n    expect(\n      thread.supervisors.some((s) =\u003e s instanceof AutoCompactSupervisor),\n    ).toBe(true);\n    expect(\n      thread.supervisors.some((s) =\u003e s instanceof SubagentSupervisor),\n    ).toBe(false);\n  });\n});",
+      "contextualizedText": "// node/chat/supervisor-wiring.test.ts\n\nimport {\n  AutoCompactSupervisor,\n  SubagentSupervisor,\n  type ThreadId,\n  type ToolName,\n  type ToolRequestId,\n} from \"@magenta/core\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport { expect, it } from \"vitest\";\nimport type { ScriptInvocationId } from \"../scripts/script-manager.ts\";\nimport { withDriver } from \"../test/preamble.ts\";\n\nit(\"root/user threads get an AutoCompactSupervisor\", async () =\u003e {\n  await withDriver({}, async (driver) =\u003e {\n    await driver.showSidebar();\n\n    const thread = driver.magenta.chat.getActiveThread();\n\n    expect(\n      thread.supervisors.some((s) =\u003e s instanceof AutoCompactSupervisor),\n    ).toBe(true);\n    expect(\n      thread.supervisors.some((s) =\u003e s instanceof SubagentSupervisor),\n    ).toBe(false);\n  });\n});",
+      "headingContext": "node/chat/supervisor-wiring.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 4
+    },
+    {
+      "text": "it(\"subagent threads get both SubagentSupervisor and AutoCompactSupervisor\", async () =\u003e {\n  await withDriver({}, async (driver) =\u003e {\n    await driver.showSidebar();\n\n    await driver.inputMagentaText(\"Use spawn_subagents to do a task.\");\n    await driver.send();\n\n    const stream1 =\n      await driver.mockAnthropic.awaitPendingStreamWithText(\"spawn_subagents\");\n\n    stream1.respond({\n      stopReason: \"tool_use\",\n      text: \"I'll spawn a subagent to handle this task.\",\n      toolRequests: [\n        {\n          status: \"ok\",\n          value: {\n            id: \"test-subagent\" as ToolRequestId,\n            toolName: \"spawn_subagents\" as ToolName,\n            input: {\n              agents: [{ prompt: \"Do the task and yield the result\" }],\n            },\n          },\n        },\n      ],\n    });\n\n    // Wait for the child subagent stream to start.\n    await driver.mockAnthropic.awaitPendingStreamWithText(\"Do the task\");\n\n    const chat = driver.magenta.chat;\n    const childThreadId = Object.keys(chat.threadWrappers).find((id) =\u003e {\n      const wrapper = chat.threadWrappers[id as ThreadId];\n      return wrapper?.parentThreadId !== undefined;\n    }) as ThreadId | undefined;\n    expect(childThreadId).toBeDefined();\n\n    const childWrapper = chat.threadWrappers[childThreadId!];\n    if (childWrapper.state !== \"initialized\")\n      throw new Error(\"Expected initialized child thread\");\n    const supervisors = childWrapper.thread.supervisors;\n\n    expect(supervisors.some((s) =\u003e s instanceof SubagentSupervisor)).toBe(true);\n    expect(supervisors.some((s) =\u003e s instanceof AutoCompactSupervisor)).toBe(\n      true,\n    );\n  });\n});\n\nconst emptyYieldSchema: JSONSchemaType = { type: \"object\", properties: {} };\n\nit(\"script-spawned thread honors per-thread autoCompactThreshold override\", async () =\u003e {\n  await withDriver(\n    { options: { autoCompactThreshold: 300_000 } },\n    async (driver) =\u003e {\n      await driver.showSidebar();\n\n      const overriddenId",
+      "contextualizedText": "// node/chat/supervisor-wiring.test.ts\n\nit(\"subagent threads get both SubagentSupervisor and AutoCompactSupervisor\", async () =\u003e {\n  await withDriver({}, async (driver) =\u003e {\n    await driver.showSidebar();\n\n    await driver.inputMagentaText(\"Use spawn_subagents to do a task.\");\n    await driver.send();\n\n    const stream1 =\n      await driver.mockAnthropic.awaitPendingStreamWithText(\"spawn_subagents\");\n\n    stream1.respond({\n      stopReason: \"tool_use\",\n      text: \"I'll spawn a subagent to handle this task.\",\n      toolRequests: [\n        {\n          status: \"ok\",\n          value: {\n            id: \"test-subagent\" as ToolRequestId,\n            toolName: \"spawn_subagents\" as ToolName,\n            input: {\n              agents: [{ prompt: \"Do the task and yield the result\" }],\n            },\n          },\n        },\n      ],\n    });\n\n    // Wait for the child subagent stream to start.\n    await driver.mockAnthropic.awaitPendingStreamWithText(\"Do the task\");\n\n    const chat = driver.magenta.chat;\n    const childThreadId = Object.keys(chat.threadWrappers).find((id) =\u003e {\n      const wrapper = chat.threadWrappers[id as ThreadId];\n      return wrapper?.parentThreadId !== undefined;\n    }) as ThreadId | undefined;\n    expect(childThreadId).toBeDefined();\n\n    const childWrapper = chat.threadWrappers[childThreadId!];\n    if (childWrapper.state !== \"initialized\")\n      throw new Error(\"Expected initialized child thread\");\n    const supervisors = childWrapper.thread.supervisors;\n\n    expect(supervisors.some((s) =\u003e s instanceof SubagentSupervisor)).toBe(true);\n    expect(supervisors.some((s) =\u003e s instanceof AutoCompactSupervisor)).toBe(\n      true,\n    );\n  });\n});\n\nconst emptyYieldSchema: JSONSchemaType = { type: \"object\", properties: {} };\n\nit(\"script-spawned thread honors per-thread autoCompactThreshold override\", async () =\u003e {\n  await withDriver(\n    { options: { autoCompactThreshold: 300_000 } },\n    async (driver) =\u003e {\n      await driver.showSidebar();\n\n      const overriddenId",
+      "headingContext": "node/chat/supervisor-wiring.test.ts",
+      "startLine": 28,
+      "startCol": 1,
+      "endLine": 85,
+      "endCol": 25
+    },
+    {
+      "text": "driver.magenta.chat.spawnScriptThread({\n        scriptInvocationId: \"inv-override\" as ScriptInvocationId,\n        prompt: \"do work\",\n        yieldSchema: emptyYieldSchema",
+      "contextualizedText": "// node/chat/supervisor-wiring.test.ts\n\ndriver.magenta.chat.spawnScriptThread({\n        scriptInvocationId: \"inv-override\" as ScriptInvocationId,\n        prompt: \"do work\",\n        yieldSchema: emptyYieldSchema",
+      "headingContext": "node/chat/supervisor-wiring.test.ts",
+      "startLine": 85,
+      "startCol": 34,
+      "endLine": 88,
+      "endCol": 38
+    },
+    {
+      "text": "        getSandboxRoot: () =\u003e undefined",
+      "contextualizedText": "// node/chat/supervisor-wiring.test.ts \u003e function getSandboxRoot\n\n        getSandboxRoot: () =\u003e undefined",
+      "headingContext": "node/chat/supervisor-wiring.test.ts \u003e function getSandboxRoot",
+      "startLine": 89,
+      "startCol": 1,
+      "endLine": 89,
+      "endCol": 40
+    },
+    {
+      "text": "autoCompactThreshold: 100_000,\n      });\n\n      const defaultId = await driver.magenta.chat.spawnScriptThread({\n        scriptInvocationId: \"inv-default\" as ScriptInvocationId,\n        prompt: \"do work\",\n        yieldSchema: emptyYieldSchema",
+      "contextualizedText": "// node/chat/supervisor-wiring.test.ts\n\nautoCompactThreshold: 100_000,\n      });\n\n      const defaultId = await driver.magenta.chat.spawnScriptThread({\n        scriptInvocationId: \"inv-default\" as ScriptInvocationId,\n        prompt: \"do work\",\n        yieldSchema: emptyYieldSchema",
+      "headingContext": "node/chat/supervisor-wiring.test.ts",
+      "startLine": 90,
+      "startCol": 9,
+      "endLine": 96,
+      "endCol": 38
+    },
+    {
+      "text": "        getSandboxRoot: () =\u003e undefined",
+      "contextualizedText": "// node/chat/supervisor-wiring.test.ts \u003e function getSandboxRoot\n\n        getSandboxRoot: () =\u003e undefined",
+      "headingContext": "node/chat/supervisor-wiring.test.ts \u003e function getSandboxRoot",
+      "startLine": 97,
+      "startCol": 1,
+      "endLine": 97,
+      "endCol": 40
+    },
+    {
+      "text": "const chat = driver.magenta.chat;",
+      "contextualizedText": "// node/chat/supervisor-wiring.test.ts\n\nconst chat = driver.magenta.chat;",
+      "headingContext": "node/chat/supervisor-wiring.test.ts",
+      "startLine": 100,
+      "startCol": 7,
+      "endLine": 100,
+      "endCol": 40
+    },
+    {
+      "text": "      const getSupervisor = (id: ThreadId) =\u003e {\n        const wrapper = chat.threadWrappers[id];\n        if (wrapper.state !== \"initialized\")\n          throw new Error(\"expected initialized thread\");\n        const sup = wrapper.thread.supervisors.find(\n          (s): s is AutoCompactSupervisor =\u003e s instanceof AutoCompactSupervisor,\n        );\n        if (!sup) throw new Error(\"expected AutoCompactSupervisor\");\n        return sup;\n      }",
+      "contextualizedText": "// node/chat/supervisor-wiring.test.ts \u003e function getSupervisor\n\n      const getSupervisor = (id: ThreadId) =\u003e {\n        const wrapper = chat.threadWrappers[id];\n        if (wrapper.state !== \"initialized\")\n          throw new Error(\"expected initialized thread\");\n        const sup = wrapper.thread.supervisors.find(\n          (s): s is AutoCompactSupervisor =\u003e s instanceof AutoCompactSupervisor,\n        );\n        if (!sup) throw new Error(\"expected AutoCompactSupervisor\");\n        return sup;\n      }",
+      "headingContext": "node/chat/supervisor-wiring.test.ts \u003e function getSupervisor",
+      "startLine": 101,
+      "startCol": 1,
+      "endLine": 110,
+      "endCol": 8
+    },
+    {
+      "text": "const overridden = getSupervisor(overriddenId);\n      const fallback = getSupervisor(defaultId);\n\n      // The override compacts at 100k; the default only at 300k.\n      expect(\n        overridden.onHandoff({\n          inputTokenCount: 100_000,\n          stopReason: \"end_turn\",\n        }).type,\n      ).toBe(\"compact\");\n      expect(\n        fallback.onHandoff({ inputTokenCount: 100_000, stopReason: \"end_turn\" })\n          .type,\n      ).toBe(\"none\");\n      expect(\n        fallback.onHandoff({ inputTokenCount: 300_000, stopReason: \"end_turn\" })\n          .type,\n      ).toBe(\"compact\");",
+      "contextualizedText": "// node/chat/supervisor-wiring.test.ts\n\nconst overridden = getSupervisor(overriddenId);\n      const fallback = getSupervisor(defaultId);\n\n      // The override compacts at 100k; the default only at 300k.\n      expect(\n        overridden.onHandoff({\n          inputTokenCount: 100_000,\n          stopReason: \"end_turn\",\n        }).type,\n      ).toBe(\"compact\");\n      expect(\n        fallback.onHandoff({ inputTokenCount: 100_000, stopReason: \"end_turn\" })\n          .type,\n      ).toBe(\"none\");\n      expect(\n        fallback.onHandoff({ inputTokenCount: 300_000, stopReason: \"end_turn\" })\n          .type,\n      ).toBe(\"compact\");",
+      "headingContext": "node/chat/supervisor-wiring.test.ts",
+      "startLine": 112,
+      "startCol": 7,
+      "endLine": 129,
+      "endCol": 25
+    }
+  ]
+}

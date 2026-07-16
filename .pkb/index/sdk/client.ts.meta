@@ -1,0 +1,87 @@
+{
+  "blobSha": "a7ba35baca5042f33c170fdf12da6c5d38701ecf",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type {\n  JSONSchema,\n  MagentaToScript,\n  ScriptToMagenta,\n  ThreadOptions,\n} from \"./protocol.ts\";\nimport { getRegistry } from \"./registry.ts\";\n\nlet activated = false;\nlet nextRequestId = 1;\nconst pendingThreads = new Map\u003c\n  number,\n  { resolve: (value: unknown) =\u003e void; reject: (error: Error) =\u003e void }\n\u003e();\n\ntype Send = (msg: ScriptToMagenta) =\u003e void;",
+      "contextualizedText": "// sdk/client.ts\n\nimport type {\n  JSONSchema,\n  MagentaToScript,\n  ScriptToMagenta,\n  ThreadOptions,\n} from \"./protocol.ts\";\nimport { getRegistry } from \"./registry.ts\";\n\nlet activated = false;\nlet nextRequestId = 1;\nconst pendingThreads = new Map\u003c\n  number,\n  { resolve: (value: unknown) =\u003e void; reject: (error: Error) =\u003e void }\n\u003e();\n\ntype Send = (msg: ScriptToMagenta) =\u003e void;",
+      "headingContext": "sdk/client.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 16,
+      "endCol": 44
+    },
+    {
+      "text": "function createThread\u003cT\u003e(\n  send: Send,\n  prompt: string,\n  yieldSchema: JSONSchema,\n  options?: ThreadOptions,\n): Promise\u003cT\u003e {\n  const requestId = nextRequestId++;\n  return new Promise\u003cT\u003e((resolve, reject) =\u003e {\n    pendingThreads.set(requestId",
+      "contextualizedText": "// sdk/client.ts \u003e function createThread\n\nfunction createThread\u003cT\u003e(\n  send: Send,\n  prompt: string,\n  yieldSchema: JSONSchema,\n  options?: ThreadOptions,\n): Promise\u003cT\u003e {\n  const requestId = nextRequestId++;\n  return new Promise\u003cT\u003e((resolve, reject) =\u003e {\n    pendingThreads.set(requestId",
+      "headingContext": "sdk/client.ts \u003e function createThread",
+      "startLine": 18,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 33
+    },
+    {
+      "text": "      resolve: (value) =\u003e resolve(value as T)",
+      "contextualizedText": "// sdk/client.ts \u003e function createThread \u003e function resolve\n\n      resolve: (value) =\u003e resolve(value as T)",
+      "headingContext": "sdk/client.ts \u003e function createThread \u003e function resolve",
+      "startLine": 27,
+      "startCol": 1,
+      "endLine": 27,
+      "endCol": 46
+    },
+    {
+      "text": "reject,\n    });\n    send({\n      type: \"create-thread\",\n      requestId,\n      prompt,\n      yieldSchema,\n      ...(options !== undefined ? { options } : {}),\n    });\n  });\n}",
+      "contextualizedText": "// sdk/client.ts \u003e function createThread\n\nreject,\n    });\n    send({\n      type: \"create-thread\",\n      requestId,\n      prompt,\n      yieldSchema,\n      ...(options !== undefined ? { options } : {}),\n    });\n  });\n}",
+      "headingContext": "sdk/client.ts \u003e function createThread",
+      "startLine": 28,
+      "startCol": 7,
+      "endLine": 38,
+      "endCol": 2
+    },
+    {
+      "text": "async function handleMagentaMessage(\n  send: Send,\n  msg: MagentaToScript,\n): Promise\u003cvoid\u003e {\n  switch (msg.type) {\n    case \"run-script\": {\n      const script = getRegistry().get(msg.scriptName);\n      if (!script) {\n        send({ type: \"error\", message: `unknown script ${msg.scriptName}` });\n        return;\n      }",
+      "contextualizedText": "// sdk/client.ts \u003e function handleMagentaMessage\n\nasync function handleMagentaMessage(\n  send: Send,\n  msg: MagentaToScript,\n): Promise\u003cvoid\u003e {\n  switch (msg.type) {\n    case \"run-script\": {\n      const script = getRegistry().get(msg.scriptName);\n      if (!script) {\n        send({ type: \"error\", message: `unknown script ${msg.scriptName}` });\n        return;\n      }",
+      "headingContext": "sdk/client.ts \u003e function handleMagentaMessage",
+      "startLine": 40,
+      "startCol": 1,
+      "endLine": 50,
+      "endCol": 8
+    },
+    {
+      "text": "      const log = (message: string) =\u003e send({ type: \"log\", message })",
+      "contextualizedText": "// sdk/client.ts \u003e function handleMagentaMessage \u003e function log\n\n      const log = (message: string) =\u003e send({ type: \"log\", message })",
+      "headingContext": "sdk/client.ts \u003e function handleMagentaMessage \u003e function log",
+      "startLine": 51,
+      "startCol": 1,
+      "endLine": 51,
+      "endCol": 70
+    },
+    {
+      "text": "        const thread = \u003cT\u003e(\n          prompt: string,\n          yieldSchema: JSONSchema,\n          options?: ThreadOptions,\n        ): Promise\u003cT\u003e =\u003e createThread\u003cT\u003e(send, prompt, yieldSchema, options)",
+      "contextualizedText": "// sdk/client.ts \u003e function handleMagentaMessage \u003e function thread\n\n        const thread = \u003cT\u003e(\n          prompt: string,\n          yieldSchema: JSONSchema,\n          options?: ThreadOptions,\n        ): Promise\u003cT\u003e =\u003e createThread\u003cT\u003e(send, prompt, yieldSchema, options)",
+      "headingContext": "sdk/client.ts \u003e function handleMagentaMessage \u003e function thread",
+      "startLine": 53,
+      "startCol": 1,
+      "endLine": 57,
+      "endCol": 77
+    },
+    {
+      "text": "await script.runner(msg.parameters, thread, log);\n        send({ type: \"done\" });\n      } catch (err) {\n        send({\n          type: \"error\",\n          message: err instanceof Error ? err.message : String(err),\n        });\n      }\n      return;\n    }\n    case \"thread-result\": {\n      const pending = pendingThreads.get(msg.requestId);\n      if (!pending) return;\n      pendingThreads.delete(msg.requestId);\n      if (msg.result.status === \"ok\") {\n        pending.resolve(msg.result.value);\n      } else {\n        pending.reject(new Error(msg.result.error));\n      }\n      return;\n    }\n  }\n}",
+      "contextualizedText": "// sdk/client.ts \u003e function handleMagentaMessage\n\nawait script.runner(msg.parameters, thread, log);\n        send({ type: \"done\" });\n      } catch (err) {\n        send({\n          type: \"error\",\n          message: err instanceof Error ? err.message : String(err),\n        });\n      }\n      return;\n    }\n    case \"thread-result\": {\n      const pending = pendingThreads.get(msg.requestId);\n      if (!pending) return;\n      pendingThreads.delete(msg.requestId);\n      if (msg.result.status === \"ok\") {\n        pending.resolve(msg.result.value);\n      } else {\n        pending.reject(new Error(msg.result.error));\n      }\n      return;\n    }\n  }\n}",
+      "headingContext": "sdk/client.ts \u003e function handleMagentaMessage",
+      "startLine": 58,
+      "startCol": 9,
+      "endLine": 80,
+      "endCol": 2
+    },
+    {
+      "text": "/**\n * Activate the IPC client. No-op unless this process was forked with an IPC\n * channel (i.e. `process.send` exists). Sends the registration catalog once the\n * current tick's top-level `registerScript` calls have completed, then listens\n * for `invoke` / `thread-result` messages.\n */\nexport function activate(): void {\n  if (activated) return;\n  if (process.env.MAGENTA_SDK_CHILD !== \"1\") return;\n  if (typeof process.send !== \"function\") return;\n  activated = true;\n\n  const send: Send = process.send.bind(process);\n\n  process.on(\"message\", (magentaMsg: MagentaToScript) =\u003e {\n    handleMagentaMessage(send, magentaMsg).catch((err) =\u003e {\n      send({\n        type: \"error\",\n        message: err instanceof Error ? err.message : String(err),\n      });\n    });\n  });\n\n  setImmediate(() =\u003e {\n    const scripts = [...getRegistry().values()].map(\n      ({ name, description, parameterSchema }) =\u003e ({\n        name,\n        description,\n        parameterSchema,\n      }),\n    );\n    send({ type: \"register\", scripts });\n  });\n}",
+      "contextualizedText": "// sdk/client.ts \u003e function activate\n\n/**\n * Activate the IPC client. No-op unless this process was forked with an IPC\n * channel (i.e. `process.send` exists). Sends the registration catalog once the\n * current tick's top-level `registerScript` calls have completed, then listens\n * for `invoke` / `thread-result` messages.\n */\nexport function activate(): void {\n  if (activated) return;\n  if (process.env.MAGENTA_SDK_CHILD !== \"1\") return;\n  if (typeof process.send !== \"function\") return;\n  activated = true;\n\n  const send: Send = process.send.bind(process);\n\n  process.on(\"message\", (magentaMsg: MagentaToScript) =\u003e {\n    handleMagentaMessage(send, magentaMsg).catch((err) =\u003e {\n      send({\n        type: \"error\",\n        message: err instanceof Error ? err.message : String(err),\n      });\n    });\n  });\n\n  setImmediate(() =\u003e {\n    const scripts = [...getRegistry().values()].map(\n      ({ name, description, parameterSchema }) =\u003e ({\n        name,\n        description,\n        parameterSchema,\n      }),\n    );\n    send({ type: \"register\", scripts });\n  });\n}",
+      "headingContext": "sdk/client.ts \u003e function activate",
+      "startLine": 82,
+      "startCol": 1,
+      "endLine": 115,
+      "endCol": 2
+    }
+  ]
+}

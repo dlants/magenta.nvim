@@ -1,0 +1,258 @@
+{
+  "blobSha": "6f9c94ed9ac560f154bfd25ef72e693a3eaeb248",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { spawn } from \"node:child_process\";\nimport { access, cp, mkdir, realpath, rm } from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport type { ToolRequestId } from \"@magenta/core\";\nimport {\n  type MockMCPServer,\n  mockServers,\n  type ServerName,\n} from \"@magenta/core\";\nimport { Magenta } from \"../magenta.ts\";\nimport { attach, type LogLevel, type Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { MagentaOptions } from \"../options.ts\";\nimport { withMockClient } from \"../providers/mock.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { MountedVDOM } from \"../tea/view.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport { pollUntil } from \"../utils/async.ts\";\nimport { NvimDriver } from \"./driver.ts\";\nimport { MockSandboxManager } from \"./mock-sandbox-manager.ts\";\n\ntype ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;",
+      "contextualizedText": "// node/test/preamble.ts\n\nimport { spawn } from \"node:child_process\";\nimport { access, cp, mkdir, realpath, rm } from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport type { ToolRequestId } from \"@magenta/core\";\nimport {\n  type MockMCPServer,\n  mockServers,\n  type ServerName,\n} from \"@magenta/core\";\nimport { Magenta } from \"../magenta.ts\";\nimport { attach, type LogLevel, type Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { MagentaOptions } from \"../options.ts\";\nimport { withMockClient } from \"../providers/mock.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { MountedVDOM } from \"../tea/view.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport { pollUntil } from \"../utils/async.ts\";\nimport { NvimDriver } from \"./driver.ts\";\nimport { MockSandboxManager } from \"./mock-sandbox-manager.ts\";\n\ntype ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;",
+      "headingContext": "node/test/preamble.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 22,
+      "endCol": 69
+    },
+    {
+      "text": "/**\n * Helper functions for asserting properties of tool result arrays.\n * These work with Anthropic's ToolResultBlockParam format.\n */\nexport function assertToolResultContainsText(\n  toolResult: ToolResultBlockParam,\n  expectedText: string,\n): void {\n  const content = toolResult.content;\n  if (toolResult.is_error) {\n    throw new Error(\n      `Expected tool result to have ok status, but got error: ${JSON.stringify(content)}`,\n    );\n  }\n  if (typeof content === \"string\") {\n    if (!content.includes(expectedText)) {\n      throw new Error(\n        `Expected tool result to contain text \"${expectedText}\" but it didn't. Result: ${content}`,\n      );\n    }\n    return;\n  }\n  if (Array.isArray(content)) {\n    const hasText = content.some((item) =\u003e {\n      if (item.type === \"text\") {\n        return item.text.includes(expectedText);\n      }\n      return false;\n    });\n    if (!hasText) {\n      throw new Error(\n        `Expected tool result to contain text \"${expectedText}\" but it didn't. Result: ${JSON.stringify(content)}`,\n      );\n    }\n    return;\n  }\n  throw new Error(\n    `Expected tool result to have content, but got: ${JSON.stringify(toolResult)}`,\n  );\n}",
+      "contextualizedText": "// node/test/preamble.ts \u003e function assertToolResultContainsText\n\n/**\n * Helper functions for asserting properties of tool result arrays.\n * These work with Anthropic's ToolResultBlockParam format.\n */\nexport function assertToolResultContainsText(\n  toolResult: ToolResultBlockParam,\n  expectedText: string,\n): void {\n  const content = toolResult.content;\n  if (toolResult.is_error) {\n    throw new Error(\n      `Expected tool result to have ok status, but got error: ${JSON.stringify(content)}`,\n    );\n  }\n  if (typeof content === \"string\") {\n    if (!content.includes(expectedText)) {\n      throw new Error(\n        `Expected tool result to contain text \"${expectedText}\" but it didn't. Result: ${content}`,\n      );\n    }\n    return;\n  }\n  if (Array.isArray(content)) {\n    const hasText = content.some((item) =\u003e {\n      if (item.type === \"text\") {\n        return item.text.includes(expectedText);\n      }\n      return false;\n    });\n    if (!hasText) {\n      throw new Error(\n        `Expected tool result to contain text \"${expectedText}\" but it didn't. Result: ${JSON.stringify(content)}`,\n      );\n    }\n    return;\n  }\n  throw new Error(\n    `Expected tool result to have content, but got: ${JSON.stringify(toolResult)}`,\n  );\n}",
+      "headingContext": "node/test/preamble.ts \u003e function assertToolResultContainsText",
+      "startLine": 24,
+      "startCol": 1,
+      "endLine": 63,
+      "endCol": 2
+    },
+    {
+      "text": "export function assertToolResultHasType(\n  toolResult: ToolResultBlockParam,\n  expectedType: \"text\" | \"image\" | \"document\",\n): void {\n  const content = toolResult.content;\n  if (toolResult.is_error) {\n    throw new Error(\n      `Expected tool result to have ok status, but got error: ${JSON.stringify(content)}`,\n    );\n  }\n  if (typeof content === \"string\") {\n    if (expectedType !== \"text\") {\n      throw new Error(\n        `Expected tool result to contain item with type \"${expectedType}\" but got string content`,\n      );\n    }\n    return;\n  }\n  if (Array.isArray(content)) {\n    const hasType = content.some((item) =\u003e item.type === expectedType);\n    if (!hasType) {\n      throw new Error(\n        `Expected tool result to contain item with type \"${expectedType}\" but it didn't. Result: ${JSON.stringify(content)}`,\n      );\n    }\n    return;\n  }\n  throw new Error(\n    `Expected tool result to have content, but got: ${JSON.stringify(toolResult)}`,\n  );\n}",
+      "contextualizedText": "// node/test/preamble.ts \u003e function assertToolResultHasType\n\nexport function assertToolResultHasType(\n  toolResult: ToolResultBlockParam,\n  expectedType: \"text\" | \"image\" | \"document\",\n): void {\n  const content = toolResult.content;\n  if (toolResult.is_error) {\n    throw new Error(\n      `Expected tool result to have ok status, but got error: ${JSON.stringify(content)}`,\n    );\n  }\n  if (typeof content === \"string\") {\n    if (expectedType !== \"text\") {\n      throw new Error(\n        `Expected tool result to contain item with type \"${expectedType}\" but got string content`,\n      );\n    }\n    return;\n  }\n  if (Array.isArray(content)) {\n    const hasType = content.some((item) =\u003e item.type === expectedType);\n    if (!hasType) {\n      throw new Error(\n        `Expected tool result to contain item with type \"${expectedType}\" but it didn't. Result: ${JSON.stringify(content)}`,\n      );\n    }\n    return;\n  }\n  throw new Error(\n    `Expected tool result to have content, but got: ${JSON.stringify(toolResult)}`,\n  );\n}",
+      "headingContext": "node/test/preamble.ts \u003e function assertToolResultHasType",
+      "startLine": 65,
+      "startCol": 1,
+      "endLine": 95,
+      "endCol": 2
+    },
+    {
+      "text": "export function assertToolResultHasImageSource(\n  toolResult: ToolResultBlockParam,\n  expectedMediaType: string,\n): void {\n  const content = toolResult.content;\n  if (toolResult.is_error) {\n    throw new Error(\n      `Expected tool result to have ok status, but got error: ${JSON.stringify(content)}`,\n    );\n  }\n  if (typeof content === \"string\") {\n    throw new Error(\n      `Expected tool result to contain image item but got string content`,\n    );\n  }\n  if (!Array.isArray(content)) {\n    throw new Error(\n      `Expected tool result to have array content, but got: ${JSON.stringify(toolResult)}`,\n    );\n  }\n  const imageItem = content.find((item) =\u003e item.type === \"image\");\n  if (!imageItem) {\n    throw new Error(\n      `Expected tool result to contain image item but it didn't. Result: ${JSON.stringify(content)}`,\n    );\n  }\n  if (\n    !imageItem.source ||\n    imageItem.source.type !== \"base64\" ||\n    imageItem.source.media_type !== expectedMediaType ||\n    typeof imageItem.source.data !== \"string\" ||\n    imageItem.source.data.length === 0\n  ) {\n    throw new Error(\n      `Expected image item to have valid source with media_type \"${expectedMediaType}\" but got: ${JSON.stringify(imageItem.source)}`,\n    );\n  }\n}",
+      "contextualizedText": "// node/test/preamble.ts \u003e function assertToolResultHasImageSource\n\nexport function assertToolResultHasImageSource(\n  toolResult: ToolResultBlockParam,\n  expectedMediaType: string,\n): void {\n  const content = toolResult.content;\n  if (toolResult.is_error) {\n    throw new Error(\n      `Expected tool result to have ok status, but got error: ${JSON.stringify(content)}`,\n    );\n  }\n  if (typeof content === \"string\") {\n    throw new Error(\n      `Expected tool result to contain image item but got string content`,\n    );\n  }\n  if (!Array.isArray(content)) {\n    throw new Error(\n      `Expected tool result to have array content, but got: ${JSON.stringify(toolResult)}`,\n    );\n  }\n  const imageItem = content.find((item) =\u003e item.type === \"image\");\n  if (!imageItem) {\n    throw new Error(\n      `Expected tool result to contain image item but it didn't. Result: ${JSON.stringify(content)}`,\n    );\n  }\n  if (\n    !imageItem.source ||\n    imageItem.source.type !== \"base64\" ||\n    imageItem.source.media_type !== expectedMediaType ||\n    typeof imageItem.source.data !== \"string\" ||\n    imageItem.source.data.length === 0\n  ) {\n    throw new Error(\n      `Expected image item to have valid source with media_type \"${expectedMediaType}\" but got: ${JSON.stringify(imageItem.source)}`,\n    );\n  }\n}",
+      "headingContext": "node/test/preamble.ts \u003e function assertToolResultHasImageSource",
+      "startLine": 97,
+      "startCol": 1,
+      "endLine": 134,
+      "endCol": 2
+    },
+    {
+      "text": "export function assertToolResultHasDocumentSource(\n  toolResult: ToolResultBlockParam,\n  expectedMediaType: string,\n): void {\n  const content = toolResult.content;\n  if (toolResult.is_error) {\n    throw new Error(\n      `Expected tool result to have ok status, but got error: ${JSON.stringify(content)}`,\n    );\n  }\n  if (typeof content === \"string\") {\n    throw new Error(\n      `Expected tool result to contain document item but got string content`,\n    );\n  }\n  if (!Array.isArray(content)) {\n    throw new Error(\n      `Expected tool result to have array content, but got: ${JSON.stringify(toolResult)}`,\n    );\n  }\n  const documentItem = content.find((item) =\u003e item.type === \"document\");\n  if (!documentItem) {\n    throw new Error(\n      `Expected tool result to contain document item but it didn't. Result: ${JSON.stringify(content)}`,\n    );\n  }\n  if (\n    !documentItem.source ||\n    documentItem.source.type !== \"base64\" ||\n    documentItem.source.media_type !== expectedMediaType ||\n    typeof documentItem.source.data !== \"string\" ||\n    documentItem.source.data.length === 0\n  ) {\n    throw new Error(\n      `Expected document item to have valid source with media_type \"${expectedMediaType}\" but got: ${JSON.stringify(documentItem.source)}`,\n    );\n  }\n}",
+      "contextualizedText": "// node/test/preamble.ts \u003e function assertToolResultHasDocumentSource\n\nexport function assertToolResultHasDocumentSource(\n  toolResult: ToolResultBlockParam,\n  expectedMediaType: string,\n): void {\n  const content = toolResult.content;\n  if (toolResult.is_error) {\n    throw new Error(\n      `Expected tool result to have ok status, but got error: ${JSON.stringify(content)}`,\n    );\n  }\n  if (typeof content === \"string\") {\n    throw new Error(\n      `Expected tool result to contain document item but got string content`,\n    );\n  }\n  if (!Array.isArray(content)) {\n    throw new Error(\n      `Expected tool result to have array content, but got: ${JSON.stringify(toolResult)}`,\n    );\n  }\n  const documentItem = content.find((item) =\u003e item.type === \"document\");\n  if (!documentItem) {\n    throw new Error(\n      `Expected tool result to contain document item but it didn't. Result: ${JSON.stringify(content)}`,\n    );\n  }\n  if (\n    !documentItem.source ||\n    documentItem.source.type !== \"base64\" ||\n    documentItem.source.media_type !== expectedMediaType ||\n    typeof documentItem.source.data !== \"string\" ||\n    documentItem.source.data.length === 0\n  ) {\n    throw new Error(\n      `Expected document item to have valid source with media_type \"${expectedMediaType}\" but got: ${JSON.stringify(documentItem.source)}`,\n    );\n  }\n}",
+      "headingContext": "node/test/preamble.ts \u003e function assertToolResultHasDocumentSource",
+      "startLine": 136,
+      "startCol": 1,
+      "endLine": 173,
+      "endCol": 2
+    },
+    {
+      "text": "export async function assertHasMcpServer(\n  serverName: ServerName,\n): Promise\u003cMockMCPServer\u003e {\n  return await pollUntil(\n    () =\u003e {\n      if (mockServers[serverName]) {\n        return mockServers[serverName];\n      }\n      throw new Error(`Mock server with name ${serverName} was not found.`);\n    },\n    { timeout: 1000 },\n  );\n}",
+      "contextualizedText": "// node/test/preamble.ts \u003e function assertHasMcpServer\n\nexport async function assertHasMcpServer(\n  serverName: ServerName,\n): Promise\u003cMockMCPServer\u003e {\n  return await pollUntil(\n    () =\u003e {\n      if (mockServers[serverName]) {\n        return mockServers[serverName];\n      }\n      throw new Error(`Mock server with name ${serverName} was not found.`);\n    },\n    { timeout: 1000 },\n  );\n}",
+      "headingContext": "node/test/preamble.ts \u003e function assertHasMcpServer",
+      "startLine": 175,
+      "startCol": 1,
+      "endLine": 187,
+      "endCol": 2
+    },
+    {
+      "text": "/** Poll until a tool result appears in the thread messages for the given toolRequestId */\nexport async function pollForToolResult(\n  driver: NvimDriver,\n  toolRequestId: ToolRequestId,\n): Promise\u003cProviderToolResult\u003e {\n  return pollUntil(\n    () =\u003e {\n      const thread = driver.magenta.chat.getActiveThread();\n      if (!thread) {\n        throw new Error(\"No active thread\");\n      }\n\n      const messages = thread.getProviderMessages();\n      for (const message of messages) {\n        if (message.role !== \"user\") continue;\n        for (const content of message.content) {\n          if (content.type === \"tool_result\" \u0026\u0026 content.id === toolRequestId) {\n            return content;\n          }\n        }\n      }\n\n      throw new Error(`Tool result for ${toolRequestId} not found yet`);\n    },\n    { timeout: 5000 },\n  );\n}",
+      "contextualizedText": "// node/test/preamble.ts \u003e function pollForToolResult\n\n/** Poll until a tool result appears in the thread messages for the given toolRequestId */\nexport async function pollForToolResult(\n  driver: NvimDriver,\n  toolRequestId: ToolRequestId,\n): Promise\u003cProviderToolResult\u003e {\n  return pollUntil(\n    () =\u003e {\n      const thread = driver.magenta.chat.getActiveThread();\n      if (!thread) {\n        throw new Error(\"No active thread\");\n      }\n\n      const messages = thread.getProviderMessages();\n      for (const message of messages) {\n        if (message.role !== \"user\") continue;\n        for (const content of message.content) {\n          if (content.type === \"tool_result\" \u0026\u0026 content.id === toolRequestId) {\n            return content;\n          }\n        }\n      }\n\n      throw new Error(`Tool result for ${toolRequestId} not found yet`);\n    },\n    { timeout: 5000 },\n  );\n}",
+      "headingContext": "node/test/preamble.ts \u003e function pollForToolResult",
+      "startLine": 189,
+      "startCol": 1,
+      "endLine": 215,
+      "endCol": 2
+    },
+    {
+      "text": "export type NvimProcessOptions = {\n  setupFiles?: ((tmpDir: string) =\u003e Promise\u003cvoid\u003e) | undefined;\n  setupHome?: ((homeDir: string) =\u003e Promise\u003cvoid\u003e) | undefined;\n  setupExtraDirs?: ((baseDir: string) =\u003e Promise\u003cvoid\u003e) | undefined;\n};",
+      "contextualizedText": "// node/test/preamble.ts\n\nexport type NvimProcessOptions = {\n  setupFiles?: ((tmpDir: string) =\u003e Promise\u003cvoid\u003e) | undefined;\n  setupHome?: ((homeDir: string) =\u003e Promise\u003cvoid\u003e) | undefined;\n  setupExtraDirs?: ((baseDir: string) =\u003e Promise\u003cvoid\u003e) | undefined;\n};",
+      "headingContext": "node/test/preamble.ts",
+      "startLine": 217,
+      "startCol": 1,
+      "endLine": 221,
+      "endCol": 3
+    },
+    {
+      "text": "export async function withNvimProcess(\n  fn: (\n    sock: string,\n    dirs: { tmpDir: string; homeDir: string; baseDir: string },\n  ) =\u003e Promise\u003cvoid\u003e,\n  options: NvimProcessOptions = {},\n) {\n  // Generate unique ID for this test run\n  const testId = Math.random().toString(36).substring(2, 15);\n\n  // Set up test directory paths\n  const testDir = path.dirname(__filename);\n  const fixturesDir = path.join(testDir, \"fixtures\");\n  // On macOS, /tmp is a symlink to /private/tmp. Resolve the symlink so paths\n  // are consistent for permission checking logic.\n  const resolvedTmp = await realpath(\"/tmp\");\n  const baseDir = path.join(resolvedTmp, \"magenta-test\", testId);\n  const tmpDir = path.join(baseDir, \"cwd\");\n  const homeDir = path.join(baseDir, \"home\");\n  const sock = path.join(baseDir, \"magenta-test.sock\");\n\n  // Clean up and recreate base directory\n  try {\n    await rm(baseDir, { recursive: true, force: true });\n  } catch (e) {\n    if ((e as { code: string }).code !== \"ENOENT\") {\n      console.error(e);\n    }\n  }\n\n  // Create directories and copy fixtures\n  try {\n    await mkdir(tmpDir, { recursive: true });\n    await mkdir(homeDir, { recursive: true });\n    await cp(fixturesDir, tmpDir, { recursive: true });\n\n    // Set up additional files in cwd if provided\n    if (options.setupFiles) {\n      await options.setupFiles(tmpDir);\n    }\n\n    // Set up home directory if provided\n    if (options.setupHome) {\n      await options.setupHome(homeDir);\n    }\n\n    // Set up extra directories outside cwd if provided\n    if (options.setupExtraDirs) {\n      await options.setupExtraDirs(baseDir);\n    }\n  } catch (e) {\n    console.error(\"Failed to set up test directory:\", e);\n    throw e;\n  }",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withNvimProcess\n\nexport async function withNvimProcess(\n  fn: (\n    sock: string,\n    dirs: { tmpDir: string; homeDir: string; baseDir: string },\n  ) =\u003e Promise\u003cvoid\u003e,\n  options: NvimProcessOptions = {},\n) {\n  // Generate unique ID for this test run\n  const testId = Math.random().toString(36).substring(2, 15);\n\n  // Set up test directory paths\n  const testDir = path.dirname(__filename);\n  const fixturesDir = path.join(testDir, \"fixtures\");\n  // On macOS, /tmp is a symlink to /private/tmp. Resolve the symlink so paths\n  // are consistent for permission checking logic.\n  const resolvedTmp = await realpath(\"/tmp\");\n  const baseDir = path.join(resolvedTmp, \"magenta-test\", testId);\n  const tmpDir = path.join(baseDir, \"cwd\");\n  const homeDir = path.join(baseDir, \"home\");\n  const sock = path.join(baseDir, \"magenta-test.sock\");\n\n  // Clean up and recreate base directory\n  try {\n    await rm(baseDir, { recursive: true, force: true });\n  } catch (e) {\n    if ((e as { code: string }).code !== \"ENOENT\") {\n      console.error(e);\n    }\n  }\n\n  // Create directories and copy fixtures\n  try {\n    await mkdir(tmpDir, { recursive: true });\n    await mkdir(homeDir, { recursive: true });\n    await cp(fixturesDir, tmpDir, { recursive: true });\n\n    // Set up additional files in cwd if provided\n    if (options.setupFiles) {\n      await options.setupFiles(tmpDir);\n    }\n\n    // Set up home directory if provided\n    if (options.setupHome) {\n      await options.setupHome(homeDir);\n    }\n\n    // Set up extra directories outside cwd if provided\n    if (options.setupExtraDirs) {\n      await options.setupExtraDirs(baseDir);\n    }\n  } catch (e) {\n    console.error(\"Failed to set up test directory:\", e);\n    throw e;\n  }",
+      "headingContext": "node/test/preamble.ts \u003e function withNvimProcess",
+      "startLine": 223,
+      "startCol": 1,
+      "endLine": 276,
+      "endCol": 4
+    },
+    {
+      "text": "const nvimProcess = spawn(\n    \"nvim\",\n    [\n      \"--headless\",\n      \"--cmd\",\n      \"set columns=200\",\n      \"--cmd\",\n      \"set lines=60\",\n      \"-n\",\n      \"--clean\",\n      \"--listen\",\n      sock,\n      \"-u\",\n      path.resolve(testDir, \"../../minimal-init.lua\"),\n    ],\n    {\n      cwd: tmpDir,\n      env: {\n        ...process.env,\n        HOME: homeDir,\n      },\n    },\n  );\n\n  if (!nvimProcess.pid) {\n    throw new Error(\"Failed to start nvim process\");\n  }\n\n  try {\n    nvimProcess.on(\"error\", (err) =\u003e {\n      throw err;\n    });\n\n    nvimProcess.on(\"exit\", (code, signal) =\u003e {\n      // Only throw error for unexpected exits (not normal cleanup)\n      if (code !== null \u0026\u0026 code !== 0 \u0026\u0026 code !== 1) {\n        throw new Error(\n          `Nvim process exited unexpectedly with code ${code} and signal ${signal}`,\n        );\n      }\n    });\n\n    await pollUntil(\n      async () =\u003e {\n        try {\n          await access(sock);\n          return true;\n        } catch (e) {\n          throw new Error(`socket ${sock} not ready: ${(e as Error).message}`);\n        }\n      },\n      { timeout: 500 },\n    );\n\n    await fn(sock, { tmpDir, homeDir, baseDir });\n  } finally {\n    nvimProcess.kill();\n    // Clean up base directory (includes cwd and home)\n    try {\n      await rm(baseDir, { recursive: true, force: true });\n    } catch (e) {\n      // Ignore cleanup errors to avoid masking test failures\n      console.warn(`Failed to cleanup test directory ${baseDir}:`, e);\n    }\n  }\n}",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withNvimProcess\n\nconst nvimProcess = spawn(\n    \"nvim\",\n    [\n      \"--headless\",\n      \"--cmd\",\n      \"set columns=200\",\n      \"--cmd\",\n      \"set lines=60\",\n      \"-n\",\n      \"--clean\",\n      \"--listen\",\n      sock,\n      \"-u\",\n      path.resolve(testDir, \"../../minimal-init.lua\"),\n    ],\n    {\n      cwd: tmpDir,\n      env: {\n        ...process.env,\n        HOME: homeDir,\n      },\n    },\n  );\n\n  if (!nvimProcess.pid) {\n    throw new Error(\"Failed to start nvim process\");\n  }\n\n  try {\n    nvimProcess.on(\"error\", (err) =\u003e {\n      throw err;\n    });\n\n    nvimProcess.on(\"exit\", (code, signal) =\u003e {\n      // Only throw error for unexpected exits (not normal cleanup)\n      if (code !== null \u0026\u0026 code !== 0 \u0026\u0026 code !== 1) {\n        throw new Error(\n          `Nvim process exited unexpectedly with code ${code} and signal ${signal}`,\n        );\n      }\n    });\n\n    await pollUntil(\n      async () =\u003e {\n        try {\n          await access(sock);\n          return true;\n        } catch (e) {\n          throw new Error(`socket ${sock} not ready: ${(e as Error).message}`);\n        }\n      },\n      { timeout: 500 },\n    );\n\n    await fn(sock, { tmpDir, homeDir, baseDir });\n  } finally {\n    nvimProcess.kill();\n    // Clean up base directory (includes cwd and home)\n    try {\n      await rm(baseDir, { recursive: true, force: true });\n    } catch (e) {\n      // Ignore cleanup errors to avoid masking test failures\n      console.warn(`Failed to cleanup test directory ${baseDir}:`, e);\n    }\n  }\n}",
+      "headingContext": "node/test/preamble.ts \u003e function withNvimProcess",
+      "startLine": 278,
+      "startCol": 3,
+      "endLine": 343,
+      "endCol": 2
+    },
+    {
+      "text": "export async function withNvimClient(\n  fn: (nvim: Nvim) =\u003e Promise\u003cvoid\u003e,\n  options: {\n    logFile?: string;\n    logLevel?: LogLevel;\n    overrideLogger?: boolean;\n    setupFiles?: (tmpDir: string) =\u003e Promise\u003cvoid\u003e;\n    setupHome?: (homeDir: string) =\u003e Promise\u003cvoid\u003e;\n    setupExtraDirs?: (baseDir: string) =\u003e Promise\u003cvoid\u003e;\n  } = {\n    overrideLogger: true,\n  },\n) {\n  return await withNvimProcess(\n    async (sock) =\u003e {\n      const nvim = await attach({\n        socket: sock,\n        client: { name: \"test\" },\n        logging: { level: options.logLevel ?? \"debug\", file: options.logFile },\n      });\n\n      await nvim.call(\"nvim_exec_lua\", [\n        `\\\n        require('magenta').bridge(${nvim.channelId})\n\n        -- Set up message interception\n        local notify = vim.notify\n        vim.notify = function(msg, level, opts)\n          local channelId = ${nvim.channelId}\n          if channelId then\n            vim.rpcnotify(channelId, 'testMessage', {msg = msg, level = level})\n          end\n          notify(msg, level, opts)\n        end\n      `,\n        [],\n      ]);\n\n      if (options.overrideLogger) {\n        nvim.logger",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withNvimClient\n\nexport async function withNvimClient(\n  fn: (nvim: Nvim) =\u003e Promise\u003cvoid\u003e,\n  options: {\n    logFile?: string;\n    logLevel?: LogLevel;\n    overrideLogger?: boolean;\n    setupFiles?: (tmpDir: string) =\u003e Promise\u003cvoid\u003e;\n    setupHome?: (homeDir: string) =\u003e Promise\u003cvoid\u003e;\n    setupExtraDirs?: (baseDir: string) =\u003e Promise\u003cvoid\u003e;\n  } = {\n    overrideLogger: true,\n  },\n) {\n  return await withNvimProcess(\n    async (sock) =\u003e {\n      const nvim = await attach({\n        socket: sock,\n        client: { name: \"test\" },\n        logging: { level: options.logLevel ?? \"debug\", file: options.logFile },\n      });\n\n      await nvim.call(\"nvim_exec_lua\", [\n        `\\\n        require('magenta').bridge(${nvim.channelId})\n\n        -- Set up message interception\n        local notify = vim.notify\n        vim.notify = function(msg, level, opts)\n          local channelId = ${nvim.channelId}\n          if channelId then\n            vim.rpcnotify(channelId, 'testMessage', {msg = msg, level = level})\n          end\n          notify(msg, level, opts)\n        end\n      `,\n        [],\n      ]);\n\n      if (options.overrideLogger) {\n        nvim.logger",
+      "headingContext": "node/test/preamble.ts \u003e function withNvimClient",
+      "startLine": 345,
+      "startCol": 1,
+      "endLine": 384,
+      "endCol": 20
+    },
+    {
+      "text": "          error: (msg: string) =\u003e console.error(msg)",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withNvimClient \u003e function error\n\n          error: (msg: string) =\u003e console.error(msg)",
+      "headingContext": "node/test/preamble.ts \u003e function withNvimClient \u003e function error",
+      "startLine": 385,
+      "startCol": 1,
+      "endLine": 385,
+      "endCol": 53
+    },
+    {
+      "text": "          warn: (msg: string) =\u003e console.warn(msg)",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withNvimClient \u003e function warn\n\n          warn: (msg: string) =\u003e console.warn(msg)",
+      "headingContext": "node/test/preamble.ts \u003e function withNvimClient \u003e function warn",
+      "startLine": 386,
+      "startCol": 1,
+      "endLine": 386,
+      "endCol": 51
+    },
+    {
+      "text": "          info: (msg: string) =\u003e console.info(msg)",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withNvimClient \u003e function info\n\n          info: (msg: string) =\u003e console.info(msg)",
+      "headingContext": "node/test/preamble.ts \u003e function withNvimClient \u003e function info",
+      "startLine": 387,
+      "startCol": 1,
+      "endLine": 387,
+      "endCol": 51
+    },
+    {
+      "text": "          debug: (msg: string) =\u003e console.debug(msg)",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withNvimClient \u003e function debug\n\n          debug: (msg: string) =\u003e console.debug(msg)",
+      "headingContext": "node/test/preamble.ts \u003e function withNvimClient \u003e function debug",
+      "startLine": 388,
+      "startCol": 1,
+      "endLine": 388,
+      "endCol": 53
+    },
+    {
+      "text": "// biome-ignore lint/suspicious/noExplicitAny: logger type is defined in nvim module\n        } as any;\n      }\n\n      nvim.onNotification(\"testMessage\", (args) =\u003e {\n        try {\n          const { msg, level } = args[0] as { msg: string; level: number };\n          switch (level) {\n            case 0: // ERROR\n              nvim.logger.error(msg);\n              break;\n            case 2: // WARN\n              nvim.logger.warn(msg);\n              break;\n            case 3: // INFO\n              nvim.logger.info(msg);\n              break;\n            default: // DEBUG and others\n              nvim.logger.debug(msg);\n          }\n        } catch (err) {\n          nvim.logger.error(err as Error);\n        }\n      });\n\n      try {\n        await fn(nvim);\n      } finally {\n        nvim.detach();\n      }\n    },\n    {\n      setupFiles: options.setupFiles,\n      setupHome: options.setupHome,\n      setupExtraDirs: options.setupExtraDirs,\n    },\n  );\n}",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withNvimClient\n\n// biome-ignore lint/suspicious/noExplicitAny: logger type is defined in nvim module\n        } as any;\n      }\n\n      nvim.onNotification(\"testMessage\", (args) =\u003e {\n        try {\n          const { msg, level } = args[0] as { msg: string; level: number };\n          switch (level) {\n            case 0: // ERROR\n              nvim.logger.error(msg);\n              break;\n            case 2: // WARN\n              nvim.logger.warn(msg);\n              break;\n            case 3: // INFO\n              nvim.logger.info(msg);\n              break;\n            default: // DEBUG and others\n              nvim.logger.debug(msg);\n          }\n        } catch (err) {\n          nvim.logger.error(err as Error);\n        }\n      });\n\n      try {\n        await fn(nvim);\n      } finally {\n        nvim.detach();\n      }\n    },\n    {\n      setupFiles: options.setupFiles,\n      setupHome: options.setupHome,\n      setupExtraDirs: options.setupExtraDirs,\n    },\n  );\n}",
+      "headingContext": "node/test/preamble.ts \u003e function withNvimClient",
+      "startLine": 389,
+      "startCol": 11,
+      "endLine": 426,
+      "endCol": 2
+    },
+    {
+      "text": "export type TestOptions = Partial\u003cMagentaOptions\u003e \u0026 {\n  changeDebounceMs?: number;\n};\n\nexport type TestDirs = {\n  tmpDir: string;\n  homeDir: string;\n  baseDir: string;\n};",
+      "contextualizedText": "// node/test/preamble.ts\n\nexport type TestOptions = Partial\u003cMagentaOptions\u003e \u0026 {\n  changeDebounceMs?: number;\n};\n\nexport type TestDirs = {\n  tmpDir: string;\n  homeDir: string;\n  baseDir: string;\n};",
+      "headingContext": "node/test/preamble.ts",
+      "startLine": 428,
+      "startCol": 1,
+      "endLine": 436,
+      "endCol": 3
+    },
+    {
+      "text": "export async function withDriver(\n  driverOptions: {\n    options?: TestOptions;\n    doNotOverrideLogger?: boolean;\n    setupFiles?: (tmpDir: string) =\u003e Promise\u003cvoid\u003e;\n    setupHome?: (homeDir: string) =\u003e Promise\u003cvoid\u003e;\n    setupExtraDirs?: (baseDir: string) =\u003e Promise\u003cvoid\u003e;\n  },\n  fn: (driver: NvimDriver, dirs: TestDirs) =\u003e Promise\u003cvoid\u003e,\n) {\n  return await withNvimProcess(\n    async (sock, dirs) =\u003e {\n      const nvim = await attach({\n        socket: sock,\n        client: { name: \"test\" },\n        logging: { level: \"debug\" },\n      });\n\n      // Set test options before Magenta starts\n      if (driverOptions.options) {\n        // Send JSON string to Lua and let it parse the string into a table\n        // Make sure we use the long string syntax [=[ ]=] to avoid escaping issues\n        const testOptionsJson = JSON.stringify(driverOptions.options);\n        await nvim.call(\"nvim_exec_lua\", [\n          `setup_test_options([=[${testOptionsJson}]=])`,\n          [],\n        ]);\n      }\n\n      await withMockClient(async (mockAnthropic) =\u003e {\n        const mockSandbox = new MockSandboxManager();\n        const magenta = await Magenta.start(\n          nvim,\n          dirs.homeDir as import(\"../utils/files.ts\").HomeDir,\n          mockSandbox,\n        );\n        await nvim.call(\"nvim_exec_lua\", [\n          `\\\n-- Set up message interception\nlocal notify = vim.notify\nvim.notify = function(msg, level, opts)\n  local channelId = ${nvim.channelId}\n  if channelId then\n    vim.rpcnotify(channelId, 'testMessage', {msg = msg, level = level})\n  end\n  notify(msg, level, opts)\nend\n\n`,\n          [],\n        ]);\n        if (!driverOptions.doNotOverrideLogger) {\n          magenta.nvim.logger",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withDriver\n\nexport async function withDriver(\n  driverOptions: {\n    options?: TestOptions;\n    doNotOverrideLogger?: boolean;\n    setupFiles?: (tmpDir: string) =\u003e Promise\u003cvoid\u003e;\n    setupHome?: (homeDir: string) =\u003e Promise\u003cvoid\u003e;\n    setupExtraDirs?: (baseDir: string) =\u003e Promise\u003cvoid\u003e;\n  },\n  fn: (driver: NvimDriver, dirs: TestDirs) =\u003e Promise\u003cvoid\u003e,\n) {\n  return await withNvimProcess(\n    async (sock, dirs) =\u003e {\n      const nvim = await attach({\n        socket: sock,\n        client: { name: \"test\" },\n        logging: { level: \"debug\" },\n      });\n\n      // Set test options before Magenta starts\n      if (driverOptions.options) {\n        // Send JSON string to Lua and let it parse the string into a table\n        // Make sure we use the long string syntax [=[ ]=] to avoid escaping issues\n        const testOptionsJson = JSON.stringify(driverOptions.options);\n        await nvim.call(\"nvim_exec_lua\", [\n          `setup_test_options([=[${testOptionsJson}]=])`,\n          [],\n        ]);\n      }\n\n      await withMockClient(async (mockAnthropic) =\u003e {\n        const mockSandbox = new MockSandboxManager();\n        const magenta = await Magenta.start(\n          nvim,\n          dirs.homeDir as import(\"../utils/files.ts\").HomeDir,\n          mockSandbox,\n        );\n        await nvim.call(\"nvim_exec_lua\", [\n          `\\\n-- Set up message interception\nlocal notify = vim.notify\nvim.notify = function(msg, level, opts)\n  local channelId = ${nvim.channelId}\n  if channelId then\n    vim.rpcnotify(channelId, 'testMessage', {msg = msg, level = level})\n  end\n  notify(msg, level, opts)\nend\n\n`,\n          [],\n        ]);\n        if (!driverOptions.doNotOverrideLogger) {\n          magenta.nvim.logger",
+      "headingContext": "node/test/preamble.ts \u003e function withDriver",
+      "startLine": 438,
+      "startCol": 1,
+      "endLine": 490,
+      "endCol": 30
+    },
+    {
+      "text": "            error: (msg: string) =\u003e console.error(msg)",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withDriver \u003e function error\n\n            error: (msg: string) =\u003e console.error(msg)",
+      "headingContext": "node/test/preamble.ts \u003e function withDriver \u003e function error",
+      "startLine": 491,
+      "startCol": 1,
+      "endLine": 491,
+      "endCol": 55
+    },
+    {
+      "text": "            warn: (msg: string) =\u003e console.warn(msg)",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withDriver \u003e function warn\n\n            warn: (msg: string) =\u003e console.warn(msg)",
+      "headingContext": "node/test/preamble.ts \u003e function withDriver \u003e function warn",
+      "startLine": 492,
+      "startCol": 1,
+      "endLine": 492,
+      "endCol": 53
+    },
+    {
+      "text": "            info: (msg: string) =\u003e console.log(msg)",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withDriver \u003e function info\n\n            info: (msg: string) =\u003e console.log(msg)",
+      "headingContext": "node/test/preamble.ts \u003e function withDriver \u003e function info",
+      "startLine": 493,
+      "startCol": 1,
+      "endLine": 493,
+      "endCol": 52
+    },
+    {
+      "text": "            debug: (msg: string) =\u003e\n              process.env.LOG_LEVEL === \"debug\" \u0026\u0026 console.debug(msg)",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withDriver \u003e function debug\n\n            debug: (msg: string) =\u003e\n              process.env.LOG_LEVEL === \"debug\" \u0026\u0026 console.debug(msg)",
+      "headingContext": "node/test/preamble.ts \u003e function withDriver \u003e function debug",
+      "startLine": 494,
+      "startCol": 1,
+      "endLine": 495,
+      "endCol": 70
+    },
+    {
+      "text": "// biome-ignore lint/suspicious/noExplicitAny: logger type is defined in nvim module\n          } as any;\n        }\n\n        try {\n          await fn(\n            new NvimDriver(nvim, magenta, mockAnthropic, mockSandbox),\n            dirs,\n          );\n        } finally {\n          magenta.destroy();\n          nvim.detach();\n          for (const serverName in mockServers) {\n            await mockServers[serverName as ServerName].stop();\n            delete mockServers[serverName as ServerName];\n          }\n        }\n      });\n    },\n    {\n      setupFiles: driverOptions.setupFiles,\n      setupHome: driverOptions.setupHome,\n      setupExtraDirs: driverOptions.setupExtraDirs,\n    },\n  );\n}",
+      "contextualizedText": "// node/test/preamble.ts \u003e function withDriver\n\n// biome-ignore lint/suspicious/noExplicitAny: logger type is defined in nvim module\n          } as any;\n        }\n\n        try {\n          await fn(\n            new NvimDriver(nvim, magenta, mockAnthropic, mockSandbox),\n            dirs,\n          );\n        } finally {\n          magenta.destroy();\n          nvim.detach();\n          for (const serverName in mockServers) {\n            await mockServers[serverName as ServerName].stop();\n            delete mockServers[serverName as ServerName];\n          }\n        }\n      });\n    },\n    {\n      setupFiles: driverOptions.setupFiles,\n      setupHome: driverOptions.setupHome,\n      setupExtraDirs: driverOptions.setupExtraDirs,\n    },\n  );\n}",
+      "headingContext": "node/test/preamble.ts \u003e function withDriver",
+      "startLine": 496,
+      "startCol": 13,
+      "endLine": 521,
+      "endCol": 2
+    },
+    {
+      "text": "/**\n * Normalizes paths in test data by replacing the tmpDir prefix with a placeholder.\n * This allows tests to match results that contain absolute paths.\n */\nexport function normalizePaths\u003cT\u003e(data: T, tmpDir: string): T {\n  const normalizedTmpDir = tmpDir.replace(/\\/+$/, \"\"); // remove trailing slashes\n  // On macOS, /tmp is a symlink to /private/tmp, so we need to handle both\n  const privateTmpDir = `/private${normalizedTmpDir}`;",
+      "contextualizedText": "// node/test/preamble.ts \u003e function normalizePaths\n\n/**\n * Normalizes paths in test data by replacing the tmpDir prefix with a placeholder.\n * This allows tests to match results that contain absolute paths.\n */\nexport function normalizePaths\u003cT\u003e(data: T, tmpDir: string): T {\n  const normalizedTmpDir = tmpDir.replace(/\\/+$/, \"\"); // remove trailing slashes\n  // On macOS, /tmp is a symlink to /private/tmp, so we need to handle both\n  const privateTmpDir = `/private${normalizedTmpDir}`;",
+      "headingContext": "node/test/preamble.ts \u003e function normalizePaths",
+      "startLine": 523,
+      "startCol": 1,
+      "endLine": 530,
+      "endCol": 55
+    },
+    {
+      "text": "  const replacePath = (str: string): string =\u003e {\n    // Replace both variations of the tmpDir path with a placeholder\n    return str\n      .replaceAll(privateTmpDir, \"\u003ctmpDir\u003e\")\n      .replaceAll(normalizedTmpDir, \"\u003ctmpDir\u003e\");\n  }",
+      "contextualizedText": "// node/test/preamble.ts \u003e function normalizePaths \u003e function replacePath\n\n  const replacePath = (str: string): string =\u003e {\n    // Replace both variations of the tmpDir path with a placeholder\n    return str\n      .replaceAll(privateTmpDir, \"\u003ctmpDir\u003e\")\n      .replaceAll(normalizedTmpDir, \"\u003ctmpDir\u003e\");\n  }",
+      "headingContext": "node/test/preamble.ts \u003e function normalizePaths \u003e function replacePath",
+      "startLine": 532,
+      "startCol": 1,
+      "endLine": 537,
+      "endCol": 4
+    },
+    {
+      "text": "  const normalize = (value: unknown): unknown =\u003e {\n    if (typeof value === \"string\") {\n      return replacePath(value);\n    }\n    if (Array.isArray(value)) {\n      return value.map(normalize);\n    }\n    if (value !== null \u0026\u0026 typeof value === \"object\") {\n      const result: Record\u003cstring, unknown\u003e = {};\n      for (const [key, val] of Object.entries(value)) {\n        result[key] = normalize(val);\n      }\n      return result;\n    }\n    return value;\n  }",
+      "contextualizedText": "// node/test/preamble.ts \u003e function normalizePaths \u003e function normalize\n\n  const normalize = (value: unknown): unknown =\u003e {\n    if (typeof value === \"string\") {\n      return replacePath(value);\n    }\n    if (Array.isArray(value)) {\n      return value.map(normalize);\n    }\n    if (value !== null \u0026\u0026 typeof value === \"object\") {\n      const result: Record\u003cstring, unknown\u003e = {};\n      for (const [key, val] of Object.entries(value)) {\n        result[key] = normalize(val);\n      }\n      return result;\n    }\n    return value;\n  }",
+      "headingContext": "node/test/preamble.ts \u003e function normalizePaths \u003e function normalize",
+      "startLine": 539,
+      "startCol": 1,
+      "endLine": 554,
+      "endCol": 4
+    },
+    {
+      "text": "return normalize(data) as T;\n}",
+      "contextualizedText": "// node/test/preamble.ts \u003e function normalizePaths\n\nreturn normalize(data) as T;\n}",
+      "headingContext": "node/test/preamble.ts \u003e function normalizePaths",
+      "startLine": 556,
+      "startCol": 3,
+      "endLine": 557,
+      "endCol": 2
+    },
+    {
+      "text": "export function extractMountTree(mounted: MountedVDOM): unknown {\n  switch (mounted.type) {\n    case \"string\":\n      return {\n        type: \"string\",\n        startPos: mounted.startPos,\n        endPos: mounted.endPos,\n        content: mounted.content,\n      };\n    case \"node\":\n      return {\n        type: \"node\",\n        children: mounted.children.map(extractMountTree),\n        startPos: mounted.startPos,\n        endPos: mounted.endPos,\n      };\n\n    case \"array\":\n      return {\n        type: \"array\",\n        children: mounted.children.map(extractMountTree),\n        startPos: mounted.startPos,\n        endPos: mounted.endPos,\n      };\n\n    default:\n      assertUnreachable(mounted);\n  }\n}",
+      "contextualizedText": "// node/test/preamble.ts \u003e function extractMountTree\n\nexport function extractMountTree(mounted: MountedVDOM): unknown {\n  switch (mounted.type) {\n    case \"string\":\n      return {\n        type: \"string\",\n        startPos: mounted.startPos,\n        endPos: mounted.endPos,\n        content: mounted.content,\n      };\n    case \"node\":\n      return {\n        type: \"node\",\n        children: mounted.children.map(extractMountTree),\n        startPos: mounted.startPos,\n        endPos: mounted.endPos,\n      };\n\n    case \"array\":\n      return {\n        type: \"array\",\n        children: mounted.children.map(extractMountTree),\n        startPos: mounted.startPos,\n        endPos: mounted.endPos,\n      };\n\n    default:\n      assertUnreachable(mounted);\n  }\n}",
+      "headingContext": "node/test/preamble.ts \u003e function extractMountTree",
+      "startLine": 559,
+      "startCol": 1,
+      "endLine": 587,
+      "endCol": 2
+    }
+  ]
+}

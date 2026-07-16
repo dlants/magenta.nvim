@@ -1,0 +1,15 @@
+{
+  "blobSha": "22ad6c27f2cf271d183d48c21499eab8a6fb19c7",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "{\n  \"compilerOptions\": {\n    \"allowImportingTsExtensions\": true,\n    \"composite\": true,\n    \"declaration\": true,\n    \"declarationMap\": true,\n    \"emitDeclarationOnly\": true,\n    \"declarationDir\": \"./dist\",\n    \"rootDir\": \"./src\",\n    \"lib\": [\"ESNext\"],\n    \"module\": \"NodeNext\",\n    \"moduleDetection\": \"force\",\n    \"moduleResolution\": \"NodeNext\",\n    \"noFallthroughCasesInSwitch\": true,\n    \"skipLibCheck\": true,\n    \"strict\": true,\n    \"target\": \"ESNext\",\n    \"types\": [],\n    \"verbatimModuleSyntax\": true,\n    \"exactOptionalPropertyTypes\": true\n  },\n  \"include\": [\"src/**/*\"],\n  \"exclude\": [\"**/node_modules/**\"]\n}",
+      "contextualizedText": "// node/core/tsconfig.json\n\n{\n  \"compilerOptions\": {\n    \"allowImportingTsExtensions\": true,\n    \"composite\": true,\n    \"declaration\": true,\n    \"declarationMap\": true,\n    \"emitDeclarationOnly\": true,\n    \"declarationDir\": \"./dist\",\n    \"rootDir\": \"./src\",\n    \"lib\": [\"ESNext\"],\n    \"module\": \"NodeNext\",\n    \"moduleDetection\": \"force\",\n    \"moduleResolution\": \"NodeNext\",\n    \"noFallthroughCasesInSwitch\": true,\n    \"skipLibCheck\": true,\n    \"strict\": true,\n    \"target\": \"ESNext\",\n    \"types\": [],\n    \"verbatimModuleSyntax\": true,\n    \"exactOptionalPropertyTypes\": true\n  },\n  \"include\": [\"src/**/*\"],\n  \"exclude\": [\"**/node_modules/**\"]\n}",
+      "headingContext": "node/core/tsconfig.json",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 24,
+      "endCol": 2
+    }
+  ]
+}

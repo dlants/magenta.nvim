@@ -1,0 +1,231 @@
+{
+  "blobSha": "f869739c79f38a9ec15ee57c36fee0aa34363072",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { NvimBuffer } from \"../nvim/buffer.ts\";\nimport type { ExtmarkId, ExtmarkOptions } from \"../nvim/extmarks.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { Position0Indexed } from \"../nvim/window.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport type { Bindings } from \"./bindings.ts\";\nimport { render } from \"./render.ts\";\nimport { update } from \"./update.ts\";",
+      "contextualizedText": "// node/tea/view.ts\n\nimport type { NvimBuffer } from \"../nvim/buffer.ts\";\nimport type { ExtmarkId, ExtmarkOptions } from \"../nvim/extmarks.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { Position0Indexed } from \"../nvim/window.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport type { Bindings } from \"./bindings.ts\";\nimport { render } from \"./render.ts\";\nimport { update } from \"./update.ts\";",
+      "headingContext": "node/tea/view.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 8,
+      "endCol": 38
+    },
+    {
+      "text": "export function pos(row: number, col: number) {\n  return { row, col } as Position0Indexed;\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function pos\n\nexport function pos(row: number, col: number) {\n  return { row, col } as Position0Indexed;\n}",
+      "headingContext": "node/tea/view.ts \u003e function pos",
+      "startLine": 10,
+      "startCol": 1,
+      "endLine": 12,
+      "endCol": 2
+    },
+    {
+      "text": "export interface MountPoint {\n  nvim: Nvim;\n  buffer: NvimBuffer;\n  startPos: Position0Indexed;\n  endPos: Position0Indexed;\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e interface MountPoint\n\nexport interface MountPoint {\n  nvim: Nvim;\n  buffer: NvimBuffer;\n  startPos: Position0Indexed;\n  endPos: Position0Indexed;\n}",
+      "headingContext": "node/tea/view.ts \u003e interface MountPoint",
+      "startLine": 14,
+      "startCol": 1,
+      "endLine": 19,
+      "endCol": 2
+    },
+    {
+      "text": "export type View\u003cP\u003e = (props: P) =\u003e VDOMNode;\nexport type StringVDOMNode = {\n  type: \"string\";\n  content: string;\n  bindings?: Bindings | undefined;\n  extmarkOptions?: ExtmarkOptions;\n};\nexport type ComponentVDOMNode = {\n  type: \"node\";\n  children: VDOMNode[];\n  template: TemplateStringsArray;\n  bindings?: Bindings;\n  extmarkOptions?: ExtmarkOptions;\n};\nexport type ArrayVDOMNode = {\n  type: \"array\";\n  children: VDOMNode[];\n  bindings?: Bindings;\n  extmarkOptions?: ExtmarkOptions;\n};\n\nexport type VDOMNode = StringVDOMNode | ComponentVDOMNode | ArrayVDOMNode;\n\nexport type MountedStringNode = {\n  type: \"string\";\n  content: string;\n  startPos: Position0Indexed;\n  endPos: Position0Indexed;\n  bindings?: Bindings | undefined;\n  extmarkOptions?: ExtmarkOptions;\n  extmarkId?: ExtmarkId;\n};\n\nexport type MountedComponentNode = {\n  type: \"node\";\n  template: TemplateStringsArray;\n  children: MountedVDOM[];\n  startPos: Position0Indexed;\n  endPos: Position0Indexed;\n  bindings?: Bindings | undefined;\n  extmarkOptions?: ExtmarkOptions;\n  extmarkId?: ExtmarkId;\n};\n\nexport type MountedArrayNode = {\n  type: \"array\";\n  children: MountedVDOM[];\n  startPos: Position0Indexed;\n  endPos: Position0Indexed;\n  bindings?: Bindings | undefined;\n  extmarkOptions?: ExtmarkOptions;\n  extmarkId?: ExtmarkId;\n};\n\nexport type MountedVDOM =\n  | MountedStringNode\n  | MountedComponentNode\n  | MountedArrayNode;",
+      "contextualizedText": "// node/tea/view.ts\n\nexport type View\u003cP\u003e = (props: P) =\u003e VDOMNode;\nexport type StringVDOMNode = {\n  type: \"string\";\n  content: string;\n  bindings?: Bindings | undefined;\n  extmarkOptions?: ExtmarkOptions;\n};\nexport type ComponentVDOMNode = {\n  type: \"node\";\n  children: VDOMNode[];\n  template: TemplateStringsArray;\n  bindings?: Bindings;\n  extmarkOptions?: ExtmarkOptions;\n};\nexport type ArrayVDOMNode = {\n  type: \"array\";\n  children: VDOMNode[];\n  bindings?: Bindings;\n  extmarkOptions?: ExtmarkOptions;\n};\n\nexport type VDOMNode = StringVDOMNode | ComponentVDOMNode | ArrayVDOMNode;\n\nexport type MountedStringNode = {\n  type: \"string\";\n  content: string;\n  startPos: Position0Indexed;\n  endPos: Position0Indexed;\n  bindings?: Bindings | undefined;\n  extmarkOptions?: ExtmarkOptions;\n  extmarkId?: ExtmarkId;\n};\n\nexport type MountedComponentNode = {\n  type: \"node\";\n  template: TemplateStringsArray;\n  children: MountedVDOM[];\n  startPos: Position0Indexed;\n  endPos: Position0Indexed;\n  bindings?: Bindings | undefined;\n  extmarkOptions?: ExtmarkOptions;\n  extmarkId?: ExtmarkId;\n};\n\nexport type MountedArrayNode = {\n  type: \"array\";\n  children: MountedVDOM[];\n  startPos: Position0Indexed;\n  endPos: Position0Indexed;\n  bindings?: Bindings | undefined;\n  extmarkOptions?: ExtmarkOptions;\n  extmarkId?: ExtmarkId;\n};\n\nexport type MountedVDOM =\n  | MountedStringNode\n  | MountedComponentNode\n  | MountedArrayNode;",
+      "headingContext": "node/tea/view.ts",
+      "startLine": 21,
+      "startCol": 1,
+      "endLine": 78,
+      "endCol": 22
+    },
+    {
+      "text": "export function prettyPrintMountedNode(root: MountedVDOM) {\n  const stack: { node: MountedVDOM; indent: number }[] = [\n    { node: root, indent: 0 },\n  ];\n  const output: string[] = [];\n  while (stack.length) {\n    const { node, indent } = stack.pop()!;\n\n    let body = \"\";\n    switch (node.type) {\n      case \"string\":\n        body = JSON.stringify(node.content);\n        break;\n      case \"node\":\n      case \"array\": {\n        for (\n          let childIdx = node.children.length - 1;\n          childIdx \u003e= 0;\n          childIdx--\n        ) {\n          stack.push({ node: node.children[childIdx], indent: indent + 2 });\n        }\n        break;\n      }\n      default:\n        assertUnreachable(node);\n    }\n\n    const bindings = node.bindings\n      ? `{${Object.keys(node.bindings).join(\", \")}}`\n      : \"\";\n\n    output.push(\n      `${\" \".repeat(indent)}${prettyPrintPos(node.startPos)}-${prettyPrintPos(node.endPos)} (${node.type})  ${bindings} ${body}`,\n    );\n  }\n\n  return output.join(\"\\n\");\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function prettyPrintMountedNode\n\nexport function prettyPrintMountedNode(root: MountedVDOM) {\n  const stack: { node: MountedVDOM; indent: number }[] = [\n    { node: root, indent: 0 },\n  ];\n  const output: string[] = [];\n  while (stack.length) {\n    const { node, indent } = stack.pop()!;\n\n    let body = \"\";\n    switch (node.type) {\n      case \"string\":\n        body = JSON.stringify(node.content);\n        break;\n      case \"node\":\n      case \"array\": {\n        for (\n          let childIdx = node.children.length - 1;\n          childIdx \u003e= 0;\n          childIdx--\n        ) {\n          stack.push({ node: node.children[childIdx], indent: indent + 2 });\n        }\n        break;\n      }\n      default:\n        assertUnreachable(node);\n    }\n\n    const bindings = node.bindings\n      ? `{${Object.keys(node.bindings).join(\", \")}}`\n      : \"\";\n\n    output.push(\n      `${\" \".repeat(indent)}${prettyPrintPos(node.startPos)}-${prettyPrintPos(node.endPos)} (${node.type})  ${bindings} ${body}`,\n    );\n  }\n\n  return output.join(\"\\n\");\n}",
+      "headingContext": "node/tea/view.ts \u003e function prettyPrintMountedNode",
+      "startLine": 80,
+      "startCol": 1,
+      "endLine": 118,
+      "endCol": 2
+    },
+    {
+      "text": "function prettyPrintPos(pos: Position0Indexed) {\n  return `[${pos.row}, ${pos.col}]`;\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function prettyPrintPos\n\nfunction prettyPrintPos(pos: Position0Indexed) {\n  return `[${pos.row}, ${pos.col}]`;\n}",
+      "headingContext": "node/tea/view.ts \u003e function prettyPrintPos",
+      "startLine": 120,
+      "startCol": 1,
+      "endLine": 122,
+      "endCol": 2
+    },
+    {
+      "text": "MountedView\u003cP\u003e",
+      "contextualizedText": "// node/tea/view.ts\n\nMountedView\u003cP\u003e",
+      "headingContext": "node/tea/view.ts",
+      "startLine": 124,
+      "startCol": 13,
+      "endLine": 124,
+      "endCol": 27
+    },
+    {
+      "text": "  render(props: P): Promise\u003cvoid\u003e",
+      "contextualizedText": "// node/tea/view.ts \u003e method render\n\n  render(props: P): Promise\u003cvoid\u003e",
+      "headingContext": "node/tea/view.ts \u003e method render",
+      "startLine": 125,
+      "startCol": 1,
+      "endLine": 125,
+      "endCol": 34
+    },
+    {
+      "text": "  unmount(): void",
+      "contextualizedText": "// node/tea/view.ts \u003e method unmount\n\n  unmount(): void",
+      "headingContext": "node/tea/view.ts \u003e method unmount",
+      "startLine": 126,
+      "startCol": 1,
+      "endLine": 126,
+      "endCol": 18
+    },
+    {
+      "text": "/** for testing */\n  _getMountedNode(): MountedVDOM",
+      "contextualizedText": "// node/tea/view.ts \u003e method _getMountedNode\n\n/** for testing */\n  _getMountedNode(): MountedVDOM",
+      "headingContext": "node/tea/view.ts \u003e method _getMountedNode",
+      "startLine": 127,
+      "startCol": 3,
+      "endLine": 128,
+      "endCol": 33
+    },
+    {
+      "text": "export async function mountView\u003cP\u003e({\n  view,\n  mount,\n  props,\n}: {\n  view: View\u003cP\u003e;\n  mount: MountPoint;\n  props: P;\n}): Promise\u003cMountedView\u003cP\u003e\u003e {\n  let mountedNode = await render({ vdom: view(props), mount });",
+      "contextualizedText": "// node/tea/view.ts \u003e function mountView\n\nexport async function mountView\u003cP\u003e({\n  view,\n  mount,\n  props,\n}: {\n  view: View\u003cP\u003e;\n  mount: MountPoint;\n  props: P;\n}): Promise\u003cMountedView\u003cP\u003e\u003e {\n  let mountedNode = await render({ vdom: view(props), mount });",
+      "headingContext": "node/tea/view.ts \u003e function mountView",
+      "startLine": 131,
+      "startCol": 1,
+      "endLine": 140,
+      "endCol": 64
+    },
+    {
+      "text": "    async render(props) {\n      const next = view(props);\n      try {\n        mountedNode = await update({\n          currentRoot: mountedNode,\n          nextRoot: next,\n          mount,\n        });\n      } catch (e) {\n        // Check if the buffer/mount point is still valid\n        const isBufferValid = await mount.buffer.isValid();\n        if (!isBufferValid) {\n          // Buffer is no longer valid, ignore the error\n          return;\n        }\n        // Buffer is still valid, re-throw the error\n        throw e;\n      }\n    }",
+      "contextualizedText": "// node/tea/view.ts \u003e function mountView \u003e method render\n\n    async render(props) {\n      const next = view(props);\n      try {\n        mountedNode = await update({\n          currentRoot: mountedNode,\n          nextRoot: next,\n          mount,\n        });\n      } catch (e) {\n        // Check if the buffer/mount point is still valid\n        const isBufferValid = await mount.buffer.isValid();\n        if (!isBufferValid) {\n          // Buffer is no longer valid, ignore the error\n          return;\n        }\n        // Buffer is still valid, re-throw the error\n        throw e;\n      }\n    }",
+      "headingContext": "node/tea/view.ts \u003e function mountView \u003e method render",
+      "startLine": 143,
+      "startCol": 1,
+      "endLine": 161,
+      "endCol": 6
+    },
+    {
+      "text": "    unmount() {\n      // TODO\n    }",
+      "contextualizedText": "// node/tea/view.ts \u003e function mountView \u003e method unmount\n\n    unmount() {\n      // TODO\n    }",
+      "headingContext": "node/tea/view.ts \u003e function mountView \u003e method unmount",
+      "startLine": 162,
+      "startCol": 1,
+      "endLine": 164,
+      "endCol": 6
+    },
+    {
+      "text": "    _getMountedNode: () =\u003e mountedNode",
+      "contextualizedText": "// node/tea/view.ts \u003e function mountView \u003e function _getMountedNode\n\n    _getMountedNode: () =\u003e mountedNode",
+      "headingContext": "node/tea/view.ts \u003e function mountView \u003e function _getMountedNode",
+      "startLine": 165,
+      "startCol": 1,
+      "endLine": 165,
+      "endCol": 39
+    },
+    {
+      "text": "export function d(\n  template: TemplateStringsArray,\n  ...values: (VDOMNode[] | VDOMNode | string)[]\n): VDOMNode {\n  const children: VDOMNode[] = [];\n  if (template[0].length) {\n    children.push({ type: \"string\", content: template[0] });\n  }\n  for (let i = 0; i \u003c values.length; i++) {\n    if (typeof values[i] === \"string\") {\n      children.push({ type: \"string\", content: values[i] as string });\n    } else if (Array.isArray(values[i])) {\n      children.push({ type: \"array\", children: values[i] as VDOMNode[] });\n    } else {\n      children.push(values[i] as VDOMNode);\n    }\n    if (template[i + 1].length \u003e 0) {\n      children.push({ type: \"string\", content: template[i + 1] });\n    }\n  }\n\n  return { type: \"node\", children: children, template: template };\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function d\n\nexport function d(\n  template: TemplateStringsArray,\n  ...values: (VDOMNode[] | VDOMNode | string)[]\n): VDOMNode {\n  const children: VDOMNode[] = [];\n  if (template[0].length) {\n    children.push({ type: \"string\", content: template[0] });\n  }\n  for (let i = 0; i \u003c values.length; i++) {\n    if (typeof values[i] === \"string\") {\n      children.push({ type: \"string\", content: values[i] as string });\n    } else if (Array.isArray(values[i])) {\n      children.push({ type: \"array\", children: values[i] as VDOMNode[] });\n    } else {\n      children.push(values[i] as VDOMNode);\n    }\n    if (template[i + 1].length \u003e 0) {\n      children.push({ type: \"string\", content: template[i + 1] });\n    }\n  }\n\n  return { type: \"node\", children: children, template: template };\n}",
+      "headingContext": "node/tea/view.ts \u003e function d",
+      "startLine": 169,
+      "startCol": 1,
+      "endLine": 191,
+      "endCol": 2
+    },
+    {
+      "text": "/** Replace the bindings for this node\n */\nexport function withBindings(node: VDOMNode, bindings: Bindings) {\n  return {\n    ...node,\n    bindings,\n  };\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function withBindings\n\n/** Replace the bindings for this node\n */\nexport function withBindings(node: VDOMNode, bindings: Bindings) {\n  return {\n    ...node,\n    bindings,\n  };\n}",
+      "headingContext": "node/tea/view.ts \u003e function withBindings",
+      "startLine": 193,
+      "startCol": 1,
+      "endLine": 200,
+      "endCol": 2
+    },
+    {
+      "text": "export function withExtmark(\n  node: VDOMNode,\n  extmarkOptions: ExtmarkOptions | undefined,\n) {\n  return {\n    ...node,\n    ...(extmarkOptions ? { extmarkOptions } : {}),\n  };\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function withExtmark\n\nexport function withExtmark(\n  node: VDOMNode,\n  extmarkOptions: ExtmarkOptions | undefined,\n) {\n  return {\n    ...node,\n    ...(extmarkOptions ? { extmarkOptions } : {}),\n  };\n}",
+      "headingContext": "node/tea/view.ts \u003e function withExtmark",
+      "startLine": 202,
+      "startCol": 1,
+      "endLine": 210,
+      "endCol": 2
+    },
+    {
+      "text": "export function withError(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"ErrorMsg\" });\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function withError\n\nexport function withError(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"ErrorMsg\" });\n}",
+      "headingContext": "node/tea/view.ts \u003e function withError",
+      "startLine": 212,
+      "startCol": 1,
+      "endLine": 214,
+      "endCol": 2
+    },
+    {
+      "text": "export function withWarning(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"WarningMsg\" });\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function withWarning\n\nexport function withWarning(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"WarningMsg\" });\n}",
+      "headingContext": "node/tea/view.ts \u003e function withWarning",
+      "startLine": 216,
+      "startCol": 1,
+      "endLine": 218,
+      "endCol": 2
+    },
+    {
+      "text": "export function withInfo(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"Directory\" });\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function withInfo\n\nexport function withInfo(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"Directory\" });\n}",
+      "headingContext": "node/tea/view.ts \u003e function withInfo",
+      "startLine": 220,
+      "startCol": 1,
+      "endLine": 222,
+      "endCol": 2
+    },
+    {
+      "text": "export function withSuccess(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"String\" });\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function withSuccess\n\nexport function withSuccess(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"String\" });\n}",
+      "headingContext": "node/tea/view.ts \u003e function withSuccess",
+      "startLine": 224,
+      "startCol": 1,
+      "endLine": 226,
+      "endCol": 2
+    },
+    {
+      "text": "export function withMuted(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"Comment\" });\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function withMuted\n\nexport function withMuted(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"Comment\" });\n}",
+      "headingContext": "node/tea/view.ts \u003e function withMuted",
+      "startLine": 228,
+      "startCol": 1,
+      "endLine": 230,
+      "endCol": 2
+    },
+    {
+      "text": "export function withEmphasis(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"Bold\" });\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function withEmphasis\n\nexport function withEmphasis(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"Bold\" });\n}",
+      "headingContext": "node/tea/view.ts \u003e function withEmphasis",
+      "startLine": 232,
+      "startCol": 1,
+      "endLine": 234,
+      "endCol": 2
+    },
+    {
+      "text": "export function withCode(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"@markup.raw.markdown\" });\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function withCode\n\nexport function withCode(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"@markup.raw.markdown\" });\n}",
+      "headingContext": "node/tea/view.ts \u003e function withCode",
+      "startLine": 236,
+      "startCol": 1,
+      "endLine": 238,
+      "endCol": 2
+    },
+    {
+      "text": "export function withInlineCode(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"@markup.raw.markdown_inline\" });\n}",
+      "contextualizedText": "// node/tea/view.ts \u003e function withInlineCode\n\nexport function withInlineCode(node: VDOMNode) {\n  return withExtmark(node, { hl_group: \"@markup.raw.markdown_inline\" });\n}",
+      "headingContext": "node/tea/view.ts \u003e function withInlineCode",
+      "startLine": 240,
+      "startCol": 1,
+      "endLine": 242,
+      "endCol": 2
+    }
+  ]
+}

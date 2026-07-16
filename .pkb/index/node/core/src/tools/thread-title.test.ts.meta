@@ -1,0 +1,15 @@
+{
+  "blobSha": "1778e83866bc10c7263774487e869436dfe57b52",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { describe, expect, it } from \"vitest\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport * as ThreadTitle from \"./thread-title.ts\";\n\ndescribe(\"thread-title unit tests\", () =\u003e {\n  it(\"returns title as tool result text\", async () =\u003e {\n    const invocation = ThreadTitle.execute(\n      {\n        id: \"tool_1\" as ToolRequestId,\n        toolName: \"thread_title\" as const,\n        input: { title: \"My Title\" },\n      },\n      {},\n    );\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"ok\");\n    if (result.result.status === \"ok\") {\n      expect(result.result.value[0]).toMatchObject({\n        type: \"text\",\n        text: \"My Title\",\n      });\n    }\n  });\n\n  it(\"abort returns error\", async () =\u003e {\n    const invocation = ThreadTitle.execute(\n      {\n        id: \"tool_2\" as ToolRequestId,\n        toolName: \"thread_title\" as const,\n        input: { title: \"Some Title\" },\n      },\n      {},\n    );\n\n    invocation.abort();\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"error\");\n    if (result.result.status === \"error\") {\n      expect(result.result.error).toContain(\"aborted\");\n    }\n  });\n});",
+      "contextualizedText": "// node/core/src/tools/thread-title.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport * as ThreadTitle from \"./thread-title.ts\";\n\ndescribe(\"thread-title unit tests\", () =\u003e {\n  it(\"returns title as tool result text\", async () =\u003e {\n    const invocation = ThreadTitle.execute(\n      {\n        id: \"tool_1\" as ToolRequestId,\n        toolName: \"thread_title\" as const,\n        input: { title: \"My Title\" },\n      },\n      {},\n    );\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"ok\");\n    if (result.result.status === \"ok\") {\n      expect(result.result.value[0]).toMatchObject({\n        type: \"text\",\n        text: \"My Title\",\n      });\n    }\n  });\n\n  it(\"abort returns error\", async () =\u003e {\n    const invocation = ThreadTitle.execute(\n      {\n        id: \"tool_2\" as ToolRequestId,\n        toolName: \"thread_title\" as const,\n        input: { title: \"Some Title\" },\n      },\n      {},\n    );\n\n    invocation.abort();\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"error\");\n    if (result.result.status === \"error\") {\n      expect(result.result.error).toContain(\"aborted\");\n    }\n  });\n});",
+      "headingContext": "node/core/src/tools/thread-title.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 43,
+      "endCol": 4
+    }
+  ]
+}

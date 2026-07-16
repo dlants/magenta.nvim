@@ -1,0 +1,24 @@
+{
+  "blobSha": "8eb58ccac7ac39939dadc299eb9dc0f05e9c45ed",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import { execFile as execFileCb } from \"node:child_process\";\nimport * as crypto from \"node:crypto\";\nimport * as path from \"node:path\";\nimport { promisify } from \"node:util\";\nimport type { ContainerConfig, ProvisionResult } from \"./types.ts\";\n\nconst execFile = promisify(execFileCb);",
+      "contextualizedText": "// node/core/src/container/provision.ts\n\nimport { execFile as execFileCb } from \"node:child_process\";\nimport * as crypto from \"node:crypto\";\nimport * as path from \"node:path\";\nimport { promisify } from \"node:util\";\nimport type { ContainerConfig, ProvisionResult } from \"./types.ts\";\n\nconst execFile = promisify(execFileCb);",
+      "headingContext": "node/core/src/container/provision.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 7,
+      "endCol": 40
+    },
+    {
+      "text": "export async function provisionContainer({\n  hostDir,\n  containerConfig,\n  onProgress,\n}: {\n  hostDir: string;\n  containerConfig: ContainerConfig;\n  onProgress?: (message: string) =\u003e void;\n}): Promise\u003cProvisionResult\u003e {\n  const progress = onProgress ?? (() =\u003e {});\n  const shortHash = crypto.randomBytes(4).toString(\"hex\");\n  const containerName = `magenta-worker-${shortHash}`;\n  const imageName = `magenta-dev-${shortHash}`;\n\n  const dockerfilePath = path.resolve(hostDir, containerConfig.dockerfile);\n\n  progress(\"Building Docker image...\");\n  await execFile(\n    \"docker\",\n    [\"build\", \"-t\", imageName, \"-f\", dockerfilePath, hostDir],\n    { timeout: 600_000 },\n  );\n\n  progress(\"Starting container...\");\n  await execFile(\"docker\", [\"run\", \"-d\", \"--name\", containerName, imageName]);\n\n  return {\n    containerName,\n    imageName,\n  };\n}",
+      "contextualizedText": "// node/core/src/container/provision.ts \u003e function provisionContainer\n\nexport async function provisionContainer({\n  hostDir,\n  containerConfig,\n  onProgress,\n}: {\n  hostDir: string;\n  containerConfig: ContainerConfig;\n  onProgress?: (message: string) =\u003e void;\n}): Promise\u003cProvisionResult\u003e {\n  const progress = onProgress ?? (() =\u003e {});\n  const shortHash = crypto.randomBytes(4).toString(\"hex\");\n  const containerName = `magenta-worker-${shortHash}`;\n  const imageName = `magenta-dev-${shortHash}`;\n\n  const dockerfilePath = path.resolve(hostDir, containerConfig.dockerfile);\n\n  progress(\"Building Docker image...\");\n  await execFile(\n    \"docker\",\n    [\"build\", \"-t\", imageName, \"-f\", dockerfilePath, hostDir],\n    { timeout: 600_000 },\n  );\n\n  progress(\"Starting container...\");\n  await execFile(\"docker\", [\"run\", \"-d\", \"--name\", containerName, imageName]);\n\n  return {\n    containerName,\n    imageName,\n  };\n}",
+      "headingContext": "node/core/src/container/provision.ts \u003e function provisionContainer",
+      "startLine": 9,
+      "startCol": 1,
+      "endLine": 39,
+      "endCol": 2
+    }
+  ]
+}

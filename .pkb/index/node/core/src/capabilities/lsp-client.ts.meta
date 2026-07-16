@@ -1,0 +1,60 @@
+{
+  "blobSha": "1b606e1dd370a3d1aeedc7e8ff3afdde2a71c1a1",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type { AbsFilePath } from \"../utils/files.ts\";\n\ntype LspPosition = {\n  line: number;\n  character: number;\n};\n\nexport type LspRange = {\n  start: LspPosition;\n  end: LspPosition;\n};\n\nexport type LspHoverResponse = (null | {\n  result: {\n    range: LspRange;\n    contents: {\n      kind: string;\n      value: string;\n    };\n  };\n})[];\n\nexport type LspReferencesResponse = (null | {\n  result: {\n    uri: string;\n    range: LspRange;\n  }[];\n})[];\n\nexport type LspDefinitionResponse = (null | {\n  result: (\n    | {\n        uri: string;\n        range: LspRange;\n      }\n    | {\n        targetUri: string;\n        targetRange: LspRange;\n        targetSelectionRange?: LspRange;\n        originSelectionRange?: LspRange;\n      }\n  )[];\n})[];",
+      "contextualizedText": "// node/core/src/capabilities/lsp-client.ts\n\nimport type { AbsFilePath } from \"../utils/files.ts\";\n\ntype LspPosition = {\n  line: number;\n  character: number;\n};\n\nexport type LspRange = {\n  start: LspPosition;\n  end: LspPosition;\n};\n\nexport type LspHoverResponse = (null | {\n  result: {\n    range: LspRange;\n    contents: {\n      kind: string;\n      value: string;\n    };\n  };\n})[];\n\nexport type LspReferencesResponse = (null | {\n  result: {\n    uri: string;\n    range: LspRange;\n  }[];\n})[];\n\nexport type LspDefinitionResponse = (null | {\n  result: (\n    | {\n        uri: string;\n        range: LspRange;\n      }\n    | {\n        targetUri: string;\n        targetRange: LspRange;\n        targetSelectionRange?: LspRange;\n        originSelectionRange?: LspRange;\n      }\n  )[];\n})[];",
+      "headingContext": "node/core/src/capabilities/lsp-client.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 43,
+      "endCol": 6
+    },
+    {
+      "text": "export interface LspClient",
+      "contextualizedText": "// node/core/src/capabilities/lsp-client.ts \u003e interface LspClient\n\nexport interface LspClient",
+      "headingContext": "node/core/src/capabilities/lsp-client.ts \u003e interface LspClient",
+      "startLine": 45,
+      "startCol": 1,
+      "endLine": 45,
+      "endCol": 27
+    },
+    {
+      "text": "  requestHover(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspHoverResponse\u003e",
+      "contextualizedText": "// node/core/src/capabilities/lsp-client.ts \u003e interface LspClient \u003e method requestHover\n\n  requestHover(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspHoverResponse\u003e",
+      "headingContext": "node/core/src/capabilities/lsp-client.ts \u003e interface LspClient \u003e method requestHover",
+      "startLine": 46,
+      "startCol": 1,
+      "endLine": 49,
+      "endCol": 31
+    },
+    {
+      "text": "  requestReferences(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspReferencesResponse\u003e",
+      "contextualizedText": "// node/core/src/capabilities/lsp-client.ts \u003e interface LspClient \u003e method requestReferences\n\n  requestReferences(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspReferencesResponse\u003e",
+      "headingContext": "node/core/src/capabilities/lsp-client.ts \u003e interface LspClient \u003e method requestReferences",
+      "startLine": 51,
+      "startCol": 1,
+      "endLine": 54,
+      "endCol": 36
+    },
+    {
+      "text": "  requestDefinition(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e",
+      "contextualizedText": "// node/core/src/capabilities/lsp-client.ts \u003e interface LspClient \u003e method requestDefinition\n\n  requestDefinition(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e",
+      "headingContext": "node/core/src/capabilities/lsp-client.ts \u003e interface LspClient \u003e method requestDefinition",
+      "startLine": 56,
+      "startCol": 1,
+      "endLine": 59,
+      "endCol": 36
+    },
+    {
+      "text": "  requestTypeDefinition(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e",
+      "contextualizedText": "// node/core/src/capabilities/lsp-client.ts \u003e interface LspClient \u003e method requestTypeDefinition\n\n  requestTypeDefinition(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e",
+      "headingContext": "node/core/src/capabilities/lsp-client.ts \u003e interface LspClient \u003e method requestTypeDefinition",
+      "startLine": 61,
+      "startCol": 1,
+      "endLine": 64,
+      "endCol": 36
+    }
+  ]
+}

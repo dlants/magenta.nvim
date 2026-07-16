@@ -1,0 +1,114 @@
+{
+  "blobSha": "3281b689c9c145ab08063f5c4dc9882f6f2c7759",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type Anthropic from \"@anthropic-ai/sdk\";\nimport { afterEach, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport type { Logger } from \"../logger.ts\";\nimport { validateInput } from \"../tools/helpers.ts\";\nimport {\n  AnthropicAgent,\n  type AnthropicAgentOptions,\n} from \"./anthropic-agent.ts\";\nimport {\n  makeRefreshAuth,\n  type RefreshAuth,\n  type RunCommand,\n} from \"./auth-refresh.ts\";\nimport { MockAnthropicClient } from \"./mock-anthropic-client.ts\";\nimport type { ProviderToolSpec } from \"./provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"./provider-types.ts\";\n\nconst noopLogger: Logger",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts\n\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport { afterEach, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport type { Logger } from \"../logger.ts\";\nimport { validateInput } from \"../tools/helpers.ts\";\nimport {\n  AnthropicAgent,\n  type AnthropicAgentOptions,\n} from \"./anthropic-agent.ts\";\nimport {\n  makeRefreshAuth,\n  type RefreshAuth,\n  type RunCommand,\n} from \"./auth-refresh.ts\";\nimport { MockAnthropicClient } from \"./mock-anthropic-client.ts\";\nimport type { ProviderToolSpec } from \"./provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"./provider-types.ts\";\n\nconst noopLogger: Logger",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 18,
+      "endCol": 25
+    },
+    {
+      "text": "  info: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function info\n\n  info: () =\u003e {}",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function info",
+      "startLine": 19,
+      "startCol": 1,
+      "endLine": 19,
+      "endCol": 17
+    },
+    {
+      "text": "  warn: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function warn\n\n  warn: () =\u003e {}",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function warn",
+      "startLine": 20,
+      "startCol": 1,
+      "endLine": 20,
+      "endCol": 17
+    },
+    {
+      "text": "  error: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function error\n\n  error: () =\u003e {}",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function error",
+      "startLine": 21,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 18
+    },
+    {
+      "text": "  debug: () =\u003e {}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function debug\n\n  debug: () =\u003e {}",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function debug",
+      "startLine": 22,
+      "startCol": 1,
+      "endLine": 22,
+      "endCol": 18
+    },
+    {
+      "text": "const defaultOptions = {\n  model: \"claude-sonnet-4-20250514\",\n  systemPrompt: \"test\",\n  tools: [] as ProviderToolSpec[],\n  skipPostFlightTokenCount: true,\n};",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts\n\nconst defaultOptions = {\n  model: \"claude-sonnet-4-20250514\",\n  systemPrompt: \"test\",\n  tools: [] as ProviderToolSpec[],\n  skipPostFlightTokenCount: true,\n};",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts",
+      "startLine": 25,
+      "startCol": 1,
+      "endLine": 30,
+      "endCol": 3
+    },
+    {
+      "text": "function createAgent(\n  mockClient: MockAnthropicClient,\n  refreshAuth: RefreshAuth | undefined,\n): AnthropicAgent {\n  const opts: AnthropicAgentOptions = {\n    authType: \"key\",\n    includeWebSearch: false,\n    disableParallelToolUseFlag: true,\n    logger: noopLogger,\n    validateInput,\n    refreshAuth,\n  };\n  return new AnthropicAgent(\n    defaultOptions,\n    mockClient as unknown as Anthropic,\n    opts,\n  );\n}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function createAgent\n\nfunction createAgent(\n  mockClient: MockAnthropicClient,\n  refreshAuth: RefreshAuth | undefined,\n): AnthropicAgent {\n  const opts: AnthropicAgentOptions = {\n    authType: \"key\",\n    includeWebSearch: false,\n    disableParallelToolUseFlag: true,\n    logger: noopLogger,\n    validateInput,\n    refreshAuth,\n  };\n  return new AnthropicAgent(\n    defaultOptions,\n    mockClient as unknown as Anthropic,\n    opts,\n  );\n}",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function createAgent",
+      "startLine": 32,
+      "startCol": 1,
+      "endLine": 49,
+      "endCol": 2
+    },
+    {
+      "text": "function makeTokenExpiredError(): Error {\n  const err = new Error(\n    \"Token is expired. To refresh this SSO session run 'aws sso login'.\",\n  );\n  err.name = \"TokenProviderError\";\n  return err;\n}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function makeTokenExpiredError\n\nfunction makeTokenExpiredError(): Error {\n  const err = new Error(\n    \"Token is expired. To refresh this SSO session run 'aws sso login'.\",\n  );\n  err.name = \"TokenProviderError\";\n  return err;\n}",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function makeTokenExpiredError",
+      "startLine": 51,
+      "startCol": 1,
+      "endLine": 57,
+      "endCol": 2
+    },
+    {
+      "text": "function trackEvents(agent: AnthropicAgent) {\n  const events: {\n    stopped: Array\u003c{ stopReason: string }\u003e;\n    errors: Error[];\n  } = { stopped: [], errors: [] };\n  agent.on(\"stopped\", (stopReason) =\u003e {\n    events.stopped.push({ stopReason });\n  });\n  agent.on(\"error\", (error) =\u003e {\n    events.errors.push(error);\n  });\n  return events;\n}",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function trackEvents\n\nfunction trackEvents(agent: AnthropicAgent) {\n  const events: {\n    stopped: Array\u003c{ stopReason: string }\u003e;\n    errors: Error[];\n  } = { stopped: [], errors: [] };\n  agent.on(\"stopped\", (stopReason) =\u003e {\n    events.stopped.push({ stopReason });\n  });\n  agent.on(\"error\", (error) =\u003e {\n    events.errors.push(error);\n  });\n  return events;\n}",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts \u003e function trackEvents",
+      "startLine": 59,
+      "startCol": 1,
+      "endLine": 71,
+      "endCol": 2
+    },
+    {
+      "text": "describe(\"AnthropicAgent auth refresh\", () =\u003e {\n  beforeEach(() =\u003e {\n    vi.useFakeTimers();\n  });\n\n  afterEach(() =\u003e {\n    vi.useRealTimers();\n  });\n\n  it(\"refreshes auth on TokenProviderError and retries successfully\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const refreshAuth = vi.fn().mockResolvedValue(undefined);\n    const agent = createAgent(mockClient, refreshAuth);\n    const events = trackEvents(agent);\n\n    agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: \"hello\",\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n    agent.continueConversation();\n\n    let stream = await mockClient.awaitStream();\n    stream.respondWithError(makeTokenExpiredError());\n    await vi.advanceTimersByTimeAsync(0);\n\n    stream = await mockClient.awaitStream();\n    stream.respond({\n      text: \"hi back\",\n      toolRequests: [],\n      stopReason: \"end_turn\",\n    });\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(refreshAuth).toHaveBeenCalledTimes(1);\n    expect(events.stopped.length).toBe(1);\n    expect(events.stopped[0].stopReason).toBe(\"end_turn\");\n    expect(events.errors.length).toBe(0);\n  });",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts\n\ndescribe(\"AnthropicAgent auth refresh\", () =\u003e {\n  beforeEach(() =\u003e {\n    vi.useFakeTimers();\n  });\n\n  afterEach(() =\u003e {\n    vi.useRealTimers();\n  });\n\n  it(\"refreshes auth on TokenProviderError and retries successfully\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const refreshAuth = vi.fn().mockResolvedValue(undefined);\n    const agent = createAgent(mockClient, refreshAuth);\n    const events = trackEvents(agent);\n\n    agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: \"hello\",\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n    agent.continueConversation();\n\n    let stream = await mockClient.awaitStream();\n    stream.respondWithError(makeTokenExpiredError());\n    await vi.advanceTimersByTimeAsync(0);\n\n    stream = await mockClient.awaitStream();\n    stream.respond({\n      text: \"hi back\",\n      toolRequests: [],\n      stopReason: \"end_turn\",\n    });\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(refreshAuth).toHaveBeenCalledTimes(1);\n    expect(events.stopped.length).toBe(1);\n    expect(events.stopped[0].stopReason).toBe(\"end_turn\");\n    expect(events.errors.length).toBe(0);\n  });",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts",
+      "startLine": 73,
+      "startCol": 1,
+      "endLine": 113,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"surfaces a combined error when refresh fails\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const refreshAuth = vi\n      .fn()\n      .mockRejectedValue(new Error(\"aws sso login failed: bad config\"));\n    const agent = createAgent(mockClient, refreshAuth);\n    const events = trackEvents(agent);\n\n    agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: \"hello\",\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n    agent.continueConversation();\n\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(makeTokenExpiredError());\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(refreshAuth).toHaveBeenCalledTimes(1);\n    expect(events.errors.length).toBe(1);\n    expect(events.errors[0].message).toContain(\"Auth refresh failed\");\n    expect(events.errors[0].message).toContain(\"bad config\");\n    expect(events.errors[0].message).toContain(\"Token is expired\");\n  });",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts\n\nit(\"surfaces a combined error when refresh fails\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const refreshAuth = vi\n      .fn()\n      .mockRejectedValue(new Error(\"aws sso login failed: bad config\"));\n    const agent = createAgent(mockClient, refreshAuth);\n    const events = trackEvents(agent);\n\n    agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: \"hello\",\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n    agent.continueConversation();\n\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(makeTokenExpiredError());\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(refreshAuth).toHaveBeenCalledTimes(1);\n    expect(events.errors.length).toBe(1);\n    expect(events.errors[0].message).toContain(\"Auth refresh failed\");\n    expect(events.errors[0].message).toContain(\"bad config\");\n    expect(events.errors[0].message).toContain(\"Token is expired\");\n  });",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts",
+      "startLine": 115,
+      "startCol": 3,
+      "endLine": 141,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"30s window prevents a second refresh after a repeated auth error\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const runCommand = vi\n      .fn\u003cRunCommand\u003e()\n      .mockResolvedValue({ stdout: \"\", stderr: \"\" });\n    const refreshAuth = makeRefreshAuth(\n      \"aws sso login\",\n      noopLogger,\n      runCommand,\n    );\n    const agent = createAgent(mockClient, refreshAuth);\n    const events = trackEvents(agent);\n\n    agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: \"hello\",\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n    agent.continueConversation();\n\n    let stream = await mockClient.awaitStream();\n    stream.respondWithError(makeTokenExpiredError());\n    await vi.advanceTimersByTimeAsync(0);\n\n    stream = await mockClient.awaitStream();\n    stream.respondWithError(makeTokenExpiredError());\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(runCommand).toHaveBeenCalledTimes(1);\n    expect(events.errors.length).toBe(1);\n    expect(events.errors[0].message).toContain(\"Auth refresh failed\");\n    expect(events.errors[0].message).toContain(\"not retrying\");\n  });",
+      "contextualizedText": "// node/core/src/providers/anthropic-agent-auth-refresh.test.ts\n\nit(\"30s window prevents a second refresh after a repeated auth error\", async () =\u003e {\n    const mockClient = new MockAnthropicClient();\n    const runCommand = vi\n      .fn\u003cRunCommand\u003e()\n      .mockResolvedValue({ stdout: \"\", stderr: \"\" });\n    const refreshAuth = makeRefreshAuth(\n      \"aws sso login\",\n      noopLogger,\n      runCommand,\n    );\n    const agent = createAgent(mockClient, refreshAuth);\n    const events = trackEvents(agent);\n\n    agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: \"hello\",\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n    agent.continueConversation();\n\n    let stream = await mockClient.awaitStream();\n    stream.respondWithError(makeTokenExpiredError());\n    await vi.advanceTimersByTimeAsync(0);\n\n    stream = await mockClient.awaitStream();\n    stream.respondWithError(makeTokenExpiredError());\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(runCommand).toHaveBeenCalledTimes(1);\n    expect(events.errors.length).toBe(1);\n    expect(events.errors[0].message).toContain(\"Auth refresh failed\");\n    expect(events.errors[0].message).toContain(\"not retrying\");\n  });",
+      "headingContext": "node/core/src/providers/anthropic-agent-auth-refresh.test.ts",
+      "startLine": 143,
+      "startCol": 3,
+      "endLine": 177,
+      "endCol": 6
+    }
+  ]
+}
