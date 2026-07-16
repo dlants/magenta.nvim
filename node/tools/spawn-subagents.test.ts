@@ -2,7 +2,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
-  type AbortAction,
   type EndTurnAction,
   pollUntil,
   type ThreadId,
@@ -384,7 +383,6 @@ describe("yield behavior", () => {
           resultPrefix:
             "[Worker branch: magenta/worker-test123 (forked from main), 2 commit(s) synced to host]",
         }),
-        onAbort: (): AbortAction => ({ type: "none" }),
       };
       childWrapper.thread.supervisors = [mockSupervisor];
 

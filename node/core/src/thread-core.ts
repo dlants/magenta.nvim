@@ -158,8 +158,6 @@ export interface ThreadCoreContext {
   yieldSchema?: JSONSchemaType;
   /** Base dir for the conversation archive. Defaults to MAGENTA_TEMP_DIR. */
   conversationLogBaseDir?: string;
-  /** Overrides the bundled compaction prompt template when set. */
-  autoCompactPrompt?: string | undefined;
 }
 
 /** Minimum output tokens between system reminders during auto-respond loops */
@@ -1486,7 +1484,6 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       threadManager: this.context.threadManager,
       maxConcurrentSubagents: this.context.maxConcurrentSubagents,
       maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
-      compactPromptTemplate: this.context.autoCompactPrompt,
       getProvider: this.context.getProvider,
       requestRender: () => this.emit("update"),
     });
@@ -1583,28 +1580,42 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
   }
 
   private consultEndTurnSupervisors(context: EndTurnContext): EndTurnAction {
+    const texts: string[] = [];
     for (const sup of this.supervisors) {
       const action = sup.onEndTurnWithoutYield?.(context);
-      if (action && action.type !== "none") return action;
+      if (action && action.type === "send-message") texts.push(action.text);
     }
-    return { type: "none" };
+    if (texts.length === 0) return { type: "none" };
+    return { type: "send-message", text: texts.join("\n\n") };
   }
 
   private async consultYieldSupervisors(result: string): Promise<YieldAction> {
+    const texts: string[] = [];
     for (const sup of this.supervisors) {
       const action = await sup.onYield?.(result);
-      if (action && action.type !== "none") return action;
+      if (!action) continue;
+      if (action.type === "accept" || action.type === "reject") return action;
+      if (action.type === "send-message") texts.push(action.text);
     }
-    return { type: "none" };
+    if (texts.length === 0) return { type: "none" };
+    return { type: "send-message", text: texts.join("\n\n") };
   }
 
   private consultHandoffSupervisors(stopReason: StopReason): HandoffAction {
     const inputTokenCount = this.agent.getState().inputTokenCount;
+    const prompts: string[] = [];
+    let shouldCompact = false;
     for (const sup of this.supervisors) {
       const action = sup.onHandoff?.({ inputTokenCount, stopReason });
-      if (action && action.type !== "none") return action;
+      if (action && action.type === "compact") {
+        shouldCompact = true;
+        if (action.nextPrompt !== undefined) prompts.push(action.nextPrompt);
+      }
     }
-    return { type: "none" };
+    if (!shouldCompact) return { type: "none" };
+    return prompts.length > 0
+      ? { type: "compact", nextPrompt: prompts.join("\n\n") }
+      : { type: "compact" };
   }
 
   async setThreadTitle(userMessage: string): Promise<void> {

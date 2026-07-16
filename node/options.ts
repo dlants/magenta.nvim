@@ -170,6 +170,9 @@ export type SandboxConfig = {
   };
 };
 
+export const DEFAULT_AUTO_COMPACT_PROMPT =
+  "Continue with the task you were working on before the conversation was automatically compacted.";
+
 export const DEFAULT_SANDBOX_CONFIG: SandboxConfig = {
   filesystem: {
     allowWrite: ["./"],
@@ -240,7 +243,7 @@ export type MagentaOptions = {
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
   autoCompactThreshold: number;
-  autoCompactPrompt?: string;
+  autoCompactPrompt: string;
   mcpServers: { [serverName: ServerName]: MCPServerConfig };
   customCommands: CustomCommand[];
   lspDebounceMs?: number;
@@ -1074,6 +1077,7 @@ export function parseOptions(
     maxConcurrentSubagents: 3,
     maxConcurrentFastSubagents: 8,
     autoCompactThreshold: 300000,
+    autoCompactPrompt: DEFAULT_AUTO_COMPACT_PROMPT,
     sandbox: { ...DEFAULT_SANDBOX_CONFIG },
     autoContext: [],
     hierarchyContextFileNames: ["context.md", "agent.md"],

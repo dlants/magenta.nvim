@@ -36,6 +36,8 @@ function makeBaseOptions(overrides?: Partial<MagentaOptions>): MagentaOptions {
     maxConcurrentSubagents: 3,
     maxConcurrentFastSubagents: 8,
     autoCompactThreshold: 300000,
+    autoCompactPrompt:
+      "Continue with the task you were working on before the conversation was automatically compacted.",
     sandbox: structuredClone(DEFAULT_SANDBOX_CONFIG),
     autoContext: [],
     hierarchyContextFileNames: ["context.md", "agent.md"],
@@ -522,7 +524,9 @@ describe("autoCompact options", () => {
       noopLogger,
     );
     expect(result.autoCompactThreshold).toBe(300000);
-    expect(result.autoCompactPrompt).toBeUndefined();
+    expect(result.autoCompactPrompt).toBe(
+      "Continue with the task you were working on before the conversation was automatically compacted.",
+    );
   });
 
   it("parses a valid threshold and prompt", () => {
@@ -548,7 +552,9 @@ describe("autoCompact options", () => {
       noopLogger,
     );
     expect(result.autoCompactThreshold).toBe(300000);
-    expect(result.autoCompactPrompt).toBeUndefined();
+    expect(result.autoCompactPrompt).toBe(
+      "Continue with the task you were working on before the conversation was automatically compacted.",
+    );
   });
 
   it("parseProjectOptions parses valid auto-compact scalars", () => {

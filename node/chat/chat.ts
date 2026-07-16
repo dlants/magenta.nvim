@@ -694,10 +694,7 @@ export class Chat implements ThreadManager {
 
     const thread = new Thread(threadId, threadType, systemPrompt, {
       ...this.context,
-      options: {
-        ...this.context.getOptions(),
-        ...(autoCompactPrompt !== undefined ? { autoCompactPrompt } : {}),
-      },
+      options: this.context.getOptions(),
       mcpToolManager: this.mcpToolManager,
       profile,
       chat: this,
@@ -735,6 +732,9 @@ export class Chat implements ThreadManager {
               threshold:
                 autoCompactThreshold ??
                 this.context.getOptions().autoCompactThreshold,
+              nextPrompt:
+                autoCompactPrompt ??
+                this.context.getOptions().autoCompactPrompt,
             }),
           ];
 

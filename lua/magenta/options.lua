@@ -108,6 +108,7 @@ local defaults = {
   maxConcurrentSubagents = 3,
   maxConcurrentFastSubagents = 8,
   autoCompactThreshold = 300000,
+  autoCompactPrompt = "Continue with the task you were working on before the conversation was automatically compacted.",
   chimeVolume = 0.3,
   bellOnNotify = true,
   getFileAutoAllowGlobs = {

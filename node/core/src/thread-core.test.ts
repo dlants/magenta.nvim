@@ -569,7 +569,9 @@ describe("SubagentSupervisor yield tag detection", () => {
 describe("AutoCompactSupervisor integration", () => {
   it("triggers compaction on end_turn handoff when input tokens breach the threshold", async () => {
     const { core, mockClient } = createThreadCoreWithMock();
-    core.supervisors = [new AutoCompactSupervisor({ threshold: 100 })];
+    core.supervisors = [
+      new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
+    ];
     mockClient.mockInputTokenCount = 200;
 
     let compactCalls = 0;
@@ -604,7 +606,9 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("does not trigger compaction when input tokens are below the threshold", async () => {
     const { core, mockClient } = createThreadCoreWithMock();
-    core.supervisors = [new AutoCompactSupervisor({ threshold: 100000 })];
+    core.supervisors = [
+      new AutoCompactSupervisor({ threshold: 100000, nextPrompt: "go" }),
+    ];
     mockClient.mockInputTokenCount = 50;
 
     let compactCalls = 0;
@@ -631,7 +635,9 @@ describe("AutoCompactSupervisor integration", () => {
     const { core, mockClient } = createThreadCoreWithMock({
       fileIO: fileIO as unknown as ThreadCoreContext["fileIO"],
     });
-    core.supervisors = [new AutoCompactSupervisor({ threshold: 100 })];
+    core.supervisors = [
+      new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
+    ];
     mockClient.mockInputTokenCount = 200;
 
     let compactCalls = 0;
@@ -668,7 +674,9 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("triggers compaction on a max_tokens handoff when over threshold", async () => {
     const { core, mockClient } = createThreadCoreWithMock();
-    core.supervisors = [new AutoCompactSupervisor({ threshold: 100 })];
+    core.supervisors = [
+      new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
+    ];
     mockClient.mockInputTokenCount = 200;
 
     let compactCalls = 0;
@@ -699,7 +707,7 @@ describe("AutoCompactSupervisor integration", () => {
     expect(compactCalls).toBe(1);
   });
 
-  it("consults supervisors in order and takes the first non-none action", async () => {
+  it("consults all supervisors and combines their compact prompts in order", async () => {
     const { core, mockClient } = createThreadCoreWithMock();
     const calls: string[] = [];
     const first: ThreadSupervisor = {
@@ -717,7 +725,7 @@ describe("AutoCompactSupervisor integration", () => {
     const third: ThreadSupervisor = {
       onHandoff: () => {
         calls.push("third");
-        return { type: "compact" };
+        return { type: "compact", nextPrompt: "stop" };
       },
     };
     core.supervisors = [first, second, third];
@@ -733,14 +741,13 @@ describe("AutoCompactSupervisor integration", () => {
     stream.finishResponse("end_turn");
 
     await pollUntil(() => {
-      if (calls.includes("second")) return true;
+      if (calls.includes("third")) return true;
       throw new Error("waiting for supervisor consultation");
     });
 
-    // First returns none so we advance to the second; the second returns a
-    // non-none action so the third is never consulted.
-    expect(calls).toEqual(["first", "second"]);
-    expect(compactPrompt).toBe("go");
+    // All supervisors are consulted; compact prompts are combined in order.
+    expect(calls).toEqual(["first", "second", "third"]);
+    expect(compactPrompt).toBe("go\n\nstop");
   });
 });
 

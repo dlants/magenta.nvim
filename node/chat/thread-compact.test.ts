@@ -798,11 +798,15 @@ it("auto-compact triggers on handoff when inputTokenCount breaches the superviso
   });
 });
 
-it("auto-compact uses the configured compaction prompt template", async () => {
-  const customTemplate =
-    "CUSTOM_COMPACT_MARKER_XYZ {{status}} :: {{next_prompt}}";
+it("auto-compact uses the configured next prompt from options", async () => {
+  const customNextPrompt = "CUSTOM_NEXT_PROMPT_XYZ do the follow-up work";
   await withDriver(
-    { options: { autoCompactPrompt: customTemplate } },
+    {
+      options: {
+        autoCompactThreshold: 160_000,
+        autoCompactPrompt: customNextPrompt,
+      },
+    },
     async (driver) => {
       await driver.showSidebar();
 
@@ -811,64 +815,30 @@ it("auto-compact uses the configured compaction prompt template", async () => {
       await driver.inputMagentaText("What is 2+2?");
       await driver.send();
 
-      const request1 = await driver.mockAnthropic.awaitPendingStream({
-        message: "initial request",
-      });
-      request1.respond({
-        stopReason: "end_turn",
-        text: "2+2 equals 4.",
-        toolRequests: [],
-      });
-
       const originalThread = driver.magenta.chat.getActiveThread();
 
-      await pollUntil(
-        () => {
-          const state = originalThread.agent.getState();
-          if (state.status.type !== "stopped")
-            throw new Error("waiting for stop");
-          if (
-            state.inputTokenCount === undefined ||
-            state.inputTokenCount < 160_000
-          ) {
-            throw new Error(
-              `expected inputTokenCount >= 160000 but got ${state.inputTokenCount}`,
-            );
-          }
-        },
-        { timeout: 2000, message: "inputTokenCount should be populated" },
-      );
-
-      originalThread.supervisors = [
-        new AutoCompactSupervisor({ threshold: 160_000 }),
-      ];
-
-      await driver.inputMagentaText("Another question");
-      await driver.send();
-
-      const request2 = await driver.mockAnthropic.awaitPendingStream({
-        message: "second request",
-      });
-      request2.respond({
-        stopReason: "end_turn",
-        text: "Sure, happy to help.",
-        toolRequests: [],
-      });
-
-      await pollUntil(
-        () => {
-          if (originalThread.core.state.mode.type !== "compacting")
-            throw new Error(
-              `expected compacting mode but got ${originalThread.core.state.mode.type}`,
-            );
-        },
-        { timeout: 2000, message: "thread should auto-compact" },
-      );
-
-      const compactSubagentStream =
-        await driver.mockAnthropic.awaitPendingStream({
-          message: "compact subagent stream",
+      // Drive turns until the post-flight inputTokenCount is populated and the
+      // handoff triggers auto-compaction.
+      let compactSubagentStream: Awaited<
+        ReturnType<typeof driver.mockAnthropic.awaitPendingStream>
+      > | null = null;
+      for (let i = 0; i < 5; i++) {
+        const stream = await driver.mockAnthropic.awaitPendingStream({
+          message: `turn ${i}`,
         });
+        if (originalThread.core.state.mode.type === "compacting") {
+          compactSubagentStream = stream;
+          break;
+        }
+        stream.respond({
+          stopReason: "end_turn",
+          text: "working on it",
+          toolRequests: [],
+        });
+      }
+
+      if (!compactSubagentStream)
+        throw new Error("thread did not auto-compact");
 
       const subagentMessages = compactSubagentStream.getProviderMessages();
       const userMsg = subagentMessages.find((m) => m.role === "user");
@@ -880,14 +850,13 @@ it("auto-compact uses the configured compaction prompt template", async () => {
         )
         .map((c) => c.text)
         .join("");
-      expect(textContent).toContain("CUSTOM_COMPACT_MARKER_XYZ");
+      expect(textContent).toContain("CUSTOM_NEXT_PROMPT_XYZ");
     },
   );
 });
 
 it("script-spawned thread honors per-thread autoCompactPrompt override", async () => {
-  const customTemplate =
-    "PER_THREAD_COMPACT_MARKER_QRS {{status}} :: {{next_prompt}}";
+  const customNextPrompt = "PER_THREAD_NEXT_PROMPT_QRS finish the migration";
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
@@ -899,7 +868,7 @@ it("script-spawned thread honors per-thread autoCompactPrompt override", async (
       yieldSchema: { type: "object", properties: {} },
       getSandboxRoot: () => undefined,
       autoCompactThreshold: 160_000,
-      autoCompactPrompt: customTemplate,
+      autoCompactPrompt: customNextPrompt,
     });
 
     const wrapper = driver.magenta.chat.threadWrappers[threadId];
@@ -942,7 +911,7 @@ it("script-spawned thread honors per-thread autoCompactPrompt override", async (
       )
       .map((c) => c.text)
       .join("");
-    expect(textContent).toContain("PER_THREAD_COMPACT_MARKER_QRS");
+    expect(textContent).toContain("PER_THREAD_NEXT_PROMPT_QRS");
   });
 });
 
@@ -996,8 +965,11 @@ it("script-spawned thread without prompt override falls back to the default temp
       )
       .map((c) => c.text)
       .join("");
-    expect(textContent).not.toContain("PER_THREAD_COMPACT_MARKER_QRS");
+    expect(textContent).not.toContain("PER_THREAD_NEXT_PROMPT_QRS");
     expect(textContent).toContain("working brief");
+    expect(textContent).toContain(
+      "before the conversation was automatically compacted",
+    );
   });
 });
 

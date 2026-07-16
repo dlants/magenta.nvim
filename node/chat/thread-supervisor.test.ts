@@ -129,16 +129,4 @@ describe("DockerSupervisor", () => {
       expect(call).not.toHaveProperty("onProgress");
     });
   });
-
-  describe("onAbort", () => {
-    it("returns none", () => {
-      const supervisor = new DockerSupervisor(
-        "test-container",
-        "/workspace",
-        "/host/dir",
-      );
-
-      expect(supervisor.onAbort()).toEqual({ type: "none" });
-    });
-  });
 });

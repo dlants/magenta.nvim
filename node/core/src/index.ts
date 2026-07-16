@@ -206,7 +206,6 @@ export {
 } from "./thread-core.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
-  AbortAction,
   EndTurnAction,
   EndTurnContext,
   HandoffAction,

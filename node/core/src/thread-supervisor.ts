@@ -15,9 +15,6 @@ export type YieldAction =
   | { type: "send-message"; text: string }
   | { type: "none" };
 
-/** Action returned from the `onAbort` hook. */
-export type AbortAction = { type: "none" };
-
 /** Action returned from the `onHandoff` hook. */
 export type HandoffAction =
   | { type: "compact"; nextPrompt?: string }
@@ -26,11 +23,7 @@ export type HandoffAction =
 /** Union of all hook action types. Prefer the narrower per-hook types
  *  where possible so that a hook cannot return an action it does not
  *  own (e.g. `compact` is only representable from `onHandoff`). */
-export type SupervisorAction =
-  | EndTurnAction
-  | YieldAction
-  | AbortAction
-  | HandoffAction;
+export type SupervisorAction = EndTurnAction | YieldAction | HandoffAction;
 
 export type EndTurnContext = {
   stopReason: string;
@@ -45,7 +38,6 @@ export type HandoffContext = {
 export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
   onYield?(result: string): Promise<YieldAction>;
-  onAbort?(): AbortAction;
   onHandoff?(context: HandoffContext): HandoffAction;
 }
 
@@ -76,10 +68,6 @@ export class SubagentSupervisor implements ThreadSupervisor {
   }
 
   async onYield(_result: string): Promise<YieldAction> {
-    return { type: "none" };
-  }
-
-  onAbort(): AbortAction {
     return { type: "none" };
   }
 }
@@ -119,21 +107,17 @@ export class UnsupervisedSupervisor implements ThreadSupervisor {
   async onYield(_result: string): Promise<YieldAction> {
     return { type: "none" };
   }
-
-  onAbort(): AbortAction {
-    return { type: "none" };
-  }
 }
 
 /** Triggers auto-compaction when the thread's input token count breaches
  *  a configurable threshold. Only implements the handoff hook. */
 export class AutoCompactSupervisor implements ThreadSupervisor {
   private readonly threshold: number;
-  private readonly nextPrompt: string | undefined;
+  private readonly nextPrompt: string;
 
-  constructor(opts?: { threshold?: number; nextPrompt?: string }) {
-    this.threshold = opts?.threshold ?? 300000;
-    this.nextPrompt = opts?.nextPrompt;
+  constructor(opts: { nextPrompt: string; threshold?: number }) {
+    this.threshold = opts.threshold ?? 300000;
+    this.nextPrompt = opts.nextPrompt;
   }
 
   onHandoff(context: HandoffContext): HandoffAction {
@@ -141,9 +125,7 @@ export class AutoCompactSupervisor implements ThreadSupervisor {
       context.inputTokenCount !== undefined &&
       context.inputTokenCount >= this.threshold
     ) {
-      return this.nextPrompt !== undefined
-        ? { type: "compact", nextPrompt: this.nextPrompt }
-        : { type: "compact" };
+      return { type: "compact", nextPrompt: this.nextPrompt };
     }
     return { type: "none" };
   }
