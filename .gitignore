@@ -199,3 +199,5 @@ node/test/tmp
 node/providers/recordings/
 node/test/fixtures/
 test-plugins/
+
+.pkb/cache.db
