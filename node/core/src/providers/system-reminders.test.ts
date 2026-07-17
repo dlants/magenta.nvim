@@ -106,6 +106,26 @@ describe("buildSystemReminder", () => {
     expect(reminder).toBeUndefined();
   });
 
+  it("includes the scratchpad reminder for root and subagent but not compact", () => {
+    const root = buildSystemReminder({
+      threadType: "root",
+      kinds: ["subsequent"],
+    });
+    expect(root).toContain("scratchpad");
+
+    const subagent = buildSystemReminder({
+      threadType: "subagent",
+      kinds: ["subsequent"],
+    });
+    expect(subagent).toContain("scratchpad");
+
+    const compact = buildSystemReminder({
+      threadType: "compact",
+      kinds: ["subsequent"],
+    });
+    expect(compact).toBeUndefined();
+  });
+
   it("returns undefined for compact thread regardless of requested kinds", () => {
     expect(
       buildSystemReminder({

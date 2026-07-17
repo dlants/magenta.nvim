@@ -18,6 +18,9 @@ WRONG: \`command 2>&1 | tail -50\`
 WRONG: \`command | head -100\`
 RIGHT: \`command\``;
 
+const SCRATCHPAD_REMINDER = `\
+When tracking a set of items — counting, enumerating, or bookkeeping object-permanence style state — prefer the scratchpad tool over holding the state in your reasoning.`;
+
 const SUBAGENT_REMINDER = `\
 Don't spawn sub-agents for things you can do with a single tool call (get_file, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
 `;
@@ -34,11 +37,13 @@ function getSubsequentReminderBody(
       return `${SKILLS_REMINDER}
 ${BASH_REMINDER}
 ${EDL_REMINDER}
+${SCRATCHPAD_REMINDER}
 ${SUBAGENT_REMINDER}`;
     case "docker_root":
       return `${SKILLS_REMINDER}
 ${BASH_REMINDER}
 ${EDL_REMINDER}
+${SCRATCHPAD_REMINDER}
 ${SUBAGENT_REMINDER}
 
 CRITICAL: You are in a Docker container. Call yield_to_parent when done. Your changes will be synced back automatically.`;
@@ -49,6 +54,7 @@ CRITICAL: You are in a Docker container. Call yield_to_parent when done. Your ch
       return `${SKILLS_REMINDER}
 ${BASH_REMINDER}
 ${EDL_REMINDER}
+${SCRATCHPAD_REMINDER}
 ${customReminder}
 CRITICAL: Use yield_to_parent tool when task is complete.`;
     }

@@ -245,6 +245,19 @@ identically on baseline (verified via git stash) — pre-existing nvim-env flake
 
 ## prompt + system reminder
 
+**STATUS: DONE (Stage 3).** Added a `# Scratchpad` paragraph to the actually-loaded
+bundled agent prompts `node/core/src/agents/{default,docker,subagent}.md` (describing
+externalized/persistent key/value state, the one-line script commands, and the
+keys-only echo). NOTE/deviation: `node/providers/prompts/default-system-prompt.md`
+is NOT loaded anywhere (system prompts are sourced from `system-prompt.ts` →
+`loadAgents` → the `agents/*.md` files), so editing it would have had no effect; the
+real prompts live in `node/core/src/agents/*.md`. Added `SCRATCHPAD_REMINDER` to
+`node/core/src/providers/system-reminders.ts` and included it in
+`getSubsequentReminderBody` for `root`, `docker_root`, and `subagent` (not `compact`).
+Added a system-reminders unit test asserting the scratchpad reminder appears for
+root/subagent and that compact returns undefined. Typecheck (`npx tsgo -b`), biome,
+and the system-reminders/system-prompt tests all pass.
+
 - Goal: make the agent reach for the scratchpad on enumeration/counting/tracking
   tasks. Two concrete edits (the whole point is behavioral nudging):
   - **Base prompt**: add a short paragraph to the default agent prompt at

@@ -1,5 +1,5 @@
 {
-  "blobSha": "744c7a868787fec99aff0693e310d7a230222027",
+  "blobSha": "198bf9f4ff1d868935a8b2bdc905a68432f46df8",
   "modelName": "voyage-context-4@256",
   "chunks": [
     {
@@ -21,12 +21,12 @@
       "endCol": 6
     },
     {
-      "text": "it(\"returns undefined for compact thread regardless of requested kinds\", () =\u003e {\n    expect(\n      buildSystemReminder({\n        threadType: \"compact\",\n        kinds: [\"subsequent\", \"bashSummary\"],\n      }),\n    ).toBeUndefined();\n  });",
-      "contextualizedText": "// node/core/src/providers/system-reminders.test.ts\n\nit(\"returns undefined for compact thread regardless of requested kinds\", () =\u003e {\n    expect(\n      buildSystemReminder({\n        threadType: \"compact\",\n        kinds: [\"subsequent\", \"bashSummary\"],\n      }),\n    ).toBeUndefined();\n  });",
+      "text": "it(\"includes the scratchpad reminder for root and subagent but not compact\", () =\u003e {\n    const root = buildSystemReminder({\n      threadType: \"root\",\n      kinds: [\"subsequent\"],\n    });\n    expect(root).toContain(\"scratchpad\");\n\n    const subagent = buildSystemReminder({\n      threadType: \"subagent\",\n      kinds: [\"subsequent\"],\n    });\n    expect(subagent).toContain(\"scratchpad\");\n\n    const compact = buildSystemReminder({\n      threadType: \"compact\",\n      kinds: [\"subsequent\"],\n    });\n    expect(compact).toBeUndefined();\n  });\n\n  it(\"returns undefined for compact thread regardless of requested kinds\", () =\u003e {\n    expect(\n      buildSystemReminder({\n        threadType: \"compact\",\n        kinds: [\"subsequent\", \"bashSummary\"],\n      }),\n    ).toBeUndefined();\n  });",
+      "contextualizedText": "// node/core/src/providers/system-reminders.test.ts\n\nit(\"includes the scratchpad reminder for root and subagent but not compact\", () =\u003e {\n    const root = buildSystemReminder({\n      threadType: \"root\",\n      kinds: [\"subsequent\"],\n    });\n    expect(root).toContain(\"scratchpad\");\n\n    const subagent = buildSystemReminder({\n      threadType: \"subagent\",\n      kinds: [\"subsequent\"],\n    });\n    expect(subagent).toContain(\"scratchpad\");\n\n    const compact = buildSystemReminder({\n      threadType: \"compact\",\n      kinds: [\"subsequent\"],\n    });\n    expect(compact).toBeUndefined();\n  });\n\n  it(\"returns undefined for compact thread regardless of requested kinds\", () =\u003e {\n    expect(\n      buildSystemReminder({\n        threadType: \"compact\",\n        kinds: [\"subsequent\", \"bashSummary\"],\n      }),\n    ).toBeUndefined();\n  });",
       "headingContext": "node/core/src/providers/system-reminders.test.ts",
       "startLine": 109,
       "startCol": 3,
-      "endLine": 116,
+      "endLine": 136,
       "endCol": 6
     }
   ]
