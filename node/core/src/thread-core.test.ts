@@ -1792,6 +1792,14 @@ describe("ThreadCore scratchpad state", () => {
     expect(core.state.scratchpad.entries).toEqual([]);
   });
 
+  it("empties a populated scratchpad on reset-after-compaction", () => {
+    const { core } = createThreadCoreWithMock();
+    core.state.scratchpad.entries.push({ key: "a", value: "1" });
+    core.state.scratchpad.entries.push({ key: "b", value: "2" });
+    core.update({ type: "reset-after-compaction" });
+    expect(core.state.scratchpad.entries).toEqual([]);
+  });
+
   it("clone deep-copies scratchpad and edlRegisters with isolation", async () => {
     const parentId = uniqueThreadId("sp-parent");
     const childId = uniqueThreadId("sp-child");

@@ -28,7 +28,8 @@ type Command =
   | { type: "append"; key: string; value: string }
   | { type: "delete"; keys: string[] }
   | { type: "get"; key: string }
-  | { type: "move_after"; key: string; anchorKey?: string }
+  | { type: "move_after"; key: string; anchorKey: string }
+  | { type: "move_to_front"; key: string }
   | { type: "clear" };
 
 function parseError(message: string): Result<never> {
@@ -114,7 +115,7 @@ export function parseScript(script: string): Result<Command[]> {
         commands.push(
           anchorKey !== undefined
             ? { type: "move_after", key, anchorKey }
-            : { type: "move_after", key },
+            : { type: "move_to_front", key },
         );
         break;
       }
@@ -173,27 +174,29 @@ export function evaluate(
         if (idx < 0) {
           return evalError(`key "${command.key}" not found`);
         }
-        if (command.anchorKey !== undefined) {
-          if (command.anchorKey === command.key) {
-            return evalError(
-              `move_after: key "${command.key}" cannot be its own anchor`,
-            );
-          }
-          const anchorIdx = entries.findIndex(
-            (e) => e.key === command.anchorKey,
+        if (command.anchorKey === command.key) {
+          return evalError(
+            `move_after: key "${command.key}" cannot be its own anchor`,
           );
-          if (anchorIdx < 0) {
-            return evalError(`anchor key "${command.anchorKey}" not found`);
-          }
-          const [moved] = entries.splice(idx, 1);
-          const newAnchorIdx = entries.findIndex(
-            (e) => e.key === command.anchorKey,
-          );
-          entries.splice(newAnchorIdx + 1, 0, moved);
-        } else {
-          const [moved] = entries.splice(idx, 1);
-          entries.unshift(moved);
         }
+        const anchorIdx = entries.findIndex((e) => e.key === command.anchorKey);
+        if (anchorIdx < 0) {
+          return evalError(`anchor key "${command.anchorKey}" not found`);
+        }
+        const [moved] = entries.splice(idx, 1);
+        const newAnchorIdx = entries.findIndex(
+          (e) => e.key === command.anchorKey,
+        );
+        entries.splice(newAnchorIdx + 1, 0, moved);
+        break;
+      }
+      case "move_to_front": {
+        const idx = entries.findIndex((e) => e.key === command.key);
+        if (idx < 0) {
+          return evalError(`key "${command.key}" not found`);
+        }
+        const [moved] = entries.splice(idx, 1);
+        entries.unshift(moved);
         break;
       }
       case "clear": {

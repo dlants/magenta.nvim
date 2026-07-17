@@ -167,6 +167,17 @@ one failing root test (`thread.test.ts > expands context update diff with =
 binding`) fails identically on baseline (pre-existing env flake) and is
 unrelated; the tool-count snapshot (8→9) was regenerated.
 
+**Code-review follow-ups (Stage 1):** (1) Split the `move_after` `Command`
+variant's optional `anchorKey` into two disjoint variants
+(`{ type: "move_after"; key; anchorKey }` | `{ type: "move_to_front"; key }`) in
+`scratchpad.ts`, per make-invalid-states-non-representable; the script parser maps
+`move_after <key>` (no anchor) to `move_to_front`. Script-level behavior/tests
+unchanged. (2) Added a thread-core test asserting a populated scratchpad is emptied
+on `reset-after-compaction`. Typecheck, biome, and core vitest all green; the two
+pre-existing root nvim-env test flakes (`thread.test.ts > expands context update
+diff` and `spawn-subagents > allows selecting parent and child threads`) fail
+identically on baseline and are unrelated.
+
 - Goal: `scratchpad.ts` exists with `execute`, `spec`, `Input`, `validateInput`,
   and a small pure parser/evaluator over the shared state object. `ThreadCore`
   owns a `scratchpad` state field, initialized and reset alongside `edlRegisters`,
