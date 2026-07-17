@@ -27,6 +27,7 @@ import * as MCPTool from "./mcp/tool.ts";
 import { parseToolName } from "./mcp/types.ts";
 import * as NvimLua from "./nvimLua.ts";
 import * as RunScript from "./run-script.ts";
+import * as Scratchpad from "./scratchpad.ts";
 import * as SpawnSubagents from "./spawn-subagents.ts";
 import * as ThreadTitle from "./thread-title.ts";
 import type { StaticToolRequest } from "./toolManager.ts";
@@ -46,6 +47,7 @@ export type CreateToolContext = {
   onToolApplied: OnToolApplied;
   helpTagsProvider: HelpTagsProvider;
   edlRegisters: EdlRegisters;
+  scratchpad: Scratchpad.Scratchpad;
   fileIO: FileIO;
   shell: Shell;
   threadManager: ThreadManager;
@@ -160,6 +162,12 @@ export function createTool(
       }
       return NvimLua.execute(staticRequest, {
         luaExecutor: context.luaExecutor,
+      });
+    }
+
+    case "scratchpad": {
+      return Scratchpad.execute(staticRequest, {
+        scratchpad: context.scratchpad,
       });
     }
 

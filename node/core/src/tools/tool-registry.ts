@@ -10,6 +10,7 @@ export const STATIC_TOOL_NAMES = [
   "docs",
   "run_script",
   "nvim_lua",
+  "scratchpad",
 ] as const;
 
 export type StaticToolName = (typeof STATIC_TOOL_NAMES)[number];
@@ -24,6 +25,7 @@ export const CHAT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "docs",
   "run_script",
   "nvim_lua",
+  "scratchpad",
 ];
 
 export const COMPACT_STATIC_TOOL_NAMES: StaticToolName[] = ["get_file", "edl"];
@@ -39,6 +41,7 @@ export const SUBAGENT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "yield_to_parent",
   "edl",
   "docs",
+  "scratchpad",
 ];
 
 export const TOOL_CAPABILITIES = [
@@ -67,4 +70,5 @@ export const TOOL_REQUIRED_CAPABILITIES: Record<
   docs: new Set(),
   run_script: new Set(["scripts"]),
   nvim_lua: new Set(["nvim"]),
+  scratchpad: new Set(),
 };

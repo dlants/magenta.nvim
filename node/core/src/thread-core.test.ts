@@ -1783,3 +1783,63 @@ describe("ThreadCore conversation archive", () => {
     }
   });
 });
+
+describe("ThreadCore scratchpad state", () => {
+  it("subagent threads start with an empty scratchpad", () => {
+    const { core } = createThreadCoreWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    expect(core.state.scratchpad.entries).toEqual([]);
+  });
+
+  it("clone deep-copies scratchpad and edlRegisters with isolation", async () => {
+    const parentId = uniqueThreadId("sp-parent");
+    const childId = uniqueThreadId("sp-child");
+    const {
+      core: parent,
+      mockClient,
+      context,
+    } = createThreadCoreWithMock(undefined, parentId);
+
+    let child: ThreadCore | undefined;
+    try {
+      await parent.sendMessage([{ type: "user", text: "parent turn" }]);
+      const stream = await mockClient.awaitStream();
+      stream.streamText("parent response");
+      stream.finishResponse("end_turn");
+      await pollUntil(() => {
+        if (parent.agent.getState().status.type !== "stopped")
+          throw new Error("waiting");
+        return true;
+      });
+
+      parent.state.scratchpad.entries.push({ key: "a", value: "1" });
+      parent.state.edlRegisters.registers.set("r", "regval");
+      parent.state.edlRegisters.nextSavedId = 3;
+
+      const nativeMessageIdx = parent.agent.getNativeMessageIdx();
+      child = await ThreadCore.clone({
+        sourceCore: parent,
+        newId: childId,
+        nativeMessageIdx,
+        context,
+      });
+
+      expect(child.state.scratchpad.entries).toEqual([
+        { key: "a", value: "1" },
+      ]);
+      expect(child.state.edlRegisters.registers.get("r")).toBe("regval");
+      expect(child.state.edlRegisters.nextSavedId).toBe(3);
+
+      child.state.scratchpad.entries.push({ key: "b", value: "2" });
+      child.state.edlRegisters.registers.set("r2", "x");
+      expect(parent.state.scratchpad.entries.map((e) => e.key)).toEqual(["a"]);
+      expect(parent.state.edlRegisters.registers.has("r2")).toBe(false);
+    } finally {
+      await parent.destroy();
+      if (child) await child.destroy();
+      await cleanupArchive(parentId);
+      await cleanupArchive(childId);
+    }
+  });
+});

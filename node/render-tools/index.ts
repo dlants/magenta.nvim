@@ -92,6 +92,8 @@ export function renderToolSummary(
     }
     case "nvim_lua":
       return NvimLuaRender.renderSummary(request, displayContext);
+    case "scratchpad":
+      return d`📝 scratchpad`;
     default:
       assertUnreachable(toolName);
   }
@@ -228,6 +230,8 @@ export function renderToolResultSummary(
       return d`${statusEmoji} run_script (${tokEst})`;
     case "nvim_lua":
       return d`${statusEmoji} nvim_lua (${tokEst})`;
+    case "scratchpad":
+      return d`${statusEmoji} scratchpad (${tokEst})`;
     default:
       assertUnreachable(toolName);
   }

@@ -178,7 +178,7 @@ RIGHT: where is X is handled?
 exports[`followup user message text is visible after tool-use cycle > followup-message-after-tool-use 1`] = `
 "# [ Untitled ]
 ⚙️ [System Prompt ~2k tok]
-🔧 [Tool Definitions (8) ~6k tok]
+🔧 [Tool Definitions (9) ~6k tok]
 
 # user:
 📋 [System Reminder]
@@ -205,7 +205,7 @@ Stopped (end_turn)  [input: 1000, output: 5000] "
 exports[`followup user message text is visible with context updates > followup-with-context-updates 1`] = `
 "# [ Untitled ]
 ⚙️ [System Prompt ~2k tok]
-🔧 [Tool Definitions (8) ~6k tok]
+🔧 [Tool Definitions (9) ~6k tok]
 
 # user:
 Context Updates:
@@ -790,7 +790,7 @@ Do not acknowledge this reminder or mention it to the user.
 exports[`renders successive tool uses with single assistant header and inline metadata > successive-tool-uses-display 1`] = `
 "# [ Untitled ]
 ⚙️ [System Prompt ~2k tok]
-🔧 [Tool Definitions (8) ~6k tok]
+🔧 [Tool Definitions (9) ~6k tok]
 
 # user:
 📋 [System Reminder]

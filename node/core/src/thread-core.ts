@@ -74,6 +74,7 @@ import type {
 } from "./tool-types.ts";
 import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
+import * as Scratchpad from "./tools/scratchpad.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
@@ -204,6 +205,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     pendingMessages: InputMessage[];
     mode: ThreadMode;
     edlRegisters: EdlRegisters;
+    scratchpad: Scratchpad.Scratchpad;
     outputTokensSinceLastReminder: number;
     compactionHistory: CompactionRecord[];
     editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];
@@ -228,6 +230,10 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     private context: ThreadCoreContext,
     clonedAgent?: Agent,
     forkProvenance?: ForkProvenance,
+    initialState?: {
+      scratchpad?: Scratchpad.Scratchpad;
+      edlRegisters?: EdlRegisters;
+    },
   ) {
     super();
     this.threadLogger = new ThreadLogger(
@@ -265,7 +271,11 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       systemInfo: context.systemInfo,
       pendingMessages: [],
       mode: { type: "normal" },
-      edlRegisters: { registers: new Map(), nextSavedId: 0 },
+      edlRegisters: initialState?.edlRegisters ?? {
+        registers: new Map(),
+        nextSavedId: 0,
+      },
+      scratchpad: initialState?.scratchpad ?? Scratchpad.emptyScratchpad(),
       outputTokensSinceLastReminder: 0,
       compactionHistory: [],
       editedFilesThisTurn: [],
@@ -311,10 +321,22 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       initialFiles,
       initialGitState: sourceCore.gitTracker.getAgentView(),
     };
-    return new ThreadCore(newId, contextWithFiles, agent, {
-      fromThreadId: sourceCore.id,
-      nativeMessageIdx,
-    });
+    return new ThreadCore(
+      newId,
+      contextWithFiles,
+      agent,
+      {
+        fromThreadId: sourceCore.id,
+        nativeMessageIdx,
+      },
+      {
+        scratchpad: Scratchpad.cloneScratchpad(sourceCore.state.scratchpad),
+        edlRegisters: {
+          registers: new Map(sourceCore.state.edlRegisters.registers),
+          nextSavedId: sourceCore.state.edlRegisters.nextSavedId,
+        },
+      },
+    );
   }
 
   private contextManagerListeners:
@@ -497,6 +519,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         break;
       case "reset-after-compaction":
         this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
+        this.state.scratchpad = Scratchpad.emptyScratchpad();
         this.state.outputTokensSinceLastReminder = 0;
         this.state.editedFilesThisTurn = [];
         this.state.pendingBashReminder = false;
@@ -785,6 +808,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         },
         helpTagsProvider: this.context.helpTagsProvider,
         edlRegisters: this.state.edlRegisters,
+        scratchpad: this.state.scratchpad,
         fileIO: this.context.fileIO,
         shell: this.context.shell,
         threadManager: this.context.threadManager,

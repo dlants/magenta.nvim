@@ -1,0 +1,150 @@
+{
+  "blobSha": "ce92694aec6545b0ca4c4175e09afaf5c1e6c925",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolResult,\n  type ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type { ToolInvocation, ToolName, ToolRequestId } from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport type ToolRequest = {\n  id: ToolRequestId;\n  toolName: \"scratchpad\";\n  input: Input;\n};\nexport type StructuredResult = { toolName: \"scratchpad\" };\n\nexport type ScratchpadEntry = { key: string; value: string };\nexport type Scratchpad = { entries: ScratchpadEntry[] };",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts\n\nimport {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolResult,\n  type ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type { ToolInvocation, ToolName, ToolRequestId } from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport type ToolRequest = {\n  id: ToolRequestId;\n  toolName: \"scratchpad\";\n  input: Input;\n};\nexport type StructuredResult = { toolName: \"scratchpad\" };\n\nexport type ScratchpadEntry = { key: string; value: string };\nexport type Scratchpad = { entries: ScratchpadEntry[] };",
+      "headingContext": "node/core/src/tools/scratchpad.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 17,
+      "endCol": 57
+    },
+    {
+      "text": "export function emptyScratchpad(): Scratchpad {\n  return { entries: [] };\n}",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function emptyScratchpad\n\nexport function emptyScratchpad(): Scratchpad {\n  return { entries: [] };\n}",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function emptyScratchpad",
+      "startLine": 19,
+      "startCol": 1,
+      "endLine": 21,
+      "endCol": 2
+    },
+    {
+      "text": "export function cloneScratchpad(scratchpad: Scratchpad): Scratchpad {\n  return { entries: scratchpad.entries.map((e) =\u003e ({ ...e })) };\n}",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function cloneScratchpad\n\nexport function cloneScratchpad(scratchpad: Scratchpad): Scratchpad {\n  return { entries: scratchpad.entries.map((e) =\u003e ({ ...e })) };\n}",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function cloneScratchpad",
+      "startLine": 23,
+      "startCol": 1,
+      "endLine": 25,
+      "endCol": 2
+    },
+    {
+      "text": "type Command =\n  | { type: \"append\"; key: string; value: string }\n  | { type: \"delete\"; keys: string[] }\n  | { type: \"get\"; key: string }\n  | { type: \"move_after\"; key: string; anchorKey?: string }\n  | { type: \"clear\" };",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts\n\ntype Command =\n  | { type: \"append\"; key: string; value: string }\n  | { type: \"delete\"; keys: string[] }\n  | { type: \"get\"; key: string }\n  | { type: \"move_after\"; key: string; anchorKey?: string }\n  | { type: \"clear\" };",
+      "headingContext": "node/core/src/tools/scratchpad.ts",
+      "startLine": 27,
+      "startCol": 1,
+      "endLine": 32,
+      "endCol": 23
+    },
+    {
+      "text": "function parseError(message: string): Result\u003cnever\u003e {\n  return { status: \"error\", error: message };\n}",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function parseError\n\nfunction parseError(message: string): Result\u003cnever\u003e {\n  return { status: \"error\", error: message };\n}",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function parseError",
+      "startLine": 34,
+      "startCol": 1,
+      "endLine": 36,
+      "endCol": 2
+    },
+    {
+      "text": "export function parseScript(script: string): Result\u003cCommand[]\u003e {\n  const lines = script.split(\"\\n\");\n  const commands: Command[] = [];\n  let i = 0;\n\n  while (i \u003c lines.length) {\n    const raw = lines[i];\n    const trimmed = raw.trim();\n    const lineNo = i + 1;\n    i++;\n\n    if (trimmed === \"\") continue;\n\n    const tokens = trimmed.split(/\\s+/);\n    const cmd = tokens[0];\n\n    switch (cmd) {\n      case \"append\": {\n        const m = raw.match(/^\\s*append\\s+(\\S+)(?:[ \\t]+(.*))?$/);\n        if (!m) {\n          return parseError(`line ${lineNo}: append requires a key and value`);\n        }\n        const key = m[1];\n        const remainder = m[2];\n        const hd = remainder?.match(/^\u003c\u003c(\\S+)$/);\n        if (hd) {\n          const sentinel = hd[1];\n          const valueLines: string[] = [];\n          let terminated = false;\n          while (i \u003c lines.length) {\n            const bodyLine = lines[i];\n            i++;\n            if (bodyLine.trim() === sentinel) {\n              terminated = true;\n              break;\n            }\n            valueLines.push(bodyLine);\n          }\n          if (!terminated) {\n            return parseError(\n              `line ${lineNo}: heredoc for key \"${key}\" was not terminated by \"${sentinel}\"`,\n            );\n          }\n          commands.push({ type: \"append\", key, value: valueLines.join(\"\\n\") });\n        } else {\n          if (remainder === undefined || remainder === \"\") {\n            return parseError(`line ${lineNo}: append requires a value`);\n          }\n          commands.push({ type: \"append\", key, value: remainder });\n        }\n        break;\n      }\n      case \"delete\": {\n        const keys = tokens.slice(1);\n        if (keys.length === 0) {\n          return parseError(`line ${lineNo}: delete requires at least one key`);\n        }\n        commands.push({ type: \"delete\", keys });\n        break;\n      }",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function parseScript\n\nexport function parseScript(script: string): Result\u003cCommand[]\u003e {\n  const lines = script.split(\"\\n\");\n  const commands: Command[] = [];\n  let i = 0;\n\n  while (i \u003c lines.length) {\n    const raw = lines[i];\n    const trimmed = raw.trim();\n    const lineNo = i + 1;\n    i++;\n\n    if (trimmed === \"\") continue;\n\n    const tokens = trimmed.split(/\\s+/);\n    const cmd = tokens[0];\n\n    switch (cmd) {\n      case \"append\": {\n        const m = raw.match(/^\\s*append\\s+(\\S+)(?:[ \\t]+(.*))?$/);\n        if (!m) {\n          return parseError(`line ${lineNo}: append requires a key and value`);\n        }\n        const key = m[1];\n        const remainder = m[2];\n        const hd = remainder?.match(/^\u003c\u003c(\\S+)$/);\n        if (hd) {\n          const sentinel = hd[1];\n          const valueLines: string[] = [];\n          let terminated = false;\n          while (i \u003c lines.length) {\n            const bodyLine = lines[i];\n            i++;\n            if (bodyLine.trim() === sentinel) {\n              terminated = true;\n              break;\n            }\n            valueLines.push(bodyLine);\n          }\n          if (!terminated) {\n            return parseError(\n              `line ${lineNo}: heredoc for key \"${key}\" was not terminated by \"${sentinel}\"`,\n            );\n          }\n          commands.push({ type: \"append\", key, value: valueLines.join(\"\\n\") });\n        } else {\n          if (remainder === undefined || remainder === \"\") {\n            return parseError(`line ${lineNo}: append requires a value`);\n          }\n          commands.push({ type: \"append\", key, value: remainder });\n        }\n        break;\n      }\n      case \"delete\": {\n        const keys = tokens.slice(1);\n        if (keys.length === 0) {\n          return parseError(`line ${lineNo}: delete requires at least one key`);\n        }\n        commands.push({ type: \"delete\", keys });\n        break;\n      }",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function parseScript",
+      "startLine": 38,
+      "startCol": 1,
+      "endLine": 97,
+      "endCol": 8
+    },
+    {
+      "text": "case \"get\": {\n        const key = tokens[1];\n        if (!key || tokens.length \u003e 2) {\n          return parseError(`line ${lineNo}: get requires exactly one key`);\n        }\n        commands.push({ type: \"get\", key });\n        break;\n      }\n      case \"move_after\": {\n        const key = tokens[1];\n        if (!key || tokens.length \u003e 3) {\n          return parseError(\n            `line ${lineNo}: move_after requires a key and an optional anchor key`,\n          );\n        }\n        const anchorKey = tokens[2];\n        commands.push(\n          anchorKey !== undefined\n            ? { type: \"move_after\", key, anchorKey }\n            : { type: \"move_after\", key },\n        );\n        break;\n      }\n      case \"clear\": {\n        if (tokens.length \u003e 1) {\n          return parseError(`line ${lineNo}: clear takes no arguments`);\n        }\n        commands.push({ type: \"clear\" });\n        break;\n      }\n      default:\n        return parseError(`line ${lineNo}: unknown command \"${cmd}\"`);\n    }\n  }\n\n  return { status: \"ok\", value: commands };\n}",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function parseScript\n\ncase \"get\": {\n        const key = tokens[1];\n        if (!key || tokens.length \u003e 2) {\n          return parseError(`line ${lineNo}: get requires exactly one key`);\n        }\n        commands.push({ type: \"get\", key });\n        break;\n      }\n      case \"move_after\": {\n        const key = tokens[1];\n        if (!key || tokens.length \u003e 3) {\n          return parseError(\n            `line ${lineNo}: move_after requires a key and an optional anchor key`,\n          );\n        }\n        const anchorKey = tokens[2];\n        commands.push(\n          anchorKey !== undefined\n            ? { type: \"move_after\", key, anchorKey }\n            : { type: \"move_after\", key },\n        );\n        break;\n      }\n      case \"clear\": {\n        if (tokens.length \u003e 1) {\n          return parseError(`line ${lineNo}: clear takes no arguments`);\n        }\n        commands.push({ type: \"clear\" });\n        break;\n      }\n      default:\n        return parseError(`line ${lineNo}: unknown command \"${cmd}\"`);\n    }\n  }\n\n  return { status: \"ok\", value: commands };\n}",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function parseScript",
+      "startLine": 98,
+      "startCol": 7,
+      "endLine": 134,
+      "endCol": 2
+    },
+    {
+      "text": "function evalError(message: string): Result\u003cnever\u003e {\n  return { status: \"error\", error: message };\n}",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function evalError\n\nfunction evalError(message: string): Result\u003cnever\u003e {\n  return { status: \"error\", error: message };\n}",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function evalError",
+      "startLine": 136,
+      "startCol": 1,
+      "endLine": 138,
+      "endCol": 2
+    },
+    {
+      "text": "export function evaluate(\n  commands: Command[],\n  scratchpad: Scratchpad,\n): Result\u003c{ entries: ScratchpadEntry[]; getOutputs: ScratchpadEntry[] }\u003e {\n  const entries = scratchpad.entries.map((e) =\u003e ({ ...e }));\n  const getOutputs: ScratchpadEntry[] = [];",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function evaluate\n\nexport function evaluate(\n  commands: Command[],\n  scratchpad: Scratchpad,\n): Result\u003c{ entries: ScratchpadEntry[]; getOutputs: ScratchpadEntry[] }\u003e {\n  const entries = scratchpad.entries.map((e) =\u003e ({ ...e }));\n  const getOutputs: ScratchpadEntry[] = [];",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function evaluate",
+      "startLine": 140,
+      "startCol": 1,
+      "endLine": 145,
+      "endCol": 44
+    },
+    {
+      "text": "for (const command of commands) {\n    switch (command.type) {\n      case \"append\": {\n        if (entries.some((e) =\u003e e.key === command.key)) {\n          return evalError(`key \"${command.key}\" already exists`);\n        }\n        entries.push({ key: command.key, value: command.value });\n        break;\n      }\n      case \"delete\": {\n        for (const key of command.keys) {\n          const idx = entries.findIndex((e) =\u003e e.key === key);\n          if (idx \u003e= 0) entries.splice(idx, 1);\n        }\n        break;\n      }\n      case \"get\": {\n        const entry = entries.find((e) =\u003e e.key === command.key);\n        if (!entry) {\n          return evalError(`key \"${command.key}\" not found`);\n        }\n        getOutputs.push({ key: entry.key, value: entry.value });\n        break;\n      }\n      case \"move_after\": {\n        const idx = entries.findIndex((e) =\u003e e.key === command.key);\n        if (idx \u003c 0) {\n          return evalError(`key \"${command.key}\" not found`);\n        }\n        if (command.anchorKey !== undefined) {\n          if (command.anchorKey === command.key) {\n            return evalError(\n              `move_after: key \"${command.key}\" cannot be its own anchor`,\n            );\n          }\n          const anchorIdx = entries.findIndex(\n            (e) =\u003e e.key === command.anchorKey,\n          );\n          if (anchorIdx \u003c 0) {\n            return evalError(`anchor key \"${command.anchorKey}\" not found`);\n          }\n          const [moved] = entries.splice(idx, 1);\n          const newAnchorIdx = entries.findIndex(\n            (e) =\u003e e.key === command.anchorKey,\n          );\n          entries.splice(newAnchorIdx + 1, 0, moved);\n        } else {\n          const [moved] = entries.splice(idx, 1);\n          entries.unshift(moved);\n        }\n        break;\n      }\n      case \"clear\": {\n        entries.length = 0;\n        break;\n      }\n    }\n  }\n\n  return { status: \"ok\", value: { entries, getOutputs } };\n}",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function evaluate\n\nfor (const command of commands) {\n    switch (command.type) {\n      case \"append\": {\n        if (entries.some((e) =\u003e e.key === command.key)) {\n          return evalError(`key \"${command.key}\" already exists`);\n        }\n        entries.push({ key: command.key, value: command.value });\n        break;\n      }\n      case \"delete\": {\n        for (const key of command.keys) {\n          const idx = entries.findIndex((e) =\u003e e.key === key);\n          if (idx \u003e= 0) entries.splice(idx, 1);\n        }\n        break;\n      }\n      case \"get\": {\n        const entry = entries.find((e) =\u003e e.key === command.key);\n        if (!entry) {\n          return evalError(`key \"${command.key}\" not found`);\n        }\n        getOutputs.push({ key: entry.key, value: entry.value });\n        break;\n      }\n      case \"move_after\": {\n        const idx = entries.findIndex((e) =\u003e e.key === command.key);\n        if (idx \u003c 0) {\n          return evalError(`key \"${command.key}\" not found`);\n        }\n        if (command.anchorKey !== undefined) {\n          if (command.anchorKey === command.key) {\n            return evalError(\n              `move_after: key \"${command.key}\" cannot be its own anchor`,\n            );\n          }\n          const anchorIdx = entries.findIndex(\n            (e) =\u003e e.key === command.anchorKey,\n          );\n          if (anchorIdx \u003c 0) {\n            return evalError(`anchor key \"${command.anchorKey}\" not found`);\n          }\n          const [moved] = entries.splice(idx, 1);\n          const newAnchorIdx = entries.findIndex(\n            (e) =\u003e e.key === command.anchorKey,\n          );\n          entries.splice(newAnchorIdx + 1, 0, moved);\n        } else {\n          const [moved] = entries.splice(idx, 1);\n          entries.unshift(moved);\n        }\n        break;\n      }\n      case \"clear\": {\n        entries.length = 0;\n        break;\n      }\n    }\n  }\n\n  return { status: \"ok\", value: { entries, getOutputs } };\n}",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function evaluate",
+      "startLine": 147,
+      "startCol": 3,
+      "endLine": 207,
+      "endCol": 2
+    },
+    {
+      "text": "function snapshotLine(entries: ScratchpadEntry[]): string {\n  return `The scratchpad is now [${entries.map((e) =\u003e e.key).join(\", \")}]`;\n}",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function snapshotLine\n\nfunction snapshotLine(entries: ScratchpadEntry[]): string {\n  return `The scratchpad is now [${entries.map((e) =\u003e e.key).join(\", \")}]`;\n}",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function snapshotLine",
+      "startLine": 209,
+      "startCol": 1,
+      "endLine": 211,
+      "endCol": 2
+    },
+    {
+      "text": "export function runScript(\n  script: string,\n  scratchpad: Scratchpad,\n): Result\u003cstring\u003e {\n  const parsed = parseScript(script);\n  if (parsed.status === \"error\") return parsed;\n\n  const evaluated = evaluate(parsed.value, scratchpad);\n  if (evaluated.status === \"error\") return evaluated;\n\n  scratchpad.entries = evaluated.value.entries;\n\n  const parts: string[] = [];\n  for (const { key, value } of evaluated.value.getOutputs) {\n    parts.push(`${key} = ${value}`);\n  }\n  parts.push(snapshotLine(scratchpad.entries));\n\n  return { status: \"ok\", value: parts.join(\"\\n\") };\n}",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function runScript\n\nexport function runScript(\n  script: string,\n  scratchpad: Scratchpad,\n): Result\u003cstring\u003e {\n  const parsed = parseScript(script);\n  if (parsed.status === \"error\") return parsed;\n\n  const evaluated = evaluate(parsed.value, scratchpad);\n  if (evaluated.status === \"error\") return evaluated;\n\n  scratchpad.entries = evaluated.value.entries;\n\n  const parts: string[] = [];\n  for (const { key, value } of evaluated.value.getOutputs) {\n    parts.push(`${key} = ${value}`);\n  }\n  parts.push(snapshotLine(scratchpad.entries));\n\n  return { status: \"ok\", value: parts.join(\"\\n\") };\n}",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function runScript",
+      "startLine": 213,
+      "startCol": 1,
+      "endLine": 232,
+      "endCol": 2
+    },
+    {
+      "text": "export function execute(\n  request: ToolRequest,\n  context: {\n    scratchpad: Scratchpad;\n  },\n): ToolInvocation {\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    const result = runScript(request.input.script, context.scratchpad);\n\n    if (result.status === \"error\") {\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: result.error,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n\n    return {\n      type: \"tool_result\",\n      id: request.id,\n      result: {\n        status: \"ok\",\n        value: [\n          {\n            type: \"text\",\n            text: result.value,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          },\n        ],\n        structuredResult: { toolName: \"scratchpad\" as ToolName },\n      },\n      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n    };\n  })();\n\n  return {\n    promise",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function execute\n\nexport function execute(\n  request: ToolRequest,\n  context: {\n    scratchpad: Scratchpad;\n  },\n): ToolInvocation {\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    const result = runScript(request.input.script, context.scratchpad);\n\n    if (result.status === \"error\") {\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: result.error,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n\n    return {\n      type: \"tool_result\",\n      id: request.id,\n      result: {\n        status: \"ok\",\n        value: [\n          {\n            type: \"text\",\n            text: result.value,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          },\n        ],\n        structuredResult: { toolName: \"scratchpad\" as ToolName },\n      },\n      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n    };\n  })();\n\n  return {\n    promise",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function execute",
+      "startLine": 234,
+      "startCol": 1,
+      "endLine": 274,
+      "endCol": 12
+    },
+    {
+      "text": "    abort: () =\u003e {}",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function execute \u003e function abort\n\n    abort: () =\u003e {}",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function execute \u003e function abort",
+      "startLine": 275,
+      "startCol": 1,
+      "endLine": 275,
+      "endCol": 20
+    },
+    {
+      "text": "export const spec: ProviderToolSpec = {\n  name: \"scratchpad\" as ToolName,\n  description: `A persistent, ordered key/value scratchpad for externalized bookkeeping.\n\nUse this to offload enumeration, counting, and object-permanence style tracking rather than holding such state in your reasoning. State persists across calls within a thread.\n\nSubmit a \\`script\\` of one command per line:\n- \\`append \u003ckey\u003e \u003cvalue...\u003e\\` — append a key/value pair at the end. The value is the rest of the line, OR a heredoc for multi-line values:\n    append \u003ckey\u003e \u003c\u003cEND\n    line one\n    line two\n    END\n  Appending an existing key is an error (keys are unique).\n- \\`delete \u003ckey\u003e [\u003ckey\u003e ...]\\` — remove the listed keys (missing keys are ignored).\n- \\`get \u003ckey\u003e\\` — include the value for a key in the result.\n- \\`move_after \u003ckey\u003e [\u003canchorKey\u003e]\\` — move \u003ckey\u003e immediately after \u003canchorKey\u003e, or to the front of the list if no anchor is given.\n- \\`clear\\` — empty the scratchpad.\n\nAfter every script the result echoes the ordered keys only (never all values), e.g. \\`The scratchpad is now [a, b, c]\\`, plus any \\`get\\`-ed values. A parse or validation error leaves the scratchpad unchanged.`,\n  input_schema: {\n    type: \"object\",\n    properties: {\n      script: {\n        type: \"string\",\n        description:\n          \"A scratchpad script: one command per line (append/delete/get/move_after/clear).\",\n      },\n    },\n    required: [\"script\"],\n  },\n};\n\nexport type Input = {\n  script: string;\n};",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts\n\nexport const spec: ProviderToolSpec = {\n  name: \"scratchpad\" as ToolName,\n  description: `A persistent, ordered key/value scratchpad for externalized bookkeeping.\n\nUse this to offload enumeration, counting, and object-permanence style tracking rather than holding such state in your reasoning. State persists across calls within a thread.\n\nSubmit a \\`script\\` of one command per line:\n- \\`append \u003ckey\u003e \u003cvalue...\u003e\\` — append a key/value pair at the end. The value is the rest of the line, OR a heredoc for multi-line values:\n    append \u003ckey\u003e \u003c\u003cEND\n    line one\n    line two\n    END\n  Appending an existing key is an error (keys are unique).\n- \\`delete \u003ckey\u003e [\u003ckey\u003e ...]\\` — remove the listed keys (missing keys are ignored).\n- \\`get \u003ckey\u003e\\` — include the value for a key in the result.\n- \\`move_after \u003ckey\u003e [\u003canchorKey\u003e]\\` — move \u003ckey\u003e immediately after \u003canchorKey\u003e, or to the front of the list if no anchor is given.\n- \\`clear\\` — empty the scratchpad.\n\nAfter every script the result echoes the ordered keys only (never all values), e.g. \\`The scratchpad is now [a, b, c]\\`, plus any \\`get\\`-ed values. A parse or validation error leaves the scratchpad unchanged.`,\n  input_schema: {\n    type: \"object\",\n    properties: {\n      script: {\n        type: \"string\",\n        description:\n          \"A scratchpad script: one command per line (append/delete/get/move_after/clear).\",\n      },\n    },\n    required: [\"script\"],\n  },\n};\n\nexport type Input = {\n  script: string;\n};",
+      "headingContext": "node/core/src/tools/scratchpad.ts",
+      "startLine": 279,
+      "startCol": 1,
+      "endLine": 313,
+      "endCol": 3
+    },
+    {
+      "text": "export function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (typeof input.script !== \"string\") {\n    return { status: \"error\", error: \"expected input.script to be a string\" };\n  }\n\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
+      "contextualizedText": "// node/core/src/tools/scratchpad.ts \u003e function validateInput\n\nexport function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (typeof input.script !== \"string\") {\n    return { status: \"error\", error: \"expected input.script to be a string\" };\n  }\n\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
+      "headingContext": "node/core/src/tools/scratchpad.ts \u003e function validateInput",
+      "startLine": 315,
+      "startCol": 1,
+      "endLine": 326,
+      "endCol": 2
+    }
+  ]
+}

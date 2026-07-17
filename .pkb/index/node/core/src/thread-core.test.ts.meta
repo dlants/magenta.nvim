@@ -1,5 +1,5 @@
 {
-  "blobSha": "185377681611a6589c1b2008b35ce10e54971c87",
+  "blobSha": "8efac55bfc4aa752829823870b1cfa52c6b3fe06",
   "modelName": "voyage-context-4@256",
   "chunks": [
     {
@@ -876,12 +876,21 @@
       "endCol": 6
     },
     {
-      "text": "finally {\n      await parent.destroy();\n      if (child) await child.destroy();\n      await cleanupArchive(parentId);\n      await cleanupArchive(childId);\n    }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nfinally {\n      await parent.destroy();\n      if (child) await child.destroy();\n      await cleanupArchive(parentId);\n      await cleanupArchive(childId);\n    }",
+      "text": "finally {\n      await parent.destroy();\n      if (child) await child.destroy();\n      await cleanupArchive(parentId);\n      await cleanupArchive(childId);\n    }\n  });\n});\n\ndescribe(\"ThreadCore scratchpad state\", () =\u003e {\n  it(\"subagent threads start with an empty scratchpad\", () =\u003e {\n    const { core } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    expect(core.state.scratchpad.entries).toEqual([]);\n  });",
+      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nfinally {\n      await parent.destroy();\n      if (child) await child.destroy();\n      await cleanupArchive(parentId);\n      await cleanupArchive(childId);\n    }\n  });\n});\n\ndescribe(\"ThreadCore scratchpad state\", () =\u003e {\n  it(\"subagent threads start with an empty scratchpad\", () =\u003e {\n    const { core } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    expect(core.state.scratchpad.entries).toEqual([]);\n  });",
       "headingContext": "node/core/src/thread-core.test.ts",
       "startLine": 1778,
       "startCol": 7,
-      "endLine": 1783,
+      "endLine": 1793,
+      "endCol": 6
+    },
+    {
+      "text": "it(\"clone deep-copies scratchpad and edlRegisters with isolation\", async () =\u003e {\n    const parentId = uniqueThreadId(\"sp-parent\");\n    const childId = uniqueThreadId(\"sp-child\");\n    const {\n      core: parent,\n      mockClient,\n      context,\n    } = createThreadCoreWithMock(undefined, parentId);\n\n    let child: ThreadCore | undefined;\n    try {\n      await parent.sendMessage([{ type: \"user\", text: \"parent turn\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamText(\"parent response\");\n      stream.finishResponse(\"end_turn\");\n      await pollUntil(() =\u003e {\n        if (parent.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n\n      parent.state.scratchpad.entries.push({ key: \"a\", value: \"1\" });\n      parent.state.edlRegisters.registers.set(\"r\", \"regval\");\n      parent.state.edlRegisters.nextSavedId = 3;\n\n      const nativeMessageIdx = parent.agent.getNativeMessageIdx();\n      child = await ThreadCore.clone({\n        sourceCore: parent,\n        newId: childId,\n        nativeMessageIdx,\n        context,\n      });\n\n      expect(child.state.scratchpad.entries).toEqual([\n        { key: \"a\", value: \"1\" },\n      ]);\n      expect(child.state.edlRegisters.registers.get(\"r\")).toBe(\"regval\");\n      expect(child.state.edlRegisters.nextSavedId).toBe(3);\n\n      child.state.scratchpad.entries.push({ key: \"b\", value: \"2\" });\n      child.state.edlRegisters.registers.set(\"r2\", \"x\");\n      expect(parent.state.scratchpad.entries.map((e) =\u003e e.key)).toEqual([\"a\"]);\n      expect(parent.state.edlRegisters.registers.has(\"r2\")).toBe(false);\n    } finally {\n      await parent.destroy();\n      if (child) await child.destroy();\n      await cleanupArchive(parentId);\n      await cleanupArchive(childId);\n    }\n  });",
+      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"clone deep-copies scratchpad and edlRegisters with isolation\", async () =\u003e {\n    const parentId = uniqueThreadId(\"sp-parent\");\n    const childId = uniqueThreadId(\"sp-child\");\n    const {\n      core: parent,\n      mockClient,\n      context,\n    } = createThreadCoreWithMock(undefined, parentId);\n\n    let child: ThreadCore | undefined;\n    try {\n      await parent.sendMessage([{ type: \"user\", text: \"parent turn\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamText(\"parent response\");\n      stream.finishResponse(\"end_turn\");\n      await pollUntil(() =\u003e {\n        if (parent.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n\n      parent.state.scratchpad.entries.push({ key: \"a\", value: \"1\" });\n      parent.state.edlRegisters.registers.set(\"r\", \"regval\");\n      parent.state.edlRegisters.nextSavedId = 3;\n\n      const nativeMessageIdx = parent.agent.getNativeMessageIdx();\n      child = await ThreadCore.clone({\n        sourceCore: parent,\n        newId: childId,\n        nativeMessageIdx,\n        context,\n      });\n\n      expect(child.state.scratchpad.entries).toEqual([\n        { key: \"a\", value: \"1\" },\n      ]);\n      expect(child.state.edlRegisters.registers.get(\"r\")).toBe(\"regval\");\n      expect(child.state.edlRegisters.nextSavedId).toBe(3);\n\n      child.state.scratchpad.entries.push({ key: \"b\", value: \"2\" });\n      child.state.edlRegisters.registers.set(\"r2\", \"x\");\n      expect(parent.state.scratchpad.entries.map((e) =\u003e e.key)).toEqual([\"a\"]);\n      expect(parent.state.edlRegisters.registers.has(\"r2\")).toBe(false);\n    } finally {\n      await parent.destroy();\n      if (child) await child.destroy();\n      await cleanupArchive(parentId);\n      await cleanupArchive(childId);\n    }\n  });",
+      "headingContext": "node/core/src/thread-core.test.ts",
+      "startLine": 1795,
+      "startCol": 3,
+      "endLine": 1844,
       "endCol": 6
     }
   ]

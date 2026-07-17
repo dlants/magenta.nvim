@@ -16,6 +16,7 @@ import * as GetFile from "./getFile.ts";
 import * as Hover from "./hover.ts";
 import * as NvimLua from "./nvimLua.ts";
 import * as RunScript from "./run-script.ts";
+import * as Scratchpad from "./scratchpad.ts";
 import * as SpawnSubagents from "./spawn-subagents.ts";
 import * as ThreadTitle from "./thread-title.ts";
 import {
@@ -47,6 +48,7 @@ export type StaticToolMap = {
   docs: { input: Docs.Input };
   run_script: { input: RunScript.Input };
   nvim_lua: { input: NvimLua.Input };
+  scratchpad: { input: Scratchpad.Input };
 };
 
 export type StaticToolRequest = {
@@ -75,6 +77,7 @@ const TOOL_SPEC_MAP: Partial<Record<StaticToolName, ProviderToolSpec>> = {
 
   edl: Edl.spec,
   nvim_lua: NvimLua.spec,
+  scratchpad: Scratchpad.spec,
 };
 
 export function getToolSpecs(

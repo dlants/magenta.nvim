@@ -40,6 +40,7 @@ import type {
 } from "./tool-types.ts";
 import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
+import * as Scratchpad from "./tools/scratchpad.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import type { HomeDir, NvimCwd } from "./utils/files.ts";
@@ -119,11 +120,13 @@ export class CompactionManager extends Emitter<CompactionEvents> {
 
   private fileIO: InMemoryFileIO;
   private edlRegisters: EdlRegisters;
+  private scratchpad: Scratchpad.Scratchpad;
 
   constructor(private context: CompactionManagerContext) {
     super();
     this.fileIO = new InMemoryFileIO({ "/summary.md": "" });
     this.edlRegisters = { registers: new Map(), nextSavedId: 0 };
+    this.scratchpad = Scratchpad.emptyScratchpad();
   }
 
   send(action: CompactionAction): void {
@@ -384,6 +387,7 @@ export class CompactionManager extends Emitter<CompactionEvents> {
         },
         helpTagsProvider: this.context.helpTagsProvider,
         edlRegisters: this.edlRegisters,
+        scratchpad: this.scratchpad,
         fileIO: this.fileIO,
         shell: this.context.shell,
         threadManager: this.context.threadManager,

@@ -44,6 +44,7 @@ export function renderStreamdedTool(
     case "docs":
     case "run_script":
     case "nvim_lua":
+    case "scratchpad":
       break;
     case "spawn_subagents": {
       const input = SpawnSubagents.parsePartialSpawnSubagentsInput(
