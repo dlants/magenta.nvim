@@ -208,6 +208,21 @@ identically on baseline and are unrelated.
   - `ThreadCore.clone` also copies `edlRegisters` (registers + `nextSavedId`), with
     the same deep-copy isolation between parent and fork.
 
+**STATUS: DONE (Stage 2).** Added `node/render-tools/scratchpad.ts` with
+`renderSummary` (📝 scratchpad) and `renderInput` (abridged/expanded script
+preview via `withCode`, mirroring `nvimLua.ts`). Wired into
+`render-tools/index.ts` (`renderToolSummary`/`renderToolInput` now delegate to
+ScratchpadRender) and `render-tools/streaming.ts` (streams a `📝 scratchpad:`
+script tail preview like edl). Exported `Scratchpad` namespace from
+`node/core/src/index.ts`. Also fixed a Stage-1 gap: added the `scratchpad` case
+to `node/core/src/tools/helpers.ts` `validateInput` (was throwing "Unexpected
+toolName"), without which the tool couldn't execute at all. Added driver test
+`node/render-tools/scratchpad.test.ts` (2 cases: completed summary+input render,
+and streamed preview). Typecheck (`npx tsgo -b`) and biome pass; scratchpad tests
+pass. Remaining full-suite failures (archive-view, thread.test winfixbuf/context
+diff, spawn-subagents hierarchy, system-prompt/files socket) reproduce identically
+on baseline (verified via git stash) — pre-existing nvim-env flakes, unrelated.
+
 ## rendering
 
 - Goal: the tool renders in the sidebar like other tools — a summary line, input

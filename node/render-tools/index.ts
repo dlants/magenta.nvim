@@ -29,6 +29,7 @@ import * as HoverRender from "./hover.ts";
 import * as MCPToolRender from "./mcp-tool.ts";
 import * as NvimLuaRender from "./nvimLua.ts";
 import * as RunScriptRender from "./run-script.ts";
+import * as ScratchpadRender from "./scratchpad.ts";
 import * as SpawnSubagentsRender from "./spawn-subagents.ts";
 import * as ThreadTitleRender from "./thread-title.ts";
 
@@ -93,7 +94,7 @@ export function renderToolSummary(
     case "nvim_lua":
       return NvimLuaRender.renderSummary(request, displayContext);
     case "scratchpad":
-      return d`📝 scratchpad`;
+      return ScratchpadRender.renderSummary(request, displayContext);
     default:
       assertUnreachable(toolName);
   }
@@ -118,6 +119,8 @@ export function renderToolInput(
       return EdlRender.renderInput(request, displayContext, expanded, inFlight);
     case "nvim_lua":
       return NvimLuaRender.renderInput(request, displayContext, expanded);
+    case "scratchpad":
+      return ScratchpadRender.renderInput(request, displayContext, expanded);
     case "spawn_subagents":
       return SpawnSubagentsRender.renderInput(
         request,

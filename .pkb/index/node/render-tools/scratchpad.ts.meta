@@ -1,0 +1,42 @@
+{
+  "blobSha": "afa1e3d3f5bacabc57b9f27c6fa516dfdd9aaa39",
+  "modelName": "voyage-context-4@256",
+  "chunks": [
+    {
+      "text": "import type {\n  DisplayContext,\n  Scratchpad,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode, withCode } from \"../tea/view.ts\";\n\ntype Input = Scratchpad.Input;\n\nconst PREVIEW_MAX_LINES = 5;\nconst PREVIEW_MAX_LINE_LENGTH = 80;",
+      "contextualizedText": "// node/render-tools/scratchpad.ts\n\nimport type {\n  DisplayContext,\n  Scratchpad,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode, withCode } from \"../tea/view.ts\";\n\ntype Input = Scratchpad.Input;\n\nconst PREVIEW_MAX_LINES = 5;\nconst PREVIEW_MAX_LINE_LENGTH = 80;",
+      "headingContext": "node/render-tools/scratchpad.ts",
+      "startLine": 1,
+      "startCol": 1,
+      "endLine": 11,
+      "endCol": 36
+    },
+    {
+      "text": "function abridgeScript(script: string): string {\n  const lines = script.split(\"\\n\");\n  const preview = lines\n    .slice(0, PREVIEW_MAX_LINES)\n    .map((line) =\u003e\n      line.length \u003e PREVIEW_MAX_LINE_LENGTH\n        ? `${line.substring(0, PREVIEW_MAX_LINE_LENGTH)}...`\n        : line,\n    );\n  if (lines.length \u003e PREVIEW_MAX_LINES) {\n    preview.push(`... (${lines.length - PREVIEW_MAX_LINES} more lines)`);\n  }\n  return preview.join(\"\\n\");\n}",
+      "contextualizedText": "// node/render-tools/scratchpad.ts \u003e function abridgeScript\n\nfunction abridgeScript(script: string): string {\n  const lines = script.split(\"\\n\");\n  const preview = lines\n    .slice(0, PREVIEW_MAX_LINES)\n    .map((line) =\u003e\n      line.length \u003e PREVIEW_MAX_LINE_LENGTH\n        ? `${line.substring(0, PREVIEW_MAX_LINE_LENGTH)}...`\n        : line,\n    );\n  if (lines.length \u003e PREVIEW_MAX_LINES) {\n    preview.push(`... (${lines.length - PREVIEW_MAX_LINES} more lines)`);\n  }\n  return preview.join(\"\\n\");\n}",
+      "headingContext": "node/render-tools/scratchpad.ts \u003e function abridgeScript",
+      "startLine": 13,
+      "startCol": 1,
+      "endLine": 26,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderSummary(\n  _request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  return d`📝 scratchpad`;\n}",
+      "contextualizedText": "// node/render-tools/scratchpad.ts \u003e function renderSummary\n\nexport function renderSummary(\n  _request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  return d`📝 scratchpad`;\n}",
+      "headingContext": "node/render-tools/scratchpad.ts \u003e function renderSummary",
+      "startLine": 28,
+      "startCol": 1,
+      "endLine": 33,
+      "endCol": 2
+    },
+    {
+      "text": "export function renderInput(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n  expanded: boolean,\n): VDOMNode | undefined {\n  const input = request.input as Input;\n  if (expanded) {\n    return withCode(d`${input.script}`);\n  }\n  return withCode(d`${abridgeScript(input.script)}`);\n}",
+      "contextualizedText": "// node/render-tools/scratchpad.ts \u003e function renderInput\n\nexport function renderInput(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n  expanded: boolean,\n): VDOMNode | undefined {\n  const input = request.input as Input;\n  if (expanded) {\n    return withCode(d`${input.script}`);\n  }\n  return withCode(d`${abridgeScript(input.script)}`);\n}",
+      "headingContext": "node/render-tools/scratchpad.ts \u003e function renderInput",
+      "startLine": 35,
+      "startCol": 1,
+      "endLine": 45,
+      "endCol": 2
+    }
+  ]
+}
