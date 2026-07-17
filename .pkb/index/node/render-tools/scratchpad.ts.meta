@@ -1,5 +1,5 @@
 {
-  "blobSha": "afa1e3d3f5bacabc57b9f27c6fa516dfdd9aaa39",
+  "blobSha": "a232804f905820deae06bfe6bc839dd5f1ee8af4",
   "modelName": "voyage-context-4@256",
   "chunks": [
     {
@@ -12,8 +12,8 @@
       "endCol": 36
     },
     {
-      "text": "function abridgeScript(script: string): string {\n  const lines = script.split(\"\\n\");\n  const preview = lines\n    .slice(0, PREVIEW_MAX_LINES)\n    .map((line) =\u003e\n      line.length \u003e PREVIEW_MAX_LINE_LENGTH\n        ? `${line.substring(0, PREVIEW_MAX_LINE_LENGTH)}...`\n        : line,\n    );\n  if (lines.length \u003e PREVIEW_MAX_LINES) {\n    preview.push(`... (${lines.length - PREVIEW_MAX_LINES} more lines)`);\n  }\n  return preview.join(\"\\n\");\n}",
-      "contextualizedText": "// node/render-tools/scratchpad.ts \u003e function abridgeScript\n\nfunction abridgeScript(script: string): string {\n  const lines = script.split(\"\\n\");\n  const preview = lines\n    .slice(0, PREVIEW_MAX_LINES)\n    .map((line) =\u003e\n      line.length \u003e PREVIEW_MAX_LINE_LENGTH\n        ? `${line.substring(0, PREVIEW_MAX_LINE_LENGTH)}...`\n        : line,\n    );\n  if (lines.length \u003e PREVIEW_MAX_LINES) {\n    preview.push(`... (${lines.length - PREVIEW_MAX_LINES} more lines)`);\n  }\n  return preview.join(\"\\n\");\n}",
+      "text": "export function abridgeScript(script: string): string {\n  const lines = script.split(\"\\n\");\n  const preview = lines\n    .slice(0, PREVIEW_MAX_LINES)\n    .map((line) =\u003e\n      line.length \u003e PREVIEW_MAX_LINE_LENGTH\n        ? `${line.substring(0, PREVIEW_MAX_LINE_LENGTH)}...`\n        : line,\n    );\n  if (lines.length \u003e PREVIEW_MAX_LINES) {\n    preview.push(`... (${lines.length - PREVIEW_MAX_LINES} more lines)`);\n  }\n  return preview.join(\"\\n\");\n}",
+      "contextualizedText": "// node/render-tools/scratchpad.ts \u003e function abridgeScript\n\nexport function abridgeScript(script: string): string {\n  const lines = script.split(\"\\n\");\n  const preview = lines\n    .slice(0, PREVIEW_MAX_LINES)\n    .map((line) =\u003e\n      line.length \u003e PREVIEW_MAX_LINE_LENGTH\n        ? `${line.substring(0, PREVIEW_MAX_LINE_LENGTH)}...`\n        : line,\n    );\n  if (lines.length \u003e PREVIEW_MAX_LINES) {\n    preview.push(`... (${lines.length - PREVIEW_MAX_LINES} more lines)`);\n  }\n  return preview.join(\"\\n\");\n}",
       "headingContext": "node/render-tools/scratchpad.ts \u003e function abridgeScript",
       "startLine": 13,
       "startCol": 1,

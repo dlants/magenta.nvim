@@ -232,6 +232,17 @@ on baseline (verified via git stash) — pre-existing nvim-env flakes, unrelated
   tool summary and expanded input show the script. Reuse existing render-tool test
   patterns. Manual check in the sidebar that keys-only output reads cleanly.
 
+**Code-review follow-ups (Stage 2):** Exported `abridgeScript` from
+`node/render-tools/scratchpad.ts` and added coverage for its two previously
+untested branches: long-line truncation (>80 chars) and >5-line overflow
+(`... (N more lines)`), via pure unit tests. Added streaming render tests for
+(a) the `lines.slice(-10)` tail truncation (15-line script shows pos5..pos14,
+not pos4) and (b) the `script === undefined` fall-through (partial JSON `{"script"`
+renders no `📝 scratchpad:` preview). All 6 scratchpad render tests pass;
+typecheck (`npx tsgo -b`) and biome green. Remaining full-suite failures
+(context-manager, archive-view, spawn-subagents, magenta, thread) reproduce
+identically on baseline (verified via git stash) — pre-existing nvim-env flakes.
+
 ## prompt + system reminder
 
 - Goal: make the agent reach for the scratchpad on enumeration/counting/tracking

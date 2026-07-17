@@ -10,7 +10,7 @@ type Input = Scratchpad.Input;
 const PREVIEW_MAX_LINES = 5;
 const PREVIEW_MAX_LINE_LENGTH = 80;
 
-function abridgeScript(script: string): string {
+export function abridgeScript(script: string): string {
   const lines = script.split("\n");
   const preview = lines
     .slice(0, PREVIEW_MAX_LINES)
