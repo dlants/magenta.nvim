@@ -677,6 +677,17 @@ vim.rpcnotify(${this.nvim.channelId}, "magentaKey", "${key}")
   }
 
   async editFile(filePath: string): Promise<void> {
+    // Magenta windows keep 'winfixbuf' enabled, which blocks `:edit` from
+    // swapping their buffer (E1513). Switch to a non-magenta window first,
+    // mirroring how a user would open a file from an ordinary window.
+    const windows = await getAllWindows(this.nvim);
+    for (const window of windows) {
+      const isMagenta = await window.getVar("magenta");
+      if (!isMagenta) {
+        await this.nvim.call("nvim_set_current_win", [window.id]);
+        break;
+      }
+    }
     await this.nvim.call("nvim_exec2", [`edit ${filePath}`, {}]);
   }
   /** Open a file and wait for LSP to attach with hover capability.

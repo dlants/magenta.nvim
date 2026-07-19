@@ -679,7 +679,7 @@ describe("node/render-tools/spawn-subagents.test.ts", () => {
 
       await driver.magenta.command("threads-overview");
       await driver.triggerDisplayBufferKeyOnContent(
-        `- ▼ Parent thread message: ⏳ executing tools (1 subthreads)`,
+        `- 🔔 ▼ Parent thread message: ⏳ executing tools (1 subthreads)`,
         "<CR>",
       );
 

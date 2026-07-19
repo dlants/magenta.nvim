@@ -1260,7 +1260,7 @@ No archived threads`;
     }
 
     const rows: VDOMNode[] = [];
-    for (const id of this.state.threadIds) {
+    for (const id of this.state.threadIds.slice(0, this.state.loadedCount)) {
       rows.push(d`${this.renderArchiveRow(id)}\n`);
     }
 

@@ -1906,11 +1906,10 @@ it("expands context update diff with = binding", async () => {
 
     await driver.assertDisplayBufferContains("Context Updates:");
 
-    // Expand the diff using the "=" binding on the file line
-    const pos = await driver.assertDisplayBufferContains(
-      "`poem.txt` [ +2 / -4,",
-    );
-    await driver.triggerDisplayBufferKey(pos, "=");
+    // Expand the diff using the "=" binding on the file line. Resolve the
+    // binding by content to avoid a re-render race with the streaming spinner
+    // shifting line positions out from under a cached cursor position.
+    await driver.triggerDisplayBufferKeyOnContent("`poem.txt` [ +2 / -4,", "=");
 
     await driver.assertDisplayBufferContains("+with extra lines");
   });

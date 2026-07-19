@@ -139,6 +139,7 @@ it("can switch profiles", async () => {
         provider: "mock",
         model: "mock",
         fastModel: "mock-fast",
+        thinkingModel: "mock",
       });
     }
     const displayState = driver.getVisibleState();
@@ -171,6 +172,7 @@ it("can switch profiles", async () => {
         provider: "mock",
         model: "mock",
         fastModel: "mock-fast",
+        thinkingModel: "mock",
       });
     }
   });
