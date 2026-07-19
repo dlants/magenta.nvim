@@ -948,21 +948,26 @@ function renderMessageContentBlock(
               : { toolName: request.toolName as ToolName },
         };
 
-        // Section 5: Result summary
-        resultSummaryView = withBindings(
-          d`\n${renderToolResultSummary(completedInfo, displayContext)}`,
-          {
-            "=": () =>
-              dispatch({
-                type: "toggle-tool-result-summary",
-                toolRequestId: request.id,
-              }),
-          },
-        );
+        // Section 5: Result summary. get_files renders its own interactive
+        // per-file result in Section 7, so it opts out of the generic summary.
+        const rendersOwnResult = request.toolName === "get_files";
+
+        if (!rendersOwnResult) {
+          resultSummaryView = withBindings(
+            d`\n${renderToolResultSummary(completedInfo, displayContext)}`,
+            {
+              "=": () =>
+                dispatch({
+                  type: "toggle-tool-result-summary",
+                  toolRequestId: request.id,
+                }),
+            },
+          );
+        }
 
         // Section 6: Result summary expansion (pretty-printed if the tool
         // provides one, otherwise a raw JSON.stringify of the result)
-        if (toolViewState?.resultSummaryExpanded) {
+        if (!rendersOwnResult && toolViewState?.resultSummaryExpanded) {
           const prettyResult = renderToolResultSummaryExpansion(completedInfo);
           const resultContent =
             prettyResult ??

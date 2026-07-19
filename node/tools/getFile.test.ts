@@ -81,6 +81,43 @@ it("should expand get_file tool input on <CR>", async () => {
   });
 });
 
+it("expands a file's sent content with = on its result line", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText(`Try reading the file poem.txt`);
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "ok, here goes",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "request_id" as ToolRequestId,
+            toolName: "get_files" as ToolName,
+            input: {
+              files: [{ filePath: "./poem.txt" as UnresolvedFilePath }],
+            },
+          },
+        },
+      ],
+    });
+
+    // The per-file result line shows a checkmark + token estimate.
+    await driver.assertDisplayBufferContains("`poem.txt` (~");
+
+    // Press = on the result line to expand the content as it was sent.
+    await driver.triggerDisplayBufferKeyOnContent("`poem.txt` (~", "=");
+
+    // The raw file content (not JSON-escaped) should now be visible.
+    await driver.assertDisplayBufferContains(
+      "Moonlight whispers through the trees,",
+    );
+  });
+});
+
 it("getFile adds file to context after reading", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();

@@ -280,7 +280,12 @@ export function renderToolResult(
         toolRequestId,
       );
     case "get_files":
-      return undefined;
+      return GetFileRender.renderResult(
+        info,
+        context,
+        toolViewState,
+        toolRequestId,
+      );
     default:
       return toolViewState.resultExpanded
         ? d`${JSON.stringify(info.request.input, null, 2)}`

@@ -2,15 +2,34 @@ import type {
   CompletedToolInfo,
   DisplayContext,
   ProviderToolResultContent,
+  ToolRequestId,
   ToolRequest as UnionToolRequest,
 } from "@magenta/core";
-import { d, type VDOMNode, withInlineCode } from "../tea/view.ts";
+import type { ToolViewState } from "../chat/thread.ts";
+import type { Dispatch } from "../tea/tea.ts";
+import {
+  d,
+  type VDOMNode,
+  withBindings,
+  withCode,
+  withInlineCode,
+} from "../tea/view.ts";
 import {
   displayPath,
   resolveFilePath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 import { formatTokens } from "../utils/tokens.ts";
+
+export type RenderContext = {
+  cwd: DisplayContext["cwd"];
+  homeDir: DisplayContext["homeDir"];
+  threadDispatch: Dispatch<{
+    type: "toggle-tool-result-item";
+    toolRequestId: ToolRequestId;
+    itemKey: string;
+  }>;
+};
 
 type FileRequest = {
   filePath: UnresolvedFilePath;
@@ -107,5 +126,72 @@ export function renderResultSummary(
     const group = groups[i] ?? [];
     const tokEst = formatTokens(JSON.stringify(group).length);
     return d`${i > 0 ? "\n" : ""}${emoji} ${formatFileDisplay(file, displayContext)} (${tokEst})`;
+  })}`;
+}
+
+/** Render the content blocks of a single file as they were sent to the agent
+ * (raw text, not JSON-escaped). Non-text blocks become a short placeholder. */
+function renderSentContent(blocks: ProviderToolResultContent[]): string {
+  return blocks
+    .map((block) => {
+      switch (block.type) {
+        case "text":
+          return block.text;
+        case "image":
+          return "[image]";
+        case "document":
+          return `[document${block.title ? `: ${block.title}` : ""}]`;
+        default:
+          return "";
+      }
+    })
+    .join("\n");
+}
+
+export function renderResult(
+  info: CompletedToolInfo,
+  context: RenderContext,
+  toolViewState: ToolViewState,
+  toolRequestId: ToolRequestId,
+): VDOMNode | undefined {
+  const result = info.result.result;
+
+  if (result.status === "error") {
+    return d`❌ ${result.error}`;
+  }
+
+  const displayContext: DisplayContext = {
+    cwd: context.cwd,
+    homeDir: context.homeDir,
+  };
+  const input = info.request.input as Input;
+  const structured = info.structuredResult;
+  const perFileStatus =
+    structured.toolName === "get_files" && "files" in structured
+      ? structured.files
+      : [];
+  const groups = groupBlocksByFile(result.value);
+
+  return d`${input.files.map((file, i) => {
+    const emoji = perFileStatus[i]?.isError ? "❌" : "✅";
+    const group = groups[i] ?? [];
+    const tokEst = formatTokens(JSON.stringify(group).length);
+    const itemKey = String(i);
+    const expanded = toolViewState.resultItemExpanded?.[itemKey] ?? false;
+    const line = withBindings(
+      d`${i > 0 ? "\n" : ""}${emoji} ${formatFileDisplay(file, displayContext)} (${tokEst})`,
+      {
+        "=": () =>
+          context.threadDispatch({
+            type: "toggle-tool-result-item",
+            toolRequestId,
+            itemKey,
+          }),
+      },
+    );
+    const detail = expanded
+      ? d`\n${withCode(d`${renderSentContent(group)}`)}`
+      : d``;
+    return d`${line}${detail}`;
   })}`;
 }
