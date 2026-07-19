@@ -186,10 +186,8 @@ exports[`followup user message text is visible after tool-use cycle > followup-m
 Read a file for me
 # assistant:
 I'll read the file for you.
-👀
-  \`poem.txt\`
-✅ 
-  \`poem.txt\` (~64 tok)
+👀 \`poem.txt\`
+✅ \`poem.txt\` (~48 tok)
 [input: 1000, output: 5000]
 📋 [System Reminder]
 I've read the file. It contains a poem about moonlight.
@@ -808,17 +806,13 @@ exports[`renders successive tool uses with single assistant header and inline me
 Read two files for me
 # assistant:
 I'll read the first file.
-👀
-  \`poem.txt\`
-✅ 
-  \`poem.txt\` (~64 tok)
+👀 \`poem.txt\`
+✅ \`poem.txt\` (~48 tok)
 [input: 1000, output: 5000]
 📋 [System Reminder]
 💭 [Thinking]
-👀
-  \`poem2.txt\`
-✅ 
-  \`poem2.txt\` (~64 tok)
+👀 \`poem2.txt\`
+✅ \`poem2.txt\` (~48 tok)
 [input: 1000, output: 5000]
 📋 [System Reminder]
 I've read both files for you.

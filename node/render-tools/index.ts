@@ -212,7 +212,7 @@ export function renderToolResultSummary(
 
   switch (toolName) {
     case "get_files":
-      return d`${statusEmoji} ${GetFileRender.renderResultSummary(info, displayContext)} (${tokEst})`;
+      return GetFileRender.renderResultSummary(info, displayContext);
     case "bash_command":
       return d`${statusEmoji} ${BashCommandRender.renderResultSummary(info)} (${tokEst})`;
     case "hover":

@@ -40,6 +40,7 @@ export type PerFileResult = {
   filePath: AbsFilePath;
   lineCount: number;
   systemReminder: string | undefined;
+  isError: boolean;
 };
 
 export type StructuredResult = {
@@ -170,6 +171,7 @@ function errorOutcome(
       filePath: absFilePath,
       lineCount: 0,
       systemReminder: undefined,
+      isError: true,
     },
   };
 }
@@ -204,6 +206,7 @@ You already have the most up-to-date information about the contents of this file
         filePath: absFilePath,
         lineCount: 0,
         systemReminder: undefined,
+        isError: false,
       },
     };
   }
@@ -331,6 +334,7 @@ You already have the most up-to-date information about the contents of this file
             filePath: absFilePath,
             lineCount: 0,
             systemReminder: undefined,
+            isError: false,
           },
         };
       }
@@ -377,6 +381,7 @@ You already have the most up-to-date information about the contents of this file
             filePath: absFilePath,
             lineCount: 0,
             systemReminder: undefined,
+            isError: false,
           },
         };
       }
@@ -442,6 +447,7 @@ You already have the most up-to-date information about the contents of this file
       filePath: absFilePath,
       lineCount,
       systemReminder,
+      isError: false,
     },
   };
 }

@@ -1,6 +1,7 @@
 import type {
   CompletedToolInfo,
   DisplayContext,
+  ProviderToolResultContent,
   ToolRequest as UnionToolRequest,
 } from "@magenta/core";
 import { d, type VDOMNode, withInlineCode } from "../tea/view.ts";
@@ -9,6 +10,7 @@ import {
   resolveFilePath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
+import { formatTokens } from "../utils/tokens.ts";
 
 type FileRequest = {
   filePath: UnresolvedFilePath;
@@ -50,21 +52,36 @@ function formatFileDisplay(
   return withInlineCode(d`\`${pathForDisplay}\`${extraInfo}`);
 }
 
-function formatFilesDisplay(
-  input: Input,
-  displayContext: DisplayContext,
-): VDOMNode {
-  return d`${input.files.map(
-    (file) => d`\n  ${formatFileDisplay(file, displayContext)}`,
-  )}`;
-}
-
 export function renderSummary(
   request: UnionToolRequest,
   displayContext: DisplayContext,
 ): VDOMNode {
   const input = request.input as Input;
-  return d`👀${formatFilesDisplay(input, displayContext)}`;
+  if (input.files.length === 1) {
+    return d`👀 ${formatFileDisplay(input.files[0], displayContext)}`;
+  }
+  return d`👀${input.files.map(
+    (file) => d`\n  ${formatFileDisplay(file, displayContext)}`,
+  )}`;
+}
+
+/** Split the result content blocks into per-file groups, delimited by the
+ * `=== <path> ===` header block that precedes each file's content. */
+function groupBlocksByFile(
+  value: ProviderToolResultContent[],
+): ProviderToolResultContent[][] {
+  const groups: ProviderToolResultContent[][] = [];
+  for (const block of value) {
+    if (
+      block.type === "text" &&
+      /^=== .* ===$/.test(block.text.split("\n")[0])
+    ) {
+      groups.push([]);
+    } else if (groups.length > 0) {
+      groups[groups.length - 1].push(block);
+    }
+  }
+  return groups;
 }
 
 export function renderResultSummary(
@@ -74,8 +91,21 @@ export function renderResultSummary(
   const result = info.result.result;
 
   if (result.status === "error") {
-    return d`${result.error}`;
+    return d`❌ ${result.error}`;
   }
 
-  return formatFilesDisplay(info.request.input as Input, displayContext);
+  const input = info.request.input as Input;
+  const structured = info.structuredResult;
+  const perFileStatus =
+    structured.toolName === "get_files" && "files" in structured
+      ? structured.files
+      : [];
+  const groups = groupBlocksByFile(result.value);
+
+  return d`${input.files.map((file, i) => {
+    const emoji = perFileStatus[i]?.isError ? "❌" : "✅";
+    const group = groups[i] ?? [];
+    const tokEst = formatTokens(JSON.stringify(group).length);
+    return d`${i > 0 ? "\n" : ""}${emoji} ${formatFileDisplay(file, displayContext)} (${tokEst})`;
+  })}`;
 }
