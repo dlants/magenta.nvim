@@ -1,24 +1,11 @@
 {
   "blobSha": "eb3b95ffa99765b4f02532be7e2b8d21c6020c59",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { Nvim } from \"./nvim-node/index.ts\";",
-      "contextualizedText": "// node/nvim/openUrl.ts\n\nimport type { Nvim } from \"./nvim-node/index.ts\";",
-      "headingContext": "node/nvim/openUrl.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 1,
-      "endCol": 50
-    },
-    {
-      "text": "export async function openUrl(url: string, nvim: Nvim): Promise\u003cvoid\u003e {\n  const escaped = url.replace(/\\\\/g, \"\\\\\\\\\").replace(/\"/g, '\\\\\"');\n  await nvim.call(\"nvim_exec_lua\", [`vim.ui.open(\"${escaped}\")`, []]);\n}",
-      "contextualizedText": "// node/nvim/openUrl.ts \u003e function openUrl\n\nexport async function openUrl(url: string, nvim: Nvim): Promise\u003cvoid\u003e {\n  const escaped = url.replace(/\\\\/g, \"\\\\\\\\\").replace(/\"/g, '\\\\\"');\n  await nvim.call(\"nvim_exec_lua\", [`vim.ui.open(\"${escaped}\")`, []]);\n}",
-      "headingContext": "node/nvim/openUrl.ts \u003e function openUrl",
-      "startLine": 3,
-      "startCol": 1,
-      "endLine": 6,
-      "endCol": 2
+      "start": 0,
+      "end": 262
     }
   ]
 }

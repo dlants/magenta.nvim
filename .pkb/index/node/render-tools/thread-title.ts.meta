@@ -1,33 +1,11 @@
 {
   "blobSha": "f1c80e0b9f5967a52342ab604852c5469120a6a8",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type {\n  CompletedToolInfo,\n  DisplayContext,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode } from \"../tea/view.ts\";\n\ntype Input = {\n  title: string;\n};",
-      "contextualizedText": "// node/render-tools/thread-title.ts\n\nimport type {\n  CompletedToolInfo,\n  DisplayContext,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode } from \"../tea/view.ts\";\n\ntype Input = {\n  title: string;\n};",
-      "headingContext": "node/render-tools/thread-title.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 10,
-      "endCol": 3
-    },
-    {
-      "text": "export function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  return d`📝 Setting thread title: \"${input.title}\"`;\n}",
-      "contextualizedText": "// node/render-tools/thread-title.ts \u003e function renderSummary\n\nexport function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  return d`📝 Setting thread title: \"${input.title}\"`;\n}",
-      "headingContext": "node/render-tools/thread-title.ts \u003e function renderSummary",
-      "startLine": 12,
-      "startCol": 1,
-      "endLine": 18,
-      "endCol": 2
-    },
-    {
-      "text": "export function renderResultSummary(info: CompletedToolInfo): VDOMNode {\n  const input = info.request.input as Input;\n  return d`\"${input.title ?? \"\"}\"`;\n}",
-      "contextualizedText": "// node/render-tools/thread-title.ts \u003e function renderResultSummary\n\nexport function renderResultSummary(info: CompletedToolInfo): VDOMNode {\n  const input = info.request.input as Input;\n  return d`\"${input.title ?? \"\"}\"`;\n}",
-      "headingContext": "node/render-tools/thread-title.ts \u003e function renderResultSummary",
-      "startLine": 20,
-      "startCol": 1,
-      "endLine": 23,
-      "endCol": 2
+      "start": 0,
+      "end": 564
     }
   ]
 }

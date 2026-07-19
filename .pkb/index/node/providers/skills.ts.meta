@@ -1,15 +1,11 @@
 {
   "blobSha": "4ea433b18dd57712f605c20ecfa9543302855919",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export type { SkillInfo, SkillsMap } from \"@magenta/core\";\nexport { formatSkillsIntroduction, loadSkills } from \"@magenta/core\";",
-      "contextualizedText": "// node/providers/skills.ts\n\nexport type { SkillInfo, SkillsMap } from \"@magenta/core\";\nexport { formatSkillsIntroduction, loadSkills } from \"@magenta/core\";",
-      "headingContext": "node/providers/skills.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 2,
-      "endCol": 70
+      "start": 0,
+      "end": 128
     }
   ]
 }

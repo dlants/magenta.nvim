@@ -1,60 +1,11 @@
 {
   "blobSha": "872dc465cedac62d4895decbae39ce71aef89a3c",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { Line, NvimBuffer } from \"../nvim/buffer.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { ByteIdx, Position0Indexed, Row0Indexed } from \"../nvim/window.ts\";",
-      "contextualizedText": "// node/tea/util.ts\n\nimport type { Line, NvimBuffer } from \"../nvim/buffer.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { ByteIdx, Position0Indexed, Row0Indexed } from \"../nvim/window.ts\";",
-      "headingContext": "node/tea/util.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 3,
-      "endCol": 81
-    },
-    {
-      "text": "export async function replaceBetweenPositions({\n  buffer,\n  startPos,\n  endPos,\n  lines,\n  context,\n}: {\n  buffer: NvimBuffer;\n  startPos: Position0Indexed;\n  endPos: Position0Indexed;\n  lines: Line[];\n  context: { nvim: Nvim };\n}) {\n  try {\n    await buffer.setOption(\"modifiable\", true);\n\n    await context.nvim.call(\"nvim_buf_set_text\", [\n      buffer.id,\n      startPos.row,\n      startPos.col,\n      endPos.row,\n      endPos.col,\n      lines,\n    ]);\n\n    await buffer.setOption(\"modifiable\", false);\n  } catch (e) {\n    const err = new Error(\n      `Unable to replaceBetweenPositions ${JSON.stringify({ startPos, endPos })}: ${e as string}`,\n    );\n    context.nvim.logger.error(err);\n    throw err;\n  }\n}",
-      "contextualizedText": "// node/tea/util.ts \u003e function replaceBetweenPositions\n\nexport async function replaceBetweenPositions({\n  buffer,\n  startPos,\n  endPos,\n  lines,\n  context,\n}: {\n  buffer: NvimBuffer;\n  startPos: Position0Indexed;\n  endPos: Position0Indexed;\n  lines: Line[];\n  context: { nvim: Nvim };\n}) {\n  try {\n    await buffer.setOption(\"modifiable\", true);\n\n    await context.nvim.call(\"nvim_buf_set_text\", [\n      buffer.id,\n      startPos.row,\n      startPos.col,\n      endPos.row,\n      endPos.col,\n      lines,\n    ]);\n\n    await buffer.setOption(\"modifiable\", false);\n  } catch (e) {\n    const err = new Error(\n      `Unable to replaceBetweenPositions ${JSON.stringify({ startPos, endPos })}: ${e as string}`,\n    );\n    context.nvim.logger.error(err);\n    throw err;\n  }\n}",
-      "headingContext": "node/tea/util.ts \u003e function replaceBetweenPositions",
-      "startLine": 5,
-      "startCol": 1,
-      "endLine": 38,
-      "endCol": 2
-    },
-    {
-      "text": "export function calculatePosition(\n  startPos: Position0Indexed,\n  buf: Buffer,\n  indexInText: ByteIdx,\n): Position0Indexed {\n  let { row, col } = startPos;\n  let currentIndex: ByteIdx = 0 as ByteIdx;\n\n  while (currentIndex \u003c indexInText) {\n    // 10 == '\\n' in hex\n    if (buf[currentIndex] === 10) {\n      row++;\n      col = 0 as ByteIdx;\n    } else {\n      col++;\n    }\n    currentIndex++;\n  }\n\n  return { row, col };\n}",
-      "contextualizedText": "// node/tea/util.ts \u003e function calculatePosition\n\nexport function calculatePosition(\n  startPos: Position0Indexed,\n  buf: Buffer,\n  indexInText: ByteIdx,\n): Position0Indexed {\n  let { row, col } = startPos;\n  let currentIndex: ByteIdx = 0 as ByteIdx;\n\n  while (currentIndex \u003c indexInText) {\n    // 10 == '\\n' in hex\n    if (buf[currentIndex] === 10) {\n      row++;\n      col = 0 as ByteIdx;\n    } else {\n      col++;\n    }\n    currentIndex++;\n  }\n\n  return { row, col };\n}",
-      "headingContext": "node/tea/util.ts \u003e function calculatePosition",
-      "startLine": 40,
-      "startCol": 1,
-      "endLine": 60,
-      "endCol": 2
-    },
-    {
-      "text": "export { calculateStringPosition } from \"@magenta/core\";",
-      "contextualizedText": "// node/tea/util.ts\n\nexport { calculateStringPosition } from \"@magenta/core\";",
-      "headingContext": "node/tea/util.ts",
-      "startLine": 62,
-      "startCol": 1,
-      "endLine": 62,
-      "endCol": 57
-    },
-    {
-      "text": "export async function logBuffer(buffer: NvimBuffer, context: { nvim: Nvim }) {\n  const lines = await buffer.getLines({\n    start: 0 as Row0Indexed,\n    end: -1 as Row0Indexed,\n  });\n  context.nvim.logger.info(`buffer:\\n${lines.join(\"\\n\")}\\nend`);\n}",
-      "contextualizedText": "// node/tea/util.ts \u003e function logBuffer\n\nexport async function logBuffer(buffer: NvimBuffer, context: { nvim: Nvim }) {\n  const lines = await buffer.getLines({\n    start: 0 as Row0Indexed,\n    end: -1 as Row0Indexed,\n  });\n  context.nvim.logger.info(`buffer:\\n${lines.join(\"\\n\")}\\nend`);\n}",
-      "headingContext": "node/tea/util.ts \u003e function logBuffer",
-      "startLine": 64,
-      "startCol": 1,
-      "endLine": 70,
-      "endCol": 2
-    },
-    {
-      "text": "export function strWidthInBytes(str: string) {\n  return Buffer.from(str, \"utf8\").byteLength;\n}",
-      "contextualizedText": "// node/tea/util.ts \u003e function strWidthInBytes\n\nexport function strWidthInBytes(str: string) {\n  return Buffer.from(str, \"utf8\").byteLength;\n}",
-      "headingContext": "node/tea/util.ts \u003e function strWidthInBytes",
-      "startLine": 72,
-      "startCol": 1,
-      "endLine": 74,
-      "endCol": 2
+      "start": 0,
+      "end": 1736
     }
   ]
 }

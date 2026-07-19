@@ -1,78 +1,15 @@
 {
   "blobSha": "448bfd362edc04df555ce181b1be50c2bac71dba",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { describe, expect, it } from \"vitest\";\nimport type {\n  ScriptCatalogEntry,\n  ScriptRunner,\n} from \"../capabilities/script-runner.ts\";\nimport type { ThreadId } from \"../chat-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport * as RunScript from \"./run-script.ts\";\n\nconst catalog: ScriptCatalogEntry[] = [\n  {\n    name: \"foo\",\n    description: \"does foo\",\n    parameterSchema: {\n      type: \"object\",\n      properties: { x: { type: \"string\" } },\n      required: [\"x\"],\n    },\n    file: \"/scripts/foo.ts\",\n  },\n];\n\ndescribe(\"run_script tool\", () =\u003e {\n  it(\"enumerates discovered scripts in the spec\", () =\u003e {\n    const spec = RunScript.getSpec(catalog);\n    expect(spec.name).toBe(\"run_script\");\n    const schema = spec.input_schema as {\n      properties: Record\u003cstring, { enum?: string[] }\u003e;\n      required: string[];\n    };\n    const props = schema.properties;\n    expect(props.scriptName.enum).toEqual([\"foo\"]);\n    expect(spec.description).toContain(\"foo: does foo\");\n  });\n\n  it(\"requires scriptName but not parameters\", () =\u003e {\n    const schema = RunScript.getSpec(catalog).input_schema as {\n      required: string[];\n    };\n    expect(schema.required).toEqual([\"scriptName\"]);\n  });\n\n  it(\"accepts well-formed input\", () =\u003e {\n    const result = RunScript.validateInput({\n      scriptName: \"foo\",\n      parameters: { x: \"thing\" },\n    });\n    expect(result.status).toBe(\"ok\");\n  });\n\n  it(\"accepts input with omitted parameters (discovery step)\", () =\u003e {\n    const result = RunScript.validateInput({ scriptName: \"foo\" });\n    expect(result.status).toBe(\"ok\");\n  });\n\n  it(\"rejects input with a missing scriptName\", () =\u003e {\n    const result = RunScript.validateInput({ parameters: {} });\n    expect(result.status).toBe(\"error\");\n  });\n\n  it(\"rejects input whose parameters are not an object\", () =\u003e {\n    const result = RunScript.validateInput({\n      scriptName: \"foo\",\n      parameters: \"nope\",\n    });\n    expect(result.status).toBe(\"error\");\n  });",
-      "contextualizedText": "// node/core/src/tools/run-script.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport type {\n  ScriptCatalogEntry,\n  ScriptRunner,\n} from \"../capabilities/script-runner.ts\";\nimport type { ThreadId } from \"../chat-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport * as RunScript from \"./run-script.ts\";\n\nconst catalog: ScriptCatalogEntry[] = [\n  {\n    name: \"foo\",\n    description: \"does foo\",\n    parameterSchema: {\n      type: \"object\",\n      properties: { x: { type: \"string\" } },\n      required: [\"x\"],\n    },\n    file: \"/scripts/foo.ts\",\n  },\n];\n\ndescribe(\"run_script tool\", () =\u003e {\n  it(\"enumerates discovered scripts in the spec\", () =\u003e {\n    const spec = RunScript.getSpec(catalog);\n    expect(spec.name).toBe(\"run_script\");\n    const schema = spec.input_schema as {\n      properties: Record\u003cstring, { enum?: string[] }\u003e;\n      required: string[];\n    };\n    const props = schema.properties;\n    expect(props.scriptName.enum).toEqual([\"foo\"]);\n    expect(spec.description).toContain(\"foo: does foo\");\n  });\n\n  it(\"requires scriptName but not parameters\", () =\u003e {\n    const schema = RunScript.getSpec(catalog).input_schema as {\n      required: string[];\n    };\n    expect(schema.required).toEqual([\"scriptName\"]);\n  });\n\n  it(\"accepts well-formed input\", () =\u003e {\n    const result = RunScript.validateInput({\n      scriptName: \"foo\",\n      parameters: { x: \"thing\" },\n    });\n    expect(result.status).toBe(\"ok\");\n  });\n\n  it(\"accepts input with omitted parameters (discovery step)\", () =\u003e {\n    const result = RunScript.validateInput({ scriptName: \"foo\" });\n    expect(result.status).toBe(\"ok\");\n  });\n\n  it(\"rejects input with a missing scriptName\", () =\u003e {\n    const result = RunScript.validateInput({ parameters: {} });\n    expect(result.status).toBe(\"error\");\n  });\n\n  it(\"rejects input whose parameters are not an object\", () =\u003e {\n    const result = RunScript.validateInput({\n      scriptName: \"foo\",\n      parameters: \"nope\",\n    });\n    expect(result.status).toBe(\"error\");\n  });",
-      "headingContext": "node/core/src/tools/run-script.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 67,
-      "endCol": 6
+      "start": 0,
+      "end": 1983
     },
     {
-      "text": "  function makeInvoker() {\n    const calls: { scriptName: string; parameters: unknown }[] = [];\n    const invoker: ScriptRunner",
-      "contextualizedText": "// node/core/src/tools/run-script.test.ts \u003e function makeInvoker\n\n  function makeInvoker() {\n    const calls: { scriptName: string; parameters: unknown }[] = [];\n    const invoker: ScriptRunner",
-      "headingContext": "node/core/src/tools/run-script.test.ts \u003e function makeInvoker",
-      "startLine": 69,
-      "startCol": 1,
-      "endLine": 71,
-      "endCol": 32
-    },
-    {
-      "text": "      discover: () =\u003e Promise.resolve()",
-      "contextualizedText": "// node/core/src/tools/run-script.test.ts \u003e function makeInvoker \u003e function discover\n\n      discover: () =\u003e Promise.resolve()",
-      "headingContext": "node/core/src/tools/run-script.test.ts \u003e function makeInvoker \u003e function discover",
-      "startLine": 72,
-      "startCol": 1,
-      "endLine": 72,
-      "endCol": 40
-    },
-    {
-      "text": "      getScriptCatalog: () =\u003e catalog",
-      "contextualizedText": "// node/core/src/tools/run-script.test.ts \u003e function makeInvoker \u003e function getScriptCatalog\n\n      getScriptCatalog: () =\u003e catalog",
-      "headingContext": "node/core/src/tools/run-script.test.ts \u003e function makeInvoker \u003e function getScriptCatalog",
-      "startLine": 73,
-      "startCol": 1,
-      "endLine": 73,
-      "endCol": 38
-    },
-    {
-      "text": "      runScript: ({ scriptName, parameters }) =\u003e\n        calls.push({ scriptName, parameters })",
-      "contextualizedText": "// node/core/src/tools/run-script.test.ts \u003e function makeInvoker \u003e function runScript\n\n      runScript: ({ scriptName, parameters }) =\u003e\n        calls.push({ scriptName, parameters })",
-      "headingContext": "node/core/src/tools/run-script.test.ts \u003e function makeInvoker \u003e function runScript",
-      "startLine": 74,
-      "startCol": 1,
-      "endLine": 75,
-      "endCol": 47
-    },
-    {
-      "text": "return { invoker, calls };\n  }",
-      "contextualizedText": "// node/core/src/tools/run-script.test.ts \u003e function makeInvoker\n\nreturn { invoker, calls };\n  }",
-      "headingContext": "node/core/src/tools/run-script.test.ts \u003e function makeInvoker",
-      "startLine": 77,
-      "startCol": 5,
-      "endLine": 78,
-      "endCol": 4
-    },
-    {
-      "text": "  function makeRequest(input: RunScript.Input): RunScript.ToolRequest {\n    return {\n      id: \"req-1\" as ToolRequestId,\n      toolName: \"run_script\",\n      input,\n    };\n  }",
-      "contextualizedText": "// node/core/src/tools/run-script.test.ts \u003e function makeRequest\n\n  function makeRequest(input: RunScript.Input): RunScript.ToolRequest {\n    return {\n      id: \"req-1\" as ToolRequestId,\n      toolName: \"run_script\",\n      input,\n    };\n  }",
-      "headingContext": "node/core/src/tools/run-script.test.ts \u003e function makeRequest",
-      "startLine": 80,
-      "startCol": 1,
-      "endLine": 86,
-      "endCol": 4
-    },
-    {
-      "text": "it(\"returns the parameter schema and does not invoke when parameters are omitted\", async () =\u003e {\n    const { invoker, calls } = makeInvoker();\n    const result = await RunScript.execute(makeRequest({ scriptName: \"foo\" }), {\n      scriptRunner: invoker,\n      threadId: \"thread-1\" as ThreadId,\n    }).promise;\n    expect(calls).toHaveLength(0);\n    expect(result.result.status).toBe(\"ok\");\n    const text =\n      result.result.status === \"ok\" ? result.result.value[0] : undefined;\n    expect(text \u0026\u0026 \"text\" in text ? text.text : \"\").toContain('\"required\"');\n  });\n\n  it(\"rejects parameters that violate the script's schema without invoking\", async () =\u003e {\n    const { invoker, calls } = makeInvoker();\n    const result = await RunScript.execute(\n      makeRequest({ scriptName: \"foo\", parameters: { x: 123 } }),\n      { scriptRunner: invoker, threadId: \"thread-1\" as ThreadId },\n    ).promise;\n    expect(result.result.status).toBe(\"error\");\n    expect(calls).toHaveLength(0);\n  });\n  it(\"invokes the script when parameters are supplied\", async () =\u003e {\n    const { invoker, calls } = makeInvoker();\n    const result = await RunScript.execute(\n      makeRequest({ scriptName: \"foo\", parameters: { x: \"thing\" } }),\n      { scriptRunner: invoker, threadId: \"thread-1\" as ThreadId },\n    ).promise;\n    expect(result.result.status).toBe(\"ok\");\n    expect(calls).toEqual([{ scriptName: \"foo\", parameters: { x: \"thing\" } }]);\n  });",
-      "contextualizedText": "// node/core/src/tools/run-script.test.ts\n\nit(\"returns the parameter schema and does not invoke when parameters are omitted\", async () =\u003e {\n    const { invoker, calls } = makeInvoker();\n    const result = await RunScript.execute(makeRequest({ scriptName: \"foo\" }), {\n      scriptRunner: invoker,\n      threadId: \"thread-1\" as ThreadId,\n    }).promise;\n    expect(calls).toHaveLength(0);\n    expect(result.result.status).toBe(\"ok\");\n    const text =\n      result.result.status === \"ok\" ? result.result.value[0] : undefined;\n    expect(text \u0026\u0026 \"text\" in text ? text.text : \"\").toContain('\"required\"');\n  });\n\n  it(\"rejects parameters that violate the script's schema without invoking\", async () =\u003e {\n    const { invoker, calls } = makeInvoker();\n    const result = await RunScript.execute(\n      makeRequest({ scriptName: \"foo\", parameters: { x: 123 } }),\n      { scriptRunner: invoker, threadId: \"thread-1\" as ThreadId },\n    ).promise;\n    expect(result.result.status).toBe(\"error\");\n    expect(calls).toHaveLength(0);\n  });\n  it(\"invokes the script when parameters are supplied\", async () =\u003e {\n    const { invoker, calls } = makeInvoker();\n    const result = await RunScript.execute(\n      makeRequest({ scriptName: \"foo\", parameters: { x: \"thing\" } }),\n      { scriptRunner: invoker, threadId: \"thread-1\" as ThreadId },\n    ).promise;\n    expect(result.result.status).toBe(\"ok\");\n    expect(calls).toEqual([{ scriptName: \"foo\", parameters: { x: \"thing\" } }]);\n  });",
-      "headingContext": "node/core/src/tools/run-script.test.ts",
-      "startLine": 88,
-      "startCol": 3,
-      "endLine": 118,
-      "endCol": 6
+      "start": 1987,
+      "end": 3943
     }
   ]
 }

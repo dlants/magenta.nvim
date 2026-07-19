@@ -1,42 +1,15 @@
 {
   "blobSha": "d581f26eb6cae2a29c32d3171bd5908b3e721ae3",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { exec } from \"node:child_process\";\nimport * as fs from \"node:fs/promises\";\nimport * as os from \"node:os\";\nimport * as path from \"node:path\";\nimport { promisify } from \"node:util\";\n\nconst execAsync = promisify(exec);\n\nexport type ClipboardProbeResult =\n  | { kind: \"image\"; tmpPath: string }\n  | { kind: \"none\" };",
-      "contextualizedText": "// node/core/src/utils/clipboard-image.ts\n\nimport { exec } from \"node:child_process\";\nimport * as fs from \"node:fs/promises\";\nimport * as os from \"node:os\";\nimport * as path from \"node:path\";\nimport { promisify } from \"node:util\";\n\nconst execAsync = promisify(exec);\n\nexport type ClipboardProbeResult =\n  | { kind: \"image\"; tmpPath: string }\n  | { kind: \"none\" };",
-      "headingContext": "node/core/src/utils/clipboard-image.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 11,
-      "endCol": 22
+      "start": 0,
+      "end": 1742
     },
     {
-      "text": "export interface ClipboardImageLogger {\n  warn: (msg: string) =\u003e void;\n  error: (msg: string) =\u003e void;\n}",
-      "contextualizedText": "// node/core/src/utils/clipboard-image.ts \u003e interface ClipboardImageLogger\n\nexport interface ClipboardImageLogger {\n  warn: (msg: string) =\u003e void;\n  error: (msg: string) =\u003e void;\n}",
-      "headingContext": "node/core/src/utils/clipboard-image.ts \u003e interface ClipboardImageLogger",
-      "startLine": 13,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 2
-    },
-    {
-      "text": "/**\n * Probe the OS clipboard for an image. If present, save it to a tmp file and\n * return the path. Currently only macOS is supported; Linux/Windows return\n * `{ kind: \"none\" }`.\n */\nexport async function probeAndSaveClipboardImage(\n  logger: ClipboardImageLogger,\n): Promise\u003cClipboardProbeResult\u003e {\n  switch (process.platform) {\n    case \"darwin\":\n      return probeMac(logger);\n    default:\n      logger.warn(\n        `Clipboard image paste not yet supported on platform ${process.platform}`,\n      );\n      return { kind: \"none\" };\n  }\n}",
-      "contextualizedText": "// node/core/src/utils/clipboard-image.ts \u003e function probeAndSaveClipboardImage\n\n/**\n * Probe the OS clipboard for an image. If present, save it to a tmp file and\n * return the path. Currently only macOS is supported; Linux/Windows return\n * `{ kind: \"none\" }`.\n */\nexport async function probeAndSaveClipboardImage(\n  logger: ClipboardImageLogger,\n): Promise\u003cClipboardProbeResult\u003e {\n  switch (process.platform) {\n    case \"darwin\":\n      return probeMac(logger);\n    default:\n      logger.warn(\n        `Clipboard image paste not yet supported on platform ${process.platform}`,\n      );\n      return { kind: \"none\" };\n  }\n}",
-      "headingContext": "node/core/src/utils/clipboard-image.ts \u003e function probeAndSaveClipboardImage",
-      "startLine": 18,
-      "startCol": 1,
-      "endLine": 35,
-      "endCol": 2
-    },
-    {
-      "text": "async function probeMac(\n  logger: ClipboardImageLogger,\n): Promise\u003cClipboardProbeResult\u003e {\n  try {\n    const { stdout } = await execAsync(\"osascript -e 'clipboard info'\");\n    if (!stdout.includes(\"«class PNGf»\")) {\n      return { kind: \"none\" };\n    }\n  } catch (err) {\n    logger.warn(\n      `clipboard info probe failed: ${err instanceof Error ? err.message : String(err)}`,\n    );\n    return { kind: \"none\" };\n  }\n\n  const tmpPath = path.join(os.tmpdir(), `magenta-paste-${Date.now()}.png`);\n\n  // AppleScript to write clipboard PNG data to a file.\n  const script = `set f to open for access POSIX file \"${tmpPath}\" with write permission\ntry\n  write (the clipboard as «class PNGf») to f\n  close access f\non error errMsg\n  close access f\n  error errMsg\nend try`;\n\n  try {\n    await execAsync(\n      `osascript ${script\n        .split(\"\\n\")\n        .map((line) =\u003e `-e ${JSON.stringify(line)}`)\n        .join(\" \")}`,\n    );\n  } catch (err) {\n    logger.error(\n      `failed to save clipboard image: ${err instanceof Error ? err.message : String(err)}`,\n    );\n    return { kind: \"none\" };\n  }\n\n  try {\n    const stat = await fs.stat(tmpPath);\n    if (!stat.isFile() || stat.size === 0) {\n      return { kind: \"none\" };\n    }\n  } catch {\n    return { kind: \"none\" };\n  }\n\n  return { kind: \"image\", tmpPath };\n}",
-      "contextualizedText": "// node/core/src/utils/clipboard-image.ts \u003e function probeMac\n\nasync function probeMac(\n  logger: ClipboardImageLogger,\n): Promise\u003cClipboardProbeResult\u003e {\n  try {\n    const { stdout } = await execAsync(\"osascript -e 'clipboard info'\");\n    if (!stdout.includes(\"«class PNGf»\")) {\n      return { kind: \"none\" };\n    }\n  } catch (err) {\n    logger.warn(\n      `clipboard info probe failed: ${err instanceof Error ? err.message : String(err)}`,\n    );\n    return { kind: \"none\" };\n  }\n\n  const tmpPath = path.join(os.tmpdir(), `magenta-paste-${Date.now()}.png`);\n\n  // AppleScript to write clipboard PNG data to a file.\n  const script = `set f to open for access POSIX file \"${tmpPath}\" with write permission\ntry\n  write (the clipboard as «class PNGf») to f\n  close access f\non error errMsg\n  close access f\n  error errMsg\nend try`;\n\n  try {\n    await execAsync(\n      `osascript ${script\n        .split(\"\\n\")\n        .map((line) =\u003e `-e ${JSON.stringify(line)}`)\n        .join(\" \")}`,\n    );\n  } catch (err) {\n    logger.error(\n      `failed to save clipboard image: ${err instanceof Error ? err.message : String(err)}`,\n    );\n    return { kind: \"none\" };\n  }\n\n  try {\n    const stat = await fs.stat(tmpPath);\n    if (!stat.isFile() || stat.size === 0) {\n      return { kind: \"none\" };\n    }\n  } catch {\n    return { kind: \"none\" };\n  }\n\n  return { kind: \"image\", tmpPath };\n}",
-      "headingContext": "node/core/src/utils/clipboard-image.ts \u003e function probeMac",
-      "startLine": 37,
-      "startCol": 1,
-      "endLine": 88,
-      "endCol": 2
+      "start": 1746,
+      "end": 2287
     }
   ]
 }

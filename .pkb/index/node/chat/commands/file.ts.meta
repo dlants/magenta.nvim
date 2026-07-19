@@ -1,24 +1,11 @@
 {
   "blobSha": "f16fa4e1fe37d0af65757cf4469e08abe094289f",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport type { UnresolvedFilePath } from \"../../utils/files.ts\";\nimport {\n  AT_FILE_PATTERN,\n  detectFileType,\n  extractFileRefPath,\n  relativePath,\n  resolveFilePath,\n} from \"../../utils/files.ts\";\nimport type { Command } from \"./types.ts\";\n\nexport const fileCommand: Command = {\n  name: \"@file:\",\n  pattern: AT_FILE_PATTERN",
-      "contextualizedText": "// node/chat/commands/file.ts\n\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport type { UnresolvedFilePath } from \"../../utils/files.ts\";\nimport {\n  AT_FILE_PATTERN,\n  detectFileType,\n  extractFileRefPath,\n  relativePath,\n  resolveFilePath,\n} from \"../../utils/files.ts\";\nimport type { Command } from \"./types.ts\";\n\nexport const fileCommand: Command = {\n  name: \"@file:\",\n  pattern: AT_FILE_PATTERN",
-      "headingContext": "node/chat/commands/file.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 15,
-      "endCol": 27
-    },
-    {
-      "text": "  async execute(match, context): Promise\u003cProviderMessageContent[]\u003e {\n    const filePath = extractFileRefPath(match) as UnresolvedFilePath;\n    try {\n      const absFilePath = resolveFilePath(\n        context.cwd,\n        filePath,\n        context.homeDir,\n      );\n      const relFilePath = relativePath(\n        context.cwd,\n        absFilePath,\n        context.homeDir,\n      );\n      const fileTypeInfo = await detectFileType(absFilePath);\n\n      if (!fileTypeInfo) {\n        throw new Error(`File ${filePath} does not exist`);\n      }\n\n      context.contextManager.addFileContext(\n        absFilePath,\n        relFilePath,\n        fileTypeInfo,\n      );\n\n      return []; // File context is handled by contextManager\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to add file to context for ${filePath}: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error adding file to context for ${filePath}: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
-      "contextualizedText": "// node/chat/commands/file.ts \u003e method execute\n\n  async execute(match, context): Promise\u003cProviderMessageContent[]\u003e {\n    const filePath = extractFileRefPath(match) as UnresolvedFilePath;\n    try {\n      const absFilePath = resolveFilePath(\n        context.cwd,\n        filePath,\n        context.homeDir,\n      );\n      const relFilePath = relativePath(\n        context.cwd,\n        absFilePath,\n        context.homeDir,\n      );\n      const fileTypeInfo = await detectFileType(absFilePath);\n\n      if (!fileTypeInfo) {\n        throw new Error(`File ${filePath} does not exist`);\n      }\n\n      context.contextManager.addFileContext(\n        absFilePath,\n        relFilePath,\n        fileTypeInfo,\n      );\n\n      return []; // File context is handled by contextManager\n    } catch (error) {\n      context.nvim.logger.error(\n        `Failed to add file to context for ${filePath}: ${error instanceof Error ? error.message : String(error)}`,\n      );\n      return [\n        {\n          type: \"text\",\n          text: `Error adding file to context for ${filePath}: ${error instanceof Error ? error.message : String(error)}`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ];\n    }\n  }",
-      "headingContext": "node/chat/commands/file.ts \u003e method execute",
-      "startLine": 16,
-      "startCol": 1,
-      "endLine": 54,
-      "endCol": 4
+      "start": 0,
+      "end": 1637
     }
   ]
 }

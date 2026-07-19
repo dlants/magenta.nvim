@@ -1,42 +1,11 @@
 {
   "blobSha": "9664310bae42098c2922cfd128636b0d4d3f29f3",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export interface Shell",
-      "contextualizedText": "// node/core/src/capabilities/shell.ts \u003e interface Shell\n\nexport interface Shell",
-      "headingContext": "node/core/src/capabilities/shell.ts \u003e interface Shell",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 1,
-      "endCol": 23
-    },
-    {
-      "text": "  execute(\n    command: string,\n    opts: {\n      toolRequestId: string;\n      onOutput?: (line: OutputLine) =\u003e void;\n      onStart?: () =\u003e void;\n    },\n  ): Promise\u003cShellResult\u003e",
-      "contextualizedText": "// node/core/src/capabilities/shell.ts \u003e interface Shell \u003e method execute\n\n  execute(\n    command: string,\n    opts: {\n      toolRequestId: string;\n      onOutput?: (line: OutputLine) =\u003e void;\n      onStart?: () =\u003e void;\n    },\n  ): Promise\u003cShellResult\u003e",
-      "headingContext": "node/core/src/capabilities/shell.ts \u003e interface Shell \u003e method execute",
-      "startLine": 2,
-      "startCol": 1,
-      "endLine": 9,
-      "endCol": 26
-    },
-    {
-      "text": "  terminate(): void",
-      "contextualizedText": "// node/core/src/capabilities/shell.ts \u003e interface Shell \u003e method terminate\n\n  terminate(): void",
-      "headingContext": "node/core/src/capabilities/shell.ts \u003e interface Shell \u003e method terminate",
-      "startLine": 10,
-      "startCol": 1,
-      "endLine": 10,
-      "endCol": 20
-    },
-    {
-      "text": "export type ShellResult = {\n  exitCode: number;\n  signal: NodeJS.Signals | undefined;\n  output: OutputLine[];\n  logFilePath: string | undefined;\n  durationMs: number;\n};\n\nexport type OutputLine = {\n  stream: \"stdout\" | \"stderr\";\n  text: string;\n};",
-      "contextualizedText": "// node/core/src/capabilities/shell.ts\n\nexport type ShellResult = {\n  exitCode: number;\n  signal: NodeJS.Signals | undefined;\n  output: OutputLine[];\n  logFilePath: string | undefined;\n  durationMs: number;\n};\n\nexport type OutputLine = {\n  stream: \"stdout\" | \"stderr\";\n  text: string;\n};",
-      "headingContext": "node/core/src/capabilities/shell.ts",
-      "startLine": 13,
-      "startCol": 1,
-      "endLine": 24,
-      "endCol": 3
+      "start": 0,
+      "end": 476
     }
   ]
 }

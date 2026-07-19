@@ -1,15 +1,11 @@
 {
   "blobSha": "35e2332a477b9e01647d875d5f068285952bf07f",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "---\napplyTo: \"**/*.ts\"\n---\n\n# General TypeScript Review\n\n- Do not use dynamic `import()` expressions. Use static `import` statements at\n  the top of the file instead.\n- We only want to use a single bottom value, so use `undefined` whenever you can\n  and avoid `null`. When external libraries use `null`, only use `null` at the\n  boundary, and convert to `undefined` as early as possible, so the internals of\n  the plugin only use `undefined`.",
-      "contextualizedText": "---\napplyTo: \"**/*.ts\"\n---\n\n# General TypeScript Review\n\n- Do not use dynamic `import()` expressions. Use static `import` statements at\n  the top of the file instead.\n- We only want to use a single bottom value, so use `undefined` whenever you can\n  and avoid `null`. When external libraries use `null`, only use `null` at the\n  boundary, and convert to `undefined` as early as possible, so the internals of\n  the plugin only use `undefined`.",
-      "headingContext": "",
-      "startLine": 0,
-      "startCol": 0,
-      "endLine": 0,
-      "endCol": 0
+      "start": 0,
+      "end": 442
     }
   ]
 }

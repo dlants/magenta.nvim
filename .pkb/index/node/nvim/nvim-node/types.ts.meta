@@ -1,96 +1,27 @@
 {
   "blobSha": "1c1282701ec0c10d645d82e5fbb8d2127779b907",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type winston from \"winston\";\nimport type { NeovimApi } from \"./neovim-api.types.ts\";\n\nexport type Awaitable\u003cT\u003e = T | Promise\u003cT\u003e;\n\nexport type EventsMap = Record\u003cstring, unknown[]\u003e;\n\nexport type BaseEvents = {\n  notifications: EventsMap;\n  requests: EventsMap;\n};\n\nexport type LogLevel =\n  | \"error\"\n  | \"warn\"\n  | \"info\"\n  | \"http\"\n  | \"verbose\"\n  | \"debug\"\n  | \"silly\";",
-      "contextualizedText": "// node/nvim/nvim-node/types.ts\n\nimport type winston from \"winston\";\nimport type { NeovimApi } from \"./neovim-api.types.ts\";\n\nexport type Awaitable\u003cT\u003e = T | Promise\u003cT\u003e;\n\nexport type EventsMap = Record\u003cstring, unknown[]\u003e;\n\nexport type BaseEvents = {\n  notifications: EventsMap;\n  requests: EventsMap;\n};\n\nexport type LogLevel =\n  | \"error\"\n  | \"warn\"\n  | \"info\"\n  | \"http\"\n  | \"verbose\"\n  | \"debug\"\n  | \"silly\";",
-      "headingContext": "node/nvim/nvim-node/types.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 20,
-      "endCol": 13
+      "start": 0,
+      "end": 377
     },
     {
-      "text": "export type Client = {\n  /**\n   * `name` can be used to find channel id on neovim.\n   * It's also used for logging.\n   *\n   * ```lua\n   * -- look for channel.client.name in channel list\n   *\n   * local chans_list = vim.fn.nvim_list_chans()\n   * vim.print(chans_list)\n   * ```\n   */\n  name: string;\n  /** Dictionary describing the version */\n  version?: {\n    /** major version (defaults to 0 if not set, for no release yet) */\n    major?: number;\n    /** minor version */\n    minor?: number;\n    /** patch number */\n    patch?: number;\n    /** string describing a prerelease, like \"dev\" or \"beta1\" */\n    prerelease?: string;\n    /** hash or similar identifier of commit */\n    commit?: string;\n  };\n  /**\n   * - `\"remote\"` remote client connected \"Nvim flavored\" MessagePack-RPC (responses must be in reverse order of requests). msgpack-rpc\n   * - `\"msgpack-rpc\"` remote client connected to Nvim via fully MessagePack-RPC compliant protocol.\n   * - `\"ui\"` gui frontend\n   * - `\"embedder\"` application using Nvim as a component (for example, IDE/editor implementing a vim mode).\n   * - `\"host\"` plugin host, typically started by nvim\n   * - `\"plugin\"` single plugin, started by nvim\n   *\n   * @default\n   * \"msgpack-rpc\"\n   */\n  type?: \"remote\" | \"msgpack-rpc\" | \"ui\" | \"embedder\" | \"host\" | \"plugin\";\n  /**\n   * Builtin methods in the client.\n   * For a host, this does not include plugin methods which will be discovered later.\n   * The key should be the method name.\n   */\n  methods?: Record\u003c\n    string,\n    {\n      async?: boolean;\n      nargs?: number;\n    }\n  \u003e;\n  /**\n   * Arbitrary string:string map of informal client properties.\n   */\n  attributes?: {\n    [key: string]: string;\n    website?: string;\n    license?: string;\n    logo?: string;\n  };\n};",
-      "contextualizedText": "// node/nvim/nvim-node/types.ts\n\nexport type Client = {\n  /**\n   * `name` can be used to find channel id on neovim.\n   * It's also used for logging.\n   *\n   * ```lua\n   * -- look for channel.client.name in channel list\n   *\n   * local chans_list = vim.fn.nvim_list_chans()\n   * vim.print(chans_list)\n   * ```\n   */\n  name: string;\n  /** Dictionary describing the version */\n  version?: {\n    /** major version (defaults to 0 if not set, for no release yet) */\n    major?: number;\n    /** minor version */\n    minor?: number;\n    /** patch number */\n    patch?: number;\n    /** string describing a prerelease, like \"dev\" or \"beta1\" */\n    prerelease?: string;\n    /** hash or similar identifier of commit */\n    commit?: string;\n  };\n  /**\n   * - `\"remote\"` remote client connected \"Nvim flavored\" MessagePack-RPC (responses must be in reverse order of requests). msgpack-rpc\n   * - `\"msgpack-rpc\"` remote client connected to Nvim via fully MessagePack-RPC compliant protocol.\n   * - `\"ui\"` gui frontend\n   * - `\"embedder\"` application using Nvim as a component (for example, IDE/editor implementing a vim mode).\n   * - `\"host\"` plugin host, typically started by nvim\n   * - `\"plugin\"` single plugin, started by nvim\n   *\n   * @default\n   * \"msgpack-rpc\"\n   */\n  type?: \"remote\" | \"msgpack-rpc\" | \"ui\" | \"embedder\" | \"host\" | \"plugin\";\n  /**\n   * Builtin methods in the client.\n   * For a host, this does not include plugin methods which will be discovered later.\n   * The key should be the method name.\n   */\n  methods?: Record\u003c\n    string,\n    {\n      async?: boolean;\n      nargs?: number;\n    }\n  \u003e;\n  /**\n   * Arbitrary string:string map of informal client properties.\n   */\n  attributes?: {\n    [key: string]: string;\n    website?: string;\n    license?: string;\n    logo?: string;\n  };\n};",
-      "headingContext": "node/nvim/nvim-node/types.ts",
-      "startLine": 22,
-      "startCol": 1,
-      "endLine": 81,
-      "endCol": 3
+      "start": 379,
+      "end": 2139
     },
     {
-      "text": "export type AttachParams = {\n  /**\n   * neovim socket\n   *\n   * Usually you get this value from `process.env.NVIM` which is set\n   * automagically by neovim on any child processes\n   *\n   * @see {@link https://neovim.io/doc/user/eval.html#%24NVIM}\n   * @see {@link https://neovim.io/doc/user/eval.html#v%3Aservername}\n   *\n   * @example\n   * ```lua\n   * -- init.lua\n   * vim.fn.jobstart(\"npm run src/main.ts\", { cwd = root_dir })\n   * ```\n   *\n   * ```typescript\n   * // src/main.ts\n   * const socket = process.env.NVIM;\n   * if (!socket) throw Error(\"socket missing\");\n   *\n   * const nvim = await attach({ socket, client: { name: \"my_client\" } });\n   * ```\n   */\n  socket: string;\n\n  /**\n   * RPC client info, only name is required.\n   * This is sent to neovim on-connection-open by calling `nvim_set_client_info()`\n   * @see {@link https://neovim.io/doc/user/api.html#nvim_set_client_info()}\n   */\n  client: Client;\n\n  /**\n   * If left undefined, logging will be disabled.\n   */\n  logging?: {\n    /**\n     * @remarks\n     * node internally logs with `logger.debug()` and `logger.error()`\n     * Set logLevel higher than `debug` to not display bunvim's internal logs\n     *\n     * Levels from highest to lowest priority\n     * - error\n     * - warn\n     * - info\n     * - http\n     * - verbose\n     * - debug\n     * - silly\n     */\n    level?: LogLevel | undefined;\n    /**\n     * Path to write logs to.\n     *\n     * @example\n     * \"~/Projects/logs/my-plugin.log\"\n     */\n    file?: string | undefined;\n  };\n};\n\nexport const MessageType = {\n  REQUEST: 0,\n  RESPONSE: 1,\n  NOTIFY: 2,\n} as const;\nexport type MessageType = (typeof MessageType)[keyof typeof MessageType];\n\nexport type RPCRequest = [\n  typeof MessageType.REQUEST,\n  id: number,\n  method: string,\n  args: unknown[],\n];\nexport type RPCNotification = [\n  typeof MessageType.NOTIFY,\n  notification: string,\n  args: unknown[],\n];",
-      "contextualizedText": "// node/nvim/nvim-node/types.ts\n\nexport type AttachParams = {\n  /**\n   * neovim socket\n   *\n   * Usually you get this value from `process.env.NVIM` which is set\n   * automagically by neovim on any child processes\n   *\n   * @see {@link https://neovim.io/doc/user/eval.html#%24NVIM}\n   * @see {@link https://neovim.io/doc/user/eval.html#v%3Aservername}\n   *\n   * @example\n   * ```lua\n   * -- init.lua\n   * vim.fn.jobstart(\"npm run src/main.ts\", { cwd = root_dir })\n   * ```\n   *\n   * ```typescript\n   * // src/main.ts\n   * const socket = process.env.NVIM;\n   * if (!socket) throw Error(\"socket missing\");\n   *\n   * const nvim = await attach({ socket, client: { name: \"my_client\" } });\n   * ```\n   */\n  socket: string;\n\n  /**\n   * RPC client info, only name is required.\n   * This is sent to neovim on-connection-open by calling `nvim_set_client_info()`\n   * @see {@link https://neovim.io/doc/user/api.html#nvim_set_client_info()}\n   */\n  client: Client;\n\n  /**\n   * If left undefined, logging will be disabled.\n   */\n  logging?: {\n    /**\n     * @remarks\n     * node internally logs with `logger.debug()` and `logger.error()`\n     * Set logLevel higher than `debug` to not display bunvim's internal logs\n     *\n     * Levels from highest to lowest priority\n     * - error\n     * - warn\n     * - info\n     * - http\n     * - verbose\n     * - debug\n     * - silly\n     */\n    level?: LogLevel | undefined;\n    /**\n     * Path to write logs to.\n     *\n     * @example\n     * \"~/Projects/logs/my-plugin.log\"\n     */\n    file?: string | undefined;\n  };\n};\n\nexport const MessageType = {\n  REQUEST: 0,\n  RESPONSE: 1,\n  NOTIFY: 2,\n} as const;\nexport type MessageType = (typeof MessageType)[keyof typeof MessageType];\n\nexport type RPCRequest = [\n  typeof MessageType.REQUEST,\n  id: number,\n  method: string,\n  args: unknown[],\n];\nexport type RPCNotification = [\n  typeof MessageType.NOTIFY,\n  notification: string,\n  args: unknown[],\n];",
-      "headingContext": "node/nvim/nvim-node/types.ts",
-      "startLine": 83,
-      "startCol": 1,
-      "endLine": 162,
-      "endCol": 3
+      "start": 2141,
+      "end": 3813
     },
     {
-      "text": "export type RPCResponse = [\n  typeof MessageType.RESPONSE,\n  id: number,\n  error: string | null,\n  result: unknown,\n];\nexport type RPCMessage = RPCRequest | RPCNotification | RPCResponse;\n\nexport type EventHandler\u003cArgs, Returns\u003e = (args: Args) =\u003e Awaitable\u003cReturns\u003e;\nexport type NotificationHandler = EventHandler\u003cunknown[], void\u003e;\nexport type RequestHandler = EventHandler\u003cunknown[], unknown\u003e;\n\ntype UIEvent\u003c\n  E extends keyof NeovimApi[\"ui_events\"] = keyof NeovimApi[\"ui_events\"],\n\u003e = [event: E, args: NeovimApi[\"ui_events\"][E][\"parameters\"]];\n\ntype UINotifications = {\n  redraw: UIEvent[];\n};\n\nexport type Nvim\u003cApiInfo extends BaseEvents = BaseEvents\u003e",
-      "contextualizedText": "// node/nvim/nvim-node/types.ts\n\nexport type RPCResponse = [\n  typeof MessageType.RESPONSE,\n  id: number,\n  error: string | null,\n  result: unknown,\n];\nexport type RPCMessage = RPCRequest | RPCNotification | RPCResponse;\n\nexport type EventHandler\u003cArgs, Returns\u003e = (args: Args) =\u003e Awaitable\u003cReturns\u003e;\nexport type NotificationHandler = EventHandler\u003cunknown[], void\u003e;\nexport type RequestHandler = EventHandler\u003cunknown[], unknown\u003e;\n\ntype UIEvent\u003c\n  E extends keyof NeovimApi[\"ui_events\"] = keyof NeovimApi[\"ui_events\"],\n\u003e = [event: E, args: NeovimApi[\"ui_events\"][E][\"parameters\"]];\n\ntype UINotifications = {\n  redraw: UIEvent[];\n};\n\nexport type Nvim\u003cApiInfo extends BaseEvents = BaseEvents\u003e",
-      "headingContext": "node/nvim/nvim-node/types.ts",
-      "startLine": 163,
-      "startCol": 1,
-      "endLine": 183,
-      "endCol": 58
+      "start": 3815,
+      "end": 5127
     },
     {
-      "text": "/**\n   *\n   * Call a neovim function\n   * @see {@link https://neovim.io/doc/user/api.html}\n   *\n   * @param func - function name\n   * @param args - function arguments, provide empty array `[]` if no args\n   */\n  call\u003cM extends keyof NeovimApi[\"functions\"]\u003e(\n    func: M,\n    args: NeovimApi[\"functions\"][M][\"parameters\"],\n  ): Promise\u003cNeovimApi[\"functions\"][M][\"return_type\"]\u003e",
-      "contextualizedText": "// node/nvim/nvim-node/types.ts \u003e method call\n\n/**\n   *\n   * Call a neovim function\n   * @see {@link https://neovim.io/doc/user/api.html}\n   *\n   * @param func - function name\n   * @param args - function arguments, provide empty array `[]` if no args\n   */\n  call\u003cM extends keyof NeovimApi[\"functions\"]\u003e(\n    func: M,\n    args: NeovimApi[\"functions\"][M][\"parameters\"],\n  ): Promise\u003cNeovimApi[\"functions\"][M][\"return_type\"]\u003e",
-      "headingContext": "node/nvim/nvim-node/types.ts \u003e method call",
-      "startLine": 184,
-      "startCol": 3,
-      "endLine": 195,
-      "endCol": 55
-    },
-    {
-      "text": "/**\n   *\n   * RPC channel\n   */\n  channelId: number",
-      "contextualizedText": "// node/nvim/nvim-node/types.ts\n\n/**\n   *\n   * RPC channel\n   */\n  channelId: number",
-      "headingContext": "node/nvim/nvim-node/types.ts",
-      "startLine": 197,
-      "startCol": 3,
-      "endLine": 201,
-      "endCol": 20
-    },
-    {
-      "text": "/**\n   *\n   * Register a handler for rpc notifications.\n   * There can be multiple handlers setup for the same notification.\n   * Return `true` to remove handler.\n   *\n   * @param notification - event name\n   * @param callback - notification handler\n   *\n   * @example\n   * ```typescript\n   * await nvim.call(\"nvim_subscribe\", [\"my_rpc_notification\"]);\n   *\n   * nvim.onNotification(\"my_rpc_notification\", (args) =\u003e {\n   *   nvim.logger.info(args);\n   *   // return true to remove listener\n   *   return true;\n   * });\n   * ```\n   */\n  onNotification\u003cN extends keyof (ApiInfo[\"notifications\"] \u0026 UINotifications)\u003e(\n    notification: N,\n    callback: EventHandler\u003c\n      (ApiInfo[\"notifications\"] \u0026 UINotifications)[N],\n      unknown\n    \u003e,\n  ): void",
-      "contextualizedText": "// node/nvim/nvim-node/types.ts \u003e method onNotification\n\n/**\n   *\n   * Register a handler for rpc notifications.\n   * There can be multiple handlers setup for the same notification.\n   * Return `true` to remove handler.\n   *\n   * @param notification - event name\n   * @param callback - notification handler\n   *\n   * @example\n   * ```typescript\n   * await nvim.call(\"nvim_subscribe\", [\"my_rpc_notification\"]);\n   *\n   * nvim.onNotification(\"my_rpc_notification\", (args) =\u003e {\n   *   nvim.logger.info(args);\n   *   // return true to remove listener\n   *   return true;\n   * });\n   * ```\n   */\n  onNotification\u003cN extends keyof (ApiInfo[\"notifications\"] \u0026 UINotifications)\u003e(\n    notification: N,\n    callback: EventHandler\u003c\n      (ApiInfo[\"notifications\"] \u0026 UINotifications)[N],\n      unknown\n    \u003e,\n  ): void",
-      "headingContext": "node/nvim/nvim-node/types.ts \u003e method onNotification",
-      "startLine": 203,
-      "startCol": 3,
-      "endLine": 229,
-      "endCol": 10
-    },
-    {
-      "text": "/**\n   *\n   * Register/Update a handler for rpc requests.\n   *\n   * There can only be one handler per method.\n   * This means calling `nvim.onRequest(\"my_func\", () =\u003e {})` will override\n   * any previously registered handlers under `\"my_func\"`.\n   *\n   * @param method - method name\n   * @param callback - request handler\n   *\n   * @example\n   * ```typescript\n   * nvim.onRequest(\"my_func\", async (args) =\u003e {\n   *   const result = await asyncFunc(args);\n   *\n   *   if (result \u003c 10) {\n   *     // throwing an error sends the error back to neovim\n   *     throw Error(\"result too low\");\n   *   }\n   *\n   *   return result;\n   * });\n   * ```\n   */\n  onRequest\u003cM extends keyof ApiInfo[\"requests\"]\u003e(\n    method: M,\n    callback: EventHandler\u003cApiInfo[\"requests\"][M], unknown\u003e,\n  ): void",
-      "contextualizedText": "// node/nvim/nvim-node/types.ts \u003e method onRequest\n\n/**\n   *\n   * Register/Update a handler for rpc requests.\n   *\n   * There can only be one handler per method.\n   * This means calling `nvim.onRequest(\"my_func\", () =\u003e {})` will override\n   * any previously registered handlers under `\"my_func\"`.\n   *\n   * @param method - method name\n   * @param callback - request handler\n   *\n   * @example\n   * ```typescript\n   * nvim.onRequest(\"my_func\", async (args) =\u003e {\n   *   const result = await asyncFunc(args);\n   *\n   *   if (result \u003c 10) {\n   *     // throwing an error sends the error back to neovim\n   *     throw Error(\"result too low\");\n   *   }\n   *\n   *   return result;\n   * });\n   * ```\n   */\n  onRequest\u003cM extends keyof ApiInfo[\"requests\"]\u003e(\n    method: M,\n    callback: EventHandler\u003cApiInfo[\"requests\"][M], unknown\u003e,\n  ): void",
-      "headingContext": "node/nvim/nvim-node/types.ts \u003e method onRequest",
-      "startLine": 231,
-      "startCol": 3,
-      "endLine": 259,
-      "endCol": 10
-    },
-    {
-      "text": "/**\n   *\n   * Close socket connection to neovim.\n   */\n  detach(): void",
-      "contextualizedText": "// node/nvim/nvim-node/types.ts \u003e method detach\n\n/**\n   *\n   * Close socket connection to neovim.\n   */\n  detach(): void",
-      "headingContext": "node/nvim/nvim-node/types.ts \u003e method detach",
-      "startLine": 261,
-      "startCol": 3,
-      "endLine": 265,
-      "endCol": 17
-    },
-    {
-      "text": "/**\n   *\n   * Reference to winston logger. `undefined` if no `logging` provided\n   * to `attach`\n   */\n  logger: winston.Logger",
-      "contextualizedText": "// node/nvim/nvim-node/types.ts\n\n/**\n   *\n   * Reference to winston logger. `undefined` if no `logging` provided\n   * to `attach`\n   */\n  logger: winston.Logger",
-      "headingContext": "node/nvim/nvim-node/types.ts",
-      "startLine": 267,
-      "startCol": 3,
-      "endLine": 272,
-      "endCol": 25
+      "start": 5131,
+      "end": 6877
     }
   ]
 }

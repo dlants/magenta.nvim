@@ -1,51 +1,15 @@
 {
   "blobSha": "691852f8af6b42105de5e0e2d4161365e680dc46",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as fsPromises from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport type { AbsFilePath, HomeDir, NvimCwd } from \"@magenta/core\";\nimport { describe, expect, it } from \"vitest\";\nimport { withDriver } from \"../test/preamble.ts\";\nimport { discoverHierarchyContext } from \"./auto-context.ts\";\n\ndescribe(\"discoverHierarchyContext\", () =\u003e {\n  it(\"walks up from a nested file finding context.md at each ancestor level\", async () =\u003e {\n    await withDriver",
-      "contextualizedText": "// node/context/auto-context.test.ts\n\nimport * as fsPromises from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport type { AbsFilePath, HomeDir, NvimCwd } from \"@magenta/core\";\nimport { describe, expect, it } from \"vitest\";\nimport { withDriver } from \"../test/preamble.ts\";\nimport { discoverHierarchyContext } from \"./auto-context.ts\";\n\ndescribe(\"discoverHierarchyContext\", () =\u003e {\n  it(\"walks up from a nested file finding context.md at each ancestor level\", async () =\u003e {\n    await withDriver",
-      "headingContext": "node/context/auto-context.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 10,
-      "endCol": 21
+      "start": 0,
+      "end": 1648
     },
     {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fsPromises.mkdir(path.join(tmpDir, \"a\", \"b\", \"c\"), {\n            recursive: true,\n          });\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"a\", \"b\", \"c\", \"leaf.txt\"),\n            \"leaf\",\n          );\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"a\", \"b\", \"context.md\"),\n            \"B context\",\n          );\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"a\", \"context.md\"),\n            \"A context\",\n          );\n        }",
-      "contextualizedText": "// node/context/auto-context.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fsPromises.mkdir(path.join(tmpDir, \"a\", \"b\", \"c\"), {\n            recursive: true,\n          });\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"a\", \"b\", \"c\", \"leaf.txt\"),\n            \"leaf\",\n          );\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"a\", \"b\", \"context.md\"),\n            \"B context\",\n          );\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"a\", \"context.md\"),\n            \"A context\",\n          );\n        }",
-      "headingContext": "node/context/auto-context.test.ts \u003e function setupFiles",
-      "startLine": 12,
-      "startCol": 1,
-      "endLine": 28,
-      "endCol": 10
-    },
-    {
-      "text": "async (driver, dirs) =\u003e {\n        const leafAbs = path.join(\n          dirs.tmpDir,\n          \"a\",\n          \"b\",\n          \"c\",\n          \"leaf.txt\",\n        ) as AbsFilePath;\n\n        const results = await discoverHierarchyContext(leafAbs, {\n          nvim: driver.nvim,\n          cwd: dirs.tmpDir as NvimCwd,\n          homeDir: dirs.homeDir as HomeDir,\n          options: driver.magenta.options,\n        });\n\n        const relPaths = results.map((r) =\u003e r.relFilePath).sort();\n        expect(relPaths).toContain(\"a/b/context.md\");\n        expect(relPaths).toContain(\"a/context.md\");\n      },\n    );\n  });\n\n  it(\"returns empty array when hierarchyContextFileNames is empty\", async () =\u003e {\n    await withDriver(\n      {\n        options: { hierarchyContextFileNames: [] }",
-      "contextualizedText": "// node/context/auto-context.test.ts\n\nasync (driver, dirs) =\u003e {\n        const leafAbs = path.join(\n          dirs.tmpDir,\n          \"a\",\n          \"b\",\n          \"c\",\n          \"leaf.txt\",\n        ) as AbsFilePath;\n\n        const results = await discoverHierarchyContext(leafAbs, {\n          nvim: driver.nvim,\n          cwd: dirs.tmpDir as NvimCwd,\n          homeDir: dirs.homeDir as HomeDir,\n          options: driver.magenta.options,\n        });\n\n        const relPaths = results.map((r) =\u003e r.relFilePath).sort();\n        expect(relPaths).toContain(\"a/b/context.md\");\n        expect(relPaths).toContain(\"a/context.md\");\n      },\n    );\n  });\n\n  it(\"returns empty array when hierarchyContextFileNames is empty\", async () =\u003e {\n    await withDriver(\n      {\n        options: { hierarchyContextFileNames: [] }",
-      "headingContext": "node/context/auto-context.test.ts",
-      "startLine": 30,
-      "startCol": 7,
-      "endLine": 56,
-      "endCol": 51
-    },
-    {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fsPromises.mkdir(path.join(tmpDir, \"a\"), { recursive: true });\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"a\", \"leaf.txt\"),\n            \"leaf\",\n          );\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"a\", \"context.md\"),\n            \"ctx\",\n          );\n        }",
-      "contextualizedText": "// node/context/auto-context.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fsPromises.mkdir(path.join(tmpDir, \"a\"), { recursive: true });\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"a\", \"leaf.txt\"),\n            \"leaf\",\n          );\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"a\", \"context.md\"),\n            \"ctx\",\n          );\n        }",
-      "headingContext": "node/context/auto-context.test.ts \u003e function setupFiles",
-      "startLine": 57,
-      "startCol": 1,
-      "endLine": 67,
-      "endCol": 10
-    },
-    {
-      "text": "async (driver, dirs) =\u003e {\n        const leafAbs = path.join(dirs.tmpDir, \"a\", \"leaf.txt\") as AbsFilePath;\n        const results = await discoverHierarchyContext(leafAbs, {\n          nvim: driver.nvim,\n          cwd: dirs.tmpDir as NvimCwd,\n          homeDir: dirs.homeDir as HomeDir,\n          options: driver.magenta.options,\n        });\n        expect(results).toEqual([]);\n      }",
-      "contextualizedText": "// node/context/auto-context.test.ts\n\nasync (driver, dirs) =\u003e {\n        const leafAbs = path.join(dirs.tmpDir, \"a\", \"leaf.txt\") as AbsFilePath;\n        const results = await discoverHierarchyContext(leafAbs, {\n          nvim: driver.nvim,\n          cwd: dirs.tmpDir as NvimCwd,\n          homeDir: dirs.homeDir as HomeDir,\n          options: driver.magenta.options,\n        });\n        expect(results).toEqual([]);\n      }",
-      "headingContext": "node/context/auto-context.test.ts",
-      "startLine": 69,
-      "startCol": 7,
-      "endLine": 78,
-      "endCol": 8
+      "start": 1652,
+      "end": 2599
     }
   ]
 }

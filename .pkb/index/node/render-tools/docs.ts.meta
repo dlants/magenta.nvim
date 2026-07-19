@@ -1,42 +1,15 @@
 {
   "blobSha": "eaa5df22a200e165bf251090ebcb0449e0005afc",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type {\n  CompletedToolInfo,\n  DisplayContext,\n  Docs,\n  ToolRequestId,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport type { ToolViewState } from \"../chat/thread.ts\";\nimport { d, type VDOMNode, withBindings, withInlineCode } from \"../tea/view.ts\";\n\ntype Input = { query: string };",
-      "contextualizedText": "// node/render-tools/docs.ts\n\nimport type {\n  CompletedToolInfo,\n  DisplayContext,\n  Docs,\n  ToolRequestId,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport type { ToolViewState } from \"../chat/thread.ts\";\nimport { d, type VDOMNode, withBindings, withInlineCode } from \"../tea/view.ts\";\n\ntype Input = { query: string };",
-      "headingContext": "node/render-tools/docs.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 11,
-      "endCol": 32
+      "start": 0,
+      "end": 1963
     },
     {
-      "text": "export function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  return d`📚 docs ${withInlineCode(d`\\`${input.query}\\``)}`;\n}",
-      "contextualizedText": "// node/render-tools/docs.ts \u003e function renderSummary\n\nexport function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  return d`📚 docs ${withInlineCode(d`\\`${input.query}\\``)}`;\n}",
-      "headingContext": "node/render-tools/docs.ts \u003e function renderSummary",
-      "startLine": 13,
-      "startCol": 1,
-      "endLine": 19,
-      "endCol": 2
-    },
-    {
-      "text": "export function renderResultSummary(info: CompletedToolInfo): VDOMNode {\n  const input = info.request.input as Input;\n\n  if (info.result.result.status === \"error\") {\n    return d`docs(${input.query}): error`;\n  }\n\n  if (info.structuredResult.toolName === \"docs\") {\n    const sr = info.structuredResult as Docs.StructuredResult;\n    if (sr.matchCount === 0) {\n      return d`docs(${input.query}): no matches`;\n    }\n    const suffix = sr.truncated ? \"+\" : \"\";\n    return d`docs(${input.query}): ${sr.matchCount.toString()}${suffix} match${sr.matchCount === 1 ? \"\" : \"es\"}`;\n  }\n\n  return d`docs(${input.query})`;\n}",
-      "contextualizedText": "// node/render-tools/docs.ts \u003e function renderResultSummary\n\nexport function renderResultSummary(info: CompletedToolInfo): VDOMNode {\n  const input = info.request.input as Input;\n\n  if (info.result.result.status === \"error\") {\n    return d`docs(${input.query}): error`;\n  }\n\n  if (info.structuredResult.toolName === \"docs\") {\n    const sr = info.structuredResult as Docs.StructuredResult;\n    if (sr.matchCount === 0) {\n      return d`docs(${input.query}): no matches`;\n    }\n    const suffix = sr.truncated ? \"+\" : \"\";\n    return d`docs(${input.query}): ${sr.matchCount.toString()}${suffix} match${sr.matchCount === 1 ? \"\" : \"es\"}`;\n  }\n\n  return d`docs(${input.query})`;\n}",
-      "headingContext": "node/render-tools/docs.ts \u003e function renderResultSummary",
-      "startLine": 21,
-      "startCol": 1,
-      "endLine": 38,
-      "endCol": 2
-    },
-    {
-      "text": "export function renderResult(\n  info: CompletedToolInfo,\n  context: {\n    threadDispatch: (msg: {\n      type: \"toggle-tool-result\";\n      toolRequestId: ToolRequestId;\n    }) =\u003e void;\n  },\n  toolViewState: ToolViewState,\n  toolRequestId: ToolRequestId,\n): VDOMNode | undefined {\n  const toggleBinding = {\n    \"=\": () =\u003e\n      context.threadDispatch({\n        type: \"toggle-tool-result\",\n        toolRequestId,\n      }),\n  };\n\n  const result = info.result.result;\n  if (result.status === \"error\") {\n    return withBindings(d`${result.error}`, toggleBinding);\n  }\n\n  const firstValue = result.value[0];\n  if (!firstValue || firstValue.type !== \"text\") return undefined;\n\n  const text = firstValue.text;\n  const expanded = toolViewState.resultExpanded;\n\n  if (expanded) {\n    return withBindings(d`${text}`, toggleBinding);\n  }\n\n  const lines = text.split(\"\\n\");\n  const maxLines = 10;\n  if (lines.length \u003c= maxLines) {\n    return withBindings(d`${text}`, toggleBinding);\n  }\n  const preview = [\n    ...lines.slice(0, maxLines),\n    `... (${(lines.length - maxLines).toString()} more lines)`,\n  ].join(\"\\n\");\n  return withBindings(d`${preview}`, toggleBinding);\n}",
-      "contextualizedText": "// node/render-tools/docs.ts \u003e function renderResult\n\nexport function renderResult(\n  info: CompletedToolInfo,\n  context: {\n    threadDispatch: (msg: {\n      type: \"toggle-tool-result\";\n      toolRequestId: ToolRequestId;\n    }) =\u003e void;\n  },\n  toolViewState: ToolViewState,\n  toolRequestId: ToolRequestId,\n): VDOMNode | undefined {\n  const toggleBinding = {\n    \"=\": () =\u003e\n      context.threadDispatch({\n        type: \"toggle-tool-result\",\n        toolRequestId,\n      }),\n  };\n\n  const result = info.result.result;\n  if (result.status === \"error\") {\n    return withBindings(d`${result.error}`, toggleBinding);\n  }\n\n  const firstValue = result.value[0];\n  if (!firstValue || firstValue.type !== \"text\") return undefined;\n\n  const text = firstValue.text;\n  const expanded = toolViewState.resultExpanded;\n\n  if (expanded) {\n    return withBindings(d`${text}`, toggleBinding);\n  }\n\n  const lines = text.split(\"\\n\");\n  const maxLines = 10;\n  if (lines.length \u003c= maxLines) {\n    return withBindings(d`${text}`, toggleBinding);\n  }\n  const preview = [\n    ...lines.slice(0, maxLines),\n    `... (${(lines.length - maxLines).toString()} more lines)`,\n  ].join(\"\\n\");\n  return withBindings(d`${preview}`, toggleBinding);\n}",
-      "headingContext": "node/render-tools/docs.ts \u003e function renderResult",
-      "startLine": 40,
-      "startCol": 1,
-      "endLine": 84,
-      "endCol": 2
+      "start": 1967,
+      "end": 2299
     }
   ]
 }

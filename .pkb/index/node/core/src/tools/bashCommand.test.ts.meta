@@ -1,159 +1,39 @@
 {
   "blobSha": "acae6bc66b7a69b73d462988ed80e8f4bf8a12cd",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { describe, expect, it, vi } from \"vitest\";\nimport type { OutputLine, Shell, ShellResult } from \"../capabilities/shell.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport * as BashCommand from \"./bashCommand.ts\";",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts\n\nimport { describe, expect, it, vi } from \"vitest\";\nimport type { OutputLine, Shell, ShellResult } from \"../capabilities/shell.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport * as BashCommand from \"./bashCommand.ts\";",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 5,
-      "endCol": 49
+      "start": 0,
+      "end": 1969
     },
     {
-      "text": "function createMockShell(result: ShellResult): Shell",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts \u003e function createMockShell\n\nfunction createMockShell(result: ShellResult): Shell",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts \u003e function createMockShell",
-      "startLine": 7,
-      "startCol": 1,
-      "endLine": 7,
-      "endCol": 53
+      "start": 1973,
+      "end": 3643
     },
     {
-      "text": "    execute: (\n      _command: string,\n      opts: {\n        toolRequestId: string;\n        onOutput?: (line: OutputLine) =\u003e void;\n        onStart?: () =\u003e void;\n      },\n    ) =\u003e {\n      opts.onStart?.();\n      for (const line of result.output) {\n        opts.onOutput?.(line);\n      }\n      return Promise.resolve(result);\n    }",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts \u003e function createMockShell \u003e function execute\n\n    execute: (\n      _command: string,\n      opts: {\n        toolRequestId: string;\n        onOutput?: (line: OutputLine) =\u003e void;\n        onStart?: () =\u003e void;\n      },\n    ) =\u003e {\n      opts.onStart?.();\n      for (const line of result.output) {\n        opts.onOutput?.(line);\n      }\n      return Promise.resolve(result);\n    }",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts \u003e function createMockShell \u003e function execute",
-      "startLine": 9,
-      "startCol": 1,
-      "endLine": 22,
-      "endCol": 6
+      "start": 3647,
+      "end": 5475
     },
     {
-      "text": "terminate: vi.fn(),\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts \u003e function createMockShell\n\nterminate: vi.fn(),\n  };\n}",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts \u003e function createMockShell",
-      "startLine": 23,
-      "startCol": 5,
-      "endLine": 25,
-      "endCol": 2
+      "start": 5477,
+      "end": 7499
     },
     {
-      "text": "function makeOutputLines(\n  lines: string[],\n  stream: \"stdout\" | \"stderr\" = \"stdout\",\n): OutputLine[] {\n  return lines.map((text) =\u003e ({ stream, text }));\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts \u003e function makeOutputLines\n\nfunction makeOutputLines(\n  lines: string[],\n  stream: \"stdout\" | \"stderr\" = \"stdout\",\n): OutputLine[] {\n  return lines.map((text) =\u003e ({ stream, text }));\n}",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts \u003e function makeOutputLines",
-      "startLine": 27,
-      "startCol": 1,
-      "endLine": 32,
-      "endCol": 2
+      "start": 7505,
+      "end": 9328
     },
     {
-      "text": "function createTool(command: string, shellResult: ShellResult) {\n  const shell = createMockShell(shellResult);\n  const requestRender = vi.fn();\n\n  const invocation = BashCommand.execute(\n    {\n      id: \"tool_1\" as ToolRequestId,\n      toolName: \"bash_command\" as const,\n      input: { command },\n    },\n    { shell, requestRender },\n  );\n\n  return { invocation, requestRender };\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts \u003e function createTool\n\nfunction createTool(command: string, shellResult: ShellResult) {\n  const shell = createMockShell(shellResult);\n  const requestRender = vi.fn();\n\n  const invocation = BashCommand.execute(\n    {\n      id: \"tool_1\" as ToolRequestId,\n      toolName: \"bash_command\" as const,\n      input: { command },\n    },\n    { shell, requestRender },\n  );\n\n  return { invocation, requestRender };\n}",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts \u003e function createTool",
-      "startLine": 34,
-      "startCol": 1,
-      "endLine": 48,
-      "endCol": 2
+      "start": 9334,
+      "end": 11259
     },
     {
-      "text": "async function getResultText(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003cstring\u003e {\n  const { result } = await invocation.promise;\n  if (result.status === \"ok\") {\n    return (result.value[0] as { type: \"text\"; text: string }).text;\n  }\n  return result.error;\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts \u003e function getResultText\n\nasync function getResultText(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003cstring\u003e {\n  const { result } = await invocation.promise;\n  if (result.status === \"ok\") {\n    return (result.value[0] as { type: \"text\"; text: string }).text;\n  }\n  return result.error;\n}",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts \u003e function getResultText",
-      "startLine": 50,
-      "startCol": 1,
-      "endLine": 58,
-      "endCol": 2
+      "start": 11265,
+      "end": 13483
     },
     {
-      "text": "describe(\"detectRgShortReplaceFlag\", () =\u003e {\n  it(\"detects -r short flag\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg -r 'pat'\")).toBe(true);\n  });\n\n  it(\"detects bundled -rn\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg -rn 'pat'\")).toBe(true);\n  });\n\n  it(\"detects bundled -rln\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg -rln 'pat'\")).toBe(true);\n  });\n\n  it(\"detects rg with a path prefix\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"/usr/bin/rg -rn 'pat'\")).toBe(\n      true,\n    );\n  });\n\n  it(\"detects rg in a chained command\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"ls; rg -rn 'pat' src\")).toBe(\n      true,\n    );\n  });\n\n  it(\"detects rg after env assignment\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"FOO=bar rg -rn 'pat'\")).toBe(\n      true,\n    );\n  });\n\n  it(\"allows long --replace form\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg --replace n 'pat'\")).toBe(\n      false,\n    );\n  });\n\n  it(\"does not flag plain -n\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg -n 'pat'\")).toBe(false);\n  });\n\n  it(\"does not flag -l\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg -l 'pat'\")).toBe(false);\n  });\n\n  it(\"does not flag -r on a non-rg command\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"cp -r a b\")).toBe(false);\n  });\n});",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts\n\ndescribe(\"detectRgShortReplaceFlag\", () =\u003e {\n  it(\"detects -r short flag\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg -r 'pat'\")).toBe(true);\n  });\n\n  it(\"detects bundled -rn\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg -rn 'pat'\")).toBe(true);\n  });\n\n  it(\"detects bundled -rln\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg -rln 'pat'\")).toBe(true);\n  });\n\n  it(\"detects rg with a path prefix\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"/usr/bin/rg -rn 'pat'\")).toBe(\n      true,\n    );\n  });\n\n  it(\"detects rg in a chained command\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"ls; rg -rn 'pat' src\")).toBe(\n      true,\n    );\n  });\n\n  it(\"detects rg after env assignment\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"FOO=bar rg -rn 'pat'\")).toBe(\n      true,\n    );\n  });\n\n  it(\"allows long --replace form\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg --replace n 'pat'\")).toBe(\n      false,\n    );\n  });\n\n  it(\"does not flag plain -n\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg -n 'pat'\")).toBe(false);\n  });\n\n  it(\"does not flag -l\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"rg -l 'pat'\")).toBe(false);\n  });\n\n  it(\"does not flag -r on a non-rg command\", () =\u003e {\n    expect(BashCommand.detectRgShortReplaceFlag(\"cp -r a b\")).toBe(false);\n  });\n});",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts",
-      "startLine": 60,
-      "startCol": 1,
-      "endLine": 108,
-      "endCol": 4
-    },
-    {
-      "text": "describe(\"execute rg short -r guard\", () =\u003e {\n  it(\"refuses to run and never invokes the shell\", async () =\u003e {\n    const execute = vi.fn();\n    const shell: Shell = { execute, terminate: vi.fn() };\n    const invocation = BashCommand.execute(\n      {\n        id: \"tool_1\" as ToolRequestId,\n        toolName: \"bash_command\" as const,\n        input: { command: \"rg -rn 'pat' src\" },\n      },\n      { shell, requestRender: vi.fn() },\n    );\n\n    const { result } = await invocation.promise;\n    expect(result.status).toBe(\"error\");\n    if (result.status === \"error\") {\n      expect(result.error).toContain(\"This command was NOT run\");\n    }\n    expect(execute).not.toHaveBeenCalled();\n  });\n\n  it(\"runs normally for a valid rg command\", async () =\u003e {\n    const result: ShellResult = {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines([\"match\"]),\n      logFilePath: undefined,\n      durationMs: 1,\n    };\n    const { invocation } = createTool(\"rg -n 'pat' src\", result);\n    const { result: toolResult } = await invocation.promise;\n    expect(toolResult.status).toBe(\"ok\");\n  });\n});",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts\n\ndescribe(\"execute rg short -r guard\", () =\u003e {\n  it(\"refuses to run and never invokes the shell\", async () =\u003e {\n    const execute = vi.fn();\n    const shell: Shell = { execute, terminate: vi.fn() };\n    const invocation = BashCommand.execute(\n      {\n        id: \"tool_1\" as ToolRequestId,\n        toolName: \"bash_command\" as const,\n        input: { command: \"rg -rn 'pat' src\" },\n      },\n      { shell, requestRender: vi.fn() },\n    );\n\n    const { result } = await invocation.promise;\n    expect(result.status).toBe(\"error\");\n    if (result.status === \"error\") {\n      expect(result.error).toContain(\"This command was NOT run\");\n    }\n    expect(execute).not.toHaveBeenCalled();\n  });\n\n  it(\"runs normally for a valid rg command\", async () =\u003e {\n    const result: ShellResult = {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines([\"match\"]),\n      logFilePath: undefined,\n      durationMs: 1,\n    };\n    const { invocation } = createTool(\"rg -n 'pat' src\", result);\n    const { result: toolResult } = await invocation.promise;\n    expect(toolResult.status).toBe(\"ok\");\n  });\n});",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts",
-      "startLine": 110,
-      "startCol": 1,
-      "endLine": 143,
-      "endCol": 4
-    },
-    {
-      "text": "describe(\"stripTrailingHeadTail\", () =\u003e {\n  it(\"strips trailing | head\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"ls -la | head\")).toEqual({\n      command: \"ls -la\",\n      wasTrimmed: true,\n    });\n  });\n\n  it(\"strips trailing | head -n 50\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"cat foo | head -n 50\")).toEqual({\n      command: \"cat foo\",\n      wasTrimmed: true,\n    });\n  });\n\n  it(\"strips trailing | tail\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"cat foo | tail -50\")).toEqual({\n      command: \"cat foo\",\n      wasTrimmed: true,\n    });\n  });\n\n  it(\"strips trailing | tail -n 10\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"cat foo | tail -n 10\")).toEqual({\n      command: \"cat foo\",\n      wasTrimmed: true,\n    });\n  });\n\n  it(\"strips trailing | head -n 10\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"cat foo | head -n 10\")).toEqual({\n      command: \"cat foo\",\n      wasTrimmed: true,\n    });\n  });\n\n  it(\"does not strip head in the middle of a pipeline\", () =\u003e {\n    expect(\n      BashCommand.stripTrailingHeadTail(\"cat foo | head -50 | grep bar\"),\n    ).toEqual({\n      command: \"cat foo | head -50 | grep bar\",\n      wasTrimmed: false,\n    });\n  });\n\n  it(\"leaves commands without head/tail alone\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"ls -la\")).toEqual({\n      command: \"ls -la\",\n      wasTrimmed: false,\n    });\n  });\n});\n\ndescribe(\"bashCommand unit tests\", ()",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts\n\ndescribe(\"stripTrailingHeadTail\", () =\u003e {\n  it(\"strips trailing | head\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"ls -la | head\")).toEqual({\n      command: \"ls -la\",\n      wasTrimmed: true,\n    });\n  });\n\n  it(\"strips trailing | head -n 50\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"cat foo | head -n 50\")).toEqual({\n      command: \"cat foo\",\n      wasTrimmed: true,\n    });\n  });\n\n  it(\"strips trailing | tail\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"cat foo | tail -50\")).toEqual({\n      command: \"cat foo\",\n      wasTrimmed: true,\n    });\n  });\n\n  it(\"strips trailing | tail -n 10\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"cat foo | tail -n 10\")).toEqual({\n      command: \"cat foo\",\n      wasTrimmed: true,\n    });\n  });\n\n  it(\"strips trailing | head -n 10\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"cat foo | head -n 10\")).toEqual({\n      command: \"cat foo\",\n      wasTrimmed: true,\n    });\n  });\n\n  it(\"does not strip head in the middle of a pipeline\", () =\u003e {\n    expect(\n      BashCommand.stripTrailingHeadTail(\"cat foo | head -50 | grep bar\"),\n    ).toEqual({\n      command: \"cat foo | head -50 | grep bar\",\n      wasTrimmed: false,\n    });\n  });\n\n  it(\"leaves commands without head/tail alone\", () =\u003e {\n    expect(BashCommand.stripTrailingHeadTail(\"ls -la\")).toEqual({\n      command: \"ls -la\",\n      wasTrimmed: false,\n    });\n  });\n});\n\ndescribe(\"bashCommand unit tests\", ()",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts",
-      "startLine": 145,
-      "startCol": 1,
-      "endLine": 198,
-      "endCol": 38
-    },
-    {
-      "text": "it(\"returns formatted output for simple successful command without trailer\", async () =\u003e {\n    const { invocation } = createTool(\"echo hello\", {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines([\"hello\"]),\n      logFilePath: \"/tmp/test.log\",\n      durationMs: 42,\n    });\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"ok\");\n    if (result.result.status !== \"ok\") throw new Error(\"expected ok\");\n    const text = (result.result.value[0] as { type: \"text\"; text: string })\n      .text;\n    expect(text).toContain(\"stdout:\");\n    expect(text).toContain(\"hello\");\n    expect(text).toContain(\"exit code 0 (42ms)\");\n    expect(text).not.toContain(\"Full output (\");\n    const structured = result.result.structuredResult as {\n      toolName: \"bash_command\";\n      wasAbbreviated: boolean;\n    };\n    expect(structured.wasAbbreviated).toBe(false);\n  });\n\n  it(\"includes duration in result for failed commands\", async () =\u003e {\n    const { invocation } = createTool(\"exit 1\", {\n      exitCode: 1,\n      signal: undefined,\n      output: [],\n      logFilePath: \"/tmp/test.log\",\n      durationMs: 100,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"exit code 1 (100ms)\");\n  });\n\n  it(\"reports signal when process is terminated\", async () =\u003e {\n    const { invocation } = createTool(\"sleep 60\", {\n      exitCode: 0,\n      signal: \"SIGTERM\",\n      output: [],\n      logFilePath: undefined,\n      durationMs: 500,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"terminated by signal SIGTERM (500ms)\");\n  });",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts\n\nit(\"returns formatted output for simple successful command without trailer\", async () =\u003e {\n    const { invocation } = createTool(\"echo hello\", {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines([\"hello\"]),\n      logFilePath: \"/tmp/test.log\",\n      durationMs: 42,\n    });\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"ok\");\n    if (result.result.status !== \"ok\") throw new Error(\"expected ok\");\n    const text = (result.result.value[0] as { type: \"text\"; text: string })\n      .text;\n    expect(text).toContain(\"stdout:\");\n    expect(text).toContain(\"hello\");\n    expect(text).toContain(\"exit code 0 (42ms)\");\n    expect(text).not.toContain(\"Full output (\");\n    const structured = result.result.structuredResult as {\n      toolName: \"bash_command\";\n      wasAbbreviated: boolean;\n    };\n    expect(structured.wasAbbreviated).toBe(false);\n  });\n\n  it(\"includes duration in result for failed commands\", async () =\u003e {\n    const { invocation } = createTool(\"exit 1\", {\n      exitCode: 1,\n      signal: undefined,\n      output: [],\n      logFilePath: \"/tmp/test.log\",\n      durationMs: 100,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"exit code 1 (100ms)\");\n  });\n\n  it(\"reports signal when process is terminated\", async () =\u003e {\n    const { invocation } = createTool(\"sleep 60\", {\n      exitCode: 0,\n      signal: \"SIGTERM\",\n      output: [],\n      logFilePath: undefined,\n      durationMs: 500,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"terminated by signal SIGTERM (500ms)\");\n  });",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts",
-      "startLine": 199,
-      "startCol": 3,
-      "endLine": 248,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"includes full output when within token budget\", async () =\u003e {\n    const lines = Array.from({ length: 30 }, (_, i) =\u003e `LINE${i + 1}: content`);\n    const { invocation } = createTool(\"test\", {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines(lines),\n      logFilePath: \"/tmp/test.log\",\n      durationMs: 50,\n    });\n\n    const text = await getResultText(invocation);\n    for (let i = 1; i \u003c= 30; i++) {\n      expect(text).toContain(`LINE${i}:`);\n    }\n    expect(text).not.toContain(\"lines omitted\");\n    expect(text).not.toContain(\"Full output\");\n  });\n\n  it(\"abbreviates output when it exceeds token budget\", async () =\u003e {\n    const lineContent = \"X\".repeat(500);\n    const lines = Array.from(\n      { length: 100 },\n      (_, i) =\u003e `LINE${i + 1}:${lineContent}`,\n    );\n    const { invocation } = createTool(\"test\", {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines(lines),\n      logFilePath: \"/tmp/test.log\",\n      durationMs: 50,\n    });\n\n    const text = await getResultText(invocation);\n    // Should be within budget (8000 chars for 2000 tokens)\n    expect(text.length).toBeLessThan(9000);\n    expect(text).toContain(\"exit code 0\");\n    expect(text).toContain(\"lines omitted\");\n    expect(text).toContain(\"LINE1:\");\n    expect(text).toContain(\"LINE100:\");\n    expect(text).toContain(\"the result was abbreviated. To see full output\");\n    expect(text).toContain(\"/tmp/test.log\");\n\n    const result = await invocation.promise;\n    if (result.result.status !== \"ok\") throw new Error(\"expected ok\");\n    const structured = result.result.structuredResult as {\n      toolName: \"bash_command\";\n      wasAbbreviated: boolean;\n    };\n    expect(structured.wasAbbreviated).toBe(true);\n  });",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts\n\nit(\"includes full output when within token budget\", async () =\u003e {\n    const lines = Array.from({ length: 30 }, (_, i) =\u003e `LINE${i + 1}: content`);\n    const { invocation } = createTool(\"test\", {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines(lines),\n      logFilePath: \"/tmp/test.log\",\n      durationMs: 50,\n    });\n\n    const text = await getResultText(invocation);\n    for (let i = 1; i \u003c= 30; i++) {\n      expect(text).toContain(`LINE${i}:`);\n    }\n    expect(text).not.toContain(\"lines omitted\");\n    expect(text).not.toContain(\"Full output\");\n  });\n\n  it(\"abbreviates output when it exceeds token budget\", async () =\u003e {\n    const lineContent = \"X\".repeat(500);\n    const lines = Array.from(\n      { length: 100 },\n      (_, i) =\u003e `LINE${i + 1}:${lineContent}`,\n    );\n    const { invocation } = createTool(\"test\", {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines(lines),\n      logFilePath: \"/tmp/test.log\",\n      durationMs: 50,\n    });\n\n    const text = await getResultText(invocation);\n    // Should be within budget (8000 chars for 2000 tokens)\n    expect(text.length).toBeLessThan(9000);\n    expect(text).toContain(\"exit code 0\");\n    expect(text).toContain(\"lines omitted\");\n    expect(text).toContain(\"LINE1:\");\n    expect(text).toContain(\"LINE100:\");\n    expect(text).toContain(\"the result was abbreviated. To see full output\");\n    expect(text).toContain(\"/tmp/test.log\");\n\n    const result = await invocation.promise;\n    if (result.result.status !== \"ok\") throw new Error(\"expected ok\");\n    const structured = result.result.structuredResult as {\n      toolName: \"bash_command\";\n      wasAbbreviated: boolean;\n    };\n    expect(structured.wasAbbreviated).toBe(true);\n  });",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts",
-      "startLine": 250,
-      "startCol": 3,
-      "endLine": 299,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"abbreviates long lines\", async () =\u003e {\n    const longLine = \"A\".repeat(5000);\n    // Need multiple long lines so total exceeds budget and triggers abbreviation path\n    const lines = Array.from({ length: 20 }, () =\u003e longLine);\n    const { invocation } = createTool(\"test\", {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines(lines),\n      logFilePath: \"/tmp/test.log\",\n      durationMs: 10,\n    });\n\n    const text = await getResultText(invocation);\n    // The full 5000-char string should NOT be present\n    expect(text).not.toContain(longLine);\n    // But abbreviated lines should contain the \"...\" marker\n    expect(text).toContain(\"AAA...AAA\");\n  });\n\n  it(\"separates stdout and stderr streams\", async () =\u003e {\n    const output: OutputLine[] = [\n      { stream: \"stdout\", text: \"normal output\" },\n      { stream: \"stderr\", text: \"error output\" },\n      { stream: \"stdout\", text: \"more output\" },\n    ];\n    const { invocation } = createTool(\"test\", {\n      exitCode: 0,\n      signal: undefined,\n      output,\n      logFilePath: undefined,\n      durationMs: 10,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"stdout:\");\n    expect(text).toContain(\"normal output\");\n    expect(text).toContain(\"stderr:\");\n    expect(text).toContain(\"error output\");\n  });\n\n  it(\"calls requestRender on output and start\", async () =\u003e {\n    const { invocation, requestRender } = createTool(\"echo hello\", {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines([\"line1\", \"line2\"]),\n      logFilePath: undefined,\n      durationMs: 10,\n    });\n\n    await invocation.promise;\n    // onOutput is called for each line, onStart is called once\n    expect(requestRender).toHaveBeenCalled();\n  });\n\n  it(\"abort returns error result\", async () =\u003e {\n    let resolveShell: (result: ShellResult) =\u003e void;\n    const shell: Shell",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts\n\nit(\"abbreviates long lines\", async () =\u003e {\n    const longLine = \"A\".repeat(5000);\n    // Need multiple long lines so total exceeds budget and triggers abbreviation path\n    const lines = Array.from({ length: 20 }, () =\u003e longLine);\n    const { invocation } = createTool(\"test\", {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines(lines),\n      logFilePath: \"/tmp/test.log\",\n      durationMs: 10,\n    });\n\n    const text = await getResultText(invocation);\n    // The full 5000-char string should NOT be present\n    expect(text).not.toContain(longLine);\n    // But abbreviated lines should contain the \"...\" marker\n    expect(text).toContain(\"AAA...AAA\");\n  });\n\n  it(\"separates stdout and stderr streams\", async () =\u003e {\n    const output: OutputLine[] = [\n      { stream: \"stdout\", text: \"normal output\" },\n      { stream: \"stderr\", text: \"error output\" },\n      { stream: \"stdout\", text: \"more output\" },\n    ];\n    const { invocation } = createTool(\"test\", {\n      exitCode: 0,\n      signal: undefined,\n      output,\n      logFilePath: undefined,\n      durationMs: 10,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"stdout:\");\n    expect(text).toContain(\"normal output\");\n    expect(text).toContain(\"stderr:\");\n    expect(text).toContain(\"error output\");\n  });\n\n  it(\"calls requestRender on output and start\", async () =\u003e {\n    const { invocation, requestRender } = createTool(\"echo hello\", {\n      exitCode: 0,\n      signal: undefined,\n      output: makeOutputLines([\"line1\", \"line2\"]),\n      logFilePath: undefined,\n      durationMs: 10,\n    });\n\n    await invocation.promise;\n    // onOutput is called for each line, onStart is called once\n    expect(requestRender).toHaveBeenCalled();\n  });\n\n  it(\"abort returns error result\", async () =\u003e {\n    let resolveShell: (result: ShellResult) =\u003e void;\n    const shell: Shell",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts",
-      "startLine": 301,
-      "startCol": 3,
-      "endLine": 357,
-      "endCol": 23
-    },
-    {
-      "text": "      execute: async (_command, opts) =\u003e {\n        opts.onStart?.();\n        return new Promise\u003cShellResult\u003e((resolve) =\u003e {\n          resolveShell = resolve;\n        });\n      }",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts \u003e function execute\n\n      execute: async (_command, opts) =\u003e {\n        opts.onStart?.();\n        return new Promise\u003cShellResult\u003e((resolve) =\u003e {\n          resolveShell = resolve;\n        });\n      }",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts \u003e function execute",
-      "startLine": 358,
-      "startCol": 1,
-      "endLine": 363,
-      "endCol": 8
-    },
-    {
-      "text": "terminate: vi.fn(),\n    };\n\n    const requestRender = vi.fn();\n    const invocation = BashCommand.execute(\n      {\n        id: \"tool_1\" as ToolRequestId,\n        toolName: \"bash_command\" as const,\n        input: { command: \"sleep 60\" },\n      },\n      { shell, requestRender },\n    );\n\n    invocation.abort();\n    // Resolve the shell after abort with partial output\n    resolveShell!({\n      exitCode: 0,\n      signal: \"SIGTERM\",\n      output: makeOutputLines([\"partial line 1\", \"partial line 2\"]),\n      logFilePath: undefined,\n      durationMs: 100,\n    });\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"error\");\n    if (result.result.status === \"error\") {\n      expect(result.result.error).toContain(\"aborted by the user\");\n      expect(result.result.error).toContain(\"Output before termination\");\n      expect(result.result.error).toContain(\"partial line 1\");\n      expect(result.result.error).toContain(\"partial line 2\");\n    }\n    expect(shell.terminate).toHaveBeenCalled();\n  });\n\n  it(\"abort includes partial output from liveOutput on shell error\", async () =\u003e {\n    let rejectShell: (error: Error) =\u003e void;\n    const shell: Shell",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts\n\nterminate: vi.fn(),\n    };\n\n    const requestRender = vi.fn();\n    const invocation = BashCommand.execute(\n      {\n        id: \"tool_1\" as ToolRequestId,\n        toolName: \"bash_command\" as const,\n        input: { command: \"sleep 60\" },\n      },\n      { shell, requestRender },\n    );\n\n    invocation.abort();\n    // Resolve the shell after abort with partial output\n    resolveShell!({\n      exitCode: 0,\n      signal: \"SIGTERM\",\n      output: makeOutputLines([\"partial line 1\", \"partial line 2\"]),\n      logFilePath: undefined,\n      durationMs: 100,\n    });\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"error\");\n    if (result.result.status === \"error\") {\n      expect(result.result.error).toContain(\"aborted by the user\");\n      expect(result.result.error).toContain(\"Output before termination\");\n      expect(result.result.error).toContain(\"partial line 1\");\n      expect(result.result.error).toContain(\"partial line 2\");\n    }\n    expect(shell.terminate).toHaveBeenCalled();\n  });\n\n  it(\"abort includes partial output from liveOutput on shell error\", async () =\u003e {\n    let rejectShell: (error: Error) =\u003e void;\n    const shell: Shell",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts",
-      "startLine": 364,
-      "startCol": 7,
-      "endLine": 400,
-      "endCol": 23
-    },
-    {
-      "text": "      execute: async (_command, opts) =\u003e {\n        opts.onStart?.();\n        opts.onOutput?.({ stream: \"stdout\", text: \"error output 1\" });\n        opts.onOutput?.({ stream: \"stderr\", text: \"error output 2\" });\n        return new Promise\u003cShellResult\u003e((_resolve, reject) =\u003e {\n          rejectShell = reject;\n        });\n      }",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts \u003e function execute\n\n      execute: async (_command, opts) =\u003e {\n        opts.onStart?.();\n        opts.onOutput?.({ stream: \"stdout\", text: \"error output 1\" });\n        opts.onOutput?.({ stream: \"stderr\", text: \"error output 2\" });\n        return new Promise\u003cShellResult\u003e((_resolve, reject) =\u003e {\n          rejectShell = reject;\n        });\n      }",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts \u003e function execute",
-      "startLine": 401,
-      "startCol": 1,
-      "endLine": 408,
-      "endCol": 8
-    },
-    {
-      "text": "terminate: vi.fn(),\n    };\n\n    const requestRender = vi.fn();\n    const invocation = BashCommand.execute(\n      {\n        id: \"tool_1\" as ToolRequestId,\n        toolName: \"bash_command\" as const,\n        input: { command: \"sleep 60\" },\n      },\n      { shell, requestRender },\n    );\n\n    invocation.abort();\n    rejectShell!(new Error(\"Process killed\"));\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"error\");\n    if (result.result.status === \"error\") {\n      expect(result.result.error).toContain(\"aborted by the user\");\n      expect(result.result.error).toContain(\"Output before termination\");\n      expect(result.result.error).toContain(\"error output 1\");\n      expect(result.result.error).toContain(\"error output 2\");\n    }\n    expect(shell.terminate).toHaveBeenCalled();\n  });\n\n  it(\"validateInput rejects non-string command\", () =\u003e {\n    const result = BashCommand.validateInput({ command: 123 });\n    expect(result.status).toBe(\"error\");\n  });\n\n  it(\"validateInput accepts valid command\", () =\u003e {\n    const result = BashCommand.validateInput({ command: \"echo hello\" });\n    expect(result.status).toBe(\"ok\");\n    if (result.status === \"ok\") {\n      expect(result.value.command).toBe(\"echo hello\");\n    }\n  });",
-      "contextualizedText": "// node/core/src/tools/bashCommand.test.ts\n\nterminate: vi.fn(),\n    };\n\n    const requestRender = vi.fn();\n    const invocation = BashCommand.execute(\n      {\n        id: \"tool_1\" as ToolRequestId,\n        toolName: \"bash_command\" as const,\n        input: { command: \"sleep 60\" },\n      },\n      { shell, requestRender },\n    );\n\n    invocation.abort();\n    rejectShell!(new Error(\"Process killed\"));\n\n    const result = await invocation.promise;\n    expect(result.result.status).toBe(\"error\");\n    if (result.result.status === \"error\") {\n      expect(result.result.error).toContain(\"aborted by the user\");\n      expect(result.result.error).toContain(\"Output before termination\");\n      expect(result.result.error).toContain(\"error output 1\");\n      expect(result.result.error).toContain(\"error output 2\");\n    }\n    expect(shell.terminate).toHaveBeenCalled();\n  });\n\n  it(\"validateInput rejects non-string command\", () =\u003e {\n    const result = BashCommand.validateInput({ command: 123 });\n    expect(result.status).toBe(\"error\");\n  });\n\n  it(\"validateInput accepts valid command\", () =\u003e {\n    const result = BashCommand.validateInput({ command: \"echo hello\" });\n    expect(result.status).toBe(\"ok\");\n    if (result.status === \"ok\") {\n      expect(result.value.command).toBe(\"echo hello\");\n    }\n  });",
-      "headingContext": "node/core/src/tools/bashCommand.test.ts",
-      "startLine": 409,
-      "startCol": 7,
-      "endLine": 447,
-      "endCol": 6
+      "start": 13487,
+      "end": 13752
     }
   ]
 }

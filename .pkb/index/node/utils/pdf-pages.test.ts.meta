@@ -1,105 +1,23 @@
 {
   "blobSha": "5b4cc255a4d92f972a7ee759d317bc866eaf65a0",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import fs from \"node:fs\";\nimport path from \"node:path\";\nimport { PDFDocument } from \"pdf-lib\";\nimport { expect, test } from \"vitest\";\nimport { withDriver } from \"../test/preamble.ts\";\nimport type { AbsFilePath } from \"./files.ts\";\nimport { extractPDFPage, getPDFPageCount } from \"./pdf-pages.ts\";\n\ntest(\"getPDFPageCount returns correct page count\", async () =\u003e {\n  await withDriver",
-      "contextualizedText": "// node/utils/pdf-pages.test.ts\n\nimport fs from \"node:fs\";\nimport path from \"node:path\";\nimport { PDFDocument } from \"pdf-lib\";\nimport { expect, test } from \"vitest\";\nimport { withDriver } from \"../test/preamble.ts\";\nimport type { AbsFilePath } from \"./files.ts\";\nimport { extractPDFPage, getPDFPageCount } from \"./pdf-pages.ts\";\n\ntest(\"getPDFPageCount returns correct page count\", async () =\u003e {\n  await withDriver",
-      "headingContext": "node/utils/pdf-pages.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 10,
-      "endCol": 19
+      "start": 0,
+      "end": 1788
     },
     {
-      "text": "      setupFiles: async (tmpDir) =\u003e {\n        // Create a simple multi-page PDF for testing\n        const pdfDoc = await PDFDocument.create();\n\n        // Add three pages\n        const page1 = pdfDoc.addPage([600, 400]);\n        page1.drawText(\"Page 1\", { x: 50, y: 350 });\n\n        const page2 = pdfDoc.addPage([600, 400]);\n        page2.drawText(\"Page 2\", { x: 50, y: 350 });\n\n        const page3 = pdfDoc.addPage([600, 400]);\n        page3.drawText(\"Page 3\", { x: 50, y: 350 });\n\n        const pdfBytes = await pdfDoc.save();\n        const testPdfPath = path.join(tmpDir, \"test.pdf\");\n        await fs.promises.writeFile(testPdfPath, pdfBytes);\n      }",
-      "contextualizedText": "// node/utils/pdf-pages.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        // Create a simple multi-page PDF for testing\n        const pdfDoc = await PDFDocument.create();\n\n        // Add three pages\n        const page1 = pdfDoc.addPage([600, 400]);\n        page1.drawText(\"Page 1\", { x: 50, y: 350 });\n\n        const page2 = pdfDoc.addPage([600, 400]);\n        page2.drawText(\"Page 2\", { x: 50, y: 350 });\n\n        const page3 = pdfDoc.addPage([600, 400]);\n        page3.drawText(\"Page 3\", { x: 50, y: 350 });\n\n        const pdfBytes = await pdfDoc.save();\n        const testPdfPath = path.join(tmpDir, \"test.pdf\");\n        await fs.promises.writeFile(testPdfPath, pdfBytes);\n      }",
-      "headingContext": "node/utils/pdf-pages.test.ts \u003e function setupFiles",
-      "startLine": 12,
-      "startCol": 1,
-      "endLine": 29,
-      "endCol": 8
+      "start": 1798,
+      "end": 3647
     },
     {
-      "text": "async (driver) =\u003e {\n      const { getcwd } = await import(\"../nvim/nvim.ts\");\n      const cwd = await getcwd(driver.nvim);\n      const testPdfPath = path.join(cwd, \"test.pdf\") as AbsFilePath;\n\n      const result = await getPDFPageCount(testPdfPath);\n\n      expect(result.status).toBe(\"ok\");\n      if (result.status === \"ok\") {\n        expect(result.value).toBe(3);\n      }\n    },\n  );\n});\n\ntest(\"extractPDFPage extracts valid page\", async () =\u003e {\n  await withDriver",
-      "contextualizedText": "// node/utils/pdf-pages.test.ts\n\nasync (driver) =\u003e {\n      const { getcwd } = await import(\"../nvim/nvim.ts\");\n      const cwd = await getcwd(driver.nvim);\n      const testPdfPath = path.join(cwd, \"test.pdf\") as AbsFilePath;\n\n      const result = await getPDFPageCount(testPdfPath);\n\n      expect(result.status).toBe(\"ok\");\n      if (result.status === \"ok\") {\n        expect(result.value).toBe(3);\n      }\n    },\n  );\n});\n\ntest(\"extractPDFPage extracts valid page\", async () =\u003e {\n  await withDriver",
-      "headingContext": "node/utils/pdf-pages.test.ts",
-      "startLine": 31,
-      "startCol": 5,
-      "endLine": 47,
-      "endCol": 19
+      "start": 3655,
+      "end": 5629
     },
     {
-      "text": "      setupFiles: async (tmpDir) =\u003e {\n        // Create a simple multi-page PDF for testing\n        const pdfDoc = await PDFDocument.create();\n\n        const page1 = pdfDoc.addPage([600, 400]);\n        page1.drawText(\"First Page Content\", { x: 50, y: 350 });\n\n        const page2 = pdfDoc.addPage([600, 400]);\n        page2.drawText(\"Second Page Content\", { x: 50, y: 350 });\n\n        const pdfBytes = await pdfDoc.save();\n        const testPdfPath = path.join(tmpDir, \"test.pdf\");\n        await fs.promises.writeFile(testPdfPath, pdfBytes);\n      }",
-      "contextualizedText": "// node/utils/pdf-pages.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        // Create a simple multi-page PDF for testing\n        const pdfDoc = await PDFDocument.create();\n\n        const page1 = pdfDoc.addPage([600, 400]);\n        page1.drawText(\"First Page Content\", { x: 50, y: 350 });\n\n        const page2 = pdfDoc.addPage([600, 400]);\n        page2.drawText(\"Second Page Content\", { x: 50, y: 350 });\n\n        const pdfBytes = await pdfDoc.save();\n        const testPdfPath = path.join(tmpDir, \"test.pdf\");\n        await fs.promises.writeFile(testPdfPath, pdfBytes);\n      }",
-      "headingContext": "node/utils/pdf-pages.test.ts \u003e function setupFiles",
-      "startLine": 49,
-      "startCol": 1,
-      "endLine": 62,
-      "endCol": 8
-    },
-    {
-      "text": "async (driver) =\u003e {\n      const { getcwd } = await import(\"../nvim/nvim.ts\");\n      const cwd = await getcwd(driver.nvim);\n      const testPdfPath = path.join(cwd, \"test.pdf\") as AbsFilePath;\n\n      // Extract the first page (index 0)\n      const result = await extractPDFPage(testPdfPath, 1);\n\n      expect(result.status).toBe(\"ok\");\n      if (result.status === \"ok\") {\n        // Verify we got valid PDF bytes back\n        expect(result.value).toBeInstanceOf(Uint8Array);\n        expect(result.value.length).toBeGreaterThan(0);\n\n        // Verify the extracted page is a valid PDF with 1 page\n        const extractedPdf = await PDFDocument.load(result.value);\n        expect(extractedPdf.getPageCount()).toBe(1);\n      }\n    },\n  );\n});\n\ntest(\"extractPDFPage handles invalid page index\", async () =\u003e {\n  await withDriver",
-      "contextualizedText": "// node/utils/pdf-pages.test.ts\n\nasync (driver) =\u003e {\n      const { getcwd } = await import(\"../nvim/nvim.ts\");\n      const cwd = await getcwd(driver.nvim);\n      const testPdfPath = path.join(cwd, \"test.pdf\") as AbsFilePath;\n\n      // Extract the first page (index 0)\n      const result = await extractPDFPage(testPdfPath, 1);\n\n      expect(result.status).toBe(\"ok\");\n      if (result.status === \"ok\") {\n        // Verify we got valid PDF bytes back\n        expect(result.value).toBeInstanceOf(Uint8Array);\n        expect(result.value.length).toBeGreaterThan(0);\n\n        // Verify the extracted page is a valid PDF with 1 page\n        const extractedPdf = await PDFDocument.load(result.value);\n        expect(extractedPdf.getPageCount()).toBe(1);\n      }\n    },\n  );\n});\n\ntest(\"extractPDFPage handles invalid page index\", async () =\u003e {\n  await withDriver",
-      "headingContext": "node/utils/pdf-pages.test.ts",
-      "startLine": 64,
-      "startCol": 5,
-      "endLine": 87,
-      "endCol": 19
-    },
-    {
-      "text": "      setupFiles: async (tmpDir) =\u003e {\n        // Create a simple single-page PDF\n        const pdfDoc = await PDFDocument.create();\n        const page = pdfDoc.addPage([600, 400]);\n        page.drawText(\"Only Page\", { x: 50, y: 350 });\n\n        const pdfBytes = await pdfDoc.save();\n        const testPdfPath = path.join(tmpDir, \"test.pdf\");\n        await fs.promises.writeFile(testPdfPath, pdfBytes);\n      }",
-      "contextualizedText": "// node/utils/pdf-pages.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        // Create a simple single-page PDF\n        const pdfDoc = await PDFDocument.create();\n        const page = pdfDoc.addPage([600, 400]);\n        page.drawText(\"Only Page\", { x: 50, y: 350 });\n\n        const pdfBytes = await pdfDoc.save();\n        const testPdfPath = path.join(tmpDir, \"test.pdf\");\n        await fs.promises.writeFile(testPdfPath, pdfBytes);\n      }",
-      "headingContext": "node/utils/pdf-pages.test.ts \u003e function setupFiles",
-      "startLine": 89,
-      "startCol": 1,
-      "endLine": 98,
-      "endCol": 8
-    },
-    {
-      "text": "async (driver) =\u003e {\n      const { getcwd } = await import(\"../nvim/nvim.ts\");\n      const cwd = await getcwd(driver.nvim);\n      const testPdfPath = path.join(cwd, \"test.pdf\") as AbsFilePath;\n\n      // Try to extract page index 5 (out of range)\n      const result = await extractPDFPage(testPdfPath, 6);\n\n      expect(result.status).toBe(\"error\");\n      if (result.status === \"error\") {\n        expect(result.error).toContain(\"Page index 6 is out of range\");\n        expect(result.error).toContain(\"Document has 1 pages\");\n      }\n    },\n  );\n});\n\ntest(\"extractPDFPage handles negative page index\", async () =\u003e {\n  await withDriver",
-      "contextualizedText": "// node/utils/pdf-pages.test.ts\n\nasync (driver) =\u003e {\n      const { getcwd } = await import(\"../nvim/nvim.ts\");\n      const cwd = await getcwd(driver.nvim);\n      const testPdfPath = path.join(cwd, \"test.pdf\") as AbsFilePath;\n\n      // Try to extract page index 5 (out of range)\n      const result = await extractPDFPage(testPdfPath, 6);\n\n      expect(result.status).toBe(\"error\");\n      if (result.status === \"error\") {\n        expect(result.error).toContain(\"Page index 6 is out of range\");\n        expect(result.error).toContain(\"Document has 1 pages\");\n      }\n    },\n  );\n});\n\ntest(\"extractPDFPage handles negative page index\", async () =\u003e {\n  await withDriver",
-      "headingContext": "node/utils/pdf-pages.test.ts",
-      "startLine": 100,
-      "startCol": 5,
-      "endLine": 118,
-      "endCol": 19
-    },
-    {
-      "text": "      setupFiles: async (tmpDir) =\u003e {\n        // Create a simple PDF\n        const pdfDoc = await PDFDocument.create();\n        const page = pdfDoc.addPage([600, 400]);\n        page.drawText(\"Test Page\", { x: 50, y: 350 });\n\n        const pdfBytes = await pdfDoc.save();\n        const testPdfPath = path.join(tmpDir, \"test.pdf\");\n        await fs.promises.writeFile(testPdfPath, pdfBytes);\n      }",
-      "contextualizedText": "// node/utils/pdf-pages.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        // Create a simple PDF\n        const pdfDoc = await PDFDocument.create();\n        const page = pdfDoc.addPage([600, 400]);\n        page.drawText(\"Test Page\", { x: 50, y: 350 });\n\n        const pdfBytes = await pdfDoc.save();\n        const testPdfPath = path.join(tmpDir, \"test.pdf\");\n        await fs.promises.writeFile(testPdfPath, pdfBytes);\n      }",
-      "headingContext": "node/utils/pdf-pages.test.ts \u003e function setupFiles",
-      "startLine": 120,
-      "startCol": 1,
-      "endLine": 129,
-      "endCol": 8
-    },
-    {
-      "text": "async (driver) =\u003e {\n      const { getcwd } = await import(\"../nvim/nvim.ts\");\n      const cwd = await getcwd(driver.nvim);\n      const testPdfPath = path.join(cwd, \"test.pdf\") as AbsFilePath;\n\n      // Try to extract page index -1\n      const result = await extractPDFPage(testPdfPath, 0);\n\n      expect(result.status).toBe(\"error\");\n      if (result.status === \"error\") {\n        expect(result.error).toContain(\"Page index 0 is out of range\");\n      }\n    },\n  );\n});\n\ntest(\"functions handle non-existent file\", async () =\u003e {\n  await withDriver({}, async (driver) =\u003e {\n    const { getcwd } = await import(\"../nvim/nvim.ts\");\n    const cwd = await getcwd(driver.nvim);\n    const nonExistentPath = path.join(cwd, \"nonexistent.pdf\") as AbsFilePath;\n\n    const pageCountResult = await getPDFPageCount(nonExistentPath);\n    expect(pageCountResult.status).toBe(\"error\");\n    if (pageCountResult.status === \"error\") {\n      expect(pageCountResult.error).toContain(\"Failed to get PDF page count\");\n    }\n\n    const pageResult = await extractPDFPage(nonExistentPath, 1);\n    expect(pageResult.status).toBe(\"error\");\n    if (pageResult.status === \"error\") {\n      expect(pageResult.error).toContain(\"Failed to extract PDF page\");\n    }\n  });\n});\n\ntest(\"functions handle invalid PDF file\", async () =\u003e {\n  await withDriver",
-      "contextualizedText": "// node/utils/pdf-pages.test.ts\n\nasync (driver) =\u003e {\n      const { getcwd } = await import(\"../nvim/nvim.ts\");\n      const cwd = await getcwd(driver.nvim);\n      const testPdfPath = path.join(cwd, \"test.pdf\") as AbsFilePath;\n\n      // Try to extract page index -1\n      const result = await extractPDFPage(testPdfPath, 0);\n\n      expect(result.status).toBe(\"error\");\n      if (result.status === \"error\") {\n        expect(result.error).toContain(\"Page index 0 is out of range\");\n      }\n    },\n  );\n});\n\ntest(\"functions handle non-existent file\", async () =\u003e {\n  await withDriver({}, async (driver) =\u003e {\n    const { getcwd } = await import(\"../nvim/nvim.ts\");\n    const cwd = await getcwd(driver.nvim);\n    const nonExistentPath = path.join(cwd, \"nonexistent.pdf\") as AbsFilePath;\n\n    const pageCountResult = await getPDFPageCount(nonExistentPath);\n    expect(pageCountResult.status).toBe(\"error\");\n    if (pageCountResult.status === \"error\") {\n      expect(pageCountResult.error).toContain(\"Failed to get PDF page count\");\n    }\n\n    const pageResult = await extractPDFPage(nonExistentPath, 1);\n    expect(pageResult.status).toBe(\"error\");\n    if (pageResult.status === \"error\") {\n      expect(pageResult.error).toContain(\"Failed to extract PDF page\");\n    }\n  });\n});\n\ntest(\"functions handle invalid PDF file\", async () =\u003e {\n  await withDriver",
-      "headingContext": "node/utils/pdf-pages.test.ts",
-      "startLine": 131,
-      "startCol": 5,
-      "endLine": 168,
-      "endCol": 19
-    },
-    {
-      "text": "      setupFiles: async (tmpDir) =\u003e {\n        // Create a file that's not a valid PDF\n        const invalidPdfPath = path.join(tmpDir, \"invalid.pdf\");\n        await fs.promises.writeFile(invalidPdfPath, \"This is not a PDF file\");\n      }",
-      "contextualizedText": "// node/utils/pdf-pages.test.ts \u003e function setupFiles\n\n      setupFiles: async (tmpDir) =\u003e {\n        // Create a file that's not a valid PDF\n        const invalidPdfPath = path.join(tmpDir, \"invalid.pdf\");\n        await fs.promises.writeFile(invalidPdfPath, \"This is not a PDF file\");\n      }",
-      "headingContext": "node/utils/pdf-pages.test.ts \u003e function setupFiles",
-      "startLine": 170,
-      "startCol": 1,
-      "endLine": 174,
-      "endCol": 8
-    },
-    {
-      "text": "async (driver) =\u003e {\n      const { getcwd } = await import(\"../nvim/nvim.ts\");\n      const cwd = await getcwd(driver.nvim);\n      const invalidPdfPath = path.join(cwd, \"invalid.pdf\") as AbsFilePath;\n\n      const pageCountResult = await getPDFPageCount(invalidPdfPath);\n      expect(pageCountResult.status).toBe(\"error\");\n      if (pageCountResult.status === \"error\") {\n        expect(pageCountResult.error).toContain(\"Failed to get PDF page count\");\n      }\n\n      const pageResult = await extractPDFPage(invalidPdfPath, 1);\n      expect(pageResult.status).toBe(\"error\");\n      if (pageResult.status === \"error\") {\n        expect(pageResult.error).toContain(\"Failed to extract PDF page\");\n      }\n    }",
-      "contextualizedText": "// node/utils/pdf-pages.test.ts\n\nasync (driver) =\u003e {\n      const { getcwd } = await import(\"../nvim/nvim.ts\");\n      const cwd = await getcwd(driver.nvim);\n      const invalidPdfPath = path.join(cwd, \"invalid.pdf\") as AbsFilePath;\n\n      const pageCountResult = await getPDFPageCount(invalidPdfPath);\n      expect(pageCountResult.status).toBe(\"error\");\n      if (pageCountResult.status === \"error\") {\n        expect(pageCountResult.error).toContain(\"Failed to get PDF page count\");\n      }\n\n      const pageResult = await extractPDFPage(invalidPdfPath, 1);\n      expect(pageResult.status).toBe(\"error\");\n      if (pageResult.status === \"error\") {\n        expect(pageResult.error).toContain(\"Failed to extract PDF page\");\n      }\n    }",
-      "headingContext": "node/utils/pdf-pages.test.ts",
-      "startLine": 176,
-      "startCol": 5,
-      "endLine": 192,
-      "endCol": 6
+      "start": 5631,
+      "end": 6674
     }
   ]
 }

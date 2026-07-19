@@ -1,33 +1,11 @@
 {
   "blobSha": "d5eaf40d9ceb5c1007bc9491c11fea0a939ee025",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { TeardownResult, YieldAction } from \"@magenta/core\";\nimport { teardownContainer, UnsupervisedSupervisor } from \"@magenta/core\";",
-      "contextualizedText": "// node/chat/thread-supervisor.ts\n\nimport type { TeardownResult, YieldAction } from \"@magenta/core\";\nimport { teardownContainer, UnsupervisedSupervisor } from \"@magenta/core\";",
-      "headingContext": "node/chat/thread-supervisor.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 2,
-      "endCol": 75
-    },
-    {
-      "text": "export class DockerSupervisor extends UnsupervisedSupervisor {\n  public teardownResult: TeardownResult | undefined;\n\n  constructor(\n    private containerName: string,\n    private workspacePath: string,\n    private hostDir: string,\n    private opts?: {\n      maxRestarts?: number;\n      onProgress?: (message: string) =\u003e void;\n    },\n  ) {\n    super(\n      opts?.maxRestarts !== undefined\n        ? { maxRestarts: opts.maxRestarts }\n        : undefined,\n    );\n  }",
-      "contextualizedText": "// node/chat/thread-supervisor.ts \u003e class DockerSupervisor\n\nexport class DockerSupervisor extends UnsupervisedSupervisor {\n  public teardownResult: TeardownResult | undefined;\n\n  constructor(\n    private containerName: string,\n    private workspacePath: string,\n    private hostDir: string,\n    private opts?: {\n      maxRestarts?: number;\n      onProgress?: (message: string) =\u003e void;\n    },\n  ) {\n    super(\n      opts?.maxRestarts !== undefined\n        ? { maxRestarts: opts.maxRestarts }\n        : undefined,\n    );\n  }",
-      "headingContext": "node/chat/thread-supervisor.ts \u003e class DockerSupervisor",
-      "startLine": 4,
-      "startCol": 1,
-      "endLine": 21,
-      "endCol": 4
-    },
-    {
-      "text": "  override async onYield(_result: string): Promise\u003cYieldAction\u003e {\n    this.teardownResult = await teardownContainer({\n      containerName: this.containerName,\n      workspacePath: this.workspacePath,\n      hostDir: this.hostDir,\n      ...(this.opts?.onProgress ? { onProgress: this.opts.onProgress } : {}),\n    });\n\n    return {\n      type: \"accept\",\n      resultPrefix: `[Changes synced to ${this.hostDir}]`,\n    };\n  }",
-      "contextualizedText": "// node/chat/thread-supervisor.ts \u003e class DockerSupervisor \u003e method onYield\n\n  override async onYield(_result: string): Promise\u003cYieldAction\u003e {\n    this.teardownResult = await teardownContainer({\n      containerName: this.containerName,\n      workspacePath: this.workspacePath,\n      hostDir: this.hostDir,\n      ...(this.opts?.onProgress ? { onProgress: this.opts.onProgress } : {}),\n    });\n\n    return {\n      type: \"accept\",\n      resultPrefix: `[Changes synced to ${this.hostDir}]`,\n    };\n  }",
-      "headingContext": "node/chat/thread-supervisor.ts \u003e class DockerSupervisor \u003e method onYield",
-      "startLine": 23,
-      "startCol": 1,
-      "endLine": 35,
-      "endCol": 4
+      "start": 0,
+      "end": 1029
     }
   ]
 }

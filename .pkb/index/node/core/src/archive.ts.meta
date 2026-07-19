@@ -1,105 +1,19 @@
 {
   "blobSha": "362a267b7f639916dc1610c6251dd98845136bdc",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport type { ThreadId, ThreadType } from \"./chat-types.ts\";\nimport type { ThreadLogEntry } from \"./thread-logger.ts\";\nimport {\n  MAGENTA_TEMP_DIR,\n  threadConversationLogPath,\n  threadMetaPath,\n} from \"./utils/files.ts\";\n\nconst THREAD_TYPES: ReadonlySet\u003cThreadType\u003e = new Set([\n  \"subagent\",\n  \"compact\",\n  \"root\",\n  \"docker_root\",\n]);",
-      "contextualizedText": "// node/core/src/archive.ts\n\nimport * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport type { ThreadId, ThreadType } from \"./chat-types.ts\";\nimport type { ThreadLogEntry } from \"./thread-logger.ts\";\nimport {\n  MAGENTA_TEMP_DIR,\n  threadConversationLogPath,\n  threadMetaPath,\n} from \"./utils/files.ts\";\n\nconst THREAD_TYPES: ReadonlySet\u003cThreadType\u003e = new Set([\n  \"subagent\",\n  \"compact\",\n  \"root\",\n  \"docker_root\",\n]);",
-      "headingContext": "node/core/src/archive.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 4
+      "start": 0,
+      "end": 1653
     },
     {
-      "text": "function isThreadType(value: unknown): value is ThreadType {\n  return typeof value === \"string\" \u0026\u0026 THREAD_TYPES.has(value as ThreadType);\n}",
-      "contextualizedText": "// node/core/src/archive.ts \u003e function isThreadType\n\nfunction isThreadType(value: unknown): value is ThreadType {\n  return typeof value === \"string\" \u0026\u0026 THREAD_TYPES.has(value as ThreadType);\n}",
-      "headingContext": "node/core/src/archive.ts \u003e function isThreadType",
-      "startLine": 18,
-      "startCol": 1,
-      "endLine": 20,
-      "endCol": 2
+      "start": 1655,
+      "end": 2992
     },
     {
-      "text": "const UUIDV7_PATTERN =\n  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;",
-      "contextualizedText": "// node/core/src/archive.ts\n\nconst UUIDV7_PATTERN =\n  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;",
-      "headingContext": "node/core/src/archive.ts",
-      "startLine": 22,
-      "startCol": 1,
-      "endLine": 23,
-      "endCol": 76
-    },
-    {
-      "text": "function threadsDir(baseDir: string): string {\n  return path.join(baseDir, \"threads\");\n}",
-      "contextualizedText": "// node/core/src/archive.ts \u003e function threadsDir\n\nfunction threadsDir(baseDir: string): string {\n  return path.join(baseDir, \"threads\");\n}",
-      "headingContext": "node/core/src/archive.ts \u003e function threadsDir",
-      "startLine": 25,
-      "startCol": 1,
-      "endLine": 27,
-      "endCol": 2
-    },
-    {
-      "text": "/**\n * Decode the creation time of a uuidv7 thread id. The first 48 bits of a\n * uuidv7 encode the milliseconds-since-epoch creation time, so this needs no\n * file I/O.\n */\nexport function threadCreatedAt(threadId: ThreadId): Date {\n  const hex = threadId.replace(/-/g, \"\").slice(0, 12);\n  return new Date(parseInt(hex, 16));\n}",
-      "contextualizedText": "// node/core/src/archive.ts \u003e function threadCreatedAt\n\n/**\n * Decode the creation time of a uuidv7 thread id. The first 48 bits of a\n * uuidv7 encode the milliseconds-since-epoch creation time, so this needs no\n * file I/O.\n */\nexport function threadCreatedAt(threadId: ThreadId): Date {\n  const hex = threadId.replace(/-/g, \"\").slice(0, 12);\n  return new Date(parseInt(hex, 16));\n}",
-      "headingContext": "node/core/src/archive.ts \u003e function threadCreatedAt",
-      "startLine": 29,
-      "startCol": 1,
-      "endLine": 37,
-      "endCol": 2
-    },
-    {
-      "text": "/**\n * List archived thread ids, newest-first. Only reads the directory listing\n * (never file contents): names that parse as uuidv7 are kept and sorted\n * descending, which — because uuidv7 is time-ordered — yields most-recent\n * first.\n */\nexport async function listArchivedThreadIds(\n  baseDir: string = MAGENTA_TEMP_DIR,\n): Promise\u003cThreadId[]\u003e {\n  let entries: string[];\n  try {\n    entries = await fs.readdir(threadsDir(baseDir));\n  } catch {\n    return [];\n  }\n  return entries\n    .filter((name) =\u003e UUIDV7_PATTERN.test(name))\n    .sort()\n    .reverse() as ThreadId[];\n}",
-      "contextualizedText": "// node/core/src/archive.ts \u003e function listArchivedThreadIds\n\n/**\n * List archived thread ids, newest-first. Only reads the directory listing\n * (never file contents): names that parse as uuidv7 are kept and sorted\n * descending, which — because uuidv7 is time-ordered — yields most-recent\n * first.\n */\nexport async function listArchivedThreadIds(\n  baseDir: string = MAGENTA_TEMP_DIR,\n): Promise\u003cThreadId[]\u003e {\n  let entries: string[];\n  try {\n    entries = await fs.readdir(threadsDir(baseDir));\n  } catch {\n    return [];\n  }\n  return entries\n    .filter((name) =\u003e UUIDV7_PATTERN.test(name))\n    .sort()\n    .reverse() as ThreadId[];\n}",
-      "headingContext": "node/core/src/archive.ts \u003e function listArchivedThreadIds",
-      "startLine": 39,
-      "startCol": 1,
-      "endLine": 58,
-      "endCol": 2
-    },
-    {
-      "text": "/**\n * Read a thread's `meta.json` sidecar. Best-effort: a missing or malformed\n * sidecar resolves to `{}` rather than throwing.\n */\nexport async function readThreadMeta(\n  threadId: ThreadId,\n  baseDir: string = MAGENTA_TEMP_DIR,\n): Promise\u003c{ title?: string; threadType?: ThreadType }\u003e {\n  try {\n    const contents = await fs.readFile(\n      threadMetaPath(threadId, baseDir),\n      \"utf8\",\n    );\n    const parsed = JSON.parse(contents) as unknown;\n    if (typeof parsed !== \"object\" || parsed === null) return {};\n    const record = parsed as Record\u003cstring, unknown\u003e;\n    const result: { title?: string; threadType?: ThreadType } = {};\n    if (typeof record.title === \"string\") result.title = record.title;\n    if (isThreadType(record.threadType)) result.threadType = record.threadType;\n    return result;\n  } catch {\n    return {};\n  }\n}",
-      "contextualizedText": "// node/core/src/archive.ts \u003e function readThreadMeta\n\n/**\n * Read a thread's `meta.json` sidecar. Best-effort: a missing or malformed\n * sidecar resolves to `{}` rather than throwing.\n */\nexport async function readThreadMeta(\n  threadId: ThreadId,\n  baseDir: string = MAGENTA_TEMP_DIR,\n): Promise\u003c{ title?: string; threadType?: ThreadType }\u003e {\n  try {\n    const contents = await fs.readFile(\n      threadMetaPath(threadId, baseDir),\n      \"utf8\",\n    );\n    const parsed = JSON.parse(contents) as unknown;\n    if (typeof parsed !== \"object\" || parsed === null) return {};\n    const record = parsed as Record\u003cstring, unknown\u003e;\n    const result: { title?: string; threadType?: ThreadType } = {};\n    if (typeof record.title === \"string\") result.title = record.title;\n    if (isThreadType(record.threadType)) result.threadType = record.threadType;\n    return result;\n  } catch {\n    return {};\n  }\n}",
-      "headingContext": "node/core/src/archive.ts \u003e function readThreadMeta",
-      "startLine": 60,
-      "startCol": 1,
-      "endLine": 83,
-      "endCol": 2
-    },
-    {
-      "text": "const THREAD_LOG_ENTRY_TYPES: ReadonlySet\u003cThreadLogEntry[\"type\"]\u003e = new Set([\n  \"thread_start\",\n  \"fork\",\n  \"message\",\n  \"compaction\",\n  \"restart\",\n  \"title\",\n]);",
-      "contextualizedText": "// node/core/src/archive.ts\n\nconst THREAD_LOG_ENTRY_TYPES: ReadonlySet\u003cThreadLogEntry[\"type\"]\u003e = new Set([\n  \"thread_start\",\n  \"fork\",\n  \"message\",\n  \"compaction\",\n  \"restart\",\n  \"title\",\n]);",
-      "headingContext": "node/core/src/archive.ts",
-      "startLine": 85,
-      "startCol": 1,
-      "endLine": 92,
-      "endCol": 4
-    },
-    {
-      "text": "function isThreadLogEntry(value: unknown): value is ThreadLogEntry {\n  return (\n    typeof value === \"object\" \u0026\u0026\n    value !== null \u0026\u0026\n    \"type\" in value \u0026\u0026\n    typeof (value as { type: unknown }).type === \"string\" \u0026\u0026\n    THREAD_LOG_ENTRY_TYPES.has(\n      (value as { type: string }).type as ThreadLogEntry[\"type\"],\n    )\n  );\n}",
-      "contextualizedText": "// node/core/src/archive.ts \u003e function isThreadLogEntry\n\nfunction isThreadLogEntry(value: unknown): value is ThreadLogEntry {\n  return (\n    typeof value === \"object\" \u0026\u0026\n    value !== null \u0026\u0026\n    \"type\" in value \u0026\u0026\n    typeof (value as { type: unknown }).type === \"string\" \u0026\u0026\n    THREAD_LOG_ENTRY_TYPES.has(\n      (value as { type: string }).type as ThreadLogEntry[\"type\"],\n    )\n  );\n}",
-      "headingContext": "node/core/src/archive.ts \u003e function isThreadLogEntry",
-      "startLine": 94,
-      "startCol": 1,
-      "endLine": 104,
-      "endCol": 2
-    },
-    {
-      "text": "/**\n * Read and parse a thread's `conversation.jsonl` log into an ordered array of\n * `ThreadLogEntry`. Best-effort: a missing file resolves to `[]`, and any\n * individual line that fails to parse is skipped rather than throwing.\n */\nexport async function readArchivedThreadLog(\n  threadId: ThreadId,\n  baseDir: string = MAGENTA_TEMP_DIR,\n): Promise\u003cThreadLogEntry[]\u003e {\n  let contents: string;\n  try {\n    contents = await fs.readFile(\n      threadConversationLogPath(threadId, baseDir),\n      \"utf8\",\n    );\n  } catch {\n    return [];\n  }\n  const entries: ThreadLogEntry[] = [];\n  for (const line of contents.split(\"\\n\")) {\n    const trimmed = line.trim();\n    if (trimmed.length === 0) continue;\n    let parsed: unknown;\n    try {\n      parsed = JSON.parse(trimmed);\n    } catch {\n      // skip malformed lines\n      continue;\n    }\n    if (isThreadLogEntry(parsed)) {\n      entries.push(parsed);\n    }\n  }\n  return entries;\n}",
-      "contextualizedText": "// node/core/src/archive.ts \u003e function readArchivedThreadLog\n\n/**\n * Read and parse a thread's `conversation.jsonl` log into an ordered array of\n * `ThreadLogEntry`. Best-effort: a missing file resolves to `[]`, and any\n * individual line that fails to parse is skipped rather than throwing.\n */\nexport async function readArchivedThreadLog(\n  threadId: ThreadId,\n  baseDir: string = MAGENTA_TEMP_DIR,\n): Promise\u003cThreadLogEntry[]\u003e {\n  let contents: string;\n  try {\n    contents = await fs.readFile(\n      threadConversationLogPath(threadId, baseDir),\n      \"utf8\",\n    );\n  } catch {\n    return [];\n  }\n  const entries: ThreadLogEntry[] = [];\n  for (const line of contents.split(\"\\n\")) {\n    const trimmed = line.trim();\n    if (trimmed.length === 0) continue;\n    let parsed: unknown;\n    try {\n      parsed = JSON.parse(trimmed);\n    } catch {\n      // skip malformed lines\n      continue;\n    }\n    if (isThreadLogEntry(parsed)) {\n      entries.push(parsed);\n    }\n  }\n  return entries;\n}",
-      "headingContext": "node/core/src/archive.ts \u003e function readArchivedThreadLog",
-      "startLine": 106,
-      "startCol": 1,
-      "endLine": 140,
-      "endCol": 2
-    },
-    {
-      "text": "/**\n * Delete a single thread's archive directory (recursively).\n */\nexport async function deleteArchivedThread(\n  threadId: ThreadId,\n  baseDir: string = MAGENTA_TEMP_DIR,\n): Promise\u003cvoid\u003e {\n  await fs.rm(path.join(threadsDir(baseDir), threadId), {\n    recursive: true,\n    force: true,\n  });\n}",
-      "contextualizedText": "// node/core/src/archive.ts \u003e function deleteArchivedThread\n\n/**\n * Delete a single thread's archive directory (recursively).\n */\nexport async function deleteArchivedThread(\n  threadId: ThreadId,\n  baseDir: string = MAGENTA_TEMP_DIR,\n): Promise\u003cvoid\u003e {\n  await fs.rm(path.join(threadsDir(baseDir), threadId), {\n    recursive: true,\n    force: true,\n  });\n}",
-      "headingContext": "node/core/src/archive.ts \u003e function deleteArchivedThread",
-      "startLine": 142,
-      "startCol": 1,
-      "endLine": 153,
-      "endCol": 2
+      "start": 2994,
+      "end": 4219
     }
   ]
 }

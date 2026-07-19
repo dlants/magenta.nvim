@@ -1,15 +1,11 @@
 {
   "blobSha": "fe4ddc5fc5fc279eca2e43d66be3300033728e24",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export declare const FULL_CAPABILITIES: boolean;\n//# sourceMappingURL=capabilities.d.ts.map",
-      "contextualizedText": "// node/test/capabilities.d.ts\n\nexport declare const FULL_CAPABILITIES: boolean;\n//# sourceMappingURL=capabilities.d.ts.map",
-      "headingContext": "node/test/capabilities.d.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 2,
-      "endCol": 43
+      "start": 0,
+      "end": 91
     }
   ]
 }

@@ -1,15 +1,11 @@
 {
   "blobSha": "d89f7557569c3685c69f4bec0d7c7b57247cd0cf",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "# rg hang investigation\n\n## Problem\n\nRunning `rg \"Full output\" -t ts` (or just `rg \"Full output\"`) from the bash_command tool causes the command to hang indefinitely.\n\n## What works\n\n- `rg \"Full output\" \"node/tools/bashCommand.ts\"` - specifying a file path explicitly\n- `rg \"Full output\" node/` - specifying a directory path\n- `rg \"Full output\" -t ts .` - adding `.` as explicit path\n- `rg \"Full output\" -t ts node/` - specifying subdirectory\n- `rg --files -t ts` - listing files works fine (166 files)\n- `echo \"\" | rg \"Full output\" -t ts` - piping input returns immediately (exit 1)\n\n## What hangs\n\n- `rg \"Full output\" -t ts` - no path specified\n- `rg \"Full output\"` - also hangs (not specific to -t flag)\n\n## Root cause hypothesis\n\nWhen spawning from node with `stdio: \"pipe\"`, stdin is not a tty. When `rg` has no path argument and detects stdin is not a tty, it waits to read from stdin instead of searching the current directory.\n\nEvidence:\n\n```bash\nbash -c 'if [ -t 0 ]; then echo \"stdin is tty\"; else echo \"stdin is NOT tty\"; fi'\n# Output: stdin is NOT tty\n```\n\n## Attempted fix\n\nChanged spawn options in `bashCommand.ts` from:\n\n```javascript\nstdio: \"pipe\";\n```\n\nto:\n\n```javascript\nstdio: [\"ignore\", \"pipe\", \"pipe\"];\n```\n\nThis should ignore stdin entirely, preventing rg from waiting on it.\n\n## Status\n\nFix applied but not yet verified (requires restart of node process to test).",
-      "contextualizedText": "# rg hang investigation\n\n## Problem\n\nRunning `rg \"Full output\" -t ts` (or just `rg \"Full output\"`) from the bash_command tool causes the command to hang indefinitely.\n\n## What works\n\n- `rg \"Full output\" \"node/tools/bashCommand.ts\"` - specifying a file path explicitly\n- `rg \"Full output\" node/` - specifying a directory path\n- `rg \"Full output\" -t ts .` - adding `.` as explicit path\n- `rg \"Full output\" -t ts node/` - specifying subdirectory\n- `rg --files -t ts` - listing files works fine (166 files)\n- `echo \"\" | rg \"Full output\" -t ts` - piping input returns immediately (exit 1)\n\n## What hangs\n\n- `rg \"Full output\" -t ts` - no path specified\n- `rg \"Full output\"` - also hangs (not specific to -t flag)\n\n## Root cause hypothesis\n\nWhen spawning from node with `stdio: \"pipe\"`, stdin is not a tty. When `rg` has no path argument and detects stdin is not a tty, it waits to read from stdin instead of searching the current directory.\n\nEvidence:\n\n```bash\nbash -c 'if [ -t 0 ]; then echo \"stdin is tty\"; else echo \"stdin is NOT tty\"; fi'\n# Output: stdin is NOT tty\n```\n\n## Attempted fix\n\nChanged spawn options in `bashCommand.ts` from:\n\n```javascript\nstdio: \"pipe\";\n```\n\nto:\n\n```javascript\nstdio: [\"ignore\", \"pipe\", \"pipe\"];\n```\n\nThis should ignore stdin entirely, preventing rg from waiting on it.\n\n## Status\n\nFix applied but not yet verified (requires restart of node process to test).",
-      "headingContext": "",
-      "startLine": 0,
-      "startCol": 0,
-      "endLine": 0,
-      "endCol": 0
+      "start": 0,
+      "end": 1386
     }
   ]
 }

@@ -1,87 +1,15 @@
 {
   "blobSha": "e9602c297ab4b8c6c20404d04a33c522962f2319",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { execFile as execFileCb } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport { expect, it } from \"vitest\";\nimport { withDriver } from \"../test/preamble.ts\";\n\nconst execFile = promisify(execFileCb);\n\ntype ContentBlockParam = Anthropic.Messages.ContentBlockParam;",
-      "contextualizedText": "// node/context/git-context.test.ts\n\nimport { execFile as execFileCb } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport { expect, it } from \"vitest\";\nimport { withDriver } from \"../test/preamble.ts\";\n\nconst execFile = promisify(execFileCb);\n\ntype ContentBlockParam = Anthropic.Messages.ContentBlockParam;",
-      "headingContext": "node/context/git-context.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 9,
-      "endCol": 63
+      "start": 0,
+      "end": 1886
     },
     {
-      "text": "async function git(cwd: string, args: string[]): Promise\u003cvoid\u003e {\n  await execFile(\n    \"git\",\n    [\"-c\", \"user.email=test@test.com\", \"-c\", \"user.name=test\", ...args],\n    { cwd },\n  );\n}",
-      "contextualizedText": "// node/context/git-context.test.ts \u003e function git\n\nasync function git(cwd: string, args: string[]): Promise\u003cvoid\u003e {\n  await execFile(\n    \"git\",\n    [\"-c\", \"user.email=test@test.com\", \"-c\", \"user.name=test\", ...args],\n    { cwd },\n  );\n}",
-      "headingContext": "node/context/git-context.test.ts \u003e function git",
-      "startLine": 11,
-      "startCol": 1,
-      "endLine": 17,
-      "endCol": 2
-    },
-    {
-      "text": "async function initRepo(tmpDir: string): Promise\u003cvoid\u003e {\n  await git(tmpDir, [\"init\", \"-q\"]);\n  await git(tmpDir, [\"symbolic-ref\", \"HEAD\", \"refs/heads/main\"]);\n  await git(tmpDir, [\"add\", \"poem.txt\"]);\n  await git(tmpDir, [\"commit\", \"-q\", \"-m\", \"initial commit\"]);\n}",
-      "contextualizedText": "// node/context/git-context.test.ts \u003e function initRepo\n\nasync function initRepo(tmpDir: string): Promise\u003cvoid\u003e {\n  await git(tmpDir, [\"init\", \"-q\"]);\n  await git(tmpDir, [\"symbolic-ref\", \"HEAD\", \"refs/heads/main\"]);\n  await git(tmpDir, [\"add\", \"poem.txt\"]);\n  await git(tmpDir, [\"commit\", \"-q\", \"-m\", \"initial commit\"]);\n}",
-      "headingContext": "node/context/git-context.test.ts \u003e function initRepo",
-      "startLine": 19,
-      "startCol": 1,
-      "endLine": 24,
-      "endCol": 2
-    },
-    {
-      "text": "function findUserText(\n  messages: Anthropic.MessageParam[],\n  needle: string,\n): string | undefined {\n  for (const msg of messages) {\n    if (msg.role !== \"user\" || !Array.isArray(msg.content)) continue;\n    for (const block of msg.content as ContentBlockParam[]) {\n      if (block.type === \"text\" \u0026\u0026 block.text.includes(needle)) {\n        return block.text;\n      }\n    }\n  }\n  return undefined;\n}",
-      "contextualizedText": "// node/context/git-context.test.ts \u003e function findUserText\n\nfunction findUserText(\n  messages: Anthropic.MessageParam[],\n  needle: string,\n): string | undefined {\n  for (const msg of messages) {\n    if (msg.role !== \"user\" || !Array.isArray(msg.content)) continue;\n    for (const block of msg.content as ContentBlockParam[]) {\n      if (block.type === \"text\" \u0026\u0026 block.text.includes(needle)) {\n        return block.text;\n      }\n    }\n  }\n  return undefined;\n}",
-      "headingContext": "node/context/git-context.test.ts \u003e function findUserText",
-      "startLine": 26,
-      "startCol": 1,
-      "endLine": 39,
-      "endCol": 2
-    },
-    {
-      "text": "it(\"reports initial git state in the first user message\", async () =\u003e {\n  await withDriver",
-      "contextualizedText": "// node/context/git-context.test.ts\n\nit(\"reports initial git state in the first user message\", async () =\u003e {\n  await withDriver",
-      "headingContext": "node/context/git-context.test.ts",
-      "startLine": 41,
-      "startCol": 1,
-      "endLine": 42,
-      "endCol": 19
-    },
-    {
-      "text": "    { setupFiles: async (tmpDir) =\u003e initRepo(tmpDir)",
-      "contextualizedText": "// node/context/git-context.test.ts \u003e function setupFiles\n\n    { setupFiles: async (tmpDir) =\u003e initRepo(tmpDir)",
-      "headingContext": "node/context/git-context.test.ts \u003e function setupFiles",
-      "startLine": 43,
-      "startCol": 1,
-      "endLine": 43,
-      "endCol": 53
-    },
-    {
-      "text": "async (driver) =\u003e {\n      await driver.showSidebar();\n      await driver.inputMagentaText(\"hello\");\n      await driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      const systemInfo = findUserText(request.messages, \"# System Information\");\n      expect(systemInfo).toContain(\"Git branch: main\");\n      expect(systemInfo).toContain(\"Git HEAD:\");\n      expect(systemInfo).toContain(\"initial commit\");\n\n      request.respond({ stopReason: \"end_turn\", text: \"hi\", toolRequests: [] });\n    },\n  );\n});\n\nit(\"attaches a git context update when the branch changes\", async () =\u003e {\n  await withDriver",
-      "contextualizedText": "// node/context/git-context.test.ts\n\nasync (driver) =\u003e {\n      await driver.showSidebar();\n      await driver.inputMagentaText(\"hello\");\n      await driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      const systemInfo = findUserText(request.messages, \"# System Information\");\n      expect(systemInfo).toContain(\"Git branch: main\");\n      expect(systemInfo).toContain(\"Git HEAD:\");\n      expect(systemInfo).toContain(\"initial commit\");\n\n      request.respond({ stopReason: \"end_turn\", text: \"hi\", toolRequests: [] });\n    },\n  );\n});\n\nit(\"attaches a git context update when the branch changes\", async () =\u003e {\n  await withDriver",
-      "headingContext": "node/context/git-context.test.ts",
-      "startLine": 44,
-      "startCol": 5,
-      "endLine": 61,
-      "endCol": 19
-    },
-    {
-      "text": "    { setupFiles: async (tmpDir) =\u003e initRepo(tmpDir)",
-      "contextualizedText": "// node/context/git-context.test.ts \u003e function setupFiles\n\n    { setupFiles: async (tmpDir) =\u003e initRepo(tmpDir)",
-      "headingContext": "node/context/git-context.test.ts \u003e function setupFiles",
-      "startLine": 62,
-      "startCol": 1,
-      "endLine": 62,
-      "endCol": 53
-    },
-    {
-      "text": "async (driver, dirs) =\u003e {\n      await driver.showSidebar();\n      await driver.inputMagentaText(\"first\");\n      await driver.send();\n\n      const request1 = await driver.mockAnthropic.awaitPendingStream();\n      request1.respond({\n        stopReason: \"end_turn\",\n        text: \"ok\",\n        toolRequests: [],\n      });\n\n      // Change the coarse git state out from under the thread.\n      await git(dirs.tmpDir, [\"checkout\", \"-q\", \"-b\", \"feature\"]);\n\n      await driver.inputMagentaText(\"second\");\n      await driver.send();\n\n      const request2 = await driver.mockAnthropic.awaitPendingStream();\n      const gitText = findUserText(request2.messages, \"# Git status update\");\n      expect(gitText).toBeDefined();\n      expect(gitText).toContain(\"Branch: feature\");\n\n      await driver.assertDisplayBufferContains(\"git: feature\");\n\n      request2.respond({\n        stopReason: \"end_turn\",\n        text: \"done\",\n        toolRequests: [],\n      });\n    }",
-      "contextualizedText": "// node/context/git-context.test.ts\n\nasync (driver, dirs) =\u003e {\n      await driver.showSidebar();\n      await driver.inputMagentaText(\"first\");\n      await driver.send();\n\n      const request1 = await driver.mockAnthropic.awaitPendingStream();\n      request1.respond({\n        stopReason: \"end_turn\",\n        text: \"ok\",\n        toolRequests: [],\n      });\n\n      // Change the coarse git state out from under the thread.\n      await git(dirs.tmpDir, [\"checkout\", \"-q\", \"-b\", \"feature\"]);\n\n      await driver.inputMagentaText(\"second\");\n      await driver.send();\n\n      const request2 = await driver.mockAnthropic.awaitPendingStream();\n      const gitText = findUserText(request2.messages, \"# Git status update\");\n      expect(gitText).toBeDefined();\n      expect(gitText).toContain(\"Branch: feature\");\n\n      await driver.assertDisplayBufferContains(\"git: feature\");\n\n      request2.respond({\n        stopReason: \"end_turn\",\n        text: \"done\",\n        toolRequests: [],\n      });\n    }",
-      "headingContext": "node/context/git-context.test.ts",
-      "startLine": 63,
-      "startCol": 5,
-      "endLine": 93,
-      "endCol": 6
+      "start": 1888,
+      "end": 3004
     }
   ]
 }

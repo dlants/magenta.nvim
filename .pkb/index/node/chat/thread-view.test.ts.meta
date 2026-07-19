@@ -1,51 +1,15 @@
 {
   "blobSha": "97069a3e8f62988d8d9b22c37d20adb1b9e629ef",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { AgentStatus } from \"@magenta/core\";\nimport { describe, expect, it } from \"vitest\";\nimport { type Line, NvimBuffer } from \"../nvim/buffer.ts\";\nimport type { Row0Indexed } from \"../nvim/window.ts\";\nimport { mountView, pos } from \"../tea/view.ts\";\nimport { withNvimClient } from \"../test/preamble.ts\";\nimport { renderStatus } from \"./thread-view.ts\";",
-      "contextualizedText": "// node/chat/thread-view.test.ts\n\nimport type { AgentStatus } from \"@magenta/core\";\nimport { describe, expect, it } from \"vitest\";\nimport { type Line, NvimBuffer } from \"../nvim/buffer.ts\";\nimport type { Row0Indexed } from \"../nvim/window.ts\";\nimport { mountView, pos } from \"../tea/view.ts\";\nimport { withNvimClient } from \"../test/preamble.ts\";\nimport { renderStatus } from \"./thread-view.ts\";",
-      "headingContext": "node/chat/thread-view.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 7,
-      "endCol": 49
+      "start": 0,
+      "end": 1804
     },
     {
-      "text": "async function renderStatusToString(agentStatus: AgentStatus): Promise\u003cstring\u003e {\n  let text = \"\";\n  await withNvimClient(async (nvim) =\u003e {\n    const buffer = await NvimBuffer.create(false, true, nvim);\n    await buffer.setOption(\"modifiable\", false);\n    await mountView",
-      "contextualizedText": "// node/chat/thread-view.test.ts \u003e function renderStatusToString\n\nasync function renderStatusToString(agentStatus: AgentStatus): Promise\u003cstring\u003e {\n  let text = \"\";\n  await withNvimClient(async (nvim) =\u003e {\n    const buffer = await NvimBuffer.create(false, true, nvim);\n    await buffer.setOption(\"modifiable\", false);\n    await mountView",
-      "headingContext": "node/chat/thread-view.test.ts \u003e function renderStatusToString",
-      "startLine": 9,
-      "startCol": 1,
-      "endLine": 14,
-      "endCol": 20
-    },
-    {
-      "text": "      view: () =\u003e renderStatus(agentStatus, { type: \"normal\" }, undefined)",
-      "contextualizedText": "// node/chat/thread-view.test.ts \u003e function renderStatusToString \u003e function view\n\n      view: () =\u003e renderStatus(agentStatus, { type: \"normal\" }, undefined)",
-      "headingContext": "node/chat/thread-view.test.ts \u003e function renderStatusToString \u003e function view",
-      "startLine": 15,
-      "startCol": 1,
-      "endLine": 15,
-      "endCol": 75
-    },
-    {
-      "text": "props: {},\n      mount: {\n        nvim,\n        buffer,\n        startPos: pos(0, 0),\n        endPos: pos(0, 0),\n      },\n    });\n    const lines = await buffer.getLines({\n      start: 0 as Row0Indexed,\n      end: 100 as Row0Indexed,\n    });\n    text = (lines as Line[]).join(\"\\n\");\n  });\n  return text;\n}",
-      "contextualizedText": "// node/chat/thread-view.test.ts \u003e function renderStatusToString\n\nprops: {},\n      mount: {\n        nvim,\n        buffer,\n        startPos: pos(0, 0),\n        endPos: pos(0, 0),\n      },\n    });\n    const lines = await buffer.getLines({\n      start: 0 as Row0Indexed,\n      end: 100 as Row0Indexed,\n    });\n    text = (lines as Line[]).join(\"\\n\");\n  });\n  return text;\n}",
-      "headingContext": "node/chat/thread-view.test.ts \u003e function renderStatusToString",
-      "startLine": 16,
-      "startCol": 7,
-      "endLine": 31,
-      "endCol": 2
-    },
-    {
-      "text": "describe(\"thread-view renderStatus streaming\", () =\u003e {\n  it(\"shows no waiting timer when last event was recent\", async () =\u003e {\n    const now = new Date();\n    const text = await renderStatusToString({\n      type: \"streaming\",\n      startTime: now,\n      lastEventTime: new Date(now.getTime() - 1000),\n    });\n    expect(text).toContain(\"Streaming response\");\n    expect(text).not.toContain(\"waiting\");\n  });\n\n  it(\"shows a waiting timer after \u003e3s of dead air\", async () =\u003e {\n    const now = new Date();\n    const text = await renderStatusToString({\n      type: \"streaming\",\n      startTime: new Date(now.getTime() - 4000),\n      lastEventTime: new Date(now.getTime() - 4000),\n    });\n    expect(text).toContain(\"Streaming response\");\n    expect(text).toMatch(/waiting \\ds/);\n  });\n\n  it(\"shows a retry countdown with attempt and error reason\", async () =\u003e {\n    const now = new Date();\n    const text = await renderStatusToString({\n      type: \"streaming\",\n      startTime: new Date(now.getTime() - 2000),\n      lastEventTime: new Date(now.getTime() - 2000),\n      retryStatus: {\n        attempt: 2,\n        nextRetryAt: new Date(now.getTime() + 5000),\n        error: new Error(\"API is temporarily overloaded\"),\n      },\n    });\n    expect(text).toContain(\"Retrying in\");\n    expect(text).toContain(\"attempt 2\");\n    expect(text).toContain(\"API is temporarily overloaded\");\n  });\n});",
-      "contextualizedText": "// node/chat/thread-view.test.ts\n\ndescribe(\"thread-view renderStatus streaming\", () =\u003e {\n  it(\"shows no waiting timer when last event was recent\", async () =\u003e {\n    const now = new Date();\n    const text = await renderStatusToString({\n      type: \"streaming\",\n      startTime: now,\n      lastEventTime: new Date(now.getTime() - 1000),\n    });\n    expect(text).toContain(\"Streaming response\");\n    expect(text).not.toContain(\"waiting\");\n  });\n\n  it(\"shows a waiting timer after \u003e3s of dead air\", async () =\u003e {\n    const now = new Date();\n    const text = await renderStatusToString({\n      type: \"streaming\",\n      startTime: new Date(now.getTime() - 4000),\n      lastEventTime: new Date(now.getTime() - 4000),\n    });\n    expect(text).toContain(\"Streaming response\");\n    expect(text).toMatch(/waiting \\ds/);\n  });\n\n  it(\"shows a retry countdown with attempt and error reason\", async () =\u003e {\n    const now = new Date();\n    const text = await renderStatusToString({\n      type: \"streaming\",\n      startTime: new Date(now.getTime() - 2000),\n      lastEventTime: new Date(now.getTime() - 2000),\n      retryStatus: {\n        attempt: 2,\n        nextRetryAt: new Date(now.getTime() + 5000),\n        error: new Error(\"API is temporarily overloaded\"),\n      },\n    });\n    expect(text).toContain(\"Retrying in\");\n    expect(text).toContain(\"attempt 2\");\n    expect(text).toContain(\"API is temporarily overloaded\");\n  });\n});",
-      "headingContext": "node/chat/thread-view.test.ts",
-      "startLine": 33,
-      "startCol": 1,
-      "endLine": 72,
-      "endCol": 4
+      "start": 1808,
+      "end": 2407
     }
   ]
 }

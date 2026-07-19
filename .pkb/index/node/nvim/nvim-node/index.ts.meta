@@ -1,15 +1,11 @@
 {
   "blobSha": "1cf2f0e35cdfc501ac5e2f329d649e48480768cc",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export { attach } from \"./attach.ts\";\n\nexport * from \"./types.ts\";\n\nexport const NVIM_LOG_LEVELS = {\n  TRACE: 0,\n  DEBUG: 1,\n  INFO: 2,\n  WARN: 3,\n  ERROR: 4,\n  OFF: 5,\n} as const;",
-      "contextualizedText": "// node/nvim/nvim-node/index.ts\n\nexport { attach } from \"./attach.ts\";\n\nexport * from \"./types.ts\";\n\nexport const NVIM_LOG_LEVELS = {\n  TRACE: 0,\n  DEBUG: 1,\n  INFO: 2,\n  WARN: 3,\n  ERROR: 4,\n  OFF: 5,\n} as const;",
-      "headingContext": "node/nvim/nvim-node/index.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 12,
-      "endCol": 12
+      "start": 0,
+      "end": 180
     }
   ]
 }

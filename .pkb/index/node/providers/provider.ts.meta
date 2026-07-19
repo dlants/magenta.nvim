@@ -1,24 +1,11 @@
 {
   "blobSha": "76ae107595b39914c2fb2980041974878976620e",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import {\n  getProvider as coreGetProvider,\n  type Provider,\n  type ProviderProfile,\n  setMockProvider,\n  validateInput,\n} from \"@magenta/core\";\nimport * as AnthropicAuthImpl from \"../auth/anthropic.ts\";\nimport { NvimAuthUI } from \"../auth/auth-ui.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\n\nexport { setMockProvider };\nexport * from \"./provider-types.ts\";",
-      "contextualizedText": "// node/providers/provider.ts\n\nimport {\n  getProvider as coreGetProvider,\n  type Provider,\n  type ProviderProfile,\n  setMockProvider,\n  validateInput,\n} from \"@magenta/core\";\nimport * as AnthropicAuthImpl from \"../auth/anthropic.ts\";\nimport { NvimAuthUI } from \"../auth/auth-ui.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\n\nexport { setMockProvider };\nexport * from \"./provider-types.ts\";",
-      "headingContext": "node/providers/provider.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 13,
-      "endCol": 37
-    },
-    {
-      "text": "export function getProvider(nvim: Nvim, profile: ProviderProfile): Provider {\n  return coreGetProvider(\n    nvim.logger,\n    new NvimAuthUI(nvim),\n    validateInput,\n    AnthropicAuthImpl,\n    profile,\n  );\n}",
-      "contextualizedText": "// node/providers/provider.ts \u003e function getProvider\n\nexport function getProvider(nvim: Nvim, profile: ProviderProfile): Provider {\n  return coreGetProvider(\n    nvim.logger,\n    new NvimAuthUI(nvim),\n    validateInput,\n    AnthropicAuthImpl,\n    profile,\n  );\n}",
-      "headingContext": "node/providers/provider.ts \u003e function getProvider",
-      "startLine": 15,
-      "startCol": 1,
-      "endLine": 23,
-      "endCol": 2
+      "start": 0,
+      "end": 583
     }
   ]
 }

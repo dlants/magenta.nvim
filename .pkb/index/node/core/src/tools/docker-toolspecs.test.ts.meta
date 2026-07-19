@@ -1,33 +1,11 @@
 {
   "blobSha": "b29c64be1d75ef3087c65893b610a8ac5e50aee8",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { describe, expect, it } from \"vitest\";\nimport { getToolSpecs, type MCPToolManager } from \"./toolManager.ts\";\n\nconst mockMcpToolManager: MCPToolManager",
-      "contextualizedText": "// node/core/src/tools/docker-toolspecs.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport { getToolSpecs, type MCPToolManager } from \"./toolManager.ts\";\n\nconst mockMcpToolManager: MCPToolManager",
-      "headingContext": "node/core/src/tools/docker-toolspecs.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 4,
-      "endCol": 41
-    },
-    {
-      "text": "  getToolSpecs: () =\u003e []",
-      "contextualizedText": "// node/core/src/tools/docker-toolspecs.test.ts \u003e function getToolSpecs\n\n  getToolSpecs: () =\u003e []",
-      "headingContext": "node/core/src/tools/docker-toolspecs.test.ts \u003e function getToolSpecs",
-      "startLine": 5,
-      "startCol": 1,
-      "endLine": 5,
-      "endCol": 25
-    },
-    {
-      "text": "describe(\"docker_root tool specs\", () =\u003e {\n  it(\"includes root tools plus yield_to_parent\", () =\u003e {\n    const specs = getToolSpecs(\"docker_root\", mockMcpToolManager);\n    const names = specs.map((s) =\u003e s.name);\n\n    expect(names).toContain(\"get_file\");\n    expect(names).toContain(\"bash_command\");\n    expect(names).not.toContain(\"spawn_subagents\");\n    expect(names).toContain(\"edl\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n\n  it(\"excludes lsp tools when those capabilities are missing\", () =\u003e {\n    const dockerCapabilities = new Set\u003c\"lsp\" | \"shell\" | \"threads\" | \"file-io\"\u003e(\n      [\"file-io\", \"shell\", \"threads\"],\n    );\n\n    const specs = getToolSpecs(\n      \"docker_root\",\n      mockMcpToolManager,\n      dockerCapabilities,\n    );\n    const names = specs.map((s) =\u003e s.name);\n\n    expect(names).not.toContain(\"hover\");\n    expect(names).not.toContain(\"find_references\");\n    expect(names).toContain(\"get_file\");\n    expect(names).toContain(\"bash_command\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n});",
-      "contextualizedText": "// node/core/src/tools/docker-toolspecs.test.ts\n\ndescribe(\"docker_root tool specs\", () =\u003e {\n  it(\"includes root tools plus yield_to_parent\", () =\u003e {\n    const specs = getToolSpecs(\"docker_root\", mockMcpToolManager);\n    const names = specs.map((s) =\u003e s.name);\n\n    expect(names).toContain(\"get_file\");\n    expect(names).toContain(\"bash_command\");\n    expect(names).not.toContain(\"spawn_subagents\");\n    expect(names).toContain(\"edl\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n\n  it(\"excludes lsp tools when those capabilities are missing\", () =\u003e {\n    const dockerCapabilities = new Set\u003c\"lsp\" | \"shell\" | \"threads\" | \"file-io\"\u003e(\n      [\"file-io\", \"shell\", \"threads\"],\n    );\n\n    const specs = getToolSpecs(\n      \"docker_root\",\n      mockMcpToolManager,\n      dockerCapabilities,\n    );\n    const names = specs.map((s) =\u003e s.name);\n\n    expect(names).not.toContain(\"hover\");\n    expect(names).not.toContain(\"find_references\");\n    expect(names).toContain(\"get_file\");\n    expect(names).toContain(\"bash_command\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n});",
-      "headingContext": "node/core/src/tools/docker-toolspecs.test.ts",
-      "startLine": 8,
-      "startCol": 1,
-      "endLine": 38,
-      "endCol": 4
+      "start": 0,
+      "end": 1227
     }
   ]
 }

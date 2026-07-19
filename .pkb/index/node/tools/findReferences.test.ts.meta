@@ -1,24 +1,11 @@
 {
   "blobSha": "f0b6b434d25e5ffacbf187f44247d1f9f0daa173",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import {\n  pollUntil,\n  type ToolName,\n  type ToolRequestId,\n  type UnresolvedFilePath,\n} from \"@magenta/core\";\nimport { describe, expect, it } from \"vitest\";\nimport { findToolResult } from \"../chat/thread-view.ts\";\nimport { normalizePaths, withDriver } from \"../test/preamble.ts\";",
-      "contextualizedText": "// node/tools/findReferences.test.ts\n\nimport {\n  pollUntil,\n  type ToolName,\n  type ToolRequestId,\n  type UnresolvedFilePath,\n} from \"@magenta/core\";\nimport { describe, expect, it } from \"vitest\";\nimport { findToolResult } from \"../chat/thread-view.ts\";\nimport { normalizePaths, withDriver } from \"../test/preamble.ts\";",
-      "headingContext": "node/tools/findReferences.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 9,
-      "endCol": 66
-    },
-    {
-      "text": "describe(\"node/tools/findReferences.test.ts\", () =\u003e {\n  it(\"findReferences end-to-end\", async () =\u003e {\n    await withDriver({}, async (driver, dirs) =\u003e {\n      await driver.editFile(\"test.ts\");\n      await driver.showSidebar();\n\n      await driver.inputMagentaText(`Try finding references for a symbol`);\n      await driver.send();\n\n      const toolRequestId = \"id\" as ToolRequestId;\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"ok, here goes\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: toolRequestId,\n              toolName: \"find_references\" as ToolName,\n              input: {\n                filePath: \"test.ts\" as UnresolvedFilePath,\n                symbol: \"val.a.b.c\",\n              },\n            },\n          },\n        ],\n      });\n\n      const result = await pollUntil(\n        () =\u003e {\n          const thread = driver.magenta.chat.getActiveThread();\n          if (!thread || !thread.state || typeof thread.state !== \"object\") {\n            throw new Error(\"Thread state is not valid\");\n          }\n\n          const result = findToolResult(thread, toolRequestId);\n          if (!result) {\n            throw new Error(`no result for ${toolRequestId} found.`);\n          }\n\n          return result;\n        },\n        { timeout: 3000 },\n      );\n\n      expect(normalizePaths(result, dirs.tmpDir)).toMatchObject({\n        type: \"tool_result\",\n        id: toolRequestId,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text: `\u003ctmpDir\u003e/test.ts:4:6\\n\u003ctmpDir\u003e/test.ts:12:6\\n\u003ctmpDir\u003e/test.ts:17:20\\n`,\n            },\n          ],\n        },\n      });\n    });\n  });\n});",
-      "contextualizedText": "// node/tools/findReferences.test.ts\n\ndescribe(\"node/tools/findReferences.test.ts\", () =\u003e {\n  it(\"findReferences end-to-end\", async () =\u003e {\n    await withDriver({}, async (driver, dirs) =\u003e {\n      await driver.editFile(\"test.ts\");\n      await driver.showSidebar();\n\n      await driver.inputMagentaText(`Try finding references for a symbol`);\n      await driver.send();\n\n      const toolRequestId = \"id\" as ToolRequestId;\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.respond({\n        stopReason: \"tool_use\",\n        text: \"ok, here goes\",\n        toolRequests: [\n          {\n            status: \"ok\",\n            value: {\n              id: toolRequestId,\n              toolName: \"find_references\" as ToolName,\n              input: {\n                filePath: \"test.ts\" as UnresolvedFilePath,\n                symbol: \"val.a.b.c\",\n              },\n            },\n          },\n        ],\n      });\n\n      const result = await pollUntil(\n        () =\u003e {\n          const thread = driver.magenta.chat.getActiveThread();\n          if (!thread || !thread.state || typeof thread.state !== \"object\") {\n            throw new Error(\"Thread state is not valid\");\n          }\n\n          const result = findToolResult(thread, toolRequestId);\n          if (!result) {\n            throw new Error(`no result for ${toolRequestId} found.`);\n          }\n\n          return result;\n        },\n        { timeout: 3000 },\n      );\n\n      expect(normalizePaths(result, dirs.tmpDir)).toMatchObject({\n        type: \"tool_result\",\n        id: toolRequestId,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text: `\u003ctmpDir\u003e/test.ts:4:6\\n\u003ctmpDir\u003e/test.ts:12:6\\n\u003ctmpDir\u003e/test.ts:17:20\\n`,\n            },\n          ],\n        },\n      });\n    });\n  });\n});",
-      "headingContext": "node/tools/findReferences.test.ts",
-      "startLine": 11,
-      "startCol": 1,
-      "endLine": 72,
-      "endCol": 4
+      "start": 0,
+      "end": 2077
     }
   ]
 }

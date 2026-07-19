@@ -1,51 +1,15 @@
 {
   "blobSha": "736d98a3030c576c502c3464355b39d0a608ce5a",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { dirname, join } from \"node:path\";\nimport { fileURLToPath } from \"node:url\";\nimport player from \"play-sound\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { MagentaOptions } from \"../options.ts\";\n\nexport type NotifyContext = {\n  nvim: Nvim;\n  options: MagentaOptions;\n};\n\nexport type NotifyReason =\n  | \"thread-attention\"\n  | \"thread-turn-end\"\n  | \"script-finished\";\n\n/** Test-observable record of every notification raised via notifyUser. */\nexport const notificationLog: { reason: NotifyReason }[] = [];",
-      "contextualizedText": "// node/chat/notify.ts\n\nimport { dirname, join } from \"node:path\";\nimport { fileURLToPath } from \"node:url\";\nimport player from \"play-sound\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { MagentaOptions } from \"../options.ts\";\n\nexport type NotifyContext = {\n  nvim: Nvim;\n  options: MagentaOptions;\n};\n\nexport type NotifyReason =\n  | \"thread-attention\"\n  | \"thread-turn-end\"\n  | \"script-finished\";\n\n/** Test-observable record of every notification raised via notifyUser. */\nexport const notificationLog: { reason: NotifyReason }[] = [];",
-      "headingContext": "node/chat/notify.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 18,
-      "endCol": 63
+      "start": 0,
+      "end": 2005
     },
     {
-      "text": "export function resetNotificationLog(): void {\n  notificationLog.length = 0;\n}",
-      "contextualizedText": "// node/chat/notify.ts \u003e function resetNotificationLog\n\nexport function resetNotificationLog(): void {\n  notificationLog.length = 0;\n}",
-      "headingContext": "node/chat/notify.ts \u003e function resetNotificationLog",
-      "startLine": 20,
-      "startCol": 1,
-      "endLine": 22,
-      "endCol": 2
-    },
-    {
-      "text": "/**\n * Notify the user that something needs their attention: play the chime sound\n * (respecting `chimeVolume`) and ring the bell (respecting `bellOnNotify`).\n *\n * The bell is sent to the host terminal (channel 2). We deliberately avoid\n * feeding \u003cEsc\u003e to the editor itself to produce a beep, since that yanks the\n * user out of insert mode while they're composing.\n */\nexport function notifyUser(context: NotifyContext, reason: NotifyReason): void {\n  notificationLog.push({ reason });\n  playChimeSound(context);\n  sendBell(context);\n}",
-      "contextualizedText": "// node/chat/notify.ts \u003e function notifyUser\n\n/**\n * Notify the user that something needs their attention: play the chime sound\n * (respecting `chimeVolume`) and ring the bell (respecting `bellOnNotify`).\n *\n * The bell is sent to the host terminal (channel 2). We deliberately avoid\n * feeding \u003cEsc\u003e to the editor itself to produce a beep, since that yanks the\n * user out of insert mode while they're composing.\n */\nexport function notifyUser(context: NotifyContext, reason: NotifyReason): void {\n  notificationLog.push({ reason });\n  playChimeSound(context);\n  sendBell(context);\n}",
-      "headingContext": "node/chat/notify.ts \u003e function notifyUser",
-      "startLine": 24,
-      "startCol": 1,
-      "endLine": 36,
-      "endCol": 2
-    },
-    {
-      "text": "function sendBell(context: NotifyContext): void {\n  if (context.options.bellOnNotify === false) {\n    return;\n  }\n\n  context.nvim.call(\"nvim_chan_send\", [2, \"\\x07\"]).catch((err) =\u003e {\n    context.nvim.logger.error(\n      `Failed to send terminal bell: ${err instanceof Error ? err.message : String(err)}`,\n    );\n  });\n}",
-      "contextualizedText": "// node/chat/notify.ts \u003e function sendBell\n\nfunction sendBell(context: NotifyContext): void {\n  if (context.options.bellOnNotify === false) {\n    return;\n  }\n\n  context.nvim.call(\"nvim_chan_send\", [2, \"\\x07\"]).catch((err) =\u003e {\n    context.nvim.logger.error(\n      `Failed to send terminal bell: ${err instanceof Error ? err.message : String(err)}`,\n    );\n  });\n}",
-      "headingContext": "node/chat/notify.ts \u003e function sendBell",
-      "startLine": 38,
-      "startCol": 1,
-      "endLine": 48,
-      "endCol": 2
-    },
-    {
-      "text": "function playChimeSound(context: NotifyContext): void {\n  const actualVolume = context.options.chimeVolume;\n\n  if (!actualVolume) {\n    return;\n  }\n\n  try {\n    const play = player();\n    const chimeFile = join(\n      dirname(fileURLToPath(import.meta.url)),\n      \"..\",\n      \"..\",\n      \"chime.wav\",\n    );\n\n    const playOptions = {\n      afplay: [\"-v\", actualVolume.toString()],\n      aplay: [\"-v\", `${Math.round(actualVolume * 100).toString()}%`],\n      mpg123: [\"-f\", Math.round(actualVolume * 32768).toString()],\n    };\n\n    play.play(chimeFile, playOptions, (err: Error | null) =\u003e {\n      if (err) {\n        context.nvim.logger.error(`Failed to play chime sound: ${err.message}`);\n      }\n    });\n  } catch (error) {\n    context.nvim.logger.error(\n      `Error setting up chime sound: ${error instanceof Error ? error.message : String(error)}`,\n    );\n  }\n}",
-      "contextualizedText": "// node/chat/notify.ts \u003e function playChimeSound\n\nfunction playChimeSound(context: NotifyContext): void {\n  const actualVolume = context.options.chimeVolume;\n\n  if (!actualVolume) {\n    return;\n  }\n\n  try {\n    const play = player();\n    const chimeFile = join(\n      dirname(fileURLToPath(import.meta.url)),\n      \"..\",\n      \"..\",\n      \"chime.wav\",\n    );\n\n    const playOptions = {\n      afplay: [\"-v\", actualVolume.toString()],\n      aplay: [\"-v\", `${Math.round(actualVolume * 100).toString()}%`],\n      mpg123: [\"-f\", Math.round(actualVolume * 32768).toString()],\n    };\n\n    play.play(chimeFile, playOptions, (err: Error | null) =\u003e {\n      if (err) {\n        context.nvim.logger.error(`Failed to play chime sound: ${err.message}`);\n      }\n    });\n  } catch (error) {\n    context.nvim.logger.error(\n      `Error setting up chime sound: ${error instanceof Error ? error.message : String(error)}`,\n    );\n  }\n}",
-      "headingContext": "node/chat/notify.ts \u003e function playChimeSound",
-      "startLine": 50,
-      "startCol": 1,
-      "endLine": 82,
-      "endCol": 2
+      "start": 2011,
+      "end": 2344
     }
   ]
 }

@@ -1,33 +1,11 @@
 {
   "blobSha": "58c109ffca1cbdb741b02c84ab677a0aad8c5df6",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export function estimateTokens(charCount: number): number {\n  return Math.ceil(charCount / 4);\n}",
-      "contextualizedText": "// node/utils/tokens.ts \u003e function estimateTokens\n\nexport function estimateTokens(charCount: number): number {\n  return Math.ceil(charCount / 4);\n}",
-      "headingContext": "node/utils/tokens.ts \u003e function estimateTokens",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 3,
-      "endCol": 2
-    },
-    {
-      "text": "export function formatTokenCount(tokens: number): string {\n  return tokens \u003e= 1000\n    ? `~${Math.round(tokens / 1000).toString()}k tok`\n    : `~${tokens.toString()} tok`;\n}",
-      "contextualizedText": "// node/utils/tokens.ts \u003e function formatTokenCount\n\nexport function formatTokenCount(tokens: number): string {\n  return tokens \u003e= 1000\n    ? `~${Math.round(tokens / 1000).toString()}k tok`\n    : `~${tokens.toString()} tok`;\n}",
-      "headingContext": "node/utils/tokens.ts \u003e function formatTokenCount",
-      "startLine": 5,
-      "startCol": 1,
-      "endLine": 9,
-      "endCol": 2
-    },
-    {
-      "text": "export function formatTokens(charCount: number): string {\n  return formatTokenCount(estimateTokens(charCount));\n}",
-      "contextualizedText": "// node/utils/tokens.ts \u003e function formatTokens\n\nexport function formatTokens(charCount: number): string {\n  return formatTokenCount(estimateTokens(charCount));\n}",
-      "headingContext": "node/utils/tokens.ts \u003e function formatTokens",
-      "startLine": 11,
-      "startCol": 1,
-      "endLine": 13,
-      "endCol": 2
+      "start": 0,
+      "end": 386
     }
   ]
 }

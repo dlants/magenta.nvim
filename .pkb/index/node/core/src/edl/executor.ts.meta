@@ -1,348 +1,71 @@
 {
   "blobSha": "99d181e4fe9994372c9e0c65735b582e8814faf1",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { type FileIO, FsFileIO } from \"../capabilities/file-io.ts\";\nimport { Document } from \"./document.ts\";\nimport type { Command, MutationText, Pattern } from \"./parser.ts\";\nimport type {\n  FileError,\n  FileMutationSummary,\n  Range,\n  RangeWithPos,\n  SavedRegisterInfo,\n  ScriptResult,\n  TraceEntry,\n} from \"./types.ts\";",
-      "contextualizedText": "// node/core/src/edl/executor.ts\n\nimport { type FileIO, FsFileIO } from \"../capabilities/file-io.ts\";\nimport { Document } from \"./document.ts\";\nimport type { Command, MutationText, Pattern } from \"./parser.ts\";\nimport type {\n  FileError,\n  FileMutationSummary,\n  Range,\n  RangeWithPos,\n  SavedRegisterInfo,\n  ScriptResult,\n  TraceEntry,\n} from \"./types.ts\";",
-      "headingContext": "node/core/src/edl/executor.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 12,
-      "endCol": 21
+      "start": 0,
+      "end": 1463
     },
     {
-      "text": "export class ExecutionError extends Error {\n  constructor(\n    message: string,\n    public trace: TraceEntry[] = [],\n  ) {\n    super(message);\n  }\n}",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class ExecutionError\n\nexport class ExecutionError extends Error {\n  constructor(\n    message: string,\n    public trace: TraceEntry[] = [],\n  ) {\n    super(message);\n  }\n}",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class ExecutionError",
-      "startLine": 14,
-      "startCol": 1,
-      "endLine": 21,
-      "endCol": 2
+      "start": 1465,
+      "end": 2933
     },
     {
-      "text": "function formatPattern(pattern: Pattern): string {\n  switch (pattern.type) {\n    case \"regex\":\n      return `/${pattern.pattern.source}/${pattern.pattern.flags.replace(\"g\", \"\")}`;\n    case \"literal\": {\n      const text = pattern.text;\n      if (text.length \u003e 60) {\n        return `\u003c\u003cHEREDOC\\n${text.slice(0, 60)}...\\nHEREDOC`;\n      }\n      return `\u003c\u003cHEREDOC\\n${text}\\nHEREDOC`;\n    }\n    case \"line\":\n      return `${pattern.line}:`;\n    case \"lineCol\":\n      return `${pattern.line}:${pattern.col}`;\n    case \"bof\":\n      return \"bof\";\n    case \"eof\":\n      return \"eof\";\n    case \"range\":\n      return `${formatPattern(pattern.from)}-${formatPattern(pattern.to)}`;\n  }\n}",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e function formatPattern\n\nfunction formatPattern(pattern: Pattern): string {\n  switch (pattern.type) {\n    case \"regex\":\n      return `/${pattern.pattern.source}/${pattern.pattern.flags.replace(\"g\", \"\")}`;\n    case \"literal\": {\n      const text = pattern.text;\n      if (text.length \u003e 60) {\n        return `\u003c\u003cHEREDOC\\n${text.slice(0, 60)}...\\nHEREDOC`;\n      }\n      return `\u003c\u003cHEREDOC\\n${text}\\nHEREDOC`;\n    }\n    case \"line\":\n      return `${pattern.line}:`;\n    case \"lineCol\":\n      return `${pattern.line}:${pattern.col}`;\n    case \"bof\":\n      return \"bof\";\n    case \"eof\":\n      return \"eof\";\n    case \"range\":\n      return `${formatPattern(pattern.from)}-${formatPattern(pattern.to)}`;\n  }\n}",
-      "headingContext": "node/core/src/edl/executor.ts \u003e function formatPattern",
-      "startLine": 23,
-      "startCol": 1,
-      "endLine": 45,
-      "endCol": 2
+      "start": 2937,
+      "end": 4599
     },
     {
-      "text": "/** An offset into the original (pre-mutation) file content. */\nexport type InitialDocIndex = number \u0026 { __initialDocIndex: true };\n\n/** Records a single mutation in the current-doc coordinate space at the time it occurred. */\nexport type Transform = {\n  start: number;\n  beforeEnd: number;\n  afterEnd: number;\n};",
-      "contextualizedText": "// node/core/src/edl/executor.ts\n\n/** An offset into the original (pre-mutation) file content. */\nexport type InitialDocIndex = number \u0026 { __initialDocIndex: true };\n\n/** Records a single mutation in the current-doc coordinate space at the time it occurred. */\nexport type Transform = {\n  start: number;\n  beforeEnd: number;\n  afterEnd: number;\n};",
-      "headingContext": "node/core/src/edl/executor.ts",
-      "startLine": 47,
-      "startCol": 1,
-      "endLine": 55,
-      "endCol": 3
+      "start": 4603,
+      "end": 6822
     },
     {
-      "text": "/** Maps an InitialDocIndex through accumulated transforms to a current-doc offset.\n * Throws if the index falls inside a previously replaced region, since the\n * original content there no longer exists and coordinates into it are meaningless. */\nexport function resolveIndex(\n  index: InitialDocIndex,\n  transforms: Transform[],\n): number {\n  let offset: number = index;\n  for (const t of transforms) {\n    if (offset \u003c= t.start) {\n      // Before the mutation, unchanged\n    } else if (offset \u003c t.beforeEnd) {\n      throw new ExecutionError(\n        `Cannot resolve position: original offset ${index} falls inside a previously replaced region [${t.start}, ${t.beforeEnd})`,\n      );\n    } else {\n      // After the mutation, shift by delta\n      offset += t.afterEnd - t.beforeEnd;\n    }\n  }\n  return offset;\n}",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e function resolveIndex\n\n/** Maps an InitialDocIndex through accumulated transforms to a current-doc offset.\n * Throws if the index falls inside a previously replaced region, since the\n * original content there no longer exists and coordinates into it are meaningless. */\nexport function resolveIndex(\n  index: InitialDocIndex,\n  transforms: Transform[],\n): number {\n  let offset: number = index;\n  for (const t of transforms) {\n    if (offset \u003c= t.start) {\n      // Before the mutation, unchanged\n    } else if (offset \u003c t.beforeEnd) {\n      throw new ExecutionError(\n        `Cannot resolve position: original offset ${index} falls inside a previously replaced region [${t.start}, ${t.beforeEnd})`,\n      );\n    } else {\n      // After the mutation, shift by delta\n      offset += t.afterEnd - t.beforeEnd;\n    }\n  }\n  return offset;\n}",
-      "headingContext": "node/core/src/edl/executor.ts \u003e function resolveIndex",
-      "startLine": 57,
-      "startCol": 1,
-      "endLine": 78,
-      "endCol": 2
+      "start": 6833,
+      "end": 8467
     },
     {
-      "text": "export type FileState = {\n  doc: Document;\n  path: string;\n  mutations: FileMutationSummary;\n  originalContent: string;\n  isNew?: boolean;\n  originalLineStarts: readonly number[];\n  originalContentLength: number;\n  transforms: Transform[];\n};",
-      "contextualizedText": "// node/core/src/edl/executor.ts\n\nexport type FileState = {\n  doc: Document;\n  path: string;\n  mutations: FileMutationSummary;\n  originalContent: string;\n  isNew?: boolean;\n  originalLineStarts: readonly number[];\n  originalContentLength: number;\n  transforms: Transform[];\n};",
-      "headingContext": "node/core/src/edl/executor.ts",
-      "startLine": 80,
-      "startCol": 1,
-      "endLine": 89,
-      "endCol": 3
+      "start": 8471,
+      "end": 10234
     },
     {
-      "text": "export class Executor {\n  public trace: TraceEntry[] = [];\n  public warnings: string[] = [];\n  public registers = new Map\u003cstring, string\u003e();\n  public fileDocs = new Map\u003cstring, FileState\u003e();\n  public currentFile: FileState | undefined;\n  public selection: Range[] = [];\n  public savedRegisterCount = 0;\n  private fileIO: FileIO;\n\n  constructor(fileIO?: FileIO) {\n    this.fileIO = fileIO ?? new FsFileIO();\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor\n\nexport class Executor {\n  public trace: TraceEntry[] = [];\n  public warnings: string[] = [];\n  public registers = new Map\u003cstring, string\u003e();\n  public fileDocs = new Map\u003cstring, FileState\u003e();\n  public currentFile: FileState | undefined;\n  public selection: Range[] = [];\n  public savedRegisterCount = 0;\n  private fileIO: FileIO;\n\n  constructor(fileIO?: FileIO) {\n    this.fileIO = fileIO ?? new FsFileIO();\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor",
-      "startLine": 91,
-      "startCol": 1,
-      "endLine": 103,
-      "endCol": 4
+      "start": 10238,
+      "end": 11357
     },
     {
-      "text": "  async getOrLoadFile(path: string): Promise\u003cFileState\u003e {\n    let state = this.fileDocs.get(path);\n    if (!state) {\n      let content: string;\n      try {\n        content = await this.fileIO.readFile(path);\n      } catch (e) {\n        throw new ExecutionError(\n          `Failed to read file: ${path}: ${e instanceof Error ? e.message : String(e)}`,\n          this.trace,\n        );\n      }\n      const doc = new Document(content);\n      state = {\n        doc,\n        path,\n        originalContent: content,\n        mutations: {\n          insertions: 0,\n          deletions: 0,\n          replacements: 0,\n          linesAdded: 0,\n          linesRemoved: 0,\n        },\n        originalLineStarts: doc.lineStarts,\n        originalContentLength: content.length,\n        transforms: [],\n      };\n      this.fileDocs.set(path, state);\n    }\n    return state;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method getOrLoadFile\n\n  async getOrLoadFile(path: string): Promise\u003cFileState\u003e {\n    let state = this.fileDocs.get(path);\n    if (!state) {\n      let content: string;\n      try {\n        content = await this.fileIO.readFile(path);\n      } catch (e) {\n        throw new ExecutionError(\n          `Failed to read file: ${path}: ${e instanceof Error ? e.message : String(e)}`,\n          this.trace,\n        );\n      }\n      const doc = new Document(content);\n      state = {\n        doc,\n        path,\n        originalContent: content,\n        mutations: {\n          insertions: 0,\n          deletions: 0,\n          replacements: 0,\n          linesAdded: 0,\n          linesRemoved: 0,\n        },\n        originalLineStarts: doc.lineStarts,\n        originalContentLength: content.length,\n        transforms: [],\n      };\n      this.fileDocs.set(path, state);\n    }\n    return state;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method getOrLoadFile",
-      "startLine": 105,
-      "startCol": 1,
-      "endLine": 136,
-      "endCol": 4
+      "start": 11361,
+      "end": 13393
     },
     {
-      "text": "  requireFile(): FileState {\n    if (!this.currentFile)\n      throw new ExecutionError(\n        \"No file selected. Use 'file' command first.\",\n        this.trace,\n      );\n    return this.currentFile;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method requireFile\n\n  requireFile(): FileState {\n    if (!this.currentFile)\n      throw new ExecutionError(\n        \"No file selected. Use 'file' command first.\",\n        this.trace,\n      );\n    return this.currentFile;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method requireFile",
-      "startLine": 138,
-      "startCol": 1,
-      "endLine": 145,
-      "endCol": 4
+      "start": 13401,
+      "end": 15276
     },
     {
-      "text": "  requireSingleSelect(): Range {\n    if (this.selection.length !== 1) {\n      throw new ExecutionError(\n        `Expected single selection, got ${this.selection.length}`,\n        this.trace,\n      );\n    }\n    return this.selection[0];\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method requireSingleSelect\n\n  requireSingleSelect(): Range {\n    if (this.selection.length !== 1) {\n      throw new ExecutionError(\n        `Expected single selection, got ${this.selection.length}`,\n        this.trace,\n      );\n    }\n    return this.selection[0];\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method requireSingleSelect",
-      "startLine": 147,
-      "startCol": 1,
-      "endLine": 155,
-      "endCol": 4
+      "start": 15284,
+      "end": 17389
     },
     {
-      "text": "  findAllMatches(\n    pattern: Pattern,\n    doc: Document,\n    withinRanges: Range[],\n  ): Range[] {\n    const results: Range[] = [];\n    for (const scope of withinRanges) {\n      const scopeText = doc.getText(scope);\n      const matches = this.findInText(pattern, scopeText, doc, scope.start);\n      results.push(...matches);\n    }\n    return results;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method findAllMatches\n\n  findAllMatches(\n    pattern: Pattern,\n    doc: Document,\n    withinRanges: Range[],\n  ): Range[] {\n    const results: Range[] = [];\n    for (const scope of withinRanges) {\n      const scopeText = doc.getText(scope);\n      const matches = this.findInText(pattern, scopeText, doc, scope.start);\n      results.push(...matches);\n    }\n    return results;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method findAllMatches",
-      "startLine": 157,
-      "startCol": 1,
-      "endLine": 169,
-      "endCol": 4
+      "start": 17397,
+      "end": 19781
     },
     {
-      "text": "  findInText(\n    pattern: Pattern,\n    text: string,\n    doc: Document,\n    baseOffset: number,\n  ): Range[] {\n    switch (pattern.type) {\n      case \"regex\": {\n        const results: Range[] = [];\n        const flags = pattern.pattern.flags.includes(\"g\")\n          ? pattern.pattern.flags\n          : `${pattern.pattern.flags}g`;\n        const re = new RegExp(pattern.pattern.source, flags);\n        let m: RegExpExecArray | null;\n        while ((m = re.exec(text)) !== null) {\n          results.push({\n            start: baseOffset + m.index,\n            end: baseOffset + m.index + m[0].length,\n          });\n          if (m[0].length === 0) re.lastIndex++;\n        }\n        return results;\n      }\n      case \"literal\": {\n        if (pattern.text.length === 0) {\n          throw new ExecutionError(\n            `Empty literal pattern will match everywhere. Use a non-empty pattern for select/narrow operations.`,\n          );\n        }\n        const results: Range[] = [];\n        let idx = 0;\n        while ((idx = text.indexOf(pattern.text, idx)) !== -1) {\n          const absStart = baseOffset + idx;\n          const absEnd = absStart + pattern.text.length;\n          const atLineStart =\n            absStart === 0 || doc.content[absStart - 1] === \"\\n\";\n          const atLineEnd =\n            absEnd === doc.content.length || doc.content[absEnd] === \"\\n\";\n          if (atLineStart \u0026\u0026 atLineEnd) {\n            const end =\n              absEnd \u003c doc.content.length \u0026\u0026 doc.content[absEnd] === \"\\n\"\n                ? absEnd + 1\n                : absEnd;\n            results.push({ start: absStart, end, isLineSelection: true });\n          }\n          idx += pattern.text.length;\n        }\n        return results;\n      }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method findInText\n\n  findInText(\n    pattern: Pattern,\n    text: string,\n    doc: Document,\n    baseOffset: number,\n  ): Range[] {\n    switch (pattern.type) {\n      case \"regex\": {\n        const results: Range[] = [];\n        const flags = pattern.pattern.flags.includes(\"g\")\n          ? pattern.pattern.flags\n          : `${pattern.pattern.flags}g`;\n        const re = new RegExp(pattern.pattern.source, flags);\n        let m: RegExpExecArray | null;\n        while ((m = re.exec(text)) !== null) {\n          results.push({\n            start: baseOffset + m.index,\n            end: baseOffset + m.index + m[0].length,\n          });\n          if (m[0].length === 0) re.lastIndex++;\n        }\n        return results;\n      }\n      case \"literal\": {\n        if (pattern.text.length === 0) {\n          throw new ExecutionError(\n            `Empty literal pattern will match everywhere. Use a non-empty pattern for select/narrow operations.`,\n          );\n        }\n        const results: Range[] = [];\n        let idx = 0;\n        while ((idx = text.indexOf(pattern.text, idx)) !== -1) {\n          const absStart = baseOffset + idx;\n          const absEnd = absStart + pattern.text.length;\n          const atLineStart =\n            absStart === 0 || doc.content[absStart - 1] === \"\\n\";\n          const atLineEnd =\n            absEnd === doc.content.length || doc.content[absEnd] === \"\\n\";\n          if (atLineStart \u0026\u0026 atLineEnd) {\n            const end =\n              absEnd \u003c doc.content.length \u0026\u0026 doc.content[absEnd] === \"\\n\"\n                ? absEnd + 1\n                : absEnd;\n            results.push({ start: absStart, end, isLineSelection: true });\n          }\n          idx += pattern.text.length;\n        }\n        return results;\n      }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method findInText",
-      "startLine": 171,
-      "startCol": 1,
-      "endLine": 219,
-      "endCol": 8
+      "start": 19789,
+      "end": 22145
     },
     {
-      "text": "case \"line\": {\n        const file = this.currentFile;\n        if (file) {\n          const ols = file.originalLineStarts;\n          const idx = pattern.line - 1;\n          if (idx \u003c 0 || idx \u003e= ols.length) {\n            throw new ExecutionError(\n              `Line ${pattern.line} out of range (1-${ols.length})`,\n              this.trace,\n            );\n          }\n          const start = resolveIndex(\n            ols[idx] as InitialDocIndex,\n            file.transforms,\n          );\n          const origEnd =\n            idx + 1 \u003c ols.length\n              ? ols[idx + 1] - 1\n              : file.originalContentLength;\n          const end = resolveIndex(origEnd as InitialDocIndex, file.transforms);\n          return [{ start, end }];\n        }\n        return [doc.lineRange(pattern.line)];\n      }\n      case \"lineCol\": {\n        const file = this.currentFile;\n        if (file) {\n          const ols = file.originalLineStarts;\n          const idx = pattern.line - 1;\n          if (idx \u003c 0 || idx \u003e= ols.length) {\n            throw new ExecutionError(\n              `Line ${pattern.line} out of range (1-${ols.length})`,\n              this.trace,\n            );\n          }\n          const origOffset = ols[idx] + pattern.col;\n          const offset = resolveIndex(\n            origOffset as InitialDocIndex,\n            file.transforms,\n          );\n          return [{ start: offset, end: offset }];\n        }\n        const offset = doc.posToOffset({\n          line: pattern.line,\n          col: pattern.col,\n        });\n        return [{ start: offset, end: offset }];\n      }\n      case \"bof\":\n        return [{ start: 0, end: 0 }];\n      case \"eof\":\n        return [{ start: doc.content.length, end: doc.content.length }];",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method findInText\n\ncase \"line\": {\n        const file = this.currentFile;\n        if (file) {\n          const ols = file.originalLineStarts;\n          const idx = pattern.line - 1;\n          if (idx \u003c 0 || idx \u003e= ols.length) {\n            throw new ExecutionError(\n              `Line ${pattern.line} out of range (1-${ols.length})`,\n              this.trace,\n            );\n          }\n          const start = resolveIndex(\n            ols[idx] as InitialDocIndex,\n            file.transforms,\n          );\n          const origEnd =\n            idx + 1 \u003c ols.length\n              ? ols[idx + 1] - 1\n              : file.originalContentLength;\n          const end = resolveIndex(origEnd as InitialDocIndex, file.transforms);\n          return [{ start, end }];\n        }\n        return [doc.lineRange(pattern.line)];\n      }\n      case \"lineCol\": {\n        const file = this.currentFile;\n        if (file) {\n          const ols = file.originalLineStarts;\n          const idx = pattern.line - 1;\n          if (idx \u003c 0 || idx \u003e= ols.length) {\n            throw new ExecutionError(\n              `Line ${pattern.line} out of range (1-${ols.length})`,\n              this.trace,\n            );\n          }\n          const origOffset = ols[idx] + pattern.col;\n          const offset = resolveIndex(\n            origOffset as InitialDocIndex,\n            file.transforms,\n          );\n          return [{ start: offset, end: offset }];\n        }\n        const offset = doc.posToOffset({\n          line: pattern.line,\n          col: pattern.col,\n        });\n        return [{ start: offset, end: offset }];\n      }\n      case \"bof\":\n        return [{ start: 0, end: 0 }];\n      case \"eof\":\n        return [{ start: doc.content.length, end: doc.content.length }];",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method findInText",
-      "startLine": 220,
-      "startCol": 7,
-      "endLine": 271,
-      "endCol": 73
+      "start": 22153,
+      "end": 24253
     },
     {
-      "text": "case \"range\": {\n        const fromMatches = this.findInText(\n          pattern.from,\n          text,\n          doc,\n          baseOffset,\n        );\n        const toMatches = this.findInText(pattern.to, text, doc, baseOffset);\n        if (fromMatches.length === 0 || toMatches.length === 0) return [];\n        return [{ start: fromMatches[0].start, end: toMatches[0].end }];\n      }\n    }\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method findInText\n\ncase \"range\": {\n        const fromMatches = this.findInText(\n          pattern.from,\n          text,\n          doc,\n          baseOffset,\n        );\n        const toMatches = this.findInText(pattern.to, text, doc, baseOffset);\n        if (fromMatches.length === 0 || toMatches.length === 0) return [];\n        return [{ start: fromMatches[0].start, end: toMatches[0].end }];\n      }\n    }\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method findInText",
-      "startLine": 272,
-      "startCol": 7,
-      "endLine": 284,
-      "endCol": 4
+      "start": 24261,
+      "end": 26266
     },
     {
-      "text": "  private warnIfLineNumber(pattern: Pattern, commandName: string): void {\n    switch (pattern.type) {\n      case \"line\":\n        this.warnings.push(\n          `⚠️ \"${commandName}\" used line number ${pattern.line}. Text/regex patterns are more reliable — line numbers shift after mutations.`,\n        );\n        break;\n      case \"lineCol\":\n        this.warnings.push(\n          `⚠️ \"${commandName}\" used line:col ${pattern.line}:${pattern.col}. Text/regex patterns are more reliable — line numbers shift after mutations.`,\n        );\n        break;\n      case \"range\":\n        this.warnIfLineNumber(pattern.from, commandName);\n        this.warnIfLineNumber(pattern.to, commandName);\n        break;\n    }\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method warnIfLineNumber\n\n  private warnIfLineNumber(pattern: Pattern, commandName: string): void {\n    switch (pattern.type) {\n      case \"line\":\n        this.warnings.push(\n          `⚠️ \"${commandName}\" used line number ${pattern.line}. Text/regex patterns are more reliable — line numbers shift after mutations.`,\n        );\n        break;\n      case \"lineCol\":\n        this.warnings.push(\n          `⚠️ \"${commandName}\" used line:col ${pattern.line}:${pattern.col}. Text/regex patterns are more reliable — line numbers shift after mutations.`,\n        );\n        break;\n      case \"range\":\n        this.warnIfLineNumber(pattern.from, commandName);\n        this.warnIfLineNumber(pattern.to, commandName);\n        break;\n    }\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method warnIfLineNumber",
-      "startLine": 286,
-      "startCol": 1,
-      "endLine": 303,
-      "endCol": 4
+      "start": 26274,
+      "end": 28625
     },
     {
-      "text": "  addTrace(command: string, ranges: Range[], doc: Document): void {\n    this.trace.push({\n      command,\n      ranges: [...ranges],\n      snippet: Executor.describeSelection(ranges, doc),\n    });\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method addTrace\n\n  addTrace(command: string, ranges: Range[], doc: Document): void {\n    this.trace.push({\n      command,\n      ranges: [...ranges],\n      snippet: Executor.describeSelection(ranges, doc),\n    });\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method addTrace",
-      "startLine": 304,
-      "startCol": 1,
-      "endLine": 310,
-      "endCol": 4
-    },
-    {
-      "text": "  static describeSelection(ranges: Range[], doc: Document): string {\n    if (ranges.length === 0) return \"no selection\";\n    const lineCount = ranges.reduce(\n      (acc, r) =\u003e acc + Executor.countLines(doc.getText(r)),\n      0,\n    );\n    return `${ranges.length} range${ranges.length !== 1 ? \"s\" : \"\"}, ${lineCount} line${lineCount !== 1 ? \"s\" : \"\"}`;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method describeSelection\n\n  static describeSelection(ranges: Range[], doc: Document): string {\n    if (ranges.length === 0) return \"no selection\";\n    const lineCount = ranges.reduce(\n      (acc, r) =\u003e acc + Executor.countLines(doc.getText(r)),\n      0,\n    );\n    return `${ranges.length} range${ranges.length !== 1 ? \"s\" : \"\"}, ${lineCount} line${lineCount !== 1 ? \"s\" : \"\"}`;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method describeSelection",
-      "startLine": 312,
-      "startCol": 1,
-      "endLine": 319,
-      "endCol": 4
-    },
-    {
-      "text": "  static describeLines(count: number, verb: string): string {\n    return `${count} line${count !== 1 ? \"s\" : \"\"} ${verb}`;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method describeLines\n\n  static describeLines(count: number, verb: string): string {\n    return `${count} line${count !== 1 ? \"s\" : \"\"} ${verb}`;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method describeLines",
-      "startLine": 321,
-      "startCol": 1,
-      "endLine": 323,
-      "endCol": 4
-    },
-    {
-      "text": "  addTraceWithSnippet(command: string, ranges: Range[], snippet: string): void {\n    this.trace.push({ command, ranges: [...ranges], snippet });\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method addTraceWithSnippet\n\n  addTraceWithSnippet(command: string, ranges: Range[], snippet: string): void {\n    this.trace.push({ command, ranges: [...ranges], snippet });\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method addTraceWithSnippet",
-      "startLine": 325,
-      "startCol": 1,
-      "endLine": 327,
-      "endCol": 4
-    },
-    {
-      "text": "  static countLines(text: string): number {\n    if (text.length === 0) return 0;\n    let count = 1;\n    for (let i = 0; i \u003c text.length; i++) {\n      if (text[i] === \"\\n\") count++;\n    }\n    return count;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method countLines\n\n  static countLines(text: string): number {\n    if (text.length === 0) return 0;\n    let count = 1;\n    for (let i = 0; i \u003c text.length; i++) {\n      if (text[i] === \"\\n\") count++;\n    }\n    return count;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method countLines",
-      "startLine": 329,
-      "startCol": 1,
-      "endLine": 336,
-      "endCol": 4
-    },
-    {
-      "text": "  static recalcSelectionAfterReplace(\n    originalRanges: Range[],\n    replacementText: string,\n  ): Range[] {\n    const sorted = [...originalRanges].sort((a, b) =\u003e a.start - b.start);\n    const result: Range[] = [];\n    let offsetShift = 0;\n    for (const range of sorted) {\n      const newStart = range.start + offsetShift;\n      const newEnd = newStart + replacementText.length;\n      result.push({ start: newStart, end: newEnd });\n      const oldLen = range.end - range.start;\n      offsetShift += replacementText.length - oldLen;\n    }\n    return result;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method recalcSelectionAfterReplace\n\n  static recalcSelectionAfterReplace(\n    originalRanges: Range[],\n    replacementText: string,\n  ): Range[] {\n    const sorted = [...originalRanges].sort((a, b) =\u003e a.start - b.start);\n    const result: Range[] = [];\n    let offsetShift = 0;\n    for (const range of sorted) {\n      const newStart = range.start + offsetShift;\n      const newEnd = newStart + replacementText.length;\n      result.push({ start: newStart, end: newEnd });\n      const oldLen = range.end - range.start;\n      offsetShift += replacementText.length - oldLen;\n    }\n    return result;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method recalcSelectionAfterReplace",
-      "startLine": 338,
-      "startCol": 1,
-      "endLine": 353,
-      "endCol": 4
-    },
-    {
-      "text": "  private recordTransform(\n    file: FileState,\n    start: number,\n    beforeEnd: number,\n    afterEnd: number,\n  ): void {\n    file.transforms.push({ start, beforeEnd, afterEnd });\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method recordTransform\n\n  private recordTransform(\n    file: FileState,\n    start: number,\n    beforeEnd: number,\n    afterEnd: number,\n  ): void {\n    file.transforms.push({ start, beforeEnd, afterEnd });\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method recordTransform",
-      "startLine": 355,
-      "startCol": 1,
-      "endLine": 362,
-      "endCol": 4
-    },
-    {
-      "text": "  private findNextFileCommand(\n    commands: Command[],\n    startIndex: number,\n    excludePath: string,\n  ): number {\n    for (let i = startIndex; i \u003c commands.length; i++) {\n      const cmd = commands[i];\n      if (\n        (cmd.type === \"file\" || cmd.type === \"newfile\") \u0026\u0026\n        cmd.path !== excludePath\n      ) {\n        return i;\n      }\n    }\n    return -1;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method findNextFileCommand\n\n  private findNextFileCommand(\n    commands: Command[],\n    startIndex: number,\n    excludePath: string,\n  ): number {\n    for (let i = startIndex; i \u003c commands.length; i++) {\n      const cmd = commands[i];\n      if (\n        (cmd.type === \"file\" || cmd.type === \"newfile\") \u0026\u0026\n        cmd.path !== excludePath\n      ) {\n        return i;\n      }\n    }\n    return -1;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method findNextFileCommand",
-      "startLine": 363,
-      "startCol": 1,
-      "endLine": 378,
-      "endCol": 4
-    },
-    {
-      "text": "  private resolveText(cmd: MutationText): string {\n    if (\"text\" in cmd) return cmd.isHeredoc ? `${cmd.text}\\n` : cmd.text;\n    const text = this.registers.get(cmd.register);\n    if (text === undefined)\n      throw new ExecutionError(\n        `Register \"${cmd.register}\" is empty or does not exist`,\n        this.trace,\n      );\n    return text;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method resolveText\n\n  private resolveText(cmd: MutationText): string {\n    if (\"text\" in cmd) return cmd.isHeredoc ? `${cmd.text}\\n` : cmd.text;\n    const text = this.registers.get(cmd.register);\n    if (text === undefined)\n      throw new ExecutionError(\n        `Register \"${cmd.register}\" is empty or does not exist`,\n        this.trace,\n      );\n    return text;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method resolveText",
-      "startLine": 380,
-      "startCol": 1,
-      "endLine": 389,
-      "endCol": 4
-    },
-    {
-      "text": "  private async executeCommand(cmd: Command): Promise\u003cvoid\u003e {\n    switch (cmd.type) {\n      case \"file\": {\n        this.currentFile = await this.getOrLoadFile(cmd.path);\n        this.selection = [this.currentFile.doc.fullRange()];\n        this.trace.push({\n          command: `file ${cmd.path}`,\n          ranges: [...this.selection],\n          snippet: `switched to ${cmd.path} (${this.currentFile.doc.lineCount} lines)`,\n        });\n        break;\n      }\n      case \"newfile\": {\n        if (this.fileDocs.has(cmd.path)) {\n          throw new ExecutionError(\n            `newfile: file already loaded: ${cmd.path}`,\n            this.trace,\n          );\n        }\n        const exists = await this.fileIO.fileExists(cmd.path);\n        if (exists) {\n          throw new ExecutionError(\n            `newfile: file already exists on disk: ${cmd.path}`,\n            this.trace,\n          );\n        }\n        const newDoc = new Document(\"\");\n        const state: FileState = {\n          doc: newDoc,\n          path: cmd.path,\n          originalContent: \"\",\n          mutations: {\n            insertions: 0,\n            deletions: 0,\n            replacements: 0,\n            linesAdded: 0,\n            linesRemoved: 0,\n          },\n          isNew: true,\n          originalLineStarts: newDoc.lineStarts,\n          originalContentLength: 0,\n          transforms: [],\n        };\n        this.fileDocs.set(cmd.path, state);\n        this.currentFile = state;\n        this.selection = [{ start: 0, end: 0 }];\n        this.trace.push({\n          command: `newfile ${cmd.path}`,\n          ranges: [...this.selection],\n          snippet: `created ${cmd.path}`,\n        });\n        break;\n      }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand\n\n  private async executeCommand(cmd: Command): Promise\u003cvoid\u003e {\n    switch (cmd.type) {\n      case \"file\": {\n        this.currentFile = await this.getOrLoadFile(cmd.path);\n        this.selection = [this.currentFile.doc.fullRange()];\n        this.trace.push({\n          command: `file ${cmd.path}`,\n          ranges: [...this.selection],\n          snippet: `switched to ${cmd.path} (${this.currentFile.doc.lineCount} lines)`,\n        });\n        break;\n      }\n      case \"newfile\": {\n        if (this.fileDocs.has(cmd.path)) {\n          throw new ExecutionError(\n            `newfile: file already loaded: ${cmd.path}`,\n            this.trace,\n          );\n        }\n        const exists = await this.fileIO.fileExists(cmd.path);\n        if (exists) {\n          throw new ExecutionError(\n            `newfile: file already exists on disk: ${cmd.path}`,\n            this.trace,\n          );\n        }\n        const newDoc = new Document(\"\");\n        const state: FileState = {\n          doc: newDoc,\n          path: cmd.path,\n          originalContent: \"\",\n          mutations: {\n            insertions: 0,\n            deletions: 0,\n            replacements: 0,\n            linesAdded: 0,\n            linesRemoved: 0,\n          },\n          isNew: true,\n          originalLineStarts: newDoc.lineStarts,\n          originalContentLength: 0,\n          transforms: [],\n        };\n        this.fileDocs.set(cmd.path, state);\n        this.currentFile = state;\n        this.selection = [{ start: 0, end: 0 }];\n        this.trace.push({\n          command: `newfile ${cmd.path}`,\n          ranges: [...this.selection],\n          snippet: `created ${cmd.path}`,\n        });\n        break;\n      }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand",
-      "startLine": 390,
-      "startCol": 1,
-      "endLine": 442,
-      "endCol": 8
-    },
-    {
-      "text": "case \"narrow_multiple\": {\n        const file = this.requireFile();\n        this.warnIfLineNumber(cmd.pattern, \"narrow_multiple\");\n        const matches = this.findAllMatches(\n          cmd.pattern,\n          file.doc,\n          this.selection,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `narrow_multiple: no matches for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = matches;\n        this.addTrace(\"narrow_multiple\", this.selection, file.doc);\n        break;\n      }\n      case \"narrow\": {\n        const file = this.requireFile();\n        this.warnIfLineNumber(cmd.pattern, \"narrow\");\n        const matches = this.findAllMatches(\n          cmd.pattern,\n          file.doc,\n          this.selection,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `narrow: no matches for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        if (matches.length \u003e 1)\n          throw new ExecutionError(\n            `narrow: expected 1 match, got ${matches.length}`,\n            this.trace,\n          );\n        this.selection = [matches[0]];\n        this.addTrace(\"narrow\", this.selection, file.doc);\n        break;\n      }\n      case \"select_multiple\": {\n        const file = this.requireFile();\n        this.warnIfLineNumber(cmd.pattern, \"select_multiple\");\n        const matches = this.findInText(\n          cmd.pattern,\n          file.doc.content,\n          file.doc,\n          0,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `select_multiple: no matches for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = matches;\n        this.addTrace(\"select_multiple\", this.selection, file.doc);\n        break;\n      }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand\n\ncase \"narrow_multiple\": {\n        const file = this.requireFile();\n        this.warnIfLineNumber(cmd.pattern, \"narrow_multiple\");\n        const matches = this.findAllMatches(\n          cmd.pattern,\n          file.doc,\n          this.selection,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `narrow_multiple: no matches for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = matches;\n        this.addTrace(\"narrow_multiple\", this.selection, file.doc);\n        break;\n      }\n      case \"narrow\": {\n        const file = this.requireFile();\n        this.warnIfLineNumber(cmd.pattern, \"narrow\");\n        const matches = this.findAllMatches(\n          cmd.pattern,\n          file.doc,\n          this.selection,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `narrow: no matches for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        if (matches.length \u003e 1)\n          throw new ExecutionError(\n            `narrow: expected 1 match, got ${matches.length}`,\n            this.trace,\n          );\n        this.selection = [matches[0]];\n        this.addTrace(\"narrow\", this.selection, file.doc);\n        break;\n      }\n      case \"select_multiple\": {\n        const file = this.requireFile();\n        this.warnIfLineNumber(cmd.pattern, \"select_multiple\");\n        const matches = this.findInText(\n          cmd.pattern,\n          file.doc.content,\n          file.doc,\n          0,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `select_multiple: no matches for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = matches;\n        this.addTrace(\"select_multiple\", this.selection, file.doc);\n        break;\n      }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand",
-      "startLine": 444,
-      "startCol": 7,
-      "endLine": 500,
-      "endCol": 8
-    },
-    {
-      "text": "case \"select\": {\n        const file = this.requireFile();\n        this.warnIfLineNumber(cmd.pattern, \"select\");\n        const matches = this.findInText(\n          cmd.pattern,\n          file.doc.content,\n          file.doc,\n          0,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `select: no matches for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        if (matches.length \u003e 1)\n          throw new ExecutionError(\n            `select: expected 1 match, got ${matches.length}`,\n            this.trace,\n          );\n        this.selection = [matches[0]];\n        this.addTrace(\"select\", this.selection, file.doc);\n        break;\n      }\n\n      case \"retain_first\": {\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"retain_first: no selections\", this.trace);\n        this.selection = [this.selection[0]];\n        const file = this.requireFile();\n        this.addTrace(\"retain_first\", this.selection, file.doc);\n        break;\n      }\n\n      case \"retain_last\": {\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"retain_last: no selections\", this.trace);\n        this.selection = [this.selection[this.selection.length - 1]];\n        const file = this.requireFile();\n        this.addTrace(\"retain_last\", this.selection, file.doc);\n        break;\n      }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand\n\ncase \"select\": {\n        const file = this.requireFile();\n        this.warnIfLineNumber(cmd.pattern, \"select\");\n        const matches = this.findInText(\n          cmd.pattern,\n          file.doc.content,\n          file.doc,\n          0,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `select: no matches for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        if (matches.length \u003e 1)\n          throw new ExecutionError(\n            `select: expected 1 match, got ${matches.length}`,\n            this.trace,\n          );\n        this.selection = [matches[0]];\n        this.addTrace(\"select\", this.selection, file.doc);\n        break;\n      }\n\n      case \"retain_first\": {\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"retain_first: no selections\", this.trace);\n        this.selection = [this.selection[0]];\n        const file = this.requireFile();\n        this.addTrace(\"retain_first\", this.selection, file.doc);\n        break;\n      }\n\n      case \"retain_last\": {\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"retain_last: no selections\", this.trace);\n        this.selection = [this.selection[this.selection.length - 1]];\n        const file = this.requireFile();\n        this.addTrace(\"retain_last\", this.selection, file.doc);\n        break;\n      }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand",
-      "startLine": 502,
-      "startCol": 7,
-      "endLine": 542,
-      "endCol": 8
-    },
-    {
-      "text": "case \"select_next\": {\n        const file = this.requireFile();\n        const current = this.requireSingleSelect();\n        this.warnIfLineNumber(cmd.pattern, \"select_next\");\n        const searchText = file.doc.content.slice(current.end);\n        const matches = this.findInText(\n          cmd.pattern,\n          searchText,\n          file.doc,\n          current.end,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `select_next: no matches after selection for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = [matches[0]];\n        this.addTrace(\"select_next\", this.selection, file.doc);\n        break;\n      }\n\n      case \"select_prev\": {\n        const file = this.requireFile();\n        const current = this.requireSingleSelect();\n        this.warnIfLineNumber(cmd.pattern, \"select_prev\");\n        const searchText = file.doc.content.slice(0, current.start);\n        const matches = this.findInText(cmd.pattern, searchText, file.doc, 0);\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `select_prev: no matches before selection for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = [matches[matches.length - 1]];\n        this.addTrace(\"select_prev\", this.selection, file.doc);\n        break;\n      }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand\n\ncase \"select_next\": {\n        const file = this.requireFile();\n        const current = this.requireSingleSelect();\n        this.warnIfLineNumber(cmd.pattern, \"select_next\");\n        const searchText = file.doc.content.slice(current.end);\n        const matches = this.findInText(\n          cmd.pattern,\n          searchText,\n          file.doc,\n          current.end,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `select_next: no matches after selection for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = [matches[0]];\n        this.addTrace(\"select_next\", this.selection, file.doc);\n        break;\n      }\n\n      case \"select_prev\": {\n        const file = this.requireFile();\n        const current = this.requireSingleSelect();\n        this.warnIfLineNumber(cmd.pattern, \"select_prev\");\n        const searchText = file.doc.content.slice(0, current.start);\n        const matches = this.findInText(cmd.pattern, searchText, file.doc, 0);\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `select_prev: no matches before selection for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = [matches[matches.length - 1]];\n        this.addTrace(\"select_prev\", this.selection, file.doc);\n        break;\n      }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand",
-      "startLine": 544,
-      "startCol": 7,
-      "endLine": 579,
-      "endCol": 8
-    },
-    {
-      "text": "case \"extend_forward\": {\n        const file = this.requireFile();\n        const current = this.requireSingleSelect();\n        this.warnIfLineNumber(cmd.pattern, \"extend_forward\");\n        const searchText = file.doc.content.slice(current.end);\n        const matches = this.findInText(\n          cmd.pattern,\n          searchText,\n          file.doc,\n          current.end,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `extend_forward: no matches after selection for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = [\n          {\n            start: current.start,\n            end: matches[0].end,\n            isLineSelection: matches[0].isLineSelection === true,\n          },\n        ];\n        this.addTrace(\"extend_forward\", this.selection, file.doc);\n        break;\n      }\n\n      case \"extend_back\": {\n        const file = this.requireFile();\n        const current = this.requireSingleSelect();\n        this.warnIfLineNumber(cmd.pattern, \"extend_back\");\n        const searchText = file.doc.content.slice(0, current.start);\n        const matches = this.findInText(cmd.pattern, searchText, file.doc, 0);\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `extend_back: no matches before selection for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = [\n          {\n            start: matches[matches.length - 1].start,\n            end: current.end,\n            isLineSelection: current.isLineSelection === true,\n          },\n        ];\n        this.addTrace(\"extend_back\", this.selection, file.doc);\n        break;\n      }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand\n\ncase \"extend_forward\": {\n        const file = this.requireFile();\n        const current = this.requireSingleSelect();\n        this.warnIfLineNumber(cmd.pattern, \"extend_forward\");\n        const searchText = file.doc.content.slice(current.end);\n        const matches = this.findInText(\n          cmd.pattern,\n          searchText,\n          file.doc,\n          current.end,\n        );\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `extend_forward: no matches after selection for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = [\n          {\n            start: current.start,\n            end: matches[0].end,\n            isLineSelection: matches[0].isLineSelection === true,\n          },\n        ];\n        this.addTrace(\"extend_forward\", this.selection, file.doc);\n        break;\n      }\n\n      case \"extend_back\": {\n        const file = this.requireFile();\n        const current = this.requireSingleSelect();\n        this.warnIfLineNumber(cmd.pattern, \"extend_back\");\n        const searchText = file.doc.content.slice(0, current.start);\n        const matches = this.findInText(cmd.pattern, searchText, file.doc, 0);\n        if (matches.length === 0)\n          throw new ExecutionError(\n            `extend_back: no matches before selection for pattern ${formatPattern(cmd.pattern)}`,\n            this.trace,\n          );\n        this.selection = [\n          {\n            start: matches[matches.length - 1].start,\n            end: current.end,\n            isLineSelection: current.isLineSelection === true,\n          },\n        ];\n        this.addTrace(\"extend_back\", this.selection, file.doc);\n        break;\n      }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand",
-      "startLine": 581,
-      "startCol": 7,
-      "endLine": 628,
-      "endCol": 8
-    },
-    {
-      "text": "case \"retain_nth\": {\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"retain_nth: no selections\", this.trace);\n        const n = cmd.n \u003c 0 ? this.selection.length + cmd.n : cmd.n;\n        if (n \u003c 0 || n \u003e= this.selection.length)\n          throw new ExecutionError(\n            `retain_nth: index ${cmd.n} out of range (${this.selection.length} selections)`,\n            this.trace,\n          );\n        this.selection = [this.selection[n]];\n        const file = this.requireFile();\n        this.addTrace(`retain_nth ${cmd.n}`, this.selection, file.doc);\n        break;\n      }\n\n      case \"replace\": {\n        const file = this.requireFile();\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"replace: no selection\", this.trace);\n        const text = this.resolveText(cmd);\n        const sorted = [...this.selection].sort((a, b) =\u003e b.start - a.start);\n        for (const range of sorted) {\n          const oldText = file.doc.getText(range);\n          this.recordTransform(\n            file,\n            range.start,\n            range.end,\n            range.start + text.length,\n          );\n          file.doc.splice(range, text);\n          file.mutations.replacements++;\n          file.mutations.linesRemoved += Executor.countLines(oldText);\n          file.mutations.linesAdded += Executor.countLines(text);\n        }\n        this.selection = Executor.recalcSelectionAfterReplace(\n          this.selection,\n          text,\n        );\n        this.addTrace(\"replace\", this.selection, file.doc);\n        break;\n      }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand\n\ncase \"retain_nth\": {\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"retain_nth: no selections\", this.trace);\n        const n = cmd.n \u003c 0 ? this.selection.length + cmd.n : cmd.n;\n        if (n \u003c 0 || n \u003e= this.selection.length)\n          throw new ExecutionError(\n            `retain_nth: index ${cmd.n} out of range (${this.selection.length} selections)`,\n            this.trace,\n          );\n        this.selection = [this.selection[n]];\n        const file = this.requireFile();\n        this.addTrace(`retain_nth ${cmd.n}`, this.selection, file.doc);\n        break;\n      }\n\n      case \"replace\": {\n        const file = this.requireFile();\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"replace: no selection\", this.trace);\n        const text = this.resolveText(cmd);\n        const sorted = [...this.selection].sort((a, b) =\u003e b.start - a.start);\n        for (const range of sorted) {\n          const oldText = file.doc.getText(range);\n          this.recordTransform(\n            file,\n            range.start,\n            range.end,\n            range.start + text.length,\n          );\n          file.doc.splice(range, text);\n          file.mutations.replacements++;\n          file.mutations.linesRemoved += Executor.countLines(oldText);\n          file.mutations.linesAdded += Executor.countLines(text);\n        }\n        this.selection = Executor.recalcSelectionAfterReplace(\n          this.selection,\n          text,\n        );\n        this.addTrace(\"replace\", this.selection, file.doc);\n        break;\n      }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand",
-      "startLine": 630,
-      "startCol": 7,
-      "endLine": 670,
-      "endCol": 8
-    },
-    {
-      "text": "case \"delete\": {\n        const file = this.requireFile();\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"delete: no selection\", this.trace);\n        this.addTrace(\"delete\", this.selection, file.doc);\n        const sorted = [...this.selection].sort((a, b) =\u003e b.start - a.start);\n        for (const range of sorted) {\n          const oldText = file.doc.getText(range);\n          this.recordTransform(file, range.start, range.end, range.start);\n          file.doc.splice(range, \"\");\n          file.mutations.deletions++;\n          file.mutations.linesRemoved += Executor.countLines(oldText);\n        }\n        const firstRange = this.selection[0];\n        this.selection = [{ start: firstRange.start, end: firstRange.start }];\n        break;\n      }\n\n      case \"insert_before\": {\n        const file = this.requireFile();\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"insert_before: no selection\", this.trace);\n        const text = this.resolveText(cmd);\n        const sorted = [...this.selection].sort((a, b) =\u003e b.start - a.start);\n        for (const range of sorted) {\n          this.recordTransform(\n            file,\n            range.start,\n            range.start,\n            range.start + text.length,\n          );\n          file.doc.splice({ start: range.start, end: range.start }, text);\n          file.mutations.insertions++;\n          file.mutations.linesAdded += Executor.countLines(text);\n        }\n        this.addTraceWithSnippet(\n          \"insert_before\",\n          this.selection,\n          Executor.describeLines(Executor.countLines(text), \"inserted\"),\n        );\n        break;\n      }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand\n\ncase \"delete\": {\n        const file = this.requireFile();\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"delete: no selection\", this.trace);\n        this.addTrace(\"delete\", this.selection, file.doc);\n        const sorted = [...this.selection].sort((a, b) =\u003e b.start - a.start);\n        for (const range of sorted) {\n          const oldText = file.doc.getText(range);\n          this.recordTransform(file, range.start, range.end, range.start);\n          file.doc.splice(range, \"\");\n          file.mutations.deletions++;\n          file.mutations.linesRemoved += Executor.countLines(oldText);\n        }\n        const firstRange = this.selection[0];\n        this.selection = [{ start: firstRange.start, end: firstRange.start }];\n        break;\n      }\n\n      case \"insert_before\": {\n        const file = this.requireFile();\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"insert_before: no selection\", this.trace);\n        const text = this.resolveText(cmd);\n        const sorted = [...this.selection].sort((a, b) =\u003e b.start - a.start);\n        for (const range of sorted) {\n          this.recordTransform(\n            file,\n            range.start,\n            range.start,\n            range.start + text.length,\n          );\n          file.doc.splice({ start: range.start, end: range.start }, text);\n          file.mutations.insertions++;\n          file.mutations.linesAdded += Executor.countLines(text);\n        }\n        this.addTraceWithSnippet(\n          \"insert_before\",\n          this.selection,\n          Executor.describeLines(Executor.countLines(text), \"inserted\"),\n        );\n        break;\n      }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand",
-      "startLine": 672,
-      "startCol": 7,
-      "endLine": 713,
-      "endCol": 8
-    },
-    {
-      "text": "case \"insert_after\": {\n        const file = this.requireFile();\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"insert_after: no selection\", this.trace);\n        let text = this.resolveText(cmd);\n        const hasLineSelection = this.selection.some((r) =\u003e r.isLineSelection);\n        if (\n          hasLineSelection \u0026\u0026\n          this.selection.some(\n            (r) =\u003e\n              r.isLineSelection \u0026\u0026\n              (r.start === r.end || file.doc.content[r.end - 1] !== \"\\n\"),\n          )\n        ) {\n          text = `\\n${text}`;\n        }\n        const sorted = [...this.selection].sort((a, b) =\u003e b.start - a.start);\n        for (const range of sorted) {\n          this.recordTransform(\n            file,\n            range.end,\n            range.end,\n            range.end + text.length,\n          );\n          file.doc.splice({ start: range.end, end: range.end }, text);\n          file.mutations.insertions++;\n          file.mutations.linesAdded += Executor.countLines(text);\n        }\n        this.addTraceWithSnippet(\n          \"insert_after\",\n          this.selection,\n          Executor.describeLines(Executor.countLines(text), \"inserted\"),\n        );\n        break;\n      }\n\n      case \"cut\": {\n        const file = this.requireFile();\n        const range = this.requireSingleSelect();\n        const text = file.doc.getText(range);\n        this.registers.set(cmd.register, text);\n        this.recordTransform(file, range.start, range.end, range.start);\n        file.doc.splice(range, \"\");\n        file.mutations.deletions++;\n        file.mutations.linesRemoved += Executor.countLines(text);\n        this.addTrace(`cut ${cmd.register}`, [range], file.doc);\n        this.selection = [{ start: range.start, end: range.start }];\n        break;\n      }\n    }\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand\n\ncase \"insert_after\": {\n        const file = this.requireFile();\n        if (this.selection.length === 0)\n          throw new ExecutionError(\"insert_after: no selection\", this.trace);\n        let text = this.resolveText(cmd);\n        const hasLineSelection = this.selection.some((r) =\u003e r.isLineSelection);\n        if (\n          hasLineSelection \u0026\u0026\n          this.selection.some(\n            (r) =\u003e\n              r.isLineSelection \u0026\u0026\n              (r.start === r.end || file.doc.content[r.end - 1] !== \"\\n\"),\n          )\n        ) {\n          text = `\\n${text}`;\n        }\n        const sorted = [...this.selection].sort((a, b) =\u003e b.start - a.start);\n        for (const range of sorted) {\n          this.recordTransform(\n            file,\n            range.end,\n            range.end,\n            range.end + text.length,\n          );\n          file.doc.splice({ start: range.end, end: range.end }, text);\n          file.mutations.insertions++;\n          file.mutations.linesAdded += Executor.countLines(text);\n        }\n        this.addTraceWithSnippet(\n          \"insert_after\",\n          this.selection,\n          Executor.describeLines(Executor.countLines(text), \"inserted\"),\n        );\n        break;\n      }\n\n      case \"cut\": {\n        const file = this.requireFile();\n        const range = this.requireSingleSelect();\n        const text = file.doc.getText(range);\n        this.registers.set(cmd.register, text);\n        this.recordTransform(file, range.start, range.end, range.start);\n        file.doc.splice(range, \"\");\n        file.mutations.deletions++;\n        file.mutations.linesRemoved += Executor.countLines(text);\n        this.addTrace(`cut ${cmd.register}`, [range], file.doc);\n        this.selection = [{ start: range.start, end: range.start }];\n        break;\n      }\n    }\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method executeCommand",
-      "startLine": 715,
-      "startCol": 7,
-      "endLine": 765,
-      "endCol": 4
-    },
-    {
-      "text": "  private static getCommandText(cmd: Command): string | undefined {\n    if (\n      cmd.type === \"replace\" ||\n      cmd.type === \"insert_before\" ||\n      cmd.type === \"insert_after\"\n    ) {\n      return \"text\" in cmd ? cmd.text : undefined;\n    }\n    return undefined;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method getCommandText\n\n  private static getCommandText(cmd: Command): string | undefined {\n    if (\n      cmd.type === \"replace\" ||\n      cmd.type === \"insert_before\" ||\n      cmd.type === \"insert_after\"\n    ) {\n      return \"text\" in cmd ? cmd.text : undefined;\n    }\n    return undefined;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method getCommandText",
-      "startLine": 767,
-      "startCol": 1,
-      "endLine": 776,
-      "endCol": 4
-    },
-    {
-      "text": "private static readonly MUTATION_COMMANDS = new Set([\n    \"replace\",\n    \"delete\",\n    \"insert_before\",\n    \"insert_after\",\n    \"cut\",\n  ])",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor\n\nprivate static readonly MUTATION_COMMANDS = new Set([\n    \"replace\",\n    \"delete\",\n    \"insert_before\",\n    \"insert_after\",\n    \"cut\",\n  ])",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor",
-      "startLine": 778,
-      "startCol": 3,
-      "endLine": 784,
-      "endCol": 5
-    },
-    {
-      "text": "  private countMutationCommands(\n    commands: Command[],\n    startIdx: number,\n    endIdx: number,\n  ): number {\n    let count = 0;\n    for (let j = startIdx; j \u003c endIdx; j++) {\n      if (Executor.MUTATION_COMMANDS.has(commands[j].type)) {\n        count++;\n      }\n    }\n    return count;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method countMutationCommands\n\n  private countMutationCommands(\n    commands: Command[],\n    startIdx: number,\n    endIdx: number,\n  ): number {\n    let count = 0;\n    for (let j = startIdx; j \u003c endIdx; j++) {\n      if (Executor.MUTATION_COMMANDS.has(commands[j].type)) {\n        count++;\n      }\n    }\n    return count;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method countMutationCommands",
-      "startLine": 786,
-      "startCol": 1,
-      "endLine": 798,
-      "endCol": 4
-    },
-    {
-      "text": "  private saveCommandTexts(\n    commands: Command[],\n    startIdx: number,\n    endIdx: number,\n  ): SavedRegisterInfo[] {\n    const saved: SavedRegisterInfo[] = [];\n    for (let j = startIdx; j \u003c endIdx; j++) {\n      const text = Executor.getCommandText(commands[j]);\n      if (text !== undefined) {\n        const name = `_saved_${++this.savedRegisterCount}`;\n        this.registers.set(name, text);\n        saved.push({ name, sizeChars: text.length });\n      }\n    }\n    return saved;\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method saveCommandTexts\n\n  private saveCommandTexts(\n    commands: Command[],\n    startIdx: number,\n    endIdx: number,\n  ): SavedRegisterInfo[] {\n    const saved: SavedRegisterInfo[] = [];\n    for (let j = startIdx; j \u003c endIdx; j++) {\n      const text = Executor.getCommandText(commands[j]);\n      if (text !== undefined) {\n        const name = `_saved_${++this.savedRegisterCount}`;\n        this.registers.set(name, text);\n        saved.push({ name, sizeChars: text.length });\n      }\n    }\n    return saved;\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method saveCommandTexts",
-      "startLine": 800,
-      "startCol": 1,
-      "endLine": 815,
-      "endCol": 4
-    },
-    {
-      "text": "  async execute(commands: Command[]): Promise\u003cScriptResult\u003e {\n    const fileErrors: FileError[] = [];\n    const failedFiles = new Set\u003cstring\u003e();\n    let i = 0;\n\n    while (i \u003c commands.length) {\n      const cmd = commands[i];\n\n      try {\n        await this.executeCommand(cmd);\n        i++;\n      } catch (e) {\n        if (e instanceof ExecutionError) {\n          const errorPath =\n            cmd.type === \"file\" || cmd.type === \"newfile\"\n              ? cmd.path\n              : this.currentFile?.path;\n\n          if (errorPath) {\n            failedFiles.add(errorPath);\n\n            const nextIdx = this.findNextFileCommand(\n              commands,\n              i + 1,\n              errorPath,\n            );\n            const skipEnd = nextIdx === -1 ? commands.length : nextIdx;\n\n            const savedRegisters = this.saveCommandTexts(commands, i, skipEnd);\n            const failedMutations = this.countMutationCommands(\n              commands,\n              i,\n              skipEnd,\n            );\n\n            fileErrors.push({\n              path: errorPath,\n              error: e.message,\n              failedMutations,\n              trace: [...e.trace],\n              savedRegisters,\n            });\n\n            if (nextIdx === -1) {\n              break;\n            }\n            i = nextIdx;\n            this.currentFile = undefined;\n            this.selection = [];\n          } else {\n            throw e;\n          }\n        } else {\n          throw e;\n        }\n      }\n    }\n\n    const mutations = new Map\u003cstring, FileMutationSummary\u003e();\n    const fileContents = new Map\u003c\n      string,\n      { content: string; previousContent: string }\n    \u003e();\n    const newFiles = new Set\u003cstring\u003e();",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method execute\n\n  async execute(commands: Command[]): Promise\u003cScriptResult\u003e {\n    const fileErrors: FileError[] = [];\n    const failedFiles = new Set\u003cstring\u003e();\n    let i = 0;\n\n    while (i \u003c commands.length) {\n      const cmd = commands[i];\n\n      try {\n        await this.executeCommand(cmd);\n        i++;\n      } catch (e) {\n        if (e instanceof ExecutionError) {\n          const errorPath =\n            cmd.type === \"file\" || cmd.type === \"newfile\"\n              ? cmd.path\n              : this.currentFile?.path;\n\n          if (errorPath) {\n            failedFiles.add(errorPath);\n\n            const nextIdx = this.findNextFileCommand(\n              commands,\n              i + 1,\n              errorPath,\n            );\n            const skipEnd = nextIdx === -1 ? commands.length : nextIdx;\n\n            const savedRegisters = this.saveCommandTexts(commands, i, skipEnd);\n            const failedMutations = this.countMutationCommands(\n              commands,\n              i,\n              skipEnd,\n            );\n\n            fileErrors.push({\n              path: errorPath,\n              error: e.message,\n              failedMutations,\n              trace: [...e.trace],\n              savedRegisters,\n            });\n\n            if (nextIdx === -1) {\n              break;\n            }\n            i = nextIdx;\n            this.currentFile = undefined;\n            this.selection = [];\n          } else {\n            throw e;\n          }\n        } else {\n          throw e;\n        }\n      }\n    }\n\n    const mutations = new Map\u003cstring, FileMutationSummary\u003e();\n    const fileContents = new Map\u003c\n      string,\n      { content: string; previousContent: string }\n    \u003e();\n    const newFiles = new Set\u003cstring\u003e();",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method execute",
-      "startLine": 816,
-      "startCol": 1,
-      "endLine": 879,
-      "endCol": 40
-    },
-    {
-      "text": "for (const [path, state] of this.fileDocs) {\n      if (failedFiles.has(path)) continue;\n\n      const m = state.mutations;\n      if (m.insertions \u003e 0 || m.deletions \u003e 0 || m.replacements \u003e 0) {\n        mutations.set(path, m);\n        fileContents.set(path, {\n          content: state.doc.content,\n          previousContent: state.originalContent,\n        });\n      }\n      if (state.isNew) {\n        newFiles.add(path);\n        fileContents.set(path, {\n          content: state.doc.content,\n          previousContent: state.originalContent,\n        });\n      }\n    }\n\n    for (const path of new Set([...mutations.keys(), ...newFiles])) {\n      const state = this.fileDocs.get(path)!;\n      const dir = path.substring(0, path.lastIndexOf(\"/\"));\n      if (dir) {\n        await this.fileIO.mkdir(dir);\n      }\n      await this.fileIO.writeFile(path, state.doc.content);\n    }\n\n    let finalSelection: { ranges: RangeWithPos[] } | undefined;\n    if (this.selection.length \u003e 0 \u0026\u0026 this.currentFile) {\n      const doc = this.currentFile.doc;\n      finalSelection = {\n        ranges: this.selection.map((r) =\u003e ({\n          range: r,\n          startPos: doc.offsetToPos(r.start),\n          endPos: doc.offsetToPos(r.end),\n          content: doc.getText(r),\n        })),\n      };\n    }\n\n    return {\n      warnings: this.warnings,\n      trace: this.trace,\n      finalSelection,\n      mutations,\n      fileContents,\n      fileErrors,\n    };\n  }",
-      "contextualizedText": "// node/core/src/edl/executor.ts \u003e class Executor \u003e method execute\n\nfor (const [path, state] of this.fileDocs) {\n      if (failedFiles.has(path)) continue;\n\n      const m = state.mutations;\n      if (m.insertions \u003e 0 || m.deletions \u003e 0 || m.replacements \u003e 0) {\n        mutations.set(path, m);\n        fileContents.set(path, {\n          content: state.doc.content,\n          previousContent: state.originalContent,\n        });\n      }\n      if (state.isNew) {\n        newFiles.add(path);\n        fileContents.set(path, {\n          content: state.doc.content,\n          previousContent: state.originalContent,\n        });\n      }\n    }\n\n    for (const path of new Set([...mutations.keys(), ...newFiles])) {\n      const state = this.fileDocs.get(path)!;\n      const dir = path.substring(0, path.lastIndexOf(\"/\"));\n      if (dir) {\n        await this.fileIO.mkdir(dir);\n      }\n      await this.fileIO.writeFile(path, state.doc.content);\n    }\n\n    let finalSelection: { ranges: RangeWithPos[] } | undefined;\n    if (this.selection.length \u003e 0 \u0026\u0026 this.currentFile) {\n      const doc = this.currentFile.doc;\n      finalSelection = {\n        ranges: this.selection.map((r) =\u003e ({\n          range: r,\n          startPos: doc.offsetToPos(r.start),\n          endPos: doc.offsetToPos(r.end),\n          content: doc.getText(r),\n        })),\n      };\n    }\n\n    return {\n      warnings: this.warnings,\n      trace: this.trace,\n      finalSelection,\n      mutations,\n      fileContents,\n      fileErrors,\n    };\n  }",
-      "headingContext": "node/core/src/edl/executor.ts \u003e class Executor \u003e method execute",
-      "startLine": 880,
-      "startCol": 5,
-      "endLine": 930,
-      "endCol": 4
+      "start": 28631,
+      "end": 29188
     }
   ]
 }

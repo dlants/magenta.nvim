@@ -1,15 +1,11 @@
 {
   "blobSha": "f3597368f05821d17c241cb3c390416b8fc68c63",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "/** Normalize message payloads for stable snapshots: strips thread IDs, timing\n * info, and the volatile contents of the system-info block (live timestamp and\n * git state). */\nexport function sanitizeMessagesForSnapshot\u003cT\u003e(messages: T): T {\n  let json = JSON.stringify(messages);\n  json = json.replace(\n    /\\/tmp\\/magenta\\/threads\\/[a-f0-9-]+\\//g,\n    \"/tmp/magenta/threads/\u003cthread-id\u003e/\",\n  );\n  json = json.replace(/\\((\\d+)ms\\)/g, \"(\u003ctiming\u003ems)\");\n  json = json.replace(\n    /\u003csystem-info\u003e[\\s\\S]*?\u003c\\/system-info\u003e/g,\n    \"\u003csystem-info\u003e\u003cnormalized\u003e\u003c/system-info\u003e\",\n  );\n  return JSON.parse(json) as T;\n}",
-      "contextualizedText": "// node/test/sanitize-snapshot.ts \u003e function sanitizeMessagesForSnapshot\n\n/** Normalize message payloads for stable snapshots: strips thread IDs, timing\n * info, and the volatile contents of the system-info block (live timestamp and\n * git state). */\nexport function sanitizeMessagesForSnapshot\u003cT\u003e(messages: T): T {\n  let json = JSON.stringify(messages);\n  json = json.replace(\n    /\\/tmp\\/magenta\\/threads\\/[a-f0-9-]+\\//g,\n    \"/tmp/magenta/threads/\u003cthread-id\u003e/\",\n  );\n  json = json.replace(/\\((\\d+)ms\\)/g, \"(\u003ctiming\u003ems)\");\n  json = json.replace(\n    /\u003csystem-info\u003e[\\s\\S]*?\u003c\\/system-info\u003e/g,\n    \"\u003csystem-info\u003e\u003cnormalized\u003e\u003c/system-info\u003e\",\n  );\n  return JSON.parse(json) as T;\n}",
-      "headingContext": "node/test/sanitize-snapshot.ts \u003e function sanitizeMessagesForSnapshot",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 2
+      "start": 0,
+      "end": 604
     }
   ]
 }

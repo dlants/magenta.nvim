@@ -1,897 +1,147 @@
 {
   "blobSha": "b0c7b5fef8f38e123731876768412cf698041d02",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as fs from \"node:fs/promises\";\nimport * as os from \"node:os\";\nimport * as path from \"node:path\";\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport { afterEach, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport type { OutputLine, Shell, ShellResult } from \"./capabilities/shell.ts\";\nimport type { ThreadId, ThreadType } from \"./chat-types.ts\";\nimport { InMemoryFileIO } from \"./edl/in-memory-file-io.ts\";\nimport type { Logger } from \"./logger.ts\";\nimport type { ProviderProfile } from \"./provider-options.ts\";\nimport {\n  AnthropicAgent,\n  type AnthropicAgentOptions,\n} from \"./providers/anthropic-agent.ts\";\nimport { MockAnthropicClient } from \"./providers/mock-anthropic-client.ts\";\nimport type {\n  Agent,\n  AgentOptions,\n  Provider,\n} from \"./providers/provider-types.ts\";\nimport type { SystemPrompt } from \"./providers/system-prompt.ts\";\nimport { ThreadCore, type ThreadCoreContext } from \"./thread-core.ts\";\nimport {\n  AutoCompactSupervisor,\n  SubagentSupervisor,\n  type ThreadSupervisor,\n} from \"./thread-supervisor.ts\";\nimport type { ToolName, ToolRequestId } from \"./tool-types.ts\";\nimport { validateInput } from \"./tools/helpers.ts\";\nimport type { MCPToolManager } from \"./tools/mcp/manager.ts\";\nimport { pollUntil } from \"./utils/async.ts\";\nimport { threadConversationLogPath } from \"./utils/files.ts\";\n\nconst TEST_ARCHIVE_DIR = path.join(os.tmpdir(), \"magenta-test-archive\");\n\nconst noopLogger: Logger",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nimport * as fs from \"node:fs/promises\";\nimport * as os from \"node:os\";\nimport * as path from \"node:path\";\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport { afterEach, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport type { OutputLine, Shell, ShellResult } from \"./capabilities/shell.ts\";\nimport type { ThreadId, ThreadType } from \"./chat-types.ts\";\nimport { InMemoryFileIO } from \"./edl/in-memory-file-io.ts\";\nimport type { Logger } from \"./logger.ts\";\nimport type { ProviderProfile } from \"./provider-options.ts\";\nimport {\n  AnthropicAgent,\n  type AnthropicAgentOptions,\n} from \"./providers/anthropic-agent.ts\";\nimport { MockAnthropicClient } from \"./providers/mock-anthropic-client.ts\";\nimport type {\n  Agent,\n  AgentOptions,\n  Provider,\n} from \"./providers/provider-types.ts\";\nimport type { SystemPrompt } from \"./providers/system-prompt.ts\";\nimport { ThreadCore, type ThreadCoreContext } from \"./thread-core.ts\";\nimport {\n  AutoCompactSupervisor,\n  SubagentSupervisor,\n  type ThreadSupervisor,\n} from \"./thread-supervisor.ts\";\nimport type { ToolName, ToolRequestId } from \"./tool-types.ts\";\nimport { validateInput } from \"./tools/helpers.ts\";\nimport type { MCPToolManager } from \"./tools/mcp/manager.ts\";\nimport { pollUntil } from \"./utils/async.ts\";\nimport { threadConversationLogPath } from \"./utils/files.ts\";\n\nconst TEST_ARCHIVE_DIR = path.join(os.tmpdir(), \"magenta-test-archive\");\n\nconst noopLogger: Logger",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 36,
-      "endCol": 25
-    },
-    {
-      "text": "  debug: () =\u003e {}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function debug\n\n  debug: () =\u003e {}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function debug",
-      "startLine": 37,
-      "startCol": 1,
-      "endLine": 37,
-      "endCol": 18
-    },
-    {
-      "text": "  info: () =\u003e {}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function info\n\n  info: () =\u003e {}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function info",
-      "startLine": 38,
-      "startCol": 1,
-      "endLine": 38,
-      "endCol": 17
-    },
-    {
-      "text": "  warn: () =\u003e {}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function warn\n\n  warn: () =\u003e {}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function warn",
-      "startLine": 39,
-      "startCol": 1,
-      "endLine": 39,
-      "endCol": 17
-    },
-    {
-      "text": "  error: () =\u003e {}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function error\n\n  error: () =\u003e {}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function error",
-      "startLine": 40,
-      "startCol": 1,
-      "endLine": 40,
-      "endCol": 18
-    },
-    {
-      "text": "  trace: () =\u003e {}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function trace\n\n  trace: () =\u003e {}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function trace",
-      "startLine": 41,
-      "startCol": 1,
-      "endLine": 41,
-      "endCol": 18
-    },
-    {
-      "text": "Logger;\n\nconst defaultAnthropicOptions: AnthropicAgentOptions = {\n  authType: \"max\",\n  includeWebSearch: false,\n  disableParallelToolUseFlag: true,\n  logger: noopLogger,\n  validateInput,\n};",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nLogger;\n\nconst defaultAnthropicOptions: AnthropicAgentOptions = {\n  authType: \"max\",\n  includeWebSearch: false,\n  disableParallelToolUseFlag: true,\n  logger: noopLogger,\n  validateInput,\n};",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 42,
-      "startCol": 6,
-      "endLine": 50,
-      "endCol": 3
-    },
-    {
-      "text": "function createMockProvider(mockClient: MockAnthropicClient): Provider",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createMockProvider\n\nfunction createMockProvider(mockClient: MockAnthropicClient): Provider",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createMockProvider",
-      "startLine": 52,
-      "startCol": 1,
-      "endLine": 52,
-      "endCol": 71
-    },
-    {
-      "text": "    createAgent(options: AgentOptions): Agent {\n      return new AnthropicAgent(\n        options,\n        mockClient as unknown as Anthropic,\n        defaultAnthropicOptions,\n      );\n    }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createMockProvider \u003e method createAgent\n\n    createAgent(options: AgentOptions): Agent {\n      return new AnthropicAgent(\n        options,\n        mockClient as unknown as Anthropic,\n        defaultAnthropicOptions,\n      );\n    }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createMockProvider \u003e method createAgent",
-      "startLine": 54,
-      "startCol": 1,
-      "endLine": 60,
-      "endCol": 6
-    },
-    {
-      "text": "    forceToolUse() {\n      throw new Error(\"Not implemented in mock\");\n    }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createMockProvider \u003e method forceToolUse\n\n    forceToolUse() {\n      throw new Error(\"Not implemented in mock\");\n    }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createMockProvider \u003e method forceToolUse",
-      "startLine": 61,
-      "startCol": 1,
-      "endLine": 63,
-      "endCol": 6
-    },
-    {
-      "text": "function createThreadCoreWithMock(\n  overrides?: Partial\u003cThreadCoreContext\u003e,\n  threadId: ThreadId = \"test-thread\" as ThreadId,\n): {\n  core: ThreadCore;\n  mockClient: MockAnthropicClient;\n  context: ThreadCoreContext;\n} {\n  const mockClient = new MockAnthropicClient();\n  const provider = createMockProvider(mockClient);\n  const context: ThreadCoreContext = {\n    logger: noopLogger,\n    profile: {\n      provider: \"mock\",\n      model: \"claude-3-5-sonnet-20241022\",\n    } as ProviderProfile,\n    cwd: \"/tmp\" as ThreadCoreContext[\"cwd\"],\n    homeDir: \"/home\" as ThreadCoreContext[\"homeDir\"],\n    threadType: \"root\" as ThreadType,\n    systemPrompt: \"test system prompt\" as unknown as SystemPrompt,\n    systemInfo: {\n      timestamp: \"Mon Jan 01 2024 00:00:00 GMT+0000\",\n      platform: \"linux\",\n      neovimVersion: \"0.10.0\",\n      cwd: \"/tmp\" as ThreadCoreContext[\"cwd\"],\n    },\n    mcpToolManager: {\n      serverMap: {}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock\n\nfunction createThreadCoreWithMock(\n  overrides?: Partial\u003cThreadCoreContext\u003e,\n  threadId: ThreadId = \"test-thread\" as ThreadId,\n): {\n  core: ThreadCore;\n  mockClient: MockAnthropicClient;\n  context: ThreadCoreContext;\n} {\n  const mockClient = new MockAnthropicClient();\n  const provider = createMockProvider(mockClient);\n  const context: ThreadCoreContext = {\n    logger: noopLogger,\n    profile: {\n      provider: \"mock\",\n      model: \"claude-3-5-sonnet-20241022\",\n    } as ProviderProfile,\n    cwd: \"/tmp\" as ThreadCoreContext[\"cwd\"],\n    homeDir: \"/home\" as ThreadCoreContext[\"homeDir\"],\n    threadType: \"root\" as ThreadType,\n    systemPrompt: \"test system prompt\" as unknown as SystemPrompt,\n    systemInfo: {\n      timestamp: \"Mon Jan 01 2024 00:00:00 GMT+0000\",\n      platform: \"linux\",\n      neovimVersion: \"0.10.0\",\n      cwd: \"/tmp\" as ThreadCoreContext[\"cwd\"],\n    },\n    mcpToolManager: {\n      serverMap: {}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock",
-      "startLine": 67,
-      "startCol": 1,
-      "endLine": 94,
-      "endCol": 20
-    },
-    {
-      "text": "      getToolSpecs: () =\u003e []",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getToolSpecs\n\n      getToolSpecs: () =\u003e []",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getToolSpecs",
-      "startLine": 95,
-      "startCol": 1,
-      "endLine": 95,
-      "endCol": 29
-    },
-    {
-      "text": "unknown as MCPToolManager,\n    threadManager",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock\n\nunknown as MCPToolManager,\n    threadManager",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock",
-      "startLine": 96,
-      "startCol": 10,
-      "endLine": 97,
-      "endCol": 18
-    },
-    {
-      "text": "      getThread: () =\u003e undefined",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getThread\n\n      getThread: () =\u003e undefined",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getThread",
-      "startLine": 98,
-      "startCol": 1,
-      "endLine": 98,
-      "endCol": 33
-    },
-    {
-      "text": "      getThreads: () =\u003e []",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getThreads\n\n      getThreads: () =\u003e []",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getThreads",
-      "startLine": 99,
-      "startCol": 1,
-      "endLine": 99,
-      "endCol": 27
-    },
-    {
-      "text": "unknown as ThreadCoreContext[\"threadManager\"],\n    fileIO",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock\n\nunknown as ThreadCoreContext[\"threadManager\"],\n    fileIO",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock",
-      "startLine": 100,
-      "startCol": 10,
-      "endLine": 101,
-      "endCol": 11
-    },
-    {
-      "text": "      readFile: async () =\u003e \"\"",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function readFile\n\n      readFile: async () =\u003e \"\"",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function readFile",
-      "startLine": 102,
-      "startCol": 1,
-      "endLine": 102,
-      "endCol": 31
-    },
-    {
-      "text": "      writeFile: async () =\u003e {}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function writeFile\n\n      writeFile: async () =\u003e {}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function writeFile",
-      "startLine": 103,
-      "startCol": 1,
-      "endLine": 103,
-      "endCol": 32
-    },
-    {
-      "text": "      fileExists: async () =\u003e false",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function fileExists\n\n      fileExists: async () =\u003e false",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function fileExists",
-      "startLine": 104,
-      "startCol": 1,
-      "endLine": 104,
-      "endCol": 36
-    },
-    {
-      "text": "unknown as ThreadCoreContext[\"fileIO\"],\n    shell",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock\n\nunknown as ThreadCoreContext[\"fileIO\"],\n    shell",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock",
-      "startLine": 105,
-      "startCol": 10,
-      "endLine": 106,
-      "endCol": 10
-    },
-    {
-      "text": "      exec: async () =\u003e ({ exitCode: 0, stdout: \"\", stderr: \"\" })",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function exec\n\n      exec: async () =\u003e ({ exitCode: 0, stdout: \"\", stderr: \"\" })",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function exec",
-      "startLine": 107,
-      "startCol": 1,
-      "endLine": 107,
-      "endCol": 66
-    },
-    {
-      "text": "unknown as ThreadCoreContext[\"shell\"],\n    gitClient",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock\n\nunknown as ThreadCoreContext[\"shell\"],\n    gitClient",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock",
-      "startLine": 108,
-      "startCol": 10,
-      "endLine": 109,
-      "endCol": 14
-    },
-    {
-      "text": "      getState: async () =\u003e undefined",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getState\n\n      getState: async () =\u003e undefined",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getState",
-      "startLine": 110,
-      "startCol": 1,
-      "endLine": 110,
-      "endCol": 38
-    },
-    {
-      "text": "unknown as ThreadCoreContext[\"gitClient\"],\n    lspClient: {} as unknown as ThreadCoreContext[\"lspClient\"],\n    helpTagsProvider",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock\n\nunknown as ThreadCoreContext[\"gitClient\"],\n    lspClient: {} as unknown as ThreadCoreContext[\"lspClient\"],\n    helpTagsProvider",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock",
-      "startLine": 111,
-      "startCol": 10,
-      "endLine": 113,
-      "endCol": 21
-    },
-    {
-      "text": "      listTagFiles: async () =\u003e []",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function listTagFiles\n\n      listTagFiles: async () =\u003e []",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function listTagFiles",
-      "startLine": 114,
-      "startCol": 1,
-      "endLine": 114,
-      "endCol": 35
-    },
-    {
-      "text": "unknown as ThreadCoreContext[\"helpTagsProvider\"],\n    availableCapabilities: new Set(),\n    environmentConfig: { type: \"local\" },\n    maxConcurrentSubagents: 1,\n    maxConcurrentFastSubagents: 8",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock\n\nunknown as ThreadCoreContext[\"helpTagsProvider\"],\n    availableCapabilities: new Set(),\n    environmentConfig: { type: \"local\" },\n    maxConcurrentSubagents: 1,\n    maxConcurrentFastSubagents: 8",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock",
-      "startLine": 115,
-      "startCol": 10,
-      "endLine": 119,
-      "endCol": 34
-    },
-    {
-      "text": "    getAgents: () =\u003e ({})",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getAgents\n\n    getAgents: () =\u003e ({})",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getAgents",
-      "startLine": 120,
-      "startCol": 1,
-      "endLine": 120,
-      "endCol": 26
-    },
-    {
-      "text": "    getProvider: () =\u003e provider",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getProvider\n\n    getProvider: () =\u003e provider",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock \u003e function getProvider",
-      "startLine": 121,
-      "startCol": 1,
-      "endLine": 121,
-      "endCol": 32
-    },
-    {
-      "text": "conversationLogBaseDir: TEST_ARCHIVE_DIR,\n    ...overrides,\n  };\n\n  return {\n    core: new ThreadCore(threadId, context),\n    mockClient,\n    context,\n  };\n}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock\n\nconversationLogBaseDir: TEST_ARCHIVE_DIR,\n    ...overrides,\n  };\n\n  return {\n    core: new ThreadCore(threadId, context),\n    mockClient,\n    context,\n  };\n}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createThreadCoreWithMock",
-      "startLine": 122,
-      "startCol": 5,
-      "endLine": 131,
-      "endCol": 2
-    },
-    {
-      "text": "describe(\"ThreadCore.handleProviderStopped\", () =\u003e {\n  it(\"max_tokens with completed tool_use block routes through handleProviderStoppedWithToolUse\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    const toolUseId = \"tool-yield-1\" as ToolRequestId;\n\n    // Stream a yield_to_parent tool_use, then stop with max_tokens\n    stream.streamToolUse(toolUseId, \"yield_to_parent\" as ToolName, {\n      result: \"Here is the result of my work\",\n    });\n    stream.finishResponse(\"max_tokens\");\n\n    // ThreadCore should route to handleProviderStoppedWithToolUse,\n    // which executes the yield tool, and maybeAutoRespond transitions to yielded mode\n    await pollUntil(() =\u003e {\n      if (core.state.mode.type === \"yielded\") return true;\n      throw new Error(\n        `waiting for yielded mode, currently: ${core.state.mode.type}`,\n      );\n    });\n\n    expect(core.state.mode.type).toBe(\"yielded\");\n    if (core.state.mode.type === \"yielded\") {\n      expect(core.state.mode.response).toBe(\"Here is the result of my work\");\n    }\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\ndescribe(\"ThreadCore.handleProviderStopped\", () =\u003e {\n  it(\"max_tokens with completed tool_use block routes through handleProviderStoppedWithToolUse\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    const toolUseId = \"tool-yield-1\" as ToolRequestId;\n\n    // Stream a yield_to_parent tool_use, then stop with max_tokens\n    stream.streamToolUse(toolUseId, \"yield_to_parent\" as ToolName, {\n      result: \"Here is the result of my work\",\n    });\n    stream.finishResponse(\"max_tokens\");\n\n    // ThreadCore should route to handleProviderStoppedWithToolUse,\n    // which executes the yield tool, and maybeAutoRespond transitions to yielded mode\n    await pollUntil(() =\u003e {\n      if (core.state.mode.type === \"yielded\") return true;\n      throw new Error(\n        `waiting for yielded mode, currently: ${core.state.mode.type}`,\n      );\n    });\n\n    expect(core.state.mode.type).toBe(\"yielded\");\n    if (core.state.mode.type === \"yielded\") {\n      expect(core.state.mode.response).toBe(\"Here is the result of my work\");\n    }\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 133,
-      "startCol": 1,
-      "endLine": 163,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"custom yieldSchema yields a structured JSON value\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n      yieldSchema: {\n        type: \"object\",\n        properties: { count: { type: \"number\" } },\n        required: [\"count\"],\n      },\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    const toolUseId = \"tool-yield-structured\" as ToolRequestId;\n    stream.streamToolUse(toolUseId, \"yield_to_parent\" as ToolName, {\n      count: 3,\n    });\n    stream.finishResponse(\"max_tokens\");\n\n    await pollUntil(() =\u003e {\n      if (core.state.mode.type === \"yielded\") return true;\n      throw new Error(\n        `waiting for yielded mode, currently: ${core.state.mode.type}`,\n      );\n    });\n\n    expect(core.state.mode.type).toBe(\"yielded\");\n    if (core.state.mode.type === \"yielded\") {\n      expect(JSON.parse(core.state.mode.response)).toEqual({ count: 3 });\n    }\n  });\n  it(\"max_tokens with truncated (incomplete) tool_use block sends error tool_result and auto-continues\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n\n    const toolUseId = \"tool-1\" as ToolRequestId;\n\n    // Stream a tool_use block with incomplete JSON input.\n    // The real API always sends content_block_stop even at max_tokens.\n    // partialParse will produce {} for the truncated JSON, which fails validation.\n    const blockIndex = stream.nextBlockIndex();\n    stream.emitEvent({\n      type: \"content_block_start\",\n      index: blockIndex,\n      content_block: {\n        type: \"tool_use\",\n        id: toolUseId,\n        name: \"get_file\" as ToolName,\n        input: {},\n        caller: { type: \"direct\" as const },\n      },\n    });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"custom yieldSchema yields a structured JSON value\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n      yieldSchema: {\n        type: \"object\",\n        properties: { count: { type: \"number\" } },\n        required: [\"count\"],\n      },\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    const toolUseId = \"tool-yield-structured\" as ToolRequestId;\n    stream.streamToolUse(toolUseId, \"yield_to_parent\" as ToolName, {\n      count: 3,\n    });\n    stream.finishResponse(\"max_tokens\");\n\n    await pollUntil(() =\u003e {\n      if (core.state.mode.type === \"yielded\") return true;\n      throw new Error(\n        `waiting for yielded mode, currently: ${core.state.mode.type}`,\n      );\n    });\n\n    expect(core.state.mode.type).toBe(\"yielded\");\n    if (core.state.mode.type === \"yielded\") {\n      expect(JSON.parse(core.state.mode.response)).toEqual({ count: 3 });\n    }\n  });\n  it(\"max_tokens with truncated (incomplete) tool_use block sends error tool_result and auto-continues\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n\n    const toolUseId = \"tool-1\" as ToolRequestId;\n\n    // Stream a tool_use block with incomplete JSON input.\n    // The real API always sends content_block_stop even at max_tokens.\n    // partialParse will produce {} for the truncated JSON, which fails validation.\n    const blockIndex = stream.nextBlockIndex();\n    stream.emitEvent({\n      type: \"content_block_start\",\n      index: blockIndex,\n      content_block: {\n        type: \"tool_use\",\n        id: toolUseId,\n        name: \"get_file\" as ToolName,\n        input: {},\n        caller: { type: \"direct\" as const },\n      },\n    });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 165,
-      "startCol": 3,
-      "endLine": 218,
-      "endCol": 8
-    },
-    {
-      "text": "stream.emitEvent({\n      type: \"content_block_delta\",\n      index: blockIndex,\n      delta: { type: \"input_json_delta\", partial_json: '{\"filePath\":' },\n    });\n    stream.emitEvent({ type: \"content_block_stop\", index: blockIndex });\n    stream.finishResponse(\"max_tokens\");\n\n    // The truncated tool_use should be visible and get an error tool_result,\n    // then the agent should auto-continue\n    // Wait for at least one more stream to appear\n    await pollUntil(() =\u003e {\n      if (mockClient.streams.length \u003e 1) return true;\n      throw new Error(\"waiting for next stream\");\n    });\n\n    // The second stream should contain the tool_result in its messages.\n    // It may not be in the very last user message (system reminders follow),\n    // so search backwards for a user message containing tool_result.\n    const secondStream = mockClient.streams[1];\n    let toolResult: Anthropic.Messages.ToolResultBlockParam | undefined;\n    for (let i = secondStream.messages.length - 1; i \u003e= 0; i--) {\n      const msg = secondStream.messages[i];\n      if (msg.role !== \"user\" || typeof msg.content === \"string\") continue;\n      toolResult = (\n        msg.content as Anthropic.Messages.ToolResultBlockParam[]\n      ).find(\n        (b): b is Anthropic.Messages.ToolResultBlockParam =\u003e\n          b.type === \"tool_result\" \u0026\u0026 b.tool_use_id === toolUseId,\n      );\n      if (toolResult) break;\n    }\n    expect(\n      toolResult,\n      `Expected tool_result in stream messages: ${JSON.stringify(\n        secondStream.messages.map((m) =\u003e ({\n          role: m.role,\n          content: m.content,\n        })),\n        null,\n        2,\n      )}`,\n    ).toBeDefined();\n    expect(toolResult!.is_error).toBe(true);",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nstream.emitEvent({\n      type: \"content_block_delta\",\n      index: blockIndex,\n      delta: { type: \"input_json_delta\", partial_json: '{\"filePath\":' },\n    });\n    stream.emitEvent({ type: \"content_block_stop\", index: blockIndex });\n    stream.finishResponse(\"max_tokens\");\n\n    // The truncated tool_use should be visible and get an error tool_result,\n    // then the agent should auto-continue\n    // Wait for at least one more stream to appear\n    await pollUntil(() =\u003e {\n      if (mockClient.streams.length \u003e 1) return true;\n      throw new Error(\"waiting for next stream\");\n    });\n\n    // The second stream should contain the tool_result in its messages.\n    // It may not be in the very last user message (system reminders follow),\n    // so search backwards for a user message containing tool_result.\n    const secondStream = mockClient.streams[1];\n    let toolResult: Anthropic.Messages.ToolResultBlockParam | undefined;\n    for (let i = secondStream.messages.length - 1; i \u003e= 0; i--) {\n      const msg = secondStream.messages[i];\n      if (msg.role !== \"user\" || typeof msg.content === \"string\") continue;\n      toolResult = (\n        msg.content as Anthropic.Messages.ToolResultBlockParam[]\n      ).find(\n        (b): b is Anthropic.Messages.ToolResultBlockParam =\u003e\n          b.type === \"tool_result\" \u0026\u0026 b.tool_use_id === toolUseId,\n      );\n      if (toolResult) break;\n    }\n    expect(\n      toolResult,\n      `Expected tool_result in stream messages: ${JSON.stringify(\n        secondStream.messages.map((m) =\u003e ({\n          role: m.role,\n          content: m.content,\n        })),\n        null,\n        2,\n      )}`,\n    ).toBeDefined();\n    expect(toolResult!.is_error).toBe(true);",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 219,
-      "startCol": 5,
-      "endLine": 262,
-      "endCol": 45
-    },
-    {
-      "text": "it(\"max_tokens with text-only content sends continuation prompt\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // Stream only text, then stop with max_tokens\n    stream.streamText(\"Here is a long response that got\");\n    stream.finishResponse(\"max_tokens\");\n\n    // ThreadCore should send a continuation system message and auto-continue\n    const nextStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream) return s;\n      throw new Error(\"waiting for next stream\");\n    });\n\n    // The next stream should contain the continuation prompt\n    const lastUserMsg = nextStream.messages[nextStream.messages.length - 1];\n    expect(lastUserMsg.role).toBe(\"user\");\n    const textBlocks = (\n      lastUserMsg.content as Anthropic.Messages.ContentBlockParam[]\n    ).filter((b): b is Anthropic.Messages.TextBlockParam =\u003e b.type === \"text\");\n    expect(textBlocks.some((b) =\u003e b.text.includes(\"truncated\"))).toBe(true);\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"max_tokens with text-only content sends continuation prompt\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // Stream only text, then stop with max_tokens\n    stream.streamText(\"Here is a long response that got\");\n    stream.finishResponse(\"max_tokens\");\n\n    // ThreadCore should send a continuation system message and auto-continue\n    const nextStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream) return s;\n      throw new Error(\"waiting for next stream\");\n    });\n\n    // The next stream should contain the continuation prompt\n    const lastUserMsg = nextStream.messages[nextStream.messages.length - 1];\n    expect(lastUserMsg.role).toBe(\"user\");\n    const textBlocks = (\n      lastUserMsg.content as Anthropic.Messages.ContentBlockParam[]\n    ).filter((b): b is Anthropic.Messages.TextBlockParam =\u003e b.type === \"text\");\n    expect(textBlocks.some((b) =\u003e b.text.includes(\"truncated\"))).toBe(true);\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 265,
-      "startCol": 3,
-      "endLine": 289,
-      "endCol": 6
-    },
-    {
-      "text": "describe(\"ThreadCore.abort on yielded thread\", () =\u003e {\n  it(\"abort is a no-op when thread has already yielded\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    const toolUseId = \"tool-yield-1\" as ToolRequestId;\n\n    // Drive the thread to yielded state\n    stream.streamToolUse(toolUseId, \"yield_to_parent\" as ToolName, {\n      result: \"Here is the result of my work\",\n    });\n    stream.finishResponse(\"tool_use\");\n\n    await pollUntil(() =\u003e {\n      if (core.state.mode.type === \"yielded\") return true;\n      throw new Error(\n        `waiting for yielded mode, currently: ${core.state.mode.type}`,\n      );\n    });\n\n    expect(core.state.mode.type).toBe(\"yielded\");\n\n    // Now abort — should be a no-op\n    await core.abort();\n\n    // Mode should still be yielded with the original response\n    expect(core.state.mode.type).toBe(\"yielded\");\n    if (core.state.mode.type === \"yielded\") {\n      expect(core.state.mode.response).toBe(\"Here is the result of my work\");\n    }\n  });\n});\n\ndescribe(\"ThreadCore.abort appends user abort message\", ()",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\ndescribe(\"ThreadCore.abort on yielded thread\", () =\u003e {\n  it(\"abort is a no-op when thread has already yielded\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    const toolUseId = \"tool-yield-1\" as ToolRequestId;\n\n    // Drive the thread to yielded state\n    stream.streamToolUse(toolUseId, \"yield_to_parent\" as ToolName, {\n      result: \"Here is the result of my work\",\n    });\n    stream.finishResponse(\"tool_use\");\n\n    await pollUntil(() =\u003e {\n      if (core.state.mode.type === \"yielded\") return true;\n      throw new Error(\n        `waiting for yielded mode, currently: ${core.state.mode.type}`,\n      );\n    });\n\n    expect(core.state.mode.type).toBe(\"yielded\");\n\n    // Now abort — should be a no-op\n    await core.abort();\n\n    // Mode should still be yielded with the original response\n    expect(core.state.mode.type).toBe(\"yielded\");\n    if (core.state.mode.type === \"yielded\") {\n      expect(core.state.mode.response).toBe(\"Here is the result of my work\");\n    }\n  });\n});\n\ndescribe(\"ThreadCore.abort appends user abort message\", ()",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 292,
-      "startCol": 1,
-      "endLine": 329,
-      "endCol": 59
-    },
-    {
-      "text": "it(\"appends abort message when aborting during streaming\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // Start streaming text but don't finish\n    stream.streamText(\"Here is a partial response\");\n\n    // Abort while streaming\n    await core.abort();\n\n    // The last message should be a user message with the abort text\n    const messages = core.getProviderMessages();\n    const lastMessage = messages[messages.length - 1];\n    expect(lastMessage.role).toBe(\"user\");\n    expect(lastMessage.content).toEqual(\n      expect.arrayContaining([\n        expect.objectContaining({\n          type: \"text\",\n          text: \"[The user aborted the previous request.]\",\n        }),\n      ]),\n    );\n  });\n\n  it(\"appends abort message after tool_result errors when aborting during tool_use\", async () =\u003e {\n    // Use a fileIO where stat blocks so the tool stays pending\n    let resolveStat!: () =\u003e void;\n    const statPromise = new Promise\u003c{ mtimeMs: number; size: number }\u003e(\n      (resolve) =\u003e {\n        resolveStat = () =\u003e resolve({ mtimeMs: 0, size: 100 });\n      },\n    );\n    const { core, mockClient } = createThreadCoreWithMock({\n      fileIO",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"appends abort message when aborting during streaming\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // Start streaming text but don't finish\n    stream.streamText(\"Here is a partial response\");\n\n    // Abort while streaming\n    await core.abort();\n\n    // The last message should be a user message with the abort text\n    const messages = core.getProviderMessages();\n    const lastMessage = messages[messages.length - 1];\n    expect(lastMessage.role).toBe(\"user\");\n    expect(lastMessage.content).toEqual(\n      expect.arrayContaining([\n        expect.objectContaining({\n          type: \"text\",\n          text: \"[The user aborted the previous request.]\",\n        }),\n      ]),\n    );\n  });\n\n  it(\"appends abort message after tool_result errors when aborting during tool_use\", async () =\u003e {\n    // Use a fileIO where stat blocks so the tool stays pending\n    let resolveStat!: () =\u003e void;\n    const statPromise = new Promise\u003c{ mtimeMs: number; size: number }\u003e(\n      (resolve) =\u003e {\n        resolveStat = () =\u003e resolve({ mtimeMs: 0, size: 100 });\n      },\n    );\n    const { core, mockClient } = createThreadCoreWithMock({\n      fileIO",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 330,
-      "startCol": 3,
-      "endLine": 365,
-      "endCol": 13
-    },
-    {
-      "text": "        readFile: async () =\u003e \"file contents\"",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function readFile\n\n        readFile: async () =\u003e \"file contents\"",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function readFile",
-      "startLine": 366,
-      "startCol": 1,
-      "endLine": 366,
-      "endCol": 46
-    },
-    {
-      "text": "        writeFile: async () =\u003e {}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function writeFile\n\n        writeFile: async () =\u003e {}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function writeFile",
-      "startLine": 367,
-      "startCol": 1,
-      "endLine": 367,
-      "endCol": 34
-    },
-    {
-      "text": "        fileExists: async () =\u003e true",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function fileExists\n\n        fileExists: async () =\u003e true",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function fileExists",
-      "startLine": 368,
-      "startCol": 1,
-      "endLine": 368,
-      "endCol": 37
-    },
-    {
-      "text": "        stat: async () =\u003e statPromise",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function stat\n\n        stat: async () =\u003e statPromise",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function stat",
-      "startLine": 369,
-      "startCol": 1,
-      "endLine": 369,
-      "endCol": 38
-    },
-    {
-      "text": "unknown as ThreadCoreContext[\"fileIO\"],\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n\n    const toolUseId = \"tool-abort-1\" as ToolRequestId;\n\n    // Stream a tool_use block and finish with tool_use stop reason\n    stream.streamToolUse(toolUseId, \"get_file\" as ToolName, {\n      filePath: \"/tmp/test.txt\",\n    });\n    stream.finishResponse(\"tool_use\");\n\n    // Wait for tool_use mode\n    await pollUntil(() =\u003e {\n      if (core.state.mode.type === \"tool_use\") return true;\n      throw new Error(\n        `waiting for tool_use mode, currently: ${core.state.mode.type}`,\n      );\n    });\n\n    // Abort while in tool_use mode (tool is still pending)\n    const abortPromise = core.abort();\n    resolveStat();\n    await abortPromise;\n\n    // The last message should be the abort user message\n    const messages = core.getProviderMessages();\n    const lastMessage = messages[messages.length - 1];\n    expect(lastMessage.role).toBe(\"user\");\n    expect(lastMessage.content).toEqual(\n      expect.arrayContaining([\n        expect.objectContaining({\n          type: \"text\",\n          text: \"[The user aborted the previous request.]\",\n        }),\n      ]),\n    );\n\n    // There should also be a tool_result error message before the abort message\n    const secondToLast = messages[messages.length - 2];\n    expect(secondToLast.role).toBe(\"user\");\n    expect(secondToLast.content).toEqual(\n      expect.arrayContaining([\n        expect.objectContaining({\n          type: \"tool_result\",\n          id: toolUseId,\n        }),\n      ]),\n    );\n  });\n});\n\ndescribe(\"ThreadCore.abort recovers pending messages\", ()",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nunknown as ThreadCoreContext[\"fileIO\"],\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n\n    const toolUseId = \"tool-abort-1\" as ToolRequestId;\n\n    // Stream a tool_use block and finish with tool_use stop reason\n    stream.streamToolUse(toolUseId, \"get_file\" as ToolName, {\n      filePath: \"/tmp/test.txt\",\n    });\n    stream.finishResponse(\"tool_use\");\n\n    // Wait for tool_use mode\n    await pollUntil(() =\u003e {\n      if (core.state.mode.type === \"tool_use\") return true;\n      throw new Error(\n        `waiting for tool_use mode, currently: ${core.state.mode.type}`,\n      );\n    });\n\n    // Abort while in tool_use mode (tool is still pending)\n    const abortPromise = core.abort();\n    resolveStat();\n    await abortPromise;\n\n    // The last message should be the abort user message\n    const messages = core.getProviderMessages();\n    const lastMessage = messages[messages.length - 1];\n    expect(lastMessage.role).toBe(\"user\");\n    expect(lastMessage.content).toEqual(\n      expect.arrayContaining([\n        expect.objectContaining({\n          type: \"text\",\n          text: \"[The user aborted the previous request.]\",\n        }),\n      ]),\n    );\n\n    // There should also be a tool_result error message before the abort message\n    const secondToLast = messages[messages.length - 2];\n    expect(secondToLast.role).toBe(\"user\");\n    expect(secondToLast.content).toEqual(\n      expect.arrayContaining([\n        expect.objectContaining({\n          type: \"tool_result\",\n          id: toolUseId,\n        }),\n      ]),\n    );\n  });\n});\n\ndescribe(\"ThreadCore.abort recovers pending messages\", ()",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 370,
-      "startCol": 12,
-      "endLine": 424,
-      "endCol": 58
-    },
-    {
-      "text": "it(\"drains pending messages and emits recoverPendingMessages on abort\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const recovered: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"recoverPendingMessages\", (threadId, text) =\u003e {\n      recovered.push({ threadId, text });\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"partial response\");\n\n    core.update({\n      type: \"push-pending-messages\",\n      messages: [\n        { type: \"user\", text: \"queued one\" },\n        { type: \"user\", text: \"queued two\" },\n      ],\n    });\n\n    await core.abort();\n\n    expect(core.state.pendingMessages).toEqual([]);\n    expect(recovered).toHaveLength(1);\n    expect(recovered[0].threadId).toBe(\"test-thread\");\n    expect(recovered[0].text).toBe(\"queued one\\nqueued two\");\n  });\n\n  it(\"does not emit recoverPendingMessages when there are no pending messages\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const recovered: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"recoverPendingMessages\", (threadId, text) =\u003e {\n      recovered.push({ threadId, text });\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"partial response\");\n\n    await core.abort();\n\n    expect(recovered).toHaveLength(0);\n    expect(core.state.pendingMessages).toEqual([]);\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"drains pending messages and emits recoverPendingMessages on abort\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const recovered: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"recoverPendingMessages\", (threadId, text) =\u003e {\n      recovered.push({ threadId, text });\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"partial response\");\n\n    core.update({\n      type: \"push-pending-messages\",\n      messages: [\n        { type: \"user\", text: \"queued one\" },\n        { type: \"user\", text: \"queued two\" },\n      ],\n    });\n\n    await core.abort();\n\n    expect(core.state.pendingMessages).toEqual([]);\n    expect(recovered).toHaveLength(1);\n    expect(recovered[0].threadId).toBe(\"test-thread\");\n    expect(recovered[0].text).toBe(\"queued one\\nqueued two\");\n  });\n\n  it(\"does not emit recoverPendingMessages when there are no pending messages\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const recovered: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"recoverPendingMessages\", (threadId, text) =\u003e {\n      recovered.push({ threadId, text });\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"partial response\");\n\n    await core.abort();\n\n    expect(recovered).toHaveLength(0);\n    expect(core.state.pendingMessages).toEqual([]);\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 425,
-      "startCol": 3,
-      "endLine": 467,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"excludes system pending messages from recovered text\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const recovered: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"recoverPendingMessages\", (threadId, text) =\u003e {\n      recovered.push({ threadId, text });\n    });\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"partial response\");\n    core.update({\n      type: \"push-pending-messages\",\n      messages: [\n        { type: \"user\", text: \"queued user\" },\n        { type: \"system\", text: \"queued system\" },\n      ],\n    });\n    await core.abort();\n    expect(core.state.pendingMessages).toEqual([]);\n    expect(recovered).toHaveLength(1);\n    expect(recovered[0].text).toBe(\"queued user\");\n  });\n  it(\"does not emit recoverPendingMessages for subagent threads\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    const recovered: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"recoverPendingMessages\", (threadId, text) =\u003e {\n      recovered.push({ threadId, text });\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"partial response\");\n\n    core.update({\n      type: \"push-pending-messages\",\n      messages: [{ type: \"user\", text: \"queued\" }],\n    });\n\n    await core.abort();\n\n    expect(recovered).toHaveLength(0);\n    expect(core.state.pendingMessages).toEqual([]);\n  });\n});\n\ndescribe(\"SubagentSupervisor yield tag detection\", ()",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"excludes system pending messages from recovered text\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const recovered: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"recoverPendingMessages\", (threadId, text) =\u003e {\n      recovered.push({ threadId, text });\n    });\n    core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"partial response\");\n    core.update({\n      type: \"push-pending-messages\",\n      messages: [\n        { type: \"user\", text: \"queued user\" },\n        { type: \"system\", text: \"queued system\" },\n      ],\n    });\n    await core.abort();\n    expect(core.state.pendingMessages).toEqual([]);\n    expect(recovered).toHaveLength(1);\n    expect(recovered[0].text).toBe(\"queued user\");\n  });\n  it(\"does not emit recoverPendingMessages for subagent threads\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    const recovered: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"recoverPendingMessages\", (threadId, text) =\u003e {\n      recovered.push({ threadId, text });\n    });\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"partial response\");\n\n    core.update({\n      type: \"push-pending-messages\",\n      messages: [{ type: \"user\", text: \"queued\" }],\n    });\n\n    await core.abort();\n\n    expect(recovered).toHaveLength(0);\n    expect(core.state.pendingMessages).toEqual([]);\n  });\n});\n\ndescribe(\"SubagentSupervisor yield tag detection\", ()",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 469,
-      "startCol": 3,
-      "endLine": 515,
-      "endCol": 54
-    },
-    {
-      "text": "it(\"nudges agent when it writes a \u003cyield_to_parent\u003e XML tag instead of calling the tool\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    core.supervisors = [new SubagentSupervisor()];\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // Agent writes a \u003cyield\u003e tag in text instead of calling the tool\n    stream.streamText(\n      \"\u003cyield_to_parent\u003eHere is the result of my work\u003c/yield_to_parent\u003e\",\n    );\n    stream.finishResponse(\"end_turn\");\n\n    // The supervisor should detect the tag and send a correction message,\n    // which triggers a new stream\n    const nextStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream) return s;\n      throw new Error(\"waiting for next stream\");\n    });\n\n    // Verify the correction message mentions the yield_to_parent tool\n    const lastUserMsg = nextStream.messages[nextStream.messages.length - 1];\n    expect(lastUserMsg.role).toBe(\"user\");\n    const textBlocks = (\n      lastUserMsg.content as Anthropic.Messages.ContentBlockParam[]\n    ).filter((b): b is Anthropic.Messages.TextBlockParam =\u003e b.type === \"text\");\n    expect(\n      textBlocks.some((b) =\u003e b.text.includes(\"yield_to_parent tool\")),\n    ).toBe(true);\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"nudges agent when it writes a \u003cyield_to_parent\u003e XML tag instead of calling the tool\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    core.supervisors = [new SubagentSupervisor()];\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // Agent writes a \u003cyield\u003e tag in text instead of calling the tool\n    stream.streamText(\n      \"\u003cyield_to_parent\u003eHere is the result of my work\u003c/yield_to_parent\u003e\",\n    );\n    stream.finishResponse(\"end_turn\");\n\n    // The supervisor should detect the tag and send a correction message,\n    // which triggers a new stream\n    const nextStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream) return s;\n      throw new Error(\"waiting for next stream\");\n    });\n\n    // Verify the correction message mentions the yield_to_parent tool\n    const lastUserMsg = nextStream.messages[nextStream.messages.length - 1];\n    expect(lastUserMsg.role).toBe(\"user\");\n    const textBlocks = (\n      lastUserMsg.content as Anthropic.Messages.ContentBlockParam[]\n    ).filter((b): b is Anthropic.Messages.TextBlockParam =\u003e b.type === \"text\");\n    expect(\n      textBlocks.some((b) =\u003e b.text.includes(\"yield_to_parent tool\")),\n    ).toBe(true);\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 516,
-      "startCol": 3,
-      "endLine": 548,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"does not intervene when agent stops without a yield tag\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    core.supervisors = [new SubagentSupervisor()];\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // Agent responds with normal text and stops\n    stream.streamText(\"I have completed the task.\");\n    stream.finishResponse(\"end_turn\");\n\n    // Wait a tick to ensure no new stream is created\n    await new Promise((r) =\u003e setTimeout(r, 50));\n    expect(mockClient.streams.length).toBe(1);\n  });\n});\n\ndescribe(\"AutoCompactSupervisor integration\", () =\u003e {\n  it(\"triggers compaction on end_turn handoff when input tokens breach the threshold\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    core.supervisors = [\n      new AutoCompactSupervisor({ threshold: 100, nextPrompt: \"go\" }),\n    ];\n    mockClient.mockInputTokenCount = 200;\n\n    let compactCalls = 0;\n    core.startCompaction = () =\u003e {\n      compactCalls++;\n    };\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\");\n\n    // inputTokenCount is populated post-flight, so it lags one turn. Drive a\n    // second turn; the handoff at its end sees the over-threshold count.\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().inputTokenCount === 200) return true;\n      throw new Error(\"waiting for token count\");\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"again\" }]);\n    const stream2 = await mockClient.awaitStream();\n    stream2.streamText(\"done again\");\n    stream2.finishResponse(\"end_turn\");\n\n    await pollUntil(() =\u003e {\n      if (compactCalls \u003e 0) return true;\n      throw new Error(\"waiting for compaction\");\n    });\n\n    expect(compactCalls).toBe(1);\n  });\n\n  it",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"does not intervene when agent stops without a yield tag\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    core.supervisors = [new SubagentSupervisor()];\n\n    core.sendMessage([{ type: \"user\", text: \"do the task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // Agent responds with normal text and stops\n    stream.streamText(\"I have completed the task.\");\n    stream.finishResponse(\"end_turn\");\n\n    // Wait a tick to ensure no new stream is created\n    await new Promise((r) =\u003e setTimeout(r, 50));\n    expect(mockClient.streams.length).toBe(1);\n  });\n});\n\ndescribe(\"AutoCompactSupervisor integration\", () =\u003e {\n  it(\"triggers compaction on end_turn handoff when input tokens breach the threshold\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    core.supervisors = [\n      new AutoCompactSupervisor({ threshold: 100, nextPrompt: \"go\" }),\n    ];\n    mockClient.mockInputTokenCount = 200;\n\n    let compactCalls = 0;\n    core.startCompaction = () =\u003e {\n      compactCalls++;\n    };\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\");\n\n    // inputTokenCount is populated post-flight, so it lags one turn. Drive a\n    // second turn; the handoff at its end sees the over-threshold count.\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().inputTokenCount === 200) return true;\n      throw new Error(\"waiting for token count\");\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"again\" }]);\n    const stream2 = await mockClient.awaitStream();\n    stream2.streamText(\"done again\");\n    stream2.finishResponse(\"end_turn\");\n\n    await pollUntil(() =\u003e {\n      if (compactCalls \u003e 0) return true;\n      throw new Error(\"waiting for compaction\");\n    });\n\n    expect(compactCalls).toBe(1);\n  });\n\n  it",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 550,
-      "startCol": 3,
-      "endLine": 607,
-      "endCol": 5
-    },
-    {
-      "text": "\"does not trigger compaction when input tokens are below the threshold\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    core.supervisors = [\n      new AutoCompactSupervisor({ threshold: 100000, nextPrompt: \"go\" }),\n    ];\n    mockClient.mockInputTokenCount = 50;\n\n    let compactCalls = 0;\n    core.startCompaction = () =\u003e {\n      compactCalls++;\n    };\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\", { inputTokens: 50, outputTokens: 5 });\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type !== \"stopped\")\n        throw new Error(\"waiting\");\n      return true;\n    });\n\n    expect(compactCalls).toBe(0);\n  });\n\n  it(\"triggers compaction on a tool_use handoff after tools resolve\", async () =\u003e {\n    const fileIO = new InMemoryFileIO({ \"/tmp/a.txt\": \"hello\" });\n    const { core, mockClient } = createThreadCoreWithMock({\n      fileIO: fileIO as unknown as ThreadCoreContext[\"fileIO\"],\n    });\n    core.supervisors = [\n      new AutoCompactSupervisor({ threshold: 100, nextPrompt: \"go\" }),\n    ];\n    mockClient.mockInputTokenCount = 200;\n\n    let compactCalls = 0;\n    core.startCompaction = () =\u003e {\n      compactCalls++;\n    };\n\n    // First turn populates the post-flight inputTokenCount.\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\");\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().inputTokenCount === 200) return true;\n      throw new Error(\"waiting for token count\");\n    });\n\n    // Second turn ends with a tool_use. After the tool resolves, the tool_use\n    // handoff sees the over-threshold count and triggers compaction rather\n    // than continuing the conversation.\n    await core.sendMessage([{ type: \"user\", text: \"edit a\" }]);",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\n\"does not trigger compaction when input tokens are below the threshold\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    core.supervisors = [\n      new AutoCompactSupervisor({ threshold: 100000, nextPrompt: \"go\" }),\n    ];\n    mockClient.mockInputTokenCount = 50;\n\n    let compactCalls = 0;\n    core.startCompaction = () =\u003e {\n      compactCalls++;\n    };\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\", { inputTokens: 50, outputTokens: 5 });\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type !== \"stopped\")\n        throw new Error(\"waiting\");\n      return true;\n    });\n\n    expect(compactCalls).toBe(0);\n  });\n\n  it(\"triggers compaction on a tool_use handoff after tools resolve\", async () =\u003e {\n    const fileIO = new InMemoryFileIO({ \"/tmp/a.txt\": \"hello\" });\n    const { core, mockClient } = createThreadCoreWithMock({\n      fileIO: fileIO as unknown as ThreadCoreContext[\"fileIO\"],\n    });\n    core.supervisors = [\n      new AutoCompactSupervisor({ threshold: 100, nextPrompt: \"go\" }),\n    ];\n    mockClient.mockInputTokenCount = 200;\n\n    let compactCalls = 0;\n    core.startCompaction = () =\u003e {\n      compactCalls++;\n    };\n\n    // First turn populates the post-flight inputTokenCount.\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\");\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().inputTokenCount === 200) return true;\n      throw new Error(\"waiting for token count\");\n    });\n\n    // Second turn ends with a tool_use. After the tool resolves, the tool_use\n    // handoff sees the over-threshold count and triggers compaction rather\n    // than continuing the conversation.\n    await core.sendMessage([{ type: \"user\", text: \"edit a\" }]);",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 607,
-      "startCol": 6,
-      "endLine": 661,
-      "endCol": 64
-    },
-    {
-      "text": "const stream2 = await mockClient.awaitStream();\n    stream2.streamToolUse(\"edl-1\" as ToolRequestId, \"edl\" as ToolName, {\n      script: `file \\`/tmp/a.txt\\`\\nnarrow /hello/\\nreplace \"bye\"`,\n    });\n    stream2.finishResponse(\"tool_use\");\n\n    await pollUntil(() =\u003e {\n      if (compactCalls \u003e 0) return true;\n      throw new Error(\"waiting for compaction\");\n    });\n    expect(compactCalls).toBe(1);\n  });\n\n  it(\"triggers compaction on a max_tokens handoff when over threshold\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    core.supervisors = [\n      new AutoCompactSupervisor({ threshold: 100, nextPrompt: \"go\" }),\n    ];\n    mockClient.mockInputTokenCount = 200;\n\n    let compactCalls = 0;\n    core.startCompaction = () =\u003e {\n      compactCalls++;\n    };\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\");\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().inputTokenCount === 200) return true;\n      throw new Error(\"waiting for token count\");\n    });\n\n    // A max_tokens stop without a tool_use block routes through the handoff\n    // check before the truncation-continue path.\n    await core.sendMessage([{ type: \"user\", text: \"again\" }]);\n    const stream2 = await mockClient.awaitStream();\n    stream2.streamText(\"partial\");\n    stream2.finishResponse(\"max_tokens\");\n\n    await pollUntil(() =\u003e {\n      if (compactCalls \u003e 0) return true;\n      throw new Error(\"waiting for compaction\");\n    });\n    expect(compactCalls).toBe(1);\n  });\n\n  it(\"consults all supervisors and combines their compact prompts in order\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const calls: string[] = [];\n    const first: ThreadSupervisor",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nconst stream2 = await mockClient.awaitStream();\n    stream2.streamToolUse(\"edl-1\" as ToolRequestId, \"edl\" as ToolName, {\n      script: `file \\`/tmp/a.txt\\`\\nnarrow /hello/\\nreplace \"bye\"`,\n    });\n    stream2.finishResponse(\"tool_use\");\n\n    await pollUntil(() =\u003e {\n      if (compactCalls \u003e 0) return true;\n      throw new Error(\"waiting for compaction\");\n    });\n    expect(compactCalls).toBe(1);\n  });\n\n  it(\"triggers compaction on a max_tokens handoff when over threshold\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    core.supervisors = [\n      new AutoCompactSupervisor({ threshold: 100, nextPrompt: \"go\" }),\n    ];\n    mockClient.mockInputTokenCount = 200;\n\n    let compactCalls = 0;\n    core.startCompaction = () =\u003e {\n      compactCalls++;\n    };\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\");\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().inputTokenCount === 200) return true;\n      throw new Error(\"waiting for token count\");\n    });\n\n    // A max_tokens stop without a tool_use block routes through the handoff\n    // check before the truncation-continue path.\n    await core.sendMessage([{ type: \"user\", text: \"again\" }]);\n    const stream2 = await mockClient.awaitStream();\n    stream2.streamText(\"partial\");\n    stream2.finishResponse(\"max_tokens\");\n\n    await pollUntil(() =\u003e {\n      if (compactCalls \u003e 0) return true;\n      throw new Error(\"waiting for compaction\");\n    });\n    expect(compactCalls).toBe(1);\n  });\n\n  it(\"consults all supervisors and combines their compact prompts in order\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const calls: string[] = [];\n    const first: ThreadSupervisor",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 662,
-      "startCol": 5,
-      "endLine": 713,
-      "endCol": 34
-    },
-    {
-      "text": "      onHandoff: () =\u003e {\n        calls.push(\"first\");\n        return { type: \"none\" };\n      }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function onHandoff\n\n      onHandoff: () =\u003e {\n        calls.push(\"first\");\n        return { type: \"none\" };\n      }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function onHandoff",
-      "startLine": 714,
-      "startCol": 1,
-      "endLine": 717,
-      "endCol": 8
-    },
-    {
-      "text": "second: ThreadSupervisor",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nsecond: ThreadSupervisor",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 719,
-      "startCol": 11,
-      "endLine": 719,
-      "endCol": 35
-    },
-    {
-      "text": "      onHandoff: () =\u003e {\n        calls.push(\"second\");\n        return { type: \"compact\", nextPrompt: \"go\" };\n      }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function onHandoff\n\n      onHandoff: () =\u003e {\n        calls.push(\"second\");\n        return { type: \"compact\", nextPrompt: \"go\" };\n      }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function onHandoff",
-      "startLine": 720,
-      "startCol": 1,
-      "endLine": 723,
-      "endCol": 8
-    },
-    {
-      "text": "third: ThreadSupervisor",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nthird: ThreadSupervisor",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 725,
-      "startCol": 11,
-      "endLine": 725,
-      "endCol": 34
-    },
-    {
-      "text": "      onHandoff: () =\u003e {\n        calls.push(\"third\");\n        return { type: \"compact\", nextPrompt: \"stop\" };\n      }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function onHandoff\n\n      onHandoff: () =\u003e {\n        calls.push(\"third\");\n        return { type: \"compact\", nextPrompt: \"stop\" };\n      }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function onHandoff",
-      "startLine": 726,
-      "startCol": 1,
-      "endLine": 729,
-      "endCol": 8
-    },
-    {
-      "text": "core.supervisors = [first, second, third];\n\n    let compactPrompt: string | undefined = \"unset\";\n    core.startCompaction = (p?: string) =\u003e {\n      compactPrompt = p;\n    };\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\");\n\n    await pollUntil(() =\u003e {\n      if (calls.includes(\"third\")) return true;\n      throw new Error(\"waiting for supervisor consultation\");\n    });\n\n    // All supervisors are consulted; compact prompts are combined in order.\n    expect(calls).toEqual([\"first\", \"second\", \"third\"]);\n    expect(compactPrompt).toBe(\"go\\n\\nstop\");",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\ncore.supervisors = [first, second, third];\n\n    let compactPrompt: string | undefined = \"unset\";\n    core.startCompaction = (p?: string) =\u003e {\n      compactPrompt = p;\n    };\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\");\n\n    await pollUntil(() =\u003e {\n      if (calls.includes(\"third\")) return true;\n      throw new Error(\"waiting for supervisor consultation\");\n    });\n\n    // All supervisors are consulted; compact prompts are combined in order.\n    expect(calls).toEqual([\"first\", \"second\", \"third\"]);\n    expect(compactPrompt).toBe(\"go\\n\\nstop\");",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 731,
-      "startCol": 5,
-      "endLine": 750,
-      "endCol": 46
-    },
-    {
-      "text": "describe(\"ThreadCore.turnEnded event\", () =\u003e {\n  it(\"emits turnEnded with reason end_turn when agent stops cleanly\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const events: Array\u003c{ reason: string }\u003e = [];\n    core.on(\"turnEnded\", (payload) =\u003e events.push(payload));\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\");\n\n    await pollUntil(() =\u003e {\n      if (events.length \u003e 0) return true;\n      throw new Error(\"waiting for turnEnded\");\n    });\n\n    expect(events).toEqual([{ reason: \"end_turn\" }]);\n  });\n\n  it(\"emits turnEnded with reason aborted when user aborts\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const events: Array\u003c{ reason: string }\u003e = [];\n    core.on(\"turnEnded\", (payload) =\u003e events.push(payload));\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"partial\");\n\n    await core.abort();\n\n    expect(events).toEqual([{ reason: \"aborted\" }]);\n  });\n\n  it(\"emits turnEnded with reason error when provider fails\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const events: Array\u003c{ reason: string }\u003e = [];\n    core.on(\"turnEnded\", (payload) =\u003e events.push(payload));\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (events.length \u003e 0) return true;\n      throw new Error(\"waiting for turnEnded\");\n    });\n\n    expect(events).toEqual([{ reason: \"error\" }]);\n  });\n});\n\ndescribe(\"ThreadCore.editedFilesThisTurn\", ()",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\ndescribe(\"ThreadCore.turnEnded event\", () =\u003e {\n  it(\"emits turnEnded with reason end_turn when agent stops cleanly\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const events: Array\u003c{ reason: string }\u003e = [];\n    core.on(\"turnEnded\", (payload) =\u003e events.push(payload));\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"done\");\n    stream.finishResponse(\"end_turn\");\n\n    await pollUntil(() =\u003e {\n      if (events.length \u003e 0) return true;\n      throw new Error(\"waiting for turnEnded\");\n    });\n\n    expect(events).toEqual([{ reason: \"end_turn\" }]);\n  });\n\n  it(\"emits turnEnded with reason aborted when user aborts\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const events: Array\u003c{ reason: string }\u003e = [];\n    core.on(\"turnEnded\", (payload) =\u003e events.push(payload));\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"partial\");\n\n    await core.abort();\n\n    expect(events).toEqual([{ reason: \"aborted\" }]);\n  });\n\n  it(\"emits turnEnded with reason error when provider fails\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const events: Array\u003c{ reason: string }\u003e = [];\n    core.on(\"turnEnded\", (payload) =\u003e events.push(payload));\n\n    await core.sendMessage([{ type: \"user\", text: \"hello\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (events.length \u003e 0) return true;\n      throw new Error(\"waiting for turnEnded\");\n    });\n\n    expect(events).toEqual([{ reason: \"error\" }]);\n  });\n});\n\ndescribe(\"ThreadCore.editedFilesThisTurn\", ()",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 754,
-      "startCol": 1,
-      "endLine": 805,
-      "endCol": 46
-    },
-    {
-      "text": "it(\"starts empty and resets on new sendMessage\", async () =\u003e {\n    const fileIO = new InMemoryFileIO({ \"/tmp/a.txt\": \"hello\" });\n    const { core, mockClient } = createThreadCoreWithMock({\n      fileIO: fileIO as unknown as ThreadCoreContext[\"fileIO\"],\n    });\n\n    expect(core.state.editedFilesThisTurn).toEqual([]);\n\n    await core.sendMessage([{ type: \"user\", text: \"edit a\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamToolUse(\"edl-1\" as ToolRequestId, \"edl\" as ToolName, {\n      script: `file \\`/tmp/a.txt\\`\\nnarrow /hello/\\nreplace \"bye\"`,\n    });\n    stream.finishResponse(\"tool_use\");\n\n    await pollUntil(() =\u003e {\n      if (core.state.editedFilesThisTurn.length === 1) return true;\n      throw new Error(\n        `waiting for 1 edited file, got ${core.state.editedFilesThisTurn.length}`,\n      );\n    });\n    expect(core.state.editedFilesThisTurn).toEqual([\n      { path: \"/tmp/a.txt\", snapshot: \"hello\" },\n    ]);\n\n    await core.sendMessage([{ type: \"user\", text: \"next turn\" }]);\n    expect(core.state.editedFilesThisTurn).toEqual([]);\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"starts empty and resets on new sendMessage\", async () =\u003e {\n    const fileIO = new InMemoryFileIO({ \"/tmp/a.txt\": \"hello\" });\n    const { core, mockClient } = createThreadCoreWithMock({\n      fileIO: fileIO as unknown as ThreadCoreContext[\"fileIO\"],\n    });\n\n    expect(core.state.editedFilesThisTurn).toEqual([]);\n\n    await core.sendMessage([{ type: \"user\", text: \"edit a\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamToolUse(\"edl-1\" as ToolRequestId, \"edl\" as ToolName, {\n      script: `file \\`/tmp/a.txt\\`\\nnarrow /hello/\\nreplace \"bye\"`,\n    });\n    stream.finishResponse(\"tool_use\");\n\n    await pollUntil(() =\u003e {\n      if (core.state.editedFilesThisTurn.length === 1) return true;\n      throw new Error(\n        `waiting for 1 edited file, got ${core.state.editedFilesThisTurn.length}`,\n      );\n    });\n    expect(core.state.editedFilesThisTurn).toEqual([\n      { path: \"/tmp/a.txt\", snapshot: \"hello\" },\n    ]);\n\n    await core.sendMessage([{ type: \"user\", text: \"next turn\" }]);\n    expect(core.state.editedFilesThisTurn).toEqual([]);\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 806,
-      "startCol": 3,
-      "endLine": 833,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"keeps the pre-turn snapshot after a second edit to the same file\", async () =\u003e {\n    const fileIO = new InMemoryFileIO({ \"/tmp/a.txt\": \"hello\" });\n    const { core, mockClient } = createThreadCoreWithMock({\n      fileIO: fileIO as unknown as ThreadCoreContext[\"fileIO\"],\n    });\n    await core.sendMessage([{ type: \"user\", text: \"edit a\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamToolUse(\"edl-1\" as ToolRequestId, \"edl\" as ToolName, {\n      script: `file \\`/tmp/a.txt\\`\\nnarrow /hello/\\nreplace \"bye\"`,\n    });\n    stream.finishResponse(\"tool_use\");\n    await pollUntil(() =\u003e {\n      if (core.state.editedFilesThisTurn.length === 1) return true;\n      throw new Error(\n        `waiting for 1 edited file, got ${core.state.editedFilesThisTurn.length}`,\n      );\n    });\n    const stream2 = await mockClient.awaitStream();\n    stream2.streamToolUse(\"edl-2\" as ToolRequestId, \"edl\" as ToolName, {\n      script: `file \\`/tmp/a.txt\\`\\nnarrow /bye/\\nreplace \"done\"`,\n    });\n    stream2.finishResponse(\"tool_use\");\n    await pollUntil(async () =\u003e {\n      const content = await fileIO.readFile(\n        \"/tmp/a.txt\" as unknown as Parameters\u003ctypeof fileIO.readFile\u003e[0],\n      );\n      if (content === \"done\") return true;\n      throw new Error(`waiting for second edit, got ${content}`);\n    });\n    expect(core.state.editedFilesThisTurn).toEqual([\n      { path: \"/tmp/a.txt\", snapshot: \"hello\" },\n    ]);\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"keeps the pre-turn snapshot after a second edit to the same file\", async () =\u003e {\n    const fileIO = new InMemoryFileIO({ \"/tmp/a.txt\": \"hello\" });\n    const { core, mockClient } = createThreadCoreWithMock({\n      fileIO: fileIO as unknown as ThreadCoreContext[\"fileIO\"],\n    });\n    await core.sendMessage([{ type: \"user\", text: \"edit a\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamToolUse(\"edl-1\" as ToolRequestId, \"edl\" as ToolName, {\n      script: `file \\`/tmp/a.txt\\`\\nnarrow /hello/\\nreplace \"bye\"`,\n    });\n    stream.finishResponse(\"tool_use\");\n    await pollUntil(() =\u003e {\n      if (core.state.editedFilesThisTurn.length === 1) return true;\n      throw new Error(\n        `waiting for 1 edited file, got ${core.state.editedFilesThisTurn.length}`,\n      );\n    });\n    const stream2 = await mockClient.awaitStream();\n    stream2.streamToolUse(\"edl-2\" as ToolRequestId, \"edl\" as ToolName, {\n      script: `file \\`/tmp/a.txt\\`\\nnarrow /bye/\\nreplace \"done\"`,\n    });\n    stream2.finishResponse(\"tool_use\");\n    await pollUntil(async () =\u003e {\n      const content = await fileIO.readFile(\n        \"/tmp/a.txt\" as unknown as Parameters\u003ctypeof fileIO.readFile\u003e[0],\n      );\n      if (content === \"done\") return true;\n      throw new Error(`waiting for second edit, got ${content}`);\n    });\n    expect(core.state.editedFilesThisTurn).toEqual([\n      { path: \"/tmp/a.txt\", snapshot: \"hello\" },\n    ]);\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 835,
-      "startCol": 3,
-      "endLine": 867,
-      "endCol": 6
-    },
-    {
-      "text": "function createMockShell(initialResult: ShellResult): {\n  shell: Shell;\n  setNextResult: (r: ShellResult) =\u003e void;\n} {\n  let nextResult = initialResult;\n  const shell: Shell",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createMockShell\n\nfunction createMockShell(initialResult: ShellResult): {\n  shell: Shell;\n  setNextResult: (r: ShellResult) =\u003e void;\n} {\n  let nextResult = initialResult;\n  const shell: Shell",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createMockShell",
-      "startLine": 870,
-      "startCol": 1,
-      "endLine": 875,
-      "endCol": 21
-    },
-    {
-      "text": "    execute: (\n      _command: string,\n      opts: {\n        toolRequestId: string;\n        onOutput?: (line: OutputLine) =\u003e void;\n        onStart?: () =\u003e void;\n      },\n    ) =\u003e {\n      opts.onStart?.();\n      for (const line of nextResult.output) {\n        opts.onOutput?.(line);\n      }\n      return Promise.resolve(nextResult);\n    }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createMockShell \u003e function execute\n\n    execute: (\n      _command: string,\n      opts: {\n        toolRequestId: string;\n        onOutput?: (line: OutputLine) =\u003e void;\n        onStart?: () =\u003e void;\n      },\n    ) =\u003e {\n      opts.onStart?.();\n      for (const line of nextResult.output) {\n        opts.onOutput?.(line);\n      }\n      return Promise.resolve(nextResult);\n    }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createMockShell \u003e function execute",
-      "startLine": 876,
-      "startCol": 1,
-      "endLine": 889,
-      "endCol": 6
-    },
-    {
-      "text": "terminate: vi.fn(),\n  };\n  return {\n    shell",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createMockShell\n\nterminate: vi.fn(),\n  };\n  return {\n    shell",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createMockShell",
-      "startLine": 890,
-      "startCol": 5,
-      "endLine": 893,
-      "endCol": 10
-    },
-    {
-      "text": "    setNextResult: (r) =\u003e {\n      nextResult = r;\n    }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function createMockShell \u003e function setNextResult\n\n    setNextResult: (r) =\u003e {\n      nextResult = r;\n    }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function createMockShell \u003e function setNextResult",
-      "startLine": 894,
-      "startCol": 1,
-      "endLine": 896,
-      "endCol": 6
-    },
-    {
-      "text": "function findBashReminderText(\n  messages: Anthropic.MessageParam[],\n): string | undefined {\n  for (let i = messages.length - 1; i \u003e= 0; i--) {\n    const msg = messages[i];\n    if (msg.role !== \"user\" || typeof msg.content === \"string\") continue;\n    for (const block of msg.content as Anthropic.ContentBlockParam[]) {\n      if (\n        block.type === \"text\" \u0026\u0026\n        block.text.includes(\"\u003csystem-reminder\u003e\") \u0026\u0026\n        block.text.includes(\"log file\") \u0026\u0026\n        block.text.includes(\"bash_summarizer\")\n      ) {\n        return block.text;\n      }\n    }\n  }\n  return undefined;\n}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function findBashReminderText\n\nfunction findBashReminderText(\n  messages: Anthropic.MessageParam[],\n): string | undefined {\n  for (let i = messages.length - 1; i \u003e= 0; i--) {\n    const msg = messages[i];\n    if (msg.role !== \"user\" || typeof msg.content === \"string\") continue;\n    for (const block of msg.content as Anthropic.ContentBlockParam[]) {\n      if (\n        block.type === \"text\" \u0026\u0026\n        block.text.includes(\"\u003csystem-reminder\u003e\") \u0026\u0026\n        block.text.includes(\"log file\") \u0026\u0026\n        block.text.includes(\"bash_summarizer\")\n      ) {\n        return block.text;\n      }\n    }\n  }\n  return undefined;\n}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function findBashReminderText",
-      "startLine": 900,
-      "startCol": 1,
-      "endLine": 918,
-      "endCol": 2
-    },
-    {
-      "text": "function makeAbbreviatedShellResult(): ShellResult {\n  const lineContent = \"X\".repeat(500);\n  const output: OutputLine[] = Array.from({ length: 100 }, (_, i) =\u003e ({\n    stream: \"stdout\" as const,\n    text: `LINE${i + 1}:${lineContent}`,\n  }));\n  return {\n    exitCode: 0,\n    signal: undefined,\n    output,\n    logFilePath: \"/tmp/test.log\",\n    durationMs: 50,\n  };\n}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function makeAbbreviatedShellResult\n\nfunction makeAbbreviatedShellResult(): ShellResult {\n  const lineContent = \"X\".repeat(500);\n  const output: OutputLine[] = Array.from({ length: 100 }, (_, i) =\u003e ({\n    stream: \"stdout\" as const,\n    text: `LINE${i + 1}:${lineContent}`,\n  }));\n  return {\n    exitCode: 0,\n    signal: undefined,\n    output,\n    logFilePath: \"/tmp/test.log\",\n    durationMs: 50,\n  };\n}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function makeAbbreviatedShellResult",
-      "startLine": 920,
-      "startCol": 1,
-      "endLine": 933,
-      "endCol": 2
-    },
-    {
-      "text": "describe(\"ThreadCore bash summary reminder\", () =\u003e {\n  it(\"fires the bash reminder on the first abbreviated bash output\", async () =\u003e {\n    const { shell } = createMockShell(makeAbbreviatedShellResult());\n    const { core, mockClient } = createThreadCoreWithMock({\n      shell: shell as unknown as ThreadCoreContext[\"shell\"],\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"run a thing\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamToolUse(\n      \"tool-bash-1\" as ToolRequestId,\n      \"bash_command\" as ToolName,\n      { command: \"echo hi\" },\n    );\n    stream.finishResponse(\"tool_use\");\n\n    const nextStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream) return s;\n      throw new Error(\"waiting for next stream\");\n    });\n\n    const reminderText = findBashReminderText(nextStream.messages);\n    expect(reminderText).toBeDefined();\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\ndescribe(\"ThreadCore bash summary reminder\", () =\u003e {\n  it(\"fires the bash reminder on the first abbreviated bash output\", async () =\u003e {\n    const { shell } = createMockShell(makeAbbreviatedShellResult());\n    const { core, mockClient } = createThreadCoreWithMock({\n      shell: shell as unknown as ThreadCoreContext[\"shell\"],\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"run a thing\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamToolUse(\n      \"tool-bash-1\" as ToolRequestId,\n      \"bash_command\" as ToolName,\n      { command: \"echo hi\" },\n    );\n    stream.finishResponse(\"tool_use\");\n\n    const nextStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream) return s;\n      throw new Error(\"waiting for next stream\");\n    });\n\n    const reminderText = findBashReminderText(nextStream.messages);\n    expect(reminderText).toBeDefined();\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 935,
-      "startCol": 1,
-      "endLine": 959,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"combines subsequent and bash reminders into a single \u003csystem-reminder\u003e block when both gates fire\", async () =\u003e {\n    const { shell } = createMockShell(makeAbbreviatedShellResult());\n    const { core, mockClient } = createThreadCoreWithMock({\n      shell: shell as unknown as ThreadCoreContext[\"shell\"],\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"run a thing\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamToolUse(\n      \"tool-bash-1\" as ToolRequestId,\n      \"bash_command\" as ToolName,\n      { command: \"echo hi\" },\n    );\n    // High output tokens to also fire the subsequent reminder gate.\n    stream.finishResponse(\"tool_use\", { inputTokens: 1, outputTokens: 5000 });\n\n    const nextStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream) return s;\n      throw new Error(\"waiting for next stream\");\n    });\n\n    const lastUserMsg = nextStream.messages[nextStream.messages.length - 1];\n    if (\n      lastUserMsg.role !== \"user\" ||\n      typeof lastUserMsg.content === \"string\"\n    ) {\n      throw new Error(\"expected structured user message\");\n    }\n\n    const reminderBlocks = (\n      lastUserMsg.content as Anthropic.ContentBlockParam[]\n    ).filter(\n      (b): b is Anthropic.TextBlockParam =\u003e\n        b.type === \"text\" \u0026\u0026 b.text.includes(\"\u003csystem-reminder\u003e\"),\n    );\n\n    // Exactly one combined system-reminder block should appear\n    expect(reminderBlocks.length).toBe(1);\n    const combinedText = reminderBlocks[0].text;\n    expect((combinedText.match(/\u003csystem-reminder\u003e/g) ?? []).length).toBe(1);\n    expect((combinedText.match(/\u003c\\/system-reminder\u003e/g) ?? []).length).toBe(1);\n    // Both bodies are present in the combined block\n    expect(combinedText).toContain(\"Remember the skills\");\n    expect(combinedText).toContain(\"bash_summarizer\");\n  });\n\n  it(\"does not fire again below the token threshold, but fires after the threshold is crossed\", async ()",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"combines subsequent and bash reminders into a single \u003csystem-reminder\u003e block when both gates fire\", async () =\u003e {\n    const { shell } = createMockShell(makeAbbreviatedShellResult());\n    const { core, mockClient } = createThreadCoreWithMock({\n      shell: shell as unknown as ThreadCoreContext[\"shell\"],\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"run a thing\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.streamToolUse(\n      \"tool-bash-1\" as ToolRequestId,\n      \"bash_command\" as ToolName,\n      { command: \"echo hi\" },\n    );\n    // High output tokens to also fire the subsequent reminder gate.\n    stream.finishResponse(\"tool_use\", { inputTokens: 1, outputTokens: 5000 });\n\n    const nextStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream) return s;\n      throw new Error(\"waiting for next stream\");\n    });\n\n    const lastUserMsg = nextStream.messages[nextStream.messages.length - 1];\n    if (\n      lastUserMsg.role !== \"user\" ||\n      typeof lastUserMsg.content === \"string\"\n    ) {\n      throw new Error(\"expected structured user message\");\n    }\n\n    const reminderBlocks = (\n      lastUserMsg.content as Anthropic.ContentBlockParam[]\n    ).filter(\n      (b): b is Anthropic.TextBlockParam =\u003e\n        b.type === \"text\" \u0026\u0026 b.text.includes(\"\u003csystem-reminder\u003e\"),\n    );\n\n    // Exactly one combined system-reminder block should appear\n    expect(reminderBlocks.length).toBe(1);\n    const combinedText = reminderBlocks[0].text;\n    expect((combinedText.match(/\u003csystem-reminder\u003e/g) ?? []).length).toBe(1);\n    expect((combinedText.match(/\u003c\\/system-reminder\u003e/g) ?? []).length).toBe(1);\n    // Both bodies are present in the combined block\n    expect(combinedText).toContain(\"Remember the skills\");\n    expect(combinedText).toContain(\"bash_summarizer\");\n  });\n\n  it(\"does not fire again below the token threshold, but fires after the threshold is crossed\", async ()",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 961,
-      "startCol": 3,
-      "endLine": 1008,
-      "endCol": 105
-    },
-    {
-      "text": "const { shell, setNextResult } = createMockShell(\n      makeAbbreviatedShellResult(),\n    );\n    const { core, mockClient } = createThreadCoreWithMock({\n      shell: shell as unknown as ThreadCoreContext[\"shell\"],\n    });\n\n    // First abbreviated bash → reminder should fire\n    await core.sendMessage([{ type: \"user\", text: \"first\" }]);\n    const stream1 = await mockClient.awaitStream();\n    stream1.streamToolUse(\n      \"tool-bash-1\" as ToolRequestId,\n      \"bash_command\" as ToolName,\n      { command: \"echo hi\" },\n    );\n    stream1.finishResponse(\"tool_use\", { inputTokens: 1, outputTokens: 10 });\n\n    const stream2 = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream1) return s;\n      throw new Error(\"waiting for second stream\");\n    });\n    expect(findBashReminderText(stream2.messages)).toBeDefined();\n\n    // Second abbreviated bash with few tokens → NO second reminder\n    setNextResult(makeAbbreviatedShellResult());\n    stream2.streamToolUse(\n      \"tool-bash-2\" as ToolRequestId,\n      \"bash_command\" as ToolName,\n      { command: \"echo hi\" },\n    );\n    stream2.finishResponse(\"tool_use\", { inputTokens: 1, outputTokens: 100 });\n\n    const stream3 = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream2) return s;\n      throw new Error(\"waiting for third stream\");\n    });\n    const lastUserMsg3 = stream3.messages[stream3.messages.length - 1];\n    if (\n      lastUserMsg3.role !== \"user\" ||\n      typeof lastUserMsg3.content === \"string\"\n    ) {\n      throw new Error(\"expected structured user message\");\n    }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nconst { shell, setNextResult } = createMockShell(\n      makeAbbreviatedShellResult(),\n    );\n    const { core, mockClient } = createThreadCoreWithMock({\n      shell: shell as unknown as ThreadCoreContext[\"shell\"],\n    });\n\n    // First abbreviated bash → reminder should fire\n    await core.sendMessage([{ type: \"user\", text: \"first\" }]);\n    const stream1 = await mockClient.awaitStream();\n    stream1.streamToolUse(\n      \"tool-bash-1\" as ToolRequestId,\n      \"bash_command\" as ToolName,\n      { command: \"echo hi\" },\n    );\n    stream1.finishResponse(\"tool_use\", { inputTokens: 1, outputTokens: 10 });\n\n    const stream2 = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream1) return s;\n      throw new Error(\"waiting for second stream\");\n    });\n    expect(findBashReminderText(stream2.messages)).toBeDefined();\n\n    // Second abbreviated bash with few tokens → NO second reminder\n    setNextResult(makeAbbreviatedShellResult());\n    stream2.streamToolUse(\n      \"tool-bash-2\" as ToolRequestId,\n      \"bash_command\" as ToolName,\n      { command: \"echo hi\" },\n    );\n    stream2.finishResponse(\"tool_use\", { inputTokens: 1, outputTokens: 100 });\n\n    const stream3 = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream2) return s;\n      throw new Error(\"waiting for third stream\");\n    });\n    const lastUserMsg3 = stream3.messages[stream3.messages.length - 1];\n    if (\n      lastUserMsg3.role !== \"user\" ||\n      typeof lastUserMsg3.content === \"string\"\n    ) {\n      throw new Error(\"expected structured user message\");\n    }",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1009,
-      "startCol": 5,
-      "endLine": 1053,
-      "endCol": 6
-    },
-    {
-      "text": "const hasReminderInStream3 = (\n      lastUserMsg3.content as Anthropic.ContentBlockParam[]\n    )\n      .filter(\n        (b): b is Anthropic.TextBlockParam =\u003e\n          b.type === \"text\" \u0026\u0026 b.text.includes(\"\u003csystem-reminder\u003e\"),\n      )\n      .some(\n        (b) =\u003e\n          b.text.includes(\"log file\") \u0026\u0026 b.text.includes(\"bash_summarizer\"),\n      );\n    expect(hasReminderInStream3).toBe(false);\n\n    // Third bash with enough output tokens to cross the threshold → reminder fires again\n    stream3.streamToolUse(\n      \"tool-bash-3\" as ToolRequestId,\n      \"bash_command\" as ToolName,\n      { command: \"echo hi\" },\n    );\n    stream3.finishResponse(\"tool_use\", { inputTokens: 1, outputTokens: 6000 });\n\n    const stream4 = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream3) return s;\n      throw new Error(\"waiting for fourth stream\");\n    });\n    const lastUserMsg4 = stream4.messages[stream4.messages.length - 1];\n    if (\n      lastUserMsg4.role !== \"user\" ||\n      typeof lastUserMsg4.content === \"string\"\n    ) {\n      throw new Error(\"expected structured user message\");\n    }\n    const hasReminderInStream4 = (\n      lastUserMsg4.content as Anthropic.ContentBlockParam[]\n    )\n      .filter(\n        (b): b is Anthropic.TextBlockParam =\u003e\n          b.type === \"text\" \u0026\u0026 b.text.includes(\"\u003csystem-reminder\u003e\"),\n      )\n      .some(\n        (b) =\u003e\n          b.text.includes(\"log file\") \u0026\u0026 b.text.includes(\"bash_summarizer\"),\n      );\n    expect(hasReminderInStream4).toBe(true);\n  });\n});\n\ndescribe(\"ThreadCore createFreshAgent thinking effort override\", () =\u003e {\n  it(\"applies subagentConfig.effort to thinking when creating agent\", () =\u003e {\n    const captured: AgentOptions[] = [];\n    const spyProvider: Provider",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nconst hasReminderInStream3 = (\n      lastUserMsg3.content as Anthropic.ContentBlockParam[]\n    )\n      .filter(\n        (b): b is Anthropic.TextBlockParam =\u003e\n          b.type === \"text\" \u0026\u0026 b.text.includes(\"\u003csystem-reminder\u003e\"),\n      )\n      .some(\n        (b) =\u003e\n          b.text.includes(\"log file\") \u0026\u0026 b.text.includes(\"bash_summarizer\"),\n      );\n    expect(hasReminderInStream3).toBe(false);\n\n    // Third bash with enough output tokens to cross the threshold → reminder fires again\n    stream3.streamToolUse(\n      \"tool-bash-3\" as ToolRequestId,\n      \"bash_command\" as ToolName,\n      { command: \"echo hi\" },\n    );\n    stream3.finishResponse(\"tool_use\", { inputTokens: 1, outputTokens: 6000 });\n\n    const stream4 = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== stream3) return s;\n      throw new Error(\"waiting for fourth stream\");\n    });\n    const lastUserMsg4 = stream4.messages[stream4.messages.length - 1];\n    if (\n      lastUserMsg4.role !== \"user\" ||\n      typeof lastUserMsg4.content === \"string\"\n    ) {\n      throw new Error(\"expected structured user message\");\n    }\n    const hasReminderInStream4 = (\n      lastUserMsg4.content as Anthropic.ContentBlockParam[]\n    )\n      .filter(\n        (b): b is Anthropic.TextBlockParam =\u003e\n          b.type === \"text\" \u0026\u0026 b.text.includes(\"\u003csystem-reminder\u003e\"),\n      )\n      .some(\n        (b) =\u003e\n          b.text.includes(\"log file\") \u0026\u0026 b.text.includes(\"bash_summarizer\"),\n      );\n    expect(hasReminderInStream4).toBe(true);\n  });\n});\n\ndescribe(\"ThreadCore createFreshAgent thinking effort override\", () =\u003e {\n  it(\"applies subagentConfig.effort to thinking when creating agent\", () =\u003e {\n    const captured: AgentOptions[] = [];\n    const spyProvider: Provider",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1054,
-      "startCol": 5,
-      "endLine": 1105,
-      "endCol": 32
-    },
-    {
-      "text": "      createAgent(options: AgentOptions): Agent {\n        captured.push(options);\n        const mockClient = new MockAnthropicClient();\n        return new AnthropicAgent(\n          options,\n          mockClient as unknown as Anthropic,\n          defaultAnthropicOptions,\n        );\n      }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e method createAgent\n\n      createAgent(options: AgentOptions): Agent {\n        captured.push(options);\n        const mockClient = new MockAnthropicClient();\n        return new AnthropicAgent(\n          options,\n          mockClient as unknown as Anthropic,\n          defaultAnthropicOptions,\n        );\n      }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e method createAgent",
-      "startLine": 1106,
-      "startCol": 1,
-      "endLine": 1114,
-      "endCol": 8
-    },
-    {
-      "text": "      forceToolUse() {\n        throw new Error(\"Not implemented in mock\");\n      }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e method forceToolUse\n\n      forceToolUse() {\n        throw new Error(\"Not implemented in mock\");\n      }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e method forceToolUse",
-      "startLine": 1115,
-      "startCol": 1,
-      "endLine": 1117,
-      "endCol": 8
-    },
-    {
-      "text": "createThreadCoreWithMock({\n      profile: {\n        provider: \"anthropic\",\n        model: \"claude-3-5-sonnet-20241022\",\n        thinking: { enabled: true, effort: \"low\" },\n      } as ProviderProfile,\n      subagentConfig: { effort: \"max\" }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\ncreateThreadCoreWithMock({\n      profile: {\n        provider: \"anthropic\",\n        model: \"claude-3-5-sonnet-20241022\",\n        thinking: { enabled: true, effort: \"low\" },\n      } as ProviderProfile,\n      subagentConfig: { effort: \"max\" }",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1120,
-      "startCol": 5,
-      "endLine": 1126,
-      "endCol": 40
-    },
-    {
-      "text": "      getProvider: () =\u003e spyProvider",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function getProvider\n\n      getProvider: () =\u003e spyProvider",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function getProvider",
-      "startLine": 1127,
-      "startCol": 1,
-      "endLine": 1127,
-      "endCol": 37
-    },
-    {
-      "text": "expect(captured.length).toBe(1);\n    expect(captured[0].thinking).toBeDefined();\n    expect(captured[0].thinking?.effort).toBe(\"max\");\n    expect(captured[0].thinking?.enabled).toBe(true);\n  });\n\n  it(\"force-enables thinking when profile.thinking is unset but subagent has effort\", () =\u003e {\n    const captured: AgentOptions[] = [];\n    const spyProvider: Provider",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nexpect(captured.length).toBe(1);\n    expect(captured[0].thinking).toBeDefined();\n    expect(captured[0].thinking?.effort).toBe(\"max\");\n    expect(captured[0].thinking?.enabled).toBe(true);\n  });\n\n  it(\"force-enables thinking when profile.thinking is unset but subagent has effort\", () =\u003e {\n    const captured: AgentOptions[] = [];\n    const spyProvider: Provider",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1130,
-      "startCol": 5,
-      "endLine": 1138,
-      "endCol": 32
-    },
-    {
-      "text": "      createAgent(options: AgentOptions): Agent {\n        captured.push(options);\n        const mockClient = new MockAnthropicClient();\n        return new AnthropicAgent(\n          options,\n          mockClient as unknown as Anthropic,\n          defaultAnthropicOptions,\n        );\n      }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e method createAgent\n\n      createAgent(options: AgentOptions): Agent {\n        captured.push(options);\n        const mockClient = new MockAnthropicClient();\n        return new AnthropicAgent(\n          options,\n          mockClient as unknown as Anthropic,\n          defaultAnthropicOptions,\n        );\n      }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e method createAgent",
-      "startLine": 1139,
-      "startCol": 1,
-      "endLine": 1147,
-      "endCol": 8
-    },
-    {
-      "text": "      forceToolUse() {\n        throw new Error(\"Not implemented in mock\");\n      }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e method forceToolUse\n\n      forceToolUse() {\n        throw new Error(\"Not implemented in mock\");\n      }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e method forceToolUse",
-      "startLine": 1148,
-      "startCol": 1,
-      "endLine": 1150,
-      "endCol": 8
-    },
-    {
-      "text": "createThreadCoreWithMock({\n      profile: {\n        provider: \"anthropic\",\n        model: \"claude-3-5-sonnet-20241022\",\n      } as ProviderProfile,\n      subagentConfig: { effort: \"max\" }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\ncreateThreadCoreWithMock({\n      profile: {\n        provider: \"anthropic\",\n        model: \"claude-3-5-sonnet-20241022\",\n      } as ProviderProfile,\n      subagentConfig: { effort: \"max\" }",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1153,
-      "startCol": 5,
-      "endLine": 1158,
-      "endCol": 40
-    },
-    {
-      "text": "      getProvider: () =\u003e spyProvider",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function getProvider\n\n      getProvider: () =\u003e spyProvider",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function getProvider",
-      "startLine": 1159,
-      "startCol": 1,
-      "endLine": 1159,
-      "endCol": 37
-    },
-    {
-      "text": "expect(captured[0].thinking?.effort).toBe(\"max\");\n    expect(captured[0].thinking?.enabled).toBe(true);\n  });\n\n  it(\"uses profile.thinking unchanged when no subagentConfig.effort override\", () =\u003e {\n    const captured: AgentOptions[] = [];\n    const spyProvider: Provider",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nexpect(captured[0].thinking?.effort).toBe(\"max\");\n    expect(captured[0].thinking?.enabled).toBe(true);\n  });\n\n  it(\"uses profile.thinking unchanged when no subagentConfig.effort override\", () =\u003e {\n    const captured: AgentOptions[] = [];\n    const spyProvider: Provider",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1162,
-      "startCol": 5,
-      "endLine": 1168,
-      "endCol": 32
-    },
-    {
-      "text": "      createAgent(options: AgentOptions): Agent {\n        captured.push(options);\n        const mockClient = new MockAnthropicClient();\n        return new AnthropicAgent(\n          options,\n          mockClient as unknown as Anthropic,\n          defaultAnthropicOptions,\n        );\n      }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e method createAgent\n\n      createAgent(options: AgentOptions): Agent {\n        captured.push(options);\n        const mockClient = new MockAnthropicClient();\n        return new AnthropicAgent(\n          options,\n          mockClient as unknown as Anthropic,\n          defaultAnthropicOptions,\n        );\n      }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e method createAgent",
-      "startLine": 1169,
-      "startCol": 1,
-      "endLine": 1177,
-      "endCol": 8
-    },
-    {
-      "text": "      forceToolUse() {\n        throw new Error(\"Not implemented in mock\");\n      }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e method forceToolUse\n\n      forceToolUse() {\n        throw new Error(\"Not implemented in mock\");\n      }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e method forceToolUse",
-      "startLine": 1178,
-      "startCol": 1,
-      "endLine": 1180,
-      "endCol": 8
-    },
-    {
-      "text": "createThreadCoreWithMock({\n      profile: {\n        provider: \"anthropic\",\n        model: \"claude-3-5-sonnet-20241022\",\n        thinking: { enabled: true, effort: \"high\" },\n      } as ProviderProfile",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\ncreateThreadCoreWithMock({\n      profile: {\n        provider: \"anthropic\",\n        model: \"claude-3-5-sonnet-20241022\",\n        thinking: { enabled: true, effort: \"high\" },\n      } as ProviderProfile",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1183,
-      "startCol": 5,
-      "endLine": 1188,
-      "endCol": 27
-    },
-    {
-      "text": "      getProvider: () =\u003e spyProvider",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function getProvider\n\n      getProvider: () =\u003e spyProvider",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function getProvider",
-      "startLine": 1189,
-      "startCol": 1,
-      "endLine": 1189,
-      "endCol": 37
-    },
-    {
-      "text": "expect(captured[0].thinking?.effort).toBe(\"high\");\n  });\n});\n\ndescribe(\"ThreadCore non-retryable error resubmit flow\", () =\u003e {\n  it(\"emits setupResubmit with threadId and message text after error\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const events: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"setupResubmit\", (threadId, text) =\u003e {\n      events.push({ threadId, text });\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (events.length \u003e 0) return true;\n      throw new Error(\"waiting for setupResubmit\");\n    });\n\n    expect(events).toHaveLength(1);\n    expect(events[0].threadId).toBe(\"test-thread\");\n    expect(events[0].text).toContain(\"find the bug\");\n    expect(core.state.failedSubmit?.userMessage).toContain(\"find the bug\");\n    expect(core.state.failedSubmit?.errorMessage).toBe(\"provider failure\");\n  });\n\n  it(\"does not set failedSubmit or emit setupResubmit for subagent threads\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    const events: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"setupResubmit\", (threadId, text) =\u003e {\n      events.push({ threadId, text });\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"subagent task\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"subagent provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type === \"error\") return true;\n      throw new Error(\"waiting for error state\");\n    });\n\n    expect(events).toHaveLength(0);\n    expect(core.state.failedSubmit).toBeUndefined();\n    expect(core.getProviderMessages().length).toBe(1);\n    expect(core.agent.getState().status.type).toBe(\"error\");\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nexpect(captured[0].thinking?.effort).toBe(\"high\");\n  });\n});\n\ndescribe(\"ThreadCore non-retryable error resubmit flow\", () =\u003e {\n  it(\"emits setupResubmit with threadId and message text after error\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n    const events: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"setupResubmit\", (threadId, text) =\u003e {\n      events.push({ threadId, text });\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (events.length \u003e 0) return true;\n      throw new Error(\"waiting for setupResubmit\");\n    });\n\n    expect(events).toHaveLength(1);\n    expect(events[0].threadId).toBe(\"test-thread\");\n    expect(events[0].text).toContain(\"find the bug\");\n    expect(core.state.failedSubmit?.userMessage).toContain(\"find the bug\");\n    expect(core.state.failedSubmit?.errorMessage).toBe(\"provider failure\");\n  });\n\n  it(\"does not set failedSubmit or emit setupResubmit for subagent threads\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    const events: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"setupResubmit\", (threadId, text) =\u003e {\n      events.push({ threadId, text });\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"subagent task\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"subagent provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type === \"error\") return true;\n      throw new Error(\"waiting for error state\");\n    });\n\n    expect(events).toHaveLength(0);\n    expect(core.state.failedSubmit).toBeUndefined();\n    expect(core.getProviderMessages().length).toBe(1);\n    expect(core.agent.getState().status.type).toBe(\"error\");\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1192,
-      "startCol": 5,
-      "endLine": 1242,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"captures preSubmitNativeIdx before appending the user message\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    expect(core.state.preSubmitNativeIdx).toBeUndefined();\n\n    await core.sendMessage([{ type: \"user\", text: \"first message\" }]);\n    expect(core.state.preSubmitNativeIdx).toBe(-1);\n\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"hi\");\n    stream.finishResponse(\"end_turn\");\n\n    await pollUntil(() =\u003e {\n      const msgs = core.getProviderMessages();\n      if (msgs.length === 2 \u0026\u0026 msgs[1].role === \"assistant\") return true;\n      throw new Error(\"waiting for assistant message\");\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"second message\" }]);\n    expect(core.state.preSubmitNativeIdx).toBe(1);\n  });\n\n  it(\"rolls back queued pending-message text alongside the in-flight user message on error\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // While the agent is busy streaming, queue an additional async message —\n    // this lands in pendingMessages rather than being sent immediately.\n    await core.handleSendMessageRequest(\n      [{ type: \"user\", text: \"also check the logs\" }],\n      true,\n    );\n    expect(core.state.pendingMessages).toHaveLength(1);\n\n    stream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type === \"error\") return true;\n      throw new Error(\"waiting for error state\");\n    });\n\n    expect(core.state.failedSubmit?.userMessage).toBe(\n      \"find the bug\\nalso check the logs\",\n    );\n    expect(core.state.pendingMessages).toEqual([]);\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"captures preSubmitNativeIdx before appending the user message\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    expect(core.state.preSubmitNativeIdx).toBeUndefined();\n\n    await core.sendMessage([{ type: \"user\", text: \"first message\" }]);\n    expect(core.state.preSubmitNativeIdx).toBe(-1);\n\n    const stream = await mockClient.awaitStream();\n    stream.streamText(\"hi\");\n    stream.finishResponse(\"end_turn\");\n\n    await pollUntil(() =\u003e {\n      const msgs = core.getProviderMessages();\n      if (msgs.length === 2 \u0026\u0026 msgs[1].role === \"assistant\") return true;\n      throw new Error(\"waiting for assistant message\");\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"second message\" }]);\n    expect(core.state.preSubmitNativeIdx).toBe(1);\n  });\n\n  it(\"rolls back queued pending-message text alongside the in-flight user message on error\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // While the agent is busy streaming, queue an additional async message —\n    // this lands in pendingMessages rather than being sent immediately.\n    await core.handleSendMessageRequest(\n      [{ type: \"user\", text: \"also check the logs\" }],\n      true,\n    );\n    expect(core.state.pendingMessages).toHaveLength(1);\n\n    stream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type === \"error\") return true;\n      throw new Error(\"waiting for error state\");\n    });\n\n    expect(core.state.failedSubmit?.userMessage).toBe(\n      \"find the bug\\nalso check the logs\",\n    );\n    expect(core.state.pendingMessages).toEqual([]);\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1244,
-      "startCol": 3,
-      "endLine": 1291,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"after non-retryable error, preSubmitNativeIdx remains set and orphan user message remains in history\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type === \"error\") return true;\n      throw new Error(\"waiting for error state\");\n    });\n\n    expect(core.state.preSubmitNativeIdx).toBe(-1);\n    expect(core.state.failedSubmit?.userMessage).toContain(\"find the bug\");\n\n    const messages = core.getProviderMessages();\n    expect(messages.length).toBe(1);\n    expect(messages[0].role).toBe(\"user\");\n  });\n\n  it(\"discardFailedSubmit truncates agent history back to pre-submit and clears preSubmitNativeIdx but keeps failedSubmit\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type === \"error\") return true;\n      throw new Error(\"waiting for error state\");\n    });\n\n    core.discardFailedSubmit();\n\n    expect(core.getProviderMessages().length).toBe(0);\n    expect(core.state.preSubmitNativeIdx).toBeUndefined();\n    expect(core.state.failedSubmit?.userMessage).toContain(\"find the bug\");\n  });\n\n  it(\"discardFailedSubmit is a no-op when preSubmitNativeIdx is undefined\", () =\u003e {\n    const { core } = createThreadCoreWithMock();\n    expect(core.state.preSubmitNativeIdx).toBeUndefined();\n    expect(core.getProviderMessages().length).toBe(0);\n    core.discardFailedSubmit();\n    expect(core.getProviderMessages().length).toBe(0);\n    expect(core.state.preSubmitNativeIdx).toBeUndefined();\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"after non-retryable error, preSubmitNativeIdx remains set and orphan user message remains in history\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type === \"error\") return true;\n      throw new Error(\"waiting for error state\");\n    });\n\n    expect(core.state.preSubmitNativeIdx).toBe(-1);\n    expect(core.state.failedSubmit?.userMessage).toContain(\"find the bug\");\n\n    const messages = core.getProviderMessages();\n    expect(messages.length).toBe(1);\n    expect(messages[0].role).toBe(\"user\");\n  });\n\n  it(\"discardFailedSubmit truncates agent history back to pre-submit and clears preSubmitNativeIdx but keeps failedSubmit\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type === \"error\") return true;\n      throw new Error(\"waiting for error state\");\n    });\n\n    core.discardFailedSubmit();\n\n    expect(core.getProviderMessages().length).toBe(0);\n    expect(core.state.preSubmitNativeIdx).toBeUndefined();\n    expect(core.state.failedSubmit?.userMessage).toContain(\"find the bug\");\n  });\n\n  it(\"discardFailedSubmit is a no-op when preSubmitNativeIdx is undefined\", () =\u003e {\n    const { core } = createThreadCoreWithMock();\n    expect(core.state.preSubmitNativeIdx).toBeUndefined();\n    expect(core.getProviderMessages().length).toBe(0);\n    core.discardFailedSubmit();\n    expect(core.getProviderMessages().length).toBe(0);\n    expect(core.state.preSubmitNativeIdx).toBeUndefined();\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1293,
-      "startCol": 3,
-      "endLine": 1339,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"after error + discardFailedSubmit, resubmit does not duplicate the user message and resets state\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const firstStream = await mockClient.awaitStream();\n    firstStream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type === \"error\") return true;\n      throw new Error(\"waiting for error state\");\n    });\n\n    expect(core.getProviderMessages().length).toBe(1);\n    expect(core.state.preSubmitNativeIdx).toBe(-1);\n\n    core.discardFailedSubmit();\n    expect(core.getProviderMessages().length).toBe(0);\n    expect(core.state.preSubmitNativeIdx).toBeUndefined();\n    expect(core.state.failedSubmit?.userMessage).toContain(\"find the bug\");\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const secondStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== firstStream) return s;\n      throw new Error(\"waiting for resubmit stream\");\n    });\n\n    const userMessages = core\n      .getProviderMessages()\n      .filter((m) =\u003e m.role === \"user\");\n    expect(userMessages.length).toBe(1);\n    expect(core.state.failedSubmit).toBeUndefined();\n    expect(core.state.preSubmitNativeIdx).toBe(-1);\n\n    secondStream.respond({\n      text: \"ok\",\n      toolRequests: [],\n      stopReason: \"end_turn\",\n    });\n  });\n});\ndescribe(\"ThreadCore auto-resubmit for non-user-facing threads (Stage 2)\", () =\u003e {\n  beforeEach(() =\u003e {\n    vi.useFakeTimers();\n  });\n\n  afterEach(() =\u003e {\n    vi.useRealTimers();\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"after error + discardFailedSubmit, resubmit does not duplicate the user message and resets state\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock();\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const firstStream = await mockClient.awaitStream();\n    firstStream.respondWithError(new Error(\"provider failure\"));\n\n    await pollUntil(() =\u003e {\n      if (core.agent.getState().status.type === \"error\") return true;\n      throw new Error(\"waiting for error state\");\n    });\n\n    expect(core.getProviderMessages().length).toBe(1);\n    expect(core.state.preSubmitNativeIdx).toBe(-1);\n\n    core.discardFailedSubmit();\n    expect(core.getProviderMessages().length).toBe(0);\n    expect(core.state.preSubmitNativeIdx).toBeUndefined();\n    expect(core.state.failedSubmit?.userMessage).toContain(\"find the bug\");\n\n    await core.sendMessage([{ type: \"user\", text: \"find the bug\" }]);\n    const secondStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== firstStream) return s;\n      throw new Error(\"waiting for resubmit stream\");\n    });\n\n    const userMessages = core\n      .getProviderMessages()\n      .filter((m) =\u003e m.role === \"user\");\n    expect(userMessages.length).toBe(1);\n    expect(core.state.failedSubmit).toBeUndefined();\n    expect(core.state.preSubmitNativeIdx).toBe(-1);\n\n    secondStream.respond({\n      text: \"ok\",\n      toolRequests: [],\n      stopReason: \"end_turn\",\n    });\n  });\n});\ndescribe(\"ThreadCore auto-resubmit for non-user-facing threads (Stage 2)\", () =\u003e {\n  beforeEach(() =\u003e {\n    vi.useFakeTimers();\n  });\n\n  afterEach(() =\u003e {\n    vi.useRealTimers();\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1341,
-      "startCol": 3,
-      "endLine": 1389,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"subagent automatically resubmits a recoverable error and eventually yields\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    const setupResubmitEvents: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"setupResubmit\", (threadId, text) =\u003e {\n      setupResubmitEvents.push({ threadId, text });\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"flaky task\" }]);\n    const firstStream = await mockClient.awaitStream();\n\n    // Bypass the agent's own mid-stream retry budget so this error is\n    // surfaced to ThreadCore immediately, as if the connection-level\n    // retries had already been exhausted.\n    vi.setSystemTime(new Date(Date.now() + 300_001));\n    firstStream.respondWithError(new Error(\"terminated\"));\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(core.agent.getState().status.type).toBe(\"error\");\n    expect(setupResubmitEvents).toHaveLength(0);\n    expect(core.state.failedSubmit).toBeUndefined();\n\n    // Advance past the first thread-level retry delay (1000ms).\n    await vi.advanceTimersByTimeAsync(1000);\n\n    const secondStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== firstStream) return s;\n      throw new Error(\"waiting for auto-resubmit stream\");\n    });\n\n    secondStream.respond({\n      text: \"done\",\n      toolRequests: [],\n      stopReason: \"end_turn\",\n    });\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(core.agent.getState().status.type).toBe(\"stopped\");\n    const userMessages = core\n      .getProviderMessages()\n      .filter((m) =\u003e m.role === \"user\");\n    expect(userMessages.length).toBe(1);\n    expect(setupResubmitEvents).toHaveLength(0);\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"subagent automatically resubmits a recoverable error and eventually yields\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    const setupResubmitEvents: Array\u003c{ threadId: ThreadId; text: string }\u003e = [];\n    core.on(\"setupResubmit\", (threadId, text) =\u003e {\n      setupResubmitEvents.push({ threadId, text });\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"flaky task\" }]);\n    const firstStream = await mockClient.awaitStream();\n\n    // Bypass the agent's own mid-stream retry budget so this error is\n    // surfaced to ThreadCore immediately, as if the connection-level\n    // retries had already been exhausted.\n    vi.setSystemTime(new Date(Date.now() + 300_001));\n    firstStream.respondWithError(new Error(\"terminated\"));\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(core.agent.getState().status.type).toBe(\"error\");\n    expect(setupResubmitEvents).toHaveLength(0);\n    expect(core.state.failedSubmit).toBeUndefined();\n\n    // Advance past the first thread-level retry delay (1000ms).\n    await vi.advanceTimersByTimeAsync(1000);\n\n    const secondStream = await pollUntil(() =\u003e {\n      const s = mockClient.streams[mockClient.streams.length - 1];\n      if (s \u0026\u0026 s !== firstStream) return s;\n      throw new Error(\"waiting for auto-resubmit stream\");\n    });\n\n    secondStream.respond({\n      text: \"done\",\n      toolRequests: [],\n      stopReason: \"end_turn\",\n    });\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(core.agent.getState().status.type).toBe(\"stopped\");\n    const userMessages = core\n      .getProviderMessages()\n      .filter((m) =\u003e m.role === \"user\");\n    expect(userMessages.length).toBe(1);\n    expect(setupResubmitEvents).toHaveLength(0);\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1391,
-      "startCol": 3,
-      "endLine": 1436,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"subagent with a non-recoverable error stays parked and never auto-succeeds\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"doomed task\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"subagent provider failure\"));\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(core.agent.getState().status.type).toBe(\"error\");\n\n    // Advance well past every retry delay; no retry should ever be scheduled.\n    await vi.advanceTimersByTimeAsync(60_000);\n\n    expect(mockClient.streams).toHaveLength(1);\n    expect(core.agent.getState().status.type).toBe(\"error\");\n    expect(core.state.failedSubmit).toBeUndefined();\n  });\n\n  it(\"subagent stops auto-resubmitting once the retry budget is exhausted\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"flaky task\" }]);\n    let stream = await mockClient.awaitStream();",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"subagent with a non-recoverable error stays parked and never auto-succeeds\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"doomed task\" }]);\n    const stream = await mockClient.awaitStream();\n    stream.respondWithError(new Error(\"subagent provider failure\"));\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(core.agent.getState().status.type).toBe(\"error\");\n\n    // Advance well past every retry delay; no retry should ever be scheduled.\n    await vi.advanceTimersByTimeAsync(60_000);\n\n    expect(mockClient.streams).toHaveLength(1);\n    expect(core.agent.getState().status.type).toBe(\"error\");\n    expect(core.state.failedSubmit).toBeUndefined();\n  });\n\n  it(\"subagent stops auto-resubmitting once the retry budget is exhausted\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"flaky task\" }]);\n    let stream = await mockClient.awaitStream();",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1438,
-      "startCol": 3,
-      "endLine": 1464,
-      "endCol": 49
-    },
-    {
-      "text": "// Bypass the agent's own mid-stream retry budget so each error is\n    // surfaced to ThreadCore immediately.\n    const bypassAgentRetryAndFail = () =\u003e {\n      vi.setSystemTime(new Date(Date.now() + 300_001));\n      stream.respondWithError(new Error(\"terminated\"));\n    }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function bypassAgentRetryAndFail\n\n// Bypass the agent's own mid-stream retry budget so each error is\n    // surfaced to ThreadCore immediately.\n    const bypassAgentRetryAndFail = () =\u003e {\n      vi.setSystemTime(new Date(Date.now() + 300_001));\n      stream.respondWithError(new Error(\"terminated\"));\n    }",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function bypassAgentRetryAndFail",
-      "startLine": 1466,
-      "startCol": 5,
-      "endLine": 1471,
-      "endCol": 6
-    },
-    {
-      "text": "bypassAgentRetryAndFail();\n    await vi.advanceTimersByTimeAsync(0);\n    expect(core.agent.getState().status.type).toBe(\"error\");\n\n    let streamCountBefore = mockClient.streams.length;\n    for (let i = 0; i \u003c 20; i++) {\n      // Advance past the largest possible thread-level retry delay so any\n      // scheduled retry timer fires.\n      await vi.advanceTimersByTimeAsync(40_000);\n      if (mockClient.streams.length === streamCountBefore) {\n        // No new stream was created: the retry budget has been exhausted.\n        break;\n      }\n      stream = mockClient.streams[mockClient.streams.length - 1];\n      streamCountBefore = mockClient.streams.length;\n      bypassAgentRetryAndFail();\n      await vi.advanceTimersByTimeAsync(0);\n    }\n\n    expect(core.agent.getState().status.type).toBe(\"error\");\n    const finalStreamCount = mockClient.streams.length;\n\n    // No further retry should ever be scheduled.\n    await vi.advanceTimersByTimeAsync(60_000);\n    expect(mockClient.streams).toHaveLength(finalStreamCount);\n    expect(core.agent.getState().status.type).toBe(\"error\");",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nbypassAgentRetryAndFail();\n    await vi.advanceTimersByTimeAsync(0);\n    expect(core.agent.getState().status.type).toBe(\"error\");\n\n    let streamCountBefore = mockClient.streams.length;\n    for (let i = 0; i \u003c 20; i++) {\n      // Advance past the largest possible thread-level retry delay so any\n      // scheduled retry timer fires.\n      await vi.advanceTimersByTimeAsync(40_000);\n      if (mockClient.streams.length === streamCountBefore) {\n        // No new stream was created: the retry budget has been exhausted.\n        break;\n      }\n      stream = mockClient.streams[mockClient.streams.length - 1];\n      streamCountBefore = mockClient.streams.length;\n      bypassAgentRetryAndFail();\n      await vi.advanceTimersByTimeAsync(0);\n    }\n\n    expect(core.agent.getState().status.type).toBe(\"error\");\n    const finalStreamCount = mockClient.streams.length;\n\n    // No further retry should ever be scheduled.\n    await vi.advanceTimersByTimeAsync(60_000);\n    expect(mockClient.streams).toHaveLength(finalStreamCount);\n    expect(core.agent.getState().status.type).toBe(\"error\");",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1473,
-      "startCol": 5,
-      "endLine": 1498,
-      "endCol": 61
-    },
-    {
-      "text": "it(\"aborting a subagent cancels a pending auto-resubmit timer\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"flaky task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // Bypass the agent's own mid-stream retry budget so this error is\n    // surfaced to ThreadCore immediately, scheduling an auto-resubmit timer.\n    vi.setSystemTime(new Date(Date.now() + 300_001));\n    stream.respondWithError(new Error(\"terminated\"));\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(core.agent.getState().status.type).toBe(\"error\");\n    expect(mockClient.streams).toHaveLength(1);\n\n    // Abort before the scheduled retry (1000ms) fires.\n    await core.abort();\n\n    // Advance well past every retry delay; the cancelled retry must never fire.\n    await vi.advanceTimersByTimeAsync(60_000);\n\n    expect(mockClient.streams).toHaveLength(1);\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"aborting a subagent cancels a pending auto-resubmit timer\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    await core.sendMessage([{ type: \"user\", text: \"flaky task\" }]);\n    const stream = await mockClient.awaitStream();\n\n    // Bypass the agent's own mid-stream retry budget so this error is\n    // surfaced to ThreadCore immediately, scheduling an auto-resubmit timer.\n    vi.setSystemTime(new Date(Date.now() + 300_001));\n    stream.respondWithError(new Error(\"terminated\"));\n    await vi.advanceTimersByTimeAsync(0);\n\n    expect(core.agent.getState().status.type).toBe(\"error\");\n    expect(mockClient.streams).toHaveLength(1);\n\n    // Abort before the scheduled retry (1000ms) fires.\n    await core.abort();\n\n    // Advance well past every retry delay; the cancelled retry must never fire.\n    await vi.advanceTimersByTimeAsync(60_000);\n\n    expect(mockClient.streams).toHaveLength(1);\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1501,
-      "startCol": 3,
-      "endLine": 1525,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"does not schedule an auto-resubmit when there is no user message to roll back to\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    // Directly exercise the private auto-resubmit path with an empty\n    // userMessage — the case where an error occurs with no user-authored\n    // text available to roll back to and resubmit (e.g. before any content\n    // was ever produced). This is not reachable through the public\n    // sendMessage API, since every InputMessage (user or system) produces a\n    // plain \"text\" content block that would populate baseText.\n    (\n      core as unknown as {\n        maybeAutoResubmitAfterError: (\n          error: Error,\n          userMessage: string,\n        ) =\u003e void;\n      }\n    ).maybeAutoResubmitAfterError(new Error(\"terminated\"), \"\");\n\n    await vi.advanceTimersByTimeAsync(60_000);\n\n    expect(mockClient.streams).toHaveLength(0);\n    expect(core.state.failedSubmit).toBeUndefined();\n  });\n});\n\ntype ParsedEntry = { type: string; [k: string]: unknown };",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"does not schedule an auto-resubmit when there is no user message to roll back to\", async () =\u003e {\n    const { core, mockClient } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n\n    // Directly exercise the private auto-resubmit path with an empty\n    // userMessage — the case where an error occurs with no user-authored\n    // text available to roll back to and resubmit (e.g. before any content\n    // was ever produced). This is not reachable through the public\n    // sendMessage API, since every InputMessage (user or system) produces a\n    // plain \"text\" content block that would populate baseText.\n    (\n      core as unknown as {\n        maybeAutoResubmitAfterError: (\n          error: Error,\n          userMessage: string,\n        ) =\u003e void;\n      }\n    ).maybeAutoResubmitAfterError(new Error(\"terminated\"), \"\");\n\n    await vi.advanceTimersByTimeAsync(60_000);\n\n    expect(mockClient.streams).toHaveLength(0);\n    expect(core.state.failedSubmit).toBeUndefined();\n  });\n});\n\ntype ParsedEntry = { type: string; [k: string]: unknown };",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1527,
-      "startCol": 3,
-      "endLine": 1554,
-      "endCol": 59
-    },
-    {
-      "text": "async function readArchive(threadId: ThreadId): Promise\u003cParsedEntry[]\u003e {\n  const filePath = threadConversationLogPath(threadId, TEST_ARCHIVE_DIR);\n  const contents = await fs.readFile(filePath, \"utf8\");\n  return contents\n    .split(\"\\n\")\n    .filter((l) =\u003e l.length \u003e 0)\n    .map((l) =\u003e JSON.parse(l) as ParsedEntry);\n}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function readArchive\n\nasync function readArchive(threadId: ThreadId): Promise\u003cParsedEntry[]\u003e {\n  const filePath = threadConversationLogPath(threadId, TEST_ARCHIVE_DIR);\n  const contents = await fs.readFile(filePath, \"utf8\");\n  return contents\n    .split(\"\\n\")\n    .filter((l) =\u003e l.length \u003e 0)\n    .map((l) =\u003e JSON.parse(l) as ParsedEntry);\n}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function readArchive",
-      "startLine": 1556,
-      "startCol": 1,
-      "endLine": 1563,
-      "endCol": 2
-    },
-    {
-      "text": "async function cleanupArchive(threadId: ThreadId): Promise\u003cvoid\u003e {\n  const dir = path.dirname(\n    threadConversationLogPath(threadId, TEST_ARCHIVE_DIR),\n  );\n  await fs.rm(dir, { recursive: true, force: true });\n}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function cleanupArchive\n\nasync function cleanupArchive(threadId: ThreadId): Promise\u003cvoid\u003e {\n  const dir = path.dirname(\n    threadConversationLogPath(threadId, TEST_ARCHIVE_DIR),\n  );\n  await fs.rm(dir, { recursive: true, force: true });\n}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function cleanupArchive",
-      "startLine": 1565,
-      "startCol": 1,
-      "endLine": 1570,
-      "endCol": 2
-    },
-    {
-      "text": "function uniqueThreadId(prefix: string): ThreadId {\n  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}` as ThreadId;\n}",
-      "contextualizedText": "// node/core/src/thread-core.test.ts \u003e function uniqueThreadId\n\nfunction uniqueThreadId(prefix: string): ThreadId {\n  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}` as ThreadId;\n}",
-      "headingContext": "node/core/src/thread-core.test.ts \u003e function uniqueThreadId",
-      "startLine": 1572,
-      "startCol": 1,
-      "endLine": 1574,
-      "endCol": 2
-    },
-    {
-      "text": "describe(\"ThreadCore conversation archive\", () =\u003e {\n  it(\"writes a normal turn's full messages (tool_use + tool_result) to the archive\", async () =\u003e {\n    const threadId = uniqueThreadId(\"archive-normal\");\n    const fileIO = new InMemoryFileIO({ \"/tmp/a.txt\": \"hello\" });\n    const { core, mockClient } = createThreadCoreWithMock({ fileIO }, threadId);\n\n    try {\n      await core.sendMessage([{ type: \"user\", text: \"edit a\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamToolUse(\"edl-1\" as ToolRequestId, \"edl\" as ToolName, {\n        script: `file \\`/tmp/a.txt\\`\\nnarrow /hello/\\nreplace \"bye\"`,\n      });\n      stream.finishResponse(\"tool_use\");\n\n      const nextStream = await pollUntil(() =\u003e {\n        if (mockClient.streams.length \u003c 2) throw new Error(\"waiting\");\n        return mockClient.streams[1];\n      });\n      nextStream.streamText(\"done\");\n      nextStream.finishResponse(\"end_turn\");\n\n      await pollUntil(() =\u003e {\n        if (core.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n      await core.awaitArchiveFlush();\n\n      const entries = await readArchive(threadId);\n      expect(entries[0].type).toBe(\"thread_start\");\n\n      const messages = entries.filter((e) =\u003e e.type === \"message\");\n      const serialized = JSON.stringify(messages);\n      expect(serialized).toContain('\"type\":\"tool_use\"');\n      expect(serialized).toContain('\"type\":\"tool_result\"');\n      expect(serialized).toContain(\"/tmp/a.txt\");\n    } finally {\n      await core.destroy();\n      await cleanupArchive(threadId);\n    }\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\ndescribe(\"ThreadCore conversation archive\", () =\u003e {\n  it(\"writes a normal turn's full messages (tool_use + tool_result) to the archive\", async () =\u003e {\n    const threadId = uniqueThreadId(\"archive-normal\");\n    const fileIO = new InMemoryFileIO({ \"/tmp/a.txt\": \"hello\" });\n    const { core, mockClient } = createThreadCoreWithMock({ fileIO }, threadId);\n\n    try {\n      await core.sendMessage([{ type: \"user\", text: \"edit a\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamToolUse(\"edl-1\" as ToolRequestId, \"edl\" as ToolName, {\n        script: `file \\`/tmp/a.txt\\`\\nnarrow /hello/\\nreplace \"bye\"`,\n      });\n      stream.finishResponse(\"tool_use\");\n\n      const nextStream = await pollUntil(() =\u003e {\n        if (mockClient.streams.length \u003c 2) throw new Error(\"waiting\");\n        return mockClient.streams[1];\n      });\n      nextStream.streamText(\"done\");\n      nextStream.finishResponse(\"end_turn\");\n\n      await pollUntil(() =\u003e {\n        if (core.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n      await core.awaitArchiveFlush();\n\n      const entries = await readArchive(threadId);\n      expect(entries[0].type).toBe(\"thread_start\");\n\n      const messages = entries.filter((e) =\u003e e.type === \"message\");\n      const serialized = JSON.stringify(messages);\n      expect(serialized).toContain('\"type\":\"tool_use\"');\n      expect(serialized).toContain('\"type\":\"tool_result\"');\n      expect(serialized).toContain(\"/tmp/a.txt\");\n    } finally {\n      await core.destroy();\n      await cleanupArchive(threadId);\n    }\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1576,
-      "startCol": 1,
-      "endLine": 1616,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"persists completed messages mid-turn but withholds the streaming one\", async () =\u003e {\n    const threadId = uniqueThreadId(\"archive-withhold\");\n    const fileIO = new InMemoryFileIO({ \"/tmp/a.txt\": \"hello\" });\n    const { core, mockClient } = createThreadCoreWithMock({ fileIO }, threadId);\n\n    try {\n      await core.sendMessage([{ type: \"user\", text: \"edit a\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamToolUse(\"edl-1\" as ToolRequestId, \"edl\" as ToolName, {\n        script: `file \\`/tmp/a.txt\\`\\nnarrow /hello/\\nreplace \"bye\"`,\n      });\n      stream.finishResponse(\"tool_use\");\n\n      // Second stream begins once the earlier turn steps are finalized. The\n      // assistant's in-flight text is not yet a finalized message, so onUpdate\n      // persists the completed tool_use but withholds the streaming reply.\n      const nextStream = await pollUntil(() =\u003e {\n        if (mockClient.streams.length \u003c 2) throw new Error(\"waiting\");\n        return mockClient.streams[1];\n      });\n      nextStream.streamText(\"streaming-reply\");\n      await core.awaitArchiveFlush();\n\n      const midSerialized = JSON.stringify(\n        (await readArchive(threadId)).filter((e) =\u003e e.type === \"message\"),\n      );\n      expect(midSerialized).toContain('\"type\":\"tool_use\"');\n      expect(midSerialized).not.toContain(\"streaming-reply\");\n\n      nextStream.finishResponse(\"end_turn\");\n      await pollUntil(() =\u003e {\n        if (core.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n      await core.awaitArchiveFlush();\n\n      const finalSerialized = JSON.stringify(\n        (await readArchive(threadId)).filter((e) =\u003e e.type === \"message\"),\n      );\n      expect(finalSerialized).toContain('\"type\":\"tool_result\"');\n      expect(finalSerialized).toContain(\"streaming-reply\");\n    } finally {\n      await core.destroy();\n      await cleanupArchive(threadId);\n    }\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"persists completed messages mid-turn but withholds the streaming one\", async () =\u003e {\n    const threadId = uniqueThreadId(\"archive-withhold\");\n    const fileIO = new InMemoryFileIO({ \"/tmp/a.txt\": \"hello\" });\n    const { core, mockClient } = createThreadCoreWithMock({ fileIO }, threadId);\n\n    try {\n      await core.sendMessage([{ type: \"user\", text: \"edit a\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamToolUse(\"edl-1\" as ToolRequestId, \"edl\" as ToolName, {\n        script: `file \\`/tmp/a.txt\\`\\nnarrow /hello/\\nreplace \"bye\"`,\n      });\n      stream.finishResponse(\"tool_use\");\n\n      // Second stream begins once the earlier turn steps are finalized. The\n      // assistant's in-flight text is not yet a finalized message, so onUpdate\n      // persists the completed tool_use but withholds the streaming reply.\n      const nextStream = await pollUntil(() =\u003e {\n        if (mockClient.streams.length \u003c 2) throw new Error(\"waiting\");\n        return mockClient.streams[1];\n      });\n      nextStream.streamText(\"streaming-reply\");\n      await core.awaitArchiveFlush();\n\n      const midSerialized = JSON.stringify(\n        (await readArchive(threadId)).filter((e) =\u003e e.type === \"message\"),\n      );\n      expect(midSerialized).toContain('\"type\":\"tool_use\"');\n      expect(midSerialized).not.toContain(\"streaming-reply\");\n\n      nextStream.finishResponse(\"end_turn\");\n      await pollUntil(() =\u003e {\n        if (core.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n      await core.awaitArchiveFlush();\n\n      const finalSerialized = JSON.stringify(\n        (await readArchive(threadId)).filter((e) =\u003e e.type === \"message\"),\n      );\n      expect(finalSerialized).toContain('\"type\":\"tool_result\"');\n      expect(finalSerialized).toContain(\"streaming-reply\");\n    } finally {\n      await core.destroy();\n      await cleanupArchive(threadId);\n    }\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1618,
-      "startCol": 3,
-      "endLine": 1664,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"inserts a compaction marker between agent generations and keeps appending\", async () =\u003e {\n    const threadId = uniqueThreadId(\"archive-compact\");\n    const { core, mockClient } = createThreadCoreWithMock(undefined, threadId);\n\n    try {\n      await core.sendMessage([{ type: \"user\", text: \"first turn\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamText(\"done\");\n      stream.finishResponse(\"end_turn\");\n\n      await pollUntil(() =\u003e {\n        if (core.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n      await core.awaitArchiveFlush();\n\n      const compactPromise = (\n        core as unknown as {\n          handleCompactComplete: (\n            summary: string,\n            nextPrompt: string | undefined,\n            steps: unknown[],\n          ) =\u003e Promise\u003cvoid\u003e;\n        }\n      ).handleCompactComplete(\"SUMMARY TEXT\", undefined, [{}, {}]);\n\n      const contStream = await pollUntil(() =\u003e {\n        if (mockClient.streams.length \u003c 2) throw new Error(\"waiting\");\n        return mockClient.streams[1];\n      });\n      contStream.streamText(\"resumed\");\n      contStream.finishResponse(\"end_turn\");\n      await compactPromise;\n      await core.awaitArchiveFlush();\n\n      const entries = await readArchive(threadId);\n      const types = entries.map((e) =\u003e e.type);\n      const compactionIdx = types.indexOf(\"compaction\");\n      expect(compactionIdx).toBeGreaterThan(0);\n      expect(types.indexOf(\"message\")).toBeLessThan(compactionIdx);\n      expect(types.lastIndexOf(\"message\")).toBeGreaterThan(compactionIdx);\n\n      const compaction = entries[compactionIdx];\n      expect(compaction.summary).toBe(\"SUMMARY TEXT\");\n      expect(compaction.chunkCount).toBe(2);\n    } finally {\n      await core.destroy();\n      await cleanupArchive(threadId);\n    }\n  });\n\n  it(\"writes a self-contained, fork-marked archive for a cloned thread\", async () =\u003e {\n    const parentId = uniqueThreadId(\"archive-parent\");",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"inserts a compaction marker between agent generations and keeps appending\", async () =\u003e {\n    const threadId = uniqueThreadId(\"archive-compact\");\n    const { core, mockClient } = createThreadCoreWithMock(undefined, threadId);\n\n    try {\n      await core.sendMessage([{ type: \"user\", text: \"first turn\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamText(\"done\");\n      stream.finishResponse(\"end_turn\");\n\n      await pollUntil(() =\u003e {\n        if (core.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n      await core.awaitArchiveFlush();\n\n      const compactPromise = (\n        core as unknown as {\n          handleCompactComplete: (\n            summary: string,\n            nextPrompt: string | undefined,\n            steps: unknown[],\n          ) =\u003e Promise\u003cvoid\u003e;\n        }\n      ).handleCompactComplete(\"SUMMARY TEXT\", undefined, [{}, {}]);\n\n      const contStream = await pollUntil(() =\u003e {\n        if (mockClient.streams.length \u003c 2) throw new Error(\"waiting\");\n        return mockClient.streams[1];\n      });\n      contStream.streamText(\"resumed\");\n      contStream.finishResponse(\"end_turn\");\n      await compactPromise;\n      await core.awaitArchiveFlush();\n\n      const entries = await readArchive(threadId);\n      const types = entries.map((e) =\u003e e.type);\n      const compactionIdx = types.indexOf(\"compaction\");\n      expect(compactionIdx).toBeGreaterThan(0);\n      expect(types.indexOf(\"message\")).toBeLessThan(compactionIdx);\n      expect(types.lastIndexOf(\"message\")).toBeGreaterThan(compactionIdx);\n\n      const compaction = entries[compactionIdx];\n      expect(compaction.summary).toBe(\"SUMMARY TEXT\");\n      expect(compaction.chunkCount).toBe(2);\n    } finally {\n      await core.destroy();\n      await cleanupArchive(threadId);\n    }\n  });\n\n  it(\"writes a self-contained, fork-marked archive for a cloned thread\", async () =\u003e {\n    const parentId = uniqueThreadId(\"archive-parent\");",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1666,
-      "startCol": 3,
-      "endLine": 1719,
-      "endCol": 55
-    },
-    {
-      "text": "const childId = uniqueThreadId(\"archive-child\");\n    const {\n      core: parent,\n      mockClient,\n      context,\n    } = createThreadCoreWithMock(undefined, parentId);\n\n    let child: ThreadCore | undefined;",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nconst childId = uniqueThreadId(\"archive-child\");\n    const {\n      core: parent,\n      mockClient,\n      context,\n    } = createThreadCoreWithMock(undefined, parentId);\n\n    let child: ThreadCore | undefined;",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1720,
-      "startCol": 5,
-      "endLine": 1727,
-      "endCol": 39
-    },
-    {
-      "text": "{\n      await parent.sendMessage([{ type: \"user\", text: \"parent turn\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamText(\"parent response\");\n      stream.finishResponse(\"end_turn\");\n\n      await pollUntil(() =\u003e {\n        if (parent.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n\n      const nativeMessageIdx = parent.agent.getNativeMessageIdx();\n      child = await ThreadCore.clone({\n        sourceCore: parent,\n        newId: childId,\n        nativeMessageIdx,\n        context,\n      });\n\n      await child.sendMessage([{ type: \"user\", text: \"child turn\" }]);\n      const childStream = await pollUntil(() =\u003e {\n        const s = mockClient.streams[mockClient.streams.length - 1];\n        if (!s || s === stream) throw new Error(\"waiting\");\n        return s;\n      });\n      childStream.streamText(\"child response\");\n      childStream.finishResponse(\"end_turn\");\n\n      await pollUntil(() =\u003e {\n        if (child!.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n      await child.awaitArchiveFlush();\n      await parent.awaitArchiveFlush();\n\n      const childEntries = await readArchive(childId);\n      expect(childEntries[0].type).toBe(\"thread_start\");\n      expect(childEntries[1].type).toBe(\"fork\");\n      expect(childEntries[1].fromThreadId).toBe(parentId);\n      expect(childEntries[1].nativeMessageIdx).toBe(nativeMessageIdx);\n\n      const childMessages = childEntries.filter((e) =\u003e e.type === \"message\");\n      const childSerialized = JSON.stringify(childMessages);\n      expect(childSerialized).toContain(\"parent turn\");\n      expect(childSerialized).toContain(\"child turn\");\n\n      const parentEntries = await readArchive(parentId);\n      expect(parentEntries.some((e) =\u003e e.type === \"fork\")).toBe(false);\n    }",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\n{\n      await parent.sendMessage([{ type: \"user\", text: \"parent turn\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamText(\"parent response\");\n      stream.finishResponse(\"end_turn\");\n\n      await pollUntil(() =\u003e {\n        if (parent.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n\n      const nativeMessageIdx = parent.agent.getNativeMessageIdx();\n      child = await ThreadCore.clone({\n        sourceCore: parent,\n        newId: childId,\n        nativeMessageIdx,\n        context,\n      });\n\n      await child.sendMessage([{ type: \"user\", text: \"child turn\" }]);\n      const childStream = await pollUntil(() =\u003e {\n        const s = mockClient.streams[mockClient.streams.length - 1];\n        if (!s || s === stream) throw new Error(\"waiting\");\n        return s;\n      });\n      childStream.streamText(\"child response\");\n      childStream.finishResponse(\"end_turn\");\n\n      await pollUntil(() =\u003e {\n        if (child!.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n      await child.awaitArchiveFlush();\n      await parent.awaitArchiveFlush();\n\n      const childEntries = await readArchive(childId);\n      expect(childEntries[0].type).toBe(\"thread_start\");\n      expect(childEntries[1].type).toBe(\"fork\");\n      expect(childEntries[1].fromThreadId).toBe(parentId);\n      expect(childEntries[1].nativeMessageIdx).toBe(nativeMessageIdx);\n\n      const childMessages = childEntries.filter((e) =\u003e e.type === \"message\");\n      const childSerialized = JSON.stringify(childMessages);\n      expect(childSerialized).toContain(\"parent turn\");\n      expect(childSerialized).toContain(\"child turn\");\n\n      const parentEntries = await readArchive(parentId);\n      expect(parentEntries.some((e) =\u003e e.type === \"fork\")).toBe(false);\n    }",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1728,
-      "startCol": 9,
-      "endLine": 1778,
-      "endCol": 6
-    },
-    {
-      "text": "finally {\n      await parent.destroy();\n      if (child) await child.destroy();\n      await cleanupArchive(parentId);\n      await cleanupArchive(childId);\n    }\n  });\n});\n\ndescribe(\"ThreadCore scratchpad state\", () =\u003e {\n  it(\"subagent threads start with an empty scratchpad\", () =\u003e {\n    const { core } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    expect(core.state.scratchpad.entries).toEqual([]);\n  });\n\n  it(\"empties a populated scratchpad on reset-after-compaction\", () =\u003e {\n    const { core } = createThreadCoreWithMock();\n    core.state.scratchpad.entries.push({ key: \"a\", value: \"1\" });\n    core.state.scratchpad.entries.push({ key: \"b\", value: \"2\" });\n    core.update({ type: \"reset-after-compaction\" });\n    expect(core.state.scratchpad.entries).toEqual([]);\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nfinally {\n      await parent.destroy();\n      if (child) await child.destroy();\n      await cleanupArchive(parentId);\n      await cleanupArchive(childId);\n    }\n  });\n});\n\ndescribe(\"ThreadCore scratchpad state\", () =\u003e {\n  it(\"subagent threads start with an empty scratchpad\", () =\u003e {\n    const { core } = createThreadCoreWithMock({\n      threadType: \"subagent\" as ThreadType,\n    });\n    expect(core.state.scratchpad.entries).toEqual([]);\n  });\n\n  it(\"empties a populated scratchpad on reset-after-compaction\", () =\u003e {\n    const { core } = createThreadCoreWithMock();\n    core.state.scratchpad.entries.push({ key: \"a\", value: \"1\" });\n    core.state.scratchpad.entries.push({ key: \"b\", value: \"2\" });\n    core.update({ type: \"reset-after-compaction\" });\n    expect(core.state.scratchpad.entries).toEqual([]);\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1778,
-      "startCol": 7,
-      "endLine": 1801,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"clone deep-copies scratchpad and edlRegisters with isolation\", async () =\u003e {\n    const parentId = uniqueThreadId(\"sp-parent\");\n    const childId = uniqueThreadId(\"sp-child\");\n    const {\n      core: parent,\n      mockClient,\n      context,\n    } = createThreadCoreWithMock(undefined, parentId);\n\n    let child: ThreadCore | undefined;\n    try {\n      await parent.sendMessage([{ type: \"user\", text: \"parent turn\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamText(\"parent response\");\n      stream.finishResponse(\"end_turn\");\n      await pollUntil(() =\u003e {\n        if (parent.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n\n      parent.state.scratchpad.entries.push({ key: \"a\", value: \"1\" });\n      parent.state.edlRegisters.registers.set(\"r\", \"regval\");\n      parent.state.edlRegisters.nextSavedId = 3;\n\n      const nativeMessageIdx = parent.agent.getNativeMessageIdx();\n      child = await ThreadCore.clone({\n        sourceCore: parent,\n        newId: childId,\n        nativeMessageIdx,\n        context,\n      });\n\n      expect(child.state.scratchpad.entries).toEqual([\n        { key: \"a\", value: \"1\" },\n      ]);\n      expect(child.state.edlRegisters.registers.get(\"r\")).toBe(\"regval\");\n      expect(child.state.edlRegisters.nextSavedId).toBe(3);\n\n      child.state.scratchpad.entries.push({ key: \"b\", value: \"2\" });\n      child.state.edlRegisters.registers.set(\"r2\", \"x\");\n      expect(parent.state.scratchpad.entries.map((e) =\u003e e.key)).toEqual([\"a\"]);\n      expect(parent.state.edlRegisters.registers.has(\"r2\")).toBe(false);\n    } finally {\n      await parent.destroy();\n      if (child) await child.destroy();\n      await cleanupArchive(parentId);\n      await cleanupArchive(childId);\n    }\n  });",
-      "contextualizedText": "// node/core/src/thread-core.test.ts\n\nit(\"clone deep-copies scratchpad and edlRegisters with isolation\", async () =\u003e {\n    const parentId = uniqueThreadId(\"sp-parent\");\n    const childId = uniqueThreadId(\"sp-child\");\n    const {\n      core: parent,\n      mockClient,\n      context,\n    } = createThreadCoreWithMock(undefined, parentId);\n\n    let child: ThreadCore | undefined;\n    try {\n      await parent.sendMessage([{ type: \"user\", text: \"parent turn\" }]);\n      const stream = await mockClient.awaitStream();\n      stream.streamText(\"parent response\");\n      stream.finishResponse(\"end_turn\");\n      await pollUntil(() =\u003e {\n        if (parent.agent.getState().status.type !== \"stopped\")\n          throw new Error(\"waiting\");\n        return true;\n      });\n\n      parent.state.scratchpad.entries.push({ key: \"a\", value: \"1\" });\n      parent.state.edlRegisters.registers.set(\"r\", \"regval\");\n      parent.state.edlRegisters.nextSavedId = 3;\n\n      const nativeMessageIdx = parent.agent.getNativeMessageIdx();\n      child = await ThreadCore.clone({\n        sourceCore: parent,\n        newId: childId,\n        nativeMessageIdx,\n        context,\n      });\n\n      expect(child.state.scratchpad.entries).toEqual([\n        { key: \"a\", value: \"1\" },\n      ]);\n      expect(child.state.edlRegisters.registers.get(\"r\")).toBe(\"regval\");\n      expect(child.state.edlRegisters.nextSavedId).toBe(3);\n\n      child.state.scratchpad.entries.push({ key: \"b\", value: \"2\" });\n      child.state.edlRegisters.registers.set(\"r2\", \"x\");\n      expect(parent.state.scratchpad.entries.map((e) =\u003e e.key)).toEqual([\"a\"]);\n      expect(parent.state.edlRegisters.registers.has(\"r2\")).toBe(false);\n    } finally {\n      await parent.destroy();\n      if (child) await child.destroy();\n      await cleanupArchive(parentId);\n      await cleanupArchive(childId);\n    }\n  });",
-      "headingContext": "node/core/src/thread-core.test.ts",
-      "startLine": 1803,
-      "startCol": 3,
-      "endLine": 1852,
-      "endCol": 6
+      "start": 0,
+      "end": 2088
+    },
+    {
+      "start": 2090,
+      "end": 3971
+    },
+    {
+      "start": 3976,
+      "end": 4073
+    },
+    {
+      "start": 4077,
+      "end": 6023
+    },
+    {
+      "start": 6029,
+      "end": 7874
+    },
+    {
+      "start": 7880,
+      "end": 9685
+    },
+    {
+      "start": 9691,
+      "end": 11775
+    },
+    {
+      "start": 11781,
+      "end": 13633
+    },
+    {
+      "start": 13639,
+      "end": 15747
+    },
+    {
+      "start": 15753,
+      "end": 17625
+    },
+    {
+      "start": 17627,
+      "end": 19737
+    },
+    {
+      "start": 19739,
+      "end": 21812
+    },
+    {
+      "start": 21818,
+      "end": 23736
+    },
+    {
+      "start": 23742,
+      "end": 25819
+    },
+    {
+      "start": 25825,
+      "end": 27782
+    },
+    {
+      "start": 27784,
+      "end": 28917
+    },
+    {
+      "start": 28921,
+      "end": 30363
+    },
+    {
+      "start": 30365,
+      "end": 32282
+    },
+    {
+      "start": 32288,
+      "end": 34303
+    },
+    {
+      "start": 34309,
+      "end": 36124
+    },
+    {
+      "start": 36130,
+      "end": 38141
+    },
+    {
+      "start": 38143,
+      "end": 40153
+    },
+    {
+      "start": 40157,
+      "end": 42010
+    },
+    {
+      "start": 42014,
+      "end": 44026
+    },
+    {
+      "start": 44032,
+      "end": 46291
+    },
+    {
+      "start": 46295,
+      "end": 48395
+    },
+    {
+      "start": 48399,
+      "end": 50387
+    },
+    {
+      "start": 50393,
+      "end": 52443
+    },
+    {
+      "start": 52449,
+      "end": 54525
+    },
+    {
+      "start": 54531,
+      "end": 56549
+    },
+    {
+      "start": 56557,
+      "end": 58638
+    },
+    {
+      "start": 58646,
+      "end": 60847
+    },
+    {
+      "start": 60851,
+      "end": 62957
+    },
+    {
+      "start": 62965,
+      "end": 65026
+    },
+    {
+      "start": 65034,
+      "end": 65717
     }
   ]
 }

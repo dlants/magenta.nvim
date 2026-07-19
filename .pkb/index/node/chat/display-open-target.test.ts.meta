@@ -1,69 +1,19 @@
 {
   "blobSha": "c17c6b9fa358c8419438420996e23e4a8458016a",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as fsPromises from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport { describe, expect, it } from \"vitest\";\nimport { getAllWindows } from \"../nvim/nvim.ts\";\nimport { withDriver } from \"../test/preamble.ts\";\nimport { pollUntil } from \"../utils/async.ts\";",
-      "contextualizedText": "// node/chat/display-open-target.test.ts\n\nimport * as fsPromises from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport { describe, expect, it } from \"vitest\";\nimport { getAllWindows } from \"../nvim/nvim.ts\";\nimport { withDriver } from \"../test/preamble.ts\";\nimport { pollUntil } from \"../utils/async.ts\";",
-      "headingContext": "node/chat/display-open-target.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 6,
-      "endCol": 47
+      "start": 0,
+      "end": 1607
     },
     {
-      "text": "async function installUiOpenMock(\n  nvim: import(\"../nvim/nvim-node/index.ts\").Nvim,\n): Promise\u003cvoid\u003e {\n  await nvim.call(\"nvim_exec_lua\", [\n    `\\\nvim.g.magenta_test_ui_open = \"\"\nvim.ui.open = function(url)\n  vim.g.magenta_test_ui_open = url\n  return { wait = function() return 0 end }\nend`,\n    [],\n  ]);\n}",
-      "contextualizedText": "// node/chat/display-open-target.test.ts \u003e function installUiOpenMock\n\nasync function installUiOpenMock(\n  nvim: import(\"../nvim/nvim-node/index.ts\").Nvim,\n): Promise\u003cvoid\u003e {\n  await nvim.call(\"nvim_exec_lua\", [\n    `\\\nvim.g.magenta_test_ui_open = \"\"\nvim.ui.open = function(url)\n  vim.g.magenta_test_ui_open = url\n  return { wait = function() return 0 end }\nend`,\n    [],\n  ]);\n}",
-      "headingContext": "node/chat/display-open-target.test.ts \u003e function installUiOpenMock",
-      "startLine": 8,
-      "startCol": 1,
-      "endLine": 20,
-      "endCol": 2
+      "start": 1617,
+      "end": 3688
     },
     {
-      "text": "describe(\"node/chat/display-open-target.test.ts\", () =\u003e {\n  it(\"opens a file path under the cursor in a non-magenta window\", async () =\u003e {\n    await withDriver",
-      "contextualizedText": "// node/chat/display-open-target.test.ts\n\ndescribe(\"node/chat/display-open-target.test.ts\", () =\u003e {\n  it(\"opens a file path under the cursor in a non-magenta window\", async () =\u003e {\n    await withDriver",
-      "headingContext": "node/chat/display-open-target.test.ts",
-      "startLine": 22,
-      "startCol": 1,
-      "endLine": 24,
-      "endCol": 21
-    },
-    {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"target.txt\"),\n            \"hello file\\n\",\n          );\n        }",
-      "contextualizedText": "// node/chat/display-open-target.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fsPromises.writeFile(\n            path.join(tmpDir, \"target.txt\"),\n            \"hello file\\n\",\n          );\n        }",
-      "headingContext": "node/chat/display-open-target.test.ts \u003e function setupFiles",
-      "startLine": 26,
-      "startCol": 1,
-      "endLine": 31,
-      "endCol": 10
-    },
-    {
-      "text": "async (driver) =\u003e {\n        await installUiOpenMock(driver.nvim);\n        await driver.showSidebar();\n\n        await driver.inputMagentaText(\"tell me about target.txt\");\n        await driver.send();\n\n        const request = await driver.mockAnthropic.awaitPendingStream();\n        request.streamText(\"Look at ./target.txt for details.\");\n        request.finishResponse(\"end_turn\");\n\n        const pos = await driver.assertDisplayBufferContains(\"./target.txt\");\n        // Wait a bit for the render to stabilize before triggering the key\n        await new Promise((resolve) =\u003e setTimeout(resolve, 100));\n        await driver.triggerDisplayBufferKey(pos, \"\u003cCR\u003e\");\n\n        const targetBufferName = await pollUntil(\n          async () =\u003e {\n            const windows = await getAllWindows(driver.nvim);\n            for (const w of windows) {\n              const isMagenta = await w.getVar(\"magenta\");\n              if (isMagenta) continue;\n              const buf = await w.buffer();\n              const name = await buf.getName();\n              if (/target\\.txt$/.test(name)) {\n                return name;\n              }\n            }\n            throw new Error(\"target.txt not yet opened in non-magenta window\");\n          },\n          { timeout: 2000 },\n        );\n        expect(targetBufferName).toMatch(/target\\.txt$/);\n      }",
-      "contextualizedText": "// node/chat/display-open-target.test.ts\n\nasync (driver) =\u003e {\n        await installUiOpenMock(driver.nvim);\n        await driver.showSidebar();\n\n        await driver.inputMagentaText(\"tell me about target.txt\");\n        await driver.send();\n\n        const request = await driver.mockAnthropic.awaitPendingStream();\n        request.streamText(\"Look at ./target.txt for details.\");\n        request.finishResponse(\"end_turn\");\n\n        const pos = await driver.assertDisplayBufferContains(\"./target.txt\");\n        // Wait a bit for the render to stabilize before triggering the key\n        await new Promise((resolve) =\u003e setTimeout(resolve, 100));\n        await driver.triggerDisplayBufferKey(pos, \"\u003cCR\u003e\");\n\n        const targetBufferName = await pollUntil(\n          async () =\u003e {\n            const windows = await getAllWindows(driver.nvim);\n            for (const w of windows) {\n              const isMagenta = await w.getVar(\"magenta\");\n              if (isMagenta) continue;\n              const buf = await w.buffer();\n              const name = await buf.getName();\n              if (/target\\.txt$/.test(name)) {\n                return name;\n              }\n            }\n            throw new Error(\"target.txt not yet opened in non-magenta window\");\n          },\n          { timeout: 2000 },\n        );\n        expect(targetBufferName).toMatch(/target\\.txt$/);\n      }",
-      "headingContext": "node/chat/display-open-target.test.ts",
-      "startLine": 33,
-      "startCol": 7,
-      "endLine": 66,
-      "endCol": 8
-    },
-    {
-      "text": "it(\"opens a URL under the cursor via vim.ui.open\", async () =\u003e {\n    await withDriver({}, async (driver) =\u003e {\n      await installUiOpenMock(driver.nvim);\n      await driver.showSidebar();\n\n      await driver.inputMagentaText(\"show me a link\");\n      await driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.streamText(\"See https://example.com for more info.\");\n      request.finishResponse(\"end_turn\");\n\n      const pos = await driver.assertDisplayBufferContains(\n        \"https://example.com\",\n      );\n      // Wait a bit for the render to stabilize before triggering the key\n      await new Promise((resolve) =\u003e setTimeout(resolve, 100));\n      await driver.triggerDisplayBufferKey(pos, \"\u003cCR\u003e\");\n\n      await pollUntil(\n        async () =\u003e {\n          const url = (await driver.nvim.call(\"nvim_get_var\", [\n            \"magenta_test_ui_open\",\n          ])) as string;\n          if (url !== \"https://example.com\") {\n            throw new Error(\n              `vim.ui.open not invoked yet (g:magenta_test_ui_open=${JSON.stringify(url)})`,\n            );\n          }\n          return url;\n        },\n        { timeout: 2000 },\n      );\n    });\n  });",
-      "contextualizedText": "// node/chat/display-open-target.test.ts\n\nit(\"opens a URL under the cursor via vim.ui.open\", async () =\u003e {\n    await withDriver({}, async (driver) =\u003e {\n      await installUiOpenMock(driver.nvim);\n      await driver.showSidebar();\n\n      await driver.inputMagentaText(\"show me a link\");\n      await driver.send();\n\n      const request = await driver.mockAnthropic.awaitPendingStream();\n      request.streamText(\"See https://example.com for more info.\");\n      request.finishResponse(\"end_turn\");\n\n      const pos = await driver.assertDisplayBufferContains(\n        \"https://example.com\",\n      );\n      // Wait a bit for the render to stabilize before triggering the key\n      await new Promise((resolve) =\u003e setTimeout(resolve, 100));\n      await driver.triggerDisplayBufferKey(pos, \"\u003cCR\u003e\");\n\n      await pollUntil(\n        async () =\u003e {\n          const url = (await driver.nvim.call(\"nvim_get_var\", [\n            \"magenta_test_ui_open\",\n          ])) as string;\n          if (url !== \"https://example.com\") {\n            throw new Error(\n              `vim.ui.open not invoked yet (g:magenta_test_ui_open=${JSON.stringify(url)})`,\n            );\n          }\n          return url;\n        },\n        { timeout: 2000 },\n      );\n    });\n  });",
-      "headingContext": "node/chat/display-open-target.test.ts",
-      "startLine": 70,
-      "startCol": 3,
-      "endLine": 104,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"\u003cCR\u003e still fires existing withBindings handlers\", async () =\u003e {\n    await withDriver({}, async (driver) =\u003e {\n      await installUiOpenMock(driver.nvim);\n      await driver.showSidebar();\n\n      await driver.inputMagentaText(\"First thread message\");\n      await driver.send();\n      const response = await driver.mockAnthropic.awaitPendingStreamWithText(\n        \"First thread message\",\n      );\n      response.respond({\n        stopReason: \"end_turn\",\n        text: \"Assistant reply here.\",\n        toolRequests: [],\n      });\n\n      const thread1 = driver.getThreadId(0);\n\n      await driver.magenta.command(\"new-thread\");\n      await driver.awaitThreadCount(2);\n\n      await driver.magenta.command(\"threads-overview\");\n      await driver.assertDisplayBufferContains(\"# Threads\");\n\n      const beforeUrl = (await driver.nvim.call(\"nvim_get_var\", [\n        \"magenta_test_ui_open\",\n      ])) as string;\n\n      const pos = await driver.assertDisplayBufferContains(\"Untitled\");\n      await driver.triggerDisplayBufferKey(pos, \"\u003cCR\u003e\");\n\n      await driver.awaitChatState({ state: \"thread-selected\" });\n\n      const afterUrl = (await driver.nvim.call(\"nvim_get_var\", [\n        \"magenta_test_ui_open\",\n      ])) as string;\n      expect(afterUrl).toBe(beforeUrl);\n      expect(driver.getActiveThreadId()).not.toBe(thread1);\n    });\n  });",
-      "contextualizedText": "// node/chat/display-open-target.test.ts\n\nit(\"\u003cCR\u003e still fires existing withBindings handlers\", async () =\u003e {\n    await withDriver({}, async (driver) =\u003e {\n      await installUiOpenMock(driver.nvim);\n      await driver.showSidebar();\n\n      await driver.inputMagentaText(\"First thread message\");\n      await driver.send();\n      const response = await driver.mockAnthropic.awaitPendingStreamWithText(\n        \"First thread message\",\n      );\n      response.respond({\n        stopReason: \"end_turn\",\n        text: \"Assistant reply here.\",\n        toolRequests: [],\n      });\n\n      const thread1 = driver.getThreadId(0);\n\n      await driver.magenta.command(\"new-thread\");\n      await driver.awaitThreadCount(2);\n\n      await driver.magenta.command(\"threads-overview\");\n      await driver.assertDisplayBufferContains(\"# Threads\");\n\n      const beforeUrl = (await driver.nvim.call(\"nvim_get_var\", [\n        \"magenta_test_ui_open\",\n      ])) as string;\n\n      const pos = await driver.assertDisplayBufferContains(\"Untitled\");\n      await driver.triggerDisplayBufferKey(pos, \"\u003cCR\u003e\");\n\n      await driver.awaitChatState({ state: \"thread-selected\" });\n\n      const afterUrl = (await driver.nvim.call(\"nvim_get_var\", [\n        \"magenta_test_ui_open\",\n      ])) as string;\n      expect(afterUrl).toBe(beforeUrl);\n      expect(driver.getActiveThreadId()).not.toBe(thread1);\n    });\n  });",
-      "headingContext": "node/chat/display-open-target.test.ts",
-      "startLine": 106,
-      "startCol": 3,
-      "endLine": 145,
-      "endCol": 6
+      "start": 3696,
+      "end": 4836
     }
   ]
 }

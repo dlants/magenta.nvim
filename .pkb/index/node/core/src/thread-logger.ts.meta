@@ -1,123 +1,23 @@
 {
   "blobSha": "e62b0529eef139cfb72a08d2ea0d1c7e3164e8f0",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport type { ThreadId, ThreadType } from \"./chat-types.ts\";\nimport type { Logger } from \"./logger.ts\";\nimport type { ProviderMessage } from \"./providers/provider-types.ts\";\nimport { threadConversationLogPath, threadMetaPath } from \"./utils/files.ts\";\n\nexport type ForkProvenance = {\n  fromThreadId: ThreadId;\n  nativeMessageIdx: number;\n};\n\nexport type ThreadLogEntry =\n  | {\n      type: \"thread_start\";\n      threadId: ThreadId;\n      timestamp: string;\n      threadType: ThreadType;\n    }\n  | {\n      type: \"fork\";\n      timestamp: string;\n      fromThreadId: ThreadId;\n      nativeMessageIdx: number;\n    }\n  | {\n      type: \"message\";\n      timestamp: string;\n      message: ProviderMessage;\n    }\n  | {\n      type: \"compaction\";\n      timestamp: string;\n      summary?: string | undefined;\n      chunkCount: number;\n    }\n  | { type: \"restart\"; timestamp: string }\n  | { type: \"title\"; timestamp: string; title: string };\n\n/**\n * Best-effort, append-only archive of a thread's full conversation.\n *\n * Writes are serialized through an internal promise chain and never awaited by\n * thread execution or UI. All filesystem errors are caught and routed to the\n * diagnostic `Logger`, never rethrown. This is magenta-internal plumbing (like\n * diagnostic logging), so it uses node `fs` directly rather than the `FileIO`\n * abstraction.\n */\nexport type ThreadLoggerOptions = {\n  baseDir?: string;\n  forkedFrom?: ForkProvenance;\n};",
-      "contextualizedText": "// node/core/src/thread-logger.ts\n\nimport * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport type { ThreadId, ThreadType } from \"./chat-types.ts\";\nimport type { Logger } from \"./logger.ts\";\nimport type { ProviderMessage } from \"./providers/provider-types.ts\";\nimport { threadConversationLogPath, threadMetaPath } from \"./utils/files.ts\";\n\nexport type ForkProvenance = {\n  fromThreadId: ThreadId;\n  nativeMessageIdx: number;\n};\n\nexport type ThreadLogEntry =\n  | {\n      type: \"thread_start\";\n      threadId: ThreadId;\n      timestamp: string;\n      threadType: ThreadType;\n    }\n  | {\n      type: \"fork\";\n      timestamp: string;\n      fromThreadId: ThreadId;\n      nativeMessageIdx: number;\n    }\n  | {\n      type: \"message\";\n      timestamp: string;\n      message: ProviderMessage;\n    }\n  | {\n      type: \"compaction\";\n      timestamp: string;\n      summary?: string | undefined;\n      chunkCount: number;\n    }\n  | { type: \"restart\"; timestamp: string }\n  | { type: \"title\"; timestamp: string; title: string };\n\n/**\n * Best-effort, append-only archive of a thread's full conversation.\n *\n * Writes are serialized through an internal promise chain and never awaited by\n * thread execution or UI. All filesystem errors are caught and routed to the\n * diagnostic `Logger`, never rethrown. This is magenta-internal plumbing (like\n * diagnostic logging), so it uses node `fs` directly rather than the `FileIO`\n * abstraction.\n */\nexport type ThreadLoggerOptions = {\n  baseDir?: string;\n  forkedFrom?: ForkProvenance;\n};",
-      "headingContext": "node/core/src/thread-logger.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 52,
-      "endCol": 3
+      "start": 0,
+      "end": 1916
     },
     {
-      "text": "export class ThreadLogger {\n  private filePath: string;\n  private metaPath: string;\n  private threadType: ThreadType;\n  private metaChain: Promise\u003cvoid\u003e = Promise.resolve();\n  private persistedCount = 0;\n  private ready: Promise\u003cvoid\u003e;\n\n  /** Pending serialized lines awaiting a write. */\n  private buffer: string[] = [];\n  private draining = false;\n  private drainPromise: Promise\u003cvoid\u003e = Promise.resolve();\n\n  constructor(\n    threadId: ThreadId,\n    threadType: ThreadType,\n    private getMessages: () =\u003e ReadonlyArray\u003cProviderMessage\u003e,\n    private getMessageCount: () =\u003e number,\n    private logger: Logger,\n    opts: ThreadLoggerOptions = {},\n  ) {\n    this.filePath = threadConversationLogPath(threadId, opts.baseDir);\n    this.metaPath = threadMetaPath(threadId, opts.baseDir);\n    this.threadType = threadType;\n    const dir = path.dirname(this.filePath);\n    this.ready = fs.mkdir(dir, { recursive: true }).then(\n      () =\u003e undefined,\n      (err) =\u003e {\n        this.logger.error(\n          `ThreadLogger: failed to create directory ${dir}`,\n          err,\n        );\n      },\n    );\n\n    this.append({\n      type: \"thread_start\",\n      threadId,\n      timestamp: new Date().toISOString(),\n      threadType,\n    });\n\n    if (opts.forkedFrom) {\n      this.append({\n        type: \"fork\",\n        timestamp: new Date().toISOString(),\n        fromThreadId: opts.forkedFrom.fromThreadId,\n        nativeMessageIdx: opts.forkedFrom.nativeMessageIdx,\n      });\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger\n\nexport class ThreadLogger {\n  private filePath: string;\n  private metaPath: string;\n  private threadType: ThreadType;\n  private metaChain: Promise\u003cvoid\u003e = Promise.resolve();\n  private persistedCount = 0;\n  private ready: Promise\u003cvoid\u003e;\n\n  /** Pending serialized lines awaiting a write. */\n  private buffer: string[] = [];\n  private draining = false;\n  private drainPromise: Promise\u003cvoid\u003e = Promise.resolve();\n\n  constructor(\n    threadId: ThreadId,\n    threadType: ThreadType,\n    private getMessages: () =\u003e ReadonlyArray\u003cProviderMessage\u003e,\n    private getMessageCount: () =\u003e number,\n    private logger: Logger,\n    opts: ThreadLoggerOptions = {},\n  ) {\n    this.filePath = threadConversationLogPath(threadId, opts.baseDir);\n    this.metaPath = threadMetaPath(threadId, opts.baseDir);\n    this.threadType = threadType;\n    const dir = path.dirname(this.filePath);\n    this.ready = fs.mkdir(dir, { recursive: true }).then(\n      () =\u003e undefined,\n      (err) =\u003e {\n        this.logger.error(\n          `ThreadLogger: failed to create directory ${dir}`,\n          err,\n        );\n      },\n    );\n\n    this.append({\n      type: \"thread_start\",\n      threadId,\n      timestamp: new Date().toISOString(),\n      threadType,\n    });\n\n    if (opts.forkedFrom) {\n      this.append({\n        type: \"fork\",\n        timestamp: new Date().toISOString(),\n        fromThreadId: opts.forkedFrom.fromThreadId,\n        nativeMessageIdx: opts.forkedFrom.nativeMessageIdx,\n      });\n    }\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger",
-      "startLine": 54,
-      "startCol": 1,
-      "endLine": 104,
-      "endCol": 4
+      "start": 1920,
+      "end": 3616
     },
     {
-      "text": "/**\n   * Flush completed messages during a turn. The final message may still be\n   * streaming, so it is withheld until `onTurnEnded`.\n   */\n  onUpdate(): void {\n    const stableCount = Math.max(0, this.getMessageCount() - 1);\n    if (stableCount \u003e this.persistedCount) {\n      const messages = this.getMessages();\n      this.flush(messages, stableCount);\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method onUpdate\n\n/**\n   * Flush completed messages during a turn. The final message may still be\n   * streaming, so it is withheld until `onTurnEnded`.\n   */\n  onUpdate(): void {\n    const stableCount = Math.max(0, this.getMessageCount() - 1);\n    if (stableCount \u003e this.persistedCount) {\n      const messages = this.getMessages();\n      this.flush(messages, stableCount);\n    }\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method onUpdate",
-      "startLine": 106,
-      "startCol": 3,
-      "endLine": 116,
-      "endCol": 4
+      "start": 3620,
+      "end": 5589
     },
     {
-      "text": "/** Flush all messages once the turn has fully settled. */\n  onTurnEnded(): void {\n    const totalCount = this.getMessageCount();\n    if (totalCount \u003e this.persistedCount) {\n      const messages = this.getMessages();\n      this.flush(messages, totalCount);\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method onTurnEnded\n\n/** Flush all messages once the turn has fully settled. */\n  onTurnEnded(): void {\n    const totalCount = this.getMessageCount();\n    if (totalCount \u003e this.persistedCount) {\n      const messages = this.getMessages();\n      this.flush(messages, totalCount);\n    }\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method onTurnEnded",
-      "startLine": 118,
-      "startCol": 3,
-      "endLine": 125,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Append all messages at index \u003e= persistedCount, up to `stableCount`.\n   * Idempotent by cursor, so calling repeatedly with a growing array never\n   * double-writes. Fire-and-forget: returns immediately.\n   */\n  private flush(\n    messages: ReadonlyArray\u003cProviderMessage\u003e,\n    stableCount: number,\n  ): void {\n    if (stableCount \u003c= this.persistedCount) {\n      return;\n    }\n    const timestamp = new Date().toISOString();\n    for (let i = this.persistedCount; i \u003c stableCount; i++) {\n      this.append({ type: \"message\", timestamp, message: messages[i] });\n    }\n    this.persistedCount = stableCount;\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method flush\n\n/**\n   * Append all messages at index \u003e= persistedCount, up to `stableCount`.\n   * Idempotent by cursor, so calling repeatedly with a growing array never\n   * double-writes. Fire-and-forget: returns immediately.\n   */\n  private flush(\n    messages: ReadonlyArray\u003cProviderMessage\u003e,\n    stableCount: number,\n  ): void {\n    if (stableCount \u003c= this.persistedCount) {\n      return;\n    }\n    const timestamp = new Date().toISOString();\n    for (let i = this.persistedCount; i \u003c stableCount; i++) {\n      this.append({ type: \"message\", timestamp, message: messages[i] });\n    }\n    this.persistedCount = stableCount;\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method flush",
-      "startLine": 127,
-      "startCol": 3,
-      "endLine": 144,
-      "endCol": 4
-    },
-    {
-      "text": "  recordCompaction(opts: { summary?: string; chunkCount: number }): void {\n    this.append({\n      type: \"compaction\",\n      timestamp: new Date().toISOString(),\n      summary: opts.summary,\n      chunkCount: opts.chunkCount,\n    });\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method recordCompaction\n\n  recordCompaction(opts: { summary?: string; chunkCount: number }): void {\n    this.append({\n      type: \"compaction\",\n      timestamp: new Date().toISOString(),\n      summary: opts.summary,\n      chunkCount: opts.chunkCount,\n    });\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method recordCompaction",
-      "startLine": 146,
-      "startCol": 1,
-      "endLine": 153,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Persist a thread title: append a `title` entry to the JSONL and overwrite\n   * the `meta.json` sidecar. Both are best-effort and fire-and-forget.\n   */\n  recordTitle(title: string): void {\n    this.append({\n      type: \"title\",\n      timestamp: new Date().toISOString(),\n      title,\n    });\n    this.writeMeta(title);\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method recordTitle\n\n/**\n   * Persist a thread title: append a `title` entry to the JSONL and overwrite\n   * the `meta.json` sidecar. Both are best-effort and fire-and-forget.\n   */\n  recordTitle(title: string): void {\n    this.append({\n      type: \"title\",\n      timestamp: new Date().toISOString(),\n      title,\n    });\n    this.writeMeta(title);\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method recordTitle",
-      "startLine": 155,
-      "startCol": 3,
-      "endLine": 166,
-      "endCol": 4
-    },
-    {
-      "text": "  private writeMeta(title: string): void {\n    const contents = JSON.stringify({ title, threadType: this.threadType });\n    this.metaChain = this.metaChain\n      .then(() =\u003e this.ready)\n      .then(() =\u003e fs.writeFile(this.metaPath, contents))\n      .catch((err) =\u003e {\n        this.logger.error(\n          `ThreadLogger: failed to write meta ${this.metaPath}`,\n          err,\n        );\n      });\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method writeMeta\n\n  private writeMeta(title: string): void {\n    const contents = JSON.stringify({ title, threadType: this.threadType });\n    this.metaChain = this.metaChain\n      .then(() =\u003e this.ready)\n      .then(() =\u003e fs.writeFile(this.metaPath, contents))\n      .catch((err) =\u003e {\n        this.logger.error(\n          `ThreadLogger: failed to write meta ${this.metaPath}`,\n          err,\n        );\n      });\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method writeMeta",
-      "startLine": 168,
-      "startCol": 1,
-      "endLine": 179,
-      "endCol": 4
-    },
-    {
-      "text": "  recordRestart(): void {\n    this.append({\n      type: \"restart\",\n      timestamp: new Date().toISOString(),\n    });\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method recordRestart\n\n  recordRestart(): void {\n    this.append({\n      type: \"restart\",\n      timestamp: new Date().toISOString(),\n    });\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method recordRestart",
-      "startLine": 181,
-      "startCol": 1,
-      "endLine": 186,
-      "endCol": 4
-    },
-    {
-      "text": "  resetCursor(): void {\n    this.persistedCount = 0;\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method resetCursor\n\n  resetCursor(): void {\n    this.persistedCount = 0;\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method resetCursor",
-      "startLine": 188,
-      "startCol": 1,
-      "endLine": 190,
-      "endCol": 4
-    },
-    {
-      "text": "/** Resolves once all enqueued writes have flushed. For tests. */\n  async flushed(): Promise\u003cvoid\u003e {\n    while (this.draining) {\n      await this.drainPromise;\n    }\n    await this.metaChain;\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method flushed\n\n/** Resolves once all enqueued writes have flushed. For tests. */\n  async flushed(): Promise\u003cvoid\u003e {\n    while (this.draining) {\n      await this.drainPromise;\n    }\n    await this.metaChain;\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method flushed",
-      "startLine": 192,
-      "startCol": 3,
-      "endLine": 198,
-      "endCol": 4
-    },
-    {
-      "text": "  private append(entry: ThreadLogEntry): void {\n    this.buffer.push(`${JSON.stringify(entry)}\\n`);\n    if (!this.draining) {\n      this.draining = true;\n      this.drainPromise = this.drain();\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method append\n\n  private append(entry: ThreadLogEntry): void {\n    this.buffer.push(`${JSON.stringify(entry)}\\n`);\n    if (!this.draining) {\n      this.draining = true;\n      this.drainPromise = this.drain();\n    }\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method append",
-      "startLine": 200,
-      "startCol": 1,
-      "endLine": 206,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Best-effort write loop. Coalesces all buffered lines into a single append\n   * per iteration and keeps running until the buffer drains. Because pushes to\n   * the buffer are synchronous, once the loop observes an empty buffer no more\n   * work can be pending, so it is safe to stop.\n   */\n  private async drain(): Promise\u003cvoid\u003e {\n    try {\n      await this.ready;\n      while (this.buffer.length \u003e 0) {\n        const chunk = this.buffer.join(\"\");\n        this.buffer.length = 0;\n        try {\n          await fs.appendFile(this.filePath, chunk);\n        } catch (err) {\n          this.logger.error(\n            `ThreadLogger: failed to append to ${this.filePath}`,\n            err,\n          );\n        }\n      }\n    } finally {\n      this.draining = false;\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method drain\n\n/**\n   * Best-effort write loop. Coalesces all buffered lines into a single append\n   * per iteration and keeps running until the buffer drains. Because pushes to\n   * the buffer are synchronous, once the loop observes an empty buffer no more\n   * work can be pending, so it is safe to stop.\n   */\n  private async drain(): Promise\u003cvoid\u003e {\n    try {\n      await this.ready;\n      while (this.buffer.length \u003e 0) {\n        const chunk = this.buffer.join(\"\");\n        this.buffer.length = 0;\n        try {\n          await fs.appendFile(this.filePath, chunk);\n        } catch (err) {\n          this.logger.error(\n            `ThreadLogger: failed to append to ${this.filePath}`,\n            err,\n          );\n        }\n      }\n    } finally {\n      this.draining = false;\n    }\n  }",
-      "headingContext": "node/core/src/thread-logger.ts \u003e class ThreadLogger \u003e method drain",
-      "startLine": 208,
-      "startCol": 3,
-      "endLine": 232,
-      "endCol": 4
+      "start": 5593,
+      "end": 6576
     }
   ]
 }

@@ -1,114 +1,27 @@
 {
   "blobSha": "eca6014f1b5ccca08293293af64aa2ab6b98228d",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { Client } from \"@modelcontextprotocol/sdk/client/index.js\";\nimport {\n  SSEClientTransport,\n  type SSEClientTransportOptions,\n} from \"@modelcontextprotocol/sdk/client/sse.js\";\nimport { StdioClientTransport } from \"@modelcontextprotocol/sdk/client/stdio.js\";\nimport {\n  StreamableHTTPClientTransport,\n  type StreamableHTTPClientTransportOptions,\n} from \"@modelcontextprotocol/sdk/client/streamableHttp.js\";\nimport type { Transport } from \"@modelcontextprotocol/sdk/shared/transport.js\";\nimport {\n  type CallToolResult,\n  CallToolResultSchema,\n  type Tool,\n} from \"@modelcontextprotocol/sdk/types.js\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport type { Logger } from \"../../logger.ts\";\nimport type {\n  ProviderToolResultContent,\n  ProviderToolSpec,\n} from \"../../providers/provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"../../providers/provider-types.ts\";\nimport { assertUnreachable } from \"../../utils/assertUnreachable.ts\";\nimport { MockMCPServer } from \"./mock-server.ts\";\nimport type { MCPServerConfig } from \"./options.ts\";\nimport {\n  type MCPToolName,\n  type MCPToolRequestParams,\n  mcpToolNameToToolName,\n  type ServerName,\n} from \"./types.ts\";",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts\n\nimport { Client } from \"@modelcontextprotocol/sdk/client/index.js\";\nimport {\n  SSEClientTransport,\n  type SSEClientTransportOptions,\n} from \"@modelcontextprotocol/sdk/client/sse.js\";\nimport { StdioClientTransport } from \"@modelcontextprotocol/sdk/client/stdio.js\";\nimport {\n  StreamableHTTPClientTransport,\n  type StreamableHTTPClientTransportOptions,\n} from \"@modelcontextprotocol/sdk/client/streamableHttp.js\";\nimport type { Transport } from \"@modelcontextprotocol/sdk/shared/transport.js\";\nimport {\n  type CallToolResult,\n  CallToolResultSchema,\n  type Tool,\n} from \"@modelcontextprotocol/sdk/types.js\";\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport type { Logger } from \"../../logger.ts\";\nimport type {\n  ProviderToolResultContent,\n  ProviderToolSpec,\n} from \"../../providers/provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"../../providers/provider-types.ts\";\nimport { assertUnreachable } from \"../../utils/assertUnreachable.ts\";\nimport { MockMCPServer } from \"./mock-server.ts\";\nimport type { MCPServerConfig } from \"./options.ts\";\nimport {\n  type MCPToolName,\n  type MCPToolRequestParams,\n  mcpToolNameToToolName,\n  type ServerName,\n} from \"./types.ts\";",
-      "headingContext": "node/core/src/tools/mcp/client.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 32,
-      "endCol": 21
+      "start": 0,
+      "end": 1911
     },
     {
-      "text": "export class MCPClient {\n  private client: Client | undefined;\n  private transport: Transport | undefined;\n  private isConnected: boolean = false;\n  private tools: Tool[] = [];\n\n  constructor(\n    public serverName: ServerName,\n    private config: MCPServerConfig,\n    private context: {\n      logger: Logger;\n    },\n  ) {}",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts \u003e class MCPClient\n\nexport class MCPClient {\n  private client: Client | undefined;\n  private transport: Transport | undefined;\n  private isConnected: boolean = false;\n  private tools: Tool[] = [];\n\n  constructor(\n    public serverName: ServerName,\n    private config: MCPServerConfig,\n    private context: {\n      logger: Logger;\n    },\n  ) {}",
-      "headingContext": "node/core/src/tools/mcp/client.ts \u003e class MCPClient",
-      "startLine": 34,
-      "startCol": 1,
-      "endLine": 46,
-      "endCol": 7
+      "start": 1917,
+      "end": 3773
     },
     {
-      "text": "  async connect(): Promise\u003cvoid\u003e {\n    if (this.isConnected) {\n      return;\n    }\n\n    const env: Record\u003cstring, string\u003e = {};\n    for (const [key, value] of Object.entries(process.env)) {\n      if (value !== undefined) {\n        env[key] = value;\n      }\n    }\n\n    this.client = new Client({\n      name: `magenta-mcp-client-${this.serverName}`,\n      version: \"1.0.0\",\n    });\n\n    switch (this.config.type) {\n      case \"mock\": {\n        const mockServer = new MockMCPServer(\n          this.serverName,\n          this.config.tools || [],\n        );\n        this.transport = await mockServer.start();\n        break;\n      }\n      case \"remote\": {\n        const options: StreamableHTTPClientTransportOptions = {};\n        if (this.config.requestInit !== undefined) {\n          options.requestInit = this.config.requestInit;\n        }\n        if (this.config.sessionId !== undefined) {\n          options.sessionId = this.config.sessionId;\n        }\n        this.transport = new StreamableHTTPClientTransport(\n          new URL(this.config.url),\n          options,\n        ) as Transport;",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method connect\n\n  async connect(): Promise\u003cvoid\u003e {\n    if (this.isConnected) {\n      return;\n    }\n\n    const env: Record\u003cstring, string\u003e = {};\n    for (const [key, value] of Object.entries(process.env)) {\n      if (value !== undefined) {\n        env[key] = value;\n      }\n    }\n\n    this.client = new Client({\n      name: `magenta-mcp-client-${this.serverName}`,\n      version: \"1.0.0\",\n    });\n\n    switch (this.config.type) {\n      case \"mock\": {\n        const mockServer = new MockMCPServer(\n          this.serverName,\n          this.config.tools || [],\n        );\n        this.transport = await mockServer.start();\n        break;\n      }\n      case \"remote\": {\n        const options: StreamableHTTPClientTransportOptions = {};\n        if (this.config.requestInit !== undefined) {\n          options.requestInit = this.config.requestInit;\n        }\n        if (this.config.sessionId !== undefined) {\n          options.sessionId = this.config.sessionId;\n        }\n        this.transport = new StreamableHTTPClientTransport(\n          new URL(this.config.url),\n          options,\n        ) as Transport;",
-      "headingContext": "node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method connect",
-      "startLine": 48,
-      "startCol": 1,
-      "endLine": 85,
-      "endCol": 24
+      "start": 3787,
+      "end": 6092
     },
     {
-      "text": "try {\n          await this.client.connect(this.transport);\n          await this.loadTools();\n          this.isConnected = true;\n          return;\n        } catch (error) {\n          // For remote servers, always try SSE transport as fallback\n          this.context.logger.warn(\n            `Streamable HTTP connection failed for ${this.serverName}, falling back to SSE transport: ${error instanceof Error ? error.message : String(error)}`,\n          );\n\n          try {\n            // Clean up the failed transport\n            if (this.transport) {\n              await this.transport.close();\n            }\n\n            // Create SSE transport with same URL\n            const sseOptions: SSEClientTransportOptions = {};\n            if (this.config.requestInit !== undefined) {\n              sseOptions.requestInit = this.config.requestInit;\n            }\n\n            this.transport = new SSEClientTransport(\n              new URL(this.config.url),\n              sseOptions,\n            ) as Transport;\n\n            // Try connecting with SSE transport\n            await this.client.connect(this.transport);\n            await this.loadTools();\n\n            this.isConnected = true;\n            return;\n          } catch (sseError) {\n            this.disconnect().catch((e) =\u003e\n              this.context.logger.error(\n                `Error disconnecting MCP client after SSE fallback: ${e instanceof Error ? e.message : String(e)}`,\n              ),\n            );\n            throw new Error(\n              `Failed to connect to MCP server ${this.serverName} with both streamable-http and SSE transports. Streamable HTTP error: ${error instanceof Error ? error.message : String(error)}. SSE error: ${sseError instanceof Error ? sseError.message : String(sseError)}`,\n            );\n          }\n        }",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method connect\n\ntry {\n          await this.client.connect(this.transport);\n          await this.loadTools();\n          this.isConnected = true;\n          return;\n        } catch (error) {\n          // For remote servers, always try SSE transport as fallback\n          this.context.logger.warn(\n            `Streamable HTTP connection failed for ${this.serverName}, falling back to SSE transport: ${error instanceof Error ? error.message : String(error)}`,\n          );\n\n          try {\n            // Clean up the failed transport\n            if (this.transport) {\n              await this.transport.close();\n            }\n\n            // Create SSE transport with same URL\n            const sseOptions: SSEClientTransportOptions = {};\n            if (this.config.requestInit !== undefined) {\n              sseOptions.requestInit = this.config.requestInit;\n            }\n\n            this.transport = new SSEClientTransport(\n              new URL(this.config.url),\n              sseOptions,\n            ) as Transport;\n\n            // Try connecting with SSE transport\n            await this.client.connect(this.transport);\n            await this.loadTools();\n\n            this.isConnected = true;\n            return;\n          } catch (sseError) {\n            this.disconnect().catch((e) =\u003e\n              this.context.logger.error(\n                `Error disconnecting MCP client after SSE fallback: ${e instanceof Error ? e.message : String(e)}`,\n              ),\n            );\n            throw new Error(\n              `Failed to connect to MCP server ${this.serverName} with both streamable-http and SSE transports. Streamable HTTP error: ${error instanceof Error ? error.message : String(error)}. SSE error: ${sseError instanceof Error ? sseError.message : String(sseError)}`,\n            );\n          }\n        }",
-      "headingContext": "node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method connect",
-      "startLine": 87,
-      "startCol": 9,
-      "endLine": 131,
-      "endCol": 10
+      "start": 6098,
+      "end": 7177
     },
     {
-      "text": "case \"command\": {\n        for (const [key, value] of Object.entries(this.config.env || {})) {\n          env[key] = value;\n        }\n        this.transport = new StdioClientTransport({\n          command: this.config.command,\n          args: this.config.args,\n          env,\n        });\n        break;\n      }\n      default:\n        assertUnreachable(this.config);\n    }\n\n    try {\n      await this.client.connect(this.transport);\n      await this.loadTools();\n      this.isConnected = true;\n    } catch (error) {\n      this.disconnect().catch((e) =\u003e\n        this.context.logger.error(\n          `Error disconnecting MCP client: ${e instanceof Error ? e.message : String(e)}`,\n        ),\n      );\n      throw new Error(\n        `Failed to connect to MCP server ${this.serverName}: ${error instanceof Error ? error.message : String(error)}`,\n      );\n    }\n  }",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method connect\n\ncase \"command\": {\n        for (const [key, value] of Object.entries(this.config.env || {})) {\n          env[key] = value;\n        }\n        this.transport = new StdioClientTransport({\n          command: this.config.command,\n          args: this.config.args,\n          env,\n        });\n        break;\n      }\n      default:\n        assertUnreachable(this.config);\n    }\n\n    try {\n      await this.client.connect(this.transport);\n      await this.loadTools();\n      this.isConnected = true;\n    } catch (error) {\n      this.disconnect().catch((e) =\u003e\n        this.context.logger.error(\n          `Error disconnecting MCP client: ${e instanceof Error ? e.message : String(e)}`,\n        ),\n      );\n      throw new Error(\n        `Failed to connect to MCP server ${this.serverName}: ${error instanceof Error ? error.message : String(error)}`,\n      );\n    }\n  }",
-      "headingContext": "node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method connect",
-      "startLine": 133,
-      "startCol": 7,
-      "endLine": 162,
-      "endCol": 4
-    },
-    {
-      "text": "  async disconnect(): Promise\u003cvoid\u003e {\n    this.isConnected = false;\n\n    if (this.client) {\n      try {\n        await this.client.close();\n      } catch (error) {\n        this.context.logger.error(\n          `Error closing MCP client ${this.serverName}:`,\n          error,\n        );\n      }\n      this.client = undefined;\n    }\n\n    if (this.transport) {\n      try {\n        await this.transport.close();\n      } catch (error) {\n        this.context.logger.error(\n          `Error closing MCP transport ${this.serverName}:`,\n          error,\n        );\n      }\n      this.transport = undefined;\n    }\n\n    this.tools = [];\n  }",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method disconnect\n\n  async disconnect(): Promise\u003cvoid\u003e {\n    this.isConnected = false;\n\n    if (this.client) {\n      try {\n        await this.client.close();\n      } catch (error) {\n        this.context.logger.error(\n          `Error closing MCP client ${this.serverName}:`,\n          error,\n        );\n      }\n      this.client = undefined;\n    }\n\n    if (this.transport) {\n      try {\n        await this.transport.close();\n      } catch (error) {\n        this.context.logger.error(\n          `Error closing MCP transport ${this.serverName}:`,\n          error,\n        );\n      }\n      this.transport = undefined;\n    }\n\n    this.tools = [];\n  }",
-      "headingContext": "node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method disconnect",
-      "startLine": 164,
-      "startCol": 1,
-      "endLine": 192,
-      "endCol": 4
-    },
-    {
-      "text": "  private async loadTools(): Promise\u003cvoid\u003e {\n    if (!this.client) {\n      throw new Error(`Client not connected for MCP server ${this.serverName}`);\n    }\n\n    try {\n      const response = await this.client.listTools();\n      this.tools = response.tools;\n    } catch (error) {\n      throw new Error(\n        `Failed to load tools from MCP server ${this.serverName}: ${error instanceof Error ? error.message : String(error)}`,\n      );\n    }\n  }",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method loadTools\n\n  private async loadTools(): Promise\u003cvoid\u003e {\n    if (!this.client) {\n      throw new Error(`Client not connected for MCP server ${this.serverName}`);\n    }\n\n    try {\n      const response = await this.client.listTools();\n      this.tools = response.tools;\n    } catch (error) {\n      throw new Error(\n        `Failed to load tools from MCP server ${this.serverName}: ${error instanceof Error ? error.message : String(error)}`,\n      );\n    }\n  }",
-      "headingContext": "node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method loadTools",
-      "startLine": 194,
-      "startCol": 1,
-      "endLine": 207,
-      "endCol": 4
-    },
-    {
-      "text": "  listTools(): ProviderToolSpec[] {\n    return this.tools.map((tool) =\u003e ({\n      name: mcpToolNameToToolName({\n        serverName: this.serverName,\n        mcpToolName: tool.name as MCPToolName,\n      }),\n      description: tool.description ?? \"\",\n      input_schema: tool.inputSchema as JSONSchemaType,\n    }));\n  }",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method listTools\n\n  listTools(): ProviderToolSpec[] {\n    return this.tools.map((tool) =\u003e ({\n      name: mcpToolNameToToolName({\n        serverName: this.serverName,\n        mcpToolName: tool.name as MCPToolName,\n      }),\n      description: tool.description ?? \"\",\n      input_schema: tool.inputSchema as JSONSchemaType,\n    }));\n  }",
-      "headingContext": "node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method listTools",
-      "startLine": 209,
-      "startCol": 1,
-      "endLine": 218,
-      "endCol": 4
-    },
-    {
-      "text": "  async callTool(\n    toolName: MCPToolName,\n    params: MCPToolRequestParams,\n  ): Promise\u003cProviderToolResultContent[]\u003e {\n    if (!this.client || !this.isConnected) {\n      throw new Error(`MCP client ${this.serverName} is not connected`);\n    }\n\n    const result: CallToolResult = await this.client.request(\n      {\n        method: \"tools/call\",\n        params: {\n          name: toolName,\n          arguments: params,\n        },\n      },\n      CallToolResultSchema,\n    );\n\n    // biome-ignore lint/suspicious/useIterableCallbackReturn: exhaustive switch handles all cases\n    const content = result.content.map((c): ProviderToolResultContent =\u003e {\n      switch (c.type) {\n        case \"text\":\n          return {\n            type: \"text\",\n            text: c.text,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          };\n        case \"image\":\n          return {\n            type: \"image\",\n            source: {\n              type: \"base64\",\n              media_type: c.mimeType as\n                | \"image/jpeg\"\n                | \"image/png\"\n                | \"image/gif\"\n                | \"image/webp\",\n              data: c.data,\n            },\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          };\n        case \"audio\":\n          return {\n            type: \"text\",\n            text: `[MCP audio content type not supported yet]`,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          };\n        case \"resource_link\":\n          return {\n            type: \"text\",\n            text: `[MCP resource_link content type not supported yet]`,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          };\n        case \"resource\":\n          return {\n            type: \"text\",\n            text: `[MCP resource content type not supported yet]`,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          };\n        default:\n          assertUnreachable(c);\n      }\n    });",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method callTool\n\n  async callTool(\n    toolName: MCPToolName,\n    params: MCPToolRequestParams,\n  ): Promise\u003cProviderToolResultContent[]\u003e {\n    if (!this.client || !this.isConnected) {\n      throw new Error(`MCP client ${this.serverName} is not connected`);\n    }\n\n    const result: CallToolResult = await this.client.request(\n      {\n        method: \"tools/call\",\n        params: {\n          name: toolName,\n          arguments: params,\n        },\n      },\n      CallToolResultSchema,\n    );\n\n    // biome-ignore lint/suspicious/useIterableCallbackReturn: exhaustive switch handles all cases\n    const content = result.content.map((c): ProviderToolResultContent =\u003e {\n      switch (c.type) {\n        case \"text\":\n          return {\n            type: \"text\",\n            text: c.text,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          };\n        case \"image\":\n          return {\n            type: \"image\",\n            source: {\n              type: \"base64\",\n              media_type: c.mimeType as\n                | \"image/jpeg\"\n                | \"image/png\"\n                | \"image/gif\"\n                | \"image/webp\",\n              data: c.data,\n            },\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          };\n        case \"audio\":\n          return {\n            type: \"text\",\n            text: `[MCP audio content type not supported yet]`,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          };\n        case \"resource_link\":\n          return {\n            type: \"text\",\n            text: `[MCP resource_link content type not supported yet]`,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          };\n        case \"resource\":\n          return {\n            type: \"text\",\n            text: `[MCP resource content type not supported yet]`,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          };\n        default:\n          assertUnreachable(c);\n      }\n    });",
-      "headingContext": "node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method callTool",
-      "startLine": 220,
-      "startCol": 1,
-      "endLine": 283,
-      "endCol": 8
-    },
-    {
-      "text": "if (result.isError) {\n      const textContent = content\n        .filter((c) =\u003e c.type === \"text\")\n        .map((c) =\u003e c.text)\n        .join(\"\\n\");\n\n      throw new Error(textContent);\n    } else {\n      return content;\n    }\n  }",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method callTool\n\nif (result.isError) {\n      const textContent = content\n        .filter((c) =\u003e c.type === \"text\")\n        .map((c) =\u003e c.text)\n        .join(\"\\n\");\n\n      throw new Error(textContent);\n    } else {\n      return content;\n    }\n  }",
-      "headingContext": "node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method callTool",
-      "startLine": 285,
-      "startCol": 5,
-      "endLine": 295,
-      "endCol": 4
-    },
-    {
-      "text": "  isToolAvailable(toolName: string): boolean {\n    const expectedPrefix = `mcp_${this.serverName}.`;\n    if (!toolName.startsWith(expectedPrefix)) {\n      return false;\n    }\n\n    const actualToolName = toolName.slice(expectedPrefix.length);\n    return this.tools.some((tool) =\u003e tool.name === actualToolName);\n  }",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method isToolAvailable\n\n  isToolAvailable(toolName: string): boolean {\n    const expectedPrefix = `mcp_${this.serverName}.`;\n    if (!toolName.startsWith(expectedPrefix)) {\n      return false;\n    }\n\n    const actualToolName = toolName.slice(expectedPrefix.length);\n    return this.tools.some((tool) =\u003e tool.name === actualToolName);\n  }",
-      "headingContext": "node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method isToolAvailable",
-      "startLine": 297,
-      "startCol": 1,
-      "endLine": 305,
-      "endCol": 4
-    },
-    {
-      "text": "  getConnectionStatus(): {\n    connected: boolean;\n    serverName: string;\n    toolCount: number;\n  } {\n    return {\n      connected: this.isConnected,\n      serverName: this.serverName,\n      toolCount: this.tools.length,\n    };\n  }",
-      "contextualizedText": "// node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method getConnectionStatus\n\n  getConnectionStatus(): {\n    connected: boolean;\n    serverName: string;\n    toolCount: number;\n  } {\n    return {\n      connected: this.isConnected,\n      serverName: this.serverName,\n      toolCount: this.tools.length,\n    };\n  }",
-      "headingContext": "node/core/src/tools/mcp/client.ts \u003e class MCPClient \u003e method getConnectionStatus",
-      "startLine": 307,
-      "startCol": 1,
-      "endLine": 317,
-      "endCol": 4
+      "start": 7183,
+      "end": 9435
     }
   ]
 }

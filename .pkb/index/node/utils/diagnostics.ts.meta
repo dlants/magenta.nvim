@@ -1,24 +1,11 @@
 {
   "blobSha": "2b80a41c4cd2a9880e6bb45950916fdd203be72d",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport {\n  type AbsFilePath,\n  type HomeDir,\n  type NvimCwd,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"./files.ts\";\nimport { parseLsResponse } from \"./lsBuffers.ts\";\n\nexport type DiagnosticsRes = {\n  end_col: number;\n  message: string;\n  namespace: number;\n  col: number;\n  code: number;\n  end_lnum: number;\n  source: string;\n  lnum: number;\n  user_data: {\n    lsp: {\n      code: number;\n      message: string;\n      range: {\n        start: {\n          character: number;\n          line: number;\n        };\n        end: {\n          character: number;\n          line: number;\n        };\n      };\n      tags: [];\n      source: string;\n      severity: number;\n    };\n  };\n  bufnr: number;\n  severity: number;\n};",
-      "contextualizedText": "// node/utils/diagnostics.ts\n\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport {\n  type AbsFilePath,\n  type HomeDir,\n  type NvimCwd,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"./files.ts\";\nimport { parseLsResponse } from \"./lsBuffers.ts\";\n\nexport type DiagnosticsRes = {\n  end_col: number;\n  message: string;\n  namespace: number;\n  col: number;\n  code: number;\n  end_lnum: number;\n  source: string;\n  lnum: number;\n  user_data: {\n    lsp: {\n      code: number;\n      message: string;\n      range: {\n        start: {\n          character: number;\n          line: number;\n        };\n        end: {\n          character: number;\n          line: number;\n        };\n      };\n      tags: [];\n      source: string;\n      severity: number;\n    };\n  };\n  bufnr: number;\n  severity: number;\n};",
-      "headingContext": "node/utils/diagnostics.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 41,
-      "endCol": 3
-    },
-    {
-      "text": "export async function getDiagnostics(\n  nvim: Nvim,\n  cwd: NvimCwd,\n  homeDir: HomeDir,\n): Promise\u003cstring\u003e {\n  nvim.logger.debug(`Getting diagnostics`);\n\n  let diagnostics: DiagnosticsRes[];\n  try {\n    diagnostics = (await nvim.call(\"nvim_exec_lua\", [\n      `return vim.diagnostic.get(nil)`,\n      [],\n    ])) as DiagnosticsRes[];\n  } catch (e) {\n    throw new Error(`failed to nvim_exec_lua: ${JSON.stringify(e)}`);\n  }\n\n  const lsResponse = await nvim.call(\"nvim_exec2\", [\"ls\", { output: true }]);\n\n  const result = parseLsResponse(lsResponse.output as string);\n  const bufMap: { [bufId: string]: AbsFilePath } = {};\n  for (const res of result) {\n    bufMap[res.id] = resolveFilePath(\n      cwd,\n      res.filePath as UnresolvedFilePath,\n      homeDir,\n    );\n  }\n\n  const content = diagnostics\n    .map(\n      (d) =\u003e\n        `file: ${bufMap[d.bufnr]} source: ${d.source}, severity: ${d.severity}, message: \"${d.message}\"`,\n    )\n    .join(\"\\n\");\n\n  nvim.logger.debug(`got diagnostics content: ${content}`);\n  return content;\n}",
-      "contextualizedText": "// node/utils/diagnostics.ts \u003e function getDiagnostics\n\nexport async function getDiagnostics(\n  nvim: Nvim,\n  cwd: NvimCwd,\n  homeDir: HomeDir,\n): Promise\u003cstring\u003e {\n  nvim.logger.debug(`Getting diagnostics`);\n\n  let diagnostics: DiagnosticsRes[];\n  try {\n    diagnostics = (await nvim.call(\"nvim_exec_lua\", [\n      `return vim.diagnostic.get(nil)`,\n      [],\n    ])) as DiagnosticsRes[];\n  } catch (e) {\n    throw new Error(`failed to nvim_exec_lua: ${JSON.stringify(e)}`);\n  }\n\n  const lsResponse = await nvim.call(\"nvim_exec2\", [\"ls\", { output: true }]);\n\n  const result = parseLsResponse(lsResponse.output as string);\n  const bufMap: { [bufId: string]: AbsFilePath } = {};\n  for (const res of result) {\n    bufMap[res.id] = resolveFilePath(\n      cwd,\n      res.filePath as UnresolvedFilePath,\n      homeDir,\n    );\n  }\n\n  const content = diagnostics\n    .map(\n      (d) =\u003e\n        `file: ${bufMap[d.bufnr]} source: ${d.source}, severity: ${d.severity}, message: \"${d.message}\"`,\n    )\n    .join(\"\\n\");\n\n  nvim.logger.debug(`got diagnostics content: ${content}`);\n  return content;\n}",
-      "headingContext": "node/utils/diagnostics.ts \u003e function getDiagnostics",
-      "startLine": 43,
-      "startCol": 1,
-      "endLine": 81,
-      "endCol": 2
+      "start": 0,
+      "end": 1808
     }
   ]
 }

@@ -1,15 +1,11 @@
 {
   "blobSha": "23ff2075d597566051ae6b17515c2a94e877f3a7",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "/**\n * Helper function to ensure exhaustive type checking in switch statements.\n * Will cause a TypeScript error if a case is not handled.\n */\nexport function assertUnreachable(x: never): never {\n  throw new Error(`Didn't expect to get here with value: ${JSON.stringify(x)}`);\n}",
-      "contextualizedText": "// node/core/src/utils/assertUnreachable.ts \u003e function assertUnreachable\n\n/**\n * Helper function to ensure exhaustive type checking in switch statements.\n * Will cause a TypeScript error if a case is not handled.\n */\nexport function assertUnreachable(x: never): never {\n  throw new Error(`Didn't expect to get here with value: ${JSON.stringify(x)}`);\n}",
-      "headingContext": "node/core/src/utils/assertUnreachable.ts \u003e function assertUnreachable",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 7,
-      "endCol": 2
+      "start": 0,
+      "end": 278
     }
   ]
 }

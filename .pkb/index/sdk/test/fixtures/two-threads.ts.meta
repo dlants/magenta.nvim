@@ -1,15 +1,11 @@
 {
   "blobSha": "de3355e5211bdd964991885fed68f7eb85e628c0",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { registerScript } from \"../../index.ts\";\n\nconst schema = {\n  type: \"object\",\n  properties: { value: { type: \"string\" } },\n  required: [\"value\"],\n};\n\nregisterScript(\n  \"sequential\",\n  \"awaits two sequential threads\",\n  { type: \"object\", properties: {}, required: [] },\n  async (_parameters, thread, log) =\u003e {\n    log(\"starting\");\n    const first = await thread\u003c{ value: string }\u003e(\"first prompt\", schema);\n    const second = await thread\u003c{ value: string }\u003e(\n      `second using ${first.value}`,\n      schema,\n    );\n    log(`done ${second.value}`);\n  },\n);",
-      "contextualizedText": "// sdk/test/fixtures/two-threads.ts\n\nimport { registerScript } from \"../../index.ts\";\n\nconst schema = {\n  type: \"object\",\n  properties: { value: { type: \"string\" } },\n  required: [\"value\"],\n};\n\nregisterScript(\n  \"sequential\",\n  \"awaits two sequential threads\",\n  { type: \"object\", properties: {}, required: [] },\n  async (_parameters, thread, log) =\u003e {\n    log(\"starting\");\n    const first = await thread\u003c{ value: string }\u003e(\"first prompt\", schema);\n    const second = await thread\u003c{ value: string }\u003e(\n      `second using ${first.value}`,\n      schema,\n    );\n    log(`done ${second.value}`);\n  },\n);",
-      "headingContext": "sdk/test/fixtures/two-threads.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 22,
-      "endCol": 3
+      "start": 0,
+      "end": 562
     }
   ]
 }

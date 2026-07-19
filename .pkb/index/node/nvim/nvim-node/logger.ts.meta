@@ -1,33 +1,11 @@
 {
   "blobSha": "9ced1589e9473b07fb93e24c364ecf38ffe6922a",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { resolve } from \"node:path\";\nimport winston from \"winston\";\nimport {\n  type Client,\n  type LogLevel,\n  MessageType,\n  type RPCMessage,\n} from \"./types.ts\";",
-      "contextualizedText": "// node/nvim/nvim-node/logger.ts\n\nimport { resolve } from \"node:path\";\nimport winston from \"winston\";\nimport {\n  type Client,\n  type LogLevel,\n  MessageType,\n  type RPCMessage,\n} from \"./types.ts\";",
-      "headingContext": "node/nvim/nvim-node/logger.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 8,
-      "endCol": 21
-    },
-    {
-      "text": "export function createLogger(client: Client, level: LogLevel, file?: string) {\n  const filename = file ? resolve(file) : `/tmp/${client.name}.log`;\n  const logger = winston.createLogger({\n    level,\n    format: winston.format.combine(\n      winston.format.timestamp(),\n      winston.format.json(),\n    ),\n    transports: [\n      new winston.transports.File({\n        filename,\n        maxsize: 5 * 1024 * 1024, // 5MB per file\n        maxFiles: 5,\n        tailable: true,\n        options: { flags: \"a\" }, // append so previous-run logs survive restarts\n      }),\n    ],\n  });\n\n  return logger;\n}",
-      "contextualizedText": "// node/nvim/nvim-node/logger.ts \u003e function createLogger\n\nexport function createLogger(client: Client, level: LogLevel, file?: string) {\n  const filename = file ? resolve(file) : `/tmp/${client.name}.log`;\n  const logger = winston.createLogger({\n    level,\n    format: winston.format.combine(\n      winston.format.timestamp(),\n      winston.format.json(),\n    ),\n    transports: [\n      new winston.transports.File({\n        filename,\n        maxsize: 5 * 1024 * 1024, // 5MB per file\n        maxFiles: 5,\n        tailable: true,\n        options: { flags: \"a\" }, // append so previous-run logs survive restarts\n      }),\n    ],\n  });\n\n  return logger;\n}",
-      "headingContext": "node/nvim/nvim-node/logger.ts \u003e function createLogger",
-      "startLine": 10,
-      "startCol": 1,
-      "endLine": 30,
-      "endCol": 2
-    },
-    {
-      "text": "export function prettyRPCMessage(message: RPCMessage, direction: \"out\" | \"in\") {\n  const prefix = direction === \"out\" ? \"OUTGOING\" : \"INCOMING\";\n\n  if (message[0] === MessageType.REQUEST) {\n    return {\n      [`${prefix}_RPC_REQUEST`]: {\n        reqId: message[1],\n        method: message[2],\n        params: message[3],\n      },\n    };\n  }\n\n  if (message[0] === MessageType.RESPONSE) {\n    return {\n      [`${prefix}_RPC_RESPONSE`]: {\n        reqId: message[1],\n        error: message[2],\n        result: message[3],\n      },\n    };\n  }\n\n  // if (message[0] === MessageType.NOTIFY)\n  return {\n    [`${prefix}_RPC_NOTIFICATION`]: {\n      event: message[1],\n      args: message[2],\n    },\n  };\n}",
-      "contextualizedText": "// node/nvim/nvim-node/logger.ts \u003e function prettyRPCMessage\n\nexport function prettyRPCMessage(message: RPCMessage, direction: \"out\" | \"in\") {\n  const prefix = direction === \"out\" ? \"OUTGOING\" : \"INCOMING\";\n\n  if (message[0] === MessageType.REQUEST) {\n    return {\n      [`${prefix}_RPC_REQUEST`]: {\n        reqId: message[1],\n        method: message[2],\n        params: message[3],\n      },\n    };\n  }\n\n  if (message[0] === MessageType.RESPONSE) {\n    return {\n      [`${prefix}_RPC_RESPONSE`]: {\n        reqId: message[1],\n        error: message[2],\n        result: message[3],\n      },\n    };\n  }\n\n  // if (message[0] === MessageType.NOTIFY)\n  return {\n    [`${prefix}_RPC_NOTIFICATION`]: {\n      event: message[1],\n      args: message[2],\n    },\n  };\n}",
-      "headingContext": "node/nvim/nvim-node/logger.ts \u003e function prettyRPCMessage",
-      "startLine": 32,
-      "startCol": 1,
-      "endLine": 62,
-      "endCol": 2
+      "start": 0,
+      "end": 1456
     }
   ]
 }

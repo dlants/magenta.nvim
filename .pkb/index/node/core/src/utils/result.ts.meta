@@ -1,24 +1,11 @@
 {
   "blobSha": "ba1a0266d91effd13ecb8e77e25e40ae2de02c6f",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export type Success\u003cT\u003e = {\n  status: \"ok\";\n  value: T;\n};\n\nexport type ResultError\u003cE\u003e = {\n  status: \"error\";\n  error: string;\n} \u0026 E;\n\nexport type Result\u003cT, E = {}\u003e = Success\u003cT\u003e | ResultError\u003cE\u003e;\n\nexport type ExtractSuccess\u003cR extends Result\u003cunknown, unknown\u003e\u003e = Extract\u003c\n  R,\n  { status: \"ok\" }\n\u003e;",
-      "contextualizedText": "// node/core/src/utils/result.ts\n\nexport type Success\u003cT\u003e = {\n  status: \"ok\";\n  value: T;\n};\n\nexport type ResultError\u003cE\u003e = {\n  status: \"error\";\n  error: string;\n} \u0026 E;\n\nexport type Result\u003cT, E = {}\u003e = Success\u003cT\u003e | ResultError\u003cE\u003e;\n\nexport type ExtractSuccess\u003cR extends Result\u003cunknown, unknown\u003e\u003e = Extract\u003c\n  R,\n  { status: \"ok\" }\n\u003e;",
-      "headingContext": "node/core/src/utils/result.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 3
-    },
-    {
-      "text": "export function extendError\u003cT, E1, E2\u003e(\n  result: Result\u003cT, E1\u003e,\n  additionalErrorProps: E2,\n): Result\u003cT, E1 \u0026 E2\u003e {\n  if (result.status === \"ok\") {\n    return result;\n  }\n\n  return {\n    ...result,\n    ...additionalErrorProps,\n  };\n}",
-      "contextualizedText": "// node/core/src/utils/result.ts \u003e function extendError\n\nexport function extendError\u003cT, E1, E2\u003e(\n  result: Result\u003cT, E1\u003e,\n  additionalErrorProps: E2,\n): Result\u003cT, E1 \u0026 E2\u003e {\n  if (result.status === \"ok\") {\n    return result;\n  }\n\n  return {\n    ...result,\n    ...additionalErrorProps,\n  };\n}",
-      "headingContext": "node/core/src/utils/result.ts \u003e function extendError",
-      "startLine": 18,
-      "startCol": 1,
-      "endLine": 30,
-      "endCol": 2
+      "start": 0,
+      "end": 532
     }
   ]
 }

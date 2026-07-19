@@ -1,51 +1,19 @@
 {
   "blobSha": "8c6f85bec4f9c503e6cfd0d028db1db84964dd91",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { describe, expect, it } from \"vitest\";\nimport type { ToolCapability } from \"./tool-registry.ts\";\nimport { getToolSpecs } from \"./toolManager.ts\";\n\n",
-      "contextualizedText": "// node/core/src/tools/toolManager.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport type { ToolCapability } from \"./tool-registry.ts\";\nimport { getToolSpecs } from \"./toolManager.ts\";\n\n",
-      "headingContext": "node/core/src/tools/toolManager.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 5,
-      "endCol": 1
+      "start": 0,
+      "end": 1856
     },
     {
-      "text": "const noopMcpToolManager = { getToolSpecs: () =\u003e []",
-      "contextualizedText": "// node/core/src/tools/toolManager.test.ts \u003e function getToolSpecs\n\nconst noopMcpToolManager = { getToolSpecs: () =\u003e []",
-      "headingContext": "node/core/src/tools/toolManager.test.ts \u003e function getToolSpecs",
-      "startLine": 5,
-      "startCol": 1,
-      "endLine": 5,
-      "endCol": 52
+      "start": 1862,
+      "end": 3773
     },
     {
-      "text": "describe(\"getToolSpecs capability filtering\", () =\u003e {\n  it(\"returns all tools for thread type when no capabilities filter provided\", () =\u003e {\n    const specs = getToolSpecs(\"root\", noopMcpToolManager);\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"hover\");\n    expect(names).toContain(\"bash_command\");\n    expect(names).toContain(\"get_file\");\n  });\n\n  it(\"excludes lsp tools when lsp capability is missing\", () =\u003e {\n    const caps: Set\u003cToolCapability\u003e = new Set([\"file-io\", \"shell\", \"threads\"]);\n    const specs = getToolSpecs(\"root\", noopMcpToolManager, caps);\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).not.toContain(\"hover\");\n    expect(names).not.toContain(\"find_references\");\n    expect(names).toContain(\"bash_command\");\n    expect(names).toContain(\"get_file\");\n    expect(names).toContain(\"edl\");\n  });\n\n  it(\"includes tools with no required capabilities regardless of filter\", () =\u003e {\n    const caps: Set\u003cToolCapability\u003e = new Set([\"file-io\"]);\n    const specs = getToolSpecs(\"root\", noopMcpToolManager, caps);\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"get_file\");\n    expect(names).toContain(\"edl\");\n    expect(names).not.toContain(\"bash_command\");\n    expect(names).not.toContain(\"spawn_subagents\");\n  });\n\n  it(\"includes nvim_lua for root only when nvim capability is present\", () =\u003e {\n    const withNvim: Set\u003cToolCapability\u003e = new Set([\n      \"file-io\",\n      \"shell\",\n      \"threads\",\n      \"lsp\",\n      \"nvim\",\n    ]);\n    const withSpecs = getToolSpecs(\"root\", noopMcpToolManager, withNvim);\n    expect(withSpecs.map((s) =\u003e s.name)).toContain(\"nvim_lua\");\n\n    const withoutNvim: Set\u003cToolCapability\u003e = new Set([\n      \"file-io\",\n      \"shell\",\n      \"threads\",\n      \"lsp\",\n    ]);\n    const withoutSpecs = getToolSpecs(\"root\", noopMcpToolManager, withoutNvim);\n    expect(withoutSpecs.map((s) =\u003e s.name)).not.toContain(\"nvim_lua\");\n  });",
-      "contextualizedText": "// node/core/src/tools/toolManager.test.ts\n\ndescribe(\"getToolSpecs capability filtering\", () =\u003e {\n  it(\"returns all tools for thread type when no capabilities filter provided\", () =\u003e {\n    const specs = getToolSpecs(\"root\", noopMcpToolManager);\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"hover\");\n    expect(names).toContain(\"bash_command\");\n    expect(names).toContain(\"get_file\");\n  });\n\n  it(\"excludes lsp tools when lsp capability is missing\", () =\u003e {\n    const caps: Set\u003cToolCapability\u003e = new Set([\"file-io\", \"shell\", \"threads\"]);\n    const specs = getToolSpecs(\"root\", noopMcpToolManager, caps);\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).not.toContain(\"hover\");\n    expect(names).not.toContain(\"find_references\");\n    expect(names).toContain(\"bash_command\");\n    expect(names).toContain(\"get_file\");\n    expect(names).toContain(\"edl\");\n  });\n\n  it(\"includes tools with no required capabilities regardless of filter\", () =\u003e {\n    const caps: Set\u003cToolCapability\u003e = new Set([\"file-io\"]);\n    const specs = getToolSpecs(\"root\", noopMcpToolManager, caps);\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"get_file\");\n    expect(names).toContain(\"edl\");\n    expect(names).not.toContain(\"bash_command\");\n    expect(names).not.toContain(\"spawn_subagents\");\n  });\n\n  it(\"includes nvim_lua for root only when nvim capability is present\", () =\u003e {\n    const withNvim: Set\u003cToolCapability\u003e = new Set([\n      \"file-io\",\n      \"shell\",\n      \"threads\",\n      \"lsp\",\n      \"nvim\",\n    ]);\n    const withSpecs = getToolSpecs(\"root\", noopMcpToolManager, withNvim);\n    expect(withSpecs.map((s) =\u003e s.name)).toContain(\"nvim_lua\");\n\n    const withoutNvim: Set\u003cToolCapability\u003e = new Set([\n      \"file-io\",\n      \"shell\",\n      \"threads\",\n      \"lsp\",\n    ]);\n    const withoutSpecs = getToolSpecs(\"root\", noopMcpToolManager, withoutNvim);\n    expect(withoutSpecs.map((s) =\u003e s.name)).not.toContain(\"nvim_lua\");\n  });",
-      "headingContext": "node/core/src/tools/toolManager.test.ts",
-      "startLine": 7,
-      "startCol": 1,
-      "endLine": 56,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"works with subagent thread type\", () =\u003e {\n    const caps: Set\u003cToolCapability\u003e = new Set([\"file-io\", \"shell\"]);\n    const specs = getToolSpecs(\"subagent\", noopMcpToolManager, caps);\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"get_file\");\n    expect(names).toContain(\"bash_command\");\n    expect(names).toContain(\"edl\");\n    expect(names).not.toContain(\"hover\");\n    // yield_to_parent has no required capabilities\n    expect(names).toContain(\"yield_to_parent\");\n  });",
-      "contextualizedText": "// node/core/src/tools/toolManager.test.ts\n\nit(\"works with subagent thread type\", () =\u003e {\n    const caps: Set\u003cToolCapability\u003e = new Set([\"file-io\", \"shell\"]);\n    const specs = getToolSpecs(\"subagent\", noopMcpToolManager, caps);\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"get_file\");\n    expect(names).toContain(\"bash_command\");\n    expect(names).toContain(\"edl\");\n    expect(names).not.toContain(\"hover\");\n    // yield_to_parent has no required capabilities\n    expect(names).toContain(\"yield_to_parent\");\n  });",
-      "headingContext": "node/core/src/tools/toolManager.test.ts",
-      "startLine": 58,
-      "startCol": 3,
-      "endLine": 68,
-      "endCol": 6
-    },
-    {
-      "text": "describe(\"tier-based spawn_subagents control\", () =\u003e {\n  it(\"leaf subagent does not get spawn_subagents\", () =\u003e {\n    const specs = getToolSpecs(\n      \"subagent\",\n      noopMcpToolManager,\n      undefined,\n      {},\n      {\n        tier: \"leaf\",\n      },\n    );\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).not.toContain(\"spawn_subagents\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n\n  it(\"thread subagent gets spawn_subagents\", () =\u003e {\n    const specs = getToolSpecs(\n      \"subagent\",\n      noopMcpToolManager,\n      undefined,\n      {},\n      {\n        tier: \"thread\",\n      },\n    );\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"spawn_subagents\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n\n  it(\"orchestrator subagent gets spawn_subagents\", () =\u003e {\n    const specs = getToolSpecs(\n      \"subagent\",\n      noopMcpToolManager,\n      undefined,\n      {},\n      {\n        tier: \"orchestrator\",\n      },\n    );\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"spawn_subagents\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n\n  it(\"leaf docker_root does not get spawn_subagents\", () =\u003e {\n    const specs = getToolSpecs(\n      \"docker_root\",\n      noopMcpToolManager,\n      undefined,\n      {},\n      { tier: \"leaf\" },\n    );\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).not.toContain(\"spawn_subagents\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n\n  it(\"thread docker_root gets spawn_subagents\", () =\u003e {\n    const specs = getToolSpecs(\n      \"docker_root\",\n      noopMcpToolManager,\n      undefined,\n      {},\n      { tier: \"thread\" },\n    );\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"spawn_subagents\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n});",
-      "contextualizedText": "// node/core/src/tools/toolManager.test.ts\n\ndescribe(\"tier-based spawn_subagents control\", () =\u003e {\n  it(\"leaf subagent does not get spawn_subagents\", () =\u003e {\n    const specs = getToolSpecs(\n      \"subagent\",\n      noopMcpToolManager,\n      undefined,\n      {},\n      {\n        tier: \"leaf\",\n      },\n    );\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).not.toContain(\"spawn_subagents\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n\n  it(\"thread subagent gets spawn_subagents\", () =\u003e {\n    const specs = getToolSpecs(\n      \"subagent\",\n      noopMcpToolManager,\n      undefined,\n      {},\n      {\n        tier: \"thread\",\n      },\n    );\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"spawn_subagents\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n\n  it(\"orchestrator subagent gets spawn_subagents\", () =\u003e {\n    const specs = getToolSpecs(\n      \"subagent\",\n      noopMcpToolManager,\n      undefined,\n      {},\n      {\n        tier: \"orchestrator\",\n      },\n    );\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"spawn_subagents\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n\n  it(\"leaf docker_root does not get spawn_subagents\", () =\u003e {\n    const specs = getToolSpecs(\n      \"docker_root\",\n      noopMcpToolManager,\n      undefined,\n      {},\n      { tier: \"leaf\" },\n    );\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).not.toContain(\"spawn_subagents\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n\n  it(\"thread docker_root gets spawn_subagents\", () =\u003e {\n    const specs = getToolSpecs(\n      \"docker_root\",\n      noopMcpToolManager,\n      undefined,\n      {},\n      { tier: \"thread\" },\n    );\n    const names = specs.map((s) =\u003e s.name);\n    expect(names).toContain(\"spawn_subagents\");\n    expect(names).toContain(\"yield_to_parent\");\n  });\n});",
-      "headingContext": "node/core/src/tools/toolManager.test.ts",
-      "startLine": 71,
-      "startCol": 1,
-      "endLine": 142,
-      "endCol": 4
+      "start": 3777,
+      "end": 4469
     }
   ]
 }

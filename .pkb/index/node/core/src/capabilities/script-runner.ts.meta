@@ -1,51 +1,11 @@
 {
   "blobSha": "cc6ed6f183c0a663201810ac3014465b4535c494",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { ThreadId } from \"../chat-types.ts\";\n\nexport type ScriptCatalogEntry = {\n  name: string;\n  description: string;\n  parameterSchema: Record\u003cstring, unknown\u003e;\n  file: string;\n};",
-      "contextualizedText": "// node/core/src/capabilities/script-runner.ts\n\nimport type { ThreadId } from \"../chat-types.ts\";\n\nexport type ScriptCatalogEntry = {\n  name: string;\n  description: string;\n  parameterSchema: Record\u003cstring, unknown\u003e;\n  file: string;\n};",
-      "headingContext": "node/core/src/capabilities/script-runner.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 8,
-      "endCol": 3
-    },
-    {
-      "text": "/**\n * Root-injected capability that lets the `run_script` tool enumerate and\n * trigger discovered scripts. The actual invocation lives outside the\n * triggering thread's lifecycle (fire-and-forget); the triggering thread id is\n * passed so the root can seed the new script invocation's sandbox state.\n */\nexport interface ScriptRunner",
-      "contextualizedText": "// node/core/src/capabilities/script-runner.ts \u003e interface ScriptRunner\n\n/**\n * Root-injected capability that lets the `run_script` tool enumerate and\n * trigger discovered scripts. The actual invocation lives outside the\n * triggering thread's lifecycle (fire-and-forget); the triggering thread id is\n * passed so the root can seed the new script invocation's sandbox state.\n */\nexport interface ScriptRunner",
-      "headingContext": "node/core/src/capabilities/script-runner.ts \u003e interface ScriptRunner",
-      "startLine": 10,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 30
-    },
-    {
-      "text": "/**\n   * Re-scan the configured script paths and rebuild the catalog. Awaited\n   * during thread creation so each new thread starts with an up-to-date\n   * catalog.\n   */\n  discover(): Promise\u003cvoid\u003e",
-      "contextualizedText": "// node/core/src/capabilities/script-runner.ts \u003e interface ScriptRunner \u003e method discover\n\n/**\n   * Re-scan the configured script paths and rebuild the catalog. Awaited\n   * during thread creation so each new thread starts with an up-to-date\n   * catalog.\n   */\n  discover(): Promise\u003cvoid\u003e",
-      "headingContext": "node/core/src/capabilities/script-runner.ts \u003e interface ScriptRunner \u003e method discover",
-      "startLine": 17,
-      "startCol": 3,
-      "endLine": 22,
-      "endCol": 28
-    },
-    {
-      "text": "  getScriptCatalog(): ScriptCatalogEntry[]",
-      "contextualizedText": "// node/core/src/capabilities/script-runner.ts \u003e interface ScriptRunner \u003e method getScriptCatalog\n\n  getScriptCatalog(): ScriptCatalogEntry[]",
-      "headingContext": "node/core/src/capabilities/script-runner.ts \u003e interface ScriptRunner \u003e method getScriptCatalog",
-      "startLine": 23,
-      "startCol": 1,
-      "endLine": 23,
-      "endCol": 43
-    },
-    {
-      "text": "  runScript(opts: {\n    scriptName: string;\n    parameters: unknown;\n    triggeringThreadId: ThreadId;\n  }): void",
-      "contextualizedText": "// node/core/src/capabilities/script-runner.ts \u003e interface ScriptRunner \u003e method runScript\n\n  runScript(opts: {\n    scriptName: string;\n    parameters: unknown;\n    triggeringThreadId: ThreadId;\n  }): void",
-      "headingContext": "node/core/src/capabilities/script-runner.ts \u003e interface ScriptRunner \u003e method runScript",
-      "startLine": 24,
-      "startCol": 1,
-      "endLine": 28,
-      "endCol": 11
+      "start": 0,
+      "end": 890
     }
   ]
 }

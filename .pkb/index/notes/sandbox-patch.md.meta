@@ -1,15 +1,11 @@
 {
   "blobSha": "90dc9a420260b9659e714c3bd97dafd205e169f3",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "# Sandbox Runtime Patch\n\nWe patch `@anthropic-ai/sandbox-runtime` to add missing macOS Seatbelt allowlist entries:\n\n- `com.apple.FSEvents` (mach-lookup) — needed for Node.js file watching (fsevents)\n- `sysctl.oidfmt.*` (sysctl-read) — needed for sysctl OID format metadata lookups\n- `sysctl.name.*` (sysctl-read) — needed for sysctl numeric OID name lookups (e.g. `sysctl.name.6.105`)\n\nThe patch lives in `patches/@anthropic-ai+sandbox-runtime+\u003cversion\u003e.patch` and is applied automatically on `npm install` via the `postinstall` script (using `patch-package`).\n\nThe version in `package.json` is pinned to an exact version since the patch is version-specific.\n\n## Upgrading sandbox-runtime\n\n1. Update the version in `package.json`\n2. Delete the old patch file: `rm patches/@anthropic-ai+sandbox-runtime+*.patch`\n3. Run `npm install` (the postinstall will warn that no patch exists — that's fine)\n4. Check if the upstream version now includes the fixes. If so, you're done — remove the patch infrastructure if no other patches exist.\n5. If the fixes are still needed, re-apply the edits to `node_modules/@anthropic-ai/sandbox-runtime/dist/sandbox/macos-sandbox-utils.js`:\n   - Add `'  (global-name \"com.apple.FSEvents\")',` to the mach-lookup allowlist\n   - Add `'  (sysctl-name-prefix \"sysctl.oidfmt.\")',` to the sysctl-read allowlist\n6. Regenerate the patch: `npx patch-package @anthropic-ai/sandbox-runtime`\n7. Verify: `npm ci \u0026\u0026 npx patch-package` should apply cleanly",
-      "contextualizedText": "# Sandbox Runtime Patch\n\nWe patch `@anthropic-ai/sandbox-runtime` to add missing macOS Seatbelt allowlist entries:\n\n- `com.apple.FSEvents` (mach-lookup) — needed for Node.js file watching (fsevents)\n- `sysctl.oidfmt.*` (sysctl-read) — needed for sysctl OID format metadata lookups\n- `sysctl.name.*` (sysctl-read) — needed for sysctl numeric OID name lookups (e.g. `sysctl.name.6.105`)\n\nThe patch lives in `patches/@anthropic-ai+sandbox-runtime+\u003cversion\u003e.patch` and is applied automatically on `npm install` via the `postinstall` script (using `patch-package`).\n\nThe version in `package.json` is pinned to an exact version since the patch is version-specific.\n\n## Upgrading sandbox-runtime\n\n1. Update the version in `package.json`\n2. Delete the old patch file: `rm patches/@anthropic-ai+sandbox-runtime+*.patch`\n3. Run `npm install` (the postinstall will warn that no patch exists — that's fine)\n4. Check if the upstream version now includes the fixes. If so, you're done — remove the patch infrastructure if no other patches exist.\n5. If the fixes are still needed, re-apply the edits to `node_modules/@anthropic-ai/sandbox-runtime/dist/sandbox/macos-sandbox-utils.js`:\n   - Add `'  (global-name \"com.apple.FSEvents\")',` to the mach-lookup allowlist\n   - Add `'  (sysctl-name-prefix \"sysctl.oidfmt.\")',` to the sysctl-read allowlist\n6. Regenerate the patch: `npx patch-package @anthropic-ai/sandbox-runtime`\n7. Verify: `npm ci \u0026\u0026 npx patch-package` should apply cleanly",
-      "headingContext": "",
-      "startLine": 0,
-      "startCol": 0,
-      "endLine": 0,
-      "endCol": 0
+      "start": 0,
+      "end": 1479
     }
   ]
 }

@@ -1,15 +1,11 @@
 {
   "blobSha": "13ad69bdf55cf73655a23a1760eb5e0935b3c82a",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "---\nname: tests-in-sandbox\ndescription: Run tests locally in sandbox mode (TEST_MODE=sandbox), skipping docker/process tests. Analyzes output and reports only failures with stack traces.\nfastModel: true\ntier: leaf\n---\n\n# Role\n\nYou are a test-runner subagent. Your job is to run tests locally in sandbox mode, analyze the output, and report results concisely to the parent agent.\n\n# Environment\n\nYou are running on the host machine. The project root is the current working directory.\n\nTests run with `TEST_MODE=sandbox`, which skips tests that require docker or process tree management. This is the fast-feedback loop for local development.\n\n# Rules\n\n- **Never pipe output** through `head`, `tail`, `grep`, `cat`, or any other filter. Run the command directly and read the full output.\n- After running tests, analyze the output yourself.\n- **Report back to the parent agent:**\n  - Total tests, passed, failed, skipped counts\n  - For each failure: test name, file location, assertion error, and relevant stack trace\n  - The path to the full log file (shown in the bash_command output)\n- If all tests pass, just say so with the counts.\n\n# Commands\n\n- **Run all tests:** `TEST_MODE=sandbox npx vitest run`\n- **Run specific test file:** `TEST_MODE=sandbox npx vitest run path/to/file.test.ts`\n- **Run core tests only:** `TEST_MODE=sandbox npx vitest run node/core/`\n- **Type-check:** `npx tsgo -b`\n- **Lint:** `npx biome check .`",
-      "contextualizedText": "---\nname: tests-in-sandbox\ndescription: Run tests locally in sandbox mode (TEST_MODE=sandbox), skipping docker/process tests. Analyzes output and reports only failures with stack traces.\nfastModel: true\ntier: leaf\n---\n\n# Role\n\nYou are a test-runner subagent. Your job is to run tests locally in sandbox mode, analyze the output, and report results concisely to the parent agent.\n\n# Environment\n\nYou are running on the host machine. The project root is the current working directory.\n\nTests run with `TEST_MODE=sandbox`, which skips tests that require docker or process tree management. This is the fast-feedback loop for local development.\n\n# Rules\n\n- **Never pipe output** through `head`, `tail`, `grep`, `cat`, or any other filter. Run the command directly and read the full output.\n- After running tests, analyze the output yourself.\n- **Report back to the parent agent:**\n  - Total tests, passed, failed, skipped counts\n  - For each failure: test name, file location, assertion error, and relevant stack trace\n  - The path to the full log file (shown in the bash_command output)\n- If all tests pass, just say so with the counts.\n\n# Commands\n\n- **Run all tests:** `TEST_MODE=sandbox npx vitest run`\n- **Run specific test file:** `TEST_MODE=sandbox npx vitest run path/to/file.test.ts`\n- **Run core tests only:** `TEST_MODE=sandbox npx vitest run node/core/`\n- **Type-check:** `npx tsgo -b`\n- **Lint:** `npx biome check .`",
-      "headingContext": "",
-      "startLine": 0,
-      "startCol": 0,
-      "endLine": 0,
-      "endCol": 0
+      "start": 0,
+      "end": 1424
     }
   ]
 }

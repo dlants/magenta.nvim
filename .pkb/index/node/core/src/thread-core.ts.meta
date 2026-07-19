@@ -1,699 +1,123 @@
 {
   "blobSha": "1a1f5a67cb946f772f190e051185177aa7330121",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport { type AgentsMap, extractSystemReminderBlock } from \"./agents/agents.ts\";\nimport type { ContextTracker } from \"./capabilities/context-tracker.ts\";\nimport type { FileIO } from \"./capabilities/file-io.ts\";\nimport type { GitClient, GitState } from \"./capabilities/git-client.ts\";\nimport type { HelpTagsProvider } from \"./capabilities/help-tags-provider.ts\";\nimport type { LspClient } from \"./capabilities/lsp-client.ts\";\nimport type { LuaExecutor } from \"./capabilities/lua-executor.ts\";\nimport type { ScriptRunner } from \"./capabilities/script-runner.ts\";\nimport type { Shell } from \"./capabilities/shell.ts\";\nimport type { ThreadManager } from \"./capabilities/thread-manager.ts\";\nimport type { SubagentConfig, ThreadId, ThreadType } from \"./chat-types.ts\";\nimport type {\n  CompactionRecord,\n  CompactionResult,\n  CompactionStep,\n} from \"./compaction-controller.ts\";\nimport { CompactionManager } from \"./compaction-manager.ts\";\nimport {\n  buildClonedFiles,\n  ContextManager,\n  type Files,\n} from \"./context/context-manager.ts\";\nimport {\n  type GitContextUpdate,\n  GitTracker,\n  gitUpdateToText,\n} from \"./context/git-tracker.ts\";\nimport type { EdlRegisters } from \"./edl/index.ts\";\nimport { Emitter } from \"./emitter.ts\";\nimport type { Logger } from \"./logger.ts\";\nimport type { ProviderProfile } from \"./provider-options.ts\";\nimport {\n  getRetryDelay,\n  isRetryableError,\n  MAX_RETRY_DURATION,\n} from \"./providers/anthropic-agent.ts\";\nimport type {\n  Agent,\n  AgentInput,\n  AgentStatus,\n  NativeMessageIdx,\n  Provider,\n  ProviderMessage,\n  ProviderMessageContent,\n  ProviderToolResult,\n  ProviderToolSpec,\n  StopReason,\n  Usage,\n} from \"./providers/provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"./providers/provider-types.ts\";\nimport {\n  formatSystemInfo,\n  type SystemInfo,\n  type SystemPrompt,\n} from \"./providers/system-prompt.ts\";",
-      "contextualizedText": "// node/core/src/thread-core.ts\n\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport { type AgentsMap, extractSystemReminderBlock } from \"./agents/agents.ts\";\nimport type { ContextTracker } from \"./capabilities/context-tracker.ts\";\nimport type { FileIO } from \"./capabilities/file-io.ts\";\nimport type { GitClient, GitState } from \"./capabilities/git-client.ts\";\nimport type { HelpTagsProvider } from \"./capabilities/help-tags-provider.ts\";\nimport type { LspClient } from \"./capabilities/lsp-client.ts\";\nimport type { LuaExecutor } from \"./capabilities/lua-executor.ts\";\nimport type { ScriptRunner } from \"./capabilities/script-runner.ts\";\nimport type { Shell } from \"./capabilities/shell.ts\";\nimport type { ThreadManager } from \"./capabilities/thread-manager.ts\";\nimport type { SubagentConfig, ThreadId, ThreadType } from \"./chat-types.ts\";\nimport type {\n  CompactionRecord,\n  CompactionResult,\n  CompactionStep,\n} from \"./compaction-controller.ts\";\nimport { CompactionManager } from \"./compaction-manager.ts\";\nimport {\n  buildClonedFiles,\n  ContextManager,\n  type Files,\n} from \"./context/context-manager.ts\";\nimport {\n  type GitContextUpdate,\n  GitTracker,\n  gitUpdateToText,\n} from \"./context/git-tracker.ts\";\nimport type { EdlRegisters } from \"./edl/index.ts\";\nimport { Emitter } from \"./emitter.ts\";\nimport type { Logger } from \"./logger.ts\";\nimport type { ProviderProfile } from \"./provider-options.ts\";\nimport {\n  getRetryDelay,\n  isRetryableError,\n  MAX_RETRY_DURATION,\n} from \"./providers/anthropic-agent.ts\";\nimport type {\n  Agent,\n  AgentInput,\n  AgentStatus,\n  NativeMessageIdx,\n  Provider,\n  ProviderMessage,\n  ProviderMessageContent,\n  ProviderToolResult,\n  ProviderToolSpec,\n  StopReason,\n  Usage,\n} from \"./providers/provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"./providers/provider-types.ts\";\nimport {\n  formatSystemInfo,\n  type SystemInfo,\n  type SystemPrompt,\n} from \"./providers/system-prompt.ts\";",
-      "headingContext": "node/core/src/thread-core.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 56,
-      "endCol": 39
+      "start": 0,
+      "end": 2195
     },
     {
-      "text": "import {\n  buildSystemReminder,\n  type ReminderKind,\n} from \"./providers/system-reminders.ts\";\nimport { type ForkProvenance, ThreadLogger } from \"./thread-logger.ts\";\nimport type {\n  EndTurnAction,\n  EndTurnContext,\n  HandoffAction,\n  ThreadSupervisor,\n  YieldAction,\n} from \"./thread-supervisor.ts\";\nimport type {\n  ToolInvocation,\n  ToolName,\n  ToolRequest,\n  ToolRequestId,\n} from \"./tool-types.ts\";\nimport { type CreateToolContext, createTool } from \"./tools/create-tool.ts\";\nimport type { MCPToolManager as MCPToolManagerImpl } from \"./tools/mcp/manager.ts\";\nimport * as Scratchpad from \"./tools/scratchpad.ts\";\nimport * as ThreadTitle from \"./tools/thread-title.ts\";\nimport type { ToolCapability } from \"./tools/tool-registry.ts\";\nimport { getToolSpecs } from \"./tools/toolManager.ts\";\nimport { assertUnreachable } from \"./utils/assertUnreachable.ts\";\nimport type { AbsFilePath, HomeDir, NvimCwd } from \"./utils/files.ts\";\n\nexport type InputMessage =\n  | {\n      type: \"user\";\n      text: string;\n    }\n  | {\n      type: \"system\";\n      text: string;\n    };\n\nexport type ActiveToolEntry = {\n  handle: ToolInvocation;\n  progress: unknown;\n  toolName: ToolName;\n  request: ToolRequest;\n  result?: ProviderToolResult;\n};\n\nexport type ThreadMode =\n  | { type: \"normal\" }\n  | { type: \"tool_use\"; activeTools: Map\u003cToolRequestId, ActiveToolEntry\u003e }\n  | { type: \"compacting\"; chunkIndex: number; totalChunks: number }\n  | {\n      type: \"yielded\";\n      response: string;\n      tornDown?: boolean;\n      teardownMessage?: string;\n    };\n\nexport type EnvironmentConfig =\n  | { type: \"local\"; cwd?: NvimCwd }\n  | { type: \"docker\"; container: string; cwd: string };\n\nexport type TurnEndReason = \"end_turn\" | \"aborted\" | \"error\";",
-      "contextualizedText": "// node/core/src/thread-core.ts\n\nimport {\n  buildSystemReminder,\n  type ReminderKind,\n} from \"./providers/system-reminders.ts\";\nimport { type ForkProvenance, ThreadLogger } from \"./thread-logger.ts\";\nimport type {\n  EndTurnAction,\n  EndTurnContext,\n  HandoffAction,\n  ThreadSupervisor,\n  YieldAction,\n} from \"./thread-supervisor.ts\";\nimport type {\n  ToolInvocation,\n  ToolName,\n  ToolRequest,\n  ToolRequestId,\n} from \"./tool-types.ts\";\nimport { type CreateToolContext, createTool } from \"./tools/create-tool.ts\";\nimport type { MCPToolManager as MCPToolManagerImpl } from \"./tools/mcp/manager.ts\";\nimport * as Scratchpad from \"./tools/scratchpad.ts\";\nimport * as ThreadTitle from \"./tools/thread-title.ts\";\nimport type { ToolCapability } from \"./tools/tool-registry.ts\";\nimport { getToolSpecs } from \"./tools/toolManager.ts\";\nimport { assertUnreachable } from \"./utils/assertUnreachable.ts\";\nimport type { AbsFilePath, HomeDir, NvimCwd } from \"./utils/files.ts\";\n\nexport type InputMessage =\n  | {\n      type: \"user\";\n      text: string;\n    }\n  | {\n      type: \"system\";\n      text: string;\n    };\n\nexport type ActiveToolEntry = {\n  handle: ToolInvocation;\n  progress: unknown;\n  toolName: ToolName;\n  request: ToolRequest;\n  result?: ProviderToolResult;\n};\n\nexport type ThreadMode =\n  | { type: \"normal\" }\n  | { type: \"tool_use\"; activeTools: Map\u003cToolRequestId, ActiveToolEntry\u003e }\n  | { type: \"compacting\"; chunkIndex: number; totalChunks: number }\n  | {\n      type: \"yielded\";\n      response: string;\n      tornDown?: boolean;\n      teardownMessage?: string;\n    };\n\nexport type EnvironmentConfig =\n  | { type: \"local\"; cwd?: NvimCwd }\n  | { type: \"docker\"; container: string; cwd: string };\n\nexport type TurnEndReason = \"end_turn\" | \"aborted\" | \"error\";",
-      "headingContext": "node/core/src/thread-core.ts",
-      "startLine": 57,
-      "startCol": 1,
-      "endLine": 117,
-      "endCol": 62
+      "start": 2196,
+      "end": 2856
     },
     {
-      "text": "export type ThreadCoreEvents = {\n  update: [];\n  playChime: [];\n  scrollToLastMessage: [];\n  setupResubmit: [threadId: ThreadId, lastUserMessage: string];\n  aborting: [];\n  recoverPendingMessages: [threadId: ThreadId, text: string];\n  pendingUpdatesChanged: [];\n  turnEnded: [{ reason: TurnEndReason }];\n\n  contextUpdatesSent: [updates: Record\u003cstring, unknown\u003e];\n  gitContextUpdateSent: [update: GitContextUpdate];\n};",
-      "contextualizedText": "// node/core/src/thread-core.ts\n\nexport type ThreadCoreEvents = {\n  update: [];\n  playChime: [];\n  scrollToLastMessage: [];\n  setupResubmit: [threadId: ThreadId, lastUserMessage: string];\n  aborting: [];\n  recoverPendingMessages: [threadId: ThreadId, text: string];\n  pendingUpdatesChanged: [];\n  turnEnded: [{ reason: TurnEndReason }];\n\n  contextUpdatesSent: [updates: Record\u003cstring, unknown\u003e];\n  gitContextUpdateSent: [update: GitContextUpdate];\n};",
-      "headingContext": "node/core/src/thread-core.ts",
-      "startLine": 119,
-      "startCol": 1,
-      "endLine": 131,
-      "endCol": 3
+      "start": 2858,
+      "end": 4069
     },
     {
-      "text": "export interface ThreadCoreContext {\n  logger: Logger;\n  profile: ProviderProfile;\n  cwd: NvimCwd;\n  homeDir: HomeDir;\n  threadType: ThreadType;\n  subagentConfig?: SubagentConfig;\n  systemPrompt: SystemPrompt;\n  systemInfo: SystemInfo;\n  mcpToolManager: MCPToolManagerImpl;\n  threadManager: ThreadManager;\n  getScriptRunner?: () =\u003e ScriptRunner | undefined;\n  fileIO: FileIO;\n  shell: Shell;\n  gitClient: GitClient;\n  initialGitState?: GitState | undefined;\n  lspClient: LspClient;\n  helpTagsProvider: HelpTagsProvider;\n  luaExecutor?: LuaExecutor | undefined;\n  availableCapabilities: Set\u003cToolCapability\u003e;\n  environmentConfig: EnvironmentConfig;\n  maxConcurrentSubagents: number;\n  maxConcurrentFastSubagents: number;\n  getAgents: () =\u003e AgentsMap;\n  getProvider: (profile: ProviderProfile) =\u003e Provider;\n  initialFiles?: Files;\n  yieldSchema?: JSONSchemaType;\n  /** Base dir for the conversation archive. Defaults to MAGENTA_TEMP_DIR. */\n  conversationLogBaseDir?: string;\n}",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e interface ThreadCoreContext\n\nexport interface ThreadCoreContext {\n  logger: Logger;\n  profile: ProviderProfile;\n  cwd: NvimCwd;\n  homeDir: HomeDir;\n  threadType: ThreadType;\n  subagentConfig?: SubagentConfig;\n  systemPrompt: SystemPrompt;\n  systemInfo: SystemInfo;\n  mcpToolManager: MCPToolManagerImpl;\n  threadManager: ThreadManager;\n  getScriptRunner?: () =\u003e ScriptRunner | undefined;\n  fileIO: FileIO;\n  shell: Shell;\n  gitClient: GitClient;\n  initialGitState?: GitState | undefined;\n  lspClient: LspClient;\n  helpTagsProvider: HelpTagsProvider;\n  luaExecutor?: LuaExecutor | undefined;\n  availableCapabilities: Set\u003cToolCapability\u003e;\n  environmentConfig: EnvironmentConfig;\n  maxConcurrentSubagents: number;\n  maxConcurrentFastSubagents: number;\n  getAgents: () =\u003e AgentsMap;\n  getProvider: (profile: ProviderProfile) =\u003e Provider;\n  initialFiles?: Files;\n  yieldSchema?: JSONSchemaType;\n  /** Base dir for the conversation archive. Defaults to MAGENTA_TEMP_DIR. */\n  conversationLogBaseDir?: string;\n}",
-      "headingContext": "node/core/src/thread-core.ts \u003e interface ThreadCoreContext",
-      "startLine": 133,
-      "startCol": 1,
-      "endLine": 162,
-      "endCol": 2
+      "start": 4071,
+      "end": 5328
     },
     {
-      "text": "/** Minimum output tokens between system reminders during auto-respond loops */\nconst SYSTEM_REMINDER_MIN_TOKEN_INTERVAL = 2000;\n\n/** Minimum output tokens between bash-summary reminders. */\nconst BASH_REMINDER_TOKEN_INTERVAL = 5000;\n\nconst CONTEXT_MANAGER_POLL_INTERVAL_MS = 1000;\n\nexport type ThreadCoreAction =\n  | { type: \"set-title\"; title: string }\n  | { type: \"set-mode\"; mode: ThreadMode }\n  | {\n      type: \"set-active-tool-result\";\n      id: ToolRequestId;\n      result: ProviderToolResult;\n    }\n  | { type: \"increment-output-tokens\"; tokens: number }\n  | { type: \"reset-output-tokens\" }\n  | { type: \"set-teardown-message\"; message: string }\n  | { type: \"push-pending-messages\"; messages: InputMessage[] }\n  | { type: \"drain-pending-messages\" }\n  | { type: \"push-compaction-record\"; record: CompactionRecord }\n  | { type: \"reset-after-compaction\" }\n  | { type: \"mark-bash-output-abbreviated\" }\n  | { type: \"activate-reminder\"; text: string }\n  | { type: \"reset-bash-reminder\" }\n  | {\n      type: \"set-failed-submit\";\n      value: { userMessage: string; errorMessage: string } | undefined;\n    }\n  | {\n      type: \"set-pre-submit-native-idx\";\n      idx: NativeMessageIdx | undefined;\n    };",
-      "contextualizedText": "// node/core/src/thread-core.ts\n\n/** Minimum output tokens between system reminders during auto-respond loops */\nconst SYSTEM_REMINDER_MIN_TOKEN_INTERVAL = 2000;\n\n/** Minimum output tokens between bash-summary reminders. */\nconst BASH_REMINDER_TOKEN_INTERVAL = 5000;\n\nconst CONTEXT_MANAGER_POLL_INTERVAL_MS = 1000;\n\nexport type ThreadCoreAction =\n  | { type: \"set-title\"; title: string }\n  | { type: \"set-mode\"; mode: ThreadMode }\n  | {\n      type: \"set-active-tool-result\";\n      id: ToolRequestId;\n      result: ProviderToolResult;\n    }\n  | { type: \"increment-output-tokens\"; tokens: number }\n  | { type: \"reset-output-tokens\" }\n  | { type: \"set-teardown-message\"; message: string }\n  | { type: \"push-pending-messages\"; messages: InputMessage[] }\n  | { type: \"drain-pending-messages\" }\n  | { type: \"push-compaction-record\"; record: CompactionRecord }\n  | { type: \"reset-after-compaction\" }\n  | { type: \"mark-bash-output-abbreviated\" }\n  | { type: \"activate-reminder\"; text: string }\n  | { type: \"reset-bash-reminder\" }\n  | {\n      type: \"set-failed-submit\";\n      value: { userMessage: string; errorMessage: string } | undefined;\n    }\n  | {\n      type: \"set-pre-submit-native-idx\";\n      idx: NativeMessageIdx | undefined;\n    };",
-      "headingContext": "node/core/src/thread-core.ts",
-      "startLine": 164,
-      "startCol": 1,
-      "endLine": 197,
-      "endCol": 7
+      "start": 5330,
+      "end": 7282
     },
     {
-      "text": "export class ThreadCore extends Emitter\u003cThreadCoreEvents\u003e {\n  public state: {\n    title?: string;\n    threadType: ThreadType;\n    systemPrompt: SystemPrompt;\n    systemInfo: SystemInfo;\n    pendingMessages: InputMessage[];\n    mode: ThreadMode;\n    edlRegisters: EdlRegisters;\n    scratchpad: Scratchpad.Scratchpad;\n    outputTokensSinceLastReminder: number;\n    compactionHistory: CompactionRecord[];\n    editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];\n    pendingBashReminder: boolean;\n    bashTokensSinceLastReminder: number;\n    firstBashReminderPending: boolean;\n    failedSubmit: { userMessage: string; errorMessage: string } | undefined;\n    preSubmitNativeIdx: NativeMessageIdx | undefined;\n    activeReminders: Set\u003cstring\u003e;\n    toolSpecs: ProviderToolSpec[];\n  };\n\n  public agent: Agent;\n  public contextManager: ContextManager;\n  public gitTracker: GitTracker;\n  public compactionController: CompactionManager | undefined;\n  public supervisors: ThreadSupervisor[] = [];\n  private threadLogger: ThreadLogger;\n\n  constructor(\n    public id: ThreadId,\n    private context: ThreadCoreContext,\n    clonedAgent?: Agent,\n    forkProvenance?: ForkProvenance,\n    initialState?: {\n      scratchpad?: Scratchpad.Scratchpad;\n      edlRegisters?: EdlRegisters;\n    },\n  )",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore\n\nexport class ThreadCore extends Emitter\u003cThreadCoreEvents\u003e {\n  public state: {\n    title?: string;\n    threadType: ThreadType;\n    systemPrompt: SystemPrompt;\n    systemInfo: SystemInfo;\n    pendingMessages: InputMessage[];\n    mode: ThreadMode;\n    edlRegisters: EdlRegisters;\n    scratchpad: Scratchpad.Scratchpad;\n    outputTokensSinceLastReminder: number;\n    compactionHistory: CompactionRecord[];\n    editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];\n    pendingBashReminder: boolean;\n    bashTokensSinceLastReminder: number;\n    firstBashReminderPending: boolean;\n    failedSubmit: { userMessage: string; errorMessage: string } | undefined;\n    preSubmitNativeIdx: NativeMessageIdx | undefined;\n    activeReminders: Set\u003cstring\u003e;\n    toolSpecs: ProviderToolSpec[];\n  };\n\n  public agent: Agent;\n  public contextManager: ContextManager;\n  public gitTracker: GitTracker;\n  public compactionController: CompactionManager | undefined;\n  public supervisors: ThreadSupervisor[] = [];\n  private threadLogger: ThreadLogger;\n\n  constructor(\n    public id: ThreadId,\n    private context: ThreadCoreContext,\n    clonedAgent?: Agent,\n    forkProvenance?: ForkProvenance,\n    initialState?: {\n      scratchpad?: Scratchpad.Scratchpad;\n      edlRegisters?: EdlRegisters;\n    },\n  )",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore",
-      "startLine": 199,
-      "startCol": 1,
-      "endLine": 237,
-      "endCol": 4
+      "start": 7286,
+      "end": 9397
     },
     {
-      "text": "{\n    super();\n    this.threadLogger = new ThreadLogger(\n      id,\n      context.threadType,\n      () =\u003e this.getProviderMessages(),\n      () =\u003e this.getProviderMessages().length,\n      context.logger,\n      {\n        ...(context.conversationLogBaseDir !== undefined\n          ? { baseDir: context.conversationLogBaseDir }\n          : {}),\n        ...(forkProvenance ? { forkedFrom: forkProvenance } : {}),\n      },\n    );\n    this.on(\"update\", () =\u003e this.threadLogger.onUpdate());\n    this.on(\"turnEnded\", () =\u003e this.threadLogger.onTurnEnded());\n    this.contextManager = new ContextManager(\n      context.logger,\n      context.fileIO,\n      context.cwd,\n      context.homeDir,\n      context.initialFiles,\n      CONTEXT_MANAGER_POLL_INTERVAL_MS,\n    );\n    this.contextManager.start();\n    this.gitTracker = new GitTracker(\n      context.gitClient,\n      context.initialGitState,\n      context.logger,\n    );\n    this.state = {\n      threadType: context.threadType,\n      systemPrompt: context.systemPrompt,\n      systemInfo: context.systemInfo,\n      pendingMessages: [],\n      mode: { type: \"normal\" },\n      edlRegisters: initialState?.edlRegisters ?? {\n        registers: new Map(),\n        nextSavedId: 0,\n      },\n      scratchpad: initialState?.scratchpad ?? Scratchpad.emptyScratchpad(),\n      outputTokensSinceLastReminder: 0,\n      compactionHistory: [],\n      editedFilesThisTurn: [],\n      pendingBashReminder: false,\n      bashTokensSinceLastReminder: 0,\n      firstBashReminderPending: true,\n      failedSubmit: undefined,\n      preSubmitNativeIdx: undefined,\n      activeReminders: new Set(),\n      toolSpecs: [],\n    };\n    this.refreshToolSpecs();\n\n    this.listenToContextManager();\n\n    if (clonedAgent) {\n      this.agent = clonedAgent;\n      this.listenToAgent(this.agent);\n    } else {\n      this.agent = this.createFreshAgent();\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore\n\n{\n    super();\n    this.threadLogger = new ThreadLogger(\n      id,\n      context.threadType,\n      () =\u003e this.getProviderMessages(),\n      () =\u003e this.getProviderMessages().length,\n      context.logger,\n      {\n        ...(context.conversationLogBaseDir !== undefined\n          ? { baseDir: context.conversationLogBaseDir }\n          : {}),\n        ...(forkProvenance ? { forkedFrom: forkProvenance } : {}),\n      },\n    );\n    this.on(\"update\", () =\u003e this.threadLogger.onUpdate());\n    this.on(\"turnEnded\", () =\u003e this.threadLogger.onTurnEnded());\n    this.contextManager = new ContextManager(\n      context.logger,\n      context.fileIO,\n      context.cwd,\n      context.homeDir,\n      context.initialFiles,\n      CONTEXT_MANAGER_POLL_INTERVAL_MS,\n    );\n    this.contextManager.start();\n    this.gitTracker = new GitTracker(\n      context.gitClient,\n      context.initialGitState,\n      context.logger,\n    );\n    this.state = {\n      threadType: context.threadType,\n      systemPrompt: context.systemPrompt,\n      systemInfo: context.systemInfo,\n      pendingMessages: [],\n      mode: { type: \"normal\" },\n      edlRegisters: initialState?.edlRegisters ?? {\n        registers: new Map(),\n        nextSavedId: 0,\n      },\n      scratchpad: initialState?.scratchpad ?? Scratchpad.emptyScratchpad(),\n      outputTokensSinceLastReminder: 0,\n      compactionHistory: [],\n      editedFilesThisTurn: [],\n      pendingBashReminder: false,\n      bashTokensSinceLastReminder: 0,\n      firstBashReminderPending: true,\n      failedSubmit: undefined,\n      preSubmitNativeIdx: undefined,\n      activeReminders: new Set(),\n      toolSpecs: [],\n    };\n    this.refreshToolSpecs();\n\n    this.listenToContextManager();\n\n    if (clonedAgent) {\n      this.agent = clonedAgent;\n      this.listenToAgent(this.agent);\n    } else {\n      this.agent = this.createFreshAgent();\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore",
-      "startLine": 237,
-      "startCol": 5,
-      "endLine": 300,
-      "endCol": 4
+      "start": 9401,
+      "end": 11430
     },
     {
-      "text": "/** Build an independent copy of `sourceCore` that resumes the conversation\n   * frozen at `nativeMessageIdx`. The cloned agent is created exactly once\n   * here and ownership is transferred to the new ThreadCore. The source is\n   * not aborted and shares no mutable state with the result. */\n  static async clone(args: {\n    sourceCore: ThreadCore;\n    newId: ThreadId;\n    nativeMessageIdx: NativeMessageIdx;\n    context: ThreadCoreContext;\n  }): Promise\u003cThreadCore\u003e {\n    const { sourceCore, newId, nativeMessageIdx, context } = args;\n    const agent = sourceCore.agent.clone();\n    agent.truncateMessages(nativeMessageIdx);\n    const initialFiles = await buildClonedFiles(\n      sourceCore.contextManager.files,\n      context.fileIO,\n    );\n    const contextWithFiles: ThreadCoreContext = {\n      ...context,\n      initialFiles,\n      initialGitState: sourceCore.gitTracker.getAgentView(),\n    };\n    return new ThreadCore(\n      newId,\n      contextWithFiles,\n      agent,\n      {\n        fromThreadId: sourceCore.id,\n        nativeMessageIdx,\n      },\n      {\n        scratchpad: Scratchpad.cloneScratchpad(sourceCore.state.scratchpad),\n        edlRegisters: {\n          registers: new Map(sourceCore.state.edlRegisters.registers),\n          nextSavedId: sourceCore.state.edlRegisters.nextSavedId,\n        },\n      },\n    );\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method clone\n\n/** Build an independent copy of `sourceCore` that resumes the conversation\n   * frozen at `nativeMessageIdx`. The cloned agent is created exactly once\n   * here and ownership is transferred to the new ThreadCore. The source is\n   * not aborted and shares no mutable state with the result. */\n  static async clone(args: {\n    sourceCore: ThreadCore;\n    newId: ThreadId;\n    nativeMessageIdx: NativeMessageIdx;\n    context: ThreadCoreContext;\n  }): Promise\u003cThreadCore\u003e {\n    const { sourceCore, newId, nativeMessageIdx, context } = args;\n    const agent = sourceCore.agent.clone();\n    agent.truncateMessages(nativeMessageIdx);\n    const initialFiles = await buildClonedFiles(\n      sourceCore.contextManager.files,\n      context.fileIO,\n    );\n    const contextWithFiles: ThreadCoreContext = {\n      ...context,\n      initialFiles,\n      initialGitState: sourceCore.gitTracker.getAgentView(),\n    };\n    return new ThreadCore(\n      newId,\n      contextWithFiles,\n      agent,\n      {\n        fromThreadId: sourceCore.id,\n        nativeMessageIdx,\n      },\n      {\n        scratchpad: Scratchpad.cloneScratchpad(sourceCore.state.scratchpad),\n        edlRegisters: {\n          registers: new Map(sourceCore.state.edlRegisters.registers),\n          nextSavedId: sourceCore.state.edlRegisters.nextSavedId,\n        },\n      },\n    );\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method clone",
-      "startLine": 302,
-      "startCol": 3,
-      "endLine": 340,
-      "endCol": 4
+      "start": 11434,
+      "end": 13552
     },
     {
-      "text": "private contextManagerListeners:\n    | {\n        fileAdded: () =\u003e void;\n        fileRemoved: () =\u003e void;\n        pendingUpdatesChanged: () =\u003e void;\n      }\n    | undefined",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore\n\nprivate contextManagerListeners:\n    | {\n        fileAdded: () =\u003e void;\n        fileRemoved: () =\u003e void;\n        pendingUpdatesChanged: () =\u003e void;\n      }\n    | undefined",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore",
-      "startLine": 342,
-      "startCol": 3,
-      "endLine": 348,
-      "endCol": 16
+      "start": 13556,
+      "end": 14816
     },
     {
-      "text": "  private listenToContextManager(): void {\n    const listeners",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToContextManager\n\n  private listenToContextManager(): void {\n    const listeners",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToContextManager",
-      "startLine": 350,
-      "startCol": 1,
-      "endLine": 351,
-      "endCol": 20
+      "start": 14820,
+      "end": 17164
     },
     {
-      "text": "      fileAdded: () =\u003e this.emit(\"update\")",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToContextManager \u003e function fileAdded\n\n      fileAdded: () =\u003e this.emit(\"update\")",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToContextManager \u003e function fileAdded",
-      "startLine": 352,
-      "startCol": 1,
-      "endLine": 352,
-      "endCol": 43
+      "start": 17173,
+      "end": 17546
     },
     {
-      "text": "      fileRemoved: () =\u003e this.emit(\"update\")",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToContextManager \u003e function fileRemoved\n\n      fileRemoved: () =\u003e this.emit(\"update\")",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToContextManager \u003e function fileRemoved",
-      "startLine": 353,
-      "startCol": 1,
-      "endLine": 353,
-      "endCol": 45
+      "start": 17550,
+      "end": 19984
     },
     {
-      "text": "      pendingUpdatesChanged: () =\u003e this.emit(\"pendingUpdatesChanged\")",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToContextManager \u003e function pendingUpdatesChanged\n\n      pendingUpdatesChanged: () =\u003e this.emit(\"pendingUpdatesChanged\")",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToContextManager \u003e function pendingUpdatesChanged",
-      "startLine": 354,
-      "startCol": 1,
-      "endLine": 354,
-      "endCol": 70
+      "start": 19988,
+      "end": 22191
     },
     {
-      "text": "this.contextManagerListeners = listeners;\n    this.contextManager.on(\"fileAdded\", listeners.fileAdded);\n    this.contextManager.on(\"fileRemoved\", listeners.fileRemoved);\n    this.contextManager.on(\n      \"pendingUpdatesChanged\",\n      listeners.pendingUpdatesChanged,\n    );\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToContextManager\n\nthis.contextManagerListeners = listeners;\n    this.contextManager.on(\"fileAdded\", listeners.fileAdded);\n    this.contextManager.on(\"fileRemoved\", listeners.fileRemoved);\n    this.contextManager.on(\n      \"pendingUpdatesChanged\",\n      listeners.pendingUpdatesChanged,\n    );\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToContextManager",
-      "startLine": 356,
-      "startCol": 5,
-      "endLine": 363,
-      "endCol": 4
+      "start": 22199,
+      "end": 24236
     },
     {
-      "text": "  private unlistenContextManager(): void {\n    if (this.contextManagerListeners) {\n      this.contextManager.off(\n        \"fileAdded\",\n        this.contextManagerListeners.fileAdded,\n      );\n      this.contextManager.off(\n        \"fileRemoved\",\n        this.contextManagerListeners.fileRemoved,\n      );\n      this.contextManager.off(\n        \"pendingUpdatesChanged\",\n        this.contextManagerListeners.pendingUpdatesChanged,\n      );\n      this.contextManagerListeners = undefined;\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method unlistenContextManager\n\n  private unlistenContextManager(): void {\n    if (this.contextManagerListeners) {\n      this.contextManager.off(\n        \"fileAdded\",\n        this.contextManagerListeners.fileAdded,\n      );\n      this.contextManager.off(\n        \"fileRemoved\",\n        this.contextManagerListeners.fileRemoved,\n      );\n      this.contextManager.off(\n        \"pendingUpdatesChanged\",\n        this.contextManagerListeners.pendingUpdatesChanged,\n      );\n      this.contextManagerListeners = undefined;\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method unlistenContextManager",
-      "startLine": 365,
-      "startCol": 1,
-      "endLine": 381,
-      "endCol": 4
+      "start": 24244,
+      "end": 26342
     },
     {
-      "text": "/** Stored listener references so we can unsubscribe when replacing agents */\n  private agentListeners:\n    | {\n        didUpdate: () =\u003e void;\n        stopped: (stopReason: StopReason, usage: Usage | undefined) =\u003e void;\n        error: (error: Error) =\u003e void;\n      }\n    | undefined;\n\n  private updateThrottleTimer: ReturnType\u003ctypeof setTimeout\u003e | undefined;\n  private updatePending = false;\n\n  /** Bounded auto-resubmit bookkeeping for non-user-facing threads (subagent/\n   * compact) recovering from a recoverable agent error. undefined means no\n   * retry episode is in progress. Reset whenever the agent successfully\n   * stops (see handleProviderStopped). Kept as a single struct so that\n   * `attempt`/`firstErrorAt`/`timer` can never drift out of sync with each\n   * other. */\n  private errorRetry:\n    | {\n        timer: ReturnType\u003ctypeof setTimeout\u003e | undefined;\n        attempt: number;\n        firstErrorAt: number;\n      }\n    | undefined",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore\n\n/** Stored listener references so we can unsubscribe when replacing agents */\n  private agentListeners:\n    | {\n        didUpdate: () =\u003e void;\n        stopped: (stopReason: StopReason, usage: Usage | undefined) =\u003e void;\n        error: (error: Error) =\u003e void;\n      }\n    | undefined;\n\n  private updateThrottleTimer: ReturnType\u003ctypeof setTimeout\u003e | undefined;\n  private updatePending = false;\n\n  /** Bounded auto-resubmit bookkeeping for non-user-facing threads (subagent/\n   * compact) recovering from a recoverable agent error. undefined means no\n   * retry episode is in progress. Reset whenever the agent successfully\n   * stops (see handleProviderStopped). Kept as a single struct so that\n   * `attempt`/`firstErrorAt`/`timer` can never drift out of sync with each\n   * other. */\n  private errorRetry:\n    | {\n        timer: ReturnType\u003ctypeof setTimeout\u003e | undefined;\n        attempt: number;\n        firstErrorAt: number;\n      }\n    | undefined",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore",
-      "startLine": 383,
-      "startCol": 3,
-      "endLine": 407,
-      "endCol": 16
+      "start": 26350,
+      "end": 28409
     },
     {
-      "text": "  private clearErrorRetryTimer(): void {\n    if (this.errorRetry?.timer) {\n      clearTimeout(this.errorRetry.timer);\n      this.errorRetry.timer = undefined;\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method clearErrorRetryTimer\n\n  private clearErrorRetryTimer(): void {\n    if (this.errorRetry?.timer) {\n      clearTimeout(this.errorRetry.timer);\n      this.errorRetry.timer = undefined;\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method clearErrorRetryTimer",
-      "startLine": 409,
-      "startCol": 1,
-      "endLine": 414,
-      "endCol": 4
+      "start": 28415,
+      "end": 30351
     },
     {
-      "text": "  private resetErrorRetryState(): void {\n    this.clearErrorRetryTimer();\n    this.errorRetry = undefined;\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method resetErrorRetryState\n\n  private resetErrorRetryState(): void {\n    this.clearErrorRetryTimer();\n    this.errorRetry = undefined;\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method resetErrorRetryState",
-      "startLine": 416,
-      "startCol": 1,
-      "endLine": 419,
-      "endCol": 4
+      "start": 30355,
+      "end": 32311
     },
     {
-      "text": "  private flushUpdate(): void {\n    if (this.updatePending) {\n      this.updatePending = false;\n      this.emit(\"update\");\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method flushUpdate\n\n  private flushUpdate(): void {\n    if (this.updatePending) {\n      this.updatePending = false;\n      this.emit(\"update\");\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method flushUpdate",
-      "startLine": 421,
-      "startCol": 1,
-      "endLine": 426,
-      "endCol": 4
+      "start": 32315,
+      "end": 34428
     },
     {
-      "text": "  private scheduleUpdate(): void {\n    this.updatePending = true;\n    if (!this.updateThrottleTimer) {\n      this.updateThrottleTimer = setTimeout(() =\u003e {\n        this.updateThrottleTimer = undefined;\n        this.flushUpdate();\n      }, 32);\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method scheduleUpdate\n\n  private scheduleUpdate(): void {\n    this.updatePending = true;\n    if (!this.updateThrottleTimer) {\n      this.updateThrottleTimer = setTimeout(() =\u003e {\n        this.updateThrottleTimer = undefined;\n        this.flushUpdate();\n      }, 32);\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method scheduleUpdate",
-      "startLine": 428,
-      "startCol": 1,
-      "endLine": 436,
-      "endCol": 4
+      "start": 34432,
+      "end": 36026
     },
     {
-      "text": "  private unlistenAgent(agent: Agent): void {\n    if (this.agentListeners) {\n      agent.off(\"didUpdate\", this.agentListeners.didUpdate);\n      agent.off(\"stopped\", this.agentListeners.stopped);\n      agent.off(\"error\", this.agentListeners.error);\n      this.agentListeners = undefined;\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method unlistenAgent\n\n  private unlistenAgent(agent: Agent): void {\n    if (this.agentListeners) {\n      agent.off(\"didUpdate\", this.agentListeners.didUpdate);\n      agent.off(\"stopped\", this.agentListeners.stopped);\n      agent.off(\"error\", this.agentListeners.error);\n      this.agentListeners = undefined;\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method unlistenAgent",
-      "startLine": 438,
-      "startCol": 1,
-      "endLine": 445,
-      "endCol": 4
+      "start": 36032,
+      "end": 38468
     },
     {
-      "text": "  private listenToAgent(agent: Agent): void {\n    const listeners",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToAgent\n\n  private listenToAgent(agent: Agent): void {\n    const listeners",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToAgent",
-      "startLine": 447,
-      "startCol": 1,
-      "endLine": 448,
-      "endCol": 20
+      "start": 38472,
+      "end": 40609
     },
     {
-      "text": "      didUpdate: () =\u003e {\n        this.scheduleUpdate();\n      }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToAgent \u003e function didUpdate\n\n      didUpdate: () =\u003e {\n        this.scheduleUpdate();\n      }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToAgent \u003e function didUpdate",
-      "startLine": 449,
-      "startCol": 1,
-      "endLine": 451,
-      "endCol": 8
+      "start": 40615,
+      "end": 42915
     },
     {
-      "text": "      stopped: (stopReason: StopReason, usage: Usage | undefined) =\u003e {\n        // Flush any pending throttled update before handling stop\n        if (this.updateThrottleTimer) {\n          clearTimeout(this.updateThrottleTimer);\n          this.updateThrottleTimer = undefined;\n        }\n        this.updatePending = false;\n        this.handleProviderStopped(stopReason, usage);\n      }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToAgent \u003e function stopped\n\n      stopped: (stopReason: StopReason, usage: Usage | undefined) =\u003e {\n        // Flush any pending throttled update before handling stop\n        if (this.updateThrottleTimer) {\n          clearTimeout(this.updateThrottleTimer);\n          this.updateThrottleTimer = undefined;\n        }\n        this.updatePending = false;\n        this.handleProviderStopped(stopReason, usage);\n      }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToAgent \u003e function stopped",
-      "startLine": 452,
-      "startCol": 1,
-      "endLine": 460,
-      "endCol": 8
+      "start": 42921,
+      "end": 44885
     },
     {
-      "text": "      error: (error: Error) =\u003e {\n        if (this.updateThrottleTimer) {\n          clearTimeout(this.updateThrottleTimer);\n          this.updateThrottleTimer = undefined;\n        }\n        this.updatePending = false;\n        this.handleErrorState(error);\n      }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToAgent \u003e function error\n\n      error: (error: Error) =\u003e {\n        if (this.updateThrottleTimer) {\n          clearTimeout(this.updateThrottleTimer);\n          this.updateThrottleTimer = undefined;\n        }\n        this.updatePending = false;\n        this.handleErrorState(error);\n      }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToAgent \u003e function error",
-      "startLine": 461,
-      "startCol": 1,
-      "endLine": 468,
-      "endCol": 8
+      "start": 44889,
+      "end": 46284
     },
     {
-      "text": "this.agentListeners = listeners;\n    agent.on(\"didUpdate\", listeners.didUpdate);\n    agent.on(\"stopped\", listeners.stopped);\n    agent.on(\"error\", listeners.error);\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToAgent\n\nthis.agentListeners = listeners;\n    agent.on(\"didUpdate\", listeners.didUpdate);\n    agent.on(\"stopped\", listeners.stopped);\n    agent.on(\"error\", listeners.error);\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method listenToAgent",
-      "startLine": 470,
-      "startCol": 5,
-      "endLine": 474,
-      "endCol": 4
+      "start": 46288,
+      "end": 48440
     },
     {
-      "text": "/** Process a state mutation. Calls onUpdate() unless silent is true.\n   *  Use silent for internal bookkeeping that doesn't need a view re-render.\n   */\n  update(\n    action: ThreadCoreAction,\n    { silent }: { silent?: boolean } = {},\n  ): void {\n    switch (action.type) {\n      case \"set-title\":\n        this.state.title = action.title;\n        this.threadLogger.recordTitle(action.title);\n        break;\n      case \"set-mode\":\n        this.state.mode = action.mode;\n        break;\n      case \"set-active-tool-result\":\n        if (this.state.mode.type === \"tool_use\") {\n          const entry = this.state.mode.activeTools.get(action.id);\n          if (entry) {\n            entry.result = action.result;\n          }\n        }\n        break;\n      case \"increment-output-tokens\":\n        this.state.outputTokensSinceLastReminder += action.tokens;\n        this.state.bashTokensSinceLastReminder += action.tokens;\n        break;\n      case \"reset-output-tokens\":\n        this.state.outputTokensSinceLastReminder = 0;\n        break;\n      case \"set-teardown-message\":\n        if (this.state.mode.type === \"yielded\") {\n          this.state.mode.teardownMessage = action.message;\n        }\n        break;\n      case \"push-pending-messages\":\n        this.state.pendingMessages.push(...action.messages);\n        break;\n      case \"drain-pending-messages\":\n        this.state.pendingMessages = [];\n        break;\n      case \"push-compaction-record\":\n        this.state.compactionHistory.push(action.record);\n        break;",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method update\n\n/** Process a state mutation. Calls onUpdate() unless silent is true.\n   *  Use silent for internal bookkeeping that doesn't need a view re-render.\n   */\n  update(\n    action: ThreadCoreAction,\n    { silent }: { silent?: boolean } = {},\n  ): void {\n    switch (action.type) {\n      case \"set-title\":\n        this.state.title = action.title;\n        this.threadLogger.recordTitle(action.title);\n        break;\n      case \"set-mode\":\n        this.state.mode = action.mode;\n        break;\n      case \"set-active-tool-result\":\n        if (this.state.mode.type === \"tool_use\") {\n          const entry = this.state.mode.activeTools.get(action.id);\n          if (entry) {\n            entry.result = action.result;\n          }\n        }\n        break;\n      case \"increment-output-tokens\":\n        this.state.outputTokensSinceLastReminder += action.tokens;\n        this.state.bashTokensSinceLastReminder += action.tokens;\n        break;\n      case \"reset-output-tokens\":\n        this.state.outputTokensSinceLastReminder = 0;\n        break;\n      case \"set-teardown-message\":\n        if (this.state.mode.type === \"yielded\") {\n          this.state.mode.teardownMessage = action.message;\n        }\n        break;\n      case \"push-pending-messages\":\n        this.state.pendingMessages.push(...action.messages);\n        break;\n      case \"drain-pending-messages\":\n        this.state.pendingMessages = [];\n        break;\n      case \"push-compaction-record\":\n        this.state.compactionHistory.push(action.record);\n        break;",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method update",
-      "startLine": 476,
-      "startCol": 3,
-      "endLine": 519,
-      "endCol": 15
+      "start": 48444,
+      "end": 50168
     },
     {
-      "text": "case \"reset-after-compaction\":\n        this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };\n        this.state.scratchpad = Scratchpad.emptyScratchpad();\n        this.state.outputTokensSinceLastReminder = 0;\n        this.state.editedFilesThisTurn = [];\n        this.state.pendingBashReminder = false;\n        this.state.bashTokensSinceLastReminder = 0;\n        this.state.firstBashReminderPending = true;\n        this.state.activeReminders = new Set();\n        break;\n      case \"mark-bash-output-abbreviated\":\n        this.state.pendingBashReminder = true;\n        break;\n      case \"activate-reminder\":\n        this.state.activeReminders.add(action.text);\n        break;\n      case \"reset-bash-reminder\":\n        this.state.pendingBashReminder = false;\n        this.state.bashTokensSinceLastReminder = 0;\n        this.state.firstBashReminderPending = false;\n        break;\n      case \"set-failed-submit\":\n        this.state.failedSubmit = action.value;\n        break;\n      case \"set-pre-submit-native-idx\":\n        this.state.preSubmitNativeIdx = action.idx;\n        break;\n      default:\n        assertUnreachable(action);\n    }\n    if (!silent) {\n      this.emit(\"update\");\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method update\n\ncase \"reset-after-compaction\":\n        this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };\n        this.state.scratchpad = Scratchpad.emptyScratchpad();\n        this.state.outputTokensSinceLastReminder = 0;\n        this.state.editedFilesThisTurn = [];\n        this.state.pendingBashReminder = false;\n        this.state.bashTokensSinceLastReminder = 0;\n        this.state.firstBashReminderPending = true;\n        this.state.activeReminders = new Set();\n        break;\n      case \"mark-bash-output-abbreviated\":\n        this.state.pendingBashReminder = true;\n        break;\n      case \"activate-reminder\":\n        this.state.activeReminders.add(action.text);\n        break;\n      case \"reset-bash-reminder\":\n        this.state.pendingBashReminder = false;\n        this.state.bashTokensSinceLastReminder = 0;\n        this.state.firstBashReminderPending = false;\n        break;\n      case \"set-failed-submit\":\n        this.state.failedSubmit = action.value;\n        break;\n      case \"set-pre-submit-native-idx\":\n        this.state.preSubmitNativeIdx = action.idx;\n        break;\n      default:\n        assertUnreachable(action);\n    }\n    if (!silent) {\n      this.emit(\"update\");\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method update",
-      "startLine": 520,
-      "startCol": 7,
-      "endLine": 553,
-      "endCol": 4
+      "start": 50172,
+      "end": 51798
     },
     {
-      "text": "  refreshToolSpecs(): void {\n    this.state.toolSpecs = getToolSpecs(\n      this.state.threadType,\n      this.context.mcpToolManager,\n      this.context.availableCapabilities,\n      this.context.getAgents(),\n      this.context.subagentConfig,\n      this.context.yieldSchema,\n      this.context.getScriptRunner?.()?.getScriptCatalog(),\n    );\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method refreshToolSpecs\n\n  refreshToolSpecs(): void {\n    this.state.toolSpecs = getToolSpecs(\n      this.state.threadType,\n      this.context.mcpToolManager,\n      this.context.availableCapabilities,\n      this.context.getAgents(),\n      this.context.subagentConfig,\n      this.context.yieldSchema,\n      this.context.getScriptRunner?.()?.getScriptCatalog(),\n    );\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method refreshToolSpecs",
-      "startLine": 555,
-      "startCol": 1,
-      "endLine": 565,
-      "endCol": 4
-    },
-    {
-      "text": "  getToolSpecs(): ProviderToolSpec[] {\n    return this.state.toolSpecs;\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getToolSpecs\n\n  getToolSpecs(): ProviderToolSpec[] {\n    return this.state.toolSpecs;\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getToolSpecs",
-      "startLine": 567,
-      "startCol": 1,
-      "endLine": 569,
-      "endCol": 4
-    },
-    {
-      "text": "  private createFreshAgent(): Agent {\n    // Clean up listeners from old agent if replacing\n    if (this.agentListeners \u0026\u0026 this.agent) {\n      this.unlistenAgent(this.agent);\n    }\n    this.refreshToolSpecs();\n    const provider = this.context.getProvider(this.context.profile);\n    const agent = provider.createAgent({\n      model: this.context.profile.model,\n      systemPrompt: this.state.systemPrompt,\n      tools: this.getToolSpecs(),\n      ...((this.context.profile.provider === \"anthropic\" ||\n        this.context.profile.provider === \"bedrock\" ||\n        this.context.profile.provider === \"mock\") \u0026\u0026\n        (() =\u003e {\n          const effortOverride = this.context.subagentConfig?.effort;\n          const baseThinking = this.context.profile.thinking;\n          if (effortOverride) {\n            return {\n              thinking: {\n                enabled: true,\n                ...(baseThinking?.displayThinking !== undefined\n                  ? { displayThinking: baseThinking.displayThinking }\n                  : {}),\n                ...(baseThinking?.budgetTokens !== undefined\n                  ? { budgetTokens: baseThinking.budgetTokens }\n                  : {}),\n                effort: effortOverride,\n              },\n            };\n          }\n          if (baseThinking) {\n            return { thinking: baseThinking };\n          }\n          return {};\n        })()),\n      ...(this.context.profile.reasoning \u0026\u0026\n        (this.context.profile.provider === \"openai\" ||\n          this.context.profile.provider === \"mock\") \u0026\u0026 {\n          reasoning: this.context.profile.reasoning,\n        }),\n    });\n    this.listenToAgent(agent);\n    return agent;\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method createFreshAgent\n\n  private createFreshAgent(): Agent {\n    // Clean up listeners from old agent if replacing\n    if (this.agentListeners \u0026\u0026 this.agent) {\n      this.unlistenAgent(this.agent);\n    }\n    this.refreshToolSpecs();\n    const provider = this.context.getProvider(this.context.profile);\n    const agent = provider.createAgent({\n      model: this.context.profile.model,\n      systemPrompt: this.state.systemPrompt,\n      tools: this.getToolSpecs(),\n      ...((this.context.profile.provider === \"anthropic\" ||\n        this.context.profile.provider === \"bedrock\" ||\n        this.context.profile.provider === \"mock\") \u0026\u0026\n        (() =\u003e {\n          const effortOverride = this.context.subagentConfig?.effort;\n          const baseThinking = this.context.profile.thinking;\n          if (effortOverride) {\n            return {\n              thinking: {\n                enabled: true,\n                ...(baseThinking?.displayThinking !== undefined\n                  ? { displayThinking: baseThinking.displayThinking }\n                  : {}),\n                ...(baseThinking?.budgetTokens !== undefined\n                  ? { budgetTokens: baseThinking.budgetTokens }\n                  : {}),\n                effort: effortOverride,\n              },\n            };\n          }\n          if (baseThinking) {\n            return { thinking: baseThinking };\n          }\n          return {};\n        })()),\n      ...(this.context.profile.reasoning \u0026\u0026\n        (this.context.profile.provider === \"openai\" ||\n          this.context.profile.provider === \"mock\") \u0026\u0026 {\n          reasoning: this.context.profile.reasoning,\n        }),\n    });\n    this.listenToAgent(agent);\n    return agent;\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method createFreshAgent",
-      "startLine": 571,
-      "startCol": 1,
-      "endLine": 615,
-      "endCol": 4
-    },
-    {
-      "text": "  getProviderStatus(): AgentStatus {\n    return this.agent.getState().status;\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getProviderStatus\n\n  getProviderStatus(): AgentStatus {\n    return this.agent.getState().status;\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getProviderStatus",
-      "startLine": 617,
-      "startCol": 1,
-      "endLine": 619,
-      "endCol": 4
-    },
-    {
-      "text": "/** For tests: await pending best-effort archive writes. */\n  async awaitArchiveFlush(): Promise\u003cvoid\u003e {\n    await this.threadLogger.flushed();\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method awaitArchiveFlush\n\n/** For tests: await pending best-effort archive writes. */\n  async awaitArchiveFlush(): Promise\u003cvoid\u003e {\n    await this.threadLogger.flushed();\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method awaitArchiveFlush",
-      "startLine": 621,
-      "startCol": 3,
-      "endLine": 624,
-      "endCol": 4
-    },
-    {
-      "text": "  getProviderMessages(): ReadonlyArray\u003cProviderMessage\u003e {\n    return this.agent.getState().messages ?? [];\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getProviderMessages\n\n  getProviderMessages(): ReadonlyArray\u003cProviderMessage\u003e {\n    return this.agent.getState().messages ?? [];\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getProviderMessages",
-      "startLine": 626,
-      "startCol": 1,
-      "endLine": 628,
-      "endCol": 4
-    },
-    {
-      "text": "/** After a non-retryable error, roll back the agent's history to the\n   * pre-submit snapshot captured by sendMessage. Used by the setup-resubmit\n   * handler when populating the input buffer for the failing thread. */\n  discardFailedSubmit(): void {\n    if (this.state.preSubmitNativeIdx === undefined) {\n      return;\n    }\n    const idx = this.state.preSubmitNativeIdx;\n    this.update(\n      { type: \"set-pre-submit-native-idx\", idx: undefined },\n      { silent: true },\n    );\n    this.agent.truncateMessages(idx);\n    this.emit(\"update\");\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method discardFailedSubmit\n\n/** After a non-retryable error, roll back the agent's history to the\n   * pre-submit snapshot captured by sendMessage. Used by the setup-resubmit\n   * handler when populating the input buffer for the failing thread. */\n  discardFailedSubmit(): void {\n    if (this.state.preSubmitNativeIdx === undefined) {\n      return;\n    }\n    const idx = this.state.preSubmitNativeIdx;\n    this.update(\n      { type: \"set-pre-submit-native-idx\", idx: undefined },\n      { silent: true },\n    );\n    this.agent.truncateMessages(idx);\n    this.emit(\"update\");\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method discardFailedSubmit",
-      "startLine": 630,
-      "startCol": 3,
-      "endLine": 644,
-      "endCol": 4
-    },
-    {
-      "text": "  getMessages(): ProviderMessage[] {\n    return [...this.getProviderMessages()];\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getMessages\n\n  getMessages(): ProviderMessage[] {\n    return [...this.getProviderMessages()];\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getMessages",
-      "startLine": 646,
-      "startCol": 1,
-      "endLine": 648,
-      "endCol": 4
-    },
-    {
-      "text": "  getLastStopTokenCount(): number {\n    const state = this.agent.getState();\n    if (state.inputTokenCount !== undefined) {\n      return state.inputTokenCount;\n    }\n\n    const latestUsage = state.latestUsage;\n    if (!latestUsage) {\n      return 0;\n    }\n\n    return (\n      latestUsage.inputTokens +\n      latestUsage.outputTokens +\n      (latestUsage.cacheHits || 0) +\n      (latestUsage.cacheMisses || 0)\n    );\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getLastStopTokenCount\n\n  getLastStopTokenCount(): number {\n    const state = this.agent.getState();\n    if (state.inputTokenCount !== undefined) {\n      return state.inputTokenCount;\n    }\n\n    const latestUsage = state.latestUsage;\n    if (!latestUsage) {\n      return 0;\n    }\n\n    return (\n      latestUsage.inputTokens +\n      latestUsage.outputTokens +\n      (latestUsage.cacheHits || 0) +\n      (latestUsage.cacheMisses || 0)\n    );\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getLastStopTokenCount",
-      "startLine": 650,
-      "startCol": 1,
-      "endLine": 667,
-      "endCol": 4
-    },
-    {
-      "text": "  setTitle(title: string): void {\n    this.update({ type: \"set-title\", title });\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method setTitle\n\n  setTitle(title: string): void {\n    this.update({ type: \"set-title\", title });\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method setTitle",
-      "startLine": 669,
-      "startCol": 1,
-      "endLine": 671,
-      "endCol": 4
-    },
-    {
-      "text": "  private handleProviderStopped(\n    stopReason: StopReason,\n    usage: Usage | undefined,\n  ): void {\n    if (usage) {\n      // Only clear auto-resubmit bookkeeping on a genuine completed turn\n      // (usage is populated for real API responses). discardFailedSubmit's\n      // rollback emits a synthetic \"stopped\"/\"end_turn\" with no usage, which\n      // must not be mistaken for recovery — otherwise the retry episode's\n      // elapsed-time budget would reset on every single retry attempt.\n      this.resetErrorRetryState();\n      this.update(\n        { type: \"increment-output-tokens\", tokens: usage.outputTokens },\n        { silent: true },\n      );\n    }\n\n    if (stopReason === \"tool_use\") {\n      this.handleProviderStoppedWithToolUse();\n      return;\n    }\n\n    if (stopReason === \"max_tokens\") {\n      const messages = this.getProviderMessages();\n      const lastMessage = messages[messages.length - 1];\n      const hasToolUse =\n        lastMessage?.role === \"assistant\" \u0026\u0026\n        lastMessage.content.some((block) =\u003e block.type === \"tool_use\");\n\n      if (hasToolUse) {\n        this.handleProviderStoppedWithToolUse();\n        return;\n      }\n\n      const handoff = this.consultHandoffSupervisors(stopReason);\n      if (handoff.type === \"compact\") {\n        this.startCompaction(handoff.nextPrompt);\n        return;\n      }\n\n      this.sendMessage([\n        {\n          type: \"system\",\n          text: \"Your previous response was truncated due to the output token limit. Please continue where you left off.\",\n        },\n      ]).catch(this.handleSendMessageError.bind(this));\n      return;\n    }\n\n    this.update({ type: \"set-mode\", mode: { type: \"normal\" } });\n\n    if (stopReason !== \"aborted\") {\n      const handoff = this.consultHandoffSupervisors(stopReason);\n      if (handoff.type === \"compact\") {\n        this.startCompaction(handoff.nextPrompt);\n        return;\n      }\n    }\n\n    const autoRespondResult = this.maybeAutoRespond();",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStopped\n\n  private handleProviderStopped(\n    stopReason: StopReason,\n    usage: Usage | undefined,\n  ): void {\n    if (usage) {\n      // Only clear auto-resubmit bookkeeping on a genuine completed turn\n      // (usage is populated for real API responses). discardFailedSubmit's\n      // rollback emits a synthetic \"stopped\"/\"end_turn\" with no usage, which\n      // must not be mistaken for recovery — otherwise the retry episode's\n      // elapsed-time budget would reset on every single retry attempt.\n      this.resetErrorRetryState();\n      this.update(\n        { type: \"increment-output-tokens\", tokens: usage.outputTokens },\n        { silent: true },\n      );\n    }\n\n    if (stopReason === \"tool_use\") {\n      this.handleProviderStoppedWithToolUse();\n      return;\n    }\n\n    if (stopReason === \"max_tokens\") {\n      const messages = this.getProviderMessages();\n      const lastMessage = messages[messages.length - 1];\n      const hasToolUse =\n        lastMessage?.role === \"assistant\" \u0026\u0026\n        lastMessage.content.some((block) =\u003e block.type === \"tool_use\");\n\n      if (hasToolUse) {\n        this.handleProviderStoppedWithToolUse();\n        return;\n      }\n\n      const handoff = this.consultHandoffSupervisors(stopReason);\n      if (handoff.type === \"compact\") {\n        this.startCompaction(handoff.nextPrompt);\n        return;\n      }\n\n      this.sendMessage([\n        {\n          type: \"system\",\n          text: \"Your previous response was truncated due to the output token limit. Please continue where you left off.\",\n        },\n      ]).catch(this.handleSendMessageError.bind(this));\n      return;\n    }\n\n    this.update({ type: \"set-mode\", mode: { type: \"normal\" } });\n\n    if (stopReason !== \"aborted\") {\n      const handoff = this.consultHandoffSupervisors(stopReason);\n      if (handoff.type === \"compact\") {\n        this.startCompaction(handoff.nextPrompt);\n        return;\n      }\n    }\n\n    const autoRespondResult = this.maybeAutoRespond();",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStopped",
-      "startLine": 673,
-      "startCol": 1,
-      "endLine": 732,
-      "endCol": 55
-    },
-    {
-      "text": "if (autoRespondResult.type === \"no-action-needed\") {\n      const action = this.consultEndTurnSupervisors({\n        stopReason,\n        lastAssistantMessage: this.getLastAssistantMessage(),\n      });\n      if (action.type === \"send-message\") {\n        this.sendMessage([{ type: \"system\", text: action.text }]).catch(\n          this.handleSendMessageError.bind(this),\n        );\n        return;\n      }\n    }\n\n    if (autoRespondResult.type !== \"did-autorespond\") {\n      if (stopReason !== \"aborted\") {\n        this.emit(\"playChime\");\n        this.emit(\"turnEnded\", { reason: \"end_turn\" });\n      }\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStopped\n\nif (autoRespondResult.type === \"no-action-needed\") {\n      const action = this.consultEndTurnSupervisors({\n        stopReason,\n        lastAssistantMessage: this.getLastAssistantMessage(),\n      });\n      if (action.type === \"send-message\") {\n        this.sendMessage([{ type: \"system\", text: action.text }]).catch(\n          this.handleSendMessageError.bind(this),\n        );\n        return;\n      }\n    }\n\n    if (autoRespondResult.type !== \"did-autorespond\") {\n      if (stopReason !== \"aborted\") {\n        this.emit(\"playChime\");\n        this.emit(\"turnEnded\", { reason: \"end_turn\" });\n      }\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStopped",
-      "startLine": 734,
-      "startCol": 5,
-      "endLine": 753,
-      "endCol": 4
-    },
-    {
-      "text": "  private handleProviderStoppedWithToolUse(): void {\n    const messages = this.getProviderMessages();\n    const lastMessage = messages[messages.length - 1];\n\n    if (!lastMessage || lastMessage.role !== \"assistant\") {\n      throw new Error(\n        `Cannot handleProviderStoppedWithToolUse when the last message is not of type assistant`,\n      );\n    }\n\n    const activeTools = new Map\u003cToolRequestId, ActiveToolEntry\u003e();\n\n    for (const block of lastMessage.content) {\n      if (block.type !== \"tool_use\") {\n        continue;\n      }\n\n      if (block.request.status !== \"ok\") {\n        this.agent.toolResult(block.id, {\n          type: \"tool_result\",\n          id: block.id,\n          result: {\n            status: \"error\",\n            error: `Malformed tool_use block: ${block.request.error}`,\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n        continue;\n      }\n\n      const request = block.request.value;\n\n      const toolContext: CreateToolContext = {\n        mcpToolManager: this.context.mcpToolManager,\n        threadId: this.id,\n        logger: this.context.logger,\n        lspClient: this.context.lspClient,\n        cwd: this.context.cwd,\n        homeDir: this.context.homeDir,\n        maxConcurrentSubagents: this.context.maxConcurrentSubagents,\n        maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,\n        contextTracker: this.contextManager as ContextTracker",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse\n\n  private handleProviderStoppedWithToolUse(): void {\n    const messages = this.getProviderMessages();\n    const lastMessage = messages[messages.length - 1];\n\n    if (!lastMessage || lastMessage.role !== \"assistant\") {\n      throw new Error(\n        `Cannot handleProviderStoppedWithToolUse when the last message is not of type assistant`,\n      );\n    }\n\n    const activeTools = new Map\u003cToolRequestId, ActiveToolEntry\u003e();\n\n    for (const block of lastMessage.content) {\n      if (block.type !== \"tool_use\") {\n        continue;\n      }\n\n      if (block.request.status !== \"ok\") {\n        this.agent.toolResult(block.id, {\n          type: \"tool_result\",\n          id: block.id,\n          result: {\n            status: \"error\",\n            error: `Malformed tool_use block: ${block.request.error}`,\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n        continue;\n      }\n\n      const request = block.request.value;\n\n      const toolContext: CreateToolContext = {\n        mcpToolManager: this.context.mcpToolManager,\n        threadId: this.id,\n        logger: this.context.logger,\n        lspClient: this.context.lspClient,\n        cwd: this.context.cwd,\n        homeDir: this.context.homeDir,\n        maxConcurrentSubagents: this.context.maxConcurrentSubagents,\n        maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,\n        contextTracker: this.contextManager as ContextTracker",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse",
-      "startLine": 755,
-      "startCol": 1,
-      "endLine": 796,
-      "endCol": 62
-    },
-    {
-      "text": "        onToolApplied: (absFilePath, tool, fileTypeInfo) =\u003e {\n          this.contextManager.toolApplied(absFilePath, tool, fileTypeInfo);\n          if (\n            tool.type === \"edl-edit\" \u0026\u0026\n            !this.state.editedFilesThisTurn.some((e) =\u003e e.path === absFilePath)\n          ) {\n            this.state.editedFilesThisTurn.push({\n              path: absFilePath,\n              snapshot: tool.previousContent,\n            });\n          }\n        }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse \u003e function onToolApplied\n\n        onToolApplied: (absFilePath, tool, fileTypeInfo) =\u003e {\n          this.contextManager.toolApplied(absFilePath, tool, fileTypeInfo);\n          if (\n            tool.type === \"edl-edit\" \u0026\u0026\n            !this.state.editedFilesThisTurn.some((e) =\u003e e.path === absFilePath)\n          ) {\n            this.state.editedFilesThisTurn.push({\n              path: absFilePath,\n              snapshot: tool.previousContent,\n            });\n          }\n        }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse \u003e function onToolApplied",
-      "startLine": 797,
-      "startCol": 1,
-      "endLine": 808,
-      "endCol": 10
-    },
-    {
-      "text": "helpTagsProvider: this.context.helpTagsProvider,\n        edlRegisters: this.state.edlRegisters,\n        scratchpad: this.state.scratchpad,\n        fileIO: this.context.fileIO,\n        shell: this.context.shell,\n        threadManager: this.context.threadManager,\n        scriptRunner: this.context.getScriptRunner?.(),\n        luaExecutor: this.context.luaExecutor",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse\n\nhelpTagsProvider: this.context.helpTagsProvider,\n        edlRegisters: this.state.edlRegisters,\n        scratchpad: this.state.scratchpad,\n        fileIO: this.context.fileIO,\n        shell: this.context.shell,\n        threadManager: this.context.threadManager,\n        scriptRunner: this.context.getScriptRunner?.(),\n        luaExecutor: this.context.luaExecutor",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse",
-      "startLine": 809,
-      "startCol": 9,
-      "endLine": 816,
-      "endCol": 46
-    },
-    {
-      "text": "        requestRender: () =\u003e this.emit(\"update\")",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse \u003e function requestRender\n\n        requestRender: () =\u003e this.emit(\"update\")",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse \u003e function requestRender",
-      "startLine": 817,
-      "startCol": 1,
-      "endLine": 817,
-      "endCol": 49
-    },
-    {
-      "text": "        getAgents: () =\u003e this.context.getAgents()",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse \u003e function getAgents\n\n        getAgents: () =\u003e this.context.getAgents()",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse \u003e function getAgents",
-      "startLine": 818,
-      "startCol": 1,
-      "endLine": 818,
-      "endCol": 50
-    },
-    {
-      "text": "const invocation = createTool(request, toolContext);\n      activeTools.set(request.id, {\n        handle: invocation,\n        progress: \"progress\" in invocation ? invocation.progress : undefined,\n        toolName: request.toolName,\n        request,\n      });\n\n      void invocation.promise\n        .then((result) =\u003e {\n          this.update({\n            type: \"set-active-tool-result\",\n            id: request.id,\n            result,\n          });\n        })\n        .catch((err: Error) =\u003e {\n          this.update({\n            type: \"set-active-tool-result\",\n            id: request.id,\n            result: {\n              type: \"tool_result\",\n              id: request.id,\n              result: {\n                status: \"error\",\n                error: `Tool execution failed: ${err.message}`,\n              },\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          });\n        })\n        .then(() =\u003e {\n          this.maybeAutoRespond();\n        });\n    }\n\n    this.update({ type: \"set-mode\", mode: { type: \"tool_use\", activeTools } });\n\n    const autoRespondResult = this.maybeAutoRespond();\n\n    if (autoRespondResult.type !== \"did-autorespond\") {\n      this.emit(\"playChime\");\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse\n\nconst invocation = createTool(request, toolContext);\n      activeTools.set(request.id, {\n        handle: invocation,\n        progress: \"progress\" in invocation ? invocation.progress : undefined,\n        toolName: request.toolName,\n        request,\n      });\n\n      void invocation.promise\n        .then((result) =\u003e {\n          this.update({\n            type: \"set-active-tool-result\",\n            id: request.id,\n            result,\n          });\n        })\n        .catch((err: Error) =\u003e {\n          this.update({\n            type: \"set-active-tool-result\",\n            id: request.id,\n            result: {\n              type: \"tool_result\",\n              id: request.id,\n              result: {\n                status: \"error\",\n                error: `Tool execution failed: ${err.message}`,\n              },\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          });\n        })\n        .then(() =\u003e {\n          this.maybeAutoRespond();\n        });\n    }\n\n    this.update({ type: \"set-mode\", mode: { type: \"tool_use\", activeTools } });\n\n    const autoRespondResult = this.maybeAutoRespond();\n\n    if (autoRespondResult.type !== \"did-autorespond\") {\n      this.emit(\"playChime\");\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleProviderStoppedWithToolUse",
-      "startLine": 821,
-      "startCol": 7,
-      "endLine": 864,
-      "endCol": 4
-    },
-    {
-      "text": "  private handleErrorState(error: Error): void {\n    const isUserFacing =\n      this.state.threadType === \"root\" ||\n      this.state.threadType === \"docker_root\";\n\n    // Roll back to the pre-submit snapshot's user text for every thread\n    // type, not just user-facing ones: subagent/compact threads need the\n    // same text to auto-resubmit with (see maybeAutoResubmitAfterError).\n    const pendingText = this.state.pendingMessages\n      .filter((m) =\u003e m.type === \"user\")\n      .map((m) =\u003e m.text)\n      .join(\"\\n\");\n    this.update({ type: \"drain-pending-messages\" });\n\n    const messages = this.getProviderMessages();\n    const lastMessage = messages[messages.length - 1];\n    const baseText =\n      lastMessage?.role === \"user\"\n        ? lastMessage.content\n            .filter(\n              (c): c is Extract\u003ctypeof c, { type: \"text\" }\u003e =\u003e\n                c.type === \"text\",\n            )\n            .map((c) =\u003e c.text)\n            .join(\"\")\n        : \"\";\n    const userMessage = pendingText\n      ? baseText\n        ? `${baseText}\\n${pendingText}`\n        : pendingText\n      : baseText;\n\n    if (isUserFacing) {\n      if (userMessage) {\n        this.update(\n          {\n            type: \"set-failed-submit\",\n            value: { userMessage, errorMessage: error.message },\n          },\n          { silent: true },\n        );\n        setTimeout(() =\u003e this.emit(\"setupResubmit\", this.id, userMessage), 1);\n      }\n    } else {\n      this.maybeAutoResubmitAfterError(error, userMessage);\n    }\n    this.context.logger.error(error);\n    this.emit(\"turnEnded\", { reason: \"error\" });\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleErrorState\n\n  private handleErrorState(error: Error): void {\n    const isUserFacing =\n      this.state.threadType === \"root\" ||\n      this.state.threadType === \"docker_root\";\n\n    // Roll back to the pre-submit snapshot's user text for every thread\n    // type, not just user-facing ones: subagent/compact threads need the\n    // same text to auto-resubmit with (see maybeAutoResubmitAfterError).\n    const pendingText = this.state.pendingMessages\n      .filter((m) =\u003e m.type === \"user\")\n      .map((m) =\u003e m.text)\n      .join(\"\\n\");\n    this.update({ type: \"drain-pending-messages\" });\n\n    const messages = this.getProviderMessages();\n    const lastMessage = messages[messages.length - 1];\n    const baseText =\n      lastMessage?.role === \"user\"\n        ? lastMessage.content\n            .filter(\n              (c): c is Extract\u003ctypeof c, { type: \"text\" }\u003e =\u003e\n                c.type === \"text\",\n            )\n            .map((c) =\u003e c.text)\n            .join(\"\")\n        : \"\";\n    const userMessage = pendingText\n      ? baseText\n        ? `${baseText}\\n${pendingText}`\n        : pendingText\n      : baseText;\n\n    if (isUserFacing) {\n      if (userMessage) {\n        this.update(\n          {\n            type: \"set-failed-submit\",\n            value: { userMessage, errorMessage: error.message },\n          },\n          { silent: true },\n        );\n        setTimeout(() =\u003e this.emit(\"setupResubmit\", this.id, userMessage), 1);\n      }\n    } else {\n      this.maybeAutoResubmitAfterError(error, userMessage);\n    }\n    this.context.logger.error(error);\n    this.emit(\"turnEnded\", { reason: \"error\" });\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleErrorState",
-      "startLine": 866,
-      "startCol": 1,
-      "endLine": 914,
-      "endCol": 4
-    },
-    {
-      "text": "/** For subagent/compact threads (no human to manually resubmit), retry a\n   * recoverable error automatically by rolling back the failed submit and\n   * resending the same user message, following the same bounded-backoff\n   * shape as the agent's own mid-stream retries (RETRY_DELAYS, capped by\n   * MAX_RETRY_DURATION). Non-recoverable errors, or errors that persist past\n   * the retry budget, leave the thread parked in its error/pending state —\n   * the same as an aborted thread that is never resumed. */\n  private maybeAutoResubmitAfterError(error: Error, userMessage: string): void {\n    if (!userMessage) {\n      this.resetErrorRetryState();\n      return;\n    }\n\n    const now = Date.now();\n    const firstErrorAt = this.errorRetry?.firstErrorAt ?? now;\n    const elapsed = now - firstErrorAt;\n\n    if (!isRetryableError(error) || elapsed \u003e= MAX_RETRY_DURATION) {\n      this.resetErrorRetryState();\n      return;\n    }\n\n    const attempt = this.errorRetry?.attempt ?? 0;\n    const delay = getRetryDelay(attempt);\n    this.clearErrorRetryTimer();\n    this.errorRetry = {\n      firstErrorAt,\n      attempt: attempt + 1,\n      timer: setTimeout(() =\u003e {\n        if (this.errorRetry) {\n          this.errorRetry.timer = undefined;\n        }\n        this.discardFailedSubmit();\n        this.sendMessage([{ type: \"user\", text: userMessage }]).catch(\n          this.handleSendMessageError.bind(this),\n        );\n      }, delay),\n    };\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method maybeAutoResubmitAfterError\n\n/** For subagent/compact threads (no human to manually resubmit), retry a\n   * recoverable error automatically by rolling back the failed submit and\n   * resending the same user message, following the same bounded-backoff\n   * shape as the agent's own mid-stream retries (RETRY_DELAYS, capped by\n   * MAX_RETRY_DURATION). Non-recoverable errors, or errors that persist past\n   * the retry budget, leave the thread parked in its error/pending state —\n   * the same as an aborted thread that is never resumed. */\n  private maybeAutoResubmitAfterError(error: Error, userMessage: string): void {\n    if (!userMessage) {\n      this.resetErrorRetryState();\n      return;\n    }\n\n    const now = Date.now();\n    const firstErrorAt = this.errorRetry?.firstErrorAt ?? now;\n    const elapsed = now - firstErrorAt;\n\n    if (!isRetryableError(error) || elapsed \u003e= MAX_RETRY_DURATION) {\n      this.resetErrorRetryState();\n      return;\n    }\n\n    const attempt = this.errorRetry?.attempt ?? 0;\n    const delay = getRetryDelay(attempt);\n    this.clearErrorRetryTimer();\n    this.errorRetry = {\n      firstErrorAt,\n      attempt: attempt + 1,\n      timer: setTimeout(() =\u003e {\n        if (this.errorRetry) {\n          this.errorRetry.timer = undefined;\n        }\n        this.discardFailedSubmit();\n        this.sendMessage([{ type: \"user\", text: userMessage }]).catch(\n          this.handleSendMessageError.bind(this),\n        );\n      }, delay),\n    };\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method maybeAutoResubmitAfterError",
-      "startLine": 916,
-      "startCol": 3,
-      "endLine": 954,
-      "endCol": 4
-    },
-    {
-      "text": "  async abort(): Promise\u003cvoid\u003e {\n    // A yielded thread has already completed its work — don't overwrite its state.\n    if (this.state.mode.type === \"yielded\") {\n      return;\n    }\n    // Synchronously mark all tool invocations as aborted\n    if (this.state.mode.type === \"tool_use\") {\n      for (const [, entry] of this.state.mode.activeTools) {\n        entry.handle.abort();\n      }\n    }\n    await this.abortAndWait();\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method abort\n\n  async abort(): Promise\u003cvoid\u003e {\n    // A yielded thread has already completed its work — don't overwrite its state.\n    if (this.state.mode.type === \"yielded\") {\n      return;\n    }\n    // Synchronously mark all tool invocations as aborted\n    if (this.state.mode.type === \"tool_use\") {\n      for (const [, entry] of this.state.mode.activeTools) {\n        entry.handle.abort();\n      }\n    }\n    await this.abortAndWait();\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method abort",
-      "startLine": 956,
-      "startCol": 1,
-      "endLine": 968,
-      "endCol": 4
-    },
-    {
-      "text": "  private async abortAndWait(): Promise\u003cvoid\u003e {\n    this.resetErrorRetryState();\n    this.emit(\"aborting\");\n    await this.agent.abort();\n\n    if (this.state.mode.type === \"tool_use\") {\n      for (const [toolId, entry] of this.state.mode.activeTools) {\n        entry.handle.abort();\n        if (!entry.result) {\n          this.agent.toolResult(toolId, {\n            type: \"tool_result\",\n            id: toolId,\n            result: {\n              status: \"error\",\n              error: \"Request was aborted by the user.\",\n            },\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          });\n        }\n      }\n\n      this.agent.abortToolUse();\n    }\n\n    this.agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: \"[The user aborted the previous request.]\",\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n    this.emit(\"update\");\n\n    this.recoverPendingMessagesOnAbort();\n\n    this.update({ type: \"set-mode\", mode: { type: \"normal\" } });\n    this.emit(\"turnEnded\", { reason: \"aborted\" });\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method abortAndWait\n\n  private async abortAndWait(): Promise\u003cvoid\u003e {\n    this.resetErrorRetryState();\n    this.emit(\"aborting\");\n    await this.agent.abort();\n\n    if (this.state.mode.type === \"tool_use\") {\n      for (const [toolId, entry] of this.state.mode.activeTools) {\n        entry.handle.abort();\n        if (!entry.result) {\n          this.agent.toolResult(toolId, {\n            type: \"tool_result\",\n            id: toolId,\n            result: {\n              status: \"error\",\n              error: \"Request was aborted by the user.\",\n            },\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          });\n        }\n      }\n\n      this.agent.abortToolUse();\n    }\n\n    this.agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: \"[The user aborted the previous request.]\",\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n    this.emit(\"update\");\n\n    this.recoverPendingMessagesOnAbort();\n\n    this.update({ type: \"set-mode\", mode: { type: \"normal\" } });\n    this.emit(\"turnEnded\", { reason: \"aborted\" });\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method abortAndWait",
-      "startLine": 970,
-      "startCol": 1,
-      "endLine": 1007,
-      "endCol": 4
-    },
-    {
-      "text": "  private recoverPendingMessagesOnAbort(): void {\n    const pendingText = this.state.pendingMessages\n      .filter((m) =\u003e m.type === \"user\")\n      .map((m) =\u003e m.text)\n      .join(\"\\n\");\n\n    this.update({ type: \"drain-pending-messages\" });\n\n    const isUserFacing =\n      this.state.threadType === \"root\" ||\n      this.state.threadType === \"docker_root\";\n    if (isUserFacing \u0026\u0026 pendingText) {\n      this.emit(\"recoverPendingMessages\", this.id, pendingText);\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method recoverPendingMessagesOnAbort\n\n  private recoverPendingMessagesOnAbort(): void {\n    const pendingText = this.state.pendingMessages\n      .filter((m) =\u003e m.type === \"user\")\n      .map((m) =\u003e m.text)\n      .join(\"\\n\");\n\n    this.update({ type: \"drain-pending-messages\" });\n\n    const isUserFacing =\n      this.state.threadType === \"root\" ||\n      this.state.threadType === \"docker_root\";\n    if (isUserFacing \u0026\u0026 pendingText) {\n      this.emit(\"recoverPendingMessages\", this.id, pendingText);\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method recoverPendingMessagesOnAbort",
-      "startLine": 1009,
-      "startCol": 1,
-      "endLine": 1023,
-      "endCol": 4
-    },
-    {
-      "text": "  async sendMessage(inputMessages?: InputMessage[]): Promise\u003cvoid\u003e {\n    if (this.state.mode.type === \"yielded\" \u0026\u0026 this.state.mode.tornDown) {\n      throw new Error(\n        \"This thread's container has been torn down. No further messages can be sent.\",\n      );\n    }\n\n    if (this.state.failedSubmit !== undefined) {\n      this.update(\n        { type: \"set-failed-submit\", value: undefined },\n        { silent: true },\n      );\n    }\n\n    this.state.editedFilesThisTurn = [];\n\n    const {\n      content: contextContent,\n      updates: contextUpdates,\n      gitUpdate,\n    } = await this.getAndPrepareContextUpdates();\n\n    const { content, hasContent } = this.prepareUserContent(inputMessages);\n\n    if (!hasContent \u0026\u0026 contextContent.length === 0) {\n      return;\n    }\n\n    if (contextUpdates) {\n      this.emit(\"contextUpdatesSent\", contextUpdates);\n    }\n    if (gitUpdate) {\n      this.emit(\"gitContextUpdateSent\", gitUpdate);\n    }\n\n    const isFirstMessage = this.getProviderMessages().length === 0;\n    const contentToSend: AgentInput[] = [...contextContent];\n\n    for (const c of content) {\n      if (c.type === \"text\") {\n        contentToSend.push({\n          type: \"text\",\n          text: c.text,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n      } else if (c.type === \"image\") {\n        contentToSend.push(c);\n      } else if (c.type === \"document\") {\n        contentToSend.push(c);\n      } else if (c.type === \"system_reminder\") {\n        contentToSend.push({\n          type: \"text\",\n          text: c.text,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n      }\n    }\n\n    if (isFirstMessage) {\n      contentToSend.push({\n        type: \"text\",\n        text: formatSystemInfo(this.context.systemInfo),\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      });\n    }\n\n    this.update(\n      {\n        type: \"set-pre-submit-native-idx\",\n        idx: this.agent.getNativeMessageIdx(),\n      },\n      { silent: true },\n    );",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method sendMessage\n\n  async sendMessage(inputMessages?: InputMessage[]): Promise\u003cvoid\u003e {\n    if (this.state.mode.type === \"yielded\" \u0026\u0026 this.state.mode.tornDown) {\n      throw new Error(\n        \"This thread's container has been torn down. No further messages can be sent.\",\n      );\n    }\n\n    if (this.state.failedSubmit !== undefined) {\n      this.update(\n        { type: \"set-failed-submit\", value: undefined },\n        { silent: true },\n      );\n    }\n\n    this.state.editedFilesThisTurn = [];\n\n    const {\n      content: contextContent,\n      updates: contextUpdates,\n      gitUpdate,\n    } = await this.getAndPrepareContextUpdates();\n\n    const { content, hasContent } = this.prepareUserContent(inputMessages);\n\n    if (!hasContent \u0026\u0026 contextContent.length === 0) {\n      return;\n    }\n\n    if (contextUpdates) {\n      this.emit(\"contextUpdatesSent\", contextUpdates);\n    }\n    if (gitUpdate) {\n      this.emit(\"gitContextUpdateSent\", gitUpdate);\n    }\n\n    const isFirstMessage = this.getProviderMessages().length === 0;\n    const contentToSend: AgentInput[] = [...contextContent];\n\n    for (const c of content) {\n      if (c.type === \"text\") {\n        contentToSend.push({\n          type: \"text\",\n          text: c.text,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n      } else if (c.type === \"image\") {\n        contentToSend.push(c);\n      } else if (c.type === \"document\") {\n        contentToSend.push(c);\n      } else if (c.type === \"system_reminder\") {\n        contentToSend.push({\n          type: \"text\",\n          text: c.text,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n      }\n    }\n\n    if (isFirstMessage) {\n      contentToSend.push({\n        type: \"text\",\n        text: formatSystemInfo(this.context.systemInfo),\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      });\n    }\n\n    this.update(\n      {\n        type: \"set-pre-submit-native-idx\",\n        idx: this.agent.getNativeMessageIdx(),\n      },\n      { silent: true },\n    );",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method sendMessage",
-      "startLine": 1025,
-      "startCol": 1,
-      "endLine": 1097,
-      "endCol": 7
-    },
-    {
-      "text": "this.agent.appendUserMessage(contentToSend);\n    this.emit(\"update\");\n    this.agent.continueConversation();\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method sendMessage\n\nthis.agent.appendUserMessage(contentToSend);\n    this.emit(\"update\");\n    this.agent.continueConversation();\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method sendMessage",
-      "startLine": 1098,
-      "startCol": 5,
-      "endLine": 1101,
-      "endCol": 4
-    },
-    {
-      "text": "  async handleSendMessageRequest(\n    messages: InputMessage[],\n    isAsync?: boolean,\n  ): Promise\u003cvoid\u003e {\n    if (this.state.threadType === \"compact\") {\n      this.sendRawMessage(messages);\n      return;\n    }\n\n    const agentStatus = this.agent.getState().status;\n    const isBusy =\n      agentStatus.type === \"streaming\" || this.state.mode.type === \"tool_use\";\n\n    if (isBusy) {\n      if (isAsync) {\n        this.update(\n          { type: \"push-pending-messages\", messages },\n          { silent: true },\n        );\n        return;\n      } else {\n        await this.abortAndWait();\n      }\n    }\n\n    await this.sendMessage(messages);\n\n    if (!this.state.title) {\n      this.setThreadTitle(messages.map((m) =\u003e m.text).join(\"\\n\")).catch(\n        (err: Error) =\u003e\n          this.context.logger.error(\n            `Error getting thread title: ${err.message}\\n${err.stack}`,\n          ),\n      );\n    }\n\n    if (messages.length) {\n      setTimeout(() =\u003e this.emit(\"scrollToLastMessage\"), 100);\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleSendMessageRequest\n\n  async handleSendMessageRequest(\n    messages: InputMessage[],\n    isAsync?: boolean,\n  ): Promise\u003cvoid\u003e {\n    if (this.state.threadType === \"compact\") {\n      this.sendRawMessage(messages);\n      return;\n    }\n\n    const agentStatus = this.agent.getState().status;\n    const isBusy =\n      agentStatus.type === \"streaming\" || this.state.mode.type === \"tool_use\";\n\n    if (isBusy) {\n      if (isAsync) {\n        this.update(\n          { type: \"push-pending-messages\", messages },\n          { silent: true },\n        );\n        return;\n      } else {\n        await this.abortAndWait();\n      }\n    }\n\n    await this.sendMessage(messages);\n\n    if (!this.state.title) {\n      this.setThreadTitle(messages.map((m) =\u003e m.text).join(\"\\n\")).catch(\n        (err: Error) =\u003e\n          this.context.logger.error(\n            `Error getting thread title: ${err.message}\\n${err.stack}`,\n          ),\n      );\n    }\n\n    if (messages.length) {\n      setTimeout(() =\u003e this.emit(\"scrollToLastMessage\"), 100);\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleSendMessageRequest",
-      "startLine": 1103,
-      "startCol": 1,
-      "endLine": 1142,
-      "endCol": 4
-    },
-    {
-      "text": "  maybeAutoRespond():\n    | { type: \"did-autorespond\" }\n    | { type: \"waiting-for-tool-input\" }\n    | { type: \"yielded-to-parent\" }\n    | { type: \"no-action-needed\" } {\n    const mode = this.state.mode;\n    const agentStatus = this.agent.getState().status;\n\n    if (this.state.mode.type === \"yielded\") {\n      return { type: \"yielded-to-parent\" };\n    }\n    if (\n      agentStatus.type === \"stopped\" \u0026\u0026\n      agentStatus.stopReason === \"aborted\"\n    ) {\n      return { type: \"no-action-needed\" };\n    }\n\n    if (mode.type === \"compacting\") {\n      return { type: \"no-action-needed\" };\n    }\n\n    if (mode.type === \"tool_use\")",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method maybeAutoRespond\n\n  maybeAutoRespond():\n    | { type: \"did-autorespond\" }\n    | { type: \"waiting-for-tool-input\" }\n    | { type: \"yielded-to-parent\" }\n    | { type: \"no-action-needed\" } {\n    const mode = this.state.mode;\n    const agentStatus = this.agent.getState().status;\n\n    if (this.state.mode.type === \"yielded\") {\n      return { type: \"yielded-to-parent\" };\n    }\n    if (\n      agentStatus.type === \"stopped\" \u0026\u0026\n      agentStatus.stopReason === \"aborted\"\n    ) {\n      return { type: \"no-action-needed\" };\n    }\n\n    if (mode.type === \"compacting\") {\n      return { type: \"no-action-needed\" };\n    }\n\n    if (mode.type === \"tool_use\")",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method maybeAutoRespond",
-      "startLine": 1144,
-      "startCol": 1,
-      "endLine": 1166,
-      "endCol": 34
-    },
-    {
-      "text": "{\n      const completedTools: Array\u003c{\n        id: ToolRequestId;\n        result: ProviderToolResult;\n      }\u003e = [];\n      let yieldResult: string | undefined;\n      for (const [toolId, entry] of mode.activeTools) {\n        if (entry.toolName === \"yield_to_parent\") {\n          yieldResult =\n            this.context.yieldSchema !== undefined\n              ? JSON.stringify(entry.request.input)\n              : (entry.request.input as { result: string }).result;\n          completedTools.push({\n            id: toolId,\n            result: {\n              type: \"tool_result\",\n              id: toolId,\n              result: {\n                status: \"ok\",\n                value: [\n                  {\n                    type: \"text\",\n                    text: \"Yield accepted. Your result has been sent to the parent thread.\",\n                    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n                  },\n                ],\n                structuredResult: {\n                  toolName: \"yield_to_parent\" as ToolName,\n                },\n              },\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          });\n          continue;\n        }\n\n        if (!entry.result) {\n          return { type: \"waiting-for-tool-input\" };\n        }\n\n        completedTools.push({\n          id: toolId,\n          result: entry.result,\n        });\n      }\n\n      if (yieldResult !== undefined) {\n        this.submitToolResultsAndStop(completedTools, yieldResult).catch(\n          this.handleSendMessageError.bind(this),\n        );\n        return { type: \"yielded-to-parent\" };\n      }\n\n      const pendingMessages = this.state.pendingMessages;\n      this.update({ type: \"drain-pending-messages\" }, { silent: true });\n\n      this.sendToolResultsAndContinue(completedTools, pendingMessages).catch(\n        this.handleSendMessageError.bind(this),\n      );\n      return { type: \"did-autorespond\" };\n    }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method maybeAutoRespond\n\n{\n      const completedTools: Array\u003c{\n        id: ToolRequestId;\n        result: ProviderToolResult;\n      }\u003e = [];\n      let yieldResult: string | undefined;\n      for (const [toolId, entry] of mode.activeTools) {\n        if (entry.toolName === \"yield_to_parent\") {\n          yieldResult =\n            this.context.yieldSchema !== undefined\n              ? JSON.stringify(entry.request.input)\n              : (entry.request.input as { result: string }).result;\n          completedTools.push({\n            id: toolId,\n            result: {\n              type: \"tool_result\",\n              id: toolId,\n              result: {\n                status: \"ok\",\n                value: [\n                  {\n                    type: \"text\",\n                    text: \"Yield accepted. Your result has been sent to the parent thread.\",\n                    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n                  },\n                ],\n                structuredResult: {\n                  toolName: \"yield_to_parent\" as ToolName,\n                },\n              },\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          });\n          continue;\n        }\n\n        if (!entry.result) {\n          return { type: \"waiting-for-tool-input\" };\n        }\n\n        completedTools.push({\n          id: toolId,\n          result: entry.result,\n        });\n      }\n\n      if (yieldResult !== undefined) {\n        this.submitToolResultsAndStop(completedTools, yieldResult).catch(\n          this.handleSendMessageError.bind(this),\n        );\n        return { type: \"yielded-to-parent\" };\n      }\n\n      const pendingMessages = this.state.pendingMessages;\n      this.update({ type: \"drain-pending-messages\" }, { silent: true });\n\n      this.sendToolResultsAndContinue(completedTools, pendingMessages).catch(\n        this.handleSendMessageError.bind(this),\n      );\n      return { type: \"did-autorespond\" };\n    }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method maybeAutoRespond",
-      "startLine": 1166,
-      "startCol": 35,
-      "endLine": 1226,
-      "endCol": 6
-    },
-    {
-      "text": "else if (\n      agentStatus.type === \"stopped\" \u0026\u0026\n      agentStatus.stopReason === \"end_turn\" \u0026\u0026\n      this.state.pendingMessages.length\n    ) {\n      const pendingMessages = this.state.pendingMessages;\n      this.update({ type: \"drain-pending-messages\" }, { silent: true });\n      this.sendMessage(pendingMessages).catch(\n        this.handleSendMessageError.bind(this),\n      );\n      return { type: \"did-autorespond\" };\n    }\n    return { type: \"no-action-needed\" };\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method maybeAutoRespond\n\nelse if (\n      agentStatus.type === \"stopped\" \u0026\u0026\n      agentStatus.stopReason === \"end_turn\" \u0026\u0026\n      this.state.pendingMessages.length\n    ) {\n      const pendingMessages = this.state.pendingMessages;\n      this.update({ type: \"drain-pending-messages\" }, { silent: true });\n      this.sendMessage(pendingMessages).catch(\n        this.handleSendMessageError.bind(this),\n      );\n      return { type: \"did-autorespond\" };\n    }\n    return { type: \"no-action-needed\" };\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method maybeAutoRespond",
-      "startLine": 1226,
-      "startCol": 7,
-      "endLine": 1239,
-      "endCol": 4
-    },
-    {
-      "text": "  private getLastAssistantMessage():\n    | ReadonlyArray\u003cProviderMessageContent\u003e\n    | undefined {\n    const messages = this.agent.getState().messages;\n    for (let i = messages.length - 1; i \u003e= 0; i--) {\n      if (messages[i].role === \"assistant\") {\n        return messages[i].content;\n      }\n    }\n    return undefined;\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getLastAssistantMessage\n\n  private getLastAssistantMessage():\n    | ReadonlyArray\u003cProviderMessageContent\u003e\n    | undefined {\n    const messages = this.agent.getState().messages;\n    for (let i = messages.length - 1; i \u003e= 0; i--) {\n      if (messages[i].role === \"assistant\") {\n        return messages[i].content;\n      }\n    }\n    return undefined;\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getLastAssistantMessage",
-      "startLine": 1241,
-      "startCol": 1,
-      "endLine": 1251,
-      "endCol": 4
-    },
-    {
-      "text": "  private async submitToolResultsAndStop(\n    toolResults: Array\u003c{ id: ToolRequestId; result: ProviderToolResult }\u003e,\n    yieldResult: string,\n  ): Promise\u003cvoid\u003e {\n    for (const { id, result } of toolResults) {\n      this.agent.toolResult(id, result);\n    }\n    this.update({ type: \"set-mode\", mode: { type: \"normal\" } });\n\n    const action = await this.consultYieldSupervisors(yieldResult);\n    switch (action.type) {\n      case \"accept\": {\n        const response = action.resultPrefix\n          ? `${action.resultPrefix}\\n\\n${yieldResult}`\n          : yieldResult;\n        this.update({\n          type: \"set-mode\",\n          mode: { type: \"yielded\", response, tornDown: true },\n        });\n        break;\n      }\n      case \"none\":\n        this.update({\n          type: \"set-mode\",\n          mode: { type: \"yielded\", response: yieldResult },\n        });\n        break;\n      case \"reject\":\n        await this.sendMessage([{ type: \"system\", text: action.message }]);\n        return;\n      case \"send-message\":\n        await this.sendMessage([{ type: \"system\", text: action.text }]);\n        return;\n      default:\n        assertUnreachable(action);\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method submitToolResultsAndStop\n\n  private async submitToolResultsAndStop(\n    toolResults: Array\u003c{ id: ToolRequestId; result: ProviderToolResult }\u003e,\n    yieldResult: string,\n  ): Promise\u003cvoid\u003e {\n    for (const { id, result } of toolResults) {\n      this.agent.toolResult(id, result);\n    }\n    this.update({ type: \"set-mode\", mode: { type: \"normal\" } });\n\n    const action = await this.consultYieldSupervisors(yieldResult);\n    switch (action.type) {\n      case \"accept\": {\n        const response = action.resultPrefix\n          ? `${action.resultPrefix}\\n\\n${yieldResult}`\n          : yieldResult;\n        this.update({\n          type: \"set-mode\",\n          mode: { type: \"yielded\", response, tornDown: true },\n        });\n        break;\n      }\n      case \"none\":\n        this.update({\n          type: \"set-mode\",\n          mode: { type: \"yielded\", response: yieldResult },\n        });\n        break;\n      case \"reject\":\n        await this.sendMessage([{ type: \"system\", text: action.message }]);\n        return;\n      case \"send-message\":\n        await this.sendMessage([{ type: \"system\", text: action.text }]);\n        return;\n      default:\n        assertUnreachable(action);\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method submitToolResultsAndStop",
-      "startLine": 1253,
-      "startCol": 1,
-      "endLine": 1289,
-      "endCol": 4
-    },
-    {
-      "text": "  private async getAndPrepareContextUpdates(): Promise\u003c{\n    content: AgentInput[];\n    updates: Record\u003cstring, unknown\u003e | undefined;\n    gitUpdate: GitContextUpdate | undefined;\n  }\u003e {\n    const content: AgentInput[] = [];\n\n    const gitUpdate = await this.gitTracker.getUpdate();\n    if (gitUpdate) {\n      content.push({\n        type: \"text\",\n        text: gitUpdateToText(gitUpdate),\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      });\n    }\n\n    const contextUpdates = await this.contextManager.getContextUpdate();\n    if (Object.keys(contextUpdates).length === 0) {\n      return { content, updates: undefined, gitUpdate };\n    }\n\n    const contextContent =\n      this.contextManager.contextUpdatesToContent(contextUpdates);\n    for (const c of contextContent) {\n      if (c.type === \"text\") {\n        content.push({\n          type: \"text\",\n          text: c.text,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n      } else if (c.type === \"image\" || c.type === \"document\") {\n        content.push(c);\n      }\n    }\n\n    return { content, updates: contextUpdates, gitUpdate };\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getAndPrepareContextUpdates\n\n  private async getAndPrepareContextUpdates(): Promise\u003c{\n    content: AgentInput[];\n    updates: Record\u003cstring, unknown\u003e | undefined;\n    gitUpdate: GitContextUpdate | undefined;\n  }\u003e {\n    const content: AgentInput[] = [];\n\n    const gitUpdate = await this.gitTracker.getUpdate();\n    if (gitUpdate) {\n      content.push({\n        type: \"text\",\n        text: gitUpdateToText(gitUpdate),\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      });\n    }\n\n    const contextUpdates = await this.contextManager.getContextUpdate();\n    if (Object.keys(contextUpdates).length === 0) {\n      return { content, updates: undefined, gitUpdate };\n    }\n\n    const contextContent =\n      this.contextManager.contextUpdatesToContent(contextUpdates);\n    for (const c of contextContent) {\n      if (c.type === \"text\") {\n        content.push({\n          type: \"text\",\n          text: c.text,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n      } else if (c.type === \"image\" || c.type === \"document\") {\n        content.push(c);\n      }\n    }\n\n    return { content, updates: contextUpdates, gitUpdate };\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getAndPrepareContextUpdates",
-      "startLine": 1291,
-      "startCol": 1,
-      "endLine": 1327,
-      "endCol": 4
-    },
-    {
-      "text": "/** The union of transient get_file-read reminders and reminders derived from\n   * markdown files currently in context, deduped on text. */\n  private getActiveReminders(): string[] {\n    const reminders = new Set(this.state.activeReminders);\n    for (const key of Object.keys(this.contextManager.files)) {\n      const fileInfo = this.contextManager.files[key as AbsFilePath];\n      if (!fileInfo) continue;\n      if (!key.toLowerCase().endsWith(\".md\")) continue;\n      if (fileInfo.agentView?.type !== \"text\") continue;\n      const reminder = extractSystemReminderBlock(fileInfo.agentView.content);\n      if (reminder) reminders.add(reminder);\n    }\n    return [...reminders];\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getActiveReminders\n\n/** The union of transient get_file-read reminders and reminders derived from\n   * markdown files currently in context, deduped on text. */\n  private getActiveReminders(): string[] {\n    const reminders = new Set(this.state.activeReminders);\n    for (const key of Object.keys(this.contextManager.files)) {\n      const fileInfo = this.contextManager.files[key as AbsFilePath];\n      if (!fileInfo) continue;\n      if (!key.toLowerCase().endsWith(\".md\")) continue;\n      if (fileInfo.agentView?.type !== \"text\") continue;\n      const reminder = extractSystemReminderBlock(fileInfo.agentView.content);\n      if (reminder) reminders.add(reminder);\n    }\n    return [...reminders];\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method getActiveReminders",
-      "startLine": 1329,
-      "startCol": 3,
-      "endLine": 1342,
-      "endCol": 4
-    },
-    {
-      "text": "  private async sendToolResultsAndContinue(\n    toolResults: Array\u003c{ id: ToolRequestId; result: ProviderToolResult }\u003e,\n    pendingMessages: InputMessage[],\n  ): Promise\u003cvoid\u003e {\n    for (const { id, result } of toolResults) {\n      this.agent.toolResult(id, result);\n      if (result.result.status === \"ok\") {\n        const structured = result.result.structuredResult;\n        if (\n          structured.toolName === \"bash_command\" \u0026\u0026\n          \"wasAbbreviated\" in structured \u0026\u0026\n          structured.wasAbbreviated\n        ) {\n          this.update(\n            { type: \"mark-bash-output-abbreviated\" },\n            { silent: true },\n          );\n        }\n        if (\n          structured.toolName === \"get_file\" \u0026\u0026\n          \"systemReminder\" in structured \u0026\u0026\n          structured.systemReminder\n        ) {\n          this.update(\n            { type: \"activate-reminder\", text: structured.systemReminder },\n            { silent: true },\n          );\n        }\n      }\n    }\n\n    this.update({ type: \"set-mode\", mode: { type: \"normal\" } });\n\n    if (pendingMessages.length \u003e 0) {\n      await this.sendMessage(pendingMessages);\n      return;\n    }\n\n    const {\n      content: contextContent,\n      updates: contextUpdates,\n      gitUpdate,\n    } = await this.getAndPrepareContextUpdates();\n\n    const contentToSend: AgentInput[] = [...contextContent];\n\n    const reminderKinds: ReminderKind[] = [];\n    const subsequentReminderFires =\n      this.state.outputTokensSinceLastReminder \u003e=\n      SYSTEM_REMINDER_MIN_TOKEN_INTERVAL;\n    const bashReminderFires =\n      this.state.pendingBashReminder \u0026\u0026\n      (this.state.firstBashReminderPending ||\n        this.state.bashTokensSinceLastReminder \u003e= BASH_REMINDER_TOKEN_INTERVAL);\n\n    if (subsequentReminderFires) reminderKinds.push(\"subsequent\");\n    if (bashReminderFires) reminderKinds.push(\"bashSummary\");",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method sendToolResultsAndContinue\n\n  private async sendToolResultsAndContinue(\n    toolResults: Array\u003c{ id: ToolRequestId; result: ProviderToolResult }\u003e,\n    pendingMessages: InputMessage[],\n  ): Promise\u003cvoid\u003e {\n    for (const { id, result } of toolResults) {\n      this.agent.toolResult(id, result);\n      if (result.result.status === \"ok\") {\n        const structured = result.result.structuredResult;\n        if (\n          structured.toolName === \"bash_command\" \u0026\u0026\n          \"wasAbbreviated\" in structured \u0026\u0026\n          structured.wasAbbreviated\n        ) {\n          this.update(\n            { type: \"mark-bash-output-abbreviated\" },\n            { silent: true },\n          );\n        }\n        if (\n          structured.toolName === \"get_file\" \u0026\u0026\n          \"systemReminder\" in structured \u0026\u0026\n          structured.systemReminder\n        ) {\n          this.update(\n            { type: \"activate-reminder\", text: structured.systemReminder },\n            { silent: true },\n          );\n        }\n      }\n    }\n\n    this.update({ type: \"set-mode\", mode: { type: \"normal\" } });\n\n    if (pendingMessages.length \u003e 0) {\n      await this.sendMessage(pendingMessages);\n      return;\n    }\n\n    const {\n      content: contextContent,\n      updates: contextUpdates,\n      gitUpdate,\n    } = await this.getAndPrepareContextUpdates();\n\n    const contentToSend: AgentInput[] = [...contextContent];\n\n    const reminderKinds: ReminderKind[] = [];\n    const subsequentReminderFires =\n      this.state.outputTokensSinceLastReminder \u003e=\n      SYSTEM_REMINDER_MIN_TOKEN_INTERVAL;\n    const bashReminderFires =\n      this.state.pendingBashReminder \u0026\u0026\n      (this.state.firstBashReminderPending ||\n        this.state.bashTokensSinceLastReminder \u003e= BASH_REMINDER_TOKEN_INTERVAL);\n\n    if (subsequentReminderFires) reminderKinds.push(\"subsequent\");\n    if (bashReminderFires) reminderKinds.push(\"bashSummary\");",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method sendToolResultsAndContinue",
-      "startLine": 1344,
-      "startCol": 1,
-      "endLine": 1400,
-      "endCol": 62
-    },
-    {
-      "text": "if (reminderKinds.length \u003e 0) {\n      const reminder = buildSystemReminder({\n        threadType: this.state.threadType,\n        subagentConfig: this.context.subagentConfig,\n        kinds: reminderKinds,\n        extraReminders: this.getActiveReminders(),\n      });\n      if (reminder) {\n        contentToSend.push({\n          type: \"text\",\n          text: reminder,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n      }\n      if (subsequentReminderFires) {\n        this.update({ type: \"reset-output-tokens\" }, { silent: true });\n      }\n      if (bashReminderFires) {\n        this.update({ type: \"reset-bash-reminder\" }, { silent: true });\n      }\n    }\n\n    if (contextUpdates) {\n      this.emit(\"contextUpdatesSent\", contextUpdates);\n    }\n    if (gitUpdate) {\n      this.emit(\"gitContextUpdateSent\", gitUpdate);\n    }\n\n    const handoff = this.consultHandoffSupervisors(\"tool_use\");\n    if (handoff.type === \"compact\") {\n      this.startCompaction(handoff.nextPrompt);\n      return;\n    }\n\n    if (contentToSend.length \u003e 0) {\n      this.agent.appendUserMessage(contentToSend);\n    }\n    this.agent.continueConversation();\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method sendToolResultsAndContinue\n\nif (reminderKinds.length \u003e 0) {\n      const reminder = buildSystemReminder({\n        threadType: this.state.threadType,\n        subagentConfig: this.context.subagentConfig,\n        kinds: reminderKinds,\n        extraReminders: this.getActiveReminders(),\n      });\n      if (reminder) {\n        contentToSend.push({\n          type: \"text\",\n          text: reminder,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n      }\n      if (subsequentReminderFires) {\n        this.update({ type: \"reset-output-tokens\" }, { silent: true });\n      }\n      if (bashReminderFires) {\n        this.update({ type: \"reset-bash-reminder\" }, { silent: true });\n      }\n    }\n\n    if (contextUpdates) {\n      this.emit(\"contextUpdatesSent\", contextUpdates);\n    }\n    if (gitUpdate) {\n      this.emit(\"gitContextUpdateSent\", gitUpdate);\n    }\n\n    const handoff = this.consultHandoffSupervisors(\"tool_use\");\n    if (handoff.type === \"compact\") {\n      this.startCompaction(handoff.nextPrompt);\n      return;\n    }\n\n    if (contentToSend.length \u003e 0) {\n      this.agent.appendUserMessage(contentToSend);\n    }\n    this.agent.continueConversation();\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method sendToolResultsAndContinue",
-      "startLine": 1402,
-      "startCol": 5,
-      "endLine": 1441,
-      "endCol": 4
-    },
-    {
-      "text": "private handleSendMessageError = (error: Error): void =\u003e {\n    this.context.logger.error(error);\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore\n\nprivate handleSendMessageError = (error: Error): void =\u003e {\n    this.context.logger.error(error);\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore",
-      "startLine": 1443,
-      "startCol": 3,
-      "endLine": 1445,
-      "endCol": 4
-    },
-    {
-      "text": "  private prepareUserContent(inputMessages?: InputMessage[]): {\n    content: ProviderMessageContent[];\n    hasContent: boolean;\n  } {\n    const messageContent: ProviderMessageContent[] = [];\n    for (const m of inputMessages || []) {\n      messageContent.push({\n        type: \"text\",\n        text: m.text,\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      });\n    }\n    if (inputMessages?.length) {\n      this.update({ type: \"reset-output-tokens\" }, { silent: true });\n      const reminder = buildSystemReminder({\n        threadType: this.state.threadType,\n        subagentConfig: this.context.subagentConfig,\n        kinds: [\"subsequent\"],\n        extraReminders: this.getActiveReminders(),\n      });\n      if (reminder) {\n        messageContent.push({\n          type: \"system_reminder\",\n          text: reminder,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n      }\n    }\n\n    return {\n      content: messageContent,\n      hasContent: (inputMessages?.length ?? 0) \u003e 0,\n    };\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method prepareUserContent\n\n  private prepareUserContent(inputMessages?: InputMessage[]): {\n    content: ProviderMessageContent[];\n    hasContent: boolean;\n  } {\n    const messageContent: ProviderMessageContent[] = [];\n    for (const m of inputMessages || []) {\n      messageContent.push({\n        type: \"text\",\n        text: m.text,\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      });\n    }\n    if (inputMessages?.length) {\n      this.update({ type: \"reset-output-tokens\" }, { silent: true });\n      const reminder = buildSystemReminder({\n        threadType: this.state.threadType,\n        subagentConfig: this.context.subagentConfig,\n        kinds: [\"subsequent\"],\n        extraReminders: this.getActiveReminders(),\n      });\n      if (reminder) {\n        messageContent.push({\n          type: \"system_reminder\",\n          text: reminder,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        });\n      }\n    }\n\n    return {\n      content: messageContent,\n      hasContent: (inputMessages?.length ?? 0) \u003e 0,\n    };\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method prepareUserContent",
-      "startLine": 1447,
-      "startCol": 1,
-      "endLine": 1480,
-      "endCol": 4
-    },
-    {
-      "text": "  private sendRawMessage(messages: InputMessage[]): void {\n    const contentToSend: AgentInput[] = messages.map((m) =\u003e ({\n      type: \"text\" as const,\n      text: m.text,\n      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n    }));\n\n    if (contentToSend.length === 0) return;\n\n    this.agent.appendUserMessage(contentToSend);\n    this.agent.continueConversation();\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method sendRawMessage\n\n  private sendRawMessage(messages: InputMessage[]): void {\n    const contentToSend: AgentInput[] = messages.map((m) =\u003e ({\n      type: \"text\" as const,\n      text: m.text,\n      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n    }));\n\n    if (contentToSend.length === 0) return;\n\n    this.agent.appendUserMessage(contentToSend);\n    this.agent.continueConversation();\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method sendRawMessage",
-      "startLine": 1482,
-      "startCol": 1,
-      "endLine": 1493,
-      "endCol": 4
-    },
-    {
-      "text": "  startCompaction(nextPrompt?: string): void {\n    const manager = new CompactionManager({\n      logger: this.context.logger,\n      profile: this.context.profile,\n      mcpToolManager: this.context.mcpToolManager,\n      threadId: this.id,\n      cwd: this.context.cwd,\n      homeDir: this.context.homeDir,\n      lspClient: this.context.lspClient,\n      helpTagsProvider: this.context.helpTagsProvider,\n      availableCapabilities: this.context.availableCapabilities,\n      contextManager: this.contextManager,\n      shell: this.context.shell,\n      threadManager: this.context.threadManager,\n      maxConcurrentSubagents: this.context.maxConcurrentSubagents,\n      maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,\n      getProvider: this.context.getProvider",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method startCompaction\n\n  startCompaction(nextPrompt?: string): void {\n    const manager = new CompactionManager({\n      logger: this.context.logger,\n      profile: this.context.profile,\n      mcpToolManager: this.context.mcpToolManager,\n      threadId: this.id,\n      cwd: this.context.cwd,\n      homeDir: this.context.homeDir,\n      lspClient: this.context.lspClient,\n      helpTagsProvider: this.context.helpTagsProvider,\n      availableCapabilities: this.context.availableCapabilities,\n      contextManager: this.contextManager,\n      shell: this.context.shell,\n      threadManager: this.context.threadManager,\n      maxConcurrentSubagents: this.context.maxConcurrentSubagents,\n      maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,\n      getProvider: this.context.getProvider",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method startCompaction",
-      "startLine": 1495,
-      "startCol": 1,
-      "endLine": 1511,
-      "endCol": 44
-    },
-    {
-      "text": "      requestRender: () =\u003e this.emit(\"update\")",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method startCompaction \u003e function requestRender\n\n      requestRender: () =\u003e this.emit(\"update\")",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method startCompaction \u003e function requestRender",
-      "startLine": 1512,
-      "startCol": 1,
-      "endLine": 1512,
-      "endCol": 47
-    },
-    {
-      "text": "manager.on(\"transition\", (_prev, next) =\u003e {\n      if (next.type === \"complete\") {\n        this.handleCompactionResult(next.result);\n      } else if (next.type === \"error\") {\n        this.handleCompactionResult({ type: \"error\", steps: next.steps });\n      } else if (\n        next.type === \"processing-chunk\" ||\n        next.type === \"waiting-for-tools\"\n      ) {\n        this.update({\n          type: \"set-mode\",\n          mode: {\n            type: \"compacting\",\n            chunkIndex: next.chunkIndex,\n            totalChunks: next.totalChunks,\n          },\n        });\n      }\n    });\n    this.compactionController = manager;\n    manager.start(this.getProviderMessages(), nextPrompt);\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method startCompaction\n\nmanager.on(\"transition\", (_prev, next) =\u003e {\n      if (next.type === \"complete\") {\n        this.handleCompactionResult(next.result);\n      } else if (next.type === \"error\") {\n        this.handleCompactionResult({ type: \"error\", steps: next.steps });\n      } else if (\n        next.type === \"processing-chunk\" ||\n        next.type === \"waiting-for-tools\"\n      ) {\n        this.update({\n          type: \"set-mode\",\n          mode: {\n            type: \"compacting\",\n            chunkIndex: next.chunkIndex,\n            totalChunks: next.totalChunks,\n          },\n        });\n      }\n    });\n    this.compactionController = manager;\n    manager.start(this.getProviderMessages(), nextPrompt);\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method startCompaction",
-      "startLine": 1514,
-      "startCol": 5,
-      "endLine": 1535,
-      "endCol": 4
-    },
-    {
-      "text": "  private handleCompactionResult(result: CompactionResult): void {\n    this.compactionController = undefined;\n    this.update({ type: \"set-mode\", mode: { type: \"normal\" } });\n\n    if (result.type === \"complete\") {\n      this.handleCompactComplete(\n        result.summary,\n        result.nextPrompt,\n        result.steps,\n      ).catch((e: Error) =\u003e {\n        this.context.logger.error(\n          `Failed during compact-complete: ${e.message}`,\n        );\n      });\n    } else {\n      this.update({\n        type: \"push-compaction-record\",\n        record: { steps: result.steps, finalSummary: undefined },\n      });\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleCompactionResult\n\n  private handleCompactionResult(result: CompactionResult): void {\n    this.compactionController = undefined;\n    this.update({ type: \"set-mode\", mode: { type: \"normal\" } });\n\n    if (result.type === \"complete\") {\n      this.handleCompactComplete(\n        result.summary,\n        result.nextPrompt,\n        result.steps,\n      ).catch((e: Error) =\u003e {\n        this.context.logger.error(\n          `Failed during compact-complete: ${e.message}`,\n        );\n      });\n    } else {\n      this.update({\n        type: \"push-compaction-record\",\n        record: { steps: result.steps, finalSummary: undefined },\n      });\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleCompactionResult",
-      "startLine": 1537,
-      "startCol": 1,
-      "endLine": 1557,
-      "endCol": 4
-    },
-    {
-      "text": "  private async handleCompactComplete(\n    summary: string,\n    nextPrompt: string | undefined,\n    steps: CompactionStep[],\n  ): Promise\u003cvoid\u003e {\n    this.update({\n      type: \"push-compaction-record\",\n      record: { steps, finalSummary: summary },\n    });\n\n    this.unlistenContextManager();\n    this.contextManager.destroy();\n    this.contextManager = new ContextManager(\n      this.context.logger,\n      this.context.fileIO,\n      this.context.cwd,\n      this.context.homeDir,\n      undefined,\n      CONTEXT_MANAGER_POLL_INTERVAL_MS,\n    );\n    this.contextManager.start();\n    this.listenToContextManager();\n\n    this.agent = this.createFreshAgent();\n    this.threadLogger.recordCompaction({ summary, chunkCount: steps.length });\n    this.threadLogger.resetCursor();\n\n    this.update({ type: \"reset-after-compaction\" });\n\n    const summaryText = `\u003cconversation-summary\u003e\\n${summary}\\n\u003c/conversation-summary\u003e`;\n    this.agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: summaryText,\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n\n    if (nextPrompt) {\n      await this.sendMessage([{ type: \"user\", text: nextPrompt }]);\n    } else {\n      await this.sendMessage([\n        { type: \"user\", text: \"Please continue from where you left off.\" },\n      ]);\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleCompactComplete\n\n  private async handleCompactComplete(\n    summary: string,\n    nextPrompt: string | undefined,\n    steps: CompactionStep[],\n  ): Promise\u003cvoid\u003e {\n    this.update({\n      type: \"push-compaction-record\",\n      record: { steps, finalSummary: summary },\n    });\n\n    this.unlistenContextManager();\n    this.contextManager.destroy();\n    this.contextManager = new ContextManager(\n      this.context.logger,\n      this.context.fileIO,\n      this.context.cwd,\n      this.context.homeDir,\n      undefined,\n      CONTEXT_MANAGER_POLL_INTERVAL_MS,\n    );\n    this.contextManager.start();\n    this.listenToContextManager();\n\n    this.agent = this.createFreshAgent();\n    this.threadLogger.recordCompaction({ summary, chunkCount: steps.length });\n    this.threadLogger.resetCursor();\n\n    this.update({ type: \"reset-after-compaction\" });\n\n    const summaryText = `\u003cconversation-summary\u003e\\n${summary}\\n\u003c/conversation-summary\u003e`;\n    this.agent.appendUserMessage([\n      {\n        type: \"text\",\n        text: summaryText,\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      },\n    ]);\n\n    if (nextPrompt) {\n      await this.sendMessage([{ type: \"user\", text: nextPrompt }]);\n    } else {\n      await this.sendMessage([\n        { type: \"user\", text: \"Please continue from where you left off.\" },\n      ]);\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method handleCompactComplete",
-      "startLine": 1559,
-      "startCol": 1,
-      "endLine": 1604,
-      "endCol": 4
-    },
-    {
-      "text": "  private consultEndTurnSupervisors(context: EndTurnContext): EndTurnAction {\n    const texts: string[] = [];\n    for (const sup of this.supervisors) {\n      const action = sup.onEndTurnWithoutYield?.(context);\n      if (action \u0026\u0026 action.type === \"send-message\") texts.push(action.text);\n    }\n    if (texts.length === 0) return { type: \"none\" };\n    return { type: \"send-message\", text: texts.join(\"\\n\\n\") };\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method consultEndTurnSupervisors\n\n  private consultEndTurnSupervisors(context: EndTurnContext): EndTurnAction {\n    const texts: string[] = [];\n    for (const sup of this.supervisors) {\n      const action = sup.onEndTurnWithoutYield?.(context);\n      if (action \u0026\u0026 action.type === \"send-message\") texts.push(action.text);\n    }\n    if (texts.length === 0) return { type: \"none\" };\n    return { type: \"send-message\", text: texts.join(\"\\n\\n\") };\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method consultEndTurnSupervisors",
-      "startLine": 1606,
-      "startCol": 1,
-      "endLine": 1614,
-      "endCol": 4
-    },
-    {
-      "text": "  private async consultYieldSupervisors(result: string): Promise\u003cYieldAction\u003e {\n    const texts: string[] = [];\n    for (const sup of this.supervisors) {\n      const action = await sup.onYield?.(result);\n      if (!action) continue;\n      if (action.type === \"accept\" || action.type === \"reject\") return action;\n      if (action.type === \"send-message\") texts.push(action.text);\n    }\n    if (texts.length === 0) return { type: \"none\" };\n    return { type: \"send-message\", text: texts.join(\"\\n\\n\") };\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method consultYieldSupervisors\n\n  private async consultYieldSupervisors(result: string): Promise\u003cYieldAction\u003e {\n    const texts: string[] = [];\n    for (const sup of this.supervisors) {\n      const action = await sup.onYield?.(result);\n      if (!action) continue;\n      if (action.type === \"accept\" || action.type === \"reject\") return action;\n      if (action.type === \"send-message\") texts.push(action.text);\n    }\n    if (texts.length === 0) return { type: \"none\" };\n    return { type: \"send-message\", text: texts.join(\"\\n\\n\") };\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method consultYieldSupervisors",
-      "startLine": 1616,
-      "startCol": 1,
-      "endLine": 1626,
-      "endCol": 4
-    },
-    {
-      "text": "  private consultHandoffSupervisors(stopReason: StopReason): HandoffAction {\n    const inputTokenCount = this.agent.getState().inputTokenCount;\n    const prompts: string[] = [];\n    let shouldCompact = false;\n    for (const sup of this.supervisors) {\n      const action = sup.onHandoff?.({ inputTokenCount, stopReason });\n      if (action \u0026\u0026 action.type === \"compact\") {\n        shouldCompact = true;\n        if (action.nextPrompt !== undefined) prompts.push(action.nextPrompt);\n      }\n    }\n    if (!shouldCompact) return { type: \"none\" };\n    return prompts.length \u003e 0\n      ? { type: \"compact\", nextPrompt: prompts.join(\"\\n\\n\") }\n      : { type: \"compact\" };\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method consultHandoffSupervisors\n\n  private consultHandoffSupervisors(stopReason: StopReason): HandoffAction {\n    const inputTokenCount = this.agent.getState().inputTokenCount;\n    const prompts: string[] = [];\n    let shouldCompact = false;\n    for (const sup of this.supervisors) {\n      const action = sup.onHandoff?.({ inputTokenCount, stopReason });\n      if (action \u0026\u0026 action.type === \"compact\") {\n        shouldCompact = true;\n        if (action.nextPrompt !== undefined) prompts.push(action.nextPrompt);\n      }\n    }\n    if (!shouldCompact) return { type: \"none\" };\n    return prompts.length \u003e 0\n      ? { type: \"compact\", nextPrompt: prompts.join(\"\\n\\n\") }\n      : { type: \"compact\" };\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method consultHandoffSupervisors",
-      "startLine": 1628,
-      "startCol": 1,
-      "endLine": 1643,
-      "endCol": 4
-    },
-    {
-      "text": "  async setThreadTitle(userMessage: string): Promise\u003cvoid\u003e {\n    const profileForRequest: ProviderProfile = {\n      ...this.context.profile,\n      thinking: undefined,\n      reasoning: undefined,\n    };\n\n    const request = this.context.getProvider(profileForRequest).forceToolUse({\n      model: this.context.profile.fastModel,\n      input: [\n        {\n          type: \"text\",\n          text: `\\\nThe user has provided the following prompt:\n${userMessage}\n\nCome up with a succinct thread title for this prompt. It must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).\n`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ],\n      spec: ThreadTitle.spec,\n      systemPrompt: this.state.systemPrompt,\n      disableCaching: true,\n    });\n    const result = await request.promise;\n    if (result.toolRequest.status === \"ok\") {\n      this.setTitle(\n        (result.toolRequest.value.input as ThreadTitle.Input).title,\n      );\n    }\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method setThreadTitle\n\n  async setThreadTitle(userMessage: string): Promise\u003cvoid\u003e {\n    const profileForRequest: ProviderProfile = {\n      ...this.context.profile,\n      thinking: undefined,\n      reasoning: undefined,\n    };\n\n    const request = this.context.getProvider(profileForRequest).forceToolUse({\n      model: this.context.profile.fastModel,\n      input: [\n        {\n          type: \"text\",\n          text: `\\\nThe user has provided the following prompt:\n${userMessage}\n\nCome up with a succinct thread title for this prompt. It must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).\n`,\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        },\n      ],\n      spec: ThreadTitle.spec,\n      systemPrompt: this.state.systemPrompt,\n      disableCaching: true,\n    });\n    const result = await request.promise;\n    if (result.toolRequest.status === \"ok\") {\n      this.setTitle(\n        (result.toolRequest.value.input as ThreadTitle.Input).title,\n      );\n    }\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method setThreadTitle",
-      "startLine": 1645,
-      "startCol": 1,
-      "endLine": 1676,
-      "endCol": 4
-    },
-    {
-      "text": "private destroyed = false",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore\n\nprivate destroyed = false",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore",
-      "startLine": 1678,
-      "startCol": 3,
-      "endLine": 1678,
-      "endCol": 28
-    },
-    {
-      "text": "  async destroy(): Promise\u003cvoid\u003e {\n    if (this.destroyed) return;\n    this.destroyed = true;\n\n    this.clearErrorRetryTimer();\n\n    if (this.updateThrottleTimer) {\n      clearTimeout(this.updateThrottleTimer);\n    }\n\n    try {\n      await this.abort();\n    } catch {\n      // ignore\n    }\n\n    this.unlistenContextManager();\n    this.contextManager.destroy();\n\n    if (this.agent) {\n      this.unlistenAgent(this.agent);\n    }\n\n    this.removeAllListeners();\n  }",
-      "contextualizedText": "// node/core/src/thread-core.ts \u003e class ThreadCore \u003e method destroy\n\n  async destroy(): Promise\u003cvoid\u003e {\n    if (this.destroyed) return;\n    this.destroyed = true;\n\n    this.clearErrorRetryTimer();\n\n    if (this.updateThrottleTimer) {\n      clearTimeout(this.updateThrottleTimer);\n    }\n\n    try {\n      await this.abort();\n    } catch {\n      // ignore\n    }\n\n    this.unlistenContextManager();\n    this.contextManager.destroy();\n\n    if (this.agent) {\n      this.unlistenAgent(this.agent);\n    }\n\n    this.removeAllListeners();\n  }",
-      "headingContext": "node/core/src/thread-core.ts \u003e class ThreadCore \u003e method destroy",
-      "startLine": 1680,
-      "startCol": 1,
-      "endLine": 1704,
-      "endCol": 4
+      "start": 51800,
+      "end": 52842
     }
   ]
 }

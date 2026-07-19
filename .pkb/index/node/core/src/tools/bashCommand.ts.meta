@@ -1,258 +1,43 @@
 {
   "blobSha": "db29dda09460b4c1e98e117e00b71a1c4bf40c17",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { spawnSync } from \"node:child_process\";\nimport type { OutputLine, Shell } from \"../capabilities/shell.ts\";\nimport {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolResult,\n  type ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type {\n  GenericToolRequest,\n  ToolInvocation,\n  ToolName,\n} from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nlet rgAvailable: boolean | undefined;\nlet fdAvailable: boolean | undefined;",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts\n\nimport { spawnSync } from \"node:child_process\";\nimport type { OutputLine, Shell } from \"../capabilities/shell.ts\";\nimport {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolResult,\n  type ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type {\n  GenericToolRequest,\n  ToolInvocation,\n  ToolName,\n} from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nlet rgAvailable: boolean | undefined;\nlet fdAvailable: boolean | undefined;",
-      "headingContext": "node/core/src/tools/bashCommand.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 38
+      "start": 0,
+      "end": 1640
     },
     {
-      "text": "export function isRgAvailable(): boolean {\n  if (rgAvailable === undefined) {\n    const result = spawnSync(\"which\", [\"rg\"], { stdio: \"pipe\" });\n    rgAvailable = result.status === 0;\n  }\n  return rgAvailable;\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function isRgAvailable\n\nexport function isRgAvailable(): boolean {\n  if (rgAvailable === undefined) {\n    const result = spawnSync(\"which\", [\"rg\"], { stdio: \"pipe\" });\n    rgAvailable = result.status === 0;\n  }\n  return rgAvailable;\n}",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function isRgAvailable",
-      "startLine": 18,
-      "startCol": 1,
-      "endLine": 24,
-      "endCol": 2
+      "start": 1642,
+      "end": 3665
     },
     {
-      "text": "export function isFdAvailable(): boolean {\n  if (fdAvailable === undefined) {\n    const result = spawnSync(\"which\", [\"fd\"], { stdio: \"pipe\" });\n    fdAvailable = result.status === 0;\n  }\n  return fdAvailable;\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function isFdAvailable\n\nexport function isFdAvailable(): boolean {\n  if (fdAvailable === undefined) {\n    const result = spawnSync(\"which\", [\"fd\"], { stdio: \"pipe\" });\n    fdAvailable = result.status === 0;\n  }\n  return fdAvailable;\n}",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function isFdAvailable",
-      "startLine": 26,
-      "startCol": 1,
-      "endLine": 32,
-      "endCol": 2
+      "start": 3669,
+      "end": 5297
     },
     {
-      "text": "const BASE_DESCRIPTION = `Run a command in a bash shell.\nFor example, you can run \\`ls\\`, \\`echo 'Hello, World!'\\`, or \\`git status\\`.\nThe command will time out after 1 min.\nYou should not run commands that require user input, such as \\`git commit\\` without \\`-m\\` or \\`ssh\\`.\nYou should not run commands that do not halt, such as \\`docker compose up\\` without \\`-d\\`, \\`tail -f\\` or \\`watch\\`.\n\nLong output will be abbreviated (first 10 + last 20 lines). Full output is saved to a log file that can be read with get_file. You do not need to use head/tail/grep to limit output - just run the command directly.\nYou will get the stdout and stderr of the command, as well as the exit code, so you do not need to do stream redirects like \"2\u003e\u00261\".\n`;\n\nconst RG_DESCRIPTION = `\nFor searching file contents, prefer \\`rg\\` (ripgrep) which is available on this system. Examples:\n- \\`rg \"pattern\"\\` - search recursively in current directory\n- \\`rg \"pattern\" path/to/dir\\` - search in specific directory\n- \\`rg \"pattern\" path/to/file\\` - search in specific file\n- \\`echo \"text\" | rg \"pattern\"\\` - search in piped input\n`;\n\nconst FD_DESCRIPTION = `\nFor finding files by name, prefer \\`fd\\` which is available on this system. Note: fd skips hidden files and gitignored files by default. Examples:\n- \\`fd \"pattern\"\\` - find files matching pattern recursively\n- \\`fd \"pattern\" path/to/dir\\` - find in specific directory\n- \\`fd -e ts\\` - find files with specific extension\n- \\`fd -t f \"pattern\"\\` - find only files (not directories)\n- \\`fd -t d \"pattern\"\\` - find only directories\n`;",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts\n\nconst BASE_DESCRIPTION = `Run a command in a bash shell.\nFor example, you can run \\`ls\\`, \\`echo 'Hello, World!'\\`, or \\`git status\\`.\nThe command will time out after 1 min.\nYou should not run commands that require user input, such as \\`git commit\\` without \\`-m\\` or \\`ssh\\`.\nYou should not run commands that do not halt, such as \\`docker compose up\\` without \\`-d\\`, \\`tail -f\\` or \\`watch\\`.\n\nLong output will be abbreviated (first 10 + last 20 lines). Full output is saved to a log file that can be read with get_file. You do not need to use head/tail/grep to limit output - just run the command directly.\nYou will get the stdout and stderr of the command, as well as the exit code, so you do not need to do stream redirects like \"2\u003e\u00261\".\n`;\n\nconst RG_DESCRIPTION = `\nFor searching file contents, prefer \\`rg\\` (ripgrep) which is available on this system. Examples:\n- \\`rg \"pattern\"\\` - search recursively in current directory\n- \\`rg \"pattern\" path/to/dir\\` - search in specific directory\n- \\`rg \"pattern\" path/to/file\\` - search in specific file\n- \\`echo \"text\" | rg \"pattern\"\\` - search in piped input\n`;\n\nconst FD_DESCRIPTION = `\nFor finding files by name, prefer \\`fd\\` which is available on this system. Note: fd skips hidden files and gitignored files by default. Examples:\n- \\`fd \"pattern\"\\` - find files matching pattern recursively\n- \\`fd \"pattern\" path/to/dir\\` - find in specific directory\n- \\`fd -e ts\\` - find files with specific extension\n- \\`fd -t f \"pattern\"\\` - find only files (not directories)\n- \\`fd -t d \"pattern\"\\` - find only directories\n`;",
-      "headingContext": "node/core/src/tools/bashCommand.ts",
-      "startLine": 34,
-      "startCol": 1,
-      "endLine": 59,
-      "endCol": 3
+      "start": 5299,
+      "end": 7166
     },
     {
-      "text": "export function getSpec(): ProviderToolSpec {\n  let description = BASE_DESCRIPTION;\n  if (isRgAvailable()) {\n    description += RG_DESCRIPTION;\n  }\n  if (isFdAvailable()) {\n    description += FD_DESCRIPTION;\n  }\n\n  return {\n    name: \"bash_command\" as ToolName,\n    description,\n    input_schema: {\n      type: \"object\",\n      properties: {\n        command: {\n          type: \"string\",\n          description: \"The command to run in the terminal\",\n        },\n      },\n      required: [\"command\"],\n    },\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function getSpec\n\nexport function getSpec(): ProviderToolSpec {\n  let description = BASE_DESCRIPTION;\n  if (isRgAvailable()) {\n    description += RG_DESCRIPTION;\n  }\n  if (isFdAvailable()) {\n    description += FD_DESCRIPTION;\n  }\n\n  return {\n    name: \"bash_command\" as ToolName,\n    description,\n    input_schema: {\n      type: \"object\",\n      properties: {\n        command: {\n          type: \"string\",\n          description: \"The command to run in the terminal\",\n        },\n      },\n      required: [\"command\"],\n    },\n  };\n}",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function getSpec",
-      "startLine": 61,
-      "startCol": 1,
-      "endLine": 84,
-      "endCol": 2
+      "start": 7170,
+      "end": 8856
     },
     {
-      "text": "export const spec: ProviderToolSpec = getSpec();\n\nexport type Input = {\n  command: string;\n};\nexport type StructuredResult = {\n  toolName: \"bash_command\";\n  exitCode: number;\n  signal: string | undefined;\n  logFilePath: string | undefined;\n  logFileLineCount: number | undefined;\n  logFileCharCount: number | undefined;\n  outputText: string;\n  wasAbbreviated: boolean;\n};\n\nexport type ToolRequest = GenericToolRequest\u003c\"bash_command\", Input\u003e;",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts\n\nexport const spec: ProviderToolSpec = getSpec();\n\nexport type Input = {\n  command: string;\n};\nexport type StructuredResult = {\n  toolName: \"bash_command\";\n  exitCode: number;\n  signal: string | undefined;\n  logFilePath: string | undefined;\n  logFileLineCount: number | undefined;\n  logFileCharCount: number | undefined;\n  outputText: string;\n  wasAbbreviated: boolean;\n};\n\nexport type ToolRequest = GenericToolRequest\u003c\"bash_command\", Input\u003e;",
-      "headingContext": "node/core/src/tools/bashCommand.ts",
-      "startLine": 86,
-      "startCol": 1,
-      "endLine": 102,
-      "endCol": 69
+      "start": 8860,
+      "end": 10335
     },
     {
-      "text": "export function validateInput(args: { [key: string]: unknown }): Result\u003cInput\u003e {\n  if (typeof args.command !== \"string\") {\n    return {\n      status: \"error\",\n      error: `Expected command to be a string but got ${typeof args.command}`,\n    };\n  }\n\n  return {\n    status: \"ok\",\n    value: {\n      command: args.command,\n    },\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function validateInput\n\nexport function validateInput(args: { [key: string]: unknown }): Result\u003cInput\u003e {\n  if (typeof args.command !== \"string\") {\n    return {\n      status: \"error\",\n      error: `Expected command to be a string but got ${typeof args.command}`,\n    };\n  }\n\n  return {\n    status: \"ok\",\n    value: {\n      command: args.command,\n    },\n  };\n}",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function validateInput",
-      "startLine": 103,
-      "startCol": 1,
-      "endLine": 117,
-      "endCol": 2
+      "start": 10339,
+      "end": 11906
     },
     {
-      "text": "function formatTokens(charCount: number): string {\n  const tokens = Math.ceil(charCount / 4);\n  return tokens \u003e= 1000\n    ? `~${Math.round(tokens / 1000).toString()}k tok`\n    : `~${tokens.toString()} tok`;\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function formatTokens\n\nfunction formatTokens(charCount: number): string {\n  const tokens = Math.ceil(charCount / 4);\n  return tokens \u003e= 1000\n    ? `~${Math.round(tokens / 1000).toString()}k tok`\n    : `~${tokens.toString()} tok`;\n}",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function formatTokens",
-      "startLine": 119,
-      "startCol": 1,
-      "endLine": 124,
-      "endCol": 2
+      "start": 11914,
+      "end": 14201
     },
     {
-      "text": "const TRIM_REMINDER =\n  \"\\nNote: a trailing `| head`/`| tail` was removed from your command. The bash_command tool already trims long output for you, so you don't need to pipe into head or tail.\\n\";\n\nconst RG_REPLACE_WARNING =\n  \"This command was NOT run. It looks like you passed a short `-r` flag to `rg`. \" +\n  \"For ripgrep, `-r` is the short form of `--replace` and it consumes the rest of the flag bundle (and/or the next argument) as a replacement string — e.g. `-rn` means `--replace=n`, not `-r -n`. \" +\n  \"`-r` does NOT mean recursive; rg recurses by default. \" +\n  \"If you wanted line numbers use `-n`, for files-with-matches use `-l`. \" +\n  \"If you genuinely want replacement, use the long `--replace` form instead.\";",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts\n\nconst TRIM_REMINDER =\n  \"\\nNote: a trailing `| head`/`| tail` was removed from your command. The bash_command tool already trims long output for you, so you don't need to pipe into head or tail.\\n\";\n\nconst RG_REPLACE_WARNING =\n  \"This command was NOT run. It looks like you passed a short `-r` flag to `rg`. \" +\n  \"For ripgrep, `-r` is the short form of `--replace` and it consumes the rest of the flag bundle (and/or the next argument) as a replacement string — e.g. `-rn` means `--replace=n`, not `-r -n`. \" +\n  \"`-r` does NOT mean recursive; rg recurses by default. \" +\n  \"If you wanted line numbers use `-n`, for files-with-matches use `-l`. \" +\n  \"If you genuinely want replacement, use the long `--replace` form instead.\";",
-      "headingContext": "node/core/src/tools/bashCommand.ts",
-      "startLine": 126,
-      "startCol": 1,
-      "endLine": 134,
-      "endCol": 79
-    },
-    {
-      "text": "export function detectRgShortReplaceFlag(command: string): boolean {\n  const segments = command.split(/\u0026\u0026|\\|\\||[;|\\n]/);\n  for (const segment of segments) {\n    const tokens = segment.trim().split(/\\s+/).filter(Boolean);\n    let i = 0;\n    while (i \u003c tokens.length \u0026\u0026 /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) {\n      i++;\n    }\n    if (i \u003e= tokens.length) continue;\n    const program = tokens[i].split(\"/\").pop();\n    if (program !== \"rg\") continue;\n    for (const tok of tokens.slice(i + 1)) {\n      if (/^-[A-Za-z]*r[A-Za-z]*$/.test(tok)) {\n        return true;\n      }\n    }\n  }\n  return false;\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function detectRgShortReplaceFlag\n\nexport function detectRgShortReplaceFlag(command: string): boolean {\n  const segments = command.split(/\u0026\u0026|\\|\\||[;|\\n]/);\n  for (const segment of segments) {\n    const tokens = segment.trim().split(/\\s+/).filter(Boolean);\n    let i = 0;\n    while (i \u003c tokens.length \u0026\u0026 /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) {\n      i++;\n    }\n    if (i \u003e= tokens.length) continue;\n    const program = tokens[i].split(\"/\").pop();\n    if (program !== \"rg\") continue;\n    for (const tok of tokens.slice(i + 1)) {\n      if (/^-[A-Za-z]*r[A-Za-z]*$/.test(tok)) {\n        return true;\n      }\n    }\n  }\n  return false;\n}",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function detectRgShortReplaceFlag",
-      "startLine": 136,
-      "startCol": 1,
-      "endLine": 154,
-      "endCol": 2
-    },
-    {
-      "text": "export function stripTrailingHeadTail(command: string): {\n  command: string;\n  wasTrimmed: boolean;\n} {\n  const trimmed = command.replace(/\\s*\\|\\s*(?:head|tail)\\b[^|]*$/, \"\");\n  if (trimmed !== command) {\n    return { command: trimmed, wasTrimmed: true };\n  }\n  return { command, wasTrimmed: false };\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function stripTrailingHeadTail\n\nexport function stripTrailingHeadTail(command: string): {\n  command: string;\n  wasTrimmed: boolean;\n} {\n  const trimmed = command.replace(/\\s*\\|\\s*(?:head|tail)\\b[^|]*$/, \"\");\n  if (trimmed !== command) {\n    return { command: trimmed, wasTrimmed: true };\n  }\n  return { command, wasTrimmed: false };\n}",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function stripTrailingHeadTail",
-      "startLine": 156,
-      "startCol": 1,
-      "endLine": 165,
-      "endCol": 2
-    },
-    {
-      "text": "const MAX_OUTPUT_TOKENS_FOR_AGENT = 2000;\nconst MAX_CHARS_PER_LINE = 800;\nconst CHARACTERS_PER_TOKEN = 4;",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts\n\nconst MAX_OUTPUT_TOKENS_FOR_AGENT = 2000;\nconst MAX_CHARS_PER_LINE = 800;\nconst CHARACTERS_PER_TOKEN = 4;",
-      "headingContext": "node/core/src/tools/bashCommand.ts",
-      "startLine": 167,
-      "startCol": 1,
-      "endLine": 169,
-      "endCol": 32
-    },
-    {
-      "text": "function abbreviateLine(text: string): string {\n  if (text.length \u003c= MAX_CHARS_PER_LINE) {\n    return text;\n  }\n  const halfLength = Math.floor(MAX_CHARS_PER_LINE / 2) - 3;\n  return (\n    text.substring(0, halfLength) +\n    \"...\" +\n    text.substring(text.length - halfLength)\n  );\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function abbreviateLine\n\nfunction abbreviateLine(text: string): string {\n  if (text.length \u003c= MAX_CHARS_PER_LINE) {\n    return text;\n  }\n  const halfLength = Math.floor(MAX_CHARS_PER_LINE / 2) - 3;\n  return (\n    text.substring(0, halfLength) +\n    \"...\" +\n    text.substring(text.length - halfLength)\n  );\n}",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function abbreviateLine",
-      "startLine": 171,
-      "startCol": 1,
-      "endLine": 181,
-      "endCol": 2
-    },
-    {
-      "text": "function formatOutputForToolResult(\n  output: OutputLine[],\n  exitCode: number,\n  signal: NodeJS.Signals | undefined,\n  durationMs: number,\n  logFilePath: string | undefined,\n): { formattedOutput: string; wasAbbreviated: boolean } {\n  const totalBudgetChars = MAX_OUTPUT_TOKENS_FOR_AGENT * CHARACTERS_PER_TOKEN;\n\n  let totalRawChars = 0;\n  for (const line of output) {\n    totalRawChars += line.text.length + 1;\n  }\n\n  if (totalRawChars \u003c= totalBudgetChars) {\n    let formattedOutput = \"\";\n    let currentStream: \"stdout\" | \"stderr\" | null = null;\n\n    for (const line of output) {\n      if (currentStream !== line.stream) {\n        formattedOutput += line.stream === \"stdout\" ? \"stdout:\\n\" : \"stderr:\\n\";\n        currentStream = line.stream;\n      }\n      formattedOutput += `${line.text}\\n`;\n    }\n\n    if (signal) {\n      formattedOutput += `terminated by signal ${signal} (${durationMs}ms)\\n`;\n    } else {\n      formattedOutput += `exit code ${exitCode} (${durationMs}ms)\\n`;\n    }\n\n    return { formattedOutput, wasAbbreviated: false };\n  }\n\n  const headBudgetChars = Math.floor(totalBudgetChars * 0.3);\n  const tailBudgetChars = Math.floor(totalBudgetChars * 0.7);\n\n  const headLines: { line: OutputLine; text: string }[] = [];\n  let headChars = 0;\n  for (let i = 0; i \u003c output.length; i++) {\n    const text = abbreviateLine(output[i].text);\n    const lineLength = text.length + 1;\n    if (headChars + lineLength \u003e headBudgetChars \u0026\u0026 headLines.length \u003e 0) {\n      break;\n    }\n    headLines.push({ line: output[i], text });\n    headChars += lineLength;\n  }\n\n  const tailLines: { line: OutputLine; text: string }[] = [];\n  let tailChars = 0;\n  const tailStartIndex = headLines.length;",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function formatOutputForToolResult\n\nfunction formatOutputForToolResult(\n  output: OutputLine[],\n  exitCode: number,\n  signal: NodeJS.Signals | undefined,\n  durationMs: number,\n  logFilePath: string | undefined,\n): { formattedOutput: string; wasAbbreviated: boolean } {\n  const totalBudgetChars = MAX_OUTPUT_TOKENS_FOR_AGENT * CHARACTERS_PER_TOKEN;\n\n  let totalRawChars = 0;\n  for (const line of output) {\n    totalRawChars += line.text.length + 1;\n  }\n\n  if (totalRawChars \u003c= totalBudgetChars) {\n    let formattedOutput = \"\";\n    let currentStream: \"stdout\" | \"stderr\" | null = null;\n\n    for (const line of output) {\n      if (currentStream !== line.stream) {\n        formattedOutput += line.stream === \"stdout\" ? \"stdout:\\n\" : \"stderr:\\n\";\n        currentStream = line.stream;\n      }\n      formattedOutput += `${line.text}\\n`;\n    }\n\n    if (signal) {\n      formattedOutput += `terminated by signal ${signal} (${durationMs}ms)\\n`;\n    } else {\n      formattedOutput += `exit code ${exitCode} (${durationMs}ms)\\n`;\n    }\n\n    return { formattedOutput, wasAbbreviated: false };\n  }\n\n  const headBudgetChars = Math.floor(totalBudgetChars * 0.3);\n  const tailBudgetChars = Math.floor(totalBudgetChars * 0.7);\n\n  const headLines: { line: OutputLine; text: string }[] = [];\n  let headChars = 0;\n  for (let i = 0; i \u003c output.length; i++) {\n    const text = abbreviateLine(output[i].text);\n    const lineLength = text.length + 1;\n    if (headChars + lineLength \u003e headBudgetChars \u0026\u0026 headLines.length \u003e 0) {\n      break;\n    }\n    headLines.push({ line: output[i], text });\n    headChars += lineLength;\n  }\n\n  const tailLines: { line: OutputLine; text: string }[] = [];\n  let tailChars = 0;\n  const tailStartIndex = headLines.length;",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function formatOutputForToolResult",
-      "startLine": 183,
-      "startCol": 1,
-      "endLine": 235,
-      "endCol": 43
-    },
-    {
-      "text": "for (let i = output.length - 1; i \u003e= tailStartIndex; i--) {\n    const text = abbreviateLine(output[i].text);\n    const lineLength = text.length + 1;\n    if (tailChars + lineLength \u003e tailBudgetChars \u0026\u0026 tailLines.length \u003e 0) {\n      break;\n    }\n    tailLines.unshift({ line: output[i], text });\n    tailChars += lineLength;\n  }\n\n  const firstTailIndex =\n    tailLines.length \u003e 0 ? output.indexOf(tailLines[0].line) : output.length;\n  const omittedCount = firstTailIndex - headLines.length;\n\n  let formattedOutput = \"\";\n  let currentStream: \"stdout\" | \"stderr\" | null = null;\n\n  for (const { line, text } of headLines) {\n    if (currentStream !== line.stream) {\n      formattedOutput += line.stream === \"stdout\" ? \"stdout:\\n\" : \"stderr:\\n\";\n      currentStream = line.stream;\n    }\n    formattedOutput += `${text}\\n`;\n  }\n\n  if (omittedCount \u003e 0) {\n    formattedOutput += `\\n... (${omittedCount} lines omitted) ...\\n\\n`;\n  }\n\n  for (const { line, text } of tailLines) {\n    if (currentStream !== line.stream) {\n      formattedOutput += line.stream === \"stdout\" ? \"stdout:\\n\" : \"stderr:\\n\";\n      currentStream = line.stream;\n    }\n    formattedOutput += `${text}\\n`;\n  }\n\n  if (signal) {\n    formattedOutput += `terminated by signal ${signal} (${durationMs}ms)\\n`;\n  } else {\n    formattedOutput += `exit code ${exitCode} (${durationMs}ms)\\n`;\n  }\n\n  if (logFilePath) {\n    formattedOutput += `\\n⚠️  the result was abbreviated. To see full output (${formatTokens(totalRawChars)}): ${logFilePath}`;\n  }\n\n  return { formattedOutput, wasAbbreviated: true };\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function formatOutputForToolResult\n\nfor (let i = output.length - 1; i \u003e= tailStartIndex; i--) {\n    const text = abbreviateLine(output[i].text);\n    const lineLength = text.length + 1;\n    if (tailChars + lineLength \u003e tailBudgetChars \u0026\u0026 tailLines.length \u003e 0) {\n      break;\n    }\n    tailLines.unshift({ line: output[i], text });\n    tailChars += lineLength;\n  }\n\n  const firstTailIndex =\n    tailLines.length \u003e 0 ? output.indexOf(tailLines[0].line) : output.length;\n  const omittedCount = firstTailIndex - headLines.length;\n\n  let formattedOutput = \"\";\n  let currentStream: \"stdout\" | \"stderr\" | null = null;\n\n  for (const { line, text } of headLines) {\n    if (currentStream !== line.stream) {\n      formattedOutput += line.stream === \"stdout\" ? \"stdout:\\n\" : \"stderr:\\n\";\n      currentStream = line.stream;\n    }\n    formattedOutput += `${text}\\n`;\n  }\n\n  if (omittedCount \u003e 0) {\n    formattedOutput += `\\n... (${omittedCount} lines omitted) ...\\n\\n`;\n  }\n\n  for (const { line, text } of tailLines) {\n    if (currentStream !== line.stream) {\n      formattedOutput += line.stream === \"stdout\" ? \"stdout:\\n\" : \"stderr:\\n\";\n      currentStream = line.stream;\n    }\n    formattedOutput += `${text}\\n`;\n  }\n\n  if (signal) {\n    formattedOutput += `terminated by signal ${signal} (${durationMs}ms)\\n`;\n  } else {\n    formattedOutput += `exit code ${exitCode} (${durationMs}ms)\\n`;\n  }\n\n  if (logFilePath) {\n    formattedOutput += `\\n⚠️  the result was abbreviated. To see full output (${formatTokens(totalRawChars)}): ${logFilePath}`;\n  }\n\n  return { formattedOutput, wasAbbreviated: true };\n}",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function formatOutputForToolResult",
-      "startLine": 236,
-      "startCol": 3,
-      "endLine": 284,
-      "endCol": 2
-    },
-    {
-      "text": "// ===== New function-based ToolInvocation =====\n\nexport type BashProgress = {\n  liveOutput: OutputLine[];\n  startTime: number | undefined;\n};",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts\n\n// ===== New function-based ToolInvocation =====\n\nexport type BashProgress = {\n  liveOutput: OutputLine[];\n  startTime: number | undefined;\n};",
-      "headingContext": "node/core/src/tools/bashCommand.ts",
-      "startLine": 286,
-      "startCol": 1,
-      "endLine": 291,
-      "endCol": 3
-    },
-    {
-      "text": "export function execute(\n  request: ToolRequest,\n  context: {\n    shell: Shell;\n    requestRender: () =\u003e void;\n  },\n): ToolInvocation \u0026 { progress: BashProgress } {\n  const progress: BashProgress = {\n    liveOutput: [],\n    startTime: undefined,\n  };\n\n  const { command: sanitizedCommand, wasTrimmed } = stripTrailingHeadTail(\n    request.input.command,\n  );\n\n  if (detectRgShortReplaceFlag(sanitizedCommand)) {\n    return {\n      promise: Promise.resolve({\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: RG_REPLACE_WARNING,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      })",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute\n\nexport function execute(\n  request: ToolRequest,\n  context: {\n    shell: Shell;\n    requestRender: () =\u003e void;\n  },\n): ToolInvocation \u0026 { progress: BashProgress } {\n  const progress: BashProgress = {\n    liveOutput: [],\n    startTime: undefined,\n  };\n\n  const { command: sanitizedCommand, wasTrimmed } = stripTrailingHeadTail(\n    request.input.command,\n  );\n\n  if (detectRgShortReplaceFlag(sanitizedCommand)) {\n    return {\n      promise: Promise.resolve({\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: RG_REPLACE_WARNING,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      })",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute",
-      "startLine": 293,
-      "startCol": 1,
-      "endLine": 319,
-      "endCol": 9
-    },
-    {
-      "text": "      abort: () =\u003e {}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute \u003e function abort\n\n      abort: () =\u003e {}",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute \u003e function abort",
-      "startLine": 320,
-      "startCol": 1,
-      "endLine": 320,
-      "endCol": 22
-    },
-    {
-      "text": "progress,\n    };\n  }\n\n  let aborted = false;\n  let tickInterval: ReturnType\u003ctypeof setInterval\u003e | undefined;",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute\n\nprogress,\n    };\n  }\n\n  let aborted = false;\n  let tickInterval: ReturnType\u003ctypeof setInterval\u003e | undefined;",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute",
-      "startLine": 321,
-      "startCol": 7,
-      "endLine": 326,
-      "endCol": 64
-    },
-    {
-      "text": "  function stopTickInterval() {\n    if (tickInterval) {\n      clearInterval(tickInterval);\n      tickInterval = undefined;\n    }\n  }",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute \u003e function stopTickInterval\n\n  function stopTickInterval() {\n    if (tickInterval) {\n      clearInterval(tickInterval);\n      tickInterval = undefined;\n    }\n  }",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute \u003e function stopTickInterval",
-      "startLine": 328,
-      "startCol": 1,
-      "endLine": 333,
-      "endCol": 4
-    },
-    {
-      "text": "promise = context.shell\n    .execute(sanitizedCommand, {\n      toolRequestId: request.id",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute\n\npromise = context.shell\n    .execute(sanitizedCommand, {\n      toolRequestId: request.id",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute",
-      "startLine": 335,
-      "startCol": 9,
-      "endLine": 337,
-      "endCol": 32
-    },
-    {
-      "text": "      onOutput: (line) =\u003e {\n        progress.liveOutput.push(line);\n        context.requestRender();\n      }",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute \u003e function onOutput\n\n      onOutput: (line) =\u003e {\n        progress.liveOutput.push(line);\n        context.requestRender();\n      }",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute \u003e function onOutput",
-      "startLine": 338,
-      "startCol": 1,
-      "endLine": 341,
-      "endCol": 8
-    },
-    {
-      "text": "      onStart: () =\u003e {\n        stopTickInterval();\n        progress.liveOutput.length = 0;\n        progress.startTime = Date.now();\n        tickInterval = setInterval(() =\u003e {\n          context.requestRender();\n        }, 1000);\n      }",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute \u003e function onStart\n\n      onStart: () =\u003e {\n        stopTickInterval();\n        progress.liveOutput.length = 0;\n        progress.startTime = Date.now();\n        tickInterval = setInterval(() =\u003e {\n          context.requestRender();\n        }, 1000);\n      }",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute \u003e function onStart",
-      "startLine": 342,
-      "startCol": 1,
-      "endLine": 349,
-      "endCol": 8
-    },
-    {
-      "text": "then((result): ProviderToolResult =\u003e {\n      if (aborted) {\n        stopTickInterval();\n        const { formattedOutput } = formatOutputForToolResult(\n          result.output,\n          result.exitCode,\n          result.signal,\n          result.durationMs,\n          result.logFilePath,\n        );\n        const error = formattedOutput\n          ? `Request was aborted by the user.\\n\\nOutput before termination:\\n${formattedOutput}`\n          : \"Request was aborted by the user.\";\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error,\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n      stopTickInterval();\n\n      const formatted = formatOutputForToolResult(\n        result.output,\n        result.exitCode,\n        result.signal,\n        result.durationMs,\n        result.logFilePath,\n      );\n      const wasAbbreviated = formatted.wasAbbreviated;\n      const formattedOutput = wasTrimmed\n        ? formatted.formattedOutput + TRIM_REMINDER\n        : formatted.formattedOutput;",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute\n\nthen((result): ProviderToolResult =\u003e {\n      if (aborted) {\n        stopTickInterval();\n        const { formattedOutput } = formatOutputForToolResult(\n          result.output,\n          result.exitCode,\n          result.signal,\n          result.durationMs,\n          result.logFilePath,\n        );\n        const error = formattedOutput\n          ? `Request was aborted by the user.\\n\\nOutput before termination:\\n${formattedOutput}`\n          : \"Request was aborted by the user.\";\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error,\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n      stopTickInterval();\n\n      const formatted = formatOutputForToolResult(\n        result.output,\n        result.exitCode,\n        result.signal,\n        result.durationMs,\n        result.logFilePath,\n      );\n      const wasAbbreviated = formatted.wasAbbreviated;\n      const formattedOutput = wasTrimmed\n        ? formatted.formattedOutput + TRIM_REMINDER\n        : formatted.formattedOutput;",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute",
-      "startLine": 351,
-      "startCol": 6,
-      "endLine": 386,
-      "endCol": 37
-    },
-    {
-      "text": "return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text: formattedOutput,\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          ],\n          structuredResult: {\n            toolName: \"bash_command\" as const,\n            exitCode: result.exitCode,\n            signal: result.signal ? String(result.signal) : undefined,\n            logFilePath: result.logFilePath,\n            logFileLineCount: result.logFilePath\n              ? result.output.length\n              : undefined,\n            logFileCharCount: result.logFilePath\n              ? result.output.reduce(\n                  (acc, line) =\u003e acc + line.text.length + 1,\n                  0,\n                )\n              : undefined,\n            outputText: formattedOutput.replace(\n              /\\n?⚠️ {2}the result was abbreviated\\. To see full output \\([^)]*\\): .+$/m,\n              \"\",\n            ),\n            wasAbbreviated,\n          },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    })\n    .catch",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute\n\nreturn {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text: formattedOutput,\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          ],\n          structuredResult: {\n            toolName: \"bash_command\" as const,\n            exitCode: result.exitCode,\n            signal: result.signal ? String(result.signal) : undefined,\n            logFilePath: result.logFilePath,\n            logFileLineCount: result.logFilePath\n              ? result.output.length\n              : undefined,\n            logFileCharCount: result.logFilePath\n              ? result.output.reduce(\n                  (acc, line) =\u003e acc + line.text.length + 1,\n                  0,\n                )\n              : undefined,\n            outputText: formattedOutput.replace(\n              /\\n?⚠️ {2}the result was abbreviated\\. To see full output \\([^)]*\\): .+$/m,\n              \"\",\n            ),\n            wasAbbreviated,\n          },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    })\n    .catch",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute",
-      "startLine": 388,
-      "startCol": 7,
-      "endLine": 424,
-      "endCol": 11
-    },
-    {
-      "text": "((error: Error): ProviderToolResult =\u003e {\n      if (aborted) {\n        stopTickInterval();\n        const durationMs = progress.startTime\n          ? Date.now() - progress.startTime\n          : 0;\n        const formattedOutput =\n          progress.liveOutput.length \u003e 0\n            ? formatOutputForToolResult(\n                progress.liveOutput,\n                1,\n                undefined,\n                durationMs,\n                undefined,\n              ).formattedOutput\n            : \"\";\n        const errorMsg = formattedOutput\n          ? `Request was aborted by the user.\\n\\nOutput before termination:\\n${formattedOutput}`\n          : \"Request was aborted by the user.\";\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error: errorMsg,\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n      stopTickInterval();\n\n      const durationMs = progress.startTime\n        ? Date.now() - progress.startTime\n        : 0;\n      const durationStr = durationMs \u003e 0 ? ` (${durationMs}ms)` : \"\";\n\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: `Error: ${error.message}${durationStr}`,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    });\n\n  return {\n    promise",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute\n\n((error: Error): ProviderToolResult =\u003e {\n      if (aborted) {\n        stopTickInterval();\n        const durationMs = progress.startTime\n          ? Date.now() - progress.startTime\n          : 0;\n        const formattedOutput =\n          progress.liveOutput.length \u003e 0\n            ? formatOutputForToolResult(\n                progress.liveOutput,\n                1,\n                undefined,\n                durationMs,\n                undefined,\n              ).formattedOutput\n            : \"\";\n        const errorMsg = formattedOutput\n          ? `Request was aborted by the user.\\n\\nOutput before termination:\\n${formattedOutput}`\n          : \"Request was aborted by the user.\";\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error: errorMsg,\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n      stopTickInterval();\n\n      const durationMs = progress.startTime\n        ? Date.now() - progress.startTime\n        : 0;\n      const durationStr = durationMs \u003e 0 ? ` (${durationMs}ms)` : \"\";\n\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: `Error: ${error.message}${durationStr}`,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    });\n\n  return {\n    promise",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute",
-      "startLine": 424,
-      "startCol": 11,
-      "endLine": 472,
-      "endCol": 12
-    },
-    {
-      "text": "    abort: () =\u003e {\n      aborted = true;\n      stopTickInterval();\n      context.shell.terminate();\n    }",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute \u003e function abort\n\n    abort: () =\u003e {\n      aborted = true;\n      stopTickInterval();\n      context.shell.terminate();\n    }",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute \u003e function abort",
-      "startLine": 473,
-      "startCol": 1,
-      "endLine": 477,
-      "endCol": 6
-    },
-    {
-      "text": "progress,\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/bashCommand.ts \u003e function execute\n\nprogress,\n  };\n}",
-      "headingContext": "node/core/src/tools/bashCommand.ts \u003e function execute",
-      "startLine": 478,
-      "startCol": 5,
-      "endLine": 480,
-      "endCol": 2
+      "start": 14209,
+      "end": 14612
     }
   ]
 }

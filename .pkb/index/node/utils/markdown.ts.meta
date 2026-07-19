@@ -1,24 +1,11 @@
 {
   "blobSha": "54d095c0a9884f8416e47bdcb1375f213bf70f0f",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import path from \"node:path\";",
-      "contextualizedText": "// node/utils/markdown.ts\n\nimport path from \"node:path\";",
-      "headingContext": "node/utils/markdown.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 1,
-      "endCol": 30
-    },
-    {
-      "text": "/** What to append to a code block, so like:\n * ```ts\n * ...\n * ```\n */\nexport function getMarkdownExt(fileName: string): string {\n  return path.extname(fileName).slice(1); // slice to remove the dot\n}",
-      "contextualizedText": "// node/utils/markdown.ts \u003e function getMarkdownExt\n\n/** What to append to a code block, so like:\n * ```ts\n * ...\n * ```\n */\nexport function getMarkdownExt(fileName: string): string {\n  return path.extname(fileName).slice(1); // slice to remove the dot\n}",
-      "headingContext": "node/utils/markdown.ts \u003e function getMarkdownExt",
-      "startLine": 3,
-      "startCol": 1,
-      "endLine": 10,
-      "endCol": 2
+      "start": 0,
+      "end": 232
     }
   ]
 }

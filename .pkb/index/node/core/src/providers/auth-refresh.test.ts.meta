@@ -1,78 +1,19 @@
 {
   "blobSha": "3cd8d0be29d8ab1eef9019447b91cfbc6aed7312",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { APIError } from \"@anthropic-ai/sdk\";\nimport { afterEach, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport type { Logger } from \"../logger.ts\";\nimport {\n  isAuthError,\n  makeRefreshAuth,\n  REFRESH_WINDOW_MS,\n  type RunCommand,\n} from \"./auth-refresh.ts\";\n\nconst noopLogger: Logger",
-      "contextualizedText": "// node/core/src/providers/auth-refresh.test.ts\n\nimport { APIError } from \"@anthropic-ai/sdk\";\nimport { afterEach, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport type { Logger } from \"../logger.ts\";\nimport {\n  isAuthError,\n  makeRefreshAuth,\n  REFRESH_WINDOW_MS,\n  type RunCommand,\n} from \"./auth-refresh.ts\";\n\nconst noopLogger: Logger",
-      "headingContext": "node/core/src/providers/auth-refresh.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 11,
-      "endCol": 25
+      "start": 0,
+      "end": 1900
     },
     {
-      "text": "  info: () =\u003e {}",
-      "contextualizedText": "// node/core/src/providers/auth-refresh.test.ts \u003e function info\n\n  info: () =\u003e {}",
-      "headingContext": "node/core/src/providers/auth-refresh.test.ts \u003e function info",
-      "startLine": 12,
-      "startCol": 1,
-      "endLine": 12,
-      "endCol": 17
+      "start": 1904,
+      "end": 3960
     },
     {
-      "text": "  warn: () =\u003e {}",
-      "contextualizedText": "// node/core/src/providers/auth-refresh.test.ts \u003e function warn\n\n  warn: () =\u003e {}",
-      "headingContext": "node/core/src/providers/auth-refresh.test.ts \u003e function warn",
-      "startLine": 13,
-      "startCol": 1,
-      "endLine": 13,
-      "endCol": 17
-    },
-    {
-      "text": "  error: () =\u003e {}",
-      "contextualizedText": "// node/core/src/providers/auth-refresh.test.ts \u003e function error\n\n  error: () =\u003e {}",
-      "headingContext": "node/core/src/providers/auth-refresh.test.ts \u003e function error",
-      "startLine": 14,
-      "startCol": 1,
-      "endLine": 14,
-      "endCol": 18
-    },
-    {
-      "text": "  debug: () =\u003e {}",
-      "contextualizedText": "// node/core/src/providers/auth-refresh.test.ts \u003e function debug\n\n  debug: () =\u003e {}",
-      "headingContext": "node/core/src/providers/auth-refresh.test.ts \u003e function debug",
-      "startLine": 15,
-      "startCol": 1,
-      "endLine": 15,
-      "endCol": 18
-    },
-    {
-      "text": "describe(\"isAuthError\", () =\u003e {\n  it(\"detects TokenProviderError by name\", () =\u003e {\n    const err = new Error(\"Token is expired.\");\n    err.name = \"TokenProviderError\";\n    expect(isAuthError(err)).toBe(true);\n  });\n\n  it(\"detects CredentialsProviderError by name\", () =\u003e {\n    const err = new Error(\"nope\");\n    err.name = \"CredentialsProviderError\";\n    expect(isAuthError(err)).toBe(true);\n  });\n\n  it(\"detects 'Token is expired' message\", () =\u003e {\n    expect(isAuthError(new Error(\"Token is expired. Please refresh.\"))).toBe(\n      true,\n    );\n  });\n\n  it(\"detects ExpiredToken / ExpiredTokenException\", () =\u003e {\n    expect(isAuthError(new Error(\"ExpiredToken: bad creds\"))).toBe(true);\n    expect(isAuthError(new Error(\"ExpiredTokenException: nope\"))).toBe(true);\n  });\n\n  it(\"detects 'SSO session token ... not found or is invalid'\", () =\u003e {\n    expect(\n      isAuthError(\n        new Error(\n          \"The SSO session token associated with profile=dev was not found or is invalid. To refresh this SSO session run 'aws sso login' with the corresponding profile.\",\n        ),\n      ),\n    ).toBe(true);\n  });\n\n  it(\"detects 401/403 APIError\", () =\u003e {\n    const err401 = new APIError(\n      401,\n      { type: \"error\", message: \"unauth\" },\n      \"unauth\",\n      new Headers(),\n    );\n    const err403 = new APIError(\n      403,\n      { type: \"error\", message: \"forbidden\" },\n      \"forbidden\",\n      new Headers(),\n    );\n    expect(isAuthError(err401)).toBe(true);\n    expect(isAuthError(err403)).toBe(true);\n  });\n\n  it(\"does not match unrelated errors\", () =\u003e {\n    expect(isAuthError(new Error(\"random thing\"))).toBe(false);\n    const apiErr = new APIError(\n      500,\n      { type: \"error\", message: \"boom\" },\n      \"boom\",\n      new Headers(),\n    );\n    expect(isAuthError(apiErr)).toBe(false);\n    expect(isAuthError(\"not an error\")).toBe(false);\n    expect(isAuthError(null)).toBe(false);\n  });\n});\n\ndescribe(\"makeRefreshAuth\", () =\u003e {\n  beforeEach(() =\u003e {\n    vi.useFakeTimers();\n  });",
-      "contextualizedText": "// node/core/src/providers/auth-refresh.test.ts\n\ndescribe(\"isAuthError\", () =\u003e {\n  it(\"detects TokenProviderError by name\", () =\u003e {\n    const err = new Error(\"Token is expired.\");\n    err.name = \"TokenProviderError\";\n    expect(isAuthError(err)).toBe(true);\n  });\n\n  it(\"detects CredentialsProviderError by name\", () =\u003e {\n    const err = new Error(\"nope\");\n    err.name = \"CredentialsProviderError\";\n    expect(isAuthError(err)).toBe(true);\n  });\n\n  it(\"detects 'Token is expired' message\", () =\u003e {\n    expect(isAuthError(new Error(\"Token is expired. Please refresh.\"))).toBe(\n      true,\n    );\n  });\n\n  it(\"detects ExpiredToken / ExpiredTokenException\", () =\u003e {\n    expect(isAuthError(new Error(\"ExpiredToken: bad creds\"))).toBe(true);\n    expect(isAuthError(new Error(\"ExpiredTokenException: nope\"))).toBe(true);\n  });\n\n  it(\"detects 'SSO session token ... not found or is invalid'\", () =\u003e {\n    expect(\n      isAuthError(\n        new Error(\n          \"The SSO session token associated with profile=dev was not found or is invalid. To refresh this SSO session run 'aws sso login' with the corresponding profile.\",\n        ),\n      ),\n    ).toBe(true);\n  });\n\n  it(\"detects 401/403 APIError\", () =\u003e {\n    const err401 = new APIError(\n      401,\n      { type: \"error\", message: \"unauth\" },\n      \"unauth\",\n      new Headers(),\n    );\n    const err403 = new APIError(\n      403,\n      { type: \"error\", message: \"forbidden\" },\n      \"forbidden\",\n      new Headers(),\n    );\n    expect(isAuthError(err401)).toBe(true);\n    expect(isAuthError(err403)).toBe(true);\n  });\n\n  it(\"does not match unrelated errors\", () =\u003e {\n    expect(isAuthError(new Error(\"random thing\"))).toBe(false);\n    const apiErr = new APIError(\n      500,\n      { type: \"error\", message: \"boom\" },\n      \"boom\",\n      new Headers(),\n    );\n    expect(isAuthError(apiErr)).toBe(false);\n    expect(isAuthError(\"not an error\")).toBe(false);\n    expect(isAuthError(null)).toBe(false);\n  });\n});\n\ndescribe(\"makeRefreshAuth\", () =\u003e {\n  beforeEach(() =\u003e {\n    vi.useFakeTimers();\n  });",
-      "headingContext": "node/core/src/providers/auth-refresh.test.ts",
-      "startLine": 18,
-      "startCol": 1,
-      "endLine": 86,
-      "endCol": 6
-    },
-    {
-      "text": "afterEach(() =\u003e {\n    vi.useRealTimers();\n  });\n\n  it(\"resolves when the command succeeds\", async () =\u003e {\n    const runCommand = vi.fn\u003cRunCommand\u003e().mockResolvedValue({\n      stdout: \"ok\",\n      stderr: \"\",\n    });\n    const refresh = makeRefreshAuth(\"aws sso login\", noopLogger, runCommand);\n    await expect(refresh()).resolves.toBeUndefined();\n    expect(runCommand).toHaveBeenCalledTimes(1);\n    expect(runCommand).toHaveBeenCalledWith(\"aws sso login\");\n  });\n\n  it(\"rejects with stderr text when the command fails\", async () =\u003e {\n    const runCommand = vi\n      .fn\u003cRunCommand\u003e()\n      .mockRejectedValue(new Error(\"exit 1\\nboom on stderr\"));\n    const refresh = makeRefreshAuth(\"bad-cmd\", noopLogger, runCommand);\n    await expect(refresh()).rejects.toThrow(/boom on stderr/);\n    expect(runCommand).toHaveBeenCalledTimes(1);\n  });\n\n  it(\"rejects calls within 30s window without re-running command\", async () =\u003e {\n    const runCommand = vi.fn\u003cRunCommand\u003e().mockResolvedValue({\n      stdout: \"\",\n      stderr: \"\",\n    });\n    const refresh = makeRefreshAuth(\"aws sso login\", noopLogger, runCommand);\n\n    await refresh();\n    expect(runCommand).toHaveBeenCalledTimes(1);\n\n    vi.advanceTimersByTime(10_000);\n    await expect(refresh()).rejects.toThrow(/not retrying/);\n    expect(runCommand).toHaveBeenCalledTimes(1);\n  });\n\n  it(\"allows refresh after the window expires\", async () =\u003e {\n    const runCommand = vi.fn\u003cRunCommand\u003e().mockResolvedValue({\n      stdout: \"\",\n      stderr: \"\",\n    });\n    const refresh = makeRefreshAuth(\"aws sso login\", noopLogger, runCommand);\n\n    await refresh();\n    vi.advanceTimersByTime(REFRESH_WINDOW_MS + 1_000);\n    await refresh();\n\n    expect(runCommand).toHaveBeenCalledTimes(2);\n  });\n\n  it(\"coalesces concurrent calls into a single command invocation\", async () =\u003e {\n    let resolveCmd: (() =\u003e void) | undefined;\n    const runCommand = vi.fn\u003cRunCommand\u003e().mockImplementation(\n      () =\u003e\n        new Promise\u003c{ stdout: string; stderr: string }\u003e((res)",
-      "contextualizedText": "// node/core/src/providers/auth-refresh.test.ts\n\nafterEach(() =\u003e {\n    vi.useRealTimers();\n  });\n\n  it(\"resolves when the command succeeds\", async () =\u003e {\n    const runCommand = vi.fn\u003cRunCommand\u003e().mockResolvedValue({\n      stdout: \"ok\",\n      stderr: \"\",\n    });\n    const refresh = makeRefreshAuth(\"aws sso login\", noopLogger, runCommand);\n    await expect(refresh()).resolves.toBeUndefined();\n    expect(runCommand).toHaveBeenCalledTimes(1);\n    expect(runCommand).toHaveBeenCalledWith(\"aws sso login\");\n  });\n\n  it(\"rejects with stderr text when the command fails\", async () =\u003e {\n    const runCommand = vi\n      .fn\u003cRunCommand\u003e()\n      .mockRejectedValue(new Error(\"exit 1\\nboom on stderr\"));\n    const refresh = makeRefreshAuth(\"bad-cmd\", noopLogger, runCommand);\n    await expect(refresh()).rejects.toThrow(/boom on stderr/);\n    expect(runCommand).toHaveBeenCalledTimes(1);\n  });\n\n  it(\"rejects calls within 30s window without re-running command\", async () =\u003e {\n    const runCommand = vi.fn\u003cRunCommand\u003e().mockResolvedValue({\n      stdout: \"\",\n      stderr: \"\",\n    });\n    const refresh = makeRefreshAuth(\"aws sso login\", noopLogger, runCommand);\n\n    await refresh();\n    expect(runCommand).toHaveBeenCalledTimes(1);\n\n    vi.advanceTimersByTime(10_000);\n    await expect(refresh()).rejects.toThrow(/not retrying/);\n    expect(runCommand).toHaveBeenCalledTimes(1);\n  });\n\n  it(\"allows refresh after the window expires\", async () =\u003e {\n    const runCommand = vi.fn\u003cRunCommand\u003e().mockResolvedValue({\n      stdout: \"\",\n      stderr: \"\",\n    });\n    const refresh = makeRefreshAuth(\"aws sso login\", noopLogger, runCommand);\n\n    await refresh();\n    vi.advanceTimersByTime(REFRESH_WINDOW_MS + 1_000);\n    await refresh();\n\n    expect(runCommand).toHaveBeenCalledTimes(2);\n  });\n\n  it(\"coalesces concurrent calls into a single command invocation\", async () =\u003e {\n    let resolveCmd: (() =\u003e void) | undefined;\n    const runCommand = vi.fn\u003cRunCommand\u003e().mockImplementation(\n      () =\u003e\n        new Promise\u003c{ stdout: string; stderr: string }\u003e((res)",
-      "headingContext": "node/core/src/providers/auth-refresh.test.ts",
-      "startLine": 88,
-      "startCol": 3,
-      "endLine": 145,
-      "endCol": 62
-    },
-    {
-      "text": "resolveCmd = () =\u003e res({ stdout: \"\", stderr: \"\" });\n        }),\n    );\n    const refresh = makeRefreshAuth(\"aws sso login\", noopLogger, runCommand);\n\n    const p1 = refresh();\n    const p2 = refresh();\n\n    expect(runCommand).toHaveBeenCalledTimes(1);\n    resolveCmd!();\n    await Promise.all([p1, p2]);\n    expect(runCommand).toHaveBeenCalledTimes(1);",
-      "contextualizedText": "// node/core/src/providers/auth-refresh.test.ts\n\nresolveCmd = () =\u003e res({ stdout: \"\", stderr: \"\" });\n        }),\n    );\n    const refresh = makeRefreshAuth(\"aws sso login\", noopLogger, runCommand);\n\n    const p1 = refresh();\n    const p2 = refresh();\n\n    expect(runCommand).toHaveBeenCalledTimes(1);\n    resolveCmd!();\n    await Promise.all([p1, p2]);\n    expect(runCommand).toHaveBeenCalledTimes(1);",
-      "headingContext": "node/core/src/providers/auth-refresh.test.ts",
-      "startLine": 146,
-      "startCol": 11,
-      "endLine": 157,
-      "endCol": 49
+      "start": 3966,
+      "end": 4758
     }
   ]
 }

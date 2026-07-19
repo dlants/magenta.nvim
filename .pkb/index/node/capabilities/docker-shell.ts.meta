@@ -1,60 +1,15 @@
 {
   "blobSha": "f1dd320bbf580bd5f0a6d77876ed6048614d3255",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { spawn } from \"node:child_process\";\nimport type { ThreadId } from \"@magenta/core\";\nimport { withTimeout } from \"../utils/async.ts\";\nimport type { OutputLine, Shell, ShellResult } from \"./shell.ts\";\nimport {\n  createLogWriter,\n  escalateToSigkill,\n  processStreamData,\n  terminateProcess,\n} from \"./shell-utils.ts\";",
-      "contextualizedText": "// node/capabilities/docker-shell.ts\n\nimport { spawn } from \"node:child_process\";\nimport type { ThreadId } from \"@magenta/core\";\nimport { withTimeout } from \"../utils/async.ts\";\nimport type { OutputLine, Shell, ShellResult } from \"./shell.ts\";\nimport {\n  createLogWriter,\n  escalateToSigkill,\n  processStreamData,\n  terminateProcess,\n} from \"./shell-utils.ts\";",
-      "headingContext": "node/capabilities/docker-shell.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 10,
-      "endCol": 27
+      "start": 0,
+      "end": 2164
     },
     {
-      "text": "export class DockerShell implements Shell {\n  private runningProcess: ReturnType\u003ctypeof spawn\u003e | undefined;\n\n  constructor(\n    private context: {\n      container: string;\n      cwd: string;\n      threadId: ThreadId;\n    },\n  ) {}",
-      "contextualizedText": "// node/capabilities/docker-shell.ts \u003e class DockerShell\n\nexport class DockerShell implements Shell {\n  private runningProcess: ReturnType\u003ctypeof spawn\u003e | undefined;\n\n  constructor(\n    private context: {\n      container: string;\n      cwd: string;\n      threadId: ThreadId;\n    },\n  ) {}",
-      "headingContext": "node/capabilities/docker-shell.ts \u003e class DockerShell",
-      "startLine": 12,
-      "startCol": 1,
-      "endLine": 21,
-      "endCol": 7
-    },
-    {
-      "text": "  terminate(): void {\n    const childProcess = this.runningProcess;\n    if (!childProcess) return;\n\n    terminateProcess(childProcess);\n\n    setTimeout(() =\u003e {\n      if (this.runningProcess === childProcess) {\n        escalateToSigkill(childProcess);\n      }\n    }, 1000);\n  }",
-      "contextualizedText": "// node/capabilities/docker-shell.ts \u003e class DockerShell \u003e method terminate\n\n  terminate(): void {\n    const childProcess = this.runningProcess;\n    if (!childProcess) return;\n\n    terminateProcess(childProcess);\n\n    setTimeout(() =\u003e {\n      if (this.runningProcess === childProcess) {\n        escalateToSigkill(childProcess);\n      }\n    }, 1000);\n  }",
-      "headingContext": "node/capabilities/docker-shell.ts \u003e class DockerShell \u003e method terminate",
-      "startLine": 23,
-      "startCol": 1,
-      "endLine": 34,
-      "endCol": 4
-    },
-    {
-      "text": "  async execute(\n    command: string,\n    opts: {\n      toolRequestId: string;\n      onOutput?: (line: OutputLine) =\u003e void;\n      onStart?: () =\u003e void;\n    },\n  ): Promise\u003cShellResult\u003e {\n    const logWriter = createLogWriter(\n      this.context.threadId,\n      opts.toolRequestId,\n      command,\n    );\n\n    const output: OutputLine[] = [];\n    const startTime = Date.now();",
-      "contextualizedText": "// node/capabilities/docker-shell.ts \u003e class DockerShell \u003e method execute\n\n  async execute(\n    command: string,\n    opts: {\n      toolRequestId: string;\n      onOutput?: (line: OutputLine) =\u003e void;\n      onStart?: () =\u003e void;\n    },\n  ): Promise\u003cShellResult\u003e {\n    const logWriter = createLogWriter(\n      this.context.threadId,\n      opts.toolRequestId,\n      command,\n    );\n\n    const output: OutputLine[] = [];\n    const startTime = Date.now();",
-      "headingContext": "node/capabilities/docker-shell.ts \u003e class DockerShell \u003e method execute",
-      "startLine": 36,
-      "startCol": 1,
-      "endLine": 51,
-      "endCol": 34
-    },
-    {
-      "text": "{\n      const result = await withTimeout(\n        new Promise\u003c{\n          code: number | null;\n          signal: NodeJS.Signals | null;\n        }\u003e((resolve, reject) =\u003e {\n          const childProcess = spawn(\n            \"docker\",\n            [\n              \"exec\",\n              \"-w\",\n              this.context.cwd,\n              this.context.container,\n              \"bash\",\n              \"-c\",\n              command,\n            ],\n            {\n              stdio: [\"ignore\", \"pipe\", \"pipe\"],\n              detached: true,\n            },\n          );\n          this.runningProcess = childProcess;\n          opts.onStart?.();\n\n          childProcess.stdout?.on(\"data\", (data: Buffer) =\u003e {\n            processStreamData(\"stdout\", data, output, logWriter, opts.onOutput);\n          });\n\n          childProcess.stderr?.on(\"data\", (data: Buffer) =\u003e {\n            processStreamData(\"stderr\", data, output, logWriter, opts.onOutput);\n          });\n\n          childProcess.on(\n            \"close\",\n            (code: number | null, signal: NodeJS.Signals | null) =\u003e {\n              resolve({ code, signal });\n            },\n          );\n\n          childProcess.on(\"error\", (error: Error) =\u003e {\n            reject(error);\n          });\n        }),\n        300000,\n      );\n\n      const durationMs = Date.now() - startTime;\n\n      if (result.signal) {\n        logWriter.writeRaw(`terminated by signal ${result.signal}\\n`);\n      } else {\n        logWriter.writeRaw(`exit code ${result.code}\\n`);\n      }\n      logWriter.end();\n      this.runningProcess = undefined;\n\n      return {\n        exitCode: result.code ?? -1,\n        signal: result.signal ?? undefined,\n        output,\n        logFilePath: logWriter.filePath,\n        durationMs,\n      };\n    }",
-      "contextualizedText": "// node/capabilities/docker-shell.ts \u003e class DockerShell \u003e method execute\n\n{\n      const result = await withTimeout(\n        new Promise\u003c{\n          code: number | null;\n          signal: NodeJS.Signals | null;\n        }\u003e((resolve, reject) =\u003e {\n          const childProcess = spawn(\n            \"docker\",\n            [\n              \"exec\",\n              \"-w\",\n              this.context.cwd,\n              this.context.container,\n              \"bash\",\n              \"-c\",\n              command,\n            ],\n            {\n              stdio: [\"ignore\", \"pipe\", \"pipe\"],\n              detached: true,\n            },\n          );\n          this.runningProcess = childProcess;\n          opts.onStart?.();\n\n          childProcess.stdout?.on(\"data\", (data: Buffer) =\u003e {\n            processStreamData(\"stdout\", data, output, logWriter, opts.onOutput);\n          });\n\n          childProcess.stderr?.on(\"data\", (data: Buffer) =\u003e {\n            processStreamData(\"stderr\", data, output, logWriter, opts.onOutput);\n          });\n\n          childProcess.on(\n            \"close\",\n            (code: number | null, signal: NodeJS.Signals | null) =\u003e {\n              resolve({ code, signal });\n            },\n          );\n\n          childProcess.on(\"error\", (error: Error) =\u003e {\n            reject(error);\n          });\n        }),\n        300000,\n      );\n\n      const durationMs = Date.now() - startTime;\n\n      if (result.signal) {\n        logWriter.writeRaw(`terminated by signal ${result.signal}\\n`);\n      } else {\n        logWriter.writeRaw(`exit code ${result.code}\\n`);\n      }\n      logWriter.end();\n      this.runningProcess = undefined;\n\n      return {\n        exitCode: result.code ?? -1,\n        signal: result.signal ?? undefined,\n        output,\n        logFilePath: logWriter.filePath,\n        durationMs,\n      };\n    }",
-      "headingContext": "node/capabilities/docker-shell.ts \u003e class DockerShell \u003e method execute",
-      "startLine": 53,
-      "startCol": 9,
-      "endLine": 117,
-      "endCol": 6
-    },
-    {
-      "text": "catch (error) {\n      const durationMs = Date.now() - startTime;\n\n      if (this.runningProcess) {\n        this.runningProcess.kill();\n        this.runningProcess = undefined;\n      }\n\n      const errorMessage =\n        error instanceof Error ? error.message : String(error);\n\n      output.push({ stream: \"stderr\", text: errorMessage });\n      logWriter.write(\"stderr\", errorMessage);\n      logWriter.writeRaw(`exit code 1\\n`);\n      logWriter.end();\n\n      return {\n        exitCode: 1,\n        signal: undefined,\n        output,\n        logFilePath: logWriter.filePath,\n        durationMs,\n      };\n    }\n  }",
-      "contextualizedText": "// node/capabilities/docker-shell.ts \u003e class DockerShell \u003e method execute\n\ncatch (error) {\n      const durationMs = Date.now() - startTime;\n\n      if (this.runningProcess) {\n        this.runningProcess.kill();\n        this.runningProcess = undefined;\n      }\n\n      const errorMessage =\n        error instanceof Error ? error.message : String(error);\n\n      output.push({ stream: \"stderr\", text: errorMessage });\n      logWriter.write(\"stderr\", errorMessage);\n      logWriter.writeRaw(`exit code 1\\n`);\n      logWriter.end();\n\n      return {\n        exitCode: 1,\n        signal: undefined,\n        output,\n        logFilePath: logWriter.filePath,\n        durationMs,\n      };\n    }\n  }",
-      "headingContext": "node/capabilities/docker-shell.ts \u003e class DockerShell \u003e method execute",
-      "startLine": 117,
-      "startCol": 7,
-      "endLine": 141,
-      "endCol": 4
+      "start": 2176,
+      "end": 3580
     }
   ]
 }

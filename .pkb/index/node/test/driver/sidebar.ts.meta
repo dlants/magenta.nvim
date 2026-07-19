@@ -1,222 +1,27 @@
 {
   "blobSha": "ec49abf695571fa3c689381f0f7134b2388ea9c5",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { Magenta } from \"../../magenta.ts\";\nimport type { Line } from \"../../nvim/buffer.ts\";\nimport { getAllWindows } from \"../../nvim/nvim.ts\";\nimport type { Nvim } from \"../../nvim/nvim-node/index.ts\";\nimport type { Position0Indexed, Row0Indexed } from \"../../nvim/window.ts\";\nimport { type ByteIdx, pos0to1 } from \"../../nvim/window.ts\";\nimport type { BindingKey } from \"../../tea/bindings.ts\";\nimport { calculatePosition } from \"../../tea/util.ts\";\nimport { pollUntil } from \"../../utils/async.ts\";",
-      "contextualizedText": "// node/test/driver/sidebar.ts\n\nimport type { Magenta } from \"../../magenta.ts\";\nimport type { Line } from \"../../nvim/buffer.ts\";\nimport { getAllWindows } from \"../../nvim/nvim.ts\";\nimport type { Nvim } from \"../../nvim/nvim-node/index.ts\";\nimport type { Position0Indexed, Row0Indexed } from \"../../nvim/window.ts\";\nimport { type ByteIdx, pos0to1 } from \"../../nvim/window.ts\";\nimport type { BindingKey } from \"../../tea/bindings.ts\";\nimport { calculatePosition } from \"../../tea/util.ts\";\nimport { pollUntil } from \"../../utils/async.ts\";",
-      "headingContext": "node/test/driver/sidebar.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 9,
-      "endCol": 50
+      "start": 0,
+      "end": 2105
     },
     {
-      "text": "export class SidebarInteraction {\n  constructor(\n    private nvim: Nvim,\n    private magenta: Magenta,\n  ) {}",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction\n\nexport class SidebarInteraction {\n  constructor(\n    private nvim: Nvim,\n    private magenta: Magenta,\n  ) {}",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction",
-      "startLine": 11,
-      "startCol": 1,
-      "endLine": 15,
-      "endCol": 7
+      "start": 2109,
+      "end": 3549
     },
     {
-      "text": "/**\n   * Check if sidebar is currently visible\n   */\n  async isVisible(): Promise\u003cboolean\u003e {\n    try {\n      const windows = await getAllWindows(this.nvim);\n      for (const window of windows) {\n        try {\n          const magentaVar = await window.getVar(\"magenta\");\n          if (magentaVar) {\n            const isDisplayWindow = await window\n              .getVar(\"magenta_display_window\")\n              .catch(() =\u003e false);\n            if (!isDisplayWindow) {\n              return true;\n            }\n          }\n        } catch {\n          // Window doesn't have magenta var, continue\n        }\n      }\n      return false;\n    } catch {\n      return false;\n    }\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method isVisible\n\n/**\n   * Check if sidebar is currently visible\n   */\n  async isVisible(): Promise\u003cboolean\u003e {\n    try {\n      const windows = await getAllWindows(this.nvim);\n      for (const window of windows) {\n        try {\n          const magentaVar = await window.getVar(\"magenta\");\n          if (magentaVar) {\n            const isDisplayWindow = await window\n              .getVar(\"magenta_display_window\")\n              .catch(() =\u003e false);\n            if (!isDisplayWindow) {\n              return true;\n            }\n          }\n        } catch {\n          // Window doesn't have magenta var, continue\n        }\n      }\n      return false;\n    } catch {\n      return false;\n    }\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method isVisible",
-      "startLine": 17,
-      "startCol": 3,
-      "endLine": 42,
-      "endCol": 4
+      "start": 3553,
+      "end": 5602
     },
     {
-      "text": "/**\n   * Show the sidebar\n   */\n  async show(): Promise\u003cvoid\u003e {\n    const isAlreadyVisible = await this.isVisible();\n    if (!isAlreadyVisible) {\n      await this.magenta.command(\"toggle\");\n    }\n\n    await this.waitForVisible();\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method show\n\n/**\n   * Show the sidebar\n   */\n  async show(): Promise\u003cvoid\u003e {\n    const isAlreadyVisible = await this.isVisible();\n    if (!isAlreadyVisible) {\n      await this.magenta.command(\"toggle\");\n    }\n\n    await this.waitForVisible();\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method show",
-      "startLine": 44,
-      "startCol": 3,
-      "endLine": 54,
-      "endCol": 4
+      "start": 5606,
+      "end": 7602
     },
     {
-      "text": "/**\n   * Hide the sidebar\n   */\n  async hide(): Promise\u003cvoid\u003e {\n    const isCurrentlyVisible = await this.isVisible();\n    if (isCurrentlyVisible) {\n      await this.magenta.command(\"toggle\");\n    }\n\n    await this.waitForHidden();\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method hide\n\n/**\n   * Hide the sidebar\n   */\n  async hide(): Promise\u003cvoid\u003e {\n    const isCurrentlyVisible = await this.isVisible();\n    if (isCurrentlyVisible) {\n      await this.magenta.command(\"toggle\");\n    }\n\n    await this.waitForHidden();\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method hide",
-      "startLine": 56,
-      "startCol": 3,
-      "endLine": 66,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Wait for sidebar to become visible\n   */\n  async waitForVisible(timeout: number = 1000): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const visible = await this.isVisible();\n        if (!visible) {\n          throw new Error(\"Sidebar not visible yet\");\n        }\n      },\n      { timeout },\n    );\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForVisible\n\n/**\n   * Wait for sidebar to become visible\n   */\n  async waitForVisible(timeout: number = 1000): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const visible = await this.isVisible();\n        if (!visible) {\n          throw new Error(\"Sidebar not visible yet\");\n        }\n      },\n      { timeout },\n    );\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForVisible",
-      "startLine": 68,
-      "startCol": 3,
-      "endLine": 81,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Wait for sidebar to become hidden\n   */\n  async waitForHidden(timeout: number = 1000): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const visible = await this.isVisible();\n        if (visible) {\n          throw new Error(\"Sidebar should be hidden\");\n        }\n      },\n      { timeout },\n    );\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForHidden\n\n/**\n   * Wait for sidebar to become hidden\n   */\n  async waitForHidden(timeout: number = 1000): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const visible = await this.isVisible();\n        if (visible) {\n          throw new Error(\"Sidebar should be hidden\");\n        }\n      },\n      { timeout },\n    );\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForHidden",
-      "startLine": 83,
-      "startCol": 3,
-      "endLine": 96,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Get the input buffer\n   */\n  getInputBuffer() {\n    return this.magenta.activeBuffers.inputBuffer;\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method getInputBuffer\n\n/**\n   * Get the input buffer\n   */\n  getInputBuffer() {\n    return this.magenta.activeBuffers.inputBuffer;\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method getInputBuffer",
-      "startLine": 98,
-      "startCol": 3,
-      "endLine": 103,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Get the display buffer\n   */\n  getDisplayBuffer() {\n    return this.magenta.activeBuffers.displayBuffer;\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method getDisplayBuffer\n\n/**\n   * Get the display buffer\n   */\n  getDisplayBuffer() {\n    return this.magenta.activeBuffers.displayBuffer;\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method getDisplayBuffer",
-      "startLine": 105,
-      "startCol": 3,
-      "endLine": 110,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Set text in the input buffer\n   */\n  async setInputText(text: string): Promise\u003cvoid\u003e {\n    const inputBuffer = this.getInputBuffer();\n    await inputBuffer.setLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: text.split(\"\\n\") as Line[],\n    });\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method setInputText\n\n/**\n   * Set text in the input buffer\n   */\n  async setInputText(text: string): Promise\u003cvoid\u003e {\n    const inputBuffer = this.getInputBuffer();\n    await inputBuffer.setLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: text.split(\"\\n\") as Line[],\n    });\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method setInputText",
-      "startLine": 112,
-      "startCol": 3,
-      "endLine": 122,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Get text from the input buffer\n   */\n  async getInputText(): Promise\u003cstring\u003e {\n    const inputBuffer = this.getInputBuffer();\n    const lines = await inputBuffer.getLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n    });\n    return lines.join(\"\\n\");\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method getInputText\n\n/**\n   * Get text from the input buffer\n   */\n  async getInputText(): Promise\u003cstring\u003e {\n    const inputBuffer = this.getInputBuffer();\n    const lines = await inputBuffer.getLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n    });\n    return lines.join(\"\\n\");\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method getInputText",
-      "startLine": 124,
-      "startCol": 3,
-      "endLine": 134,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Get text from the display buffer\n   */\n  async getDisplayText(): Promise\u003cstring\u003e {\n    const displayBuffer = this.getDisplayBuffer();\n    const lines = await displayBuffer.getLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n    });\n    return lines.join(\"\\n\");\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method getDisplayText\n\n/**\n   * Get text from the display buffer\n   */\n  async getDisplayText(): Promise\u003cstring\u003e {\n    const displayBuffer = this.getDisplayBuffer();\n    const lines = await displayBuffer.getLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n    });\n    return lines.join(\"\\n\");\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method getDisplayText",
-      "startLine": 136,
-      "startCol": 3,
-      "endLine": 146,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Wait for display buffer to contain specific text\n   */\n  async waitForDisplayText(\n    text: string,\n    timeout: number = 2000,\n    start: number = 0,\n  ): Promise\u003cPosition0Indexed\u003e {\n    let latestContent: string | undefined;\n    try {\n      return await pollUntil(\n        async () =\u003e {\n          const displayBuffer = this.getDisplayBuffer();\n          const lines = await displayBuffer.getLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n          });\n          latestContent = lines.slice(start).join(\"\\n\");\n          const index = Buffer.from(latestContent).indexOf(text) as ByteIdx;\n          if (index === -1) {\n            throw new Error(\n              `Unable to find text \"${text}\" after line ${start} in displayBuffer`,\n            );\n          }\n\n          return calculatePosition(\n            { row: start, col: 0 } as Position0Indexed,\n            Buffer.from(latestContent),\n            index,\n          );\n        },\n        { timeout },\n      );\n    } catch (e) {\n      throw new Error(\n        `${(e as Error).message}. Latest content: \"${latestContent}\"`,\n      );\n    }\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForDisplayText\n\n/**\n   * Wait for display buffer to contain specific text\n   */\n  async waitForDisplayText(\n    text: string,\n    timeout: number = 2000,\n    start: number = 0,\n  ): Promise\u003cPosition0Indexed\u003e {\n    let latestContent: string | undefined;\n    try {\n      return await pollUntil(\n        async () =\u003e {\n          const displayBuffer = this.getDisplayBuffer();\n          const lines = await displayBuffer.getLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n          });\n          latestContent = lines.slice(start).join(\"\\n\");\n          const index = Buffer.from(latestContent).indexOf(text) as ByteIdx;\n          if (index === -1) {\n            throw new Error(\n              `Unable to find text \"${text}\" after line ${start} in displayBuffer`,\n            );\n          }\n\n          return calculatePosition(\n            { row: start, col: 0 } as Position0Indexed,\n            Buffer.from(latestContent),\n            index,\n          );\n        },\n        { timeout },\n      );\n    } catch (e) {\n      throw new Error(\n        `${(e as Error).message}. Latest content: \"${latestContent}\"`,\n      );\n    }\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForDisplayText",
-      "startLine": 148,
-      "startCol": 3,
-      "endLine": 186,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Wait for input buffer to contain specific text\n   */\n  async waitForInputText(\n    text: string,\n    timeout: number = 2000,\n    start: number = 0,\n  ): Promise\u003cPosition0Indexed\u003e {\n    return pollUntil(\n      async () =\u003e {\n        const inputBuffer = this.getInputBuffer();\n        const lines = await inputBuffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        const content = lines.slice(start).join(\"\\n\");\n        const index = Buffer.from(content).indexOf(text) as ByteIdx;\n        if (index === -1) {\n          throw new Error(\n            `Unable to find text \"${text}\" after line ${start} in inputBuffer. Content: \"${content}\"`,\n          );\n        }\n\n        return calculatePosition(\n          { row: start, col: 0 } as Position0Indexed,\n          Buffer.from(content),\n          index,\n        );\n      },\n      { timeout },\n    );\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForInputText\n\n/**\n   * Wait for input buffer to contain specific text\n   */\n  async waitForInputText(\n    text: string,\n    timeout: number = 2000,\n    start: number = 0,\n  ): Promise\u003cPosition0Indexed\u003e {\n    return pollUntil(\n      async () =\u003e {\n        const inputBuffer = this.getInputBuffer();\n        const lines = await inputBuffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        const content = lines.slice(start).join(\"\\n\");\n        const index = Buffer.from(content).indexOf(text) as ByteIdx;\n        if (index === -1) {\n          throw new Error(\n            `Unable to find text \"${text}\" after line ${start} in inputBuffer. Content: \"${content}\"`,\n          );\n        }\n\n        return calculatePosition(\n          { row: start, col: 0 } as Position0Indexed,\n          Buffer.from(content),\n          index,\n        );\n      },\n      { timeout },\n    );\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForInputText",
-      "startLine": 188,
-      "startCol": 3,
-      "endLine": 219,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Wait for display buffer to not contain specific text\n   */\n  async waitForDisplayTextAbsent(\n    text: string,\n    timeout: number = 2000,\n  ): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const content = await this.getDisplayText();\n        if (content.includes(text)) {\n          throw new Error(\n            `Display buffer should not contain text \"${text}\", but content is: \"${content}\"`,\n          );\n        }\n      },\n      { timeout },\n    );\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForDisplayTextAbsent\n\n/**\n   * Wait for display buffer to not contain specific text\n   */\n  async waitForDisplayTextAbsent(\n    text: string,\n    timeout: number = 2000,\n  ): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const content = await this.getDisplayText();\n        if (content.includes(text)) {\n          throw new Error(\n            `Display buffer should not contain text \"${text}\", but content is: \"${content}\"`,\n          );\n        }\n      },\n      { timeout },\n    );\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForDisplayTextAbsent",
-      "startLine": 221,
-      "startCol": 3,
-      "endLine": 239,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Trigger a key on the display buffer at a specific position\n   */\n  async triggerDisplayKey(\n    pos: Position0Indexed,\n    key: BindingKey,\n  ): Promise\u003cvoid\u003e {\n    const visibleState = this.getVisibleState();\n    const { displayWindow } = visibleState;\n\n    await this.nvim.call(\"nvim_set_current_win\", [displayWindow.id]);\n    await displayWindow.setCursor(pos0to1(pos));\n\n    await this.nvim.call(\"nvim_exec_lua\", [\n      `vim.rpcnotify(${this.nvim.channelId}, \"magentaKey\", \"${key}\")`,\n      [],\n    ]);\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method triggerDisplayKey\n\n/**\n   * Trigger a key on the display buffer at a specific position\n   */\n  async triggerDisplayKey(\n    pos: Position0Indexed,\n    key: BindingKey,\n  ): Promise\u003cvoid\u003e {\n    const visibleState = this.getVisibleState();\n    const { displayWindow } = visibleState;\n\n    await this.nvim.call(\"nvim_set_current_win\", [displayWindow.id]);\n    await displayWindow.setCursor(pos0to1(pos));\n\n    await this.nvim.call(\"nvim_exec_lua\", [\n      `vim.rpcnotify(${this.nvim.channelId}, \"magentaKey\", \"${key}\")`,\n      [],\n    ]);\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method triggerDisplayKey",
-      "startLine": 241,
-      "startCol": 3,
-      "endLine": 258,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Trigger a key on the display buffer at the position of specific text\n   */\n  async triggerDisplayKeyOnText(\n    text: string,\n    key: BindingKey,\n    start: number = 0,\n  ): Promise\u003cvoid\u003e {\n    const position = await this.waitForDisplayText(text, 2000, start);\n    await this.triggerDisplayKey(position, key);\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method triggerDisplayKeyOnText\n\n/**\n   * Trigger a key on the display buffer at the position of specific text\n   */\n  async triggerDisplayKeyOnText(\n    text: string,\n    key: BindingKey,\n    start: number = 0,\n  ): Promise\u003cvoid\u003e {\n    const position = await this.waitForDisplayText(text, 2000, start);\n    await this.triggerDisplayKey(position, key);\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method triggerDisplayKeyOnText",
-      "startLine": 260,
-      "startCol": 3,
-      "endLine": 270,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Send a message via the sidebar\n   */\n  async sendMessage(): Promise\u003cvoid\u003e {\n    await this.magenta.command(\"send\");\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method sendMessage\n\n/**\n   * Send a message via the sidebar\n   */\n  async sendMessage(): Promise\u003cvoid\u003e {\n    await this.magenta.command(\"send\");\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method sendMessage",
-      "startLine": 272,
-      "startCol": 3,
-      "endLine": 277,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Abort the current operation\n   */\n  async abort(): Promise\u003cvoid\u003e {\n    await this.magenta.command(\"abort\");\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method abort\n\n/**\n   * Abort the current operation\n   */\n  async abort(): Promise\u003cvoid\u003e {\n    await this.magenta.command(\"abort\");\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method abort",
-      "startLine": 279,
-      "startCol": 3,
-      "endLine": 284,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Send keys to the input buffer\n   */\n  async sendKeysToInput(keys: string): Promise\u003cvoid\u003e {\n    const visibleState = this.getVisibleState();\n    const { inputWindow } = visibleState;\n\n    // Switch to input window\n    await this.nvim.call(\"nvim_set_current_win\", [inputWindow.id]);\n\n    // Send keys using nvim_input (more direct for testing)\n    await this.nvim.call(\"nvim_input\", [keys]);\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method sendKeysToInput\n\n/**\n   * Send keys to the input buffer\n   */\n  async sendKeysToInput(keys: string): Promise\u003cvoid\u003e {\n    const visibleState = this.getVisibleState();\n    const { inputWindow } = visibleState;\n\n    // Switch to input window\n    await this.nvim.call(\"nvim_set_current_win\", [inputWindow.id]);\n\n    // Send keys using nvim_input (more direct for testing)\n    await this.nvim.call(\"nvim_input\", [keys]);\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method sendKeysToInput",
-      "startLine": 286,
-      "startCol": 3,
-      "endLine": 298,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Get the visible sidebar state (throws if not visible)\n   */\n  private getVisibleState() {\n    if (this.magenta.sidebar.state.state !== \"visible\") {\n      throw new Error(\"Sidebar is not visible\");\n    }\n    return this.magenta.sidebar.state;\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method getVisibleState\n\n/**\n   * Get the visible sidebar state (throws if not visible)\n   */\n  private getVisibleState() {\n    if (this.magenta.sidebar.state.state !== \"visible\") {\n      throw new Error(\"Sidebar is not visible\");\n    }\n    return this.magenta.sidebar.state;\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method getVisibleState",
-      "startLine": 300,
-      "startCol": 3,
-      "endLine": 308,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Assert that display buffer content exactly matches expected text\n   */\n  async assertDisplayContent(\n    expectedText: string,\n    timeout: number = 2000,\n  ): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const content = await this.getDisplayText();\n        if (content !== expectedText) {\n          throw new Error(\n            `Display buffer content does not match.\\nExpected:\\n\"${expectedText}\"\\nActual:\\n\"${content}\"`,\n          );\n        }\n      },\n      { timeout },\n    );\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method assertDisplayContent\n\n/**\n   * Assert that display buffer content exactly matches expected text\n   */\n  async assertDisplayContent(\n    expectedText: string,\n    timeout: number = 2000,\n  ): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const content = await this.getDisplayText();\n        if (content !== expectedText) {\n          throw new Error(\n            `Display buffer content does not match.\\nExpected:\\n\"${expectedText}\"\\nActual:\\n\"${content}\"`,\n          );\n        }\n      },\n      { timeout },\n    );\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method assertDisplayContent",
-      "startLine": 310,
-      "startCol": 3,
-      "endLine": 328,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Assert that input buffer content exactly matches expected text\n   */\n  async assertInputContent(\n    expectedText: string,\n    timeout: number = 2000,\n  ): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const content = await this.getInputText();\n        if (content !== expectedText) {\n          throw new Error(\n            `Input buffer content does not match.\\nExpected:\\n\"${expectedText}\"\\nActual:\\n\"${content}\"`,\n          );\n        }\n      },\n      { timeout },\n    );\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method assertInputContent\n\n/**\n   * Assert that input buffer content exactly matches expected text\n   */\n  async assertInputContent(\n    expectedText: string,\n    timeout: number = 2000,\n  ): Promise\u003cvoid\u003e {\n    await pollUntil(\n      async () =\u003e {\n        const content = await this.getInputText();\n        if (content !== expectedText) {\n          throw new Error(\n            `Input buffer content does not match.\\nExpected:\\n\"${expectedText}\"\\nActual:\\n\"${content}\"`,\n          );\n        }\n      },\n      { timeout },\n    );\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method assertInputContent",
-      "startLine": 330,
-      "startCol": 3,
-      "endLine": 348,
-      "endCol": 4
-    },
-    {
-      "text": "/**\n   * Wait for chat to be ready\n   */\n  async waitForChatReady(timeout: number = 1000): Promise\u003cvoid\u003e {\n    await pollUntil(\n      () =\u003e {\n        try {\n          this.magenta.chat.getActiveThread();\n          return true;\n        } catch (e) {\n          if ((e as Error).message.includes(\"Chat is not initialized yet\")) {\n            throw new Error(\"Chat is not ready yet\");\n          }\n          throw e;\n        }\n      },\n      { timeout },\n    );\n  }",
-      "contextualizedText": "// node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForChatReady\n\n/**\n   * Wait for chat to be ready\n   */\n  async waitForChatReady(timeout: number = 1000): Promise\u003cvoid\u003e {\n    await pollUntil(\n      () =\u003e {\n        try {\n          this.magenta.chat.getActiveThread();\n          return true;\n        } catch (e) {\n          if ((e as Error).message.includes(\"Chat is not initialized yet\")) {\n            throw new Error(\"Chat is not ready yet\");\n          }\n          throw e;\n        }\n      },\n      { timeout },\n    );\n  }",
-      "headingContext": "node/test/driver/sidebar.ts \u003e class SidebarInteraction \u003e method waitForChatReady",
-      "startLine": 350,
-      "startCol": 3,
-      "endLine": 368,
-      "endCol": 4
+      "start": 7606,
+      "end": 9353
     }
   ]
 }

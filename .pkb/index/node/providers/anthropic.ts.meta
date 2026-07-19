@@ -1,15 +1,11 @@
 {
   "blobSha": "7cd5bdcb6be9e09c92c4951643700176c769d5b5",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export { AnthropicProvider } from \"@magenta/core\";",
-      "contextualizedText": "// node/providers/anthropic.ts\n\nexport { AnthropicProvider } from \"@magenta/core\";",
-      "headingContext": "node/providers/anthropic.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 1,
-      "endCol": 51
+      "start": 0,
+      "end": 50
     }
   ]
 }

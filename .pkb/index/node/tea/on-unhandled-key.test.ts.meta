@@ -1,42 +1,15 @@
 {
   "blobSha": "503ac2427a0801f7c620fc9475acee61d2118b64",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { describe, expect, it, vi } from \"vitest\";\nimport { NvimBuffer } from \"../nvim/buffer.ts\";\nimport { getCurrentWindow } from \"../nvim/nvim.ts\";\nimport type { ByteIdx, Row0Indexed, Row1Indexed } from \"../nvim/window.ts\";\nimport { withNvimClient } from \"../test/preamble.ts\";\nimport { createApp } from \"./tea.ts\";\nimport { d, pos, withBindings } from \"./view.ts\";\n\ndescribe(\"tea/on-unhandled-key.test.ts\", () =\u003e {\n  it(\"fires onUnhandledKey only when no binding covers the cursor\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const buffer = await NvimBuffer.create(false, true, nvim);\n      await buffer.setOption(\"modifiable\", false);\n\n      const window = await getCurrentWindow(nvim);\n      await window.setBuffer(buffer);\n\n      const boundSpy = vi.fn();\n      const unhandledSpy = vi.fn();\n\n      const app = createApp({\n        nvim,\n        initialModel: {}",
-      "contextualizedText": "// node/tea/on-unhandled-key.test.ts\n\nimport { describe, expect, it, vi } from \"vitest\";\nimport { NvimBuffer } from \"../nvim/buffer.ts\";\nimport { getCurrentWindow } from \"../nvim/nvim.ts\";\nimport type { ByteIdx, Row0Indexed, Row1Indexed } from \"../nvim/window.ts\";\nimport { withNvimClient } from \"../test/preamble.ts\";\nimport { createApp } from \"./tea.ts\";\nimport { d, pos, withBindings } from \"./view.ts\";\n\ndescribe(\"tea/on-unhandled-key.test.ts\", () =\u003e {\n  it(\"fires onUnhandledKey only when no binding covers the cursor\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const buffer = await NvimBuffer.create(false, true, nvim);\n      await buffer.setOption(\"modifiable\", false);\n\n      const window = await getCurrentWindow(nvim);\n      await window.setBuffer(buffer);\n\n      const boundSpy = vi.fn();\n      const unhandledSpy = vi.fn();\n\n      const app = createApp({\n        nvim,\n        initialModel: {}",
-      "headingContext": "node/tea/on-unhandled-key.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 23,
-      "endCol": 25
+      "start": 0,
+      "end": 1576
     },
     {
-      "text": "        View: () =\u003e\n          d`plain ${withBindings(d`[btn]`, { \"\u003cCR\u003e\": boundSpy })} tail`",
-      "contextualizedText": "// node/tea/on-unhandled-key.test.ts \u003e function View\n\n        View: () =\u003e\n          d`plain ${withBindings(d`[btn]`, { \"\u003cCR\u003e\": boundSpy })} tail`",
-      "headingContext": "node/tea/on-unhandled-key.test.ts \u003e function View",
-      "startLine": 24,
-      "startCol": 1,
-      "endLine": 25,
-      "endCol": 72
-    },
-    {
-      "text": "        onUnhandledKey: (args) =\u003e {\n          unhandledSpy(args);\n        }",
-      "contextualizedText": "// node/tea/on-unhandled-key.test.ts \u003e function onUnhandledKey\n\n        onUnhandledKey: (args) =\u003e {\n          unhandledSpy(args);\n        }",
-      "headingContext": "node/tea/on-unhandled-key.test.ts \u003e function onUnhandledKey",
-      "startLine": 26,
-      "startCol": 1,
-      "endLine": 28,
-      "endCol": 10
-    },
-    {
-      "text": "const mounted = await app.mount({\n        nvim,\n        buffer,\n        startPos: pos(0, 0),\n        endPos: pos(0, 0),\n      });\n\n      // Cursor on \"[btn]\" — find the column.\n      // Buffer content: \"plain [btn] tail\"\n      //                  0123456789012345\n      await window.setCursor({\n        row: 1 as Row1Indexed,\n        col: 7 as ByteIdx,\n      });\n      await mounted.onKey(\"\u003cCR\u003e\");\n      expect(boundSpy).toHaveBeenCalledTimes(1);\n      expect(unhandledSpy).not.toHaveBeenCalled();\n\n      // Cursor on plain text (\"plain\" at col 0)\n      await window.setCursor({\n        row: 1 as Row1Indexed,\n        col: 0 as ByteIdx,\n      });\n      await mounted.onKey(\"\u003cCR\u003e\");\n      expect(boundSpy).toHaveBeenCalledTimes(1);\n      expect(unhandledSpy).toHaveBeenCalledTimes(1);\n      expect(unhandledSpy.mock.calls[0][0].key).toBe(\"\u003cCR\u003e\");\n      expect(unhandledSpy.mock.calls[0][0].row).toBe(0 as Row0Indexed);\n      expect(unhandledSpy.mock.calls[0][0].col).toBe(0);\n      expect(unhandledSpy.mock.calls[0][0].buffer.id).toBe(buffer.id);\n\n      mounted.unmount();\n      app.destroy();",
-      "contextualizedText": "// node/tea/on-unhandled-key.test.ts\n\nconst mounted = await app.mount({\n        nvim,\n        buffer,\n        startPos: pos(0, 0),\n        endPos: pos(0, 0),\n      });\n\n      // Cursor on \"[btn]\" — find the column.\n      // Buffer content: \"plain [btn] tail\"\n      //                  0123456789012345\n      await window.setCursor({\n        row: 1 as Row1Indexed,\n        col: 7 as ByteIdx,\n      });\n      await mounted.onKey(\"\u003cCR\u003e\");\n      expect(boundSpy).toHaveBeenCalledTimes(1);\n      expect(unhandledSpy).not.toHaveBeenCalled();\n\n      // Cursor on plain text (\"plain\" at col 0)\n      await window.setCursor({\n        row: 1 as Row1Indexed,\n        col: 0 as ByteIdx,\n      });\n      await mounted.onKey(\"\u003cCR\u003e\");\n      expect(boundSpy).toHaveBeenCalledTimes(1);\n      expect(unhandledSpy).toHaveBeenCalledTimes(1);\n      expect(unhandledSpy.mock.calls[0][0].key).toBe(\"\u003cCR\u003e\");\n      expect(unhandledSpy.mock.calls[0][0].row).toBe(0 as Row0Indexed);\n      expect(unhandledSpy.mock.calls[0][0].col).toBe(0);\n      expect(unhandledSpy.mock.calls[0][0].buffer.id).toBe(buffer.id);\n\n      mounted.unmount();\n      app.destroy();",
-      "headingContext": "node/tea/on-unhandled-key.test.ts",
-      "startLine": 31,
-      "startCol": 7,
-      "endLine": 63,
-      "endCol": 21
+      "start": 1584,
+      "end": 2189
     }
   ]
 }

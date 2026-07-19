@@ -1,15 +1,11 @@
 {
   "blobSha": "15d2a499dfe4de3f10cf91ca533e536051fa315a",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export type { OutputLine, Shell, ShellResult } from \"@magenta/core\";",
-      "contextualizedText": "// node/capabilities/shell.ts\n\nexport type { OutputLine, Shell, ShellResult } from \"@magenta/core\";",
-      "headingContext": "node/capabilities/shell.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 1,
-      "endCol": 69
+      "start": 0,
+      "end": 68
     }
   ]
 }

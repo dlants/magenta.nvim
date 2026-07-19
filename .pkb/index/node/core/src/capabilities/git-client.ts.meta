@@ -1,78 +1,15 @@
 {
   "blobSha": "aec1e247947cf4628b771969c76ac448d23121e2",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export type GitState = {\n  repoRoot: string;\n  /** undefined when HEAD is detached. */\n  branch: string | undefined;\n  /** Full HEAD sha. Empty string when the repo has no commits yet. */\n  headSha: string;\n  /** Subject line of the HEAD commit. Empty when the repo has no commits. */\n  headSubject: string;\n  stagedCount: number;\n  unstagedCount: number;\n  untrackedCount: number;\n};",
-      "contextualizedText": "// node/core/src/capabilities/git-client.ts\n\nexport type GitState = {\n  repoRoot: string;\n  /** undefined when HEAD is detached. */\n  branch: string | undefined;\n  /** Full HEAD sha. Empty string when the repo has no commits yet. */\n  headSha: string;\n  /** Subject line of the HEAD commit. Empty when the repo has no commits. */\n  headSubject: string;\n  stagedCount: number;\n  unstagedCount: number;\n  untrackedCount: number;\n};",
-      "headingContext": "node/core/src/capabilities/git-client.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 12,
-      "endCol": 3
+      "start": 0,
+      "end": 1808
     },
     {
-      "text": "export interface GitClient",
-      "contextualizedText": "// node/core/src/capabilities/git-client.ts \u003e interface GitClient\n\nexport interface GitClient",
-      "headingContext": "node/core/src/capabilities/git-client.ts \u003e interface GitClient",
-      "startLine": 14,
-      "startCol": 1,
-      "endLine": 14,
-      "endCol": 27
-    },
-    {
-      "text": "/** Returns undefined when the working directory is not inside a git repository. */\n  getState(): Promise\u003cGitState | undefined\u003e",
-      "contextualizedText": "// node/core/src/capabilities/git-client.ts \u003e interface GitClient \u003e method getState\n\n/** Returns undefined when the working directory is not inside a git repository. */\n  getState(): Promise\u003cGitState | undefined\u003e",
-      "headingContext": "node/core/src/capabilities/git-client.ts \u003e interface GitClient \u003e method getState",
-      "startLine": 15,
-      "startCol": 3,
-      "endLine": 16,
-      "endCol": 44
-    },
-    {
-      "text": "/** Runs a git subcommand with the given args and reports its stdout and exit code.\n * Implementations should not throw on a non-zero exit code. */\nexport type GitCommandRunner = (\n  args: string[],\n) =\u003e Promise\u003c{ stdout: string; exitCode: number }\u003e;",
-      "contextualizedText": "// node/core/src/capabilities/git-client.ts\n\n/** Runs a git subcommand with the given args and reports its stdout and exit code.\n * Implementations should not throw on a non-zero exit code. */\nexport type GitCommandRunner = (\n  args: string[],\n) =\u003e Promise\u003c{ stdout: string; exitCode: number }\u003e;",
-      "headingContext": "node/core/src/capabilities/git-client.ts",
-      "startLine": 19,
-      "startCol": 1,
-      "endLine": 23,
-      "endCol": 52
-    },
-    {
-      "text": "export async function parseGitState(\n  run: GitCommandRunner,\n): Promise\u003cGitState | undefined\u003e {\n  const root = await run([\"rev-parse\", \"--show-toplevel\"]);\n  if (root.exitCode !== 0) {\n    return undefined;\n  }\n  const repoRoot = root.stdout.trim();\n\n  const [branchResult, headResult, statusResult] = await Promise.all([\n    run([\"symbolic-ref\", \"--short\", \"-q\", \"HEAD\"]),\n    run([\"log\", \"-1\", \"--format=%H%x00%s\"]),\n    run([\"status\", \"--porcelain\"]),\n  ]);\n\n  const branchName =\n    branchResult.exitCode === 0 ? branchResult.stdout.trim() : \"\";\n  const branch = branchName.length \u003e 0 ? branchName : undefined;\n\n  let headSha = \"\";\n  let headSubject = \"\";\n  if (headResult.exitCode === 0) {\n    const trimmed = headResult.stdout.replace(/\\n$/, \"\");\n    if (trimmed.length \u003e 0) {\n      const sepIdx = trimmed.indexOf(\"\\0\");\n      if (sepIdx === -1) {\n        headSha = trimmed;\n      } else {\n        headSha = trimmed.slice(0, sepIdx);\n        headSubject = trimmed.slice(sepIdx + 1);\n      }\n    }\n  }\n\n  let stagedCount = 0;\n  let unstagedCount = 0;\n  let untrackedCount = 0;\n  for (const line of statusResult.stdout.split(\"\\n\")) {\n    if (line.length \u003c 2) continue;\n    if (line.startsWith(\"??\")) {\n      untrackedCount++;\n      continue;\n    }\n    const indexStatus = line[0];\n    const worktreeStatus = line[1];\n    if (indexStatus !== \" \") stagedCount++;\n    if (worktreeStatus !== \" \") unstagedCount++;\n  }\n\n  return {\n    repoRoot,\n    branch,\n    headSha,\n    headSubject,\n    stagedCount,\n    unstagedCount,\n    untrackedCount,\n  };\n}",
-      "contextualizedText": "// node/core/src/capabilities/git-client.ts \u003e function parseGitState\n\nexport async function parseGitState(\n  run: GitCommandRunner,\n): Promise\u003cGitState | undefined\u003e {\n  const root = await run([\"rev-parse\", \"--show-toplevel\"]);\n  if (root.exitCode !== 0) {\n    return undefined;\n  }\n  const repoRoot = root.stdout.trim();\n\n  const [branchResult, headResult, statusResult] = await Promise.all([\n    run([\"symbolic-ref\", \"--short\", \"-q\", \"HEAD\"]),\n    run([\"log\", \"-1\", \"--format=%H%x00%s\"]),\n    run([\"status\", \"--porcelain\"]),\n  ]);\n\n  const branchName =\n    branchResult.exitCode === 0 ? branchResult.stdout.trim() : \"\";\n  const branch = branchName.length \u003e 0 ? branchName : undefined;\n\n  let headSha = \"\";\n  let headSubject = \"\";\n  if (headResult.exitCode === 0) {\n    const trimmed = headResult.stdout.replace(/\\n$/, \"\");\n    if (trimmed.length \u003e 0) {\n      const sepIdx = trimmed.indexOf(\"\\0\");\n      if (sepIdx === -1) {\n        headSha = trimmed;\n      } else {\n        headSha = trimmed.slice(0, sepIdx);\n        headSubject = trimmed.slice(sepIdx + 1);\n      }\n    }\n  }\n\n  let stagedCount = 0;\n  let unstagedCount = 0;\n  let untrackedCount = 0;\n  for (const line of statusResult.stdout.split(\"\\n\")) {\n    if (line.length \u003c 2) continue;\n    if (line.startsWith(\"??\")) {\n      untrackedCount++;\n      continue;\n    }\n    const indexStatus = line[0];\n    const worktreeStatus = line[1];\n    if (indexStatus !== \" \") stagedCount++;\n    if (worktreeStatus !== \" \") unstagedCount++;\n  }\n\n  return {\n    repoRoot,\n    branch,\n    headSha,\n    headSubject,\n    stagedCount,\n    unstagedCount,\n    untrackedCount,\n  };\n}",
-      "headingContext": "node/core/src/capabilities/git-client.ts \u003e function parseGitState",
-      "startLine": 25,
-      "startCol": 1,
-      "endLine": 83,
-      "endCol": 2
-    },
-    {
-      "text": "function formatHead(state: GitState): string {\n  if (state.headSha.length === 0) {\n    return \"(no commits yet)\";\n  }\n  const shortSha = state.headSha.slice(0, 7);\n  return state.headSubject.length \u003e 0\n    ? `${shortSha} ${state.headSubject}`\n    : shortSha;\n}",
-      "contextualizedText": "// node/core/src/capabilities/git-client.ts \u003e function formatHead\n\nfunction formatHead(state: GitState): string {\n  if (state.headSha.length === 0) {\n    return \"(no commits yet)\";\n  }\n  const shortSha = state.headSha.slice(0, 7);\n  return state.headSubject.length \u003e 0\n    ? `${shortSha} ${state.headSubject}`\n    : shortSha;\n}",
-      "headingContext": "node/core/src/capabilities/git-client.ts \u003e function formatHead",
-      "startLine": 85,
-      "startCol": 1,
-      "endLine": 93,
-      "endCol": 2
-    },
-    {
-      "text": "/** Markdown lines describing git state for the system information block. */\nexport function formatGitInfo(state: GitState | undefined): string {\n  if (!state) {\n    return \"- Git: not a git repository\";\n  }\n  return [\n    `- Git repository root: ${state.repoRoot}`,\n    `- Git branch: ${state.branch ?? \"(detached HEAD)\"}`,\n    `- Git HEAD: ${formatHead(state)}`,\n    `- Git changes: ${state.stagedCount} staged, ${state.unstagedCount} unstaged, ${state.untrackedCount} untracked`,\n  ].join(\"\\n\");\n}",
-      "contextualizedText": "// node/core/src/capabilities/git-client.ts \u003e function formatGitInfo\n\n/** Markdown lines describing git state for the system information block. */\nexport function formatGitInfo(state: GitState | undefined): string {\n  if (!state) {\n    return \"- Git: not a git repository\";\n  }\n  return [\n    `- Git repository root: ${state.repoRoot}`,\n    `- Git branch: ${state.branch ?? \"(detached HEAD)\"}`,\n    `- Git HEAD: ${formatHead(state)}`,\n    `- Git changes: ${state.stagedCount} staged, ${state.unstagedCount} unstaged, ${state.untrackedCount} untracked`,\n  ].join(\"\\n\");\n}",
-      "headingContext": "node/core/src/capabilities/git-client.ts \u003e function formatGitInfo",
-      "startLine": 95,
-      "startCol": 1,
-      "endLine": 106,
-      "endCol": 2
-    },
-    {
-      "text": "export { formatHead as formatGitHead };",
-      "contextualizedText": "// node/core/src/capabilities/git-client.ts\n\nexport { formatHead as formatGitHead };",
-      "headingContext": "node/core/src/capabilities/git-client.ts",
-      "startLine": 108,
-      "startCol": 1,
-      "endLine": 108,
-      "endCol": 40
+      "start": 1812,
+      "end": 3155
     }
   ]
 }

@@ -1,15 +1,11 @@
 {
   "blobSha": "5ac6d540dfad9478963c307f93f72120f8113c80",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { ServerName } from \"./types.ts\";\n\nexport type MCPMockToolSchemaType = \"string\" | \"number\" | \"boolean\";\n\nexport type MCPMockToolConfig = {\n  name: string;\n  description: string;\n  inputSchema: { [param: string]: MCPMockToolSchemaType };\n};\n\nexport type MCPServerConfig =\n  | {\n      type: \"command\";\n      command: string;\n      args: string[];\n      env?: Record\u003cstring, string\u003e;\n    }\n  | {\n      type: \"remote\";\n      url: string;\n      requestInit?: RequestInit;\n      sessionId?: string;\n    }\n  | {\n      type: \"mock\";\n      tools?: MCPMockToolConfig[];\n    };\n\nexport type MCPServersConfig = { [serverName: ServerName]: MCPServerConfig };",
-      "contextualizedText": "// node/core/src/tools/mcp/options.ts\n\nimport type { ServerName } from \"./types.ts\";\n\nexport type MCPMockToolSchemaType = \"string\" | \"number\" | \"boolean\";\n\nexport type MCPMockToolConfig = {\n  name: string;\n  description: string;\n  inputSchema: { [param: string]: MCPMockToolSchemaType };\n};\n\nexport type MCPServerConfig =\n  | {\n      type: \"command\";\n      command: string;\n      args: string[];\n      env?: Record\u003cstring, string\u003e;\n    }\n  | {\n      type: \"remote\";\n      url: string;\n      requestInit?: RequestInit;\n      sessionId?: string;\n    }\n  | {\n      type: \"mock\";\n      tools?: MCPMockToolConfig[];\n    };\n\nexport type MCPServersConfig = { [serverName: ServerName]: MCPServerConfig };",
-      "headingContext": "node/core/src/tools/mcp/options.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 29,
-      "endCol": 78
+      "start": 0,
+      "end": 657
     }
   ]
 }

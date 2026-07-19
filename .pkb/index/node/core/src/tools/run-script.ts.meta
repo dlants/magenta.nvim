@@ -1,69 +1,19 @@
 {
   "blobSha": "5362a5897f9ebcecf6debbf4fe0fe46a3af6f0bc",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type {\n  ScriptCatalogEntry,\n  ScriptRunner,\n} from \"../capabilities/script-runner.ts\";\nimport type { ThreadId } from \"../chat-types.ts\";\nimport type {\n  ProviderToolResult,\n  ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"../providers/provider-types.ts\";\nimport type {\n  GenericToolRequest,\n  ToolInvocation,\n  ToolName,\n} from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\nimport { validateAgainstSchema } from \"../utils/validate-schema.ts\";\n\nexport type Input = {\n  scriptName: string;\n  parameters?: Record\u003cstring, unknown\u003e;\n};\n\nexport type StructuredResult = { toolName: \"run_script\" };\n\nexport type ToolRequest = GenericToolRequest\u003c\"run_script\", Input\u003e;",
-      "contextualizedText": "// node/core/src/tools/run-script.ts\n\nimport type {\n  ScriptCatalogEntry,\n  ScriptRunner,\n} from \"../capabilities/script-runner.ts\";\nimport type { ThreadId } from \"../chat-types.ts\";\nimport type {\n  ProviderToolResult,\n  ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"../providers/provider-types.ts\";\nimport type {\n  GenericToolRequest,\n  ToolInvocation,\n  ToolName,\n} from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\nimport { validateAgainstSchema } from \"../utils/validate-schema.ts\";\n\nexport type Input = {\n  scriptName: string;\n  parameters?: Record\u003cstring, unknown\u003e;\n};\n\nexport type StructuredResult = { toolName: \"run_script\" };\n\nexport type ToolRequest = GenericToolRequest\u003c\"run_script\", Input\u003e;",
-      "headingContext": "node/core/src/tools/run-script.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 26,
-      "endCol": 67
+      "start": 0,
+      "end": 1975
     },
     {
-      "text": "export function getSpec(catalog: ScriptCatalogEntry[]): ProviderToolSpec {\n  const descriptions = catalog\n    .map((c) =\u003e `- ${c.name}: ${c.description}`)\n    .join(\"\\n\");\n  return {\n    name: \"run_script\" as ToolName,\n    description: `Trigger a project automation script. Scripts run outside this thread's lifecycle; they may spawn their own threads and report progress in the Scripts section of the overview.\\n\\nTwo-step protocol: first call with only \\`scriptName\\` to fetch that script's parameter schema, then call again with \\`scriptName\\` and a \\`parameters\\` object matching that schema to run it.\\n\\nAvailable scripts:\\n${descriptions}`,\n    input_schema: {\n      type: \"object\",\n      properties: {\n        scriptName: {\n          type: \"string\",\n          enum: catalog.map((c) =\u003e c.name),\n          description: \"The name of the script to run.\",\n        },\n        parameters: {\n          type: \"object\",\n          description:\n            \"Parameters for the script, matching the chosen script's parameter schema. Omit on the first call to fetch the schema; provide it on the second call to run the script.\",\n        },\n      },\n      required: [\"scriptName\"],\n      additionalProperties: false,\n    },\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/run-script.ts \u003e function getSpec\n\nexport function getSpec(catalog: ScriptCatalogEntry[]): ProviderToolSpec {\n  const descriptions = catalog\n    .map((c) =\u003e `- ${c.name}: ${c.description}`)\n    .join(\"\\n\");\n  return {\n    name: \"run_script\" as ToolName,\n    description: `Trigger a project automation script. Scripts run outside this thread's lifecycle; they may spawn their own threads and report progress in the Scripts section of the overview.\\n\\nTwo-step protocol: first call with only \\`scriptName\\` to fetch that script's parameter schema, then call again with \\`scriptName\\` and a \\`parameters\\` object matching that schema to run it.\\n\\nAvailable scripts:\\n${descriptions}`,\n    input_schema: {\n      type: \"object\",\n      properties: {\n        scriptName: {\n          type: \"string\",\n          enum: catalog.map((c) =\u003e c.name),\n          description: \"The name of the script to run.\",\n        },\n        parameters: {\n          type: \"object\",\n          description:\n            \"Parameters for the script, matching the chosen script's parameter schema. Omit on the first call to fetch the schema; provide it on the second call to run the script.\",\n        },\n      },\n      required: [\"scriptName\"],\n      additionalProperties: false,\n    },\n  };\n}",
-      "headingContext": "node/core/src/tools/run-script.ts \u003e function getSpec",
-      "startLine": 28,
-      "startCol": 1,
-      "endLine": 53,
-      "endCol": 2
+      "start": 1977,
+      "end": 4064
     },
     {
-      "text": "export function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (typeof input.scriptName !== \"string\") {\n    return {\n      status: \"error\",\n      error: \"expected req.input.scriptName to be a string\",\n    };\n  }\n  if (\n    input.parameters !== undefined \u0026\u0026\n    (typeof input.parameters !== \"object\" ||\n      input.parameters === null ||\n      Array.isArray(input.parameters))\n  ) {\n    return {\n      status: \"error\",\n      error: \"expected req.input.parameters to be an object\",\n    };\n  }\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/run-script.ts \u003e function validateInput\n\nexport function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (typeof input.scriptName !== \"string\") {\n    return {\n      status: \"error\",\n      error: \"expected req.input.scriptName to be a string\",\n    };\n  }\n  if (\n    input.parameters !== undefined \u0026\u0026\n    (typeof input.parameters !== \"object\" ||\n      input.parameters === null ||\n      Array.isArray(input.parameters))\n  ) {\n    return {\n      status: \"error\",\n      error: \"expected req.input.parameters to be an object\",\n    };\n  }\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
-      "headingContext": "node/core/src/tools/run-script.ts \u003e function validateInput",
-      "startLine": 55,
-      "startCol": 1,
-      "endLine": 79,
-      "endCol": 2
-    },
-    {
-      "text": "export function execute(\n  request: ToolRequest,\n  context: {\n    scriptRunner: ScriptRunner | undefined;\n    threadId: ThreadId;\n  },\n): ToolInvocation {\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    await Promise.resolve();\n    const { scriptRunner } = context;\n    if (!scriptRunner) {\n      return errorResult(request.id, \"scripts are not available\");\n    }\n    const entry = scriptRunner\n      .getScriptCatalog()\n      .find((c) =\u003e c.name === request.input.scriptName);\n    if (!entry) {\n      return errorResult(\n        request.id,\n        `unknown script: ${request.input.scriptName}`,\n      );\n    }\n\n    // Step 1: no parameters supplied yet — return the script's parameter schema\n    // so the agent can construct a valid call without us bloating the tool spec\n    // with every script's schema up front.\n    if (request.input.parameters === undefined) {\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text: `Parameter schema for \"${entry.name}\". Call run_script again with this scriptName and a matching \\`parameters\\` object to run it.\\n\\n${JSON.stringify(entry.parameterSchema, null, 2)}`,\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          ],\n          structuredResult: { toolName: \"run_script\" as const },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n\n    const schemaErrors = validateAgainstSchema(\n      request.input.parameters,\n      entry.parameterSchema,\n    );\n    if (schemaErrors.length \u003e 0) {\n      return errorResult(\n        request.id,\n        `parameters do not match the schema for \"${entry.name}\":\\n- ${schemaErrors.join(\n          \"\\n- \",\n        )}\\n\\nExpected schema:\\n${JSON.stringify(entry.parameterSchema, null, 2)}`,\n      );\n    }",
-      "contextualizedText": "// node/core/src/tools/run-script.ts \u003e function execute\n\nexport function execute(\n  request: ToolRequest,\n  context: {\n    scriptRunner: ScriptRunner | undefined;\n    threadId: ThreadId;\n  },\n): ToolInvocation {\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    await Promise.resolve();\n    const { scriptRunner } = context;\n    if (!scriptRunner) {\n      return errorResult(request.id, \"scripts are not available\");\n    }\n    const entry = scriptRunner\n      .getScriptCatalog()\n      .find((c) =\u003e c.name === request.input.scriptName);\n    if (!entry) {\n      return errorResult(\n        request.id,\n        `unknown script: ${request.input.scriptName}`,\n      );\n    }\n\n    // Step 1: no parameters supplied yet — return the script's parameter schema\n    // so the agent can construct a valid call without us bloating the tool spec\n    // with every script's schema up front.\n    if (request.input.parameters === undefined) {\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text: `Parameter schema for \"${entry.name}\". Call run_script again with this scriptName and a matching \\`parameters\\` object to run it.\\n\\n${JSON.stringify(entry.parameterSchema, null, 2)}`,\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          ],\n          structuredResult: { toolName: \"run_script\" as const },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n\n    const schemaErrors = validateAgainstSchema(\n      request.input.parameters,\n      entry.parameterSchema,\n    );\n    if (schemaErrors.length \u003e 0) {\n      return errorResult(\n        request.id,\n        `parameters do not match the schema for \"${entry.name}\":\\n- ${schemaErrors.join(\n          \"\\n- \",\n        )}\\n\\nExpected schema:\\n${JSON.stringify(entry.parameterSchema, null, 2)}`,\n      );\n    }",
-      "headingContext": "node/core/src/tools/run-script.ts \u003e function execute",
-      "startLine": 81,
-      "startCol": 1,
-      "endLine": 137,
-      "endCol": 6
-    },
-    {
-      "text": "try {\n      scriptRunner.runScript({\n        scriptName: request.input.scriptName,\n        parameters: request.input.parameters,\n        triggeringThreadId: context.threadId,\n      });\n    } catch (error) {\n      return errorResult(\n        request.id,\n        `failed to start script: ${error instanceof Error ? error.message : String(error)}`,\n      );\n    }\n    return {\n      type: \"tool_result\",\n      id: request.id,\n      result: {\n        status: \"ok\",\n        value: [\n          {\n            type: \"text\",\n            text: `Started script \"${request.input.scriptName}\". It runs independently; check the Scripts section for progress.`,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          },\n        ],\n        structuredResult: { toolName: \"run_script\" as const },\n      },\n      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n    };\n  })();\n\n  return {\n    promise",
-      "contextualizedText": "// node/core/src/tools/run-script.ts \u003e function execute\n\ntry {\n      scriptRunner.runScript({\n        scriptName: request.input.scriptName,\n        parameters: request.input.parameters,\n        triggeringThreadId: context.threadId,\n      });\n    } catch (error) {\n      return errorResult(\n        request.id,\n        `failed to start script: ${error instanceof Error ? error.message : String(error)}`,\n      );\n    }\n    return {\n      type: \"tool_result\",\n      id: request.id,\n      result: {\n        status: \"ok\",\n        value: [\n          {\n            type: \"text\",\n            text: `Started script \"${request.input.scriptName}\". It runs independently; check the Scripts section for progress.`,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          },\n        ],\n        structuredResult: { toolName: \"run_script\" as const },\n      },\n      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n    };\n  })();\n\n  return {\n    promise",
-      "headingContext": "node/core/src/tools/run-script.ts \u003e function execute",
-      "startLine": 139,
-      "startCol": 5,
-      "endLine": 170,
-      "endCol": 12
-    },
-    {
-      "text": "    abort: () =\u003e {}",
-      "contextualizedText": "// node/core/src/tools/run-script.ts \u003e function execute \u003e function abort\n\n    abort: () =\u003e {}",
-      "headingContext": "node/core/src/tools/run-script.ts \u003e function execute \u003e function abort",
-      "startLine": 171,
-      "startCol": 1,
-      "endLine": 171,
-      "endCol": 20
-    },
-    {
-      "text": "function errorResult(id: ToolRequest[\"id\"], error: string): ProviderToolResult {\n  return {\n    type: \"tool_result\",\n    id,\n    result: { status: \"error\", error },\n    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/run-script.ts \u003e function errorResult\n\nfunction errorResult(id: ToolRequest[\"id\"], error: string): ProviderToolResult {\n  return {\n    type: \"tool_result\",\n    id,\n    result: { status: \"error\", error },\n    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  };\n}",
-      "headingContext": "node/core/src/tools/run-script.ts \u003e function errorResult",
-      "startLine": 175,
-      "startCol": 1,
-      "endLine": 182,
-      "endCol": 2
+      "start": 4070,
+      "end": 5628
     }
   ]
 }

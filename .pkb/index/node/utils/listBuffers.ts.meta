@@ -1,24 +1,11 @@
 {
   "blobSha": "e56e039f10d7cd88f70859399b2bd77d39f160a1",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport { parseLsResponse } from \"./lsBuffers.ts\";",
-      "contextualizedText": "// node/utils/listBuffers.ts\n\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport { parseLsResponse } from \"./lsBuffers.ts\";",
-      "headingContext": "node/utils/listBuffers.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 2,
-      "endCol": 50
-    },
-    {
-      "text": "export async function getBuffersList(nvim: Nvim): Promise\u003cstring\u003e {\n  const lsResponse = await nvim.call(\"nvim_exec2\", [\"ls\", { output: true }]);\n\n  const result = parseLsResponse(lsResponse.output as string);\n  return result\n    .map((bufEntry) =\u003e {\n      let out = \"\";\n      if (bufEntry.flags.active) {\n        out += \"active \";\n      }\n      if (bufEntry.flags.modified) {\n        out += \"modified \";\n      }\n      if (bufEntry.flags.terminal) {\n        out += \"terminal \";\n      }\n      out += bufEntry.filePath;\n      return out;\n    })\n    .join(\"\\n\");\n}",
-      "contextualizedText": "// node/utils/listBuffers.ts \u003e function getBuffersList\n\nexport async function getBuffersList(nvim: Nvim): Promise\u003cstring\u003e {\n  const lsResponse = await nvim.call(\"nvim_exec2\", [\"ls\", { output: true }]);\n\n  const result = parseLsResponse(lsResponse.output as string);\n  return result\n    .map((bufEntry) =\u003e {\n      let out = \"\";\n      if (bufEntry.flags.active) {\n        out += \"active \";\n      }\n      if (bufEntry.flags.modified) {\n        out += \"modified \";\n      }\n      if (bufEntry.flags.terminal) {\n        out += \"terminal \";\n      }\n      out += bufEntry.filePath;\n      return out;\n    })\n    .join(\"\\n\");\n}",
-      "headingContext": "node/utils/listBuffers.ts \u003e function getBuffersList",
-      "startLine": 4,
-      "startCol": 1,
-      "endLine": 24,
-      "endCol": 2
+      "start": 0,
+      "end": 668
     }
   ]
 }

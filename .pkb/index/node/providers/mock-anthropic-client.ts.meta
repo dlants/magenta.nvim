@@ -1,15 +1,11 @@
 {
   "blobSha": "56caefc0b0287d39cf08ab629e1350d54c6c8d9e",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export { MockAnthropicClient, MockStream } from \"@magenta/core\";",
-      "contextualizedText": "// node/providers/mock-anthropic-client.ts\n\nexport { MockAnthropicClient, MockStream } from \"@magenta/core\";",
-      "headingContext": "node/providers/mock-anthropic-client.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 1,
-      "endCol": 65
+      "start": 0,
+      "end": 64
     }
   ]
 }

@@ -1,96 +1,15 @@
 {
   "blobSha": "eb59de52f9b8797df68b3c4a7543f173e050c7f0",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport type { CustomCommand as CustomCommandConfig } from \"../../options.ts\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport { bufCommand, buffersCommand } from \"./buffers.ts\";\nimport { compactCommand } from \"./compact.ts\";\nimport { diagCommand, diagnosticsCommand } from \"./diagnostics.ts\";\nimport { diffCommand, stagedCommand } from \"./diff.ts\";\nimport { fileCommand } from \"./file.ts\";\nimport { implementPlanCommand } from \"./implementplan.ts\";\nimport { qfCommand, quickfixCommand } from \"./quickfix.ts\";\nimport type { Command, MessageContext } from \"./types.ts\";",
-      "contextualizedText": "// node/chat/commands/registry.ts\n\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"@magenta/core\";\nimport type { CustomCommand as CustomCommandConfig } from \"../../options.ts\";\nimport type { ProviderMessageContent } from \"../../providers/provider-types.ts\";\nimport { bufCommand, buffersCommand } from \"./buffers.ts\";\nimport { compactCommand } from \"./compact.ts\";\nimport { diagCommand, diagnosticsCommand } from \"./diagnostics.ts\";\nimport { diffCommand, stagedCommand } from \"./diff.ts\";\nimport { fileCommand } from \"./file.ts\";\nimport { implementPlanCommand } from \"./implementplan.ts\";\nimport { qfCommand, quickfixCommand } from \"./quickfix.ts\";\nimport type { Command, MessageContext } from \"./types.ts\";",
-      "headingContext": "node/chat/commands/registry.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 11,
-      "endCol": 59
+      "start": 0,
+      "end": 2371
     },
     {
-      "text": "export class CommandRegistry {\n  private commands: Map\u003cstring, Command\u003e = new Map();\n\n  constructor() {\n    this.registerBuiltinCommands();\n  }",
-      "contextualizedText": "// node/chat/commands/registry.ts \u003e class CommandRegistry\n\nexport class CommandRegistry {\n  private commands: Map\u003cstring, Command\u003e = new Map();\n\n  constructor() {\n    this.registerBuiltinCommands();\n  }",
-      "headingContext": "node/chat/commands/registry.ts \u003e class CommandRegistry",
-      "startLine": 13,
-      "startCol": 1,
-      "endLine": 18,
-      "endCol": 4
-    },
-    {
-      "text": "  private registerBuiltinCommands(): void {\n    const builtinCommands: Command[] = [\n      compactCommand,\n      fileCommand,\n      implementPlanCommand,\n      diffCommand,\n      stagedCommand,\n      diagCommand,\n      diagnosticsCommand,\n      qfCommand,\n      quickfixCommand,\n      bufCommand,\n      buffersCommand,\n    ];\n\n    for (const command of builtinCommands) {\n      this.registerCommand(command);\n    }\n  }",
-      "contextualizedText": "// node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method registerBuiltinCommands\n\n  private registerBuiltinCommands(): void {\n    const builtinCommands: Command[] = [\n      compactCommand,\n      fileCommand,\n      implementPlanCommand,\n      diffCommand,\n      stagedCommand,\n      diagCommand,\n      diagnosticsCommand,\n      qfCommand,\n      quickfixCommand,\n      bufCommand,\n      buffersCommand,\n    ];\n\n    for (const command of builtinCommands) {\n      this.registerCommand(command);\n    }\n  }",
-      "headingContext": "node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method registerBuiltinCommands",
-      "startLine": 20,
-      "startCol": 1,
-      "endLine": 38,
-      "endCol": 4
-    },
-    {
-      "text": "  registerCommand(command: Command): void {\n    if (this.commands.has(command.name)) {\n      throw new Error(`Command ${command.name} is already registered`);\n    }\n    this.commands.set(command.name, command);\n  }",
-      "contextualizedText": "// node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method registerCommand\n\n  registerCommand(command: Command): void {\n    if (this.commands.has(command.name)) {\n      throw new Error(`Command ${command.name} is already registered`);\n    }\n    this.commands.set(command.name, command);\n  }",
-      "headingContext": "node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method registerCommand",
-      "startLine": 40,
-      "startCol": 1,
-      "endLine": 45,
-      "endCol": 4
-    },
-    {
-      "text": "  registerCustomCommand(config: CustomCommandConfig): void {\n    const command: Command = {\n      name: config.name,\n      // Regex needs to be generated for user-defined commands for ease of configuring\n      // To prevent \"@testing\" from triggering a command called \"@test\", we add\n      // a word boundary to the end.\n      //\n      // Word boundaries don't work after non-word chars, so for commands\n      // that end in punctuation (e.g., \"@test[1]\"), we use a lookahead instead\n      pattern: new RegExp(\n        config.name.match(/\\w$/)\n          ? `${this.escapeRegExp(config.name)}\\\\b`\n          : `${this.escapeRegExp(config.name)}(?!\\\\w)`,\n      )",
-      "contextualizedText": "// node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method registerCustomCommand\n\n  registerCustomCommand(config: CustomCommandConfig): void {\n    const command: Command = {\n      name: config.name,\n      // Regex needs to be generated for user-defined commands for ease of configuring\n      // To prevent \"@testing\" from triggering a command called \"@test\", we add\n      // a word boundary to the end.\n      //\n      // Word boundaries don't work after non-word chars, so for commands\n      // that end in punctuation (e.g., \"@test[1]\"), we use a lookahead instead\n      pattern: new RegExp(\n        config.name.match(/\\w$/)\n          ? `${this.escapeRegExp(config.name)}\\\\b`\n          : `${this.escapeRegExp(config.name)}(?!\\\\w)`,\n      )",
-      "headingContext": "node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method registerCustomCommand",
-      "startLine": 47,
-      "startCol": 1,
-      "endLine": 60,
-      "endCol": 8
-    },
-    {
-      "text": "      execute(): Promise\u003cProviderMessageContent[]\u003e {\n        return Promise.resolve([\n          {\n            type: \"text\",\n            text: config.text,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          },\n        ]);\n      }",
-      "contextualizedText": "// node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method registerCustomCommand \u003e method execute\n\n      execute(): Promise\u003cProviderMessageContent[]\u003e {\n        return Promise.resolve([\n          {\n            type: \"text\",\n            text: config.text,\n            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n          },\n        ]);\n      }",
-      "headingContext": "node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method registerCustomCommand \u003e method execute",
-      "startLine": 61,
-      "startCol": 1,
-      "endLine": 69,
-      "endCol": 8
-    },
-    {
-      "text": "if (config.description !== undefined) {\n      command.description = config.description;\n    }\n\n    if (config.systemReminder !== undefined) {\n      command.systemReminder = config.systemReminder;\n    }\n\n    this.registerCommand(command);\n  }",
-      "contextualizedText": "// node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method registerCustomCommand\n\nif (config.description !== undefined) {\n      command.description = config.description;\n    }\n\n    if (config.systemReminder !== undefined) {\n      command.systemReminder = config.systemReminder;\n    }\n\n    this.registerCommand(command);\n  }",
-      "headingContext": "node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method registerCustomCommand",
-      "startLine": 72,
-      "startCol": 5,
-      "endLine": 81,
-      "endCol": 4
-    },
-    {
-      "text": "  private escapeRegExp(str: string): string {\n    // Custom commands can have regex metacharacters like \"@test[1]\"\n    // We need to escape these so they match literally in the regex pattern,\n    // not as regex metacharacters\n    return str.replace(/[.*+?^${}()|[\\]\\\\]/g, \"\\\\$\u0026\");\n  }",
-      "contextualizedText": "// node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method escapeRegExp\n\n  private escapeRegExp(str: string): string {\n    // Custom commands can have regex metacharacters like \"@test[1]\"\n    // We need to escape these so they match literally in the regex pattern,\n    // not as regex metacharacters\n    return str.replace(/[.*+?^${}()|[\\]\\\\]/g, \"\\\\$\u0026\");\n  }",
-      "headingContext": "node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method escapeRegExp",
-      "startLine": 83,
-      "startCol": 1,
-      "endLine": 88,
-      "endCol": 4
-    },
-    {
-      "text": "  getCommands(): Command[] {\n    return Array.from(this.commands.values());\n  }",
-      "contextualizedText": "// node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method getCommands\n\n  getCommands(): Command[] {\n    return Array.from(this.commands.values());\n  }",
-      "headingContext": "node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method getCommands",
-      "startLine": 90,
-      "startCol": 1,
-      "endLine": 92,
-      "endCol": 4
-    },
-    {
-      "text": "  async processMessage(\n    text: string,\n    context: MessageContext,\n  ): Promise\u003c{\n    processedText: string;\n    additionalContent: ProviderMessageContent[];\n    reminders: string[];\n  }\u003e {\n    const additionalContent: ProviderMessageContent[] = [];\n    const reminders = new Set\u003cstring\u003e();\n    let processedText = text;\n\n    // Handle @async specially - strip it from the beginning\n    if (processedText.trim().startsWith(\"@async\")) {\n      processedText = processedText.replace(/^\\s*@async\\s*/, \"\");\n    }\n\n    // Find all command matches in the text\n    for (const command of this.commands.values()) {\n      const regex = new RegExp(command.pattern.source, \"g\");\n      let match;\n      while ((match = regex.exec(processedText)) !== null) {\n        const content = await command.execute(match, context);\n        additionalContent.push(...content);\n        if (command.systemReminder !== undefined) {\n          reminders.add(command.systemReminder);\n        }\n      }\n    }\n\n    return {\n      processedText,\n      additionalContent,\n      reminders: Array.from(reminders),\n    };\n  }",
-      "contextualizedText": "// node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method processMessage\n\n  async processMessage(\n    text: string,\n    context: MessageContext,\n  ): Promise\u003c{\n    processedText: string;\n    additionalContent: ProviderMessageContent[];\n    reminders: string[];\n  }\u003e {\n    const additionalContent: ProviderMessageContent[] = [];\n    const reminders = new Set\u003cstring\u003e();\n    let processedText = text;\n\n    // Handle @async specially - strip it from the beginning\n    if (processedText.trim().startsWith(\"@async\")) {\n      processedText = processedText.replace(/^\\s*@async\\s*/, \"\");\n    }\n\n    // Find all command matches in the text\n    for (const command of this.commands.values()) {\n      const regex = new RegExp(command.pattern.source, \"g\");\n      let match;\n      while ((match = regex.exec(processedText)) !== null) {\n        const content = await command.execute(match, context);\n        additionalContent.push(...content);\n        if (command.systemReminder !== undefined) {\n          reminders.add(command.systemReminder);\n        }\n      }\n    }\n\n    return {\n      processedText,\n      additionalContent,\n      reminders: Array.from(reminders),\n    };\n  }",
-      "headingContext": "node/chat/commands/registry.ts \u003e class CommandRegistry \u003e method processMessage",
-      "startLine": 94,
-      "startCol": 1,
-      "endLine": 129,
-      "endCol": 4
+      "start": 2377,
+      "end": 4080
     }
   ]
 }

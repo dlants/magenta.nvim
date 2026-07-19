@@ -1,24 +1,15 @@
 {
   "blobSha": "9c298322b9f37326e471ff46c29c68d882c6b409",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { Nvim } from \"./nvim-node/index.ts\";\nimport type { NvimWindow } from \"./window.ts\";\n\nconst URL_REGEX = /^(https?|ftp|file|ssh):\\/\\//;\nconst MARKDOWN_LINK_REGEX = /\\[([^\\]]*)\\]\\(([^)\\s]+)\\)/g;",
-      "contextualizedText": "// node/nvim/cursorToken.ts\n\nimport type { Nvim } from \"./nvim-node/index.ts\";\nimport type { NvimWindow } from \"./window.ts\";\n\nconst URL_REGEX = /^(https?|ftp|file|ssh):\\/\\//;\nconst MARKDOWN_LINK_REGEX = /\\[([^\\]]*)\\]\\(([^)\\s]+)\\)/g;",
-      "headingContext": "node/nvim/cursorToken.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 5,
-      "endCol": 58
+      "start": 0,
+      "end": 1414
     },
     {
-      "text": "/**\n * Resolve what target (file path or URL) is under the cursor in the given window.\n *\n * Detection order:\n *  1. Markdown link `[label](target)` — if cursor is inside the span, return target.\n *  2. `\u003ccWORD\u003e` (whitespace-delimited) — if it looks like a URL, return it\n *     (with trailing punctuation stripped). `\u003ccWORD\u003e` is used because default\n *     `'isfname'` excludes `:`, so `\u003ccfile\u003e` can't hold a full URL.\n *  3. `\u003ccfile\u003e` — honors `'isfname'`, expands `~`/`\\$VAR`, strips trailing\n *     punctuation, collapses `\\\\ ` → ` `.\n *  4. Empty string if nothing resolves.\n */\nexport async function getTokenAtCursor(\n  nvim: Nvim,\n  window: NvimWindow,\n): Promise\u003cstring\u003e {\n  const result = (await nvim.call(\"nvim_exec_lua\", [\n    `\\\nlocal args = {...}\nlocal win_id = args[1]\nreturn vim.api.nvim_win_call(win_id, function()\n  local cfile = vim.fn.expand(\"\u003ccfile\u003e\")\n  local cword = vim.fn.expand(\"\u003ccWORD\u003e\")\n  local line = vim.api.nvim_get_current_line()\n  local col = vim.api.nvim_win_get_cursor(0)[2]\n  return { cfile = cfile, cword = cword, line = line, col = col }\nend)`,\n    [window.id],\n  ])) as { cfile: string; cword: string; line: string; col: number };\n\n  const { line, col } = result;\n\n  const regex = new RegExp(MARKDOWN_LINK_REGEX.source, \"g\");\n  let match: RegExpExecArray | null;\n  while ((match = regex.exec(line)) !== null) {\n    const start = match.index;\n    const end = start + match[0].length;\n    if (col \u003e= start \u0026\u0026 col \u003c end) {\n      nvim.logger.debug(\n        `getTokenAtCursor: returning markdown link target ${JSON.stringify(match[2])}`,\n      );\n      return match[2];\n    }\n  }\n\n  const strippedCword = result.cword.replace(/[,.;:!?)\\]\u003e}]+$/, \"\");\n  if (URL_REGEX.test(strippedCword)) {\n    return strippedCword;\n  }\n\n  return result.cfile;\n}",
-      "contextualizedText": "// node/nvim/cursorToken.ts \u003e function getTokenAtCursor\n\n/**\n * Resolve what target (file path or URL) is under the cursor in the given window.\n *\n * Detection order:\n *  1. Markdown link `[label](target)` — if cursor is inside the span, return target.\n *  2. `\u003ccWORD\u003e` (whitespace-delimited) — if it looks like a URL, return it\n *     (with trailing punctuation stripped). `\u003ccWORD\u003e` is used because default\n *     `'isfname'` excludes `:`, so `\u003ccfile\u003e` can't hold a full URL.\n *  3. `\u003ccfile\u003e` — honors `'isfname'`, expands `~`/`\\$VAR`, strips trailing\n *     punctuation, collapses `\\\\ ` → ` `.\n *  4. Empty string if nothing resolves.\n */\nexport async function getTokenAtCursor(\n  nvim: Nvim,\n  window: NvimWindow,\n): Promise\u003cstring\u003e {\n  const result = (await nvim.call(\"nvim_exec_lua\", [\n    `\\\nlocal args = {...}\nlocal win_id = args[1]\nreturn vim.api.nvim_win_call(win_id, function()\n  local cfile = vim.fn.expand(\"\u003ccfile\u003e\")\n  local cword = vim.fn.expand(\"\u003ccWORD\u003e\")\n  local line = vim.api.nvim_get_current_line()\n  local col = vim.api.nvim_win_get_cursor(0)[2]\n  return { cfile = cfile, cword = cword, line = line, col = col }\nend)`,\n    [window.id],\n  ])) as { cfile: string; cword: string; line: string; col: number };\n\n  const { line, col } = result;\n\n  const regex = new RegExp(MARKDOWN_LINK_REGEX.source, \"g\");\n  let match: RegExpExecArray | null;\n  while ((match = regex.exec(line)) !== null) {\n    const start = match.index;\n    const end = start + match[0].length;\n    if (col \u003e= start \u0026\u0026 col \u003c end) {\n      nvim.logger.debug(\n        `getTokenAtCursor: returning markdown link target ${JSON.stringify(match[2])}`,\n      );\n      return match[2];\n    }\n  }\n\n  const strippedCword = result.cword.replace(/[,.;:!?)\\]\u003e}]+$/, \"\");\n  if (URL_REGEX.test(strippedCword)) {\n    return strippedCword;\n  }\n\n  return result.cfile;\n}",
-      "headingContext": "node/nvim/cursorToken.ts \u003e function getTokenAtCursor",
-      "startLine": 7,
-      "startCol": 1,
-      "endLine": 58,
-      "endCol": 2
+      "start": 1418,
+      "end": 1990
     }
   ]
 }

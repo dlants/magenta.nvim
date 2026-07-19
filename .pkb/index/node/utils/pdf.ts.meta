@@ -1,24 +1,11 @@
 {
   "blobSha": "4bcc39e0433f0bdedf40db6c9899d7d8ea16dd8e",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import fs from \"node:fs\";\nimport { getDocument } from \"pdfjs-dist/legacy/build/pdf.mjs\";\nimport type { Result } from \"./result.ts\";",
-      "contextualizedText": "// node/utils/pdf.ts\n\nimport fs from \"node:fs\";\nimport { getDocument } from \"pdfjs-dist/legacy/build/pdf.mjs\";\nimport type { Result } from \"./result.ts\";",
-      "headingContext": "node/utils/pdf.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 3,
-      "endCol": 43
-    },
-    {
-      "text": "export async function extractPdfText(\n  filePath: string,\n): Promise\u003cResult\u003cstring\u003e\u003e {\n  try {\n    // Load the PDF file from disk\n    const data = new Uint8Array(fs.readFileSync(filePath));\n\n    const loadingTask = getDocument({\n      data,\n      useSystemFonts: true,\n    });\n\n    const pdf = await loadingTask.promise;\n    const textContent: string[] = [];\n\n    for (let pageNum = 1; pageNum \u003c= pdf.numPages; pageNum++) {\n      const page = await pdf.getPage(pageNum);\n      const content = await page.getTextContent();\n\n      // Extract text items and join them\n      const pageText = content.items\n        .map((item) =\u003e {\n          if (\"str\" in item) {\n            return item.str;\n          }\n          return \"\";\n        })\n        .join(\" \");\n\n      if (pageText.trim()) {\n        textContent.push(`\\n--- Page ${pageNum} ---\\n${pageText}`);\n      }\n\n      // Clean up page resources\n      page.cleanup();\n    }\n\n    const fullText = textContent.join(\"\\n\");\n\n    return {\n      status: \"ok\",\n      value: fullText,\n    };\n  } catch (error) {\n    return {\n      status: \"error\",\n      error: `Failed to extract text from PDF: ${(error as Error).message}`,\n    };\n  }\n}",
-      "contextualizedText": "// node/utils/pdf.ts \u003e function extractPdfText\n\nexport async function extractPdfText(\n  filePath: string,\n): Promise\u003cResult\u003cstring\u003e\u003e {\n  try {\n    // Load the PDF file from disk\n    const data = new Uint8Array(fs.readFileSync(filePath));\n\n    const loadingTask = getDocument({\n      data,\n      useSystemFonts: true,\n    });\n\n    const pdf = await loadingTask.promise;\n    const textContent: string[] = [];\n\n    for (let pageNum = 1; pageNum \u003c= pdf.numPages; pageNum++) {\n      const page = await pdf.getPage(pageNum);\n      const content = await page.getTextContent();\n\n      // Extract text items and join them\n      const pageText = content.items\n        .map((item) =\u003e {\n          if (\"str\" in item) {\n            return item.str;\n          }\n          return \"\";\n        })\n        .join(\" \");\n\n      if (pageText.trim()) {\n        textContent.push(`\\n--- Page ${pageNum} ---\\n${pageText}`);\n      }\n\n      // Clean up page resources\n      page.cleanup();\n    }\n\n    const fullText = textContent.join(\"\\n\");\n\n    return {\n      status: \"ok\",\n      value: fullText,\n    };\n  } catch (error) {\n    return {\n      status: \"error\",\n      error: `Failed to extract text from PDF: ${(error as Error).message}`,\n    };\n  }\n}",
-      "headingContext": "node/utils/pdf.ts \u003e function extractPdfText",
-      "startLine": 5,
-      "startCol": 1,
-      "endLine": 54,
-      "endCol": 2
+      "start": 0,
+      "end": 1307
     }
   ]
 }

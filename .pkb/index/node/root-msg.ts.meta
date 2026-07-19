@@ -1,15 +1,11 @@
 {
   "blobSha": "aaeae9ecbfaa14c6dde4d900509049fb848f243c",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { ThreadId } from \"@magenta/core\";\nimport type { ChatMsg } from \"./chat/chat.ts\";\nimport type { ThreadMsg } from \"./chat/thread.ts\";\nimport type { ScriptMsg } from \"./scripts/script-manager.ts\";\n\nexport type SidebarMsg =\n  | {\n      type: \"setup-resubmit\";\n      threadId: ThreadId;\n      lastUserMessage: string;\n    }\n  | {\n      type: \"append-to-input\";\n      threadId: ThreadId;\n      text: string;\n    }\n  | {\n      type: \"scroll-to-last-user-message\";\n    }\n  | {\n      type: \"set-cursor-to-bottom\";\n    };\n\nexport type RootMsg =\n  | ThreadMsg\n  | ChatMsg\n  | ScriptMsg\n  | {\n      type: \"sidebar-msg\";\n      msg: SidebarMsg;\n    }\n  | {\n      type: \"select-thread-effect\";\n      id: ThreadId;\n    }\n  | {\n      type: \"set-thread-title-effect\";\n      id: ThreadId;\n      title: string;\n    };",
-      "contextualizedText": "// node/root-msg.ts\n\nimport type { ThreadId } from \"@magenta/core\";\nimport type { ChatMsg } from \"./chat/chat.ts\";\nimport type { ThreadMsg } from \"./chat/thread.ts\";\nimport type { ScriptMsg } from \"./scripts/script-manager.ts\";\n\nexport type SidebarMsg =\n  | {\n      type: \"setup-resubmit\";\n      threadId: ThreadId;\n      lastUserMessage: string;\n    }\n  | {\n      type: \"append-to-input\";\n      threadId: ThreadId;\n      text: string;\n    }\n  | {\n      type: \"scroll-to-last-user-message\";\n    }\n  | {\n      type: \"set-cursor-to-bottom\";\n    };\n\nexport type RootMsg =\n  | ThreadMsg\n  | ChatMsg\n  | ScriptMsg\n  | {\n      type: \"sidebar-msg\";\n      msg: SidebarMsg;\n    }\n  | {\n      type: \"select-thread-effect\";\n      id: ThreadId;\n    }\n  | {\n      type: \"set-thread-title-effect\";\n      id: ThreadId;\n      title: string;\n    };",
-      "headingContext": "node/root-msg.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 40,
-      "endCol": 7
+      "start": 0,
+      "end": 810
     }
   ]
 }

@@ -1,24 +1,15 @@
 {
   "blobSha": "79a6733e994a8e3fda52d1b93eda6d165b1a069a",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { describe, expect, it } from \"vitest\";\nimport { extractPartialJsonStringValue } from \"./helpers.ts\";\n\ndescribe(\"extractPartialJsonStringValue\"",
-      "contextualizedText": "// node/core/src/tools/helpers.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport { extractPartialJsonStringValue } from \"./helpers.ts\";\n\ndescribe(\"extractPartialJsonStringValue\"",
-      "headingContext": "node/core/src/tools/helpers.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 4,
-      "endCol": 41
+      "start": 0,
+      "end": 1948
     },
     {
-      "text": "() =\u003e {\n  it(\"extracts a complete string value\", () =\u003e {\n    const json = '{\"script\": \"file `foo`\"}';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\"file `foo`\");\n  });\n\n  it(\"extracts a partial string value (incomplete JSON)\", () =\u003e {\n    const json = '{\"script\": \"file `foo`\\\\nsel';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\n      \"file `foo`\\nsel\",\n    );\n  });\n\n  it(\"returns undefined when key is not present\", () =\u003e {\n    expect(extractPartialJsonStringValue('{\"scr', \"script\")).toBe(undefined);\n  });\n\n  it(\"returns undefined when colon is not present\", () =\u003e {\n    expect(extractPartialJsonStringValue('{\"script\"', \"script\")).toBe(\n      undefined,\n    );\n  });\n\n  it(\"returns undefined when opening quote is not present\", () =\u003e {\n    expect(extractPartialJsonStringValue('{\"script\": ', \"script\")).toBe(\n      undefined,\n    );\n  });\n\n  it(\"returns empty string for empty value\", () =\u003e {\n    expect(extractPartialJsonStringValue('{\"script\": \"\"}', \"script\")).toBe(\"\");\n  });\n\n  it(\"unescapes JSON escape sequences\", () =\u003e {\n    const json = '{\"script\": \"line1\\\\nline2\\\\ttab\\\\\\\\backslash\\\\/slash\"}';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\n      \"line1\\nline2\\ttab\\\\backslash/slash\",\n    );\n  });\n\n  it(\"unescapes escaped quotes\", () =\u003e {\n    const json = '{\"script\": \"say \\\\\"hello\\\\\"\"}';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe('say \"hello\"');\n  });\n\n  it(\"unescapes unicode escapes\", () =\u003e {\n    const json = '{\"script\": \"\\\\u0041\\\\u0042\"}';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\"AB\");\n  });\n\n  it(\"handles trailing backslash at end of partial JSON\", () =\u003e {\n    const json = '{\"script\": \"hello\\\\';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\"hello\");\n  });\n\n  it(\"handles just the opening of the string value\", () =\u003e {\n    const json = '{\"script\": \"';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\"\");\n  });\n}",
-      "contextualizedText": "// node/core/src/tools/helpers.test.ts\n\n() =\u003e {\n  it(\"extracts a complete string value\", () =\u003e {\n    const json = '{\"script\": \"file `foo`\"}';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\"file `foo`\");\n  });\n\n  it(\"extracts a partial string value (incomplete JSON)\", () =\u003e {\n    const json = '{\"script\": \"file `foo`\\\\nsel';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\n      \"file `foo`\\nsel\",\n    );\n  });\n\n  it(\"returns undefined when key is not present\", () =\u003e {\n    expect(extractPartialJsonStringValue('{\"scr', \"script\")).toBe(undefined);\n  });\n\n  it(\"returns undefined when colon is not present\", () =\u003e {\n    expect(extractPartialJsonStringValue('{\"script\"', \"script\")).toBe(\n      undefined,\n    );\n  });\n\n  it(\"returns undefined when opening quote is not present\", () =\u003e {\n    expect(extractPartialJsonStringValue('{\"script\": ', \"script\")).toBe(\n      undefined,\n    );\n  });\n\n  it(\"returns empty string for empty value\", () =\u003e {\n    expect(extractPartialJsonStringValue('{\"script\": \"\"}', \"script\")).toBe(\"\");\n  });\n\n  it(\"unescapes JSON escape sequences\", () =\u003e {\n    const json = '{\"script\": \"line1\\\\nline2\\\\ttab\\\\\\\\backslash\\\\/slash\"}';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\n      \"line1\\nline2\\ttab\\\\backslash/slash\",\n    );\n  });\n\n  it(\"unescapes escaped quotes\", () =\u003e {\n    const json = '{\"script\": \"say \\\\\"hello\\\\\"\"}';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe('say \"hello\"');\n  });\n\n  it(\"unescapes unicode escapes\", () =\u003e {\n    const json = '{\"script\": \"\\\\u0041\\\\u0042\"}';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\"AB\");\n  });\n\n  it(\"handles trailing backslash at end of partial JSON\", () =\u003e {\n    const json = '{\"script\": \"hello\\\\';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\"hello\");\n  });\n\n  it(\"handles just the opening of the string value\", () =\u003e {\n    const json = '{\"script\": \"';\n    expect(extractPartialJsonStringValue(json, \"script\")).toBe(\"\");\n  });\n}",
-      "headingContext": "node/core/src/tools/helpers.test.ts",
-      "startLine": 4,
-      "startCol": 43,
-      "endLine": 63,
-      "endCol": 2
+      "start": 1952,
+      "end": 2121
     }
   ]
 }

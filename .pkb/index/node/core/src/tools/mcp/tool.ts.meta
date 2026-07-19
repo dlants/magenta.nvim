@@ -1,33 +1,15 @@
 {
   "blobSha": "ae12ad79a66fe190f36cd364a665d334c2fd5c66",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolResult,\n} from \"../../providers/provider-types.ts\";\nimport type {\n  ToolInvocation,\n  ToolName,\n  ToolRequestId,\n} from \"../../tool-types.ts\";\nimport type { MCPClient } from \"./client.ts\";\nimport { type MCPToolRequestParams, parseToolName } from \"./types.ts\";\n\nexport type Input = {\n  [key: string]: unknown;\n};\n\nexport type MCPProgress = {\n  startTime: number;\n};",
-      "contextualizedText": "// node/core/src/tools/mcp/tool.ts\n\nimport {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolResult,\n} from \"../../providers/provider-types.ts\";\nimport type {\n  ToolInvocation,\n  ToolName,\n  ToolRequestId,\n} from \"../../tool-types.ts\";\nimport type { MCPClient } from \"./client.ts\";\nimport { type MCPToolRequestParams, parseToolName } from \"./types.ts\";\n\nexport type Input = {\n  [key: string]: unknown;\n};\n\nexport type MCPProgress = {\n  startTime: number;\n};",
-      "headingContext": "node/core/src/tools/mcp/tool.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 19,
-      "endCol": 3
+      "start": 0,
+      "end": 1887
     },
     {
-      "text": "export function execute(\n  request: {\n    id: ToolRequestId;\n    toolName: ToolName;\n    input: Input;\n  },\n  context: {\n    mcpClient: MCPClient;\n    requestRender: () =\u003e void;\n  },\n): ToolInvocation \u0026 { progress: MCPProgress } {\n  let aborted = false;\n\n  const progress: MCPProgress = {\n    startTime: Date.now(),\n  };\n\n  const tickInterval = setInterval(() =\u003e {\n    context.requestRender();\n  }, 1000);\n\n  const abortResult: ProviderToolResult = {\n    type: \"tool_result\",\n    id: request.id,\n    result: { status: \"error\", error: \"Request was aborted by the user.\" },\n    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  };\n\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    try {\n      if (aborted) return abortResult;\n\n      const mcpToolName = parseToolName(request.toolName).mcpToolName;\n      const params = request.input as MCPToolRequestParams;\n\n      const result = await context.mcpClient.callTool(mcpToolName, params);\n\n      if (aborted) return abortResult;\n\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: result,\n          structuredResult: { toolName: request.toolName },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    } catch (error) {\n      if (aborted) return abortResult;\n\n      const errorMessage =\n        error instanceof Error\n          ? `${error.message}\\n${error.stack}`\n          : String(error);\n\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: `MCP tool error: ${errorMessage}`,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    } finally {\n      clearInterval(tickInterval);\n    }\n  })();\n\n  return {\n    promise,\n    progress",
-      "contextualizedText": "// node/core/src/tools/mcp/tool.ts \u003e function execute\n\nexport function execute(\n  request: {\n    id: ToolRequestId;\n    toolName: ToolName;\n    input: Input;\n  },\n  context: {\n    mcpClient: MCPClient;\n    requestRender: () =\u003e void;\n  },\n): ToolInvocation \u0026 { progress: MCPProgress } {\n  let aborted = false;\n\n  const progress: MCPProgress = {\n    startTime: Date.now(),\n  };\n\n  const tickInterval = setInterval(() =\u003e {\n    context.requestRender();\n  }, 1000);\n\n  const abortResult: ProviderToolResult = {\n    type: \"tool_result\",\n    id: request.id,\n    result: { status: \"error\", error: \"Request was aborted by the user.\" },\n    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  };\n\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    try {\n      if (aborted) return abortResult;\n\n      const mcpToolName = parseToolName(request.toolName).mcpToolName;\n      const params = request.input as MCPToolRequestParams;\n\n      const result = await context.mcpClient.callTool(mcpToolName, params);\n\n      if (aborted) return abortResult;\n\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: result,\n          structuredResult: { toolName: request.toolName },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    } catch (error) {\n      if (aborted) return abortResult;\n\n      const errorMessage =\n        error instanceof Error\n          ? `${error.message}\\n${error.stack}`\n          : String(error);\n\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: `MCP tool error: ${errorMessage}`,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    } finally {\n      clearInterval(tickInterval);\n    }\n  })();\n\n  return {\n    promise,\n    progress",
-      "headingContext": "node/core/src/tools/mcp/tool.ts \u003e function execute",
-      "startLine": 21,
-      "startCol": 1,
-      "endLine": 94,
-      "endCol": 13
-    },
-    {
-      "text": "    abort: () =\u003e {\n      aborted = true;\n      clearInterval(tickInterval);\n    }",
-      "contextualizedText": "// node/core/src/tools/mcp/tool.ts \u003e function execute \u003e function abort\n\n    abort: () =\u003e {\n      aborted = true;\n      clearInterval(tickInterval);\n    }",
-      "headingContext": "node/core/src/tools/mcp/tool.ts \u003e function execute \u003e function abort",
-      "startLine": 95,
-      "startCol": 1,
-      "endLine": 98,
-      "endCol": 6
+      "start": 1895,
+      "end": 2325
     }
   ]
 }

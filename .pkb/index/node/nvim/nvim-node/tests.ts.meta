@@ -1,15 +1,11 @@
 {
   "blobSha": "4894d37a785bcd24a31509e6041ffdc6c0284e19",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { attach } from \"./index.ts\";\n\nconst SOCKET = process.env.NVIM;\nif (!SOCKET) throw Error(\"socket missing\");\n\ntype MyEvents = {\n  notifications: {\n    \"some-notification\": [name: string, id: number];\n  };\n  requests: {\n    \"some-request\": [name: string];\n  };\n};\n\nconst nvim = await attach\u003cMyEvents\u003e({\n  socket: SOCKET,\n  client: {\n    name: \"node\",\n    version: {\n      minor: 0,\n    },\n    methods: {\n      \"some-method\": {\n        async: false,\n        nargs: 9,\n      },\n    },\n    attributes: {\n      website: \"https://wallpants.io\",\n    },\n  },\n  logging: { level: \"debug\" },\n});\n\nnvim.detach();",
-      "contextualizedText": "// node/nvim/nvim-node/tests.ts\n\nimport { attach } from \"./index.ts\";\n\nconst SOCKET = process.env.NVIM;\nif (!SOCKET) throw Error(\"socket missing\");\n\ntype MyEvents = {\n  notifications: {\n    \"some-notification\": [name: string, id: number];\n  };\n  requests: {\n    \"some-request\": [name: string];\n  };\n};\n\nconst nvim = await attach\u003cMyEvents\u003e({\n  socket: SOCKET,\n  client: {\n    name: \"node\",\n    version: {\n      minor: 0,\n    },\n    methods: {\n      \"some-method\": {\n        async: false,\n        nargs: 9,\n      },\n    },\n    attributes: {\n      website: \"https://wallpants.io\",\n    },\n  },\n  logging: { level: \"debug\" },\n});\n\nnvim.detach();",
-      "headingContext": "node/nvim/nvim-node/tests.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 35,
-      "endCol": 15
+      "start": 0,
+      "end": 607
     }
   ]
 }

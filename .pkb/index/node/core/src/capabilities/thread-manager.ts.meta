@@ -1,51 +1,11 @@
 {
   "blobSha": "e1fd57f4ed729ebb35beadc0c8f3aab0018f8bb7",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { SubagentConfig, ThreadId, ThreadType } from \"../chat-types.ts\";\nimport type { UnresolvedFilePath } from \"../utils/files.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport type DockerSpawnConfig = {\n  containerName: string;\n  imageName: string;\n  workspacePath: string;\n  hostDir: string;\n  supervised: boolean;\n};",
-      "contextualizedText": "// node/core/src/capabilities/thread-manager.ts\n\nimport type { SubagentConfig, ThreadId, ThreadType } from \"../chat-types.ts\";\nimport type { UnresolvedFilePath } from \"../utils/files.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport type DockerSpawnConfig = {\n  containerName: string;\n  imageName: string;\n  workspacePath: string;\n  hostDir: string;\n  supervised: boolean;\n};",
-      "headingContext": "node/core/src/capabilities/thread-manager.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 11,
-      "endCol": 3
-    },
-    {
-      "text": "export interface ThreadManager",
-      "contextualizedText": "// node/core/src/capabilities/thread-manager.ts \u003e interface ThreadManager\n\nexport interface ThreadManager",
-      "headingContext": "node/core/src/capabilities/thread-manager.ts \u003e interface ThreadManager",
-      "startLine": 13,
-      "startCol": 1,
-      "endLine": 13,
-      "endCol": 31
-    },
-    {
-      "text": "  spawnThread(opts: {\n    parentThreadId: ThreadId;\n    prompt: string;\n    threadType: ThreadType;\n    subagentConfig?: SubagentConfig;\n    contextFiles?: UnresolvedFilePath[];\n    dockerSpawnConfig?: DockerSpawnConfig;\n    cwd?: string;\n  }): Promise\u003cThreadId\u003e",
-      "contextualizedText": "// node/core/src/capabilities/thread-manager.ts \u003e interface ThreadManager \u003e method spawnThread\n\n  spawnThread(opts: {\n    parentThreadId: ThreadId;\n    prompt: string;\n    threadType: ThreadType;\n    subagentConfig?: SubagentConfig;\n    contextFiles?: UnresolvedFilePath[];\n    dockerSpawnConfig?: DockerSpawnConfig;\n    cwd?: string;\n  }): Promise\u003cThreadId\u003e",
-      "headingContext": "node/core/src/capabilities/thread-manager.ts \u003e interface ThreadManager \u003e method spawnThread",
-      "startLine": 14,
-      "startCol": 1,
-      "endLine": 22,
-      "endCol": 24
-    },
-    {
-      "text": "  onThreadYielded(threadId: ThreadId, callback: () =\u003e void): void",
-      "contextualizedText": "// node/core/src/capabilities/thread-manager.ts \u003e interface ThreadManager \u003e method onThreadYielded\n\n  onThreadYielded(threadId: ThreadId, callback: () =\u003e void): void",
-      "headingContext": "node/core/src/capabilities/thread-manager.ts \u003e interface ThreadManager \u003e method onThreadYielded",
-      "startLine": 24,
-      "startCol": 1,
-      "endLine": 24,
-      "endCol": 66
-    },
-    {
-      "text": "  getThreadResult(\n    threadId: ThreadId,\n  ): { status: \"done\"; result: Result\u003cstring\u003e } | { status: \"pending\" }",
-      "contextualizedText": "// node/core/src/capabilities/thread-manager.ts \u003e interface ThreadManager \u003e method getThreadResult\n\n  getThreadResult(\n    threadId: ThreadId,\n  ): { status: \"done\"; result: Result\u003cstring\u003e } | { status: \"pending\" }",
-      "headingContext": "node/core/src/capabilities/thread-manager.ts \u003e interface ThreadManager \u003e method getThreadResult",
-      "startLine": 26,
-      "startCol": 1,
-      "endLine": 28,
-      "endCol": 72
+      "start": 0,
+      "end": 824
     }
   ]
 }

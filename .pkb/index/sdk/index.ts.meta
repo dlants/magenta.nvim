@@ -1,15 +1,11 @@
 {
   "blobSha": "1dfa59b315d4f4a88efeb37fe3a7efe43e643003",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { activate } from \"./client.ts\";\n\nexport type {\n  JSONSchema,\n  MagentaToScript,\n  Result,\n  ScriptMeta,\n  ScriptToMagenta,\n  ThreadOptions,\n} from \"./protocol.ts\";\nexport type { LogFn, Runner, ThreadFn } from \"./registry.ts\";\nexport { registerScript } from \"./registry.ts\";\n\n// Auto-activate the IPC client when run as a child process with an IPC channel.\n// In-process (e.g. the test harness) this is a no-op.\nactivate();",
-      "contextualizedText": "// sdk/index.ts\n\nimport { activate } from \"./client.ts\";\n\nexport type {\n  JSONSchema,\n  MagentaToScript,\n  Result,\n  ScriptMeta,\n  ScriptToMagenta,\n  ThreadOptions,\n} from \"./protocol.ts\";\nexport type { LogFn, Runner, ThreadFn } from \"./registry.ts\";\nexport { registerScript } from \"./registry.ts\";\n\n// Auto-activate the IPC client when run as a child process with an IPC channel.\n// In-process (e.g. the test harness) this is a no-op.\nactivate();",
-      "headingContext": "sdk/index.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 12
+      "start": 0,
+      "end": 430
     }
   ]
 }

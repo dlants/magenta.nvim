@@ -1,123 +1,15 @@
 {
   "blobSha": "196be535c708fd7f04a20de88fe784069fb8fac2",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { FileIO } from \"../capabilities/file-io.ts\";",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts\n\nimport type { FileIO } from \"../capabilities/file-io.ts\";",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 1,
-      "endCol": 58
+      "start": 0,
+      "end": 2227
     },
     {
-      "text": "export class InMemoryFileIO implements FileIO {\n  private files: Map\u003cstring, string\u003e;\n\n  constructor(initialFiles: Record\u003cstring, string\u003e) {\n    this.files = new Map(Object.entries(initialFiles));\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO\n\nexport class InMemoryFileIO implements FileIO {\n  private files: Map\u003cstring, string\u003e;\n\n  constructor(initialFiles: Record\u003cstring, string\u003e) {\n    this.files = new Map(Object.entries(initialFiles));\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO",
-      "startLine": 3,
-      "startCol": 1,
-      "endLine": 8,
-      "endCol": 4
-    },
-    {
-      "text": "  readFile(path: string): Promise\u003cstring\u003e {\n    const content = this.files.get(path);\n    if (content === undefined) {\n      const err = new Error(\n        `ENOENT: no such file or directory, open '${path}'`,\n      );\n      (err as NodeJS.ErrnoException).code = \"ENOENT\";\n      return Promise.reject(err);\n    }\n    return Promise.resolve(content);\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method readFile\n\n  readFile(path: string): Promise\u003cstring\u003e {\n    const content = this.files.get(path);\n    if (content === undefined) {\n      const err = new Error(\n        `ENOENT: no such file or directory, open '${path}'`,\n      );\n      (err as NodeJS.ErrnoException).code = \"ENOENT\";\n      return Promise.reject(err);\n    }\n    return Promise.resolve(content);\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method readFile",
-      "startLine": 10,
-      "startCol": 1,
-      "endLine": 20,
-      "endCol": 4
-    },
-    {
-      "text": "  async readBinaryFile(path: string): Promise\u003cBuffer\u003e {\n    const content = await this.readFile(path);\n    return Buffer.from(content);\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method readBinaryFile\n\n  async readBinaryFile(path: string): Promise\u003cBuffer\u003e {\n    const content = await this.readFile(path);\n    return Buffer.from(content);\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method readBinaryFile",
-      "startLine": 22,
-      "startCol": 1,
-      "endLine": 25,
-      "endCol": 4
-    },
-    {
-      "text": "  writeFile(path: string, content: string): Promise\u003cvoid\u003e {\n    this.files.set(path, content);\n    return Promise.resolve();\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method writeFile\n\n  writeFile(path: string, content: string): Promise\u003cvoid\u003e {\n    this.files.set(path, content);\n    return Promise.resolve();\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method writeFile",
-      "startLine": 27,
-      "startCol": 1,
-      "endLine": 30,
-      "endCol": 4
-    },
-    {
-      "text": "  writeFileSync(path: string, content: string) {\n    this.files.set(path, content);\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method writeFileSync\n\n  writeFileSync(path: string, content: string) {\n    this.files.set(path, content);\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method writeFileSync",
-      "startLine": 32,
-      "startCol": 1,
-      "endLine": 34,
-      "endCol": 4
-    },
-    {
-      "text": "  fileExists(path: string): Promise\u003cboolean\u003e {\n    return Promise.resolve(this.files.has(path));\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method fileExists\n\n  fileExists(path: string): Promise\u003cboolean\u003e {\n    return Promise.resolve(this.files.has(path));\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method fileExists",
-      "startLine": 36,
-      "startCol": 1,
-      "endLine": 38,
-      "endCol": 4
-    },
-    {
-      "text": "  mkdir(_path: string): Promise\u003cvoid\u003e {\n    return Promise.resolve();\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method mkdir\n\n  mkdir(_path: string): Promise\u003cvoid\u003e {\n    return Promise.resolve();\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method mkdir",
-      "startLine": 40,
-      "startCol": 1,
-      "endLine": 42,
-      "endCol": 4
-    },
-    {
-      "text": "  stat(path: string): Promise\u003c{ mtimeMs: number; size: number } | undefined\u003e {\n    if (this.files.has(path)) {\n      return Promise.resolve({ mtimeMs: Date.now(), size: 0 });\n    }\n    return Promise.resolve(undefined);\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method stat\n\n  stat(path: string): Promise\u003c{ mtimeMs: number; size: number } | undefined\u003e {\n    if (this.files.has(path)) {\n      return Promise.resolve({ mtimeMs: Date.now(), size: 0 });\n    }\n    return Promise.resolve(undefined);\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method stat",
-      "startLine": 44,
-      "startCol": 1,
-      "endLine": 49,
-      "endCol": 4
-    },
-    {
-      "text": "  deleteFile(path: string): void {\n    this.files.delete(path);\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method deleteFile\n\n  deleteFile(path: string): void {\n    this.files.delete(path);\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method deleteFile",
-      "startLine": 51,
-      "startCol": 1,
-      "endLine": 53,
-      "endCol": 4
-    },
-    {
-      "text": "  getFileContents(path: string): string | undefined {\n    return this.files.get(path);\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method getFileContents\n\n  getFileContents(path: string): string | undefined {\n    return this.files.get(path);\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method getFileContents",
-      "startLine": 54,
-      "startCol": 1,
-      "endLine": 56,
-      "endCol": 4
-    },
-    {
-      "text": "  async readdir(path: string): Promise\u003cstring[]\u003e {\n    const prefix = path.endsWith(\"/\") ? path : `${path}/`;\n    const children = new Set\u003cstring\u003e();\n\n    for (const key of this.files.keys()) {\n      if (key.startsWith(prefix)) {\n        // Get the part after the prefix\n        const remaining = key.slice(prefix.length);\n        // Get the first component (directory or file name)\n        const firstComponent = remaining.split(\"/\")[0];\n        if (firstComponent) {\n          children.add(firstComponent);\n        }\n      }\n    }\n\n    return Array.from(children).sort();\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method readdir\n\n  async readdir(path: string): Promise\u003cstring[]\u003e {\n    const prefix = path.endsWith(\"/\") ? path : `${path}/`;\n    const children = new Set\u003cstring\u003e();\n\n    for (const key of this.files.keys()) {\n      if (key.startsWith(prefix)) {\n        // Get the part after the prefix\n        const remaining = key.slice(prefix.length);\n        // Get the first component (directory or file name)\n        const firstComponent = remaining.split(\"/\")[0];\n        if (firstComponent) {\n          children.add(firstComponent);\n        }\n      }\n    }\n\n    return Array.from(children).sort();\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method readdir",
-      "startLine": 57,
-      "startCol": 1,
-      "endLine": 74,
-      "endCol": 4
-    },
-    {
-      "text": "  async isDirectory(path: string): Promise\u003cboolean\u003e {\n    const prefix = path.endsWith(\"/\") ? path : `${path}/`;\n\n    for (const key of this.files.keys()) {\n      if (key.startsWith(prefix)) {\n        return true;\n      }\n    }\n\n    return false;\n  }",
-      "contextualizedText": "// node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method isDirectory\n\n  async isDirectory(path: string): Promise\u003cboolean\u003e {\n    const prefix = path.endsWith(\"/\") ? path : `${path}/`;\n\n    for (const key of this.files.keys()) {\n      if (key.startsWith(prefix)) {\n        return true;\n      }\n    }\n\n    return false;\n  }",
-      "headingContext": "node/core/src/edl/in-memory-file-io.ts \u003e class InMemoryFileIO \u003e method isDirectory",
-      "startLine": 76,
-      "startCol": 1,
-      "endLine": 86,
-      "endCol": 4
+      "start": 2233,
+      "end": 2367
     }
   ]
 }

@@ -1,24 +1,11 @@
 {
   "blobSha": "30be8fda98a951628bfdb9525927ac2233200f97",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export type StringIdx = number \u0026 { __charIdx: true };\n\nexport type Row0Indexed = number \u0026 { __row0Indexed: true };\n\nexport type PositionString = {\n  row: Row0Indexed;\n  col: StringIdx;\n};",
-      "contextualizedText": "// node/core/src/utils/string-position.ts\n\nexport type StringIdx = number \u0026 { __charIdx: true };\n\nexport type Row0Indexed = number \u0026 { __row0Indexed: true };\n\nexport type PositionString = {\n  row: Row0Indexed;\n  col: StringIdx;\n};",
-      "headingContext": "node/core/src/utils/string-position.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 8,
-      "endCol": 3
-    },
-    {
-      "text": "export function calculateStringPosition(\n  startPos: PositionString,\n  content: string,\n  indexInText: StringIdx,\n): PositionString {\n  let { row, col } = startPos;\n  let currentIndex = 0 as StringIdx;\n\n  while (currentIndex \u003c indexInText) {\n    if (content[currentIndex] === \"\\n\") {\n      row++;\n      col = 0 as StringIdx;\n    } else {\n      col++;\n    }\n    currentIndex++;\n  }\n\n  return { row, col };\n}",
-      "contextualizedText": "// node/core/src/utils/string-position.ts \u003e function calculateStringPosition\n\nexport function calculateStringPosition(\n  startPos: PositionString,\n  content: string,\n  indexInText: StringIdx,\n): PositionString {\n  let { row, col } = startPos;\n  let currentIndex = 0 as StringIdx;\n\n  while (currentIndex \u003c indexInText) {\n    if (content[currentIndex] === \"\\n\") {\n      row++;\n      col = 0 as StringIdx;\n    } else {\n      col++;\n    }\n    currentIndex++;\n  }\n\n  return { row, col };\n}",
-      "headingContext": "node/core/src/utils/string-position.ts \u003e function calculateStringPosition",
-      "startLine": 10,
-      "startCol": 1,
-      "endLine": 29,
-      "endCol": 2
+      "start": 0,
+      "end": 595
     }
   ]
 }

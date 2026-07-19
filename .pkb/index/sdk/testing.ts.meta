@@ -1,123 +1,15 @@
 {
   "blobSha": "82b6b7fd8a1fa164b25c197011a905a81d59192a",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { JSONSchema, ThreadOptions } from \"./protocol.ts\";\nimport { getRegistry } from \"./registry.ts\";\n\nexport { clearRegistry } from \"./registry.ts\";\n\n/**\n * A pending `thread()` invocation captured by the test harness. The test\n * inspects `prompt` / `yieldSchema` / `options` and settles the specific call\n * via `yield(value)` or `reject(error)`.\n */\nexport type PendingThread = {\n  prompt: string;\n  yieldSchema: JSONSchema;\n  options: ThreadOptions | undefined",
-      "contextualizedText": "// sdk/testing.ts\n\nimport type { JSONSchema, ThreadOptions } from \"./protocol.ts\";\nimport { getRegistry } from \"./registry.ts\";\n\nexport { clearRegistry } from \"./registry.ts\";\n\n/**\n * A pending `thread()` invocation captured by the test harness. The test\n * inspects `prompt` / `yieldSchema` / `options` and settles the specific call\n * via `yield(value)` or `reject(error)`.\n */\nexport type PendingThread = {\n  prompt: string;\n  yieldSchema: JSONSchema;\n  options: ThreadOptions | undefined",
-      "headingContext": "sdk/testing.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 14,
-      "endCol": 37
+      "start": 0,
+      "end": 1938
     },
     {
-      "text": "  yield(value: unknown): void",
-      "contextualizedText": "// sdk/testing.ts \u003e method yield\n\n  yield(value: unknown): void",
-      "headingContext": "sdk/testing.ts \u003e method yield",
-      "startLine": 15,
-      "startCol": 1,
-      "endLine": 15,
-      "endCol": 30
-    },
-    {
-      "text": "  reject(error: Error): void",
-      "contextualizedText": "// sdk/testing.ts \u003e method reject\n\n  reject(error: Error): void",
-      "headingContext": "sdk/testing.ts \u003e method reject",
-      "startLine": 16,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 29
-    },
-    {
-      "text": "ScriptHandle = {\n  /** Captured `log()` messages, in order. */\n  logs: string[]",
-      "contextualizedText": "// sdk/testing.ts\n\nScriptHandle = {\n  /** Captured `log()` messages, in order. */\n  logs: string[]",
-      "headingContext": "sdk/testing.ts",
-      "startLine": 19,
-      "startCol": 13,
-      "endLine": 21,
-      "endCol": 17
-    },
-    {
-      "text": "/** Resolves with the next pending `thread()` invocation. */\n  nextThread(): Promise\u003cPendingThread\u003e",
-      "contextualizedText": "// sdk/testing.ts \u003e method nextThread\n\n/** Resolves with the next pending `thread()` invocation. */\n  nextThread(): Promise\u003cPendingThread\u003e",
-      "headingContext": "sdk/testing.ts \u003e method nextThread",
-      "startLine": 22,
-      "startCol": 3,
-      "endLine": 23,
-      "endCol": 39
-    },
-    {
-      "text": "/**\n * Drive a registered runner in-process with test-double `thread`/`log`. The\n * script module must be statically imported before calling this so its\n * `registerScript` call has populated the registry.\n */\nexport function runScript(\n  scriptName: string,\n  parameters: unknown,\n): { handle: ScriptHandle; donePromise: Promise\u003cvoid\u003e } {\n  const script = getRegistry().get(scriptName);\n  if (!script) {\n    throw new Error(`unknown script ${scriptName}`);\n  }\n\n  const logs: string[] = [];\n  const pendingQueue: PendingThread[] = [];\n  const waiters: Array\u003c(t: PendingThread) =\u003e void\u003e = [];",
-      "contextualizedText": "// sdk/testing.ts \u003e function runScript\n\n/**\n * Drive a registered runner in-process with test-double `thread`/`log`. The\n * script module must be statically imported before calling this so its\n * `registerScript` call has populated the registry.\n */\nexport function runScript(\n  scriptName: string,\n  parameters: unknown,\n): { handle: ScriptHandle; donePromise: Promise\u003cvoid\u003e } {\n  const script = getRegistry().get(scriptName);\n  if (!script) {\n    throw new Error(`unknown script ${scriptName}`);\n  }\n\n  const logs: string[] = [];\n  const pendingQueue: PendingThread[] = [];\n  const waiters: Array\u003c(t: PendingThread) =\u003e void\u003e = [];",
-      "headingContext": "sdk/testing.ts \u003e function runScript",
-      "startLine": 26,
-      "startCol": 1,
-      "endLine": 42,
-      "endCol": 57
-    },
-    {
-      "text": "  const log = (message: string) =\u003e {\n    logs.push(message);\n  }",
-      "contextualizedText": "// sdk/testing.ts \u003e function runScript \u003e function log\n\n  const log = (message: string) =\u003e {\n    logs.push(message);\n  }",
-      "headingContext": "sdk/testing.ts \u003e function runScript \u003e function log",
-      "startLine": 44,
-      "startCol": 1,
-      "endLine": 46,
-      "endCol": 4
-    },
-    {
-      "text": "  const thread = \u003cT\u003e(\n    prompt: string,\n    yieldSchema: JSONSchema,\n    options?: ThreadOptions,\n  ): Promise\u003cT\u003e =\u003e\n    new Promise\u003cT\u003e((resolve, reject) =\u003e {\n      const pending: PendingThread = {\n        prompt,\n        yieldSchema,\n        options",
-      "contextualizedText": "// sdk/testing.ts \u003e function runScript \u003e function thread\n\n  const thread = \u003cT\u003e(\n    prompt: string,\n    yieldSchema: JSONSchema,\n    options?: ThreadOptions,\n  ): Promise\u003cT\u003e =\u003e\n    new Promise\u003cT\u003e((resolve, reject) =\u003e {\n      const pending: PendingThread = {\n        prompt,\n        yieldSchema,\n        options",
-      "headingContext": "sdk/testing.ts \u003e function runScript \u003e function thread",
-      "startLine": 48,
-      "startCol": 1,
-      "endLine": 57,
-      "endCol": 16
-    },
-    {
-      "text": "        yield: (value) =\u003e resolve(value as T)",
-      "contextualizedText": "// sdk/testing.ts \u003e function runScript \u003e function thread \u003e function yield\n\n        yield: (value) =\u003e resolve(value as T)",
-      "headingContext": "sdk/testing.ts \u003e function runScript \u003e function thread \u003e function yield",
-      "startLine": 58,
-      "startCol": 1,
-      "endLine": 58,
-      "endCol": 46
-    },
-    {
-      "text": "reject,\n      };\n      const waiter = waiters.shift();\n      if (waiter) {\n        waiter(pending);\n      } else {\n        pendingQueue.push(pending);\n      }\n    })",
-      "contextualizedText": "// sdk/testing.ts \u003e function runScript \u003e function thread\n\nreject,\n      };\n      const waiter = waiters.shift();\n      if (waiter) {\n        waiter(pending);\n      } else {\n        pendingQueue.push(pending);\n      }\n    })",
-      "headingContext": "sdk/testing.ts \u003e function runScript \u003e function thread",
-      "startLine": 59,
-      "startCol": 9,
-      "endLine": 67,
-      "endCol": 7
-    },
-    {
-      "text": "const donePromise = script.runner(parameters, thread, log);\n\n  const handle: ScriptHandle = {\n    logs",
-      "contextualizedText": "// sdk/testing.ts \u003e function runScript\n\nconst donePromise = script.runner(parameters, thread, log);\n\n  const handle: ScriptHandle = {\n    logs",
-      "headingContext": "sdk/testing.ts \u003e function runScript",
-      "startLine": 69,
-      "startCol": 3,
-      "endLine": 72,
-      "endCol": 9
-    },
-    {
-      "text": "    nextThread() {\n      return new Promise\u003cPendingThread\u003e((resolve) =\u003e {\n        const pending = pendingQueue.shift();\n        if (pending) {\n          resolve(pending);\n        } else {\n          waiters.push(resolve);\n        }\n      });\n    }",
-      "contextualizedText": "// sdk/testing.ts \u003e function runScript \u003e method nextThread\n\n    nextThread() {\n      return new Promise\u003cPendingThread\u003e((resolve) =\u003e {\n        const pending = pendingQueue.shift();\n        if (pending) {\n          resolve(pending);\n        } else {\n          waiters.push(resolve);\n        }\n      });\n    }",
-      "headingContext": "sdk/testing.ts \u003e function runScript \u003e method nextThread",
-      "startLine": 73,
-      "startCol": 1,
-      "endLine": 82,
-      "endCol": 6
-    },
-    {
-      "text": "return { handle, donePromise };\n}",
-      "contextualizedText": "// sdk/testing.ts \u003e function runScript\n\nreturn { handle, donePromise };\n}",
-      "headingContext": "sdk/testing.ts \u003e function runScript",
-      "startLine": 85,
-      "startCol": 3,
-      "endLine": 86,
-      "endCol": 2
+      "start": 1942,
+      "end": 2272
     }
   ]
 }

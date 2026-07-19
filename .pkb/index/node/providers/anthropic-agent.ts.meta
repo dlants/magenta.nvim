@@ -1,15 +1,11 @@
 {
   "blobSha": "26a3b4f6c6559689592929e63b94584415b7b225",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export type { AnthropicAgentOptions } from \"@magenta/core\";\nexport {\n  AnthropicAgent,\n  CLAUDE_CODE_SPOOF_PROMPT,\n  convertAnthropicMessagesToProvider,\n  getContextWindowForModel,\n  getMaxTokensForModel,\n  withCacheControl,\n} from \"@magenta/core\";",
-      "contextualizedText": "// node/providers/anthropic-agent.ts\n\nexport type { AnthropicAgentOptions } from \"@magenta/core\";\nexport {\n  AnthropicAgent,\n  CLAUDE_CODE_SPOOF_PROMPT,\n  convertAnthropicMessagesToProvider,\n  getContextWindowForModel,\n  getMaxTokensForModel,\n  withCacheControl,\n} from \"@magenta/core\";",
-      "headingContext": "node/providers/anthropic-agent.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 9,
-      "endCol": 24
+      "start": 0,
+      "end": 248
     }
   ]
 }

@@ -1,15 +1,15 @@
 {
   "blobSha": "2c61b09011da4dd34ba2cff95f0084ff52765b39",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { describe, expect, it } from \"vitest\";\nimport { AutoCompactSupervisor } from \"./thread-supervisor.ts\";\n\ndescribe(\"AutoCompactSupervisor\", () =\u003e {\n  it(\"returns compact (with nextPrompt) at or over the threshold\", () =\u003e {\n    const sup = new AutoCompactSupervisor({\n      threshold: 300000,\n      nextPrompt: \"go\",\n    });\n    expect(\n      sup.onHandoff({ inputTokenCount: 300000, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"compact\", nextPrompt: \"go\" });\n    expect(\n      sup.onHandoff({ inputTokenCount: 400000, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"compact\", nextPrompt: \"go\" });\n  });\n\n  it(\"returns none below the threshold\", () =\u003e {\n    const sup = new AutoCompactSupervisor({\n      threshold: 300000,\n      nextPrompt: \"go\",\n    });\n    expect(\n      sup.onHandoff({ inputTokenCount: 299999, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"none\" });\n  });\n\n  it(\"returns none when inputTokenCount is undefined\", () =\u003e {\n    const sup = new AutoCompactSupervisor({\n      threshold: 300000,\n      nextPrompt: \"go\",\n    });\n    expect(\n      sup.onHandoff({ inputTokenCount: undefined, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"none\" });\n  });\n\n  it(\"defaults the threshold to 300000\", () =\u003e {\n    const sup = new AutoCompactSupervisor({ nextPrompt: \"go\" });\n    expect(\n      sup.onHandoff({ inputTokenCount: 300000, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"compact\", nextPrompt: \"go\" });\n    expect(\n      sup.onHandoff({ inputTokenCount: 299999, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"none\" });\n  });\n\n  it(\"passes through the configured nextPrompt\", () =\u003e {\n    const sup = new AutoCompactSupervisor({\n      threshold: 100,\n      nextPrompt: \"custom\",\n    });\n    expect(\n      sup.onHandoff({ inputTokenCount: 200, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"compact\", nextPrompt: \"custom\" });\n  });\n});",
-      "contextualizedText": "// node/core/src/thread-supervisor.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport { AutoCompactSupervisor } from \"./thread-supervisor.ts\";\n\ndescribe(\"AutoCompactSupervisor\", () =\u003e {\n  it(\"returns compact (with nextPrompt) at or over the threshold\", () =\u003e {\n    const sup = new AutoCompactSupervisor({\n      threshold: 300000,\n      nextPrompt: \"go\",\n    });\n    expect(\n      sup.onHandoff({ inputTokenCount: 300000, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"compact\", nextPrompt: \"go\" });\n    expect(\n      sup.onHandoff({ inputTokenCount: 400000, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"compact\", nextPrompt: \"go\" });\n  });\n\n  it(\"returns none below the threshold\", () =\u003e {\n    const sup = new AutoCompactSupervisor({\n      threshold: 300000,\n      nextPrompt: \"go\",\n    });\n    expect(\n      sup.onHandoff({ inputTokenCount: 299999, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"none\" });\n  });\n\n  it(\"returns none when inputTokenCount is undefined\", () =\u003e {\n    const sup = new AutoCompactSupervisor({\n      threshold: 300000,\n      nextPrompt: \"go\",\n    });\n    expect(\n      sup.onHandoff({ inputTokenCount: undefined, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"none\" });\n  });\n\n  it(\"defaults the threshold to 300000\", () =\u003e {\n    const sup = new AutoCompactSupervisor({ nextPrompt: \"go\" });\n    expect(\n      sup.onHandoff({ inputTokenCount: 300000, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"compact\", nextPrompt: \"go\" });\n    expect(\n      sup.onHandoff({ inputTokenCount: 299999, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"none\" });\n  });\n\n  it(\"passes through the configured nextPrompt\", () =\u003e {\n    const sup = new AutoCompactSupervisor({\n      threshold: 100,\n      nextPrompt: \"custom\",\n    });\n    expect(\n      sup.onHandoff({ inputTokenCount: 200, stopReason: \"end_turn\" }),\n    ).toEqual({ type: \"compact\", nextPrompt: \"custom\" });\n  });\n});",
-      "headingContext": "node/core/src/thread-supervisor.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 57,
-      "endCol": 4
+      "start": 0,
+      "end": 1564
+    },
+    {
+      "start": 1568,
+      "end": 1875
     }
   ]
 }

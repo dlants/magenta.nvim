@@ -1,96 +1,11 @@
 {
   "blobSha": "b505a21b35577e1c23ad497904d55af4ececbc00",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { execFile as execFileCb } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport {\n  type GitClient,\n  type GitCommandRunner,\n  type GitState,\n  parseGitState,\n} from \"@magenta/core\";\n\nconst execFile = promisify(execFileCb);",
-      "contextualizedText": "// node/capabilities/git-client.ts\n\nimport { execFile as execFileCb } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport {\n  type GitClient,\n  type GitCommandRunner,\n  type GitState,\n  parseGitState,\n} from \"@magenta/core\";\n\nconst execFile = promisify(execFileCb);",
-      "headingContext": "node/capabilities/git-client.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 10,
-      "endCol": 40
-    },
-    {
-      "text": "function runnerResult(\n  promise: Promise\u003c{ stdout: string }\u003e,\n): Promise\u003c{ stdout: string; exitCode: number }\u003e {\n  return promise\n    .then((r) =\u003e ({ stdout: r.stdout, exitCode: 0 }))\n    .catch((error: unknown) =\u003e {\n      const err = error as { stdout?: string; code?: number | string };\n      const exitCode = typeof err.code === \"number\" ? err.code : 1;\n      return { stdout: err.stdout ?? \"\", exitCode };\n    });\n}",
-      "contextualizedText": "// node/capabilities/git-client.ts \u003e function runnerResult\n\nfunction runnerResult(\n  promise: Promise\u003c{ stdout: string }\u003e,\n): Promise\u003c{ stdout: string; exitCode: number }\u003e {\n  return promise\n    .then((r) =\u003e ({ stdout: r.stdout, exitCode: 0 }))\n    .catch((error: unknown) =\u003e {\n      const err = error as { stdout?: string; code?: number | string };\n      const exitCode = typeof err.code === \"number\" ? err.code : 1;\n      return { stdout: err.stdout ?? \"\", exitCode };\n    });\n}",
-      "headingContext": "node/capabilities/git-client.ts \u003e function runnerResult",
-      "startLine": 12,
-      "startCol": 1,
-      "endLine": 22,
-      "endCol": 2
-    },
-    {
-      "text": "export class LocalGitClient implements GitClient {\n  constructor(private cwd: string) {}",
-      "contextualizedText": "// node/capabilities/git-client.ts \u003e class LocalGitClient\n\nexport class LocalGitClient implements GitClient {\n  constructor(private cwd: string) {}",
-      "headingContext": "node/capabilities/git-client.ts \u003e class LocalGitClient",
-      "startLine": 24,
-      "startCol": 1,
-      "endLine": 25,
-      "endCol": 38
-    },
-    {
-      "text": "  getState(): Promise\u003cGitState | undefined\u003e",
-      "contextualizedText": "// node/capabilities/git-client.ts \u003e class LocalGitClient \u003e method getState\n\n  getState(): Promise\u003cGitState | undefined\u003e",
-      "headingContext": "node/capabilities/git-client.ts \u003e class LocalGitClient \u003e method getState",
-      "startLine": 27,
-      "startCol": 1,
-      "endLine": 27,
-      "endCol": 44
-    },
-    {
-      "text": "    const run: GitCommandRunner = (args) =\u003e\n      runnerResult(execFile(\"git\", args, { cwd: this.cwd }))",
-      "contextualizedText": "// node/capabilities/git-client.ts \u003e class LocalGitClient \u003e method getState \u003e function run\n\n    const run: GitCommandRunner = (args) =\u003e\n      runnerResult(execFile(\"git\", args, { cwd: this.cwd }))",
-      "headingContext": "node/capabilities/git-client.ts \u003e class LocalGitClient \u003e method getState \u003e function run",
-      "startLine": 28,
-      "startCol": 1,
-      "endLine": 29,
-      "endCol": 61
-    },
-    {
-      "text": "return parseGitState(run);\n  }",
-      "contextualizedText": "// node/capabilities/git-client.ts \u003e class LocalGitClient \u003e method getState\n\nreturn parseGitState(run);\n  }",
-      "headingContext": "node/capabilities/git-client.ts \u003e class LocalGitClient \u003e method getState",
-      "startLine": 30,
-      "startCol": 5,
-      "endLine": 31,
-      "endCol": 4
-    },
-    {
-      "text": "export class DockerGitClient implements GitClient {\n  constructor(\n    private container: string,\n    private cwd: string,\n  ) {}",
-      "contextualizedText": "// node/capabilities/git-client.ts \u003e class DockerGitClient\n\nexport class DockerGitClient implements GitClient {\n  constructor(\n    private container: string,\n    private cwd: string,\n  ) {}",
-      "headingContext": "node/capabilities/git-client.ts \u003e class DockerGitClient",
-      "startLine": 34,
-      "startCol": 1,
-      "endLine": 38,
-      "endCol": 7
-    },
-    {
-      "text": "  getState(): Promise\u003cGitState | undefined\u003e",
-      "contextualizedText": "// node/capabilities/git-client.ts \u003e class DockerGitClient \u003e method getState\n\n  getState(): Promise\u003cGitState | undefined\u003e",
-      "headingContext": "node/capabilities/git-client.ts \u003e class DockerGitClient \u003e method getState",
-      "startLine": 40,
-      "startCol": 1,
-      "endLine": 40,
-      "endCol": 44
-    },
-    {
-      "text": "    const run: GitCommandRunner = (args) =\u003e\n      runnerResult(\n        execFile(\"docker\", [\n          \"exec\",\n          \"-w\",\n          this.cwd,\n          this.container,\n          \"git\",\n          ...args,\n        ]),\n      )",
-      "contextualizedText": "// node/capabilities/git-client.ts \u003e class DockerGitClient \u003e method getState \u003e function run\n\n    const run: GitCommandRunner = (args) =\u003e\n      runnerResult(\n        execFile(\"docker\", [\n          \"exec\",\n          \"-w\",\n          this.cwd,\n          this.container,\n          \"git\",\n          ...args,\n        ]),\n      )",
-      "headingContext": "node/capabilities/git-client.ts \u003e class DockerGitClient \u003e method getState \u003e function run",
-      "startLine": 41,
-      "startCol": 1,
-      "endLine": 51,
-      "endCol": 8
-    },
-    {
-      "text": "return parseGitState(run);\n  }",
-      "contextualizedText": "// node/capabilities/git-client.ts \u003e class DockerGitClient \u003e method getState\n\nreturn parseGitState(run);\n  }",
-      "headingContext": "node/capabilities/git-client.ts \u003e class DockerGitClient \u003e method getState",
-      "startLine": 52,
-      "startCol": 5,
-      "endLine": 53,
-      "endCol": 4
+      "start": 0,
+      "end": 1397
     }
   ]
 }

@@ -1,186 +1,35 @@
 {
   "blobSha": "a74bfbee106e893493d6b9a964dbc5eb9f024f55",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport { fileTypeFromFile } from \"file-type\";\nimport { lookup } from \"mime-types\";\nimport type { ThreadId } from \"../chat-types.ts\";\n\nexport type AbsFilePath = string \u0026 { __abs_file_path: true };\nexport type RelFilePath = string \u0026 { __rel_file_path: true };\nexport type UnresolvedFilePath = string \u0026 { __unresolved_file_path: true };\nexport type HomeDir = AbsFilePath \u0026 { __home_dir: true };\nexport type DisplayPath = string \u0026 { __display_path: true };\n\nexport const MAGENTA_TEMP_DIR = \"/tmp/magenta\" as AbsFilePath;",
-      "contextualizedText": "// node/core/src/utils/files.ts\n\nimport * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport { fileTypeFromFile } from \"file-type\";\nimport { lookup } from \"mime-types\";\nimport type { ThreadId } from \"../chat-types.ts\";\n\nexport type AbsFilePath = string \u0026 { __abs_file_path: true };\nexport type RelFilePath = string \u0026 { __rel_file_path: true };\nexport type UnresolvedFilePath = string \u0026 { __unresolved_file_path: true };\nexport type HomeDir = AbsFilePath \u0026 { __home_dir: true };\nexport type DisplayPath = string \u0026 { __display_path: true };\n\nexport const MAGENTA_TEMP_DIR = \"/tmp/magenta\" as AbsFilePath;",
-      "headingContext": "node/core/src/utils/files.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 13,
-      "endCol": 63
+      "start": 0,
+      "end": 1587
     },
     {
-      "text": "export function threadConversationLogPath(\n  threadId: ThreadId,\n  baseDir: string = MAGENTA_TEMP_DIR,\n): AbsFilePath {\n  return path.join(\n    baseDir,\n    \"threads\",\n    threadId,\n    \"conversation.jsonl\",\n  ) as AbsFilePath;\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function threadConversationLogPath\n\nexport function threadConversationLogPath(\n  threadId: ThreadId,\n  baseDir: string = MAGENTA_TEMP_DIR,\n): AbsFilePath {\n  return path.join(\n    baseDir,\n    \"threads\",\n    threadId,\n    \"conversation.jsonl\",\n  ) as AbsFilePath;\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function threadConversationLogPath",
-      "startLine": 15,
-      "startCol": 1,
-      "endLine": 25,
-      "endCol": 2
+      "start": 1589,
+      "end": 3350
     },
     {
-      "text": "export function threadMetaPath(\n  threadId: ThreadId,\n  baseDir: string = MAGENTA_TEMP_DIR,\n): AbsFilePath {\n  return path.join(baseDir, \"threads\", threadId, \"meta.json\") as AbsFilePath;\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function threadMetaPath\n\nexport function threadMetaPath(\n  threadId: ThreadId,\n  baseDir: string = MAGENTA_TEMP_DIR,\n): AbsFilePath {\n  return path.join(baseDir, \"threads\", threadId, \"meta.json\") as AbsFilePath;\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function threadMetaPath",
-      "startLine": 27,
-      "startCol": 1,
-      "endLine": 32,
-      "endCol": 2
+      "start": 3352,
+      "end": 5135
     },
     {
-      "text": "/**\n * Regex for matching `@file:` references. Supports three forms:\n *   - Bare: `@file:path/without/whitespace`\n *   - Length-1 fence: `` @file:`path with spaces` `` (body verbatim; must not contain backticks)\n *   - Length-2 fence: `` @file:``path`` `` (body escape-processed: `\\\\` → `\\`, `` \\` `` → `` ` ``, any other `\\x` is literal `\\x`)\n *\n * Capture groups:\n *   1. length-2 fenced body (escape-processed)\n *   2. length-1 fenced body (verbatim)\n *   3. bare path\n */\nexport const AT_FILE_PATTERN =\n  /@file:(?:``((?:\\\\.|`(?!`)|[^`\\\\])*)``|`([^`\\\\]*)`|(\\S+))/g;",
-      "contextualizedText": "// node/core/src/utils/files.ts\n\n/**\n * Regex for matching `@file:` references. Supports three forms:\n *   - Bare: `@file:path/without/whitespace`\n *   - Length-1 fence: `` @file:`path with spaces` `` (body verbatim; must not contain backticks)\n *   - Length-2 fence: `` @file:``path`` `` (body escape-processed: `\\\\` → `\\`, `` \\` `` → `` ` ``, any other `\\x` is literal `\\x`)\n *\n * Capture groups:\n *   1. length-2 fenced body (escape-processed)\n *   2. length-1 fenced body (verbatim)\n *   3. bare path\n */\nexport const AT_FILE_PATTERN =\n  /@file:(?:``((?:\\\\.|`(?!`)|[^`\\\\])*)``|`([^`\\\\]*)`|(\\S+))/g;",
-      "headingContext": "node/core/src/utils/files.ts",
-      "startLine": 34,
-      "startCol": 1,
-      "endLine": 46,
-      "endCol": 63
+      "start": 5139,
+      "end": 6934
     },
     {
-      "text": "/**\n * Unescape a length-2 fence body. Rules:\n *   - `\\\\` → `\\`\n *   - `` \\` `` → `` ` ``\n *   - `\\x` (any other) → literal `\\x` (two chars preserved)\n *   - trailing lone `\\` is preserved as-is\n */\nexport function unescapeFenceBody(body: string): string {\n  let out = \"\";\n  let i = 0;\n  while (i \u003c body.length) {\n    const ch = body[i];\n    if (ch === \"\\\\\" \u0026\u0026 i + 1 \u003c body.length) {\n      const next = body[i + 1];\n      if (next === \"\\\\\" || next === \"`\") {\n        out += next;\n        i += 2;\n        continue;\n      }\n      out += ch + next;\n      i += 2;\n      continue;\n    }\n    out += ch;\n    i += 1;\n  }\n  return out;\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function unescapeFenceBody\n\n/**\n * Unescape a length-2 fence body. Rules:\n *   - `\\\\` → `\\`\n *   - `` \\` `` → `` ` ``\n *   - `\\x` (any other) → literal `\\x` (two chars preserved)\n *   - trailing lone `\\` is preserved as-is\n */\nexport function unescapeFenceBody(body: string): string {\n  let out = \"\";\n  let i = 0;\n  while (i \u003c body.length) {\n    const ch = body[i];\n    if (ch === \"\\\\\" \u0026\u0026 i + 1 \u003c body.length) {\n      const next = body[i + 1];\n      if (next === \"\\\\\" || next === \"`\") {\n        out += next;\n        i += 2;\n        continue;\n      }\n      out += ch + next;\n      i += 2;\n      continue;\n    }\n    out += ch;\n    i += 1;\n  }\n  return out;\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function unescapeFenceBody",
-      "startLine": 48,
-      "startCol": 1,
-      "endLine": 75,
-      "endCol": 2
+      "start": 6940,
+      "end": 8783
     },
     {
-      "text": "/**\n * Extract the literal path from an AT_FILE_PATTERN regex match.\n */\nexport function extractFileRefPath(match: RegExpMatchArray): string {\n  const fence2Body = match[1];\n  const fence1Body = match[2];\n  const bare = match[3];\n  if (fence2Body !== undefined) {\n    return unescapeFenceBody(fence2Body);\n  }\n  if (fence1Body !== undefined) {\n    return fence1Body;\n  }\n  return bare;\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function extractFileRefPath\n\n/**\n * Extract the literal path from an AT_FILE_PATTERN regex match.\n */\nexport function extractFileRefPath(match: RegExpMatchArray): string {\n  const fence2Body = match[1];\n  const fence1Body = match[2];\n  const bare = match[3];\n  if (fence2Body !== undefined) {\n    return unescapeFenceBody(fence2Body);\n  }\n  if (fence1Body !== undefined) {\n    return fence1Body;\n  }\n  return bare;\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function extractFileRefPath",
-      "startLine": 77,
-      "startCol": 1,
-      "endLine": 91,
-      "endCol": 2
+      "start": 8787,
+      "end": 10873
     },
     {
-      "text": "/**\n * Format a path as an `@file:` reference, picking the shortest safe form.\n */\nexport function formatFileRef(filePath: string): string {\n  const hasWhitespace = /\\s/.test(filePath);\n  const hasBacktick = filePath.includes(\"`\");\n  if (!hasWhitespace \u0026\u0026 !hasBacktick) {\n    return `@file:${filePath}`;\n  }\n  if (!hasBacktick) {\n    return `@file:\\`${filePath}\\``;\n  }\n  const escaped = filePath.replace(/\\\\/g, \"\\\\\\\\\").replace(/`/g, \"\\\\`\");\n  return `@file:\\`\\`${escaped}\\`\\``;\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function formatFileRef\n\n/**\n * Format a path as an `@file:` reference, picking the shortest safe form.\n */\nexport function formatFileRef(filePath: string): string {\n  const hasWhitespace = /\\s/.test(filePath);\n  const hasBacktick = filePath.includes(\"`\");\n  if (!hasWhitespace \u0026\u0026 !hasBacktick) {\n    return `@file:${filePath}`;\n  }\n  if (!hasBacktick) {\n    return `@file:\\`${filePath}\\``;\n  }\n  const escaped = filePath.replace(/\\\\/g, \"\\\\\\\\\").replace(/`/g, \"\\\\`\");\n  return `@file:\\`\\`${escaped}\\`\\``;\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function formatFileRef",
-      "startLine": 93,
-      "startCol": 1,
-      "endLine": 107,
-      "endCol": 2
-    },
-    {
-      "text": "/** Special nominal type to represent the neovim directory. The node plugin runs in the magenta directory, but when\n * dealing with paths, we always want to do it from the POV of the nvim cwd.\n */\nexport type NvimCwd = AbsFilePath \u0026 { __nvim_cwd: true };\n\nexport const FileCategory = {\n  TEXT: \"text\",\n  IMAGE: \"image\",\n  PDF: \"pdf\",\n  UNSUPPORTED: \"unsupported\",\n} as const;\nexport type FileCategory = (typeof FileCategory)[keyof typeof FileCategory];",
-      "contextualizedText": "// node/core/src/utils/files.ts\n\n/** Special nominal type to represent the neovim directory. The node plugin runs in the magenta directory, but when\n * dealing with paths, we always want to do it from the POV of the nvim cwd.\n */\nexport type NvimCwd = AbsFilePath \u0026 { __nvim_cwd: true };\n\nexport const FileCategory = {\n  TEXT: \"text\",\n  IMAGE: \"image\",\n  PDF: \"pdf\",\n  UNSUPPORTED: \"unsupported\",\n} as const;\nexport type FileCategory = (typeof FileCategory)[keyof typeof FileCategory];",
-      "headingContext": "node/core/src/utils/files.ts",
-      "startLine": 109,
-      "startCol": 1,
-      "endLine": 120,
-      "endCol": 77
-    },
-    {
-      "text": "export interface FileTypeInfo {\n  category: FileCategory;\n  mimeType: string;\n  extension: string;\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e interface FileTypeInfo\n\nexport interface FileTypeInfo {\n  category: FileCategory;\n  mimeType: string;\n  extension: string;\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e interface FileTypeInfo",
-      "startLine": 122,
-      "startCol": 1,
-      "endLine": 126,
-      "endCol": 2
-    },
-    {
-      "text": "export function expandTilde(filepath: string, homeDir: HomeDir): string {\n  if (filepath.startsWith(\"~/\") || filepath === \"~\") {\n    return path.join(homeDir, filepath.slice(1));\n  }\n  return filepath;\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function expandTilde\n\nexport function expandTilde(filepath: string, homeDir: HomeDir): string {\n  if (filepath.startsWith(\"~/\") || filepath === \"~\") {\n    return path.join(homeDir, filepath.slice(1));\n  }\n  return filepath;\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function expandTilde",
-      "startLine": 128,
-      "startCol": 1,
-      "endLine": 133,
-      "endCol": 2
-    },
-    {
-      "text": "export function resolveFilePath(\n  cwd: NvimCwd,\n  filePath: UnresolvedFilePath | AbsFilePath | RelFilePath,\n  homeDir: HomeDir,\n) {\n  let expandedPath = filePath as string;\n  if (expandedPath.startsWith(\"~/\") || expandedPath === \"~\") {\n    expandedPath = path.join(homeDir, expandedPath.slice(1));\n  }\n  return path.resolve(cwd, expandedPath) as AbsFilePath;\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function resolveFilePath\n\nexport function resolveFilePath(\n  cwd: NvimCwd,\n  filePath: UnresolvedFilePath | AbsFilePath | RelFilePath,\n  homeDir: HomeDir,\n) {\n  let expandedPath = filePath as string;\n  if (expandedPath.startsWith(\"~/\") || expandedPath === \"~\") {\n    expandedPath = path.join(homeDir, expandedPath.slice(1));\n  }\n  return path.resolve(cwd, expandedPath) as AbsFilePath;\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function resolveFilePath",
-      "startLine": 135,
-      "startCol": 1,
-      "endLine": 145,
-      "endCol": 2
-    },
-    {
-      "text": "export function relativePath(\n  cwd: NvimCwd,\n  filePath: UnresolvedFilePath | AbsFilePath,\n  homeDir: HomeDir,\n) {\n  const absPath = resolveFilePath(cwd, filePath, homeDir);\n  return path.relative(cwd, absPath) as RelFilePath;\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function relativePath\n\nexport function relativePath(\n  cwd: NvimCwd,\n  filePath: UnresolvedFilePath | AbsFilePath,\n  homeDir: HomeDir,\n) {\n  const absPath = resolveFilePath(cwd, filePath, homeDir);\n  return path.relative(cwd, absPath) as RelFilePath;\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function relativePath",
-      "startLine": 147,
-      "startCol": 1,
-      "endLine": 154,
-      "endCol": 2
-    },
-    {
-      "text": "export function displayPath(\n  cwd: NvimCwd,\n  absFilePath: AbsFilePath,\n  homeDir: HomeDir,\n): DisplayPath {\n  const rel = path.relative(cwd, absFilePath);\n  if (!rel.startsWith(\"..\")) {\n    return rel as DisplayPath;\n  }\n  if (absFilePath.startsWith(homeDir)) {\n    return `~${absFilePath.slice(homeDir.length)}` as DisplayPath;\n  }\n  return absFilePath as string as DisplayPath;\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function displayPath\n\nexport function displayPath(\n  cwd: NvimCwd,\n  absFilePath: AbsFilePath,\n  homeDir: HomeDir,\n): DisplayPath {\n  const rel = path.relative(cwd, absFilePath);\n  if (!rel.startsWith(\"..\")) {\n    return rel as DisplayPath;\n  }\n  if (absFilePath.startsWith(homeDir)) {\n    return `~${absFilePath.slice(homeDir.length)}` as DisplayPath;\n  }\n  return absFilePath as string as DisplayPath;\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function displayPath",
-      "startLine": 156,
-      "startCol": 1,
-      "endLine": 169,
-      "endCol": 2
-    },
-    {
-      "text": "// File size limits in bytes\nexport const FILE_SIZE_LIMITS = {\n  IMAGE: 10 * 1024 * 1024, // 10MB\n  PDF: 32 * 1024 * 1024, // 32MB\n} as const;",
-      "contextualizedText": "// node/core/src/utils/files.ts\n\n// File size limits in bytes\nexport const FILE_SIZE_LIMITS = {\n  IMAGE: 10 * 1024 * 1024, // 10MB\n  PDF: 32 * 1024 * 1024, // 32MB\n} as const;",
-      "headingContext": "node/core/src/utils/files.ts",
-      "startLine": 170,
-      "startCol": 1,
-      "endLine": 174,
-      "endCol": 12
-    },
-    {
-      "text": "export function categorizeFileType(mimeType: string): FileCategory {\n  // Text files\n  if (mimeType.startsWith(\"text/\")) {\n    return FileCategory.TEXT;\n  }\n\n  // Common text-based formats that don't have text/ mime type\n  const textMimeTypes = [\n    \"application/javascript\",\n    \"application/json\",\n    \"application/xml\",\n    \"application/x-yaml\",\n    \"application/yaml\",\n    \"application/toml\",\n    \"application/x-sh\",\n    \"application/x-shellscript\",\n  ];\n\n  if (textMimeTypes.includes(mimeType)) {\n    return FileCategory.TEXT;\n  }\n\n  // Images supported by Anthropic\n  const imageMimeTypes = [\"image/jpeg\", \"image/png\", \"image/gif\", \"image/webp\"];\n\n  if (imageMimeTypes.includes(mimeType)) {\n    return FileCategory.IMAGE;\n  }\n\n  // PDF documents\n  if (mimeType === \"application/pdf\") {\n    return FileCategory.PDF;\n  }\n\n  return FileCategory.UNSUPPORTED;\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function categorizeFileType\n\nexport function categorizeFileType(mimeType: string): FileCategory {\n  // Text files\n  if (mimeType.startsWith(\"text/\")) {\n    return FileCategory.TEXT;\n  }\n\n  // Common text-based formats that don't have text/ mime type\n  const textMimeTypes = [\n    \"application/javascript\",\n    \"application/json\",\n    \"application/xml\",\n    \"application/x-yaml\",\n    \"application/yaml\",\n    \"application/toml\",\n    \"application/x-sh\",\n    \"application/x-shellscript\",\n  ];\n\n  if (textMimeTypes.includes(mimeType)) {\n    return FileCategory.TEXT;\n  }\n\n  // Images supported by Anthropic\n  const imageMimeTypes = [\"image/jpeg\", \"image/png\", \"image/gif\", \"image/webp\"];\n\n  if (imageMimeTypes.includes(mimeType)) {\n    return FileCategory.IMAGE;\n  }\n\n  // PDF documents\n  if (mimeType === \"application/pdf\") {\n    return FileCategory.PDF;\n  }\n\n  return FileCategory.UNSUPPORTED;\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function categorizeFileType",
-      "startLine": 176,
-      "startCol": 1,
-      "endLine": 211,
-      "endCol": 2
-    },
-    {
-      "text": "export async function isLikelyTextFile(filePath: string): Promise\u003cboolean\u003e {\n  // Check file extension patterns as fallback\n  const ext = path.extname(filePath).toLowerCase();\n  const textExtensions = [\n    \".adoc\",\n    \".bash\",\n    \".bat\",\n    \".c\",\n    \".cfg\",\n    \".cmd\",\n    \".conf\",\n    \".cpp\",\n    \".cs\",\n    \".css\",\n    \".dockerfile\",\n    \".editorconfig\",\n    \".fish\",\n    \".gitattributes\",\n    \".gitignore\",\n    \".go\",\n    \".h\",\n    \".hpp\",\n    \".htm\",\n    \".html\",\n    \".ini\",\n    \".java\",\n    \".js\",\n    \".json\",\n    \".jsx\",\n    \".kt\",\n    \".less\",\n    \".lua\",\n    \".m\",\n    \".md\",\n    \".org\",\n    \".php\",\n    \".pl\",\n    \".ps1\",\n    \".py\",\n    \".r\",\n    \".rb\",\n    \".rs\",\n    \".rst\",\n    \".sass\",\n    \".scala\",\n    \".scss\",\n    \".sh\",\n    \".sql\",\n    \".swift\",\n    \".tcl\",\n    \".toml\",\n    \".ts\",\n    \".tsx\",\n    \".txt\",\n    \".vim\",\n    \".vimrc\",\n    \".xml\",\n    \".yaml\",\n    \".yml\",\n    \".zsh\",\n  ];\n\n  if (textExtensions.includes(ext)) {\n    return true;\n  }\n\n  // Sample file content for binary detection\n  let fileHandle;",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function isLikelyTextFile\n\nexport async function isLikelyTextFile(filePath: string): Promise\u003cboolean\u003e {\n  // Check file extension patterns as fallback\n  const ext = path.extname(filePath).toLowerCase();\n  const textExtensions = [\n    \".adoc\",\n    \".bash\",\n    \".bat\",\n    \".c\",\n    \".cfg\",\n    \".cmd\",\n    \".conf\",\n    \".cpp\",\n    \".cs\",\n    \".css\",\n    \".dockerfile\",\n    \".editorconfig\",\n    \".fish\",\n    \".gitattributes\",\n    \".gitignore\",\n    \".go\",\n    \".h\",\n    \".hpp\",\n    \".htm\",\n    \".html\",\n    \".ini\",\n    \".java\",\n    \".js\",\n    \".json\",\n    \".jsx\",\n    \".kt\",\n    \".less\",\n    \".lua\",\n    \".m\",\n    \".md\",\n    \".org\",\n    \".php\",\n    \".pl\",\n    \".ps1\",\n    \".py\",\n    \".r\",\n    \".rb\",\n    \".rs\",\n    \".rst\",\n    \".sass\",\n    \".scala\",\n    \".scss\",\n    \".sh\",\n    \".sql\",\n    \".swift\",\n    \".tcl\",\n    \".toml\",\n    \".ts\",\n    \".tsx\",\n    \".txt\",\n    \".vim\",\n    \".vimrc\",\n    \".xml\",\n    \".yaml\",\n    \".yml\",\n    \".zsh\",\n  ];\n\n  if (textExtensions.includes(ext)) {\n    return true;\n  }\n\n  // Sample file content for binary detection\n  let fileHandle;",
-      "headingContext": "node/core/src/utils/files.ts \u003e function isLikelyTextFile",
-      "startLine": 213,
-      "startCol": 1,
-      "endLine": 280,
-      "endCol": 18
-    },
-    {
-      "text": "try {\n    fileHandle = await fs.open(filePath, \"r\");\n\n    const SAMPLE_SIZE = 8192; // 8KB\n    const buffer = Buffer.alloc(SAMPLE_SIZE);\n    const { bytesRead } = await fileHandle.read(buffer, 0, SAMPLE_SIZE, 0);\n    const sampleBuffer = buffer.subarray(0, bytesRead);\n\n    // Check for null bytes (strong indicator of binary content)\n    if (sampleBuffer.includes(0)) {\n      return false;\n    }\n\n    // Check for valid UTF-8 encoding\n    try {\n      const text = sampleBuffer.toString(\"utf8\");\n      // If decoding succeeds, check character distribution\n      const printableChars = text.split(\"\").filter((char) =\u003e {\n        const code = char.charCodeAt(0);\n        // Allow printable ASCII, common whitespace, and Unicode characters\n        return (\n          (code \u003e= 32 \u0026\u0026 code \u003c= 126) || // Printable ASCII\n          code === 9 || // Tab\n          code === 10 || // Line feed\n          code === 13 || // Carriage return\n          code \u003e 126 // Unicode characters\n        );\n      }).length;\n\n      const printableRatio = printableChars / text.length;\n      return printableRatio \u003e 0.95; // 95% printable characters\n    } catch {\n      return false; // Invalid UTF-8\n    }\n  } catch {\n    return false; // File cannot be opened\n  } finally {\n    if (fileHandle) {\n      await fileHandle.close();\n    }\n  }\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function isLikelyTextFile\n\ntry {\n    fileHandle = await fs.open(filePath, \"r\");\n\n    const SAMPLE_SIZE = 8192; // 8KB\n    const buffer = Buffer.alloc(SAMPLE_SIZE);\n    const { bytesRead } = await fileHandle.read(buffer, 0, SAMPLE_SIZE, 0);\n    const sampleBuffer = buffer.subarray(0, bytesRead);\n\n    // Check for null bytes (strong indicator of binary content)\n    if (sampleBuffer.includes(0)) {\n      return false;\n    }\n\n    // Check for valid UTF-8 encoding\n    try {\n      const text = sampleBuffer.toString(\"utf8\");\n      // If decoding succeeds, check character distribution\n      const printableChars = text.split(\"\").filter((char) =\u003e {\n        const code = char.charCodeAt(0);\n        // Allow printable ASCII, common whitespace, and Unicode characters\n        return (\n          (code \u003e= 32 \u0026\u0026 code \u003c= 126) || // Printable ASCII\n          code === 9 || // Tab\n          code === 10 || // Line feed\n          code === 13 || // Carriage return\n          code \u003e 126 // Unicode characters\n        );\n      }).length;\n\n      const printableRatio = printableChars / text.length;\n      return printableRatio \u003e 0.95; // 95% printable characters\n    } catch {\n      return false; // Invalid UTF-8\n    }\n  } catch {\n    return false; // File cannot be opened\n  } finally {\n    if (fileHandle) {\n      await fileHandle.close();\n    }\n  }\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function isLikelyTextFile",
-      "startLine": 281,
-      "startCol": 3,
-      "endLine": 322,
-      "endCol": 2
-    },
-    {
-      "text": "/**\n * FileIO-aware file type detection. Uses the FileIO abstraction instead of\n * direct filesystem access, so it works in docker environments.\n */\nexport async function detectFileTypeViaFileIO(\n  filePath: string,\n  fileIO: {\n    fileExists: (path: string) =\u003e Promise\u003cboolean\u003e;\n    readBinaryFile: (path: string) =\u003e Promise\u003cBuffer\u003e;\n  },\n): Promise\u003cFileTypeInfo | undefined\u003e {\n  const exists = await fileIO.fileExists(filePath);\n  if (!exists) return undefined;\n\n  const extension = path.extname(filePath).toLowerCase();\n  let mimeType: string | undefined;\n  let category: FileCategory;\n\n  try {\n    const buffer = await fileIO.readBinaryFile(filePath);\n    const { fileTypeFromBuffer } = await import(\"file-type\");\n    const fileType = await fileTypeFromBuffer(buffer);\n    if (fileType) {\n      mimeType = fileType.mime;\n      category = categorizeFileType(mimeType);\n    } else {\n      mimeType = lookup(filePath) || \"application/octet-stream\";\n      category = categorizeFileType(mimeType);\n\n      if (category === FileCategory.UNSUPPORTED) {\n        // Check if content looks like text\n        const sample = buffer.subarray(0, Math.min(buffer.length, 8192));\n        if (!sample.includes(0)) {\n          const text = sample.toString(\"utf8\");\n          const printableChars = text.split(\"\").filter((char) =\u003e {\n            const code = char.charCodeAt(0);\n            return (\n              (code \u003e= 32 \u0026\u0026 code \u003c= 126) ||\n              code === 9 ||\n              code === 10 ||\n              code === 13 ||\n              code \u003e 126\n            );\n          }).length;\n          if (printableChars / text.length \u003e 0.95) {\n            mimeType = \"text/plain\";\n            category = FileCategory.TEXT;\n          }\n        }\n      }\n    }\n  } catch {\n    mimeType = lookup(filePath) || \"application/octet-stream\";\n    category = categorizeFileType(mimeType);\n  }\n\n  return { category, mimeType, extension };\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function detectFileTypeViaFileIO\n\n/**\n * FileIO-aware file type detection. Uses the FileIO abstraction instead of\n * direct filesystem access, so it works in docker environments.\n */\nexport async function detectFileTypeViaFileIO(\n  filePath: string,\n  fileIO: {\n    fileExists: (path: string) =\u003e Promise\u003cboolean\u003e;\n    readBinaryFile: (path: string) =\u003e Promise\u003cBuffer\u003e;\n  },\n): Promise\u003cFileTypeInfo | undefined\u003e {\n  const exists = await fileIO.fileExists(filePath);\n  if (!exists) return undefined;\n\n  const extension = path.extname(filePath).toLowerCase();\n  let mimeType: string | undefined;\n  let category: FileCategory;\n\n  try {\n    const buffer = await fileIO.readBinaryFile(filePath);\n    const { fileTypeFromBuffer } = await import(\"file-type\");\n    const fileType = await fileTypeFromBuffer(buffer);\n    if (fileType) {\n      mimeType = fileType.mime;\n      category = categorizeFileType(mimeType);\n    } else {\n      mimeType = lookup(filePath) || \"application/octet-stream\";\n      category = categorizeFileType(mimeType);\n\n      if (category === FileCategory.UNSUPPORTED) {\n        // Check if content looks like text\n        const sample = buffer.subarray(0, Math.min(buffer.length, 8192));\n        if (!sample.includes(0)) {\n          const text = sample.toString(\"utf8\");\n          const printableChars = text.split(\"\").filter((char) =\u003e {\n            const code = char.charCodeAt(0);\n            return (\n              (code \u003e= 32 \u0026\u0026 code \u003c= 126) ||\n              code === 9 ||\n              code === 10 ||\n              code === 13 ||\n              code \u003e 126\n            );\n          }).length;\n          if (printableChars / text.length \u003e 0.95) {\n            mimeType = \"text/plain\";\n            category = FileCategory.TEXT;\n          }\n        }\n      }\n    }\n  } catch {\n    mimeType = lookup(filePath) || \"application/octet-stream\";\n    category = categorizeFileType(mimeType);\n  }\n\n  return { category, mimeType, extension };\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function detectFileTypeViaFileIO",
-      "startLine": 323,
-      "startCol": 1,
-      "endLine": 380,
-      "endCol": 2
-    },
-    {
-      "text": "export async function detectFileType(\n  filePath: string,\n): Promise\u003cFileTypeInfo | undefined\u003e {\n  // First check if file exists\n  try {\n    await fs.stat(filePath);\n  } catch {\n    return undefined; // File does not exist or cannot be accessed\n  }\n\n  const extension = path.extname(filePath).toLowerCase();\n  let mimeType: string | undefined;\n  let category: FileCategory;\n\n  try {\n    // First try magic number detection (most reliable)\n    const fileType = await fileTypeFromFile(filePath);\n    if (fileType) {\n      mimeType = fileType.mime;\n      category = categorizeFileType(mimeType);\n    } else {\n      // Fallback to extension-based detection\n      mimeType = lookup(filePath) || \"application/octet-stream\";\n      category = categorizeFileType(mimeType);\n\n      // For unknown MIME types, try content analysis\n      if (category === FileCategory.UNSUPPORTED) {\n        const isText = await isLikelyTextFile(filePath);\n        if (isText) {\n          mimeType = \"text/plain\";\n          category = FileCategory.TEXT;\n        }\n      }\n    }\n  } catch {\n    // If all detection fails, fallback to extension or content analysis\n    mimeType = lookup(filePath) || \"application/octet-stream\";\n    category = categorizeFileType(mimeType);\n\n    if (category === FileCategory.UNSUPPORTED) {\n      try {\n        const isText = await isLikelyTextFile(filePath);\n        if (isText) {\n          mimeType = \"text/plain\";\n          category = FileCategory.TEXT;\n        }\n      } catch {\n        // Final fallback\n        mimeType = \"application/octet-stream\";\n        category = FileCategory.UNSUPPORTED;\n      }\n    }\n  }\n\n  return {\n    category,\n    mimeType,\n    extension,\n  };\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function detectFileType\n\nexport async function detectFileType(\n  filePath: string,\n): Promise\u003cFileTypeInfo | undefined\u003e {\n  // First check if file exists\n  try {\n    await fs.stat(filePath);\n  } catch {\n    return undefined; // File does not exist or cannot be accessed\n  }\n\n  const extension = path.extname(filePath).toLowerCase();\n  let mimeType: string | undefined;\n  let category: FileCategory;\n\n  try {\n    // First try magic number detection (most reliable)\n    const fileType = await fileTypeFromFile(filePath);\n    if (fileType) {\n      mimeType = fileType.mime;\n      category = categorizeFileType(mimeType);\n    } else {\n      // Fallback to extension-based detection\n      mimeType = lookup(filePath) || \"application/octet-stream\";\n      category = categorizeFileType(mimeType);\n\n      // For unknown MIME types, try content analysis\n      if (category === FileCategory.UNSUPPORTED) {\n        const isText = await isLikelyTextFile(filePath);\n        if (isText) {\n          mimeType = \"text/plain\";\n          category = FileCategory.TEXT;\n        }\n      }\n    }\n  } catch {\n    // If all detection fails, fallback to extension or content analysis\n    mimeType = lookup(filePath) || \"application/octet-stream\";\n    category = categorizeFileType(mimeType);\n\n    if (category === FileCategory.UNSUPPORTED) {\n      try {\n        const isText = await isLikelyTextFile(filePath);\n        if (isText) {\n          mimeType = \"text/plain\";\n          category = FileCategory.TEXT;\n        }\n      } catch {\n        // Final fallback\n        mimeType = \"application/octet-stream\";\n        category = FileCategory.UNSUPPORTED;\n      }\n    }\n  }\n\n  return {\n    category,\n    mimeType,\n    extension,\n  };\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function detectFileType",
-      "startLine": 381,
-      "startCol": 1,
-      "endLine": 440,
-      "endCol": 2
-    },
-    {
-      "text": "export async function validateFileSize(\n  filePath: string,\n  category: FileCategory,\n): Promise\u003c{ isValid: boolean; actualSize: number; maxSize: number }\u003e {\n  const stats = await fs.stat(filePath);\n  const actualSize = stats.size;\n\n  let maxSize: number;\n  switch (category) {\n    case FileCategory.TEXT:\n      // No size limit for text files - tree-sitter minimap handles large files\n      return { isValid: true, actualSize, maxSize: Infinity };\n    case FileCategory.IMAGE:\n      maxSize = FILE_SIZE_LIMITS.IMAGE;\n      break;\n    case FileCategory.PDF:\n      maxSize = FILE_SIZE_LIMITS.PDF;\n      break;\n    default:\n      maxSize = 0; // Unsupported files have no size limit as they're rejected anyway\n      break;\n  }\n\n  return {\n    isValid: actualSize \u003c= maxSize,\n    actualSize,\n    maxSize,\n  };\n}",
-      "contextualizedText": "// node/core/src/utils/files.ts \u003e function validateFileSize\n\nexport async function validateFileSize(\n  filePath: string,\n  category: FileCategory,\n): Promise\u003c{ isValid: boolean; actualSize: number; maxSize: number }\u003e {\n  const stats = await fs.stat(filePath);\n  const actualSize = stats.size;\n\n  let maxSize: number;\n  switch (category) {\n    case FileCategory.TEXT:\n      // No size limit for text files - tree-sitter minimap handles large files\n      return { isValid: true, actualSize, maxSize: Infinity };\n    case FileCategory.IMAGE:\n      maxSize = FILE_SIZE_LIMITS.IMAGE;\n      break;\n    case FileCategory.PDF:\n      maxSize = FILE_SIZE_LIMITS.PDF;\n      break;\n    default:\n      maxSize = 0; // Unsupported files have no size limit as they're rejected anyway\n      break;\n  }\n\n  return {\n    isValid: actualSize \u003c= maxSize,\n    actualSize,\n    maxSize,\n  };\n}",
-      "headingContext": "node/core/src/utils/files.ts \u003e function validateFileSize",
-      "startLine": 442,
-      "startCol": 1,
-      "endLine": 470,
-      "endCol": 2
+      "start": 10881,
+      "end": 12600
     }
   ]
 }

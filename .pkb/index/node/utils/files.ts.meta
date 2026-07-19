@@ -1,15 +1,11 @@
 {
   "blobSha": "95029943c5d22a4ab603c10f8837b695b273914e",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export {\n  type AbsFilePath,\n  AT_FILE_PATTERN,\n  categorizeFileType,\n  type DisplayPath,\n  detectFileType,\n  displayPath,\n  expandTilde,\n  extractFileRefPath,\n  FILE_SIZE_LIMITS,\n  FileCategory,\n  type FileCategory as FileCategoryType,\n  type FileTypeInfo,\n  formatFileRef,\n  type HomeDir,\n  isLikelyTextFile,\n  MAGENTA_TEMP_DIR,\n  type NvimCwd,\n  type RelFilePath,\n  relativePath,\n  resolveFilePath,\n  type UnresolvedFilePath,\n  unescapeFenceBody,\n  validateFileSize,\n} from \"@magenta/core\";",
-      "contextualizedText": "// node/utils/files.ts\n\nexport {\n  type AbsFilePath,\n  AT_FILE_PATTERN,\n  categorizeFileType,\n  type DisplayPath,\n  detectFileType,\n  displayPath,\n  expandTilde,\n  extractFileRefPath,\n  FILE_SIZE_LIMITS,\n  FileCategory,\n  type FileCategory as FileCategoryType,\n  type FileTypeInfo,\n  formatFileRef,\n  type HomeDir,\n  isLikelyTextFile,\n  MAGENTA_TEMP_DIR,\n  type NvimCwd,\n  type RelFilePath,\n  relativePath,\n  resolveFilePath,\n  type UnresolvedFilePath,\n  unescapeFenceBody,\n  validateFileSize,\n} from \"@magenta/core\";",
-      "headingContext": "node/utils/files.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 25,
-      "endCol": 24
+      "start": 0,
+      "end": 493
     }
   ]
 }

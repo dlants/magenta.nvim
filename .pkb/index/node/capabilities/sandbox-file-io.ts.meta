@@ -1,141 +1,19 @@
 {
   "blobSha": "59f0c19ebe5fa8f743fec320362a59af03f947d0",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as fs from \"node:fs/promises\";\nimport {\n  containsGlobChars,\n  globToRegex,\n} from \"@anthropic-ai/sandbox-runtime/dist/sandbox/sandbox-utils.js\";\nimport type { FileIO } from \"@magenta/core\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { Sandbox } from \"../sandbox-manager.ts\";\nimport { getBufferIfOpen } from \"../utils/buffers.ts\";\nimport {\n  type AbsFilePath,\n  type HomeDir,\n  type NvimCwd,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"../utils/files.ts\";",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts\n\nimport * as fs from \"node:fs/promises\";\nimport {\n  containsGlobChars,\n  globToRegex,\n} from \"@anthropic-ai/sandbox-runtime/dist/sandbox/sandbox-utils.js\";\nimport type { FileIO } from \"@magenta/core\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { Sandbox } from \"../sandbox-manager.ts\";\nimport { getBufferIfOpen } from \"../utils/buffers.ts\";\nimport {\n  type AbsFilePath,\n  type HomeDir,\n  type NvimCwd,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"../utils/files.ts\";",
-      "headingContext": "node/capabilities/sandbox-file-io.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 28
+      "start": 0,
+      "end": 1973
     },
     {
-      "text": "export class SandboxFileIO implements FileIO {\n  constructor(\n    private context: {\n      nvim: Nvim;\n      cwd: NvimCwd;\n      homeDir: HomeDir;\n    },\n    private sandbox: Sandbox,\n    private promptForWriteApproval: (absPath: string) =\u003e Promise\u003cvoid\u003e,\n    private isBypassed: () =\u003e boolean,\n  ) {}",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO\n\nexport class SandboxFileIO implements FileIO {\n  constructor(\n    private context: {\n      nvim: Nvim;\n      cwd: NvimCwd;\n      homeDir: HomeDir;\n    },\n    private sandbox: Sandbox,\n    private promptForWriteApproval: (absPath: string) =\u003e Promise\u003cvoid\u003e,\n    private isBypassed: () =\u003e boolean,\n  ) {}",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO",
-      "startLine": 18,
-      "startCol": 1,
-      "endLine": 28,
-      "endCol": 7
+      "start": 1977,
+      "end": 3967
     },
     {
-      "text": "  private resolvePath(path: string): AbsFilePath {\n    return resolveFilePath(\n      this.context.cwd,\n      path as UnresolvedFilePath,\n      this.context.homeDir,\n    );\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method resolvePath\n\n  private resolvePath(path: string): AbsFilePath {\n    return resolveFilePath(\n      this.context.cwd,\n      path as UnresolvedFilePath,\n      this.context.homeDir,\n    );\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method resolvePath",
-      "startLine": 30,
-      "startCol": 1,
-      "endLine": 36,
-      "endCol": 4
-    },
-    {
-      "text": "/** Replicate the seatbelt matching logic from sandbox-runtime:\n   *  - literal paths use subpath matching (path + all children)\n   *  - glob patterns use regex matching via globToRegex\n   */\n  private pathMatchesPattern(absPath: string, pattern: string): boolean {\n    if (containsGlobChars(pattern)) {\n      return new RegExp(globToRegex(pattern)).test(absPath);\n    }\n    if (pattern === \"/\") {\n      return absPath.startsWith(\"/\");\n    }\n    return absPath === pattern || absPath.startsWith(`${pattern}/`);\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method pathMatchesPattern\n\n/** Replicate the seatbelt matching logic from sandbox-runtime:\n   *  - literal paths use subpath matching (path + all children)\n   *  - glob patterns use regex matching via globToRegex\n   */\n  private pathMatchesPattern(absPath: string, pattern: string): boolean {\n    if (containsGlobChars(pattern)) {\n      return new RegExp(globToRegex(pattern)).test(absPath);\n    }\n    if (pattern === \"/\") {\n      return absPath.startsWith(\"/\");\n    }\n    return absPath === pattern || absPath.startsWith(`${pattern}/`);\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method pathMatchesPattern",
-      "startLine": 38,
-      "startCol": 3,
-      "endLine": 50,
-      "endCol": 4
-    },
-    {
-      "text": "  isReadBlocked(absPath: string): boolean {\n    if (this.sandbox.getState().status !== \"ready\") return false;\n    const readConfig = this.sandbox.getFsReadConfig();\n    const isDenied = readConfig.denyOnly.some((pattern) =\u003e\n      this.pathMatchesPattern(absPath, pattern),\n    );\n    if (!isDenied) return false;\n    const isReAllowed = (readConfig.allowWithinDeny ?? []).some((pattern) =\u003e\n      this.pathMatchesPattern(absPath, pattern),\n    );\n    return !isReAllowed;\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method isReadBlocked\n\n  isReadBlocked(absPath: string): boolean {\n    if (this.sandbox.getState().status !== \"ready\") return false;\n    const readConfig = this.sandbox.getFsReadConfig();\n    const isDenied = readConfig.denyOnly.some((pattern) =\u003e\n      this.pathMatchesPattern(absPath, pattern),\n    );\n    if (!isDenied) return false;\n    const isReAllowed = (readConfig.allowWithinDeny ?? []).some((pattern) =\u003e\n      this.pathMatchesPattern(absPath, pattern),\n    );\n    return !isReAllowed;\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method isReadBlocked",
-      "startLine": 52,
-      "startCol": 1,
-      "endLine": 63,
-      "endCol": 4
-    },
-    {
-      "text": "  async readFile(path: string): Promise\u003cstring\u003e {\n    const abs = this.resolvePath(path);\n    if (this.isReadBlocked(abs)) {\n      throw new Error(`Sandbox: read access denied for ${path}`);\n    }\n\n    return fs.readFile(abs, \"utf-8\");\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method readFile\n\n  async readFile(path: string): Promise\u003cstring\u003e {\n    const abs = this.resolvePath(path);\n    if (this.isReadBlocked(abs)) {\n      throw new Error(`Sandbox: read access denied for ${path}`);\n    }\n\n    return fs.readFile(abs, \"utf-8\");\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method readFile",
-      "startLine": 65,
-      "startCol": 1,
-      "endLine": 72,
-      "endCol": 4
-    },
-    {
-      "text": "  async readBinaryFile(path: string): Promise\u003cBuffer\u003e {\n    const abs = this.resolvePath(path);\n    if (this.isReadBlocked(abs)) {\n      throw new Error(`Sandbox: read access denied for ${path}`);\n    }\n    return fs.readFile(abs);\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method readBinaryFile\n\n  async readBinaryFile(path: string): Promise\u003cBuffer\u003e {\n    const abs = this.resolvePath(path);\n    if (this.isReadBlocked(abs)) {\n      throw new Error(`Sandbox: read access denied for ${path}`);\n    }\n    return fs.readFile(abs);\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method readBinaryFile",
-      "startLine": 74,
-      "startCol": 1,
-      "endLine": 80,
-      "endCol": 4
-    },
-    {
-      "text": "  isWriteBlocked(absPath: string): boolean {\n    if (this.isBypassed()) return false;\n    if (this.sandbox.getState().status !== \"ready\") return true;\n    const writeConfig = this.sandbox.getFsWriteConfig();\n    const inAllowed = writeConfig.allowOnly.some((pattern) =\u003e\n      this.pathMatchesPattern(absPath, pattern),\n    );\n    if (!inAllowed) return true;\n    const inDeny = writeConfig.denyWithinAllow.some((pattern) =\u003e\n      this.pathMatchesPattern(absPath, pattern),\n    );\n    return inDeny;\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method isWriteBlocked\n\n  isWriteBlocked(absPath: string): boolean {\n    if (this.isBypassed()) return false;\n    if (this.sandbox.getState().status !== \"ready\") return true;\n    const writeConfig = this.sandbox.getFsWriteConfig();\n    const inAllowed = writeConfig.allowOnly.some((pattern) =\u003e\n      this.pathMatchesPattern(absPath, pattern),\n    );\n    if (!inAllowed) return true;\n    const inDeny = writeConfig.denyWithinAllow.some((pattern) =\u003e\n      this.pathMatchesPattern(absPath, pattern),\n    );\n    return inDeny;\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method isWriteBlocked",
-      "startLine": 82,
-      "startCol": 1,
-      "endLine": 94,
-      "endCol": 4
-    },
-    {
-      "text": "  async writeFile(path: string, content: string): Promise\u003cvoid\u003e {\n    const abs = this.resolvePath(path);\n    if (this.isWriteBlocked(abs)) {\n      await this.promptForWriteApproval(abs);\n    }\n\n    await fs.writeFile(abs, content, \"utf-8\");\n\n    this.reloadBufferIfOpen(abs).catch((err) =\u003e {\n      this.context.nvim.logger.warn(\n        `Failed to reload buffer for ${abs}: ${err instanceof Error ? err.message : String(err)}`,\n      );\n    });\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method writeFile\n\n  async writeFile(path: string, content: string): Promise\u003cvoid\u003e {\n    const abs = this.resolvePath(path);\n    if (this.isWriteBlocked(abs)) {\n      await this.promptForWriteApproval(abs);\n    }\n\n    await fs.writeFile(abs, content, \"utf-8\");\n\n    this.reloadBufferIfOpen(abs).catch((err) =\u003e {\n      this.context.nvim.logger.warn(\n        `Failed to reload buffer for ${abs}: ${err instanceof Error ? err.message : String(err)}`,\n      );\n    });\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method writeFile",
-      "startLine": 96,
-      "startCol": 1,
-      "endLine": 109,
-      "endCol": 4
-    },
-    {
-      "text": "  private async reloadBufferIfOpen(absPath: AbsFilePath): Promise\u003cvoid\u003e {\n    const result = await getBufferIfOpen({\n      unresolvedPath: absPath,\n      context: this.context,\n    });\n    if (result.status !== \"ok\") {\n      return;\n    }\n    const buffer = result.buffer;\n    const modified = await buffer.getOption(\"modified\");\n    if (modified) {\n      this.context.nvim.logger.warn(\n        `Buffer for ${absPath} has unsaved changes; disk was updated by agent but buffer was not reloaded`,\n      );\n      return;\n    }\n    await buffer.attemptEdit();\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method reloadBufferIfOpen\n\n  private async reloadBufferIfOpen(absPath: AbsFilePath): Promise\u003cvoid\u003e {\n    const result = await getBufferIfOpen({\n      unresolvedPath: absPath,\n      context: this.context,\n    });\n    if (result.status !== \"ok\") {\n      return;\n    }\n    const buffer = result.buffer;\n    const modified = await buffer.getOption(\"modified\");\n    if (modified) {\n      this.context.nvim.logger.warn(\n        `Buffer for ${absPath} has unsaved changes; disk was updated by agent but buffer was not reloaded`,\n      );\n      return;\n    }\n    await buffer.attemptEdit();\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method reloadBufferIfOpen",
-      "startLine": 111,
-      "startCol": 1,
-      "endLine": 128,
-      "endCol": 4
-    },
-    {
-      "text": "  async fileExists(path: string): Promise\u003cboolean\u003e {\n    const abs = this.resolvePath(path);\n    try {\n      await fs.access(abs);\n      return true;\n    } catch {\n      return false;\n    }\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method fileExists\n\n  async fileExists(path: string): Promise\u003cboolean\u003e {\n    const abs = this.resolvePath(path);\n    try {\n      await fs.access(abs);\n      return true;\n    } catch {\n      return false;\n    }\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method fileExists",
-      "startLine": 130,
-      "startCol": 1,
-      "endLine": 138,
-      "endCol": 4
-    },
-    {
-      "text": "  async mkdir(path: string): Promise\u003cvoid\u003e {\n    const abs = this.resolvePath(path);\n    await fs.mkdir(abs, { recursive: true });\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method mkdir\n\n  async mkdir(path: string): Promise\u003cvoid\u003e {\n    const abs = this.resolvePath(path);\n    await fs.mkdir(abs, { recursive: true });\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method mkdir",
-      "startLine": 140,
-      "startCol": 1,
-      "endLine": 143,
-      "endCol": 4
-    },
-    {
-      "text": "  async stat(\n    path: string,\n  ): Promise\u003c{ mtimeMs: number; size: number } | undefined\u003e {\n    const abs = this.resolvePath(path);\n    try {\n      const stats = await fs.stat(abs);\n      return { mtimeMs: stats.mtimeMs, size: stats.size };\n    } catch {\n      return undefined;\n    }\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method stat\n\n  async stat(\n    path: string,\n  ): Promise\u003c{ mtimeMs: number; size: number } | undefined\u003e {\n    const abs = this.resolvePath(path);\n    try {\n      const stats = await fs.stat(abs);\n      return { mtimeMs: stats.mtimeMs, size: stats.size };\n    } catch {\n      return undefined;\n    }\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method stat",
-      "startLine": 145,
-      "startCol": 1,
-      "endLine": 155,
-      "endCol": 4
-    },
-    {
-      "text": "  async readdir(path: string): Promise\u003cstring[]\u003e {\n    const abs = this.resolvePath(path);\n    return fs.readdir(abs);\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method readdir\n\n  async readdir(path: string): Promise\u003cstring[]\u003e {\n    const abs = this.resolvePath(path);\n    return fs.readdir(abs);\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method readdir",
-      "startLine": 157,
-      "startCol": 1,
-      "endLine": 160,
-      "endCol": 4
-    },
-    {
-      "text": "  async isDirectory(path: string): Promise\u003cboolean\u003e {\n    const abs = this.resolvePath(path);\n    try {\n      const stats = await fs.stat(abs);\n      return stats.isDirectory();\n    } catch {\n      return false;\n    }\n  }",
-      "contextualizedText": "// node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method isDirectory\n\n  async isDirectory(path: string): Promise\u003cboolean\u003e {\n    const abs = this.resolvePath(path);\n    try {\n      const stats = await fs.stat(abs);\n      return stats.isDirectory();\n    } catch {\n      return false;\n    }\n  }",
-      "headingContext": "node/capabilities/sandbox-file-io.ts \u003e class SandboxFileIO \u003e method isDirectory",
-      "startLine": 162,
-      "startCol": 1,
-      "endLine": 170,
-      "endCol": 4
+      "start": 3971,
+      "end": 4939
     }
   ]
 }

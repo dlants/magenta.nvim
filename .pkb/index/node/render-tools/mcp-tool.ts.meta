@@ -1,42 +1,11 @@
 {
   "blobSha": "9a14c732e1de10d39c3511dfacb916664f6ec4f8",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type {\n  CompletedToolInfo,\n  DisplayContext,\n  MCPProgress,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode, withInlineCode } from \"../tea/view.ts\";\nexport type { MCPProgress };",
-      "contextualizedText": "// node/render-tools/mcp-tool.ts\n\nimport type {\n  CompletedToolInfo,\n  DisplayContext,\n  MCPProgress,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode, withInlineCode } from \"../tea/view.ts\";\nexport type { MCPProgress };",
-      "headingContext": "node/render-tools/mcp-tool.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 8,
-      "endCol": 29
-    },
-    {
-      "text": "export function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  return d`🔨 MCP tool ${withInlineCode(d`\\`${request.toolName}\\``)}`;\n}",
-      "contextualizedText": "// node/render-tools/mcp-tool.ts \u003e function renderSummary\n\nexport function renderSummary(\n  request: UnionToolRequest,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  return d`🔨 MCP tool ${withInlineCode(d`\\`${request.toolName}\\``)}`;\n}",
-      "headingContext": "node/render-tools/mcp-tool.ts \u003e function renderSummary",
-      "startLine": 10,
-      "startCol": 1,
-      "endLine": 15,
-      "endCol": 2
-    },
-    {
-      "text": "export function renderProgress(\n  _request: UnionToolRequest,\n  progress: MCPProgress,\n  _displayContext: DisplayContext,\n  _expanded: boolean,\n): VDOMNode | undefined {\n  const runningTime = Math.floor((Date.now() - progress.startTime) / 1000);\n  return d`(${String(runningTime)}s) processing...`;\n}",
-      "contextualizedText": "// node/render-tools/mcp-tool.ts \u003e function renderProgress\n\nexport function renderProgress(\n  _request: UnionToolRequest,\n  progress: MCPProgress,\n  _displayContext: DisplayContext,\n  _expanded: boolean,\n): VDOMNode | undefined {\n  const runningTime = Math.floor((Date.now() - progress.startTime) / 1000);\n  return d`(${String(runningTime)}s) processing...`;\n}",
-      "headingContext": "node/render-tools/mcp-tool.ts \u003e function renderProgress",
-      "startLine": 17,
-      "startCol": 1,
-      "endLine": 25,
-      "endCol": 2
-    },
-    {
-      "text": "export function renderResultSummary(\n  info: CompletedToolInfo,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const suffix = info.result.result.status === \"error\" ? \" error\" : \"\";\n  return d`MCP tool ${withInlineCode(d`\\`${info.request.toolName}\\``)}${suffix}`;\n}",
-      "contextualizedText": "// node/render-tools/mcp-tool.ts \u003e function renderResultSummary\n\nexport function renderResultSummary(\n  info: CompletedToolInfo,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const suffix = info.result.result.status === \"error\" ? \" error\" : \"\";\n  return d`MCP tool ${withInlineCode(d`\\`${info.request.toolName}\\``)}${suffix}`;\n}",
-      "headingContext": "node/render-tools/mcp-tool.ts \u003e function renderResultSummary",
-      "startLine": 27,
-      "startCol": 1,
-      "endLine": 33,
-      "endCol": 2
+      "start": 0,
+      "end": 979
     }
   ]
 }

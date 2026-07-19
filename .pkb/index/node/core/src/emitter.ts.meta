@@ -1,60 +1,11 @@
 {
   "blobSha": "250fde7945bd6b3841be10f5915de08a6690144d",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export type EventMap = Record\u003cstring, unknown[]\u003e;\n\ntype Listener\u003cArgs extends unknown[]\u003e = (...args: Args) =\u003e void;",
-      "contextualizedText": "// node/core/src/emitter.ts\n\nexport type EventMap = Record\u003cstring, unknown[]\u003e;\n\ntype Listener\u003cArgs extends unknown[]\u003e = (...args: Args) =\u003e void;",
-      "headingContext": "node/core/src/emitter.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 3,
-      "endCol": 65
-    },
-    {
-      "text": "export class Emitter\u003cEvents extends EventMap\u003e {\n  private listeners: {\n    [K in keyof Events]?: Set\u003cListener\u003cEvents[K]\u003e\u003e;\n  } = {}",
-      "contextualizedText": "// node/core/src/emitter.ts \u003e class Emitter\n\nexport class Emitter\u003cEvents extends EventMap\u003e {\n  private listeners: {\n    [K in keyof Events]?: Set\u003cListener\u003cEvents[K]\u003e\u003e;\n  } = {}",
-      "headingContext": "node/core/src/emitter.ts \u003e class Emitter",
-      "startLine": 5,
-      "startCol": 1,
-      "endLine": 8,
-      "endCol": 9
-    },
-    {
-      "text": "  on\u003cK extends keyof Events\u003e(event: K, listener: Listener\u003cEvents[K]\u003e): void {\n    if (!this.listeners[event]) {\n      this.listeners[event] = new Set();\n    }\n    this.listeners[event].add(listener);\n  }",
-      "contextualizedText": "// node/core/src/emitter.ts \u003e class Emitter \u003e method on\n\n  on\u003cK extends keyof Events\u003e(event: K, listener: Listener\u003cEvents[K]\u003e): void {\n    if (!this.listeners[event]) {\n      this.listeners[event] = new Set();\n    }\n    this.listeners[event].add(listener);\n  }",
-      "headingContext": "node/core/src/emitter.ts \u003e class Emitter \u003e method on",
-      "startLine": 10,
-      "startCol": 1,
-      "endLine": 15,
-      "endCol": 4
-    },
-    {
-      "text": "  off\u003cK extends keyof Events\u003e(event: K, listener: Listener\u003cEvents[K]\u003e): void {\n    this.listeners[event]?.delete(listener);\n  }",
-      "contextualizedText": "// node/core/src/emitter.ts \u003e class Emitter \u003e method off\n\n  off\u003cK extends keyof Events\u003e(event: K, listener: Listener\u003cEvents[K]\u003e): void {\n    this.listeners[event]?.delete(listener);\n  }",
-      "headingContext": "node/core/src/emitter.ts \u003e class Emitter \u003e method off",
-      "startLine": 17,
-      "startCol": 1,
-      "endLine": 19,
-      "endCol": 4
-    },
-    {
-      "text": "  emit\u003cK extends keyof Events\u003e(event: K, ...args: Events[K]): void {\n    const set = this.listeners[event];\n    if (set) {\n      for (const listener of set) {\n        listener(...args);\n      }\n    }\n  }",
-      "contextualizedText": "// node/core/src/emitter.ts \u003e class Emitter \u003e method emit\n\n  emit\u003cK extends keyof Events\u003e(event: K, ...args: Events[K]): void {\n    const set = this.listeners[event];\n    if (set) {\n      for (const listener of set) {\n        listener(...args);\n      }\n    }\n  }",
-      "headingContext": "node/core/src/emitter.ts \u003e class Emitter \u003e method emit",
-      "startLine": 21,
-      "startCol": 1,
-      "endLine": 28,
-      "endCol": 4
-    },
-    {
-      "text": "  removeAllListeners(): void {\n    this.listeners = {};\n  }",
-      "contextualizedText": "// node/core/src/emitter.ts \u003e class Emitter \u003e method removeAllListeners\n\n  removeAllListeners(): void {\n    this.listeners = {};\n  }",
-      "headingContext": "node/core/src/emitter.ts \u003e class Emitter \u003e method removeAllListeners",
-      "startLine": 30,
-      "startCol": 1,
-      "endLine": 32,
-      "endCol": 4
+      "start": 0,
+      "end": 851
     }
   ]
 }

@@ -1,105 +1,27 @@
 {
   "blobSha": "d2b322f023b65f0833fba5aa1687dc459637e940",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { FileIO } from \"../capabilities/file-io.ts\";\nimport type { HelpTagsProvider } from \"../capabilities/help-tags-provider.ts\";\nimport {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolResult,\n  type ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type {\n  GenericToolRequest,\n  ToolInvocation,\n  ToolName,\n} from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport type Input = { query: string };\n\nexport type ToolRequest = GenericToolRequest\u003c\"docs\", Input\u003e;\nexport type StructuredResult = {\n  toolName: \"docs\";\n  matchCount: number;\n  truncated: boolean;\n};\n\nexport type Match = {\n  tag: string;\n  filePath: string;\n  lineNumber: number;\n};\n\nconst MAX_MATCHES = 200;\n\ntype ExecuteContext = {\n  fileIO: FileIO;\n  helpTagsProvider: HelpTagsProvider;\n};\n\ntype ParsedTag = {\n  tag: string;\n  relFile: string;\n  tagsFileDir: string;\n};",
-      "contextualizedText": "// node/core/src/tools/docs.ts\n\nimport type { FileIO } from \"../capabilities/file-io.ts\";\nimport type { HelpTagsProvider } from \"../capabilities/help-tags-provider.ts\";\nimport {\n  PLACEHOLDER_NATIVE_MESSAGE_IDX,\n  type ProviderToolResult,\n  type ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type {\n  GenericToolRequest,\n  ToolInvocation,\n  ToolName,\n} from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";\n\nexport type Input = { query: string };\n\nexport type ToolRequest = GenericToolRequest\u003c\"docs\", Input\u003e;\nexport type StructuredResult = {\n  toolName: \"docs\";\n  matchCount: number;\n  truncated: boolean;\n};\n\nexport type Match = {\n  tag: string;\n  filePath: string;\n  lineNumber: number;\n};\n\nconst MAX_MATCHES = 200;\n\ntype ExecuteContext = {\n  fileIO: FileIO;\n  helpTagsProvider: HelpTagsProvider;\n};\n\ntype ParsedTag = {\n  tag: string;\n  relFile: string;\n  tagsFileDir: string;\n};",
-      "headingContext": "node/core/src/tools/docs.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 41,
-      "endCol": 3
+      "start": 0,
+      "end": 1888
     },
     {
-      "text": "function parseTagsFile(content: string): { tag: string; relFile: string }[] {\n  const results: { tag: string; relFile: string }[] = [];\n  for (const line of content.split(\"\\n\")) {\n    if (!line || line.startsWith(\"!\")) continue;\n    const parts = line.split(\"\\t\");\n    if (parts.length \u003c 2) continue;\n    const tag = parts[0];\n    const relFile = parts[1];\n    if (!tag || !relFile) continue;\n    results.push({ tag, relFile });\n  }\n  return results;\n}",
-      "contextualizedText": "// node/core/src/tools/docs.ts \u003e function parseTagsFile\n\nfunction parseTagsFile(content: string): { tag: string; relFile: string }[] {\n  const results: { tag: string; relFile: string }[] = [];\n  for (const line of content.split(\"\\n\")) {\n    if (!line || line.startsWith(\"!\")) continue;\n    const parts = line.split(\"\\t\");\n    if (parts.length \u003c 2) continue;\n    const tag = parts[0];\n    const relFile = parts[1];\n    if (!tag || !relFile) continue;\n    results.push({ tag, relFile });\n  }\n  return results;\n}",
-      "headingContext": "node/core/src/tools/docs.ts \u003e function parseTagsFile",
-      "startLine": 43,
-      "startCol": 1,
-      "endLine": 55,
-      "endCol": 2
+      "start": 1890,
+      "end": 3446
     },
     {
-      "text": "function dirOf(path: string): string {\n  const idx = path.lastIndexOf(\"/\");\n  return idx === -1 ? \"\" : path.slice(0, idx);\n}",
-      "contextualizedText": "// node/core/src/tools/docs.ts \u003e function dirOf\n\nfunction dirOf(path: string): string {\n  const idx = path.lastIndexOf(\"/\");\n  return idx === -1 ? \"\" : path.slice(0, idx);\n}",
-      "headingContext": "node/core/src/tools/docs.ts \u003e function dirOf",
-      "startLine": 57,
-      "startCol": 1,
-      "endLine": 60,
-      "endCol": 2
+      "start": 3454,
+      "end": 4556
     },
     {
-      "text": "function joinPath(dir: string, rel: string): string {\n  if (!dir) return rel;\n  if (rel.startsWith(\"/\")) return rel;\n  return `${dir}/${rel}`;\n}",
-      "contextualizedText": "// node/core/src/tools/docs.ts \u003e function joinPath\n\nfunction joinPath(dir: string, rel: string): string {\n  if (!dir) return rel;\n  if (rel.startsWith(\"/\")) return rel;\n  return `${dir}/${rel}`;\n}",
-      "headingContext": "node/core/src/tools/docs.ts \u003e function joinPath",
-      "startLine": 62,
-      "startCol": 1,
-      "endLine": 66,
-      "endCol": 2
+      "start": 4564,
+      "end": 6537
     },
     {
-      "text": "function findTagLine(content: string, tag: string): number | undefined {\n  const marker = `*${tag}*`;\n  const lines = content.split(\"\\n\");\n  for (let i = 0; i \u003c lines.length; i++) {\n    if (lines[i].includes(marker)) {\n      return i + 1;\n    }\n  }\n  return undefined;\n}",
-      "contextualizedText": "// node/core/src/tools/docs.ts \u003e function findTagLine\n\nfunction findTagLine(content: string, tag: string): number | undefined {\n  const marker = `*${tag}*`;\n  const lines = content.split(\"\\n\");\n  for (let i = 0; i \u003c lines.length; i++) {\n    if (lines[i].includes(marker)) {\n      return i + 1;\n    }\n  }\n  return undefined;\n}",
-      "headingContext": "node/core/src/tools/docs.ts \u003e function findTagLine",
-      "startLine": 68,
-      "startCol": 1,
-      "endLine": 77,
-      "endCol": 2
-    },
-    {
-      "text": "export function execute(\n  request: ToolRequest,\n  context: ExecuteContext,\n): ToolInvocation {\n  let aborted = false;\n\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    if (aborted) {\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: \"Request was aborted by the user.\",\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n\n    try {\n      const query = request.input.query.toLowerCase();\n      const tagsFiles = await context.helpTagsProvider.listTagFiles();\n\n      const matches: ParsedTag[] = [];\n      for (const tagsFile of tagsFiles) {\n        let content: string;\n        try {\n          content = await context.fileIO.readFile(tagsFile);\n        } catch {\n          continue;\n        }\n        const tagsFileDir = dirOf(tagsFile);\n        for (const { tag, relFile } of parseTagsFile(content)) {\n          if (tag.toLowerCase().includes(query)) {\n            matches.push({ tag, relFile, tagsFileDir });\n            if (matches.length \u003e MAX_MATCHES) break;\n          }\n        }\n        if (matches.length \u003e MAX_MATCHES) break;\n      }\n\n      const truncated = matches.length \u003e MAX_MATCHES;\n      const capped = truncated ? matches.slice(0, MAX_MATCHES) : matches;\n\n      const byFile = new Map\u003cstring, ParsedTag[]\u003e();\n      for (const m of capped) {\n        const absPath = joinPath(m.tagsFileDir, m.relFile);\n        const arr = byFile.get(absPath) ?? [];\n        arr.push(m);\n        byFile.set(absPath, arr);\n      }\n\n      type FileEntry = { fileName: string; tags: Match[] };\n      const byDir = new Map\u003cstring, Map\u003cstring, FileEntry\u003e\u003e();",
-      "contextualizedText": "// node/core/src/tools/docs.ts \u003e function execute\n\nexport function execute(\n  request: ToolRequest,\n  context: ExecuteContext,\n): ToolInvocation {\n  let aborted = false;\n\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    if (aborted) {\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: \"Request was aborted by the user.\",\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n\n    try {\n      const query = request.input.query.toLowerCase();\n      const tagsFiles = await context.helpTagsProvider.listTagFiles();\n\n      const matches: ParsedTag[] = [];\n      for (const tagsFile of tagsFiles) {\n        let content: string;\n        try {\n          content = await context.fileIO.readFile(tagsFile);\n        } catch {\n          continue;\n        }\n        const tagsFileDir = dirOf(tagsFile);\n        for (const { tag, relFile } of parseTagsFile(content)) {\n          if (tag.toLowerCase().includes(query)) {\n            matches.push({ tag, relFile, tagsFileDir });\n            if (matches.length \u003e MAX_MATCHES) break;\n          }\n        }\n        if (matches.length \u003e MAX_MATCHES) break;\n      }\n\n      const truncated = matches.length \u003e MAX_MATCHES;\n      const capped = truncated ? matches.slice(0, MAX_MATCHES) : matches;\n\n      const byFile = new Map\u003cstring, ParsedTag[]\u003e();\n      for (const m of capped) {\n        const absPath = joinPath(m.tagsFileDir, m.relFile);\n        const arr = byFile.get(absPath) ?? [];\n        arr.push(m);\n        byFile.set(absPath, arr);\n      }\n\n      type FileEntry = { fileName: string; tags: Match[] };\n      const byDir = new Map\u003cstring, Map\u003cstring, FileEntry\u003e\u003e();",
-      "headingContext": "node/core/src/tools/docs.ts \u003e function execute",
-      "startLine": 79,
-      "startCol": 1,
-      "endLine": 132,
-      "endCol": 63
-    },
-    {
-      "text": "for (const [absPath, tagEntries] of byFile.entries()) {\n        let fileContent: string | undefined;\n        try {\n          fileContent = await context.fileIO.readFile(absPath);\n        } catch {\n          fileContent = undefined;\n        }\n        const dir = dirOf(absPath);\n        const fileName = absPath.slice(dir.length + 1);\n        let filesInDir = byDir.get(dir);\n        if (!filesInDir) {\n          filesInDir = new Map();\n          byDir.set(dir, filesInDir);\n        }\n        let entry = filesInDir.get(absPath);\n        if (!entry) {\n          entry = { fileName, tags: [] };\n          filesInDir.set(absPath, entry);\n        }\n        for (const t of tagEntries) {\n          const lineNumber = fileContent\n            ? (findTagLine(fileContent, t.tag) ?? 1)\n            : 1;\n          entry.tags.push({ tag: t.tag, filePath: absPath, lineNumber });\n        }\n      }\n\n      const totalMatches = capped.length;\n      const sortedDirs = [...byDir.keys()].sort();\n\n      let text: string;",
-      "contextualizedText": "// node/core/src/tools/docs.ts \u003e function execute\n\nfor (const [absPath, tagEntries] of byFile.entries()) {\n        let fileContent: string | undefined;\n        try {\n          fileContent = await context.fileIO.readFile(absPath);\n        } catch {\n          fileContent = undefined;\n        }\n        const dir = dirOf(absPath);\n        const fileName = absPath.slice(dir.length + 1);\n        let filesInDir = byDir.get(dir);\n        if (!filesInDir) {\n          filesInDir = new Map();\n          byDir.set(dir, filesInDir);\n        }\n        let entry = filesInDir.get(absPath);\n        if (!entry) {\n          entry = { fileName, tags: [] };\n          filesInDir.set(absPath, entry);\n        }\n        for (const t of tagEntries) {\n          const lineNumber = fileContent\n            ? (findTagLine(fileContent, t.tag) ?? 1)\n            : 1;\n          entry.tags.push({ tag: t.tag, filePath: absPath, lineNumber });\n        }\n      }\n\n      const totalMatches = capped.length;\n      const sortedDirs = [...byDir.keys()].sort();\n\n      let text: string;",
-      "headingContext": "node/core/src/tools/docs.ts \u003e function execute",
-      "startLine": 133,
-      "startCol": 7,
-      "endLine": 163,
-      "endCol": 24
-    },
-    {
-      "text": "if (totalMatches === 0) {\n        text = `No matches for query \"${request.input.query}\".`;\n      } else {\n        const header = truncated\n          ? `Found ${totalMatches}+ matches (truncated to ${MAX_MATCHES}).\\n`\n          : `Found ${totalMatches} match${totalMatches === 1 ? \"\" : \"es\"}.\\n`;\n        const sections: string[] = [];\n        for (const dir of sortedDirs) {\n          const filesInDir = byDir.get(dir);\n          if (!filesInDir) continue;\n          const lines: string[] = [`${dir}/`];\n          const sortedFiles = [...filesInDir.values()].sort((a, b) =\u003e\n            a.fileName.localeCompare(b.fileName),\n          );\n          for (const entry of sortedFiles) {\n            lines.push(`  ${entry.fileName}`);\n            entry.tags.sort((a, b) =\u003e a.tag.localeCompare(b.tag));\n            for (const t of entry.tags) {\n              lines.push(`    ${t.tag}:${t.lineNumber}`);\n            }\n          }\n          sections.push(lines.join(\"\\n\"));\n        }\n        text = `${header}\\n${sections.join(\"\\n\\n\")}`;\n      }\n\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text,\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          ],\n          structuredResult: {\n            toolName: \"docs\" as const,\n            matchCount: totalMatches,\n            truncated,\n          },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    } catch (error) {\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: `Failed to search docs: ${error instanceof Error ? error.message : String(error)}`,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n  })();\n\n  return {\n    promise",
-      "contextualizedText": "// node/core/src/tools/docs.ts \u003e function execute\n\nif (totalMatches === 0) {\n        text = `No matches for query \"${request.input.query}\".`;\n      } else {\n        const header = truncated\n          ? `Found ${totalMatches}+ matches (truncated to ${MAX_MATCHES}).\\n`\n          : `Found ${totalMatches} match${totalMatches === 1 ? \"\" : \"es\"}.\\n`;\n        const sections: string[] = [];\n        for (const dir of sortedDirs) {\n          const filesInDir = byDir.get(dir);\n          if (!filesInDir) continue;\n          const lines: string[] = [`${dir}/`];\n          const sortedFiles = [...filesInDir.values()].sort((a, b) =\u003e\n            a.fileName.localeCompare(b.fileName),\n          );\n          for (const entry of sortedFiles) {\n            lines.push(`  ${entry.fileName}`);\n            entry.tags.sort((a, b) =\u003e a.tag.localeCompare(b.tag));\n            for (const t of entry.tags) {\n              lines.push(`    ${t.tag}:${t.lineNumber}`);\n            }\n          }\n          sections.push(lines.join(\"\\n\"));\n        }\n        text = `${header}\\n${sections.join(\"\\n\\n\")}`;\n      }\n\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text,\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          ],\n          structuredResult: {\n            toolName: \"docs\" as const,\n            matchCount: totalMatches,\n            truncated,\n          },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    } catch (error) {\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: `Failed to search docs: ${error instanceof Error ? error.message : String(error)}`,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n  })();\n\n  return {\n    promise",
-      "headingContext": "node/core/src/tools/docs.ts \u003e function execute",
-      "startLine": 164,
-      "startCol": 7,
-      "endLine": 224,
-      "endCol": 12
-    },
-    {
-      "text": "    abort: () =\u003e {\n      aborted = true;\n    }",
-      "contextualizedText": "// node/core/src/tools/docs.ts \u003e function execute \u003e function abort\n\n    abort: () =\u003e {\n      aborted = true;\n    }",
-      "headingContext": "node/core/src/tools/docs.ts \u003e function execute \u003e function abort",
-      "startLine": 225,
-      "startCol": 1,
-      "endLine": 227,
-      "endCol": 6
-    },
-    {
-      "text": "export function getSpec(): ProviderToolSpec {\n  return {\n    name: \"docs\" as ToolName,\n    description:\n      \"Search neovim help tags across all runtime help files (magenta docs, neovim builtins, plugin help). Returns matching tags with their file paths and line numbers.\",\n    input_schema: {\n      type: \"object\",\n      properties: {\n        query: {\n          type: \"string\",\n          description:\n            \"Substring to match against help tag names (case-insensitive).\",\n        },\n      },\n      required: [\"query\"],\n      additionalProperties: false,\n    },\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/docs.ts \u003e function getSpec\n\nexport function getSpec(): ProviderToolSpec {\n  return {\n    name: \"docs\" as ToolName,\n    description:\n      \"Search neovim help tags across all runtime help files (magenta docs, neovim builtins, plugin help). Returns matching tags with their file paths and line numbers.\",\n    input_schema: {\n      type: \"object\",\n      properties: {\n        query: {\n          type: \"string\",\n          description:\n            \"Substring to match against help tag names (case-insensitive).\",\n        },\n      },\n      required: [\"query\"],\n      additionalProperties: false,\n    },\n  };\n}",
-      "headingContext": "node/core/src/tools/docs.ts \u003e function getSpec",
-      "startLine": 231,
-      "startCol": 1,
-      "endLine": 249,
-      "endCol": 2
-    },
-    {
-      "text": "export function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (typeof input.query !== \"string\") {\n    return {\n      status: \"error\",\n      error: \"expected req.input.query to be a string\",\n    };\n  }\n  if (input.query.trim().length === 0) {\n    return {\n      status: \"error\",\n      error: \"expected req.input.query to be a non-empty string\",\n    };\n  }\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/docs.ts \u003e function validateInput\n\nexport function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (typeof input.query !== \"string\") {\n    return {\n      status: \"error\",\n      error: \"expected req.input.query to be a string\",\n    };\n  }\n  if (input.query.trim().length === 0) {\n    return {\n      status: \"error\",\n      error: \"expected req.input.query to be a non-empty string\",\n    };\n  }\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
-      "headingContext": "node/core/src/tools/docs.ts \u003e function validateInput",
-      "startLine": 251,
-      "startCol": 1,
-      "endLine": 270,
-      "endCol": 2
+      "start": 6539,
+      "end": 7561
     }
   ]
 }

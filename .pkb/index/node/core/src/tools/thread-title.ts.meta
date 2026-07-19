@@ -1,51 +1,15 @@
 {
   "blobSha": "0bb322239e3c59c4dae53de2a462db90650f0ed6",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type {\n  ProviderToolResult,\n  ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"../providers/provider-types.ts\";\nimport type {\n  GenericToolRequest,\n  ToolInvocation,\n  ToolName,\n} from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";",
-      "contextualizedText": "// node/core/src/tools/thread-title.ts\n\nimport type {\n  ProviderToolResult,\n  ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport { PLACEHOLDER_NATIVE_MESSAGE_IDX } from \"../providers/provider-types.ts\";\nimport type {\n  GenericToolRequest,\n  ToolInvocation,\n  ToolName,\n} from \"../tool-types.ts\";\nimport type { Result } from \"../utils/result.ts\";",
-      "headingContext": "node/core/src/tools/thread-title.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 11,
-      "endCol": 50
+      "start": 0,
+      "end": 1976
     },
     {
-      "text": "export function execute(\n  request: ToolRequest,\n  _context: Record\u003cstring, never\u003e,\n): ToolInvocation {\n  let aborted = false;\n\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    try {\n      await Promise.resolve();\n      if (aborted) {\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error: \"Request was aborted by the user.\",\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text: request.input.title,\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          ],\n          structuredResult: { toolName: \"thread_title\" as const },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    } catch (error) {\n      if (aborted) {\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error: \"Request was aborted by the user.\",\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: `Failed: ${error instanceof Error ? error.message : String(error)}`,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n  })();\n\n  return {\n    promise",
-      "contextualizedText": "// node/core/src/tools/thread-title.ts \u003e function execute\n\nexport function execute(\n  request: ToolRequest,\n  _context: Record\u003cstring, never\u003e,\n): ToolInvocation {\n  let aborted = false;\n\n  const promise = (async (): Promise\u003cProviderToolResult\u003e =\u003e {\n    try {\n      await Promise.resolve();\n      if (aborted) {\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error: \"Request was aborted by the user.\",\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"ok\",\n          value: [\n            {\n              type: \"text\",\n              text: request.input.title,\n              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n            },\n          ],\n          structuredResult: { toolName: \"thread_title\" as const },\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    } catch (error) {\n      if (aborted) {\n        return {\n          type: \"tool_result\",\n          id: request.id,\n          result: {\n            status: \"error\",\n            error: \"Request was aborted by the user.\",\n          },\n          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n        };\n      }\n      return {\n        type: \"tool_result\",\n        id: request.id,\n        result: {\n          status: \"error\",\n          error: `Failed: ${error instanceof Error ? error.message : String(error)}`,\n        },\n        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,\n      };\n    }\n  })();\n\n  return {\n    promise",
-      "headingContext": "node/core/src/tools/thread-title.ts \u003e function execute",
-      "startLine": 13,
-      "startCol": 1,
-      "endLine": 74,
-      "endCol": 12
-    },
-    {
-      "text": "    abort: () =\u003e {\n      aborted = true;\n    }",
-      "contextualizedText": "// node/core/src/tools/thread-title.ts \u003e function execute \u003e function abort\n\n    abort: () =\u003e {\n      aborted = true;\n    }",
-      "headingContext": "node/core/src/tools/thread-title.ts \u003e function execute \u003e function abort",
-      "startLine": 75,
-      "startCol": 1,
-      "endLine": 77,
-      "endCol": 6
-    },
-    {
-      "text": "export const spec: ProviderToolSpec = {\n  name: \"thread_title\" as ToolName,\n  description: `Set a concise title for the current conversation thread based on the user's message. The title is shown in the buffer name, so keep it to a few words on a single line.`,\n  input_schema: {\n    type: \"object\",\n    properties: {\n      title: {\n        type: \"string\",\n        description:\n          \"A short, descriptive title for the conversation thread. Must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).\",\n      },\n    },\n    required: [\"title\"],\n    additionalProperties: false,\n  },\n};\n\nexport type Input = {\n  title: string;\n};\n\nexport type ToolRequest = GenericToolRequest\u003c\"thread_title\", Input\u003e;\nexport type StructuredResult = { toolName: \"thread_title\" };",
-      "contextualizedText": "// node/core/src/tools/thread-title.ts\n\nexport const spec: ProviderToolSpec = {\n  name: \"thread_title\" as ToolName,\n  description: `Set a concise title for the current conversation thread based on the user's message. The title is shown in the buffer name, so keep it to a few words on a single line.`,\n  input_schema: {\n    type: \"object\",\n    properties: {\n      title: {\n        type: \"string\",\n        description:\n          \"A short, descriptive title for the conversation thread. Must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).\",\n      },\n    },\n    required: [\"title\"],\n    additionalProperties: false,\n  },\n};\n\nexport type Input = {\n  title: string;\n};\n\nexport type ToolRequest = GenericToolRequest\u003c\"thread_title\", Input\u003e;\nexport type StructuredResult = { toolName: \"thread_title\" };",
-      "headingContext": "node/core/src/tools/thread-title.ts",
-      "startLine": 81,
-      "startCol": 1,
-      "endLine": 103,
-      "endCol": 61
-    },
-    {
-      "text": "export function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (typeof input.title !== \"string\") {\n    return {\n      status: \"error\",\n      error: \"expected req.input.title to be a string\",\n    };\n  }\n\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/thread-title.ts \u003e function validateInput\n\nexport function validateInput(input: {\n  [key: string]: unknown;\n}): Result\u003cInput\u003e {\n  if (typeof input.title !== \"string\") {\n    return {\n      status: \"error\",\n      error: \"expected req.input.title to be a string\",\n    };\n  }\n\n  return {\n    status: \"ok\",\n    value: input as Input,\n  };\n}",
-      "headingContext": "node/core/src/tools/thread-title.ts \u003e function validateInput",
-      "startLine": 105,
-      "startCol": 1,
-      "endLine": 119,
-      "endCol": 2
+      "start": 1978,
+      "end": 3072
     }
   ]
 }

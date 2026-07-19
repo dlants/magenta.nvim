@@ -1,24 +1,15 @@
 {
   "blobSha": "64c5bd38c3fb94c0d58445b0a1f7930ebfad9888",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { ClientOptions } from \"@anthropic-ai/bedrock-sdk\";\nimport { AnthropicBedrock } from \"@anthropic-ai/bedrock-sdk\";\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport type { DefaultProviderInit } from \"@aws-sdk/credential-provider-node\";\nimport { fromNodeProviderChain } from \"@aws-sdk/credential-providers\";\nimport type { AnthropicAuth } from \"../anthropic-auth.ts\";\nimport type { Logger } from \"../logger.ts\";\nimport type { ValidateInput } from \"../tool-types.ts\";\nimport { AnthropicProvider } from \"./anthropic.ts\";\nimport { makeRefreshAuth } from \"./auth-refresh.ts\";\n\nexport type BedrockProviderOptions = {\n  env?: Record\u003cstring, string\u003e | undefined;\n  tokenRefreshCommand?: string | undefined;\n};",
-      "contextualizedText": "// node/core/src/providers/bedrock.ts\n\nimport type { ClientOptions } from \"@anthropic-ai/bedrock-sdk\";\nimport { AnthropicBedrock } from \"@anthropic-ai/bedrock-sdk\";\nimport type Anthropic from \"@anthropic-ai/sdk\";\nimport type { DefaultProviderInit } from \"@aws-sdk/credential-provider-node\";\nimport { fromNodeProviderChain } from \"@aws-sdk/credential-providers\";\nimport type { AnthropicAuth } from \"../anthropic-auth.ts\";\nimport type { Logger } from \"../logger.ts\";\nimport type { ValidateInput } from \"../tool-types.ts\";\nimport { AnthropicProvider } from \"./anthropic.ts\";\nimport { makeRefreshAuth } from \"./auth-refresh.ts\";\n\nexport type BedrockProviderOptions = {\n  env?: Record\u003cstring, string\u003e | undefined;\n  tokenRefreshCommand?: string | undefined;\n};",
-      "headingContext": "node/core/src/providers/bedrock.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 15,
-      "endCol": 3
+      "start": 0,
+      "end": 2242
     },
     {
-      "text": "export class BedrockProvider extends AnthropicProvider {\n  constructor(\n    logger: Logger,\n    validateInput: ValidateInput,\n    anthropicAuth: AnthropicAuth | undefined,\n    options: BedrockProviderOptions,\n  ) {\n    super(logger, undefined, validateInput, anthropicAuth, {});\n    this.isBedrock = true;\n\n    const env = options.env;\n    const clientOptions: ClientOptions = {};\n\n    if (env) {\n      if (env.AWS_REGION) {\n        clientOptions.awsRegion = env.AWS_REGION;\n      }\n      if (env.AWS_ACCESS_KEY_ID \u0026\u0026 env.AWS_SECRET_ACCESS_KEY) {\n        clientOptions.awsAccessKey = env.AWS_ACCESS_KEY_ID;\n        clientOptions.awsSecretKey = env.AWS_SECRET_ACCESS_KEY;\n      } else if (env.AWS_ACCESS_KEY_ID || env.AWS_SECRET_ACCESS_KEY) {\n        throw new Error(\n          \"Both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set together\",\n        );\n      }\n      if (env.AWS_SESSION_TOKEN) {\n        clientOptions.awsSessionToken = env.AWS_SESSION_TOKEN;\n      }\n\n      // AWS_PROFILE must go through the credential provider chain since\n      // AnthropicBedrock has no direct constructor option for it.\n      if (env.AWS_PROFILE) {\n        const providerInit: DefaultProviderInit = { profile: env.AWS_PROFILE };\n        clientOptions.providerChainResolver = async () =\u003e\n          fromNodeProviderChain(providerInit);\n      }\n    }\n\n    this.client = new AnthropicBedrock(\n      clientOptions as ConstructorParameters\u003ctypeof AnthropicBedrock\u003e[0],\n    ) as unknown as Anthropic;\n    this.includeWebSearch = false;\n\n    if (options.tokenRefreshCommand) {\n      this.refreshAuth = makeRefreshAuth(options.tokenRefreshCommand, logger);\n    }\n  }\n}",
-      "contextualizedText": "// node/core/src/providers/bedrock.ts \u003e class BedrockProvider\n\nexport class BedrockProvider extends AnthropicProvider {\n  constructor(\n    logger: Logger,\n    validateInput: ValidateInput,\n    anthropicAuth: AnthropicAuth | undefined,\n    options: BedrockProviderOptions,\n  ) {\n    super(logger, undefined, validateInput, anthropicAuth, {});\n    this.isBedrock = true;\n\n    const env = options.env;\n    const clientOptions: ClientOptions = {};\n\n    if (env) {\n      if (env.AWS_REGION) {\n        clientOptions.awsRegion = env.AWS_REGION;\n      }\n      if (env.AWS_ACCESS_KEY_ID \u0026\u0026 env.AWS_SECRET_ACCESS_KEY) {\n        clientOptions.awsAccessKey = env.AWS_ACCESS_KEY_ID;\n        clientOptions.awsSecretKey = env.AWS_SECRET_ACCESS_KEY;\n      } else if (env.AWS_ACCESS_KEY_ID || env.AWS_SECRET_ACCESS_KEY) {\n        throw new Error(\n          \"Both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set together\",\n        );\n      }\n      if (env.AWS_SESSION_TOKEN) {\n        clientOptions.awsSessionToken = env.AWS_SESSION_TOKEN;\n      }\n\n      // AWS_PROFILE must go through the credential provider chain since\n      // AnthropicBedrock has no direct constructor option for it.\n      if (env.AWS_PROFILE) {\n        const providerInit: DefaultProviderInit = { profile: env.AWS_PROFILE };\n        clientOptions.providerChainResolver = async () =\u003e\n          fromNodeProviderChain(providerInit);\n      }\n    }\n\n    this.client = new AnthropicBedrock(\n      clientOptions as ConstructorParameters\u003ctypeof AnthropicBedrock\u003e[0],\n    ) as unknown as Anthropic;\n    this.includeWebSearch = false;\n\n    if (options.tokenRefreshCommand) {\n      this.refreshAuth = makeRefreshAuth(options.tokenRefreshCommand, logger);\n    }\n  }\n}",
-      "headingContext": "node/core/src/providers/bedrock.ts \u003e class BedrockProvider",
-      "startLine": 17,
-      "startCol": 1,
-      "endLine": 64,
-      "endCol": 2
+      "start": 2248,
+      "end": 2373
     }
   ]
 }

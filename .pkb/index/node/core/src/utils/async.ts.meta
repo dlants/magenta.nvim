@@ -1,42 +1,11 @@
 {
   "blobSha": "c1be5a15ae11d51723d8d0816129801a34968cac",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export function delay(ms: number) {\n  return new Promise((resolve) =\u003e {\n    setTimeout(resolve, ms);\n  });\n}",
-      "contextualizedText": "// node/core/src/utils/async.ts \u003e function delay\n\nexport function delay(ms: number) {\n  return new Promise((resolve) =\u003e {\n    setTimeout(resolve, ms);\n  });\n}",
-      "headingContext": "node/core/src/utils/async.ts \u003e function delay",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 5,
-      "endCol": 2
-    },
-    {
-      "text": "export class Defer\u003cT\u003e {\n  public promise: Promise\u003cT\u003e;\n  public resolve: (val: T) =\u003e void;\n  public reject: (err: Error) =\u003e void;\n  public resolved: boolean = false;\n\n  constructor() {\n    let resolve: typeof this.resolve;\n    let reject: typeof this.reject;\n\n    this.resolve = (val) =\u003e {\n      if (resolve !== undefined) {\n        resolve(val);\n      }\n      this.resolved = true;\n    };\n\n    this.reject = (err) =\u003e {\n      if (reject !== undefined) {\n        reject(err);\n      }\n      this.resolved = true;\n    };\n\n    this.promise = new Promise((fnRes, fnRej) =\u003e {\n      resolve = fnRes;\n      reject = fnRej;\n    });\n  }\n}",
-      "contextualizedText": "// node/core/src/utils/async.ts \u003e class Defer\n\nexport class Defer\u003cT\u003e {\n  public promise: Promise\u003cT\u003e;\n  public resolve: (val: T) =\u003e void;\n  public reject: (err: Error) =\u003e void;\n  public resolved: boolean = false;\n\n  constructor() {\n    let resolve: typeof this.resolve;\n    let reject: typeof this.reject;\n\n    this.resolve = (val) =\u003e {\n      if (resolve !== undefined) {\n        resolve(val);\n      }\n      this.resolved = true;\n    };\n\n    this.reject = (err) =\u003e {\n      if (reject !== undefined) {\n        reject(err);\n      }\n      this.resolved = true;\n    };\n\n    this.promise = new Promise((fnRes, fnRej) =\u003e {\n      resolve = fnRes;\n      reject = fnRej;\n    });\n  }\n}",
-      "headingContext": "node/core/src/utils/async.ts \u003e class Defer",
-      "startLine": 7,
-      "startCol": 1,
-      "endLine": 36,
-      "endCol": 2
-    },
-    {
-      "text": "/** poll fn until it returns.\n */\nexport async function pollUntil\u003cT\u003e(\n  fn: (() =\u003e Promise\u003cT\u003e) | (() =\u003e T),\n  opts: { timeout: number; message?: string } = { timeout: 1000 },\n): Promise\u003cT\u003e {\n  const start = Date.now();\n  let lastError: Error | undefined;\n  while (true) {\n    if (Date.now() - start \u003e opts.timeout) {\n      if (opts.message) {\n        throw new Error(opts.message);\n      }\n\n      if (lastError) {\n        throw lastError;\n      }\n\n      throw new Error(`pollUntil timeout`);\n    }\n\n    try {\n      const res = fn();\n      const val = res \u0026\u0026 (res as Promise\u003cunknown\u003e).then ? await res : res;\n      return val;\n    } catch (e) {\n      lastError = e as Error;\n    }\n\n    await delay(100);\n  }\n}",
-      "contextualizedText": "// node/core/src/utils/async.ts \u003e function pollUntil\n\n/** poll fn until it returns.\n */\nexport async function pollUntil\u003cT\u003e(\n  fn: (() =\u003e Promise\u003cT\u003e) | (() =\u003e T),\n  opts: { timeout: number; message?: string } = { timeout: 1000 },\n): Promise\u003cT\u003e {\n  const start = Date.now();\n  let lastError: Error | undefined;\n  while (true) {\n    if (Date.now() - start \u003e opts.timeout) {\n      if (opts.message) {\n        throw new Error(opts.message);\n      }\n\n      if (lastError) {\n        throw lastError;\n      }\n\n      throw new Error(`pollUntil timeout`);\n    }\n\n    try {\n      const res = fn();\n      const val = res \u0026\u0026 (res as Promise\u003cunknown\u003e).then ? await res : res;\n      return val;\n    } catch (e) {\n      lastError = e as Error;\n    }\n\n    await delay(100);\n  }\n}",
-      "headingContext": "node/core/src/utils/async.ts \u003e function pollUntil",
-      "startLine": 38,
-      "startCol": 1,
-      "endLine": 69,
-      "endCol": 2
-    },
-    {
-      "text": "/**\n * Wrap a promise with a timeout. If the promise resolves/rejects before the timeout,\n * return its result. Otherwise, reject with a timeout error.\n */\nexport function withTimeout\u003cT\u003e(\n  promise: Promise\u003cT\u003e,\n  timeoutMs: number,\n  message?: string,\n): Promise\u003cT\u003e {\n  return Promise.race([\n    promise,\n    new Promise\u003cT\u003e((_, reject) =\u003e {\n      setTimeout(\n        () =\u003e\n          reject(\n            new Error(\n              message ? message : `Promise timed out after ${timeoutMs}ms`,\n            ),\n          ),\n        timeoutMs,\n      );\n    }),\n  ]);\n}",
-      "contextualizedText": "// node/core/src/utils/async.ts \u003e function withTimeout\n\n/**\n * Wrap a promise with a timeout. If the promise resolves/rejects before the timeout,\n * return its result. Otherwise, reject with a timeout error.\n */\nexport function withTimeout\u003cT\u003e(\n  promise: Promise\u003cT\u003e,\n  timeoutMs: number,\n  message?: string,\n): Promise\u003cT\u003e {\n  return Promise.race([\n    promise,\n    new Promise\u003cT\u003e((_, reject) =\u003e {\n      setTimeout(\n        () =\u003e\n          reject(\n            new Error(\n              message ? message : `Promise timed out after ${timeoutMs}ms`,\n            ),\n          ),\n        timeoutMs,\n      );\n    }),\n  ]);\n}",
-      "headingContext": "node/core/src/utils/async.ts \u003e function withTimeout",
-      "startLine": 71,
-      "startCol": 1,
-      "endLine": 94,
-      "endCol": 2
+      "start": 0,
+      "end": 2010
     }
   ]
 }

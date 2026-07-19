@@ -1,15 +1,11 @@
 {
   "blobSha": "822f000374ff555cac36d9a7f14b48ed2a765ca8",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "{\n  \"$schema\": \"https://biomejs.dev/schemas/2.4.6/schema.json\",\n  \"vcs\": { \"enabled\": true, \"clientKind\": \"git\", \"useIgnoreFile\": true },\n  \"files\": {\n    \"ignoreUnknown\": true,\n    \"includes\": [\"**/*.ts\", \"**/*.js\", \"**/*.mjs\", \"**/*.cjs\"]\n  },\n  \"formatter\": {\n    \"enabled\": true,\n    \"indentStyle\": \"space\",\n    \"indentWidth\": 2\n  },\n  \"linter\": {\n    \"enabled\": true,\n    \"rules\": {\n      \"recommended\": true,\n      \"complexity\": {\n        \"noVoid\": \"off\",\n        \"noBannedTypes\": \"off\"\n      },\n      \"correctness\": {\n        \"noUnusedVariables\": {\n          \"level\": \"error\",\n          \"options\": {\n            \"ignoreRestSiblings\": true\n          }\n        }\n      },\n      \"style\": {\n        \"noCommonJs\": \"error\",\n        \"noNamespace\": \"error\",\n        \"useThrowOnlyError\": \"error\",\n        \"noNonNullAssertion\": \"off\"\n      },\n      \"suspicious\": {\n        \"noExplicitAny\": \"error\",\n        \"useAwait\": \"off\",\n        \"noImplicitAnyLet\": \"off\",\n        \"noAssignInExpressions\": \"off\",\n        \"noControlCharactersInRegex\": \"off\"\n      }\n    },\n    \"includes\": [\n      \"**\",\n      \"!**/node/test/fixtures/**\",\n      \"!**/node/test/tmp/**\",\n      \"!node/nvim/nvim-node/cli/**\",\n      \"!**/node/core/dist/**\"\n    ]\n  },\n  \"javascript\": {\n    \"formatter\": { \"quoteStyle\": \"double\" }\n  },\n  \"assist\": {\n    \"enabled\": true,\n    \"actions\": { \"source\": { \"organizeImports\": \"on\" } }\n  }\n}",
-      "contextualizedText": "// biome.json\n\n{\n  \"$schema\": \"https://biomejs.dev/schemas/2.4.6/schema.json\",\n  \"vcs\": { \"enabled\": true, \"clientKind\": \"git\", \"useIgnoreFile\": true },\n  \"files\": {\n    \"ignoreUnknown\": true,\n    \"includes\": [\"**/*.ts\", \"**/*.js\", \"**/*.mjs\", \"**/*.cjs\"]\n  },\n  \"formatter\": {\n    \"enabled\": true,\n    \"indentStyle\": \"space\",\n    \"indentWidth\": 2\n  },\n  \"linter\": {\n    \"enabled\": true,\n    \"rules\": {\n      \"recommended\": true,\n      \"complexity\": {\n        \"noVoid\": \"off\",\n        \"noBannedTypes\": \"off\"\n      },\n      \"correctness\": {\n        \"noUnusedVariables\": {\n          \"level\": \"error\",\n          \"options\": {\n            \"ignoreRestSiblings\": true\n          }\n        }\n      },\n      \"style\": {\n        \"noCommonJs\": \"error\",\n        \"noNamespace\": \"error\",\n        \"useThrowOnlyError\": \"error\",\n        \"noNonNullAssertion\": \"off\"\n      },\n      \"suspicious\": {\n        \"noExplicitAny\": \"error\",\n        \"useAwait\": \"off\",\n        \"noImplicitAnyLet\": \"off\",\n        \"noAssignInExpressions\": \"off\",\n        \"noControlCharactersInRegex\": \"off\"\n      }\n    },\n    \"includes\": [\n      \"**\",\n      \"!**/node/test/fixtures/**\",\n      \"!**/node/test/tmp/**\",\n      \"!node/nvim/nvim-node/cli/**\",\n      \"!**/node/core/dist/**\"\n    ]\n  },\n  \"javascript\": {\n    \"formatter\": { \"quoteStyle\": \"double\" }\n  },\n  \"assist\": {\n    \"enabled\": true,\n    \"actions\": { \"source\": { \"organizeImports\": \"on\" } }\n  }\n}",
-      "headingContext": "biome.json",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 58,
-      "endCol": 2
+      "start": 0,
+      "end": 1394
     }
   ]
 }

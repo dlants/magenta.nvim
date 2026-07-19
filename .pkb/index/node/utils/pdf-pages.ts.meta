@@ -1,15 +1,11 @@
 {
   "blobSha": "611d60535137b405cf9975bfc0f75aba920bae98",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export {\n  extractPDFPage,\n  getPDFPageCount,\n  getSummaryAsProviderContent,\n} from \"@magenta/core\";",
-      "contextualizedText": "// node/utils/pdf-pages.ts\n\nexport {\n  extractPDFPage,\n  getPDFPageCount,\n  getSummaryAsProviderContent,\n} from \"@magenta/core\";",
-      "headingContext": "node/utils/pdf-pages.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 5,
-      "endCol": 24
+      "start": 0,
+      "end": 100
     }
   ]
 }

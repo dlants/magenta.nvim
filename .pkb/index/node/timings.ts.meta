@@ -1,51 +1,11 @@
 {
   "blobSha": "c6d5e00f3ac7a64e4e56f48bfc640a8b43e60928",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "const ENABLED = Boolean(process.env.MAGENTA_TIMINGS);\n\nexport type TimingEntry = {\n  label: string;\n  time_ms: number;\n};\n\nconst entries: TimingEntry[] = [];",
-      "contextualizedText": "// node/timings.ts\n\nconst ENABLED = Boolean(process.env.MAGENTA_TIMINGS);\n\nexport type TimingEntry = {\n  label: string;\n  time_ms: number;\n};\n\nconst entries: TimingEntry[] = [];",
-      "headingContext": "node/timings.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 8,
-      "endCol": 35
-    },
-    {
-      "text": "export const isEnabled = (): boolean =\u003e ENABLED",
-      "contextualizedText": "// node/timings.ts \u003e function isEnabled\n\nexport const isEnabled = (): boolean =\u003e ENABLED",
-      "headingContext": "node/timings.ts \u003e function isEnabled",
-      "startLine": 10,
-      "startCol": 1,
-      "endLine": 10,
-      "endCol": 48
-    },
-    {
-      "text": "export const record = (label: string): void =\u003e {\n  if (!ENABLED) return;\n  entries.push({ label, time_ms: Date.now() });\n}",
-      "contextualizedText": "// node/timings.ts \u003e function record\n\nexport const record = (label: string): void =\u003e {\n  if (!ENABLED) return;\n  entries.push({ label, time_ms: Date.now() });\n}",
-      "headingContext": "node/timings.ts \u003e function record",
-      "startLine": 12,
-      "startCol": 1,
-      "endLine": 15,
-      "endCol": 2
-    },
-    {
-      "text": "// Add an entry with an explicit, already-captured timestamp (for events that\n// happened before this module was loaded, like the pre-import boot script).\nexport const addEntry = (entry: TimingEntry): void =\u003e {\n  if (!ENABLED) return;\n  entries.push(entry);\n}",
-      "contextualizedText": "// node/timings.ts \u003e function addEntry\n\n// Add an entry with an explicit, already-captured timestamp (for events that\n// happened before this module was loaded, like the pre-import boot script).\nexport const addEntry = (entry: TimingEntry): void =\u003e {\n  if (!ENABLED) return;\n  entries.push(entry);\n}",
-      "headingContext": "node/timings.ts \u003e function addEntry",
-      "startLine": 17,
-      "startCol": 1,
-      "endLine": 22,
-      "endCol": 2
-    },
-    {
-      "text": "export const getEntries = (): TimingEntry[] =\u003e entries",
-      "contextualizedText": "// node/timings.ts \u003e function getEntries\n\nexport const getEntries = (): TimingEntry[] =\u003e entries",
-      "headingContext": "node/timings.ts \u003e function getEntries",
-      "startLine": 24,
-      "startCol": 1,
-      "endLine": 24,
-      "endCol": 55
+      "start": 0,
+      "end": 651
     }
   ]
 }

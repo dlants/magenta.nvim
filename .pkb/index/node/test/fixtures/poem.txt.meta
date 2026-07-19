@@ -1,15 +1,11 @@
 {
   "blobSha": "36a036e0f46c6d4fbe8dbc87b1702754134d6c16",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "Moonlight whispers through the trees,\nSilver shadows dance with ease.\nStars above like diamonds bright,\nPaint their stories in the night.",
-      "contextualizedText": "Moonlight whispers through the trees,\nSilver shadows dance with ease.\nStars above like diamonds bright,\nPaint their stories in the night.",
-      "headingContext": "",
-      "startLine": 0,
-      "startCol": 0,
-      "endLine": 0,
-      "endCol": 0
+      "start": 0,
+      "end": 137
     }
   ]
 }

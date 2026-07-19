@@ -1,114 +1,27 @@
 {
   "blobSha": "4a26a6988da4dbba7271e3fe961a0f352dce4e66",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { describe, expect, it, vi } from \"vitest\";\nimport type { FileIO } from \"../capabilities/file-io.ts\";\nimport type {\n  LspClient,\n  LspDefinitionResponse,\n  LspHoverResponse,\n} from \"../capabilities/lsp-client.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport type { HomeDir, NvimCwd } from \"../utils/files.ts\";\nimport * as Hover from \"./hover.ts\";",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts\n\nimport { describe, expect, it, vi } from \"vitest\";\nimport type { FileIO } from \"../capabilities/file-io.ts\";\nimport type {\n  LspClient,\n  LspDefinitionResponse,\n  LspHoverResponse,\n} from \"../capabilities/lsp-client.ts\";\nimport type { ProviderToolResult } from \"../providers/provider-types.ts\";\nimport type { ToolRequestId } from \"../tool-types.ts\";\nimport type { HomeDir, NvimCwd } from \"../utils/files.ts\";\nimport * as Hover from \"./hover.ts\";",
-      "headingContext": "node/core/src/tools/hover.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 11,
-      "endCol": 37
+      "start": 0,
+      "end": 1979
     },
     {
-      "text": "function createMockLspClient(overrides: Partial\u003cLspClient\u003e = {}): LspClient {\n  return {\n    requestHover: vi.fn().mockResolvedValue([]),\n    requestDefinition: vi.fn().mockResolvedValue([]),\n    requestTypeDefinition: vi.fn().mockResolvedValue([]),\n    requestReferences: vi.fn().mockResolvedValue([]),\n    ...overrides,\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts \u003e function createMockLspClient\n\nfunction createMockLspClient(overrides: Partial\u003cLspClient\u003e = {}): LspClient {\n  return {\n    requestHover: vi.fn().mockResolvedValue([]),\n    requestDefinition: vi.fn().mockResolvedValue([]),\n    requestTypeDefinition: vi.fn().mockResolvedValue([]),\n    requestReferences: vi.fn().mockResolvedValue([]),\n    ...overrides,\n  };\n}",
-      "headingContext": "node/core/src/tools/hover.test.ts \u003e function createMockLspClient",
-      "startLine": 13,
-      "startCol": 1,
-      "endLine": 21,
-      "endCol": 2
+      "start": 1981,
+      "end": 4136
     },
     {
-      "text": "function createMockFileIO(fileContent: string): FileIO {\n  return {\n    readFile: vi.fn().mockResolvedValue(fileContent),\n    readBinaryFile: vi.fn(),\n    writeFile: vi.fn(),\n    fileExists: vi.fn(),\n    mkdir: vi.fn(),\n    stat: vi.fn(),\n    readdir: vi.fn(),\n    isDirectory: vi.fn(),\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts \u003e function createMockFileIO\n\nfunction createMockFileIO(fileContent: string): FileIO {\n  return {\n    readFile: vi.fn().mockResolvedValue(fileContent),\n    readBinaryFile: vi.fn(),\n    writeFile: vi.fn(),\n    fileExists: vi.fn(),\n    mkdir: vi.fn(),\n    stat: vi.fn(),\n    readdir: vi.fn(),\n    isDirectory: vi.fn(),\n  };\n}",
-      "headingContext": "node/core/src/tools/hover.test.ts \u003e function createMockFileIO",
-      "startLine": 23,
-      "startCol": 1,
-      "endLine": 34,
-      "endCol": 2
+      "start": 4142,
+      "end": 6078
     },
     {
-      "text": "const TEST_CWD = \"/project\" as NvimCwd;\nconst TEST_HOME = \"/home/user\" as HomeDir;",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts\n\nconst TEST_CWD = \"/project\" as NvimCwd;\nconst TEST_HOME = \"/home/user\" as HomeDir;",
-      "headingContext": "node/core/src/tools/hover.test.ts",
-      "startLine": 36,
-      "startCol": 1,
-      "endLine": 37,
-      "endCol": 43
+      "start": 6084,
+      "end": 8197
     },
     {
-      "text": "function makeRequest(\n  symbol: string,\n  filePath = \"test.ts\",\n  context?: string,\n): Hover.ToolRequest {\n  return {\n    id: \"tool_1\" as ToolRequestId,\n    toolName: \"hover\" as const,\n    input: {\n      filePath: filePath as Hover.Input[\"filePath\"],\n      symbol,\n      ...(context !== undefined ? { context } : {}),\n    },\n  };\n}",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts \u003e function makeRequest\n\nfunction makeRequest(\n  symbol: string,\n  filePath = \"test.ts\",\n  context?: string,\n): Hover.ToolRequest {\n  return {\n    id: \"tool_1\" as ToolRequestId,\n    toolName: \"hover\" as const,\n    input: {\n      filePath: filePath as Hover.Input[\"filePath\"],\n      symbol,\n      ...(context !== undefined ? { context } : {}),\n    },\n  };\n}",
-      "headingContext": "node/core/src/tools/hover.test.ts \u003e function makeRequest",
-      "startLine": 39,
-      "startCol": 1,
-      "endLine": 53,
-      "endCol": 2
-    },
-    {
-      "text": "async function getResultText(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003cstring\u003e {\n  const result = await invocation.promise;\n  if (result.result.status === \"ok\") {\n    return (result.result.value[0] as { type: \"text\"; text: string }).text;\n  }\n  return result.result.error;\n}",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts \u003e function getResultText\n\nasync function getResultText(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003cstring\u003e {\n  const result = await invocation.promise;\n  if (result.result.status === \"ok\") {\n    return (result.result.value[0] as { type: \"text\"; text: string }).text;\n  }\n  return result.result.error;\n}",
-      "headingContext": "node/core/src/tools/hover.test.ts \u003e function getResultText",
-      "startLine": 55,
-      "startCol": 1,
-      "endLine": 63,
-      "endCol": 2
-    },
-    {
-      "text": "async function getResultStatus(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003c\"ok\" | \"error\"\u003e {\n  const result = await invocation.promise;\n  return result.result.status;\n}",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts \u003e function getResultStatus\n\nasync function getResultStatus(invocation: {\n  promise: Promise\u003cProviderToolResult\u003e;\n}): Promise\u003c\"ok\" | \"error\"\u003e {\n  const result = await invocation.promise;\n  return result.result.status;\n}",
-      "headingContext": "node/core/src/tools/hover.test.ts \u003e function getResultStatus",
-      "startLine": 65,
-      "startCol": 1,
-      "endLine": 70,
-      "endCol": 2
-    },
-    {
-      "text": "describe(\"hover unit tests\", () =\u003e {\n  it(\"returns formatted hover content with definition locations\", async () =\u003e {\n    const fileContent = \"const foo = 42;\";\n\n    const hoverResponse: LspHoverResponse = [\n      {\n        result: {\n          range: {\n            start: { line: 0, character: 6 },\n            end: { line: 0, character: 9 },\n          },\n          contents: {\n            kind: \"markdown\",\n            value: \"```typescript\\nconst foo: number\\n```\",\n          },\n        },\n      },\n    ];\n\n    const definitionResponse: LspDefinitionResponse = [\n      {\n        result: [\n          {\n            uri: \"file:///project/test.ts\",\n            range: {\n              start: { line: 0, character: 6 },\n              end: { line: 0, character: 9 },\n            },\n          },\n        ],\n      },\n    ];\n\n    const lspClient = createMockLspClient({\n      requestHover: vi.fn().mockResolvedValue(hoverResponse),\n      requestDefinition: vi.fn().mockResolvedValue(definitionResponse),\n    });\n\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(makeRequest(\"foo\"), {\n      cwd: TEST_CWD,\n      homeDir: TEST_HOME,\n      lspClient,\n      fileIO,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"const foo: number\");\n    expect(text).toContain(\"Definition locations:\");\n    expect(text).toContain(\"test.ts:1:7\");\n  });",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts\n\ndescribe(\"hover unit tests\", () =\u003e {\n  it(\"returns formatted hover content with definition locations\", async () =\u003e {\n    const fileContent = \"const foo = 42;\";\n\n    const hoverResponse: LspHoverResponse = [\n      {\n        result: {\n          range: {\n            start: { line: 0, character: 6 },\n            end: { line: 0, character: 9 },\n          },\n          contents: {\n            kind: \"markdown\",\n            value: \"```typescript\\nconst foo: number\\n```\",\n          },\n        },\n      },\n    ];\n\n    const definitionResponse: LspDefinitionResponse = [\n      {\n        result: [\n          {\n            uri: \"file:///project/test.ts\",\n            range: {\n              start: { line: 0, character: 6 },\n              end: { line: 0, character: 9 },\n            },\n          },\n        ],\n      },\n    ];\n\n    const lspClient = createMockLspClient({\n      requestHover: vi.fn().mockResolvedValue(hoverResponse),\n      requestDefinition: vi.fn().mockResolvedValue(definitionResponse),\n    });\n\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(makeRequest(\"foo\"), {\n      cwd: TEST_CWD,\n      homeDir: TEST_HOME,\n      lspClient,\n      fileIO,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"const foo: number\");\n    expect(text).toContain(\"Definition locations:\");\n    expect(text).toContain(\"test.ts:1:7\");\n  });",
-      "headingContext": "node/core/src/tools/hover.test.ts",
-      "startLine": 72,
-      "startCol": 1,
-      "endLine": 123,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"uses word boundary matching for symbol\", async () =\u003e {\n    const fileContent = \"interface Transport {}\\ninterface AutoTransport {}\";\n\n    const hoverResponse: LspHoverResponse = [\n      {\n        result: {\n          range: {\n            start: { line: 0, character: 10 },\n            end: { line: 0, character: 19 },\n          },\n          contents: { kind: \"markdown\", value: \"interface Transport\" },\n        },\n      },\n    ];\n\n    const lspClient = createMockLspClient({\n      requestHover: vi.fn().mockResolvedValue(hoverResponse),\n    });\n\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(makeRequest(\"Transport\"), {\n      cwd: TEST_CWD,\n      homeDir: TEST_HOME,\n      lspClient,\n      fileIO,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"interface Transport\");\n\n    // Verify that the LSP was called with position corresponding to\n    // the standalone \"Transport\" (index 10-18), not \"AutoTransport\"\n    // The last char of \"Transport\" at index 10 is at index 18 (10 + 9 - 1)\n    // which is line 0, character 18\n    expect(lspClient.requestHover).toHaveBeenCalledWith(expect.anything(), {\n      line: 0,\n      character: 18,\n    });\n  });",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts\n\nit(\"uses word boundary matching for symbol\", async () =\u003e {\n    const fileContent = \"interface Transport {}\\ninterface AutoTransport {}\";\n\n    const hoverResponse: LspHoverResponse = [\n      {\n        result: {\n          range: {\n            start: { line: 0, character: 10 },\n            end: { line: 0, character: 19 },\n          },\n          contents: { kind: \"markdown\", value: \"interface Transport\" },\n        },\n      },\n    ];\n\n    const lspClient = createMockLspClient({\n      requestHover: vi.fn().mockResolvedValue(hoverResponse),\n    });\n\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(makeRequest(\"Transport\"), {\n      cwd: TEST_CWD,\n      homeDir: TEST_HOME,\n      lspClient,\n      fileIO,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"interface Transport\");\n\n    // Verify that the LSP was called with position corresponding to\n    // the standalone \"Transport\" (index 10-18), not \"AutoTransport\"\n    // The last char of \"Transport\" at index 10 is at index 18 (10 + 9 - 1)\n    // which is line 0, character 18\n    expect(lspClient.requestHover).toHaveBeenCalledWith(expect.anything(), {\n      line: 0,\n      character: 18,\n    });\n  });",
-      "headingContext": "node/core/src/tools/hover.test.ts",
-      "startLine": 125,
-      "startCol": 3,
-      "endLine": 164,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"finds symbol within context when context provided\", async () =\u003e {\n    const fileContent = `{\n  const res = request1()\n}\n\n{\n  const res = request2()\n}`;\n\n    const lspClient = createMockLspClient({\n      requestHover: vi.fn().mockResolvedValue([]),\n    });\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(\n      makeRequest(\"res\", \"test.ts\", \"  const res = request2()\"),\n      {\n        cwd: TEST_CWD,\n        homeDir: TEST_HOME,\n        lspClient,\n        fileIO,\n      },\n    );\n\n    await invocation.promise;\n\n    // The context \"  const res = request2()\" starts at the second block.\n    // Within the context, \"res\" matches at offset 8 (after \"  const \").\n    // The symbolStart in the full buffer = contextIndex + 8.\n    // The position passed to LSP is for the last char of \"res\" = symbolStart + 2.\n    // Line 5 (0-indexed), character 10 (0-indexed) for the 's' of the second 'res'\n    expect(lspClient.requestHover).toHaveBeenCalledWith(expect.anything(), {\n      line: 5,\n      character: 10,\n    });\n  });\n\n  it(\"returns error when context not found\", async () =\u003e {\n    const fileContent = \"const foo = 42;\";\n    const lspClient = createMockLspClient();\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(\n      makeRequest(\"foo\", \"test.ts\", \"nonexistent\"),\n      {\n        cwd: TEST_CWD,\n        homeDir: TEST_HOME,\n        lspClient,\n        fileIO,\n      },\n    );\n\n    const status = await getResultStatus(invocation);\n    expect(status).toBe(\"error\");\n    const text = await getResultText(invocation);\n    expect(text).toBe('Context \"nonexistent\" not found in file.');\n  });",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts\n\nit(\"finds symbol within context when context provided\", async () =\u003e {\n    const fileContent = `{\n  const res = request1()\n}\n\n{\n  const res = request2()\n}`;\n\n    const lspClient = createMockLspClient({\n      requestHover: vi.fn().mockResolvedValue([]),\n    });\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(\n      makeRequest(\"res\", \"test.ts\", \"  const res = request2()\"),\n      {\n        cwd: TEST_CWD,\n        homeDir: TEST_HOME,\n        lspClient,\n        fileIO,\n      },\n    );\n\n    await invocation.promise;\n\n    // The context \"  const res = request2()\" starts at the second block.\n    // Within the context, \"res\" matches at offset 8 (after \"  const \").\n    // The symbolStart in the full buffer = contextIndex + 8.\n    // The position passed to LSP is for the last char of \"res\" = symbolStart + 2.\n    // Line 5 (0-indexed), character 10 (0-indexed) for the 's' of the second 'res'\n    expect(lspClient.requestHover).toHaveBeenCalledWith(expect.anything(), {\n      line: 5,\n      character: 10,\n    });\n  });\n\n  it(\"returns error when context not found\", async () =\u003e {\n    const fileContent = \"const foo = 42;\";\n    const lspClient = createMockLspClient();\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(\n      makeRequest(\"foo\", \"test.ts\", \"nonexistent\"),\n      {\n        cwd: TEST_CWD,\n        homeDir: TEST_HOME,\n        lspClient,\n        fileIO,\n      },\n    );\n\n    const status = await getResultStatus(invocation);\n    expect(status).toBe(\"error\");\n    const text = await getResultText(invocation);\n    expect(text).toBe('Context \"nonexistent\" not found in file.');\n  });",
-      "headingContext": "node/core/src/tools/hover.test.ts",
-      "startLine": 166,
-      "startCol": 3,
-      "endLine": 222,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"returns error when symbol not found in file\", async () =\u003e {\n    const fileContent = \"const foo = 42;\";\n    const lspClient = createMockLspClient();\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(makeRequest(\"missing\"), {\n      cwd: TEST_CWD,\n      homeDir: TEST_HOME,\n      lspClient,\n      fileIO,\n    });\n\n    const status = await getResultStatus(invocation);\n    expect(status).toBe(\"error\");\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"not found\");\n  });\n\n  it(\"returns error when file read fails\", async () =\u003e {\n    const lspClient = createMockLspClient();\n    const fileIO = createMockFileIO(\"\");\n    (fileIO.readFile as ReturnType\u003ctypeof vi.fn\u003e).mockRejectedValue(\n      new Error(\"ENOENT: no such file\"),\n    );\n\n    const invocation = Hover.execute(makeRequest(\"foo\"), {\n      cwd: TEST_CWD,\n      homeDir: TEST_HOME,\n      lspClient,\n      fileIO,\n    });\n\n    const status = await getResultStatus(invocation);\n    expect(status).toBe(\"error\");\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"Failed to read file\");\n    expect(text).toContain(\"ENOENT\");\n  });",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts\n\nit(\"returns error when symbol not found in file\", async () =\u003e {\n    const fileContent = \"const foo = 42;\";\n    const lspClient = createMockLspClient();\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(makeRequest(\"missing\"), {\n      cwd: TEST_CWD,\n      homeDir: TEST_HOME,\n      lspClient,\n      fileIO,\n    });\n\n    const status = await getResultStatus(invocation);\n    expect(status).toBe(\"error\");\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"not found\");\n  });\n\n  it(\"returns error when file read fails\", async () =\u003e {\n    const lspClient = createMockLspClient();\n    const fileIO = createMockFileIO(\"\");\n    (fileIO.readFile as ReturnType\u003ctypeof vi.fn\u003e).mockRejectedValue(\n      new Error(\"ENOENT: no such file\"),\n    );\n\n    const invocation = Hover.execute(makeRequest(\"foo\"), {\n      cwd: TEST_CWD,\n      homeDir: TEST_HOME,\n      lspClient,\n      fileIO,\n    });\n\n    const status = await getResultStatus(invocation);\n    expect(status).toBe(\"error\");\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"Failed to read file\");\n    expect(text).toContain(\"ENOENT\");\n  });",
-      "headingContext": "node/core/src/tools/hover.test.ts",
-      "startLine": 224,
-      "startCol": 3,
-      "endLine": 261,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"includes type definition locations when available\", async () =\u003e {\n    const fileContent = \"const foo: MyType = {};\";\n\n    const hoverResponse: LspHoverResponse = [\n      {\n        result: {\n          range: {\n            start: { line: 0, character: 6 },\n            end: { line: 0, character: 9 },\n          },\n          contents: { kind: \"markdown\", value: \"const foo: MyType\" },\n        },\n      },\n    ];\n\n    const definitionResponse: LspDefinitionResponse = [\n      {\n        result: [\n          {\n            uri: \"file:///project/test.ts\",\n            range: {\n              start: { line: 0, character: 6 },\n              end: { line: 0, character: 9 },\n            },\n          },\n        ],\n      },\n    ];\n\n    const typeDefinitionResponse: LspDefinitionResponse = [\n      {\n        result: [\n          {\n            uri: \"file:///project/types.ts\",\n            range: {\n              start: { line: 4, character: 0 },\n              end: { line: 4, character: 10 },\n            },\n          },\n        ],\n      },\n    ];\n\n    const lspClient = createMockLspClient({\n      requestHover: vi.fn().mockResolvedValue(hoverResponse),\n      requestDefinition: vi.fn().mockResolvedValue(definitionResponse),\n      requestTypeDefinition: vi.fn().mockResolvedValue(typeDefinitionResponse),\n    });\n\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(makeRequest(\"foo\"), {\n      cwd: TEST_CWD,\n      homeDir: TEST_HOME,\n      lspClient,\n      fileIO,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"Definition locations:\");\n    expect(text).toContain(\"test.ts:1:7\");\n    expect(text).toContain(\"Type definition locations:\");\n    expect(text).toContain(\"types.ts:5:1\");\n  });",
-      "contextualizedText": "// node/core/src/tools/hover.test.ts\n\nit(\"includes type definition locations when available\", async () =\u003e {\n    const fileContent = \"const foo: MyType = {};\";\n\n    const hoverResponse: LspHoverResponse = [\n      {\n        result: {\n          range: {\n            start: { line: 0, character: 6 },\n            end: { line: 0, character: 9 },\n          },\n          contents: { kind: \"markdown\", value: \"const foo: MyType\" },\n        },\n      },\n    ];\n\n    const definitionResponse: LspDefinitionResponse = [\n      {\n        result: [\n          {\n            uri: \"file:///project/test.ts\",\n            range: {\n              start: { line: 0, character: 6 },\n              end: { line: 0, character: 9 },\n            },\n          },\n        ],\n      },\n    ];\n\n    const typeDefinitionResponse: LspDefinitionResponse = [\n      {\n        result: [\n          {\n            uri: \"file:///project/types.ts\",\n            range: {\n              start: { line: 4, character: 0 },\n              end: { line: 4, character: 10 },\n            },\n          },\n        ],\n      },\n    ];\n\n    const lspClient = createMockLspClient({\n      requestHover: vi.fn().mockResolvedValue(hoverResponse),\n      requestDefinition: vi.fn().mockResolvedValue(definitionResponse),\n      requestTypeDefinition: vi.fn().mockResolvedValue(typeDefinitionResponse),\n    });\n\n    const fileIO = createMockFileIO(fileContent);\n\n    const invocation = Hover.execute(makeRequest(\"foo\"), {\n      cwd: TEST_CWD,\n      homeDir: TEST_HOME,\n      lspClient,\n      fileIO,\n    });\n\n    const text = await getResultText(invocation);\n    expect(text).toContain(\"Definition locations:\");\n    expect(text).toContain(\"test.ts:1:7\");\n    expect(text).toContain(\"Type definition locations:\");\n    expect(text).toContain(\"types.ts:5:1\");\n  });",
-      "headingContext": "node/core/src/tools/hover.test.ts",
-      "startLine": 263,
-      "startCol": 3,
-      "endLine": 326,
-      "endCol": 6
+      "start": 8203,
+      "end": 9235
     }
   ]
 }

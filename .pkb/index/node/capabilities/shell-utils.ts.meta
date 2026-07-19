@@ -1,114 +1,15 @@
 {
   "blobSha": "cf6324161a6c131c813c719b1cfe7cf8d76d51ba",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { spawn } from \"node:child_process\";\nimport * as fs from \"node:fs\";\nimport * as path from \"node:path\";\nimport { MAGENTA_TEMP_DIR } from \"../utils/files.ts\";\nimport type { OutputLine } from \"./shell.ts\";\n\nconst ANSI_ESCAPE_REGEX = /\\x1B\\[[0-9;]*[a-zA-Z]/g;",
-      "contextualizedText": "// node/capabilities/shell-utils.ts\n\nimport type { spawn } from \"node:child_process\";\nimport * as fs from \"node:fs\";\nimport * as path from \"node:path\";\nimport { MAGENTA_TEMP_DIR } from \"../utils/files.ts\";\nimport type { OutputLine } from \"./shell.ts\";\n\nconst ANSI_ESCAPE_REGEX = /\\x1B\\[[0-9;]*[a-zA-Z]/g;",
-      "headingContext": "node/capabilities/shell-utils.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 7,
-      "endCol": 52
+      "start": 0,
+      "end": 1824
     },
     {
-      "text": "export function stripAnsiCodes(text: string): string {\n  return text.replace(ANSI_ESCAPE_REGEX, \"\");\n}",
-      "contextualizedText": "// node/capabilities/shell-utils.ts \u003e function stripAnsiCodes\n\nexport function stripAnsiCodes(text: string): string {\n  return text.replace(ANSI_ESCAPE_REGEX, \"\");\n}",
-      "headingContext": "node/capabilities/shell-utils.ts \u003e function stripAnsiCodes",
-      "startLine": 9,
-      "startCol": 1,
-      "endLine": 11,
-      "endCol": 2
-    },
-    {
-      "text": "export type LogWriter = {\n  write: (stream: \"stdout\" | \"stderr\", text: string) =\u003e void;\n  writeRaw: (text: string) =\u003e void;\n  end: () =\u003e void;\n  filePath: string;\n};",
-      "contextualizedText": "// node/capabilities/shell-utils.ts\n\nexport type LogWriter = {\n  write: (stream: \"stdout\" | \"stderr\", text: string) =\u003e void;\n  writeRaw: (text: string) =\u003e void;\n  end: () =\u003e void;\n  filePath: string;\n};",
-      "headingContext": "node/capabilities/shell-utils.ts",
-      "startLine": 13,
-      "startCol": 1,
-      "endLine": 18,
-      "endCol": 3
-    },
-    {
-      "text": "export function toolLogDir(threadId: string, toolRequestId: string): string {\n  return path.join(\n    MAGENTA_TEMP_DIR,\n    \"threads\",\n    threadId,\n    \"tools\",\n    toolRequestId,\n  );\n}",
-      "contextualizedText": "// node/capabilities/shell-utils.ts \u003e function toolLogDir\n\nexport function toolLogDir(threadId: string, toolRequestId: string): string {\n  return path.join(\n    MAGENTA_TEMP_DIR,\n    \"threads\",\n    threadId,\n    \"tools\",\n    toolRequestId,\n  );\n}",
-      "headingContext": "node/capabilities/shell-utils.ts \u003e function toolLogDir",
-      "startLine": 20,
-      "startCol": 1,
-      "endLine": 28,
-      "endCol": 2
-    },
-    {
-      "text": "export function createLogWriter(\n  threadId: string,\n  toolRequestId: string,\n  command: string,\n): LogWriter {\n  const logDir = toolLogDir(threadId, toolRequestId);\n  fs.mkdirSync(logDir, { recursive: true });\n  const logFilePath = path.join(logDir, \"bashCommand.log\");\n  const logStream = fs.createWriteStream(logFilePath, { flags: \"w\" });\n  // Avoid crashing the process on stream errors (e.g. write-after-end caused\n  // by late data events from a killed detached process group).\n  logStream.on(\"error\", () =\u003e {});\n  logStream.write(`$ ${command}\\n`);\n  let currentStream: \"stdout\" | \"stderr\" | undefined;\n  let ended = false;",
-      "contextualizedText": "// node/capabilities/shell-utils.ts \u003e function createLogWriter\n\nexport function createLogWriter(\n  threadId: string,\n  toolRequestId: string,\n  command: string,\n): LogWriter {\n  const logDir = toolLogDir(threadId, toolRequestId);\n  fs.mkdirSync(logDir, { recursive: true });\n  const logFilePath = path.join(logDir, \"bashCommand.log\");\n  const logStream = fs.createWriteStream(logFilePath, { flags: \"w\" });\n  // Avoid crashing the process on stream errors (e.g. write-after-end caused\n  // by late data events from a killed detached process group).\n  logStream.on(\"error\", () =\u003e {});\n  logStream.write(`$ ${command}\\n`);\n  let currentStream: \"stdout\" | \"stderr\" | undefined;\n  let ended = false;",
-      "headingContext": "node/capabilities/shell-utils.ts \u003e function createLogWriter",
-      "startLine": 30,
-      "startCol": 1,
-      "endLine": 44,
-      "endCol": 21
-    },
-    {
-      "text": "    write(stream: \"stdout\" | \"stderr\", text: string) {\n      if (ended) return;\n      if (currentStream !== stream) {\n        logStream.write(`${stream}:\\n`);\n        currentStream = stream;\n      }\n      logStream.write(`${text}\\n`);\n    }",
-      "contextualizedText": "// node/capabilities/shell-utils.ts \u003e function createLogWriter \u003e method write\n\n    write(stream: \"stdout\" | \"stderr\", text: string) {\n      if (ended) return;\n      if (currentStream !== stream) {\n        logStream.write(`${stream}:\\n`);\n        currentStream = stream;\n      }\n      logStream.write(`${text}\\n`);\n    }",
-      "headingContext": "node/capabilities/shell-utils.ts \u003e function createLogWriter \u003e method write",
-      "startLine": 47,
-      "startCol": 1,
-      "endLine": 54,
-      "endCol": 6
-    },
-    {
-      "text": "    writeRaw(text: string) {\n      if (ended) return;\n      logStream.write(text);\n    }",
-      "contextualizedText": "// node/capabilities/shell-utils.ts \u003e function createLogWriter \u003e method writeRaw\n\n    writeRaw(text: string) {\n      if (ended) return;\n      logStream.write(text);\n    }",
-      "headingContext": "node/capabilities/shell-utils.ts \u003e function createLogWriter \u003e method writeRaw",
-      "startLine": 55,
-      "startCol": 1,
-      "endLine": 58,
-      "endCol": 6
-    },
-    {
-      "text": "    end() {\n      if (ended) return;\n      ended = true;\n      logStream.end();\n    }",
-      "contextualizedText": "// node/capabilities/shell-utils.ts \u003e function createLogWriter \u003e method end\n\n    end() {\n      if (ended) return;\n      ended = true;\n      logStream.end();\n    }",
-      "headingContext": "node/capabilities/shell-utils.ts \u003e function createLogWriter \u003e method end",
-      "startLine": 59,
-      "startCol": 1,
-      "endLine": 63,
-      "endCol": 6
-    },
-    {
-      "text": "filePath: logFilePath,\n  };\n}",
-      "contextualizedText": "// node/capabilities/shell-utils.ts \u003e function createLogWriter\n\nfilePath: logFilePath,\n  };\n}",
-      "headingContext": "node/capabilities/shell-utils.ts \u003e function createLogWriter",
-      "startLine": 64,
-      "startCol": 5,
-      "endLine": 66,
-      "endCol": 2
-    },
-    {
-      "text": "export function processStreamData(\n  stream: \"stdout\" | \"stderr\",\n  data: Buffer,\n  output: OutputLine[],\n  logWriter: LogWriter,\n  onOutput?: (line: OutputLine) =\u003e void,\n): void {\n  const text = stripAnsiCodes(data.toString());\n  const lines = text.split(\"\\n\");\n  for (const line of lines) {\n    if (line.trim()) {\n      const outputLine: OutputLine = { stream, text: line };\n      output.push(outputLine);\n      logWriter.write(stream, line);\n      onOutput?.(outputLine);\n    }\n  }\n}",
-      "contextualizedText": "// node/capabilities/shell-utils.ts \u003e function processStreamData\n\nexport function processStreamData(\n  stream: \"stdout\" | \"stderr\",\n  data: Buffer,\n  output: OutputLine[],\n  logWriter: LogWriter,\n  onOutput?: (line: OutputLine) =\u003e void,\n): void {\n  const text = stripAnsiCodes(data.toString());\n  const lines = text.split(\"\\n\");\n  for (const line of lines) {\n    if (line.trim()) {\n      const outputLine: OutputLine = { stream, text: line };\n      output.push(outputLine);\n      logWriter.write(stream, line);\n      onOutput?.(outputLine);\n    }\n  }\n}",
-      "headingContext": "node/capabilities/shell-utils.ts \u003e function processStreamData",
-      "startLine": 68,
-      "startCol": 1,
-      "endLine": 85,
-      "endCol": 2
-    },
-    {
-      "text": "export function terminateProcess(childProcess: ReturnType\u003ctypeof spawn\u003e): void {\n  const pid = childProcess.pid;\n  if (pid) {\n    try {\n      process.kill(-pid, \"SIGTERM\");\n    } catch {\n      childProcess.kill(\"SIGTERM\");\n    }\n  } else {\n    childProcess.kill(\"SIGTERM\");\n  }\n}",
-      "contextualizedText": "// node/capabilities/shell-utils.ts \u003e function terminateProcess\n\nexport function terminateProcess(childProcess: ReturnType\u003ctypeof spawn\u003e): void {\n  const pid = childProcess.pid;\n  if (pid) {\n    try {\n      process.kill(-pid, \"SIGTERM\");\n    } catch {\n      childProcess.kill(\"SIGTERM\");\n    }\n  } else {\n    childProcess.kill(\"SIGTERM\");\n  }\n}",
-      "headingContext": "node/capabilities/shell-utils.ts \u003e function terminateProcess",
-      "startLine": 87,
-      "startCol": 1,
-      "endLine": 98,
-      "endCol": 2
-    },
-    {
-      "text": "export function escalateToSigkill(\n  childProcess: ReturnType\u003ctypeof spawn\u003e,\n): void {\n  const pid = childProcess.pid;\n  if (pid) {\n    try {\n      process.kill(-pid, \"SIGKILL\");\n    } catch {\n      childProcess.kill(\"SIGKILL\");\n    }\n  } else {\n    childProcess.kill(\"SIGKILL\");\n  }\n}",
-      "contextualizedText": "// node/capabilities/shell-utils.ts \u003e function escalateToSigkill\n\nexport function escalateToSigkill(\n  childProcess: ReturnType\u003ctypeof spawn\u003e,\n): void {\n  const pid = childProcess.pid;\n  if (pid) {\n    try {\n      process.kill(-pid, \"SIGKILL\");\n    } catch {\n      childProcess.kill(\"SIGKILL\");\n    }\n  } else {\n    childProcess.kill(\"SIGKILL\");\n  }\n}",
-      "headingContext": "node/capabilities/shell-utils.ts \u003e function escalateToSigkill",
-      "startLine": 100,
-      "startCol": 1,
-      "endLine": 113,
-      "endCol": 2
+      "start": 1826,
+      "end": 2880
     }
   ]
 }

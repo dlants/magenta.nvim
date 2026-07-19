@@ -1,96 +1,15 @@
 {
   "blobSha": "575201961de3e005a6a0eb5498af504be6c033fe",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { execFile as execFileCb, spawn } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport type { FileIO } from \"@magenta/core\";\n\nconst execFile = promisify(execFileCb);",
-      "contextualizedText": "// node/capabilities/docker-file-io.ts\n\nimport { execFile as execFileCb, spawn } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport type { FileIO } from \"@magenta/core\";\n\nconst execFile = promisify(execFileCb);",
-      "headingContext": "node/capabilities/docker-file-io.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 5,
-      "endCol": 40
+      "start": 0,
+      "end": 1878
     },
     {
-      "text": "export class DockerFileIO implements FileIO {\n  private container: string;\n\n  constructor({ container }: { container: string }) {\n    this.container = container;\n  }",
-      "contextualizedText": "// node/capabilities/docker-file-io.ts \u003e class DockerFileIO\n\nexport class DockerFileIO implements FileIO {\n  private container: string;\n\n  constructor({ container }: { container: string }) {\n    this.container = container;\n  }",
-      "headingContext": "node/capabilities/docker-file-io.ts \u003e class DockerFileIO",
-      "startLine": 7,
-      "startCol": 1,
-      "endLine": 12,
-      "endCol": 4
-    },
-    {
-      "text": "  async readFile(path: string): Promise\u003cstring\u003e {\n    const { stdout } = await execFile(\"docker\", [\n      \"exec\",\n      this.container,\n      \"cat\",\n      path,\n    ]);\n    return stdout;\n  }",
-      "contextualizedText": "// node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method readFile\n\n  async readFile(path: string): Promise\u003cstring\u003e {\n    const { stdout } = await execFile(\"docker\", [\n      \"exec\",\n      this.container,\n      \"cat\",\n      path,\n    ]);\n    return stdout;\n  }",
-      "headingContext": "node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method readFile",
-      "startLine": 14,
-      "startCol": 1,
-      "endLine": 22,
-      "endCol": 4
-    },
-    {
-      "text": "  async readBinaryFile(path: string): Promise\u003cBuffer\u003e {\n    const { stdout } = await execFile(\n      \"docker\",\n      [\"exec\", this.container, \"cat\", path],\n      { encoding: \"buffer\" },\n    );\n    return stdout;\n  }",
-      "contextualizedText": "// node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method readBinaryFile\n\n  async readBinaryFile(path: string): Promise\u003cBuffer\u003e {\n    const { stdout } = await execFile(\n      \"docker\",\n      [\"exec\", this.container, \"cat\", path],\n      { encoding: \"buffer\" },\n    );\n    return stdout;\n  }",
-      "headingContext": "node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method readBinaryFile",
-      "startLine": 24,
-      "startCol": 1,
-      "endLine": 31,
-      "endCol": 4
-    },
-    {
-      "text": "  async writeFile(path: string, content: string): Promise\u003cvoid\u003e {\n    return new Promise\u003cvoid\u003e((resolve, reject) =\u003e {\n      const proc = spawn(\n        \"docker\",\n        [\"exec\", \"-i\", this.container, \"tee\", path],\n        {\n          stdio: [\"pipe\", \"ignore\", \"pipe\"],\n        },\n      );\n      let stderr = \"\";\n      proc.stderr?.on(\"data\", (data: Buffer) =\u003e {\n        stderr += data.toString();\n      });\n      proc.on(\"close\", (code) =\u003e {\n        if (code === 0) resolve();\n        else\n          reject(new Error(`docker exec tee failed (exit ${code}): ${stderr}`));\n      });\n      proc.on(\"error\", reject);\n      proc.stdin?.write(content);\n      proc.stdin?.end();\n    });\n  }",
-      "contextualizedText": "// node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method writeFile\n\n  async writeFile(path: string, content: string): Promise\u003cvoid\u003e {\n    return new Promise\u003cvoid\u003e((resolve, reject) =\u003e {\n      const proc = spawn(\n        \"docker\",\n        [\"exec\", \"-i\", this.container, \"tee\", path],\n        {\n          stdio: [\"pipe\", \"ignore\", \"pipe\"],\n        },\n      );\n      let stderr = \"\";\n      proc.stderr?.on(\"data\", (data: Buffer) =\u003e {\n        stderr += data.toString();\n      });\n      proc.on(\"close\", (code) =\u003e {\n        if (code === 0) resolve();\n        else\n          reject(new Error(`docker exec tee failed (exit ${code}): ${stderr}`));\n      });\n      proc.on(\"error\", reject);\n      proc.stdin?.write(content);\n      proc.stdin?.end();\n    });\n  }",
-      "headingContext": "node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method writeFile",
-      "startLine": 33,
-      "startCol": 1,
-      "endLine": 55,
-      "endCol": 4
-    },
-    {
-      "text": "  async fileExists(path: string): Promise\u003cboolean\u003e {\n    try {\n      await execFile(\"docker\", [\n        \"exec\",\n        this.container,\n        \"test\",\n        \"-f\",\n        path,\n        \"-o\",\n        \"-d\",\n        path,\n      ]);\n      return true;\n    } catch {\n      return false;\n    }\n  }",
-      "contextualizedText": "// node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method fileExists\n\n  async fileExists(path: string): Promise\u003cboolean\u003e {\n    try {\n      await execFile(\"docker\", [\n        \"exec\",\n        this.container,\n        \"test\",\n        \"-f\",\n        path,\n        \"-o\",\n        \"-d\",\n        path,\n      ]);\n      return true;\n    } catch {\n      return false;\n    }\n  }",
-      "headingContext": "node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method fileExists",
-      "startLine": 57,
-      "startCol": 1,
-      "endLine": 73,
-      "endCol": 4
-    },
-    {
-      "text": "  async mkdir(path: string): Promise\u003cvoid\u003e {\n    await execFile(\"docker\", [\"exec\", this.container, \"mkdir\", \"-p\", path]);\n  }",
-      "contextualizedText": "// node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method mkdir\n\n  async mkdir(path: string): Promise\u003cvoid\u003e {\n    await execFile(\"docker\", [\"exec\", this.container, \"mkdir\", \"-p\", path]);\n  }",
-      "headingContext": "node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method mkdir",
-      "startLine": 75,
-      "startCol": 1,
-      "endLine": 77,
-      "endCol": 4
-    },
-    {
-      "text": "  async stat(\n    path: string,\n  ): Promise\u003c{ mtimeMs: number; size: number } | undefined\u003e {\n    try {\n      const { stdout } = await execFile(\"docker\", [\n        \"exec\",\n        this.container,\n        \"stat\",\n        \"-c\",\n        \"%Y %s\",\n        path,\n      ]);\n      const parts = stdout.trim().split(\" \");\n      const seconds = parseInt(parts[0], 10);\n      const size = parseInt(parts[1], 10);\n      return { mtimeMs: seconds * 1000, size };\n    } catch {\n      return undefined;\n    }\n  }",
-      "contextualizedText": "// node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method stat\n\n  async stat(\n    path: string,\n  ): Promise\u003c{ mtimeMs: number; size: number } | undefined\u003e {\n    try {\n      const { stdout } = await execFile(\"docker\", [\n        \"exec\",\n        this.container,\n        \"stat\",\n        \"-c\",\n        \"%Y %s\",\n        path,\n      ]);\n      const parts = stdout.trim().split(\" \");\n      const seconds = parseInt(parts[0], 10);\n      const size = parseInt(parts[1], 10);\n      return { mtimeMs: seconds * 1000, size };\n    } catch {\n      return undefined;\n    }\n  }",
-      "headingContext": "node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method stat",
-      "startLine": 79,
-      "startCol": 1,
-      "endLine": 98,
-      "endCol": 4
-    },
-    {
-      "text": "  async readdir(path: string): Promise\u003cstring[]\u003e {\n    const { stdout } = await execFile(\"docker\", [\n      \"exec\",\n      this.container,\n      \"ls\",\n      path,\n    ]);\n    return stdout.split(\"\\n\").filter((s) =\u003e s.length \u003e 0);\n  }",
-      "contextualizedText": "// node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method readdir\n\n  async readdir(path: string): Promise\u003cstring[]\u003e {\n    const { stdout } = await execFile(\"docker\", [\n      \"exec\",\n      this.container,\n      \"ls\",\n      path,\n    ]);\n    return stdout.split(\"\\n\").filter((s) =\u003e s.length \u003e 0);\n  }",
-      "headingContext": "node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method readdir",
-      "startLine": 100,
-      "startCol": 1,
-      "endLine": 108,
-      "endCol": 4
-    },
-    {
-      "text": "  async isDirectory(path: string): Promise\u003cboolean\u003e {\n    try {\n      await execFile(\"docker\", [\"exec\", this.container, \"test\", \"-d\", path]);\n      return true;\n    } catch {\n      return false;\n    }\n  }",
-      "contextualizedText": "// node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method isDirectory\n\n  async isDirectory(path: string): Promise\u003cboolean\u003e {\n    try {\n      await execFile(\"docker\", [\"exec\", this.container, \"test\", \"-d\", path]);\n      return true;\n    } catch {\n      return false;\n    }\n  }",
-      "headingContext": "node/capabilities/docker-file-io.ts \u003e class DockerFileIO \u003e method isDirectory",
-      "startLine": 110,
-      "startCol": 1,
-      "endLine": 117,
-      "endCol": 4
+      "start": 1882,
+      "end": 2818
     }
   ]
 }

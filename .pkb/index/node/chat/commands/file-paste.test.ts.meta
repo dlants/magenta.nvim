@@ -1,51 +1,11 @@
 {
   "blobSha": "8be339008414fcdc5244c70f1c57769cf1fb139b",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport { describe, expect, it } from \"vitest\";\nimport type { Row0Indexed } from \"../../nvim/window.ts\";\nimport type { NvimDriver } from \"../../test/driver.ts\";\nimport { withDriver } from \"../../test/preamble.ts\";",
-      "contextualizedText": "// node/chat/commands/file-paste.test.ts\n\nimport * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport { describe, expect, it } from \"vitest\";\nimport type { Row0Indexed } from \"../../nvim/window.ts\";\nimport type { NvimDriver } from \"../../test/driver.ts\";\nimport { withDriver } from \"../../test/preamble.ts\";",
-      "headingContext": "node/chat/commands/file-paste.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 6,
-      "endCol": 53
-    },
-    {
-      "text": "async function inputText(driver: NvimDriver): Promise\u003cstring\u003e {\n  const inputBuffer = driver.getInputBuffer();\n  const lines = await inputBuffer.getLines({\n    start: 0 as Row0Indexed,\n    end: -1 as Row0Indexed,\n  });\n  return lines.join(\"\\n\");\n}",
-      "contextualizedText": "// node/chat/commands/file-paste.test.ts \u003e function inputText\n\nasync function inputText(driver: NvimDriver): Promise\u003cstring\u003e {\n  const inputBuffer = driver.getInputBuffer();\n  const lines = await inputBuffer.getLines({\n    start: 0 as Row0Indexed,\n    end: -1 as Row0Indexed,\n  });\n  return lines.join(\"\\n\");\n}",
-      "headingContext": "node/chat/commands/file-paste.test.ts \u003e function inputText",
-      "startLine": 8,
-      "startCol": 1,
-      "endLine": 15,
-      "endCol": 2
-    },
-    {
-      "text": "describe(\"drag-drop @file: paste\", () =\u003e {\n  it(\"wraps an existing file path dropped into the input buffer\", async () =\u003e {\n    await withDriver",
-      "contextualizedText": "// node/chat/commands/file-paste.test.ts\n\ndescribe(\"drag-drop @file: paste\", () =\u003e {\n  it(\"wraps an existing file path dropped into the input buffer\", async () =\u003e {\n    await withDriver",
-      "headingContext": "node/chat/commands/file-paste.test.ts",
-      "startLine": 17,
-      "startCol": 1,
-      "endLine": 19,
-      "endCol": 21
-    },
-    {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"dropped file.txt\"), \"content\");\n        }",
-      "contextualizedText": "// node/chat/commands/file-paste.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"dropped file.txt\"), \"content\");\n        }",
-      "headingContext": "node/chat/commands/file-paste.test.ts \u003e function setupFiles",
-      "startLine": 21,
-      "startCol": 1,
-      "endLine": 23,
-      "endCol": 10
-    },
-    {
-      "text": "async (driver, dirs) =\u003e {\n        await driver.showSidebar();\n\n        const absPath = path.join(dirs.tmpDir, \"dropped file.txt\");\n        // Terminals deliver drag-drop paths with shell-escaped whitespace.\n        const shellEscaped = absPath.replace(/ /g, \"\\\\ \");\n\n        const inputBuffer = driver.getInputBuffer();\n        await driver.nvim.call(\"nvim_set_current_buf\", [inputBuffer.id]);\n        await driver.nvim.call(\"nvim_paste\", [shellEscaped, false, -1]);\n\n        expect(await inputText(driver)).toBe(`@file:\\`${absPath}\\``);\n      },\n    );\n  });\n\n  it(\"passes through non-existent paths unchanged\", async () =\u003e {\n    await withDriver({}, async (driver) =\u003e {\n      await driver.showSidebar();\n      const inputBuffer = driver.getInputBuffer();\n      await driver.nvim.call(\"nvim_set_current_buf\", [inputBuffer.id]);\n      await driver.nvim.call(\"nvim_paste\", [\n        \"/this/does/not/exist.txt\",\n        false,\n        -1,\n      ]);\n      expect(await inputText(driver)).toBe(\"/this/does/not/exist.txt\");\n    });\n  });",
-      "contextualizedText": "// node/chat/commands/file-paste.test.ts\n\nasync (driver, dirs) =\u003e {\n        await driver.showSidebar();\n\n        const absPath = path.join(dirs.tmpDir, \"dropped file.txt\");\n        // Terminals deliver drag-drop paths with shell-escaped whitespace.\n        const shellEscaped = absPath.replace(/ /g, \"\\\\ \");\n\n        const inputBuffer = driver.getInputBuffer();\n        await driver.nvim.call(\"nvim_set_current_buf\", [inputBuffer.id]);\n        await driver.nvim.call(\"nvim_paste\", [shellEscaped, false, -1]);\n\n        expect(await inputText(driver)).toBe(`@file:\\`${absPath}\\``);\n      },\n    );\n  });\n\n  it(\"passes through non-existent paths unchanged\", async () =\u003e {\n    await withDriver({}, async (driver) =\u003e {\n      await driver.showSidebar();\n      const inputBuffer = driver.getInputBuffer();\n      await driver.nvim.call(\"nvim_set_current_buf\", [inputBuffer.id]);\n      await driver.nvim.call(\"nvim_paste\", [\n        \"/this/does/not/exist.txt\",\n        false,\n        -1,\n      ]);\n      expect(await inputText(driver)).toBe(\"/this/does/not/exist.txt\");\n    });\n  });",
-      "headingContext": "node/chat/commands/file-paste.test.ts",
-      "startLine": 25,
-      "startCol": 7,
-      "endLine": 53,
-      "endCol": 6
+      "start": 0,
+      "end": 1873
     }
   ]
 }

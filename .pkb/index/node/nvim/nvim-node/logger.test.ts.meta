@@ -1,33 +1,15 @@
 {
   "blobSha": "240bfcca10528539bde716992a1f6deba463806e",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import fs from \"node:fs/promises\";\nimport { resolve } from \"node:path\";\nimport { beforeEach, describe, expect, it } from \"vitest\";\nimport { withNvimClient } from \"../../test/preamble.ts\";\n\ndescribe(\"src/logger.test.ts\", () =\u003e {\n  const logFilePath = resolve(`/tmp/magenta-test/test-logging.log`);\n\n  beforeEach(async () =\u003e {\n    try {\n      await fs.unlink(logFilePath);\n    } catch {\n      // ok if file doesn't exist\n    }\n  });\n\n  it(\"logs messages in correct format and order\", async () =\u003e {\n    await withNvimClient",
-      "contextualizedText": "// node/nvim/nvim-node/logger.test.ts\n\nimport fs from \"node:fs/promises\";\nimport { resolve } from \"node:path\";\nimport { beforeEach, describe, expect, it } from \"vitest\";\nimport { withNvimClient } from \"../../test/preamble.ts\";\n\ndescribe(\"src/logger.test.ts\", () =\u003e {\n  const logFilePath = resolve(`/tmp/magenta-test/test-logging.log`);\n\n  beforeEach(async () =\u003e {\n    try {\n      await fs.unlink(logFilePath);\n    } catch {\n      // ok if file doesn't exist\n    }\n  });\n\n  it(\"logs messages in correct format and order\", async () =\u003e {\n    await withNvimClient",
-      "headingContext": "node/nvim/nvim-node/logger.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 18,
-      "endCol": 25
+      "start": 0,
+      "end": 1812
     },
     {
-      "text": "async (nvim) =\u003e {\n        // Add various log messages at different levels\n        nvim.logger.error(\"Error level message\");\n        nvim.logger.warn(\"Warning level message\");\n        nvim.logger.info(\"Info level message\");\n        nvim.logger.debug(\"Debug level message\");\n\n        // Wait for logs to be written (winston may be async)\n        await new Promise((resolve) =\u003e setTimeout(resolve, 100));\n\n        // Read log file and verify contents\n        const logContent = await fs.readFile(logFilePath, \"utf-8\");\n\n        // Split lines and check each log entry individually\n        const logLines = logContent.trim().split(\"\\n\");\n\n        expect(logLines.length, `logContent: ${logContent}`).toBe(3);\n\n        // Parse and verify each line\n\n        const logs: { level: string; message: string; timestamp: string }[] =\n          logLines.map(\n            (line) =\u003e\n              JSON.parse(line) as {\n                level: string;\n                message: string;\n                timestamp: string;\n              },\n          );\n\n        // Check error message\n        expect(logs[0].level).toBe(\"error\");\n        expect(logs[0].message).toBe(\"Error level message\");\n        expect(logs[0].timestamp).toMatch(\n          /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/,\n        );\n\n        // Check warn message\n        expect(logs[1].level).toBe(\"warn\");\n        expect(logs[1].message).toBe(\"Warning level message\");\n        expect(logs[1].timestamp).toMatch(\n          /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/,\n        );\n\n        // Check info message\n        expect(logs[2].level).toBe(\"info\");\n        expect(logs[2].message).toBe(\"Info level message\");\n        expect(logs[2].timestamp).toMatch(\n          /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/,\n        );\n\n        // Check that debug messages don't appear (set log level to info)\n        const debugEntries = logs.filter((log) =\u003e log.level === \"debug\");\n        expect(debugEntries.length).toBe(0);\n      }",
-      "contextualizedText": "// node/nvim/nvim-node/logger.test.ts\n\nasync (nvim) =\u003e {\n        // Add various log messages at different levels\n        nvim.logger.error(\"Error level message\");\n        nvim.logger.warn(\"Warning level message\");\n        nvim.logger.info(\"Info level message\");\n        nvim.logger.debug(\"Debug level message\");\n\n        // Wait for logs to be written (winston may be async)\n        await new Promise((resolve) =\u003e setTimeout(resolve, 100));\n\n        // Read log file and verify contents\n        const logContent = await fs.readFile(logFilePath, \"utf-8\");\n\n        // Split lines and check each log entry individually\n        const logLines = logContent.trim().split(\"\\n\");\n\n        expect(logLines.length, `logContent: ${logContent}`).toBe(3);\n\n        // Parse and verify each line\n\n        const logs: { level: string; message: string; timestamp: string }[] =\n          logLines.map(\n            (line) =\u003e\n              JSON.parse(line) as {\n                level: string;\n                message: string;\n                timestamp: string;\n              },\n          );\n\n        // Check error message\n        expect(logs[0].level).toBe(\"error\");\n        expect(logs[0].message).toBe(\"Error level message\");\n        expect(logs[0].timestamp).toMatch(\n          /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/,\n        );\n\n        // Check warn message\n        expect(logs[1].level).toBe(\"warn\");\n        expect(logs[1].message).toBe(\"Warning level message\");\n        expect(logs[1].timestamp).toMatch(\n          /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/,\n        );\n\n        // Check info message\n        expect(logs[2].level).toBe(\"info\");\n        expect(logs[2].message).toBe(\"Info level message\");\n        expect(logs[2].timestamp).toMatch(\n          /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/,\n        );\n\n        // Check that debug messages don't appear (set log level to info)\n        const debugEntries = logs.filter((log) =\u003e log.level === \"debug\");\n        expect(debugEntries.length).toBe(0);\n      }",
-      "headingContext": "node/nvim/nvim-node/logger.test.ts",
-      "startLine": 19,
-      "startCol": 7,
-      "endLine": 73,
-      "endCol": 8
-    },
-    {
-      "text": "{ logFile: logFilePath, logLevel: \"info\", overrideLogger: false }",
-      "contextualizedText": "// node/nvim/nvim-node/logger.test.ts\n\n{ logFile: logFilePath, logLevel: \"info\", overrideLogger: false }",
-      "headingContext": "node/nvim/nvim-node/logger.test.ts",
-      "startLine": 74,
-      "startCol": 7,
-      "endLine": 74,
-      "endCol": 72
+      "start": 1822,
+      "end": 2604
     }
   ]
 }

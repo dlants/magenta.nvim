@@ -1,114 +1,19 @@
 {
   "blobSha": "2cbf41a141040283ac706bf46a5c2689f23b0a53",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { describe, expect, it } from \"vitest\";\nimport type {\n  GitClient,\n  GitCommandRunner,\n  GitState,\n} from \"../capabilities/git-client.ts\";\nimport { parseGitState } from \"../capabilities/git-client.ts\";\nimport type { Logger } from \"../logger.ts\";\nimport { GitTracker, gitUpdateToText } from \"./git-tracker.ts\";\n\nconst noopLogger",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts\n\nimport { describe, expect, it } from \"vitest\";\nimport type {\n  GitClient,\n  GitCommandRunner,\n  GitState,\n} from \"../capabilities/git-client.ts\";\nimport { parseGitState } from \"../capabilities/git-client.ts\";\nimport type { Logger } from \"../logger.ts\";\nimport { GitTracker, gitUpdateToText } from \"./git-tracker.ts\";\n\nconst noopLogger",
-      "headingContext": "node/core/src/context/git-tracker.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 11,
-      "endCol": 17
+      "start": 0,
+      "end": 1781
     },
     {
-      "text": "  debug: () =\u003e {}",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts \u003e function debug\n\n  debug: () =\u003e {}",
-      "headingContext": "node/core/src/context/git-tracker.test.ts \u003e function debug",
-      "startLine": 12,
-      "startCol": 1,
-      "endLine": 12,
-      "endCol": 18
+      "start": 1785,
+      "end": 3475
     },
     {
-      "text": "  info: () =\u003e {}",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts \u003e function info\n\n  info: () =\u003e {}",
-      "headingContext": "node/core/src/context/git-tracker.test.ts \u003e function info",
-      "startLine": 13,
-      "startCol": 1,
-      "endLine": 13,
-      "endCol": 17
-    },
-    {
-      "text": "  warn: () =\u003e {}",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts \u003e function warn\n\n  warn: () =\u003e {}",
-      "headingContext": "node/core/src/context/git-tracker.test.ts \u003e function warn",
-      "startLine": 14,
-      "startCol": 1,
-      "endLine": 14,
-      "endCol": 17
-    },
-    {
-      "text": "  error: () =\u003e {}",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts \u003e function error\n\n  error: () =\u003e {}",
-      "headingContext": "node/core/src/context/git-tracker.test.ts \u003e function error",
-      "startLine": 15,
-      "startCol": 1,
-      "endLine": 15,
-      "endCol": 18
-    },
-    {
-      "text": "  trace: () =\u003e {}",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts \u003e function trace\n\n  trace: () =\u003e {}",
-      "headingContext": "node/core/src/context/git-tracker.test.ts \u003e function trace",
-      "startLine": 16,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 18
-    },
-    {
-      "text": "unknown as Logger",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts\n\nunknown as Logger",
-      "headingContext": "node/core/src/context/git-tracker.test.ts",
-      "startLine": 17,
-      "startCol": 6,
-      "endLine": 17,
-      "endCol": 23
-    },
-    {
-      "text": "function makeRunner(responses: {\n  [command: string]: { stdout: string; exitCode: number };\n}): GitCommandRunner {\n  return (args) =\u003e {\n    const key = args.join(\" \");\n    const match = responses[key];\n    return Promise.resolve(match ?? { stdout: \"\", exitCode: 0 });\n  };\n}",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts \u003e function makeRunner\n\nfunction makeRunner(responses: {\n  [command: string]: { stdout: string; exitCode: number };\n}): GitCommandRunner {\n  return (args) =\u003e {\n    const key = args.join(\" \");\n    const match = responses[key];\n    return Promise.resolve(match ?? { stdout: \"\", exitCode: 0 });\n  };\n}",
-      "headingContext": "node/core/src/context/git-tracker.test.ts \u003e function makeRunner",
-      "startLine": 19,
-      "startCol": 1,
-      "endLine": 27,
-      "endCol": 2
-    },
-    {
-      "text": "describe(\"parseGitState\", () =\u003e {\n  it(\"returns undefined when not in a repo\", async () =\u003e {\n    const runner = makeRunner({\n      \"rev-parse --show-toplevel\": { stdout: \"\", exitCode: 128 },\n    });\n    expect(await parseGitState(runner)).toBeUndefined();\n  });\n\n  it(\"parses branch, head, and porcelain counts\", async () =\u003e {\n    const runner = makeRunner({\n      \"rev-parse --show-toplevel\": { stdout: \"/repo\\n\", exitCode: 0 },\n      \"symbolic-ref --short -q HEAD\": { stdout: \"main\\n\", exitCode: 0 },\n      \"log -1 --format=%H%x00%s\": {\n        stdout: \"abc123def456\\u0000Initial commit\\n\",\n        exitCode: 0,\n      },\n      \"status --porcelain\": {\n        stdout: \"M  staged.ts\\n M unstaged.ts\\nMM both.ts\\n?? new.ts\\n\",\n        exitCode: 0,\n      },\n    });\n    const state = await parseGitState(runner);\n    expect(state).toEqual\u003cGitState\u003e({\n      repoRoot: \"/repo\",\n      branch: \"main\",\n      headSha: \"abc123def456\",\n      headSubject: \"Initial commit\",\n      stagedCount: 2,\n      unstagedCount: 2,\n      untrackedCount: 1,\n    });\n  });\n\n  it(\"treats detached HEAD as undefined branch\", async () =\u003e {\n    const runner = makeRunner({\n      \"rev-parse --show-toplevel\": { stdout: \"/repo\\n\", exitCode: 0 },\n      \"symbolic-ref --short -q HEAD\": { stdout: \"\", exitCode: 1 },\n      \"log -1 --format=%H%x00%s\": { stdout: \"sha\\u0000subj\\n\", exitCode: 0 },\n      \"status --porcelain\": { stdout: \"\", exitCode: 0 },\n    });\n    const state = await parseGitState(runner);\n    expect(state?.branch).toBeUndefined();\n  });\n});",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts\n\ndescribe(\"parseGitState\", () =\u003e {\n  it(\"returns undefined when not in a repo\", async () =\u003e {\n    const runner = makeRunner({\n      \"rev-parse --show-toplevel\": { stdout: \"\", exitCode: 128 },\n    });\n    expect(await parseGitState(runner)).toBeUndefined();\n  });\n\n  it(\"parses branch, head, and porcelain counts\", async () =\u003e {\n    const runner = makeRunner({\n      \"rev-parse --show-toplevel\": { stdout: \"/repo\\n\", exitCode: 0 },\n      \"symbolic-ref --short -q HEAD\": { stdout: \"main\\n\", exitCode: 0 },\n      \"log -1 --format=%H%x00%s\": {\n        stdout: \"abc123def456\\u0000Initial commit\\n\",\n        exitCode: 0,\n      },\n      \"status --porcelain\": {\n        stdout: \"M  staged.ts\\n M unstaged.ts\\nMM both.ts\\n?? new.ts\\n\",\n        exitCode: 0,\n      },\n    });\n    const state = await parseGitState(runner);\n    expect(state).toEqual\u003cGitState\u003e({\n      repoRoot: \"/repo\",\n      branch: \"main\",\n      headSha: \"abc123def456\",\n      headSubject: \"Initial commit\",\n      stagedCount: 2,\n      unstagedCount: 2,\n      untrackedCount: 1,\n    });\n  });\n\n  it(\"treats detached HEAD as undefined branch\", async () =\u003e {\n    const runner = makeRunner({\n      \"rev-parse --show-toplevel\": { stdout: \"/repo\\n\", exitCode: 0 },\n      \"symbolic-ref --short -q HEAD\": { stdout: \"\", exitCode: 1 },\n      \"log -1 --format=%H%x00%s\": { stdout: \"sha\\u0000subj\\n\", exitCode: 0 },\n      \"status --porcelain\": { stdout: \"\", exitCode: 0 },\n    });\n    const state = await parseGitState(runner);\n    expect(state?.branch).toBeUndefined();\n  });\n});",
-      "headingContext": "node/core/src/context/git-tracker.test.ts",
-      "startLine": 29,
-      "startCol": 1,
-      "endLine": 72,
-      "endCol": 4
-    },
-    {
-      "text": "function clientFor(states: (GitState | undefined)[]): GitClient {\n  let i = 0;",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts \u003e function clientFor\n\nfunction clientFor(states: (GitState | undefined)[]): GitClient {\n  let i = 0;",
-      "headingContext": "node/core/src/context/git-tracker.test.ts \u003e function clientFor",
-      "startLine": 74,
-      "startCol": 1,
-      "endLine": 75,
-      "endCol": 13
-    },
-    {
-      "text": "    getState: () =\u003e Promise.resolve(states[Math.min(i++, states.length - 1)])",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts \u003e function clientFor \u003e function getState\n\n    getState: () =\u003e Promise.resolve(states[Math.min(i++, states.length - 1)])",
-      "headingContext": "node/core/src/context/git-tracker.test.ts \u003e function clientFor \u003e function getState",
-      "startLine": 77,
-      "startCol": 1,
-      "endLine": 77,
-      "endCol": 78
-    },
-    {
-      "text": "const base: GitState = {\n  repoRoot: \"/repo\",\n  branch: \"main\",\n  headSha: \"sha1\",\n  headSubject: \"first\",\n  stagedCount: 0,\n  unstagedCount: 0,\n  untrackedCount: 0,\n};\n\ndescribe(\"GitTracker\", () =\u003e {\n  it(\"does not report when only file counts change\", async () =\u003e {\n    const tracker = new GitTracker(\n      clientFor([{ ...base, untrackedCount: 5 }]),\n      base,\n      noopLogger,\n    );\n    expect(await tracker.getUpdate()).toBeUndefined();\n  });\n\n  it(\"reports when the branch changes\", async () =\u003e {\n    const tracker = new GitTracker(\n      clientFor([{ ...base, branch: \"feature\" }]),\n      base,\n      noopLogger,\n    );\n    const update = await tracker.getUpdate();\n    expect(update?.current?.branch).toBe(\"feature\");\n    expect(update?.previous?.branch).toBe(\"main\");\n  });\n\n  it(\"reports when HEAD moves\", async () =\u003e {\n    const tracker = new GitTracker(\n      clientFor([{ ...base, headSha: \"sha2\", headSubject: \"second\" }]),\n      base,\n      noopLogger,\n    );\n    expect(await tracker.getUpdate()).toBeDefined();\n  });\n\n  it(\"reports leaving a repository\", async () =\u003e {\n    const tracker = new GitTracker(clientFor([undefined]), base, noopLogger);\n    const update = await tracker.getUpdate();\n    expect(update?.current).toBeUndefined();\n    expect(gitUpdateToText(update!)).toContain(\n      \"no longer inside a git repository\",\n    );\n  });\n\n  it(\"commits the agent view so a change is reported only once\", async () =\u003e {\n    const changed = { ...base, branch: \"feature\" };\n    const tracker = new GitTracker(clientFor([changed]), base, noopLogger);\n    expect(await tracker.getUpdate()).toBeDefined();\n    expect(await tracker.getUpdate()).toBeUndefined();\n  });\n});",
-      "contextualizedText": "// node/core/src/context/git-tracker.test.ts\n\nconst base: GitState = {\n  repoRoot: \"/repo\",\n  branch: \"main\",\n  headSha: \"sha1\",\n  headSubject: \"first\",\n  stagedCount: 0,\n  unstagedCount: 0,\n  untrackedCount: 0,\n};\n\ndescribe(\"GitTracker\", () =\u003e {\n  it(\"does not report when only file counts change\", async () =\u003e {\n    const tracker = new GitTracker(\n      clientFor([{ ...base, untrackedCount: 5 }]),\n      base,\n      noopLogger,\n    );\n    expect(await tracker.getUpdate()).toBeUndefined();\n  });\n\n  it(\"reports when the branch changes\", async () =\u003e {\n    const tracker = new GitTracker(\n      clientFor([{ ...base, branch: \"feature\" }]),\n      base,\n      noopLogger,\n    );\n    const update = await tracker.getUpdate();\n    expect(update?.current?.branch).toBe(\"feature\");\n    expect(update?.previous?.branch).toBe(\"main\");\n  });\n\n  it(\"reports when HEAD moves\", async () =\u003e {\n    const tracker = new GitTracker(\n      clientFor([{ ...base, headSha: \"sha2\", headSubject: \"second\" }]),\n      base,\n      noopLogger,\n    );\n    expect(await tracker.getUpdate()).toBeDefined();\n  });\n\n  it(\"reports leaving a repository\", async () =\u003e {\n    const tracker = new GitTracker(clientFor([undefined]), base, noopLogger);\n    const update = await tracker.getUpdate();\n    expect(update?.current).toBeUndefined();\n    expect(gitUpdateToText(update!)).toContain(\n      \"no longer inside a git repository\",\n    );\n  });\n\n  it(\"commits the agent view so a change is reported only once\", async () =\u003e {\n    const changed = { ...base, branch: \"feature\" };\n    const tracker = new GitTracker(clientFor([changed]), base, noopLogger);\n    expect(await tracker.getUpdate()).toBeDefined();\n    expect(await tracker.getUpdate()).toBeUndefined();\n  });\n});",
-      "headingContext": "node/core/src/context/git-tracker.test.ts",
-      "startLine": 81,
-      "startCol": 1,
-      "endLine": 136,
-      "endCol": 4
+      "start": 3479,
+      "end": 4126
     }
   ]
 }

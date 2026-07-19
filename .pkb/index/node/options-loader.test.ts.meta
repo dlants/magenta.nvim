@@ -1,15 +1,11 @@
 {
   "blobSha": "1aa6fd1467f8fb25abee846f3105e53b69b44251",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import fs from \"node:fs\";\nimport path from \"node:path\";\nimport { expect, it } from \"vitest\";\nimport { getcwd } from \"./nvim/nvim.ts\";\nimport { withDriver } from \"./test/preamble.ts\";\n\nit(\"dynamically picks up sandbox config changes from project options.json\", async () =\u003e {\n  await withDriver({}, async (driver) =\u003e {\n    await driver.showSidebar();\n    const cwd = await getcwd(driver.nvim);\n\n    // Write a project options.json that changes sandbox config\n    const magentaDir = path.join(cwd, \".magenta\");\n    fs.mkdirSync(magentaDir, { recursive: true });\n    fs.writeFileSync(\n      path.join(magentaDir, \"options.json\"),\n      JSON.stringify({\n        sandbox: {\n          filesystem: {\n            denyRead: [\"~/.ssh\", \"~/.aws\", \"~/.gnupg\", \".secret\"],\n          },\n        },\n      }),\n    );\n\n    // Send a message to trigger options reload\n    await driver.inputMagentaText(\"hello\");\n    await driver.send();\n\n    const request1 = await driver.mockAnthropic.awaitPendingStream();\n    request1.respond({\n      stopReason: \"end_turn\",\n      text: \"hi\",\n      toolRequests: [],\n    });\n\n    await driver.assertDisplayBufferContains(\"hi\");\n\n    // Verify the sandbox config was updated from project options.json\n    // Project denyRead is appended to the base defaults\n    expect(driver.magenta.options.sandbox.filesystem.denyRead).toContain(\n      \".secret\",\n    );\n  });\n});",
-      "contextualizedText": "// node/options-loader.test.ts\n\nimport fs from \"node:fs\";\nimport path from \"node:path\";\nimport { expect, it } from \"vitest\";\nimport { getcwd } from \"./nvim/nvim.ts\";\nimport { withDriver } from \"./test/preamble.ts\";\n\nit(\"dynamically picks up sandbox config changes from project options.json\", async () =\u003e {\n  await withDriver({}, async (driver) =\u003e {\n    await driver.showSidebar();\n    const cwd = await getcwd(driver.nvim);\n\n    // Write a project options.json that changes sandbox config\n    const magentaDir = path.join(cwd, \".magenta\");\n    fs.mkdirSync(magentaDir, { recursive: true });\n    fs.writeFileSync(\n      path.join(magentaDir, \"options.json\"),\n      JSON.stringify({\n        sandbox: {\n          filesystem: {\n            denyRead: [\"~/.ssh\", \"~/.aws\", \"~/.gnupg\", \".secret\"],\n          },\n        },\n      }),\n    );\n\n    // Send a message to trigger options reload\n    await driver.inputMagentaText(\"hello\");\n    await driver.send();\n\n    const request1 = await driver.mockAnthropic.awaitPendingStream();\n    request1.respond({\n      stopReason: \"end_turn\",\n      text: \"hi\",\n      toolRequests: [],\n    });\n\n    await driver.assertDisplayBufferContains(\"hi\");\n\n    // Verify the sandbox config was updated from project options.json\n    // Project denyRead is appended to the base defaults\n    expect(driver.magenta.options.sandbox.filesystem.denyRead).toContain(\n      \".secret\",\n    );\n  });\n});",
-      "headingContext": "node/options-loader.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 45,
-      "endCol": 4
+      "start": 0,
+      "end": 1381
     }
   ]
 }

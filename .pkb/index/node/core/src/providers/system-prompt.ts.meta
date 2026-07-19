@@ -1,60 +1,15 @@
 {
   "blobSha": "2b37dcb84db91baa71c4af89580f478715be8e3a",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { loadAgents } from \"../agents/agents.ts\";\nimport type { FileIO } from \"../capabilities/file-io.ts\";\nimport { formatGitInfo, type GitState } from \"../capabilities/git-client.ts\";\nimport type { SubagentConfig, ThreadType } from \"../chat-types.ts\";\nimport type { Logger } from \"../logger.ts\";\nimport type { ProviderOptions } from \"../provider-options.ts\";\nimport type { HomeDir, NvimCwd } from \"../utils/files.ts\";\nimport {\n  formatSkillsIntroduction,\n  loadSkills,\n  type SkillsMap,\n} from \"./skills.ts\";\n\nexport type SystemPrompt = string \u0026 { __systemPrompt: true };",
-      "contextualizedText": "// node/core/src/providers/system-prompt.ts\n\nimport { loadAgents } from \"../agents/agents.ts\";\nimport type { FileIO } from \"../capabilities/file-io.ts\";\nimport { formatGitInfo, type GitState } from \"../capabilities/git-client.ts\";\nimport type { SubagentConfig, ThreadType } from \"../chat-types.ts\";\nimport type { Logger } from \"../logger.ts\";\nimport type { ProviderOptions } from \"../provider-options.ts\";\nimport type { HomeDir, NvimCwd } from \"../utils/files.ts\";\nimport {\n  formatSkillsIntroduction,\n  loadSkills,\n  type SkillsMap,\n} from \"./skills.ts\";\n\nexport type SystemPrompt = string \u0026 { __systemPrompt: true };",
-      "headingContext": "node/core/src/providers/system-prompt.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 14,
-      "endCol": 62
+      "start": 0,
+      "end": 2107
     },
     {
-      "text": "export interface SystemInfo {\n  timestamp: string;\n  platform: string;\n  neovimVersion: string;\n  cwd: NvimCwd;\n  git?: GitState | undefined;\n}",
-      "contextualizedText": "// node/core/src/providers/system-prompt.ts \u003e interface SystemInfo\n\nexport interface SystemInfo {\n  timestamp: string;\n  platform: string;\n  neovimVersion: string;\n  cwd: NvimCwd;\n  git?: GitState | undefined;\n}",
-      "headingContext": "node/core/src/providers/system-prompt.ts \u003e interface SystemInfo",
-      "startLine": 16,
-      "startCol": 1,
-      "endLine": 22,
-      "endCol": 2
-    },
-    {
-      "text": "export const COMPACT_SYSTEM_PROMPT =\n  \"You are a compaction agent that reduces conversation transcripts using the edl tool. You MUST write your summary to the `/summary.md` file using the edl tool. Do NOT place the summary in your text response — only the contents of `/summary.md` are captured.\";",
-      "contextualizedText": "// node/core/src/providers/system-prompt.ts\n\nexport const COMPACT_SYSTEM_PROMPT =\n  \"You are a compaction agent that reduces conversation transcripts using the edl tool. You MUST write your summary to the `/summary.md` file using the edl tool. Do NOT place the summary in your text response — only the contents of `/summary.md` are captured.\";",
-      "headingContext": "node/core/src/providers/system-prompt.ts",
-      "startLine": 24,
-      "startCol": 1,
-      "endLine": 25,
-      "endCol": 264
-    },
-    {
-      "text": "function getBaseSystemPrompt(\n  type: ThreadType,\n  opts: {\n    subagentConfig?: SubagentConfig | undefined;\n    logger: Logger;\n    cwd: NvimCwd;\n    options: ProviderOptions;\n  },\n): { systemPrompt: string; systemReminder: string | undefined } {\n  if (type === \"compact\") {\n    return { systemPrompt: COMPACT_SYSTEM_PROMPT, systemReminder: undefined };\n  }\n\n  if (opts.subagentConfig?.systemPrompt) {\n    return {\n      systemPrompt: opts.subagentConfig.systemPrompt,\n      systemReminder: opts.subagentConfig.systemReminder,\n    };\n  }\n\n  // Fall back to loading agents from disk\n  const agentName =\n    type === \"root\"\n      ? \"default\"\n      : type === \"docker_root\"\n        ? \"docker\"\n        : \"subagent\";\n\n  const agents = loadAgents({\n    cwd: opts.cwd,\n    logger: opts.logger,\n    options: opts.options,\n  });\n  const agent = agents[agentName];\n  if (agent) {\n    return {\n      systemPrompt: agent.systemPrompt,\n      systemReminder: agent.systemReminder,\n    };\n  }\n\n  return {\n    systemPrompt: \"You are a helpful coding assistant.\",\n    systemReminder: undefined,\n  };\n}",
-      "contextualizedText": "// node/core/src/providers/system-prompt.ts \u003e function getBaseSystemPrompt\n\nfunction getBaseSystemPrompt(\n  type: ThreadType,\n  opts: {\n    subagentConfig?: SubagentConfig | undefined;\n    logger: Logger;\n    cwd: NvimCwd;\n    options: ProviderOptions;\n  },\n): { systemPrompt: string; systemReminder: string | undefined } {\n  if (type === \"compact\") {\n    return { systemPrompt: COMPACT_SYSTEM_PROMPT, systemReminder: undefined };\n  }\n\n  if (opts.subagentConfig?.systemPrompt) {\n    return {\n      systemPrompt: opts.subagentConfig.systemPrompt,\n      systemReminder: opts.subagentConfig.systemReminder,\n    };\n  }\n\n  // Fall back to loading agents from disk\n  const agentName =\n    type === \"root\"\n      ? \"default\"\n      : type === \"docker_root\"\n        ? \"docker\"\n        : \"subagent\";\n\n  const agents = loadAgents({\n    cwd: opts.cwd,\n    logger: opts.logger,\n    options: opts.options,\n  });\n  const agent = agents[agentName];\n  if (agent) {\n    return {\n      systemPrompt: agent.systemPrompt,\n      systemReminder: agent.systemReminder,\n    };\n  }\n\n  return {\n    systemPrompt: \"You are a helpful coding assistant.\",\n    systemReminder: undefined,\n  };\n}",
-      "headingContext": "node/core/src/providers/system-prompt.ts \u003e function getBaseSystemPrompt",
-      "startLine": 27,
-      "startCol": 1,
-      "endLine": 72,
-      "endCol": 2
-    },
-    {
-      "text": "export async function createSystemPrompt(\n  type: ThreadType,\n  context: {\n    logger: Logger;\n    cwd: NvimCwd;\n    options: ProviderOptions;\n    fileIO: FileIO;\n    homeDir: HomeDir;\n    dockerAvailable?: boolean;\n    subagentConfig?: SubagentConfig;\n  },\n): Promise\u003cSystemPrompt\u003e {\n  const { systemPrompt: basePrompt, systemReminder } = getBaseSystemPrompt(\n    type,\n    {\n      subagentConfig: context.subagentConfig,\n      logger: context.logger,\n      cwd: context.cwd,\n      options: context.options,\n    },\n  );\n  const skills =\n    type === \"compact\" ? ({} as SkillsMap) : await loadSkills(context);\n\n  const skillsText = formatSkillsIntroduction(skills);\n\n  const reminderText = systemReminder\n    ? `\\n\u003csystem_reminder\u003e\\n${systemReminder}\\n\u003c/system_reminder\u003e`\n    : \"\";\n\n  return (basePrompt + skillsText + reminderText) as SystemPrompt;\n}",
-      "contextualizedText": "// node/core/src/providers/system-prompt.ts \u003e function createSystemPrompt\n\nexport async function createSystemPrompt(\n  type: ThreadType,\n  context: {\n    logger: Logger;\n    cwd: NvimCwd;\n    options: ProviderOptions;\n    fileIO: FileIO;\n    homeDir: HomeDir;\n    dockerAvailable?: boolean;\n    subagentConfig?: SubagentConfig;\n  },\n): Promise\u003cSystemPrompt\u003e {\n  const { systemPrompt: basePrompt, systemReminder } = getBaseSystemPrompt(\n    type,\n    {\n      subagentConfig: context.subagentConfig,\n      logger: context.logger,\n      cwd: context.cwd,\n      options: context.options,\n    },\n  );\n  const skills =\n    type === \"compact\" ? ({} as SkillsMap) : await loadSkills(context);\n\n  const skillsText = formatSkillsIntroduction(skills);\n\n  const reminderText = systemReminder\n    ? `\\n\u003csystem_reminder\u003e\\n${systemReminder}\\n\u003c/system_reminder\u003e`\n    : \"\";\n\n  return (basePrompt + skillsText + reminderText) as SystemPrompt;\n}",
-      "headingContext": "node/core/src/providers/system-prompt.ts \u003e function createSystemPrompt",
-      "startLine": 74,
-      "startCol": 1,
-      "endLine": 105,
-      "endCol": 2
-    },
-    {
-      "text": "// The system info (timestamp, cwd, git state) is volatile and would bust the\n// cached system-prompt + tools prefix if included in the system prompt. Instead\n// we prepend it to the first user message of a thread so the system prefix stays\n// byte-identical across threads.\nexport function formatSystemInfo(systemInfo: SystemInfo): string {\n  return `\u003csystem-info\u003e\n# System Information\n- Current time: ${systemInfo.timestamp}\n- Operating system: ${systemInfo.platform}\n- Neovim version: ${systemInfo.neovimVersion}\n- Current working directory: ${systemInfo.cwd}\n${formatGitInfo(systemInfo.git)}\n\u003c/system-info\u003e`;\n}",
-      "contextualizedText": "// node/core/src/providers/system-prompt.ts \u003e function formatSystemInfo\n\n// The system info (timestamp, cwd, git state) is volatile and would bust the\n// cached system-prompt + tools prefix if included in the system prompt. Instead\n// we prepend it to the first user message of a thread so the system prefix stays\n// byte-identical across threads.\nexport function formatSystemInfo(systemInfo: SystemInfo): string {\n  return `\u003csystem-info\u003e\n# System Information\n- Current time: ${systemInfo.timestamp}\n- Operating system: ${systemInfo.platform}\n- Neovim version: ${systemInfo.neovimVersion}\n- Current working directory: ${systemInfo.cwd}\n${formatGitInfo(systemInfo.git)}\n\u003c/system-info\u003e`;\n}",
-      "headingContext": "node/core/src/providers/system-prompt.ts \u003e function formatSystemInfo",
-      "startLine": 107,
-      "startCol": 1,
-      "endLine": 120,
-      "endCol": 2
+      "start": 2109,
+      "end": 3576
     }
   ]
 }

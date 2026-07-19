@@ -1,69 +1,15 @@
 {
   "blobSha": "e3680adb426567dfd6ccef5361194d8dca9feacd",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type {\n  LspClient,\n  LspDefinitionResponse,\n  LspHoverResponse,\n  LspReferencesResponse,\n} from \"@magenta/core\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { Row0Indexed, StringIdx } from \"../nvim/window.ts\";\nimport { getOrOpenBuffer } from \"../utils/buffers.ts\";\nimport type {\n  AbsFilePath,\n  HomeDir,\n  NvimCwd,\n  UnresolvedFilePath,\n} from \"../utils/files.ts\";\nimport type { Lsp } from \"./lsp.ts\";",
-      "contextualizedText": "// node/capabilities/lsp-client-adapter.ts\n\nimport type {\n  LspClient,\n  LspDefinitionResponse,\n  LspHoverResponse,\n  LspReferencesResponse,\n} from \"@magenta/core\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport type { Row0Indexed, StringIdx } from \"../nvim/window.ts\";\nimport { getOrOpenBuffer } from \"../utils/buffers.ts\";\nimport type {\n  AbsFilePath,\n  HomeDir,\n  NvimCwd,\n  UnresolvedFilePath,\n} from \"../utils/files.ts\";\nimport type { Lsp } from \"./lsp.ts\";",
-      "headingContext": "node/capabilities/lsp-client-adapter.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 37
+      "start": 0,
+      "end": 1962
     },
     {
-      "text": "export class NvimLspClient implements LspClient {\n  constructor(\n    private lsp: Lsp,\n    private nvim: Nvim,\n    private cwd: NvimCwd,\n    private homeDir: HomeDir,\n  ) {}",
-      "contextualizedText": "// node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient\n\nexport class NvimLspClient implements LspClient {\n  constructor(\n    private lsp: Lsp,\n    private nvim: Nvim,\n    private cwd: NvimCwd,\n    private homeDir: HomeDir,\n  ) {}",
-      "headingContext": "node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient",
-      "startLine": 18,
-      "startCol": 1,
-      "endLine": 24,
-      "endCol": 7
-    },
-    {
-      "text": "  async requestHover(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspHoverResponse\u003e {\n    const buffer = await this.getBuffer(filePath);\n    return this.lsp.requestHover(buffer, {\n      row: position.line as Row0Indexed,\n      col: position.character as StringIdx,\n    });\n  }",
-      "contextualizedText": "// node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient \u003e method requestHover\n\n  async requestHover(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspHoverResponse\u003e {\n    const buffer = await this.getBuffer(filePath);\n    return this.lsp.requestHover(buffer, {\n      row: position.line as Row0Indexed,\n      col: position.character as StringIdx,\n    });\n  }",
-      "headingContext": "node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient \u003e method requestHover",
-      "startLine": 26,
-      "startCol": 1,
-      "endLine": 35,
-      "endCol": 4
-    },
-    {
-      "text": "  async requestReferences(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspReferencesResponse\u003e {\n    const buffer = await this.getBuffer(filePath);\n    return this.lsp.requestReferences(buffer, {\n      row: position.line as Row0Indexed,\n      col: position.character as StringIdx,\n    });\n  }",
-      "contextualizedText": "// node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient \u003e method requestReferences\n\n  async requestReferences(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspReferencesResponse\u003e {\n    const buffer = await this.getBuffer(filePath);\n    return this.lsp.requestReferences(buffer, {\n      row: position.line as Row0Indexed,\n      col: position.character as StringIdx,\n    });\n  }",
-      "headingContext": "node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient \u003e method requestReferences",
-      "startLine": 37,
-      "startCol": 1,
-      "endLine": 46,
-      "endCol": 4
-    },
-    {
-      "text": "  async requestDefinition(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e {\n    const buffer = await this.getBuffer(filePath);\n    return this.lsp.requestDefinition(buffer, {\n      row: position.line as Row0Indexed,\n      col: position.character as StringIdx,\n    });\n  }",
-      "contextualizedText": "// node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient \u003e method requestDefinition\n\n  async requestDefinition(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e {\n    const buffer = await this.getBuffer(filePath);\n    return this.lsp.requestDefinition(buffer, {\n      row: position.line as Row0Indexed,\n      col: position.character as StringIdx,\n    });\n  }",
-      "headingContext": "node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient \u003e method requestDefinition",
-      "startLine": 48,
-      "startCol": 1,
-      "endLine": 57,
-      "endCol": 4
-    },
-    {
-      "text": "  async requestTypeDefinition(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e {\n    const buffer = await this.getBuffer(filePath);\n    return this.lsp.requestTypeDefinition(buffer, {\n      row: position.line as Row0Indexed,\n      col: position.character as StringIdx,\n    });\n  }",
-      "contextualizedText": "// node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient \u003e method requestTypeDefinition\n\n  async requestTypeDefinition(\n    filePath: AbsFilePath,\n    position: { line: number; character: number },\n  ): Promise\u003cLspDefinitionResponse\u003e {\n    const buffer = await this.getBuffer(filePath);\n    return this.lsp.requestTypeDefinition(buffer, {\n      row: position.line as Row0Indexed,\n      col: position.character as StringIdx,\n    });\n  }",
-      "headingContext": "node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient \u003e method requestTypeDefinition",
-      "startLine": 59,
-      "startCol": 1,
-      "endLine": 68,
-      "endCol": 4
-    },
-    {
-      "text": "  private async getBuffer(filePath: AbsFilePath) {\n    const result = await getOrOpenBuffer({\n      unresolvedPath: filePath as string as UnresolvedFilePath,\n      context: {\n        nvim: this.nvim,\n        cwd: this.cwd,\n        homeDir: this.homeDir,\n      },\n    });\n\n    if (result.status !== \"ok\") {\n      throw new Error(`Failed to open buffer for ${filePath}: ${result.error}`);\n    }\n\n    return result.buffer;\n  }",
-      "contextualizedText": "// node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient \u003e method getBuffer\n\n  private async getBuffer(filePath: AbsFilePath) {\n    const result = await getOrOpenBuffer({\n      unresolvedPath: filePath as string as UnresolvedFilePath,\n      context: {\n        nvim: this.nvim,\n        cwd: this.cwd,\n        homeDir: this.homeDir,\n      },\n    });\n\n    if (result.status !== \"ok\") {\n      throw new Error(`Failed to open buffer for ${filePath}: ${result.error}`);\n    }\n\n    return result.buffer;\n  }",
-      "headingContext": "node/capabilities/lsp-client-adapter.ts \u003e class NvimLspClient \u003e method getBuffer",
-      "startLine": 70,
-      "startCol": 1,
-      "endLine": 85,
-      "endCol": 4
+      "start": 1966,
+      "end": 2389
     }
   ]
 }

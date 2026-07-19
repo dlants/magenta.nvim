@@ -1,348 +1,47 @@
 {
   "blobSha": "4411d29c1da781f168f853241876a438a5886e9e",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport { afterEach, beforeEach, describe, expect, it } from \"vitest\";\nimport {\n  BUILTIN_SKILLS_PATH,\n  DEFAULT_SANDBOX_CONFIG,\n  loadProjectSettings,\n  loadUserSettings,\n  type MagentaOptions,\n  mergeOptions,\n  parseOptions,\n  parseProjectOptions,\n} from \"./options.ts\";\nimport type { NvimCwd } from \"./utils/files.ts\";",
-      "contextualizedText": "// node/options.test.ts\n\nimport * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport { afterEach, beforeEach, describe, expect, it } from \"vitest\";\nimport {\n  BUILTIN_SKILLS_PATH,\n  DEFAULT_SANDBOX_CONFIG,\n  loadProjectSettings,\n  loadUserSettings,\n  type MagentaOptions,\n  mergeOptions,\n  parseOptions,\n  parseProjectOptions,\n} from \"./options.ts\";\nimport type { NvimCwd } from \"./utils/files.ts\";",
-      "headingContext": "node/options.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 14,
-      "endCol": 49
+      "start": 0,
+      "end": 1671
     },
     {
-      "text": "function makeBaseOptions(overrides?: Partial\u003cMagentaOptions\u003e): MagentaOptions {\n  return {\n    profiles: [\n      {\n        name: \"test\",\n        provider: \"mock\",\n        model: \"mock\",\n        fastModel: \"mock-fast\",\n        thinkingModel: \"mock\",\n      },\n    ],\n    activeProfile: \"test\",\n    sidebarPosition: \"left\",\n    sidebarPositionOpts: {\n      above: { displayHeightPercentage: 0.3, inputHeightPercentage: 0.1 },\n      below: { displayHeightPercentage: 0.3, inputHeightPercentage: 0.1 },\n      tab: { displayHeightPercentage: 0.8 },\n      left: { widthPercentage: 0.4, displayHeightPercentage: 0.8 },\n      right: { widthPercentage: 0.4, displayHeightPercentage: 0.8 },\n    },\n    maxConcurrentSubagents: 3,\n    maxConcurrentFastSubagents: 8,\n    autoCompactThreshold: 300000,\n    autoCompactPrompt:\n      \"Continue with the task you were working on before the conversation was automatically compacted.\",\n    sandbox: structuredClone(DEFAULT_SANDBOX_CONFIG),\n    autoContext: [],\n    hierarchyContextFileNames: [\"context.md\", \"agent.md\"],\n    skillsPaths: [],\n    scriptsPaths: [],\n    suppressProjectSkills: [],\n    agentsPaths: [],\n    mcpServers: {},\n    customCommands: [],\n    ...overrides,\n  };\n}",
-      "contextualizedText": "// node/options.test.ts \u003e function makeBaseOptions\n\nfunction makeBaseOptions(overrides?: Partial\u003cMagentaOptions\u003e): MagentaOptions {\n  return {\n    profiles: [\n      {\n        name: \"test\",\n        provider: \"mock\",\n        model: \"mock\",\n        fastModel: \"mock-fast\",\n        thinkingModel: \"mock\",\n      },\n    ],\n    activeProfile: \"test\",\n    sidebarPosition: \"left\",\n    sidebarPositionOpts: {\n      above: { displayHeightPercentage: 0.3, inputHeightPercentage: 0.1 },\n      below: { displayHeightPercentage: 0.3, inputHeightPercentage: 0.1 },\n      tab: { displayHeightPercentage: 0.8 },\n      left: { widthPercentage: 0.4, displayHeightPercentage: 0.8 },\n      right: { widthPercentage: 0.4, displayHeightPercentage: 0.8 },\n    },\n    maxConcurrentSubagents: 3,\n    maxConcurrentFastSubagents: 8,\n    autoCompactThreshold: 300000,\n    autoCompactPrompt:\n      \"Continue with the task you were working on before the conversation was automatically compacted.\",\n    sandbox: structuredClone(DEFAULT_SANDBOX_CONFIG),\n    autoContext: [],\n    hierarchyContextFileNames: [\"context.md\", \"agent.md\"],\n    skillsPaths: [],\n    scriptsPaths: [],\n    suppressProjectSkills: [],\n    agentsPaths: [],\n    mcpServers: {},\n    customCommands: [],\n    ...overrides,\n  };\n}",
-      "headingContext": "node/options.test.ts \u003e function makeBaseOptions",
-      "startLine": 16,
-      "startCol": 1,
-      "endLine": 52,
-      "endCol": 2
+      "start": 1673,
+      "end": 3730
     },
     {
-      "text": "noopLogger",
-      "contextualizedText": "// node/options.test.ts\n\nnoopLogger",
-      "headingContext": "node/options.test.ts",
-      "startLine": 54,
-      "startCol": 7,
-      "endLine": 54,
-      "endCol": 17
+      "start": 3734,
+      "end": 5579
     },
     {
-      "text": "  warn: () =\u003e {}",
-      "contextualizedText": "// node/options.test.ts \u003e function warn\n\n  warn: () =\u003e {}",
-      "headingContext": "node/options.test.ts \u003e function warn",
-      "startLine": 55,
-      "startCol": 1,
-      "endLine": 55,
-      "endCol": 17
+      "start": 5581,
+      "end": 7615
     },
     {
-      "text": "  error: () =\u003e {}",
-      "contextualizedText": "// node/options.test.ts \u003e function error\n\n  error: () =\u003e {}",
-      "headingContext": "node/options.test.ts \u003e function error",
-      "startLine": 56,
-      "startCol": 1,
-      "endLine": 56,
-      "endCol": 18
+      "start": 7619,
+      "end": 9687
     },
     {
-      "text": "describe(\"parseSandboxConfig\", () =\u003e {\n  it(\"should parse valid sandbox config\", () =\u003e {\n    const input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n      sandbox: {\n        filesystem: {\n          allowWrite: [\"/tmp\"],\n          denyWrite: [\".secret\"],\n          denyRead: [\"~/.ssh\"],\n        },\n        network: {\n          allowedDomains: [\"example.com\"],\n          deniedDomains: [\"evil.com\"],\n          allowUnixSockets: [],\n          allowAllUnixSockets: false,\n        },\n      },\n    };\n    const result = parseOptions(input, noopLogger);\n    expect(result.sandbox).toEqual({\n      filesystem: {\n        allowWrite: [...DEFAULT_SANDBOX_CONFIG.filesystem.allowWrite, \"/tmp\"],\n        denyWrite: [...DEFAULT_SANDBOX_CONFIG.filesystem.denyWrite, \".secret\"],\n        denyRead: [...DEFAULT_SANDBOX_CONFIG.filesystem.denyRead, \"~/.ssh\"],\n        allowRead: [...DEFAULT_SANDBOX_CONFIG.filesystem.allowRead],\n      },\n      network: {\n        allowedDomains: [\n          ...DEFAULT_SANDBOX_CONFIG.network.allowedDomains,\n          \"example.com\",\n        ],\n        deniedDomains: [\n          ...DEFAULT_SANDBOX_CONFIG.network.deniedDomains,\n          \"evil.com\",\n        ],\n        allowUnixSockets: [...DEFAULT_SANDBOX_CONFIG.network.allowUnixSockets],\n        allowAllUnixSockets: DEFAULT_SANDBOX_CONFIG.network.allowAllUnixSockets,\n        onUnknownHost: DEFAULT_SANDBOX_CONFIG.network.onUnknownHost,\n      },\n      requireApprovalPatterns: [\n        ...DEFAULT_SANDBOX_CONFIG.requireApprovalPatterns,\n      ],\n      strace: { ...DEFAULT_SANDBOX_CONFIG.strace },\n    });\n  });",
-      "contextualizedText": "// node/options.test.ts\n\ndescribe(\"parseSandboxConfig\", () =\u003e {\n  it(\"should parse valid sandbox config\", () =\u003e {\n    const input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n      sandbox: {\n        filesystem: {\n          allowWrite: [\"/tmp\"],\n          denyWrite: [\".secret\"],\n          denyRead: [\"~/.ssh\"],\n        },\n        network: {\n          allowedDomains: [\"example.com\"],\n          deniedDomains: [\"evil.com\"],\n          allowUnixSockets: [],\n          allowAllUnixSockets: false,\n        },\n      },\n    };\n    const result = parseOptions(input, noopLogger);\n    expect(result.sandbox).toEqual({\n      filesystem: {\n        allowWrite: [...DEFAULT_SANDBOX_CONFIG.filesystem.allowWrite, \"/tmp\"],\n        denyWrite: [...DEFAULT_SANDBOX_CONFIG.filesystem.denyWrite, \".secret\"],\n        denyRead: [...DEFAULT_SANDBOX_CONFIG.filesystem.denyRead, \"~/.ssh\"],\n        allowRead: [...DEFAULT_SANDBOX_CONFIG.filesystem.allowRead],\n      },\n      network: {\n        allowedDomains: [\n          ...DEFAULT_SANDBOX_CONFIG.network.allowedDomains,\n          \"example.com\",\n        ],\n        deniedDomains: [\n          ...DEFAULT_SANDBOX_CONFIG.network.deniedDomains,\n          \"evil.com\",\n        ],\n        allowUnixSockets: [...DEFAULT_SANDBOX_CONFIG.network.allowUnixSockets],\n        allowAllUnixSockets: DEFAULT_SANDBOX_CONFIG.network.allowAllUnixSockets,\n        onUnknownHost: DEFAULT_SANDBOX_CONFIG.network.onUnknownHost,\n      },\n      requireApprovalPatterns: [\n        ...DEFAULT_SANDBOX_CONFIG.requireApprovalPatterns,\n      ],\n      strace: { ...DEFAULT_SANDBOX_CONFIG.strace },\n    });\n  });",
-      "headingContext": "node/options.test.ts",
-      "startLine": 59,
-      "startCol": 1,
-      "endLine": 103,
-      "endCol": 6
+      "start": 9691,
+      "end": 11480
     },
     {
-      "text": "it(\"parses network.onUnknownHost and strace.autoAllowViolations\", () =\u003e {\n    const input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n      sandbox: {\n        network: { onUnknownHost: \"allow\" },\n        strace: { autoAllowViolations: true },\n      },\n    };\n    const result = parseOptions(input, noopLogger);\n    expect(result.sandbox.network.onUnknownHost).toBe(\"allow\");\n    expect(result.sandbox.strace.autoAllowViolations).toBe(true);\n  });\n\n  it(\"warns and defaults on invalid network.onUnknownHost\", () =\u003e {\n    const warnings: string[] = [];\n",
-      "contextualizedText": "// node/options.test.ts\n\nit(\"parses network.onUnknownHost and strace.autoAllowViolations\", () =\u003e {\n    const input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n      sandbox: {\n        network: { onUnknownHost: \"allow\" },\n        strace: { autoAllowViolations: true },\n      },\n    };\n    const result = parseOptions(input, noopLogger);\n    expect(result.sandbox.network.onUnknownHost).toBe(\"allow\");\n    expect(result.sandbox.strace.autoAllowViolations).toBe(true);\n  });\n\n  it(\"warns and defaults on invalid network.onUnknownHost\", () =\u003e {\n    const warnings: string[] = [];\n",
-      "headingContext": "node/options.test.ts",
-      "startLine": 105,
-      "startCol": 3,
-      "endLine": 120,
-      "endCol": 1
+      "start": 11482,
+      "end": 13404
     },
     {
-      "text": "    const logger = { warn: (m: string) =\u003e warnings.push(m)",
-      "contextualizedText": "// node/options.test.ts \u003e function warn\n\n    const logger = { warn: (m: string) =\u003e warnings.push(m)",
-      "headingContext": "node/options.test.ts \u003e function warn",
-      "startLine": 120,
-      "startCol": 1,
-      "endLine": 120,
-      "endCol": 59
+      "start": 13408,
+      "end": 15528
     },
     {
-      "text": "    const logger = { warn: (m: string) =\u003e warnings.push(m), error: () =\u003e {}",
-      "contextualizedText": "// node/options.test.ts \u003e function error\n\n    const logger = { warn: (m: string) =\u003e warnings.push(m), error: () =\u003e {}",
-      "headingContext": "node/options.test.ts \u003e function error",
-      "startLine": 120,
-      "startCol": 1,
-      "endLine": 120,
-      "endCol": 76
+      "start": 15530,
+      "end": 17589
     },
     {
-      "text": "const input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n      sandbox: { network: { onUnknownHost: \"bogus\" } },\n    };\n    const result = parseOptions(input, logger);\n    expect(result.sandbox.network.onUnknownHost).toBe(\"prompt\");\n    expect(warnings.some((w) =\u003e w.includes(\"onUnknownHost\"))).toBe(true);\n  });\n\n  it(\"defaults onUnknownHost to prompt and autoAllowViolations to false\", () =\u003e {\n    const input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n      sandbox: {},\n    };\n    const result = parseOptions(input, noopLogger);\n    expect(result.sandbox.network.onUnknownHost).toBe(\"prompt\");\n    expect(result.sandbox.strace.autoAllowViolations).toBe(false);\n  });\n\n  it(\"should fill defaults for missing fields\", () =\u003e {\n    const input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n      sandbox: {},\n    };\n    const result = parseOptions(input, noopLogger);\n    expect(result.sandbox.filesystem).toEqual(\n      DEFAULT_SANDBOX_CONFIG.filesystem,\n    );\n    expect(result.sandbox.network).toEqual(DEFAULT_SANDBOX_CONFIG.network);\n  });\n\n  it(\"should use all defaults when sandbox is not provided\", () =\u003e {\n    const input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n    };\n    const result = parseOptions(input, noopLogger);\n    expect(result.sandbox).toEqual(DEFAULT_SANDBOX_CONFIG);\n  });\n});\n\ndescribe(\"DEFAULT_SANDBOX_CONFIG security\", () =\u003e {\n  it(\"should deny writes to both project and home .magenta directories\", () =\u003e {\n    expect(DEFAULT_SANDBOX_CONFIG.filesystem.denyWrite).toContain(\".magenta\");\n    expect(DEFAULT_SANDBOX_CONFIG.filesystem.denyWrite).toContain(\"~/.magenta\");\n  });\n});",
-      "contextualizedText": "// node/options.test.ts\n\nconst input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n      sandbox: { network: { onUnknownHost: \"bogus\" } },\n    };\n    const result = parseOptions(input, logger);\n    expect(result.sandbox.network.onUnknownHost).toBe(\"prompt\");\n    expect(warnings.some((w) =\u003e w.includes(\"onUnknownHost\"))).toBe(true);\n  });\n\n  it(\"defaults onUnknownHost to prompt and autoAllowViolations to false\", () =\u003e {\n    const input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n      sandbox: {},\n    };\n    const result = parseOptions(input, noopLogger);\n    expect(result.sandbox.network.onUnknownHost).toBe(\"prompt\");\n    expect(result.sandbox.strace.autoAllowViolations).toBe(false);\n  });\n\n  it(\"should fill defaults for missing fields\", () =\u003e {\n    const input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n      sandbox: {},\n    };\n    const result = parseOptions(input, noopLogger);\n    expect(result.sandbox.filesystem).toEqual(\n      DEFAULT_SANDBOX_CONFIG.filesystem,\n    );\n    expect(result.sandbox.network).toEqual(DEFAULT_SANDBOX_CONFIG.network);\n  });\n\n  it(\"should use all defaults when sandbox is not provided\", () =\u003e {\n    const input = {\n      profiles: [{ name: \"test\", provider: \"mock\" }],\n    };\n    const result = parseOptions(input, noopLogger);\n    expect(result.sandbox).toEqual(DEFAULT_SANDBOX_CONFIG);\n  });\n});\n\ndescribe(\"DEFAULT_SANDBOX_CONFIG security\", () =\u003e {\n  it(\"should deny writes to both project and home .magenta directories\", () =\u003e {\n    expect(DEFAULT_SANDBOX_CONFIG.filesystem.denyWrite).toContain(\".magenta\");\n    expect(DEFAULT_SANDBOX_CONFIG.filesystem.denyWrite).toContain(\"~/.magenta\");\n  });\n});",
-      "headingContext": "node/options.test.ts",
-      "startLine": 121,
-      "startCol": 5,
-      "endLine": 166,
-      "endCol": 4
-    },
-    {
-      "text": "describe(\"parseProjectOptions sandbox\", () =\u003e {\n  it(\"should parse sandbox from project options\", () =\u003e {\n    const result = parseProjectOptions(\n      {\n        sandbox: {\n          filesystem: { denyRead: [\"/secret\"] },\n        },\n      },\n      noopLogger,\n    );\n    expect(result.sandbox?.filesystem.denyRead).toEqual([\"/secret\"]);\n    expect(result.sandbox?.filesystem.allowWrite).toEqual([]);\n  });\n});\n\ndescribe(\"mergeOptions\", ()",
-      "contextualizedText": "// node/options.test.ts\n\ndescribe(\"parseProjectOptions sandbox\", () =\u003e {\n  it(\"should parse sandbox from project options\", () =\u003e {\n    const result = parseProjectOptions(\n      {\n        sandbox: {\n          filesystem: { denyRead: [\"/secret\"] },\n        },\n      },\n      noopLogger,\n    );\n    expect(result.sandbox?.filesystem.denyRead).toEqual([\"/secret\"]);\n    expect(result.sandbox?.filesystem.allowWrite).toEqual([]);\n  });\n});\n\ndescribe(\"mergeOptions\", ()",
-      "headingContext": "node/options.test.ts",
-      "startLine": 168,
-      "startCol": 1,
-      "endLine": 183,
-      "endCol": 28
-    },
-    {
-      "text": "it(\"should concatenate sandbox arrays\", () =\u003e {\n    const base = makeBaseOptions({\n      sandbox: {\n        filesystem: {\n          allowWrite: [\"./\"],\n          denyWrite: [\".env\"],\n          denyRead: [\"~/.ssh\"],\n          allowRead: [],\n        },\n        network: {\n          allowedDomains: [\"registry.npmjs.org\"],\n          deniedDomains: [],\n          allowUnixSockets: [],\n          allowAllUnixSockets: false,\n          onUnknownHost: \"prompt\",\n        },\n        requireApprovalPatterns: [],\n        strace: {\n          autoAllowViolations: false,\n        },\n      },\n    });\n\n    const merged = mergeOptions(base, {\n      sandbox: {\n        filesystem: {\n          allowWrite: [\"/tmp\"],\n          denyWrite: [\".git/hooks/\"],\n          denyRead: [\"~/.aws\"],\n          allowRead: [],\n        },\n        network: {\n          allowedDomains: [\"github.com\"],\n          deniedDomains: [\"evil.com\"],\n          allowUnixSockets: [],\n          allowAllUnixSockets: false,\n          onUnknownHost: \"prompt\",\n        },\n        requireApprovalPatterns: [],\n        strace: {\n          autoAllowViolations: false,\n        },\n      },\n    });\n\n    expect(merged.sandbox.filesystem.allowWrite).toEqual([\"./\", \"/tmp\"]);\n    expect(merged.sandbox.filesystem.denyWrite).toEqual([\n      \".env\",\n      \".git/hooks/\",\n    ]);\n    expect(merged.sandbox.filesystem.denyRead).toEqual([\"~/.ssh\", \"~/.aws\"]);\n    expect(merged.sandbox.network.allowedDomains).toEqual([\n      \"registry.npmjs.org\",\n      \"github.com\",\n    ]);\n    expect(merged.sandbox.network.deniedDomains).toEqual([\"evil.com\"]);\n  });\n\n  it(\"should keep base sandbox when project has no sandbox\", () =\u003e {\n    const base = makeBaseOptions();\n    const merged = mergeOptions(base, {});\n    expect(merged.sandbox).toEqual(base.sandbox);\n  });",
-      "contextualizedText": "// node/options.test.ts\n\nit(\"should concatenate sandbox arrays\", () =\u003e {\n    const base = makeBaseOptions({\n      sandbox: {\n        filesystem: {\n          allowWrite: [\"./\"],\n          denyWrite: [\".env\"],\n          denyRead: [\"~/.ssh\"],\n          allowRead: [],\n        },\n        network: {\n          allowedDomains: [\"registry.npmjs.org\"],\n          deniedDomains: [],\n          allowUnixSockets: [],\n          allowAllUnixSockets: false,\n          onUnknownHost: \"prompt\",\n        },\n        requireApprovalPatterns: [],\n        strace: {\n          autoAllowViolations: false,\n        },\n      },\n    });\n\n    const merged = mergeOptions(base, {\n      sandbox: {\n        filesystem: {\n          allowWrite: [\"/tmp\"],\n          denyWrite: [\".git/hooks/\"],\n          denyRead: [\"~/.aws\"],\n          allowRead: [],\n        },\n        network: {\n          allowedDomains: [\"github.com\"],\n          deniedDomains: [\"evil.com\"],\n          allowUnixSockets: [],\n          allowAllUnixSockets: false,\n          onUnknownHost: \"prompt\",\n        },\n        requireApprovalPatterns: [],\n        strace: {\n          autoAllowViolations: false,\n        },\n      },\n    });\n\n    expect(merged.sandbox.filesystem.allowWrite).toEqual([\"./\", \"/tmp\"]);\n    expect(merged.sandbox.filesystem.denyWrite).toEqual([\n      \".env\",\n      \".git/hooks/\",\n    ]);\n    expect(merged.sandbox.filesystem.denyRead).toEqual([\"~/.ssh\", \"~/.aws\"]);\n    expect(merged.sandbox.network.allowedDomains).toEqual([\n      \"registry.npmjs.org\",\n      \"github.com\",\n    ]);\n    expect(merged.sandbox.network.deniedDomains).toEqual([\"evil.com\"]);\n  });\n\n  it(\"should keep base sandbox when project has no sandbox\", () =\u003e {\n    const base = makeBaseOptions();\n    const merged = mergeOptions(base, {});\n    expect(merged.sandbox).toEqual(base.sandbox);\n  });",
-      "headingContext": "node/options.test.ts",
-      "startLine": 184,
-      "startCol": 3,
-      "endLine": 246,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"lets project scalars override user scalars (last-writer-wins)\", () =\u003e {\n    const base = makeBaseOptions();\n    const projectSandbox = parseProjectOptions(\n      {\n        sandbox: {\n          network: { onUnknownHost: \"deny\" },\n          strace: { autoAllowViolations: true },\n        },\n      },\n      noopLogger,\n    ).sandbox!;\n    const merged = mergeOptions(base, { sandbox: projectSandbox });\n    expect(merged.sandbox.network.onUnknownHost).toBe(\"deny\");\n    expect(merged.sandbox.strace.autoAllowViolations).toBe(true);\n  });\n});\n\ndescribe(\"parseProfiles tokenRefreshCommand\", () =\u003e {\n  it(\"accepts a non-empty string\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "contextualizedText": "// node/options.test.ts\n\nit(\"lets project scalars override user scalars (last-writer-wins)\", () =\u003e {\n    const base = makeBaseOptions();\n    const projectSandbox = parseProjectOptions(\n      {\n        sandbox: {\n          network: { onUnknownHost: \"deny\" },\n          strace: { autoAllowViolations: true },\n        },\n      },\n      noopLogger,\n    ).sandbox!;\n    const merged = mergeOptions(base, { sandbox: projectSandbox });\n    expect(merged.sandbox.network.onUnknownHost).toBe(\"deny\");\n    expect(merged.sandbox.strace.autoAllowViolations).toBe(true);\n  });\n});\n\ndescribe(\"parseProfiles tokenRefreshCommand\", () =\u003e {\n  it(\"accepts a non-empty string\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "headingContext": "node/options.test.ts",
-      "startLine": 247,
-      "startCol": 3,
-      "endLine": 267,
-      "endCol": 17
-    },
-    {
-      "text": "      warn: (msg: string) =\u003e warnings.push(msg)",
-      "contextualizedText": "// node/options.test.ts \u003e function warn\n\n      warn: (msg: string) =\u003e warnings.push(msg)",
-      "headingContext": "node/options.test.ts \u003e function warn",
-      "startLine": 268,
-      "startCol": 1,
-      "endLine": 268,
-      "endCol": 48
-    },
-    {
-      "text": "      error: () =\u003e {}",
-      "contextualizedText": "// node/options.test.ts \u003e function error\n\n      error: () =\u003e {}",
-      "headingContext": "node/options.test.ts \u003e function error",
-      "startLine": 269,
-      "startCol": 1,
-      "endLine": 269,
-      "endCol": 22
-    },
-    {
-      "text": "const result = parseOptions(\n      {\n        profiles: [\n          {\n            name: \"bedrock\",\n            provider: \"bedrock\",\n            model: \"us.anthropic.claude-sonnet-4-5-v1:0\",\n            tokenRefreshCommand: \"aws sso login --profile myprofile\",\n          },\n        ],\n      },\n      logger,\n    );\n    expect(result.profiles[0].tokenRefreshCommand).toBe(\n      \"aws sso login --profile myprofile\",\n    );\n    expect(warnings).toEqual([]);\n  });\n\n  it(\"warns and drops a non-string value\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "contextualizedText": "// node/options.test.ts\n\nconst result = parseOptions(\n      {\n        profiles: [\n          {\n            name: \"bedrock\",\n            provider: \"bedrock\",\n            model: \"us.anthropic.claude-sonnet-4-5-v1:0\",\n            tokenRefreshCommand: \"aws sso login --profile myprofile\",\n          },\n        ],\n      },\n      logger,\n    );\n    expect(result.profiles[0].tokenRefreshCommand).toBe(\n      \"aws sso login --profile myprofile\",\n    );\n    expect(warnings).toEqual([]);\n  });\n\n  it(\"warns and drops a non-string value\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "headingContext": "node/options.test.ts",
-      "startLine": 271,
-      "startCol": 5,
-      "endLine": 292,
-      "endCol": 17
-    },
-    {
-      "text": "      warn: (msg: string) =\u003e warnings.push(msg)",
-      "contextualizedText": "// node/options.test.ts \u003e function warn\n\n      warn: (msg: string) =\u003e warnings.push(msg)",
-      "headingContext": "node/options.test.ts \u003e function warn",
-      "startLine": 293,
-      "startCol": 1,
-      "endLine": 293,
-      "endCol": 48
-    },
-    {
-      "text": "      error: () =\u003e {}",
-      "contextualizedText": "// node/options.test.ts \u003e function error\n\n      error: () =\u003e {}",
-      "headingContext": "node/options.test.ts \u003e function error",
-      "startLine": 294,
-      "startCol": 1,
-      "endLine": 294,
-      "endCol": 22
-    },
-    {
-      "text": "const result = parseOptions(\n      {\n        profiles: [\n          {\n            name: \"bedrock\",\n            provider: \"bedrock\",\n            model: \"us.anthropic.claude-sonnet-4-5-v1:0\",\n            tokenRefreshCommand: 42,\n          },\n        ],\n      },\n      logger,\n    );\n    expect(result.profiles[0].tokenRefreshCommand).toBeUndefined();\n    expect(warnings.some((w) =\u003e w.includes(\"tokenRefreshCommand\"))).toBe(true);\n  });\n\n  it(\"warns and drops an empty string\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "contextualizedText": "// node/options.test.ts\n\nconst result = parseOptions(\n      {\n        profiles: [\n          {\n            name: \"bedrock\",\n            provider: \"bedrock\",\n            model: \"us.anthropic.claude-sonnet-4-5-v1:0\",\n            tokenRefreshCommand: 42,\n          },\n        ],\n      },\n      logger,\n    );\n    expect(result.profiles[0].tokenRefreshCommand).toBeUndefined();\n    expect(warnings.some((w) =\u003e w.includes(\"tokenRefreshCommand\"))).toBe(true);\n  });\n\n  it(\"warns and drops an empty string\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "headingContext": "node/options.test.ts",
-      "startLine": 296,
-      "startCol": 5,
-      "endLine": 315,
-      "endCol": 17
-    },
-    {
-      "text": "      warn: (msg: string) =\u003e warnings.push(msg)",
-      "contextualizedText": "// node/options.test.ts \u003e function warn\n\n      warn: (msg: string) =\u003e warnings.push(msg)",
-      "headingContext": "node/options.test.ts \u003e function warn",
-      "startLine": 316,
-      "startCol": 1,
-      "endLine": 316,
-      "endCol": 48
-    },
-    {
-      "text": "      error: () =\u003e {}",
-      "contextualizedText": "// node/options.test.ts \u003e function error\n\n      error: () =\u003e {}",
-      "headingContext": "node/options.test.ts \u003e function error",
-      "startLine": 317,
-      "startCol": 1,
-      "endLine": 317,
-      "endCol": 22
-    },
-    {
-      "text": "const result = parseOptions(\n      {\n        profiles: [\n          {\n            name: \"bedrock\",\n            provider: \"bedrock\",\n            model: \"us.anthropic.claude-sonnet-4-5-v1:0\",\n            tokenRefreshCommand: \"\",\n          },\n        ],\n      },\n      logger,\n    );\n    expect(result.profiles[0].tokenRefreshCommand).toBeUndefined();\n    expect(warnings.some((w) =\u003e w.includes(\"tokenRefreshCommand\"))).toBe(true);\n  });\n});\n\ndescribe(\"parseCustomCommands systemReminder\", () =\u003e {\n  it(\"surfaces a string systemReminder on the parsed command\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "contextualizedText": "// node/options.test.ts\n\nconst result = parseOptions(\n      {\n        profiles: [\n          {\n            name: \"bedrock\",\n            provider: \"bedrock\",\n            model: \"us.anthropic.claude-sonnet-4-5-v1:0\",\n            tokenRefreshCommand: \"\",\n          },\n        ],\n      },\n      logger,\n    );\n    expect(result.profiles[0].tokenRefreshCommand).toBeUndefined();\n    expect(warnings.some((w) =\u003e w.includes(\"tokenRefreshCommand\"))).toBe(true);\n  });\n});\n\ndescribe(\"parseCustomCommands systemReminder\", () =\u003e {\n  it(\"surfaces a string systemReminder on the parsed command\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "headingContext": "node/options.test.ts",
-      "startLine": 319,
-      "startCol": 5,
-      "endLine": 340,
-      "endCol": 17
-    },
-    {
-      "text": "      warn: (msg: string) =\u003e warnings.push(msg)",
-      "contextualizedText": "// node/options.test.ts \u003e function warn\n\n      warn: (msg: string) =\u003e warnings.push(msg)",
-      "headingContext": "node/options.test.ts \u003e function warn",
-      "startLine": 341,
-      "startCol": 1,
-      "endLine": 341,
-      "endCol": 48
-    },
-    {
-      "text": "      error: () =\u003e {}",
-      "contextualizedText": "// node/options.test.ts \u003e function error\n\n      error: () =\u003e {}",
-      "headingContext": "node/options.test.ts \u003e function error",
-      "startLine": 342,
-      "startCol": 1,
-      "endLine": 342,
-      "endCol": 22
-    },
-    {
-      "text": "const result = parseOptions(\n      {\n        customCommands: [\n          { name: \"@foo\", text: \"foo\", systemReminder: \"remember foo\" },\n        ],\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n      },\n      logger,\n    );\n    expect(result.customCommands[0].systemReminder).toBe(\"remember foo\");\n    expect(warnings).toEqual([]);\n  });\n\n  it(\"warns and drops a non-string systemReminder\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "contextualizedText": "// node/options.test.ts\n\nconst result = parseOptions(\n      {\n        customCommands: [\n          { name: \"@foo\", text: \"foo\", systemReminder: \"remember foo\" },\n        ],\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n      },\n      logger,\n    );\n    expect(result.customCommands[0].systemReminder).toBe(\"remember foo\");\n    expect(warnings).toEqual([]);\n  });\n\n  it(\"warns and drops a non-string systemReminder\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "headingContext": "node/options.test.ts",
-      "startLine": 344,
-      "startCol": 5,
-      "endLine": 359,
-      "endCol": 17
-    },
-    {
-      "text": "      warn: (msg: string) =\u003e warnings.push(msg)",
-      "contextualizedText": "// node/options.test.ts \u003e function warn\n\n      warn: (msg: string) =\u003e warnings.push(msg)",
-      "headingContext": "node/options.test.ts \u003e function warn",
-      "startLine": 360,
-      "startCol": 1,
-      "endLine": 360,
-      "endCol": 48
-    },
-    {
-      "text": "      error: () =\u003e {}",
-      "contextualizedText": "// node/options.test.ts \u003e function error\n\n      error: () =\u003e {}",
-      "headingContext": "node/options.test.ts \u003e function error",
-      "startLine": 361,
-      "startCol": 1,
-      "endLine": 361,
-      "endCol": 22
-    },
-    {
-      "text": "const result = parseOptions(\n      {\n        customCommands: [{ name: \"@foo\", text: \"foo\", systemReminder: 42 }],\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n      },\n      logger,\n    );\n    expect(result.customCommands[0].systemReminder).toBeUndefined();\n    expect(warnings.some((w) =\u003e w.includes(\"systemReminder\"))).toBe(true);\n  });\n});\n\ndescribe(\"parseProfiles thinking.effort\", () =\u003e {\n  it(\"accepts a valid effort value\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "contextualizedText": "// node/options.test.ts\n\nconst result = parseOptions(\n      {\n        customCommands: [{ name: \"@foo\", text: \"foo\", systemReminder: 42 }],\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n      },\n      logger,\n    );\n    expect(result.customCommands[0].systemReminder).toBeUndefined();\n    expect(warnings.some((w) =\u003e w.includes(\"systemReminder\"))).toBe(true);\n  });\n});\n\ndescribe(\"parseProfiles thinking.effort\", () =\u003e {\n  it(\"accepts a valid effort value\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "headingContext": "node/options.test.ts",
-      "startLine": 363,
-      "startCol": 5,
-      "endLine": 378,
-      "endCol": 17
-    },
-    {
-      "text": "      warn: (msg: string) =\u003e warnings.push(msg)",
-      "contextualizedText": "// node/options.test.ts \u003e function warn\n\n      warn: (msg: string) =\u003e warnings.push(msg)",
-      "headingContext": "node/options.test.ts \u003e function warn",
-      "startLine": 379,
-      "startCol": 1,
-      "endLine": 379,
-      "endCol": 48
-    },
-    {
-      "text": "      error: () =\u003e {}",
-      "contextualizedText": "// node/options.test.ts \u003e function error\n\n      error: () =\u003e {}",
-      "headingContext": "node/options.test.ts \u003e function error",
-      "startLine": 380,
-      "startCol": 1,
-      "endLine": 380,
-      "endCol": 22
-    },
-    {
-      "text": "const result = parseOptions(\n      {\n        profiles: [\n          {\n            name: \"test\",\n            provider: \"anthropic\",\n            model: \"claude-opus-4-7\",\n            thinking: { enabled: true, effort: \"max\" },\n          },\n        ],\n      },\n      logger,\n    );\n    expect(result.profiles[0].thinking?.effort).toBe(\"max\");\n    expect(warnings).toEqual([]);\n  });\n\n  it(\"warns and drops an invalid effort value\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "contextualizedText": "// node/options.test.ts\n\nconst result = parseOptions(\n      {\n        profiles: [\n          {\n            name: \"test\",\n            provider: \"anthropic\",\n            model: \"claude-opus-4-7\",\n            thinking: { enabled: true, effort: \"max\" },\n          },\n        ],\n      },\n      logger,\n    );\n    expect(result.profiles[0].thinking?.effort).toBe(\"max\");\n    expect(warnings).toEqual([]);\n  });\n\n  it(\"warns and drops an invalid effort value\", () =\u003e {\n    const warnings: string[] = [];\n    const logger",
-      "headingContext": "node/options.test.ts",
-      "startLine": 382,
-      "startCol": 5,
-      "endLine": 401,
-      "endCol": 17
-    },
-    {
-      "text": "      warn: (msg: string) =\u003e warnings.push(msg)",
-      "contextualizedText": "// node/options.test.ts \u003e function warn\n\n      warn: (msg: string) =\u003e warnings.push(msg)",
-      "headingContext": "node/options.test.ts \u003e function warn",
-      "startLine": 402,
-      "startCol": 1,
-      "endLine": 402,
-      "endCol": 48
-    },
-    {
-      "text": "      error: () =\u003e {}",
-      "contextualizedText": "// node/options.test.ts \u003e function error\n\n      error: () =\u003e {}",
-      "headingContext": "node/options.test.ts \u003e function error",
-      "startLine": 403,
-      "startCol": 1,
-      "endLine": 403,
-      "endCol": 22
-    },
-    {
-      "text": "const result = parseOptions(\n      {\n        profiles: [\n          {\n            name: \"test\",\n            provider: \"anthropic\",\n            model: \"claude-opus-4-7\",\n            thinking: { enabled: true, effort: \"turbo\" },\n          },\n        ],\n      },\n      logger,\n    );\n    expect(result.profiles[0].thinking?.effort).toBeUndefined();\n    expect(warnings.some((w) =\u003e w.includes(\"Invalid effort\"))).toBe(true);\n  });\n});\n\ndescribe(\"suppressProjectSkills\", () =\u003e {\n  let testCounter = 0;\n  let tmpRoot: string;\n\n  beforeEach(async () =\u003e {\n    tmpRoot = path.join(\n      \"/tmp/magenta-test\",\n      `options-${Date.now()}-${testCounter++}`,\n    );\n    await fs.mkdir(tmpRoot, { recursive: true });\n  });\n\n  afterEach(async () =\u003e {\n    await fs.rm(tmpRoot, { recursive: true, force: true });\n  });\n\n  it(\"parseOptions populates suppressProjectSkills from input\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n        suppressProjectSkills: [\"plan\"],\n      },\n      noopLogger,\n    );\n    expect(result.suppressProjectSkills).toEqual([\"plan\"]);\n  });\n\n  it(\"parseOptions prepends BUILTIN_SKILLS_PATH when user provides skillsPaths\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n        skillsPaths: [\"~/.magenta/skills\", \".magenta/skills\"],\n      },\n      noopLogger,\n    );\n    expect(result.skillsPaths).toEqual([\n      BUILTIN_SKILLS_PATH,\n      \"~/.magenta/skills\",\n      \".magenta/skills\",\n    ]);\n  });\n\n  it(\"parseOptions includes BUILTIN_SKILLS_PATH by default\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n      },\n      noopLogger,\n    );\n    expect(result.skillsPaths).toContain(BUILTIN_SKILLS_PATH);\n  });",
-      "contextualizedText": "// node/options.test.ts\n\nconst result = parseOptions(\n      {\n        profiles: [\n          {\n            name: \"test\",\n            provider: \"anthropic\",\n            model: \"claude-opus-4-7\",\n            thinking: { enabled: true, effort: \"turbo\" },\n          },\n        ],\n      },\n      logger,\n    );\n    expect(result.profiles[0].thinking?.effort).toBeUndefined();\n    expect(warnings.some((w) =\u003e w.includes(\"Invalid effort\"))).toBe(true);\n  });\n});\n\ndescribe(\"suppressProjectSkills\", () =\u003e {\n  let testCounter = 0;\n  let tmpRoot: string;\n\n  beforeEach(async () =\u003e {\n    tmpRoot = path.join(\n      \"/tmp/magenta-test\",\n      `options-${Date.now()}-${testCounter++}`,\n    );\n    await fs.mkdir(tmpRoot, { recursive: true });\n  });\n\n  afterEach(async () =\u003e {\n    await fs.rm(tmpRoot, { recursive: true, force: true });\n  });\n\n  it(\"parseOptions populates suppressProjectSkills from input\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n        suppressProjectSkills: [\"plan\"],\n      },\n      noopLogger,\n    );\n    expect(result.suppressProjectSkills).toEqual([\"plan\"]);\n  });\n\n  it(\"parseOptions prepends BUILTIN_SKILLS_PATH when user provides skillsPaths\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n        skillsPaths: [\"~/.magenta/skills\", \".magenta/skills\"],\n      },\n      noopLogger,\n    );\n    expect(result.skillsPaths).toEqual([\n      BUILTIN_SKILLS_PATH,\n      \"~/.magenta/skills\",\n      \".magenta/skills\",\n    ]);\n  });\n\n  it(\"parseOptions includes BUILTIN_SKILLS_PATH by default\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n      },\n      noopLogger,\n    );\n    expect(result.skillsPaths).toContain(BUILTIN_SKILLS_PATH);\n  });",
-      "headingContext": "node/options.test.ts",
-      "startLine": 405,
-      "startCol": 5,
-      "endLine": 473,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"parseOptions defaults suppressProjectSkills to empty array\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n      },\n      noopLogger,\n    );\n    expect(result.suppressProjectSkills).toEqual([]);\n  });\n\n  it(\"loadProjectSettings strips suppressProjectSkills and warns\", async () =\u003e {\n    const magentaDir = path.join(tmpRoot, \".magenta\");\n    await fs.mkdir(magentaDir, { recursive: true });\n    await fs.writeFile(\n      path.join(magentaDir, \"options.json\"),\n      JSON.stringify({ suppressProjectSkills: [\"plan\"] }),\n    );\n\n    const warnings: string[] = [];\n",
-      "contextualizedText": "// node/options.test.ts\n\nit(\"parseOptions defaults suppressProjectSkills to empty array\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n      },\n      noopLogger,\n    );\n    expect(result.suppressProjectSkills).toEqual([]);\n  });\n\n  it(\"loadProjectSettings strips suppressProjectSkills and warns\", async () =\u003e {\n    const magentaDir = path.join(tmpRoot, \".magenta\");\n    await fs.mkdir(magentaDir, { recursive: true });\n    await fs.writeFile(\n      path.join(magentaDir, \"options.json\"),\n      JSON.stringify({ suppressProjectSkills: [\"plan\"] }),\n    );\n\n    const warnings: string[] = [];\n",
-      "headingContext": "node/options.test.ts",
-      "startLine": 475,
-      "startCol": 3,
-      "endLine": 494,
-      "endCol": 1
-    },
-    {
-      "text": "    const logger = { warn: (msg: string) =\u003e warnings.push(msg)",
-      "contextualizedText": "// node/options.test.ts \u003e function warn\n\n    const logger = { warn: (msg: string) =\u003e warnings.push(msg)",
-      "headingContext": "node/options.test.ts \u003e function warn",
-      "startLine": 494,
-      "startCol": 1,
-      "endLine": 494,
-      "endCol": 63
-    },
-    {
-      "text": "const result = loadProjectSettings(tmpRoot as NvimCwd, logger);\n\n    expect(result).toBeDefined();\n    expect(result?.suppressProjectSkills).toBeUndefined();\n    expect(warnings.some((w) =\u003e w.includes(\"suppressProjectSkills\"))).toBe(\n      true,\n    );\n  });\n\n  it(\"loadUserSettings retains suppressProjectSkills\", async () =\u003e {\n    const magentaDir = path.join(tmpRoot, \".magenta\");\n    await fs.mkdir(magentaDir, { recursive: true });\n    await fs.writeFile(\n      path.join(magentaDir, \"options.json\"),\n      JSON.stringify({ suppressProjectSkills: [\"plan\"] }),\n    );\n\n    const result = loadUserSettings(tmpRoot, noopLogger);\n\n    expect(result).toBeDefined();\n    expect(result?.suppressProjectSkills).toEqual([\"plan\"]);\n  });\n});\n\ndescribe(\"autoCompact options\", () =\u003e {\n  it(\"defaults autoCompactThreshold to 300000 and leaves prompt unset\", () =\u003e {\n    const result = parseOptions(\n      { profiles: [{ name: \"test\", provider: \"mock\" }] },\n      noopLogger,\n    );\n    expect(result.autoCompactThreshold).toBe(300000);\n    expect(result.autoCompactPrompt).toBe(\n      \"Continue with the task you were working on before the conversation was automatically compacted.\",\n    );\n  });\n\n  it(\"parses a valid threshold and prompt\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n        autoCompactThreshold: 150000,\n        autoCompactPrompt: \"custom compaction prompt\",\n      },\n      noopLogger,\n    );\n    expect(result.autoCompactThreshold).toBe(150000);\n    expect(result.autoCompactPrompt).toBe(\"custom compaction prompt\");\n  });",
-      "contextualizedText": "// node/options.test.ts\n\nconst result = loadProjectSettings(tmpRoot as NvimCwd, logger);\n\n    expect(result).toBeDefined();\n    expect(result?.suppressProjectSkills).toBeUndefined();\n    expect(warnings.some((w) =\u003e w.includes(\"suppressProjectSkills\"))).toBe(\n      true,\n    );\n  });\n\n  it(\"loadUserSettings retains suppressProjectSkills\", async () =\u003e {\n    const magentaDir = path.join(tmpRoot, \".magenta\");\n    await fs.mkdir(magentaDir, { recursive: true });\n    await fs.writeFile(\n      path.join(magentaDir, \"options.json\"),\n      JSON.stringify({ suppressProjectSkills: [\"plan\"] }),\n    );\n\n    const result = loadUserSettings(tmpRoot, noopLogger);\n\n    expect(result).toBeDefined();\n    expect(result?.suppressProjectSkills).toEqual([\"plan\"]);\n  });\n});\n\ndescribe(\"autoCompact options\", () =\u003e {\n  it(\"defaults autoCompactThreshold to 300000 and leaves prompt unset\", () =\u003e {\n    const result = parseOptions(\n      { profiles: [{ name: \"test\", provider: \"mock\" }] },\n      noopLogger,\n    );\n    expect(result.autoCompactThreshold).toBe(300000);\n    expect(result.autoCompactPrompt).toBe(\n      \"Continue with the task you were working on before the conversation was automatically compacted.\",\n    );\n  });\n\n  it(\"parses a valid threshold and prompt\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n        autoCompactThreshold: 150000,\n        autoCompactPrompt: \"custom compaction prompt\",\n      },\n      noopLogger,\n    );\n    expect(result.autoCompactThreshold).toBe(150000);\n    expect(result.autoCompactPrompt).toBe(\"custom compaction prompt\");\n  });",
-      "headingContext": "node/options.test.ts",
-      "startLine": 496,
-      "startCol": 5,
-      "endLine": 543,
-      "endCol": 6
-    },
-    {
-      "text": "it(\"rejects a non-positive threshold and a blank prompt\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n        autoCompactThreshold: 0,\n        autoCompactPrompt: \"   \",\n      },\n      noopLogger,\n    );\n    expect(result.autoCompactThreshold).toBe(300000);\n    expect(result.autoCompactPrompt).toBe(\n      \"Continue with the task you were working on before the conversation was automatically compacted.\",\n    );\n  });\n\n  it(\"parseProjectOptions parses valid auto-compact scalars\", () =\u003e {\n    const result = parseProjectOptions(\n      {\n        autoCompactThreshold: 120000,\n        autoCompactPrompt: \"project side prompt\",\n      },\n      noopLogger,\n    );\n    expect(result.autoCompactThreshold).toBe(120000);\n    expect(result.autoCompactPrompt).toBe(\"project side prompt\");\n  });\n\n  it(\"parseProjectOptions rejects non-positive threshold and blank prompt\", () =\u003e {\n    const result = parseProjectOptions(\n      {\n        autoCompactThreshold: -5,\n        autoCompactPrompt: \"   \",\n      },\n      noopLogger,\n    );\n    expect(result.autoCompactThreshold).toBeUndefined();\n    expect(result.autoCompactPrompt).toBeUndefined();\n  });\n\n  it(\"lets project settings override auto-compact scalars\", () =\u003e {\n    const base = makeBaseOptions();\n    const merged = mergeOptions(base, {\n      autoCompactThreshold: 200000,\n      autoCompactPrompt: \"project prompt\",\n    });\n    expect(merged.autoCompactThreshold).toBe(200000);\n    expect(merged.autoCompactPrompt).toBe(\"project prompt\");\n  });",
-      "contextualizedText": "// node/options.test.ts\n\nit(\"rejects a non-positive threshold and a blank prompt\", () =\u003e {\n    const result = parseOptions(\n      {\n        profiles: [{ name: \"test\", provider: \"mock\" }],\n        autoCompactThreshold: 0,\n        autoCompactPrompt: \"   \",\n      },\n      noopLogger,\n    );\n    expect(result.autoCompactThreshold).toBe(300000);\n    expect(result.autoCompactPrompt).toBe(\n      \"Continue with the task you were working on before the conversation was automatically compacted.\",\n    );\n  });\n\n  it(\"parseProjectOptions parses valid auto-compact scalars\", () =\u003e {\n    const result = parseProjectOptions(\n      {\n        autoCompactThreshold: 120000,\n        autoCompactPrompt: \"project side prompt\",\n      },\n      noopLogger,\n    );\n    expect(result.autoCompactThreshold).toBe(120000);\n    expect(result.autoCompactPrompt).toBe(\"project side prompt\");\n  });\n\n  it(\"parseProjectOptions rejects non-positive threshold and blank prompt\", () =\u003e {\n    const result = parseProjectOptions(\n      {\n        autoCompactThreshold: -5,\n        autoCompactPrompt: \"   \",\n      },\n      noopLogger,\n    );\n    expect(result.autoCompactThreshold).toBeUndefined();\n    expect(result.autoCompactPrompt).toBeUndefined();\n  });\n\n  it(\"lets project settings override auto-compact scalars\", () =\u003e {\n    const base = makeBaseOptions();\n    const merged = mergeOptions(base, {\n      autoCompactThreshold: 200000,\n      autoCompactPrompt: \"project prompt\",\n    });\n    expect(merged.autoCompactThreshold).toBe(200000);\n    expect(merged.autoCompactPrompt).toBe(\"project prompt\");\n  });",
-      "headingContext": "node/options.test.ts",
-      "startLine": 545,
-      "startCol": 3,
-      "endLine": 592,
-      "endCol": 6
+      "start": 17593,
+      "end": 17946
     }
   ]
 }

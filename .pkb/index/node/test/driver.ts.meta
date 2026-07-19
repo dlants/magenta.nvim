@@ -1,447 +1,59 @@
 {
   "blobSha": "5118d471fa92f249682f62e5939fa51b8be75fab",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { ThreadId } from \"@magenta/core\";\nimport { expect, vi } from \"vitest\";\nimport type { Magenta } from \"../magenta.ts\";\nimport type { BufNr, Line, NvimBuffer } from \"../nvim/buffer.ts\";\nimport { getAllWindows, getCurrentWindow } from \"../nvim/nvim.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport {\n  type ByteIdx,\n  type NvimWindow,\n  type Position0Indexed,\n  pos0to1,\n  type Row0Indexed,\n  type WindowId,\n} from \"../nvim/window.ts\";\nimport type { MockProvider } from \"../providers/mock.ts\";\nimport { type BindingKey, getBinding } from \"../tea/bindings.ts\";\nimport { calculatePosition } from \"../tea/util.ts\";\nimport { Defer, pollUntil } from \"../utils/async.ts\";\nimport { CompletionsInteraction } from \"./driver/completions.ts\";\nimport { SidebarInteraction } from \"./driver/sidebar.ts\";\nimport type { MockSandboxManager } from \"./mock-sandbox-manager.ts\";",
-      "contextualizedText": "// node/test/driver.ts\n\nimport type { ThreadId } from \"@magenta/core\";\nimport { expect, vi } from \"vitest\";\nimport type { Magenta } from \"../magenta.ts\";\nimport type { BufNr, Line, NvimBuffer } from \"../nvim/buffer.ts\";\nimport { getAllWindows, getCurrentWindow } from \"../nvim/nvim.ts\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";\nimport {\n  type ByteIdx,\n  type NvimWindow,\n  type Position0Indexed,\n  pos0to1,\n  type Row0Indexed,\n  type WindowId,\n} from \"../nvim/window.ts\";\nimport type { MockProvider } from \"../providers/mock.ts\";\nimport { type BindingKey, getBinding } from \"../tea/bindings.ts\";\nimport { calculatePosition } from \"../tea/util.ts\";\nimport { Defer, pollUntil } from \"../utils/async.ts\";\nimport { CompletionsInteraction } from \"./driver/completions.ts\";\nimport { SidebarInteraction } from \"./driver/sidebar.ts\";\nimport type { MockSandboxManager } from \"./mock-sandbox-manager.ts\";",
-      "headingContext": "node/test/driver.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 21,
-      "endCol": 69
+      "start": 0,
+      "end": 1963
     },
     {
-      "text": "export class NvimDriver {\n  public completions: CompletionsInteraction;\n  public sidebar: SidebarInteraction;\n  public mockSandbox: MockSandboxManager;\n\n  constructor(\n    public nvim: Nvim,\n    public magenta: Magenta,\n    public mockAnthropic: MockProvider,\n    mockSandbox: MockSandboxManager,\n  ) {\n    this.completions = new CompletionsInteraction(nvim);\n    this.sidebar = new SidebarInteraction(nvim, magenta);\n    this.mockSandbox = mockSandbox;\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver\n\nexport class NvimDriver {\n  public completions: CompletionsInteraction;\n  public sidebar: SidebarInteraction;\n  public mockSandbox: MockSandboxManager;\n\n  constructor(\n    public nvim: Nvim,\n    public magenta: Magenta,\n    public mockAnthropic: MockProvider,\n    mockSandbox: MockSandboxManager,\n  ) {\n    this.completions = new CompletionsInteraction(nvim);\n    this.sidebar = new SidebarInteraction(nvim, magenta);\n    this.mockSandbox = mockSandbox;\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver",
-      "startLine": 23,
-      "startCol": 1,
-      "endLine": 37,
-      "endCol": 4
+      "start": 1969,
+      "end": 4113
     },
     {
-      "text": "  private getActiveKey(): ThreadId | \"overview\" {\n    return this.magenta.chat.state.state === \"thread-selected\"\n      ? this.magenta.chat.state.activeThreadId\n      : \"overview\";\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method getActiveKey\n\n  private getActiveKey(): ThreadId | \"overview\" {\n    return this.magenta.chat.state.state === \"thread-selected\"\n      ? this.magenta.chat.state.activeThreadId\n      : \"overview\";\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method getActiveKey",
-      "startLine": 39,
-      "startCol": 1,
-      "endLine": 43,
-      "endCol": 4
+      "start": 4119,
+      "end": 6231
     },
     {
-      "text": "  async wait(ms: number) {\n    return new Promise((resolve) =\u003e setTimeout(resolve, ms));\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method wait\n\n  async wait(ms: number) {\n    return new Promise((resolve) =\u003e setTimeout(resolve, ms));\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method wait",
-      "startLine": 45,
-      "startCol": 1,
-      "endLine": 47,
-      "endCol": 4
+      "start": 6235,
+      "end": 8314
     },
     {
-      "text": "  async triggerMagentaCommand(command: string) {\n    return this.nvim.call(\"nvim_command\", [command]);\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method triggerMagentaCommand\n\n  async triggerMagentaCommand(command: string) {\n    return this.nvim.call(\"nvim_command\", [command]);\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method triggerMagentaCommand",
-      "startLine": 49,
-      "startCol": 1,
-      "endLine": 51,
-      "endCol": 4
+      "start": 8322,
+      "end": 10290
     },
     {
-      "text": "  async showSidebar() {\n    // Check if magenta windows are already visible\n    const magentaWindowExists = await this.checkMagentaWindowsExist();\n\n    if (!magentaWindowExists) {\n      await this.magenta.command(\"toggle\");\n    }\n\n    // Wait until magenta windows are actually visible\n    await pollUntil(async () =\u003e {\n      const windowsExist = await this.checkMagentaWindowsExist();\n      if (!windowsExist) {\n        throw new Error(`Magenta windows not visible yet`);\n      }\n    });\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method showSidebar\n\n  async showSidebar() {\n    // Check if magenta windows are already visible\n    const magentaWindowExists = await this.checkMagentaWindowsExist();\n\n    if (!magentaWindowExists) {\n      await this.magenta.command(\"toggle\");\n    }\n\n    // Wait until magenta windows are actually visible\n    await pollUntil(async () =\u003e {\n      const windowsExist = await this.checkMagentaWindowsExist();\n      if (!windowsExist) {\n        throw new Error(`Magenta windows not visible yet`);\n      }\n    });\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method showSidebar",
-      "startLine": 53,
-      "startCol": 1,
-      "endLine": 68,
-      "endCol": 4
+      "start": 10294,
+      "end": 12180
     },
     {
-      "text": "  private async checkMagentaWindowsExist(): Promise\u003cboolean\u003e {\n    try {\n      const windows = await getAllWindows(this.nvim);\n      let inputWindowExists = false;\n\n      for (const window of windows) {\n        try {\n          const magentaVar = await window.getVar(\"magenta\");\n          if (magentaVar) {\n            // Check if this is specifically the input window (not display window)\n            const isDisplayWindow = await window\n              .getVar(\"magenta_display_window\")\n              .catch(() =\u003e false);\n            if (!isDisplayWindow) {\n              inputWindowExists = true;\n              break;\n            }\n          }\n        } catch {\n          // Window doesn't have magenta var, continue\n        }\n      }\n\n      return inputWindowExists;\n    } catch {\n      return false;\n    }\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method checkMagentaWindowsExist\n\n  private async checkMagentaWindowsExist(): Promise\u003cboolean\u003e {\n    try {\n      const windows = await getAllWindows(this.nvim);\n      let inputWindowExists = false;\n\n      for (const window of windows) {\n        try {\n          const magentaVar = await window.getVar(\"magenta\");\n          if (magentaVar) {\n            // Check if this is specifically the input window (not display window)\n            const isDisplayWindow = await window\n              .getVar(\"magenta_display_window\")\n              .catch(() =\u003e false);\n            if (!isDisplayWindow) {\n              inputWindowExists = true;\n              break;\n            }\n          }\n        } catch {\n          // Window doesn't have magenta var, continue\n        }\n      }\n\n      return inputWindowExists;\n    } catch {\n      return false;\n    }\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method checkMagentaWindowsExist",
-      "startLine": 70,
-      "startCol": 1,
-      "endLine": 97,
-      "endCol": 4
+      "start": 12184,
+      "end": 14038
     },
     {
-      "text": "  async waitForChatReady() {\n    return await pollUntil(\n      () =\u003e {\n        try {\n          this.magenta.chat.getActiveThread();\n          return true;\n        } catch (e) {\n          if ((e as Error).message.includes(\"Chat is not initialized yet\")) {\n            throw new Error(\"Chat is not ready yet\");\n          }\n          throw e;\n        }\n      },\n      { timeout: 1000 },\n    );\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method waitForChatReady\n\n  async waitForChatReady() {\n    return await pollUntil(\n      () =\u003e {\n        try {\n          this.magenta.chat.getActiveThread();\n          return true;\n        } catch (e) {\n          if ((e as Error).message.includes(\"Chat is not initialized yet\")) {\n            throw new Error(\"Chat is not ready yet\");\n          }\n          throw e;\n        }\n      },\n      { timeout: 1000 },\n    );\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method waitForChatReady",
-      "startLine": 99,
-      "startCol": 1,
-      "endLine": 114,
-      "endCol": 4
+      "start": 14042,
+      "end": 16246
     },
     {
-      "text": "  async inputMagentaText(text: string) {\n    await this.magenta.activeBuffers.inputBuffer.setLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: text.split(\"\\n\") as Line[],\n    });\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method inputMagentaText\n\n  async inputMagentaText(text: string) {\n    await this.magenta.activeBuffers.inputBuffer.setLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: text.split(\"\\n\") as Line[],\n    });\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method inputMagentaText",
-      "startLine": 116,
-      "startCol": 1,
-      "endLine": 122,
-      "endCol": 4
+      "start": 16250,
+      "end": 17933
     },
     {
-      "text": "  interceptSendMessage() {\n    const thread = this.magenta.chat.getActiveThread();\n    const callDefer = new Defer\u003cParameters\u003ctypeof thread.core.sendMessage\u003e\u003e();\n    const executeDefer = new Defer\u003cvoid\u003e();\n\n    const spy = vi\n      .spyOn(thread.core, \"sendMessage\")\n      .mockImplementation(\n        async (...args: Parameters\u003ctypeof thread.core.sendMessage\u003e) =\u003e {\n          callDefer.resolve(args);\n          return executeDefer.promise;\n        },\n      );\n\n    return {\n      promise: callDefer.promise,\n      spy",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method interceptSendMessage\n\n  interceptSendMessage() {\n    const thread = this.magenta.chat.getActiveThread();\n    const callDefer = new Defer\u003cParameters\u003ctypeof thread.core.sendMessage\u003e\u003e();\n    const executeDefer = new Defer\u003cvoid\u003e();\n\n    const spy = vi\n      .spyOn(thread.core, \"sendMessage\")\n      .mockImplementation(\n        async (...args: Parameters\u003ctypeof thread.core.sendMessage\u003e) =\u003e {\n          callDefer.resolve(args);\n          return executeDefer.promise;\n        },\n      );\n\n    return {\n      promise: callDefer.promise,\n      spy",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method interceptSendMessage",
-      "startLine": 124,
-      "startCol": 1,
-      "endLine": 140,
-      "endCol": 10
+      "start": 17945,
+      "end": 20139
     },
     {
-      "text": "      execute: (...args: Parameters\u003ctypeof thread.core.sendMessage\u003e) =\u003e {\n        spy.mockRestore();\n        return thread.core.sendMessage(...args).then(\n          () =\u003e executeDefer.resolve(),\n          (err: Error) =\u003e executeDefer.reject(err),\n        );\n      }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method interceptSendMessage \u003e function execute\n\n      execute: (...args: Parameters\u003ctypeof thread.core.sendMessage\u003e) =\u003e {\n        spy.mockRestore();\n        return thread.core.sendMessage(...args).then(\n          () =\u003e executeDefer.resolve(),\n          (err: Error) =\u003e executeDefer.reject(err),\n        );\n      }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method interceptSendMessage \u003e function execute",
-      "startLine": 141,
-      "startCol": 1,
-      "endLine": 147,
-      "endCol": 8
+      "start": 20149,
+      "end": 22134
     },
     {
-      "text": "/**\n   * Intercept the maybeAutoRespond method to pause auto-respond after tool completion.\n   * This allows tests to modify state (e.g., edit buffers) before the auto-respond fires.\n   */\n  interceptAutoRespond() {\n    const thread = this.magenta.chat.getActiveThread();\n    const callDefer = new Defer\u003cvoid\u003e();\n    const executeDefer = new Defer\u003c\n      ReturnType\u003ctypeof thread.core.maybeAutoRespond\u003e\n    \u003e();\n\n    const originalMaybeAutoRespond = thread.core.maybeAutoRespond.bind(\n      thread.core,\n    );\n    const spy = vi\n      .spyOn(thread.core, \"maybeAutoRespond\")\n      .mockImplementation(() =\u003e {\n        callDefer.resolve();\n        // Block until execute() is called - return a default value synchronously\n        let result: ReturnType\u003ctypeof thread.core.maybeAutoRespond\u003e = {\n          type: \"no-action-needed\",\n        };\n        executeDefer.promise.then((r) =\u003e {\n          result = r;\n        });\n        return result;\n      });\n\n    return {\n      /** Resolves when maybeAutoRespond is called */\n      promise: callDefer.promise,\n      spy",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method interceptAutoRespond\n\n/**\n   * Intercept the maybeAutoRespond method to pause auto-respond after tool completion.\n   * This allows tests to modify state (e.g., edit buffers) before the auto-respond fires.\n   */\n  interceptAutoRespond() {\n    const thread = this.magenta.chat.getActiveThread();\n    const callDefer = new Defer\u003cvoid\u003e();\n    const executeDefer = new Defer\u003c\n      ReturnType\u003ctypeof thread.core.maybeAutoRespond\u003e\n    \u003e();\n\n    const originalMaybeAutoRespond = thread.core.maybeAutoRespond.bind(\n      thread.core,\n    );\n    const spy = vi\n      .spyOn(thread.core, \"maybeAutoRespond\")\n      .mockImplementation(() =\u003e {\n        callDefer.resolve();\n        // Block until execute() is called - return a default value synchronously\n        let result: ReturnType\u003ctypeof thread.core.maybeAutoRespond\u003e = {\n          type: \"no-action-needed\",\n        };\n        executeDefer.promise.then((r) =\u003e {\n          result = r;\n        });\n        return result;\n      });\n\n    return {\n      /** Resolves when maybeAutoRespond is called */\n      promise: callDefer.promise,\n      spy",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method interceptAutoRespond",
-      "startLine": 151,
-      "startCol": 3,
-      "endLine": 182,
-      "endCol": 10
+      "start": 22138,
+      "end": 24051
     },
     {
-      "text": "/** Call this to restore the original method and execute it */\n      execute: () =\u003e {\n        spy.mockRestore();\n        const result = originalMaybeAutoRespond();\n        executeDefer.resolve(result);\n        return result;\n      }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method interceptAutoRespond \u003e function execute\n\n/** Call this to restore the original method and execute it */\n      execute: () =\u003e {\n        spy.mockRestore();\n        const result = originalMaybeAutoRespond();\n        executeDefer.resolve(result);\n        return result;\n      }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method interceptAutoRespond \u003e function execute",
-      "startLine": 183,
-      "startCol": 7,
-      "endLine": 189,
-      "endCol": 8
-    },
-    {
-      "text": "  send() {\n    return this.magenta.command(\"send\");\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method send\n\n  send() {\n    return this.magenta.command(\"send\");\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method send",
-      "startLine": 193,
-      "startCol": 1,
-      "endLine": 195,
-      "endCol": 4
-    },
-    {
-      "text": "  abort() {\n    return this.magenta.command(\"abort\");\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method abort\n\n  abort() {\n    return this.magenta.command(\"abort\");\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method abort",
-      "startLine": 197,
-      "startCol": 1,
-      "endLine": 199,
-      "endCol": 4
-    },
-    {
-      "text": "  pasteSelection() {\n    return this.nvim.call(\"nvim_exec2\", [\"Magenta paste-selection\", {}]);\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method pasteSelection\n\n  pasteSelection() {\n    return this.nvim.call(\"nvim_exec2\", [\"Magenta paste-selection\", {}]);\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method pasteSelection",
-      "startLine": 201,
-      "startCol": 1,
-      "endLine": 203,
-      "endCol": 4
-    },
-    {
-      "text": "  clipboardPaste() {\n    return this.nvim.call(\"nvim_exec2\", [\"Magenta paste\", {}]);\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method clipboardPaste\n\n  clipboardPaste() {\n    return this.nvim.call(\"nvim_exec2\", [\"Magenta paste\", {}]);\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method clipboardPaste",
-      "startLine": 205,
-      "startCol": 1,
-      "endLine": 207,
-      "endCol": 4
-    },
-    {
-      "text": "  getDisplayBuffer() {\n    return this.magenta.activeBuffers.displayBuffer;\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method getDisplayBuffer\n\n  getDisplayBuffer() {\n    return this.magenta.activeBuffers.displayBuffer;\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method getDisplayBuffer",
-      "startLine": 209,
-      "startCol": 1,
-      "endLine": 211,
-      "endCol": 4
-    },
-    {
-      "text": "  getInputBuffer() {\n    return this.magenta.activeBuffers.inputBuffer;\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method getInputBuffer\n\n  getInputBuffer() {\n    return this.magenta.activeBuffers.inputBuffer;\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method getInputBuffer",
-      "startLine": 213,
-      "startCol": 1,
-      "endLine": 215,
-      "endCol": 4
-    },
-    {
-      "text": "  async getDisplayBufferText() {\n    const displayBuffer = this.getDisplayBuffer();\n    const lines = await displayBuffer.getLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n    });\n    return lines.join(\"\\n\");\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method getDisplayBufferText\n\n  async getDisplayBufferText() {\n    const displayBuffer = this.getDisplayBuffer();\n    const lines = await displayBuffer.getLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n    });\n    return lines.join(\"\\n\");\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method getDisplayBufferText",
-      "startLine": 217,
-      "startCol": 1,
-      "endLine": 224,
-      "endCol": 4
-    },
-    {
-      "text": "  getVisibleState() {\n    if (this.magenta.sidebar.state.state !== \"visible\") {\n      throw new Error(`sidebar is not visible`);\n    }\n    return this.magenta.sidebar.state;\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method getVisibleState\n\n  getVisibleState() {\n    if (this.magenta.sidebar.state.state !== \"visible\") {\n      throw new Error(`sidebar is not visible`);\n    }\n    return this.magenta.sidebar.state;\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method getVisibleState",
-      "startLine": 226,
-      "startCol": 1,
-      "endLine": 231,
-      "endCol": 4
-    },
-    {
-      "text": "  async assertDisplayBufferContains(\n    text: string,\n    start: number = 0,\n    timeout: number = 2000,\n  ): Promise\u003cPosition0Indexed\u003e {\n    let latestContent;\n    try {\n      return await pollUntil(\n        async () =\u003e {\n          const displayBuffer = this.getDisplayBuffer();\n          const lines = await displayBuffer.getLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n          });\n          latestContent = lines.slice(start).join(\"\\n\");\n          const index = Buffer.from(latestContent).indexOf(text) as ByteIdx;\n          if (index === -1) {\n            throw new Error(\n              `! Unable to find text ${text} after line ${start} in displayBuffer`,\n            );\n          }\n\n          return calculatePosition(\n            { row: start, col: 0 } as Position0Indexed,\n            Buffer.from(latestContent),\n            index,\n          );\n        },\n        { timeout },\n      );\n    } catch (e) {\n      expect(latestContent, (e as Error).message).toContain(text);\n      throw e;\n    }\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method assertDisplayBufferContains\n\n  async assertDisplayBufferContains(\n    text: string,\n    start: number = 0,\n    timeout: number = 2000,\n  ): Promise\u003cPosition0Indexed\u003e {\n    let latestContent;\n    try {\n      return await pollUntil(\n        async () =\u003e {\n          const displayBuffer = this.getDisplayBuffer();\n          const lines = await displayBuffer.getLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n          });\n          latestContent = lines.slice(start).join(\"\\n\");\n          const index = Buffer.from(latestContent).indexOf(text) as ByteIdx;\n          if (index === -1) {\n            throw new Error(\n              `! Unable to find text ${text} after line ${start} in displayBuffer`,\n            );\n          }\n\n          return calculatePosition(\n            { row: start, col: 0 } as Position0Indexed,\n            Buffer.from(latestContent),\n            index,\n          );\n        },\n        { timeout },\n      );\n    } catch (e) {\n      expect(latestContent, (e as Error).message).toContain(text);\n      throw e;\n    }\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method assertDisplayBufferContains",
-      "startLine": 233,
-      "startCol": 1,
-      "endLine": 267,
-      "endCol": 4
-    },
-    {
-      "text": "  async assertInputBufferContains(\n    text: string,\n    start: number = 0,\n  ): Promise\u003cPosition0Indexed\u003e {\n    return pollUntil(async () =\u003e {\n      const inputBuffer = this.getInputBuffer();\n      const lines = await inputBuffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      const content = lines.slice(start).join(\"\\n\");\n      const index = Buffer.from(content).indexOf(text) as ByteIdx;\n      if (index === -1) {\n        throw new Error(\n          `Unable to find text:\\n\"${text}\"\\nafter line ${start} in inputBuffer.\\ninputBuffer content:\\n${content}`,\n        );\n      }\n\n      return calculatePosition(\n        { row: start, col: 0 } as Position0Indexed,\n        Buffer.from(content),\n        index,\n      );\n    });\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method assertInputBufferContains\n\n  async assertInputBufferContains(\n    text: string,\n    start: number = 0,\n  ): Promise\u003cPosition0Indexed\u003e {\n    return pollUntil(async () =\u003e {\n      const inputBuffer = this.getInputBuffer();\n      const lines = await inputBuffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      const content = lines.slice(start).join(\"\\n\");\n      const index = Buffer.from(content).indexOf(text) as ByteIdx;\n      if (index === -1) {\n        throw new Error(\n          `Unable to find text:\\n\"${text}\"\\nafter line ${start} in inputBuffer.\\ninputBuffer content:\\n${content}`,\n        );\n      }\n\n      return calculatePosition(\n        { row: start, col: 0 } as Position0Indexed,\n        Buffer.from(content),\n        index,\n      );\n    });\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method assertInputBufferContains",
-      "startLine": 269,
-      "startCol": 1,
-      "endLine": 293,
-      "endCol": 4
-    },
-    {
-      "text": "  awaitChatState(\n    desiredState:\n      | { state: \"thread-overview\" }\n      | { state: \"thread-selected\"; id?: ThreadId },\n    message?: string,\n  ) {\n    return pollUntil(() =\u003e {\n      const state = this.magenta.chat.state;\n      if (state.state !== desiredState.state) {\n        throw new Error(\n          `Unexpected chat state. Desired: ${JSON.stringify(desiredState)} actual:${state.state} ${message}`,\n        );\n      }\n\n      if (\n        desiredState.state === \"thread-selected\" \u0026\u0026\n        desiredState.id !== undefined \u0026\u0026\n        desiredState.id !== state.activeThreadId\n      ) {\n        throw new Error(\n          `Unexpected chat state. Desired: ${JSON.stringify(desiredState)} actual: ${JSON.stringify(state)}`,\n        );\n      }\n\n      return;\n    });\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method awaitChatState\n\n  awaitChatState(\n    desiredState:\n      | { state: \"thread-overview\" }\n      | { state: \"thread-selected\"; id?: ThreadId },\n    message?: string,\n  ) {\n    return pollUntil(() =\u003e {\n      const state = this.magenta.chat.state;\n      if (state.state !== desiredState.state) {\n        throw new Error(\n          `Unexpected chat state. Desired: ${JSON.stringify(desiredState)} actual:${state.state} ${message}`,\n        );\n      }\n\n      if (\n        desiredState.state === \"thread-selected\" \u0026\u0026\n        desiredState.id !== undefined \u0026\u0026\n        desiredState.id !== state.activeThreadId\n      ) {\n        throw new Error(\n          `Unexpected chat state. Desired: ${JSON.stringify(desiredState)} actual: ${JSON.stringify(state)}`,\n        );\n      }\n\n      return;\n    });\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method awaitChatState",
-      "startLine": 295,
-      "startCol": 1,
-      "endLine": 321,
-      "endCol": 4
-    },
-    {
-      "text": "/** Get thread IDs in creation order */\n  getThreadIds(): ThreadId[] {\n    return Object.keys(this.magenta.chat.threadWrappers).sort() as ThreadId[];\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method getThreadIds\n\n/** Get thread IDs in creation order */\n  getThreadIds(): ThreadId[] {\n    return Object.keys(this.magenta.chat.threadWrappers).sort() as ThreadId[];\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method getThreadIds",
-      "startLine": 323,
-      "startCol": 3,
-      "endLine": 326,
-      "endCol": 4
-    },
-    {
-      "text": "/** Get the nth thread ID (0-indexed) */\n  getThreadId(index: number): ThreadId {\n    const ids = this.getThreadIds();\n    if (index \u003c 0 || index \u003e= ids.length) {\n      throw new Error(\n        `Thread index ${index} out of bounds. Available threads: ${ids.length}`,\n      );\n    }\n    return ids[index];\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method getThreadId\n\n/** Get the nth thread ID (0-indexed) */\n  getThreadId(index: number): ThreadId {\n    const ids = this.getThreadIds();\n    if (index \u003c 0 || index \u003e= ids.length) {\n      throw new Error(\n        `Thread index ${index} out of bounds. Available threads: ${ids.length}`,\n      );\n    }\n    return ids[index];\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method getThreadId",
-      "startLine": 328,
-      "startCol": 3,
-      "endLine": 337,
-      "endCol": 4
-    },
-    {
-      "text": "/** Get the active thread ID */\n  getActiveThreadId(): ThreadId | undefined {\n    const state = this.magenta.chat.state;\n    if (state.state === \"thread-selected\") {\n      return state.activeThreadId;\n    }\n    return undefined;\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method getActiveThreadId\n\n/** Get the active thread ID */\n  getActiveThreadId(): ThreadId | undefined {\n    const state = this.magenta.chat.state;\n    if (state.state === \"thread-selected\") {\n      return state.activeThreadId;\n    }\n    return undefined;\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method getActiveThreadId",
-      "startLine": 339,
-      "startCol": 3,
-      "endLine": 346,
-      "endCol": 4
-    },
-    {
-      "text": "/** Wait until the specified number of threads exist */\n  async awaitThreadCount(count: number) {\n    return pollUntil(() =\u003e {\n      const ids = this.getThreadIds();\n      if (ids.length \u003c count) {\n        throw new Error(\n          `Expected ${count} threads, but only ${ids.length} exist`,\n        );\n      }\n      return ids;\n    });\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method awaitThreadCount\n\n/** Wait until the specified number of threads exist */\n  async awaitThreadCount(count: number) {\n    return pollUntil(() =\u003e {\n      const ids = this.getThreadIds();\n      if (ids.length \u003c count) {\n        throw new Error(\n          `Expected ${count} threads, but only ${ids.length} exist`,\n        );\n      }\n      return ids;\n    });\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method awaitThreadCount",
-      "startLine": 348,
-      "startCol": 3,
-      "endLine": 359,
-      "endCol": 4
-    },
-    {
-      "text": "  async assertBufferContains(\n    buffer: NvimBuffer,\n    text: string,\n    start: number = 0,\n  ): Promise\u003cPosition0Indexed\u003e {\n    try {\n      return await pollUntil(async () =\u003e {\n        const lines = await buffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        const content = lines.slice(start).join(\"\\n\");\n        const index = Buffer.from(content).indexOf(text) as ByteIdx;\n        if (index === -1) {\n          throw new Error(\n            `Unable to find text:\\n\"${text}\"\\nafter line ${start} in inputBuffer.\\ninputBuffer content:\\n${content}`,\n          );\n        }\n\n        return calculatePosition(\n          { row: start, col: 0 } as Position0Indexed,\n          Buffer.from(content),\n          index,\n        );\n      });\n    } catch (e) {\n      const lines = await buffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      const content = lines.slice(start).join(\"\\n\");\n      expect(content).toContain(text);\n      throw e;\n    }\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method assertBufferContains\n\n  async assertBufferContains(\n    buffer: NvimBuffer,\n    text: string,\n    start: number = 0,\n  ): Promise\u003cPosition0Indexed\u003e {\n    try {\n      return await pollUntil(async () =\u003e {\n        const lines = await buffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        const content = lines.slice(start).join(\"\\n\");\n        const index = Buffer.from(content).indexOf(text) as ByteIdx;\n        if (index === -1) {\n          throw new Error(\n            `Unable to find text:\\n\"${text}\"\\nafter line ${start} in inputBuffer.\\ninputBuffer content:\\n${content}`,\n          );\n        }\n\n        return calculatePosition(\n          { row: start, col: 0 } as Position0Indexed,\n          Buffer.from(content),\n          index,\n        );\n      });\n    } catch (e) {\n      const lines = await buffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      const content = lines.slice(start).join(\"\\n\");\n      expect(content).toContain(text);\n      throw e;\n    }\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method assertBufferContains",
-      "startLine": 361,
-      "startCol": 1,
-      "endLine": 395,
-      "endCol": 4
-    },
-    {
-      "text": "  async assertDisplayBufferContent(text: string): Promise\u003cvoid\u003e {\n    try {\n      return await pollUntil(async () =\u003e {\n        const displayBuffer = this.getDisplayBuffer();\n        const lines = await displayBuffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        const content = lines.join(\"\\n\");\n        if (content !== text) {\n          throw new Error(\n            `display buffer content does not match text:\\n\"${text}\"\\ndisplayBuffer content:\\n${content}`,\n          );\n        }\n      });\n    } catch (e) {\n      const displayBuffer = this.getDisplayBuffer();\n      const lines = await displayBuffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      const content = lines.join(\"\\n\");\n      expect(content).toEqual(text);\n      throw e;\n    }\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method assertDisplayBufferContent\n\n  async assertDisplayBufferContent(text: string): Promise\u003cvoid\u003e {\n    try {\n      return await pollUntil(async () =\u003e {\n        const displayBuffer = this.getDisplayBuffer();\n        const lines = await displayBuffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        const content = lines.join(\"\\n\");\n        if (content !== text) {\n          throw new Error(\n            `display buffer content does not match text:\\n\"${text}\"\\ndisplayBuffer content:\\n${content}`,\n          );\n        }\n      });\n    } catch (e) {\n      const displayBuffer = this.getDisplayBuffer();\n      const lines = await displayBuffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      const content = lines.join(\"\\n\");\n      expect(content).toEqual(text);\n      throw e;\n    }\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method assertDisplayBufferContent",
-      "startLine": 397,
-      "startCol": 1,
-      "endLine": 422,
-      "endCol": 4
-    },
-    {
-      "text": "  async assertDisplayBufferDoesNotContain(text: string): Promise\u003cvoid\u003e {\n    try {\n      return await pollUntil(async () =\u003e {\n        const displayBuffer = this.getDisplayBuffer();\n        const lines = await displayBuffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        const content = lines.join(\"\\n\");\n        if (content.includes(text)) {\n          throw new Error(\n            `display buffer should not contain text:\\n\"${text}\"\\nbut displayBuffer content:\\n${content}`,\n          );\n        }\n      });\n    } catch (e) {\n      const displayBuffer = this.getDisplayBuffer();\n      const lines = await displayBuffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      const content = lines.join(\"\\n\");\n      expect(content).not.toContain(text);\n      throw e;\n    }\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method assertDisplayBufferDoesNotContain\n\n  async assertDisplayBufferDoesNotContain(text: string): Promise\u003cvoid\u003e {\n    try {\n      return await pollUntil(async () =\u003e {\n        const displayBuffer = this.getDisplayBuffer();\n        const lines = await displayBuffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        const content = lines.join(\"\\n\");\n        if (content.includes(text)) {\n          throw new Error(\n            `display buffer should not contain text:\\n\"${text}\"\\nbut displayBuffer content:\\n${content}`,\n          );\n        }\n      });\n    } catch (e) {\n      const displayBuffer = this.getDisplayBuffer();\n      const lines = await displayBuffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      const content = lines.join(\"\\n\");\n      expect(content).not.toContain(text);\n      throw e;\n    }\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method assertDisplayBufferDoesNotContain",
-      "startLine": 424,
-      "startCol": 1,
-      "endLine": 449,
-      "endCol": 4
-    },
-    {
-      "text": "  async triggerDisplayBufferKey(pos: Position0Indexed, key: BindingKey) {\n    const { displayWindow } = this.getVisibleState();\n    await this.nvim.call(\"nvim_set_current_win\", [displayWindow.id]);\n    await displayWindow.setCursor(pos0to1(pos));\n\n    await this.nvim.call(\"nvim_exec_lua\", [\n      `\\\nvim.rpcnotify(${this.nvim.channelId}, \"magentaKey\", \"${key}\")\n-- local key = vim.api.nvim_replace_termcodes(\"${key}\", true, false, true);\n-- vim.api.nvim_feedkeys(key, \"n\", false);`,\n\n      [],\n    ]);\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method triggerDisplayBufferKey\n\n  async triggerDisplayBufferKey(pos: Position0Indexed, key: BindingKey) {\n    const { displayWindow } = this.getVisibleState();\n    await this.nvim.call(\"nvim_set_current_win\", [displayWindow.id]);\n    await displayWindow.setCursor(pos0to1(pos));\n\n    await this.nvim.call(\"nvim_exec_lua\", [\n      `\\\nvim.rpcnotify(${this.nvim.channelId}, \"magentaKey\", \"${key}\")\n-- local key = vim.api.nvim_replace_termcodes(\"${key}\", true, false, true);\n-- vim.api.nvim_feedkeys(key, \"n\", false);`,\n\n      [],\n    ]);\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method triggerDisplayBufferKey",
-      "startLine": 451,
-      "startCol": 1,
-      "endLine": 464,
-      "endCol": 4
-    },
-    {
-      "text": "/** Find a line containing the given text in the display buffer, position\n   * the cursor on that line, and dispatch the F binding for the message that\n   * contains that line. Resolves the binding directly via getBindings to avoid\n   * re-render races, and dispatches with no selection (normal-mode F).\n   */\n  async pressOnDisplayMessage(\n    textSnippet: string,\n    key: BindingKey,\n  ): Promise\u003cvoid\u003e {\n    return this.triggerDisplayBufferKeyOnContent(textSnippet, key);\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method pressOnDisplayMessage\n\n/** Find a line containing the given text in the display buffer, position\n   * the cursor on that line, and dispatch the F binding for the message that\n   * contains that line. Resolves the binding directly via getBindings to avoid\n   * re-render races, and dispatches with no selection (normal-mode F).\n   */\n  async pressOnDisplayMessage(\n    textSnippet: string,\n    key: BindingKey,\n  ): Promise\u003cvoid\u003e {\n    return this.triggerDisplayBufferKeyOnContent(textSnippet, key);\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method pressOnDisplayMessage",
-      "startLine": 466,
-      "startCol": 3,
-      "endLine": 476,
-      "endCol": 4
-    },
-    {
-      "text": "/** Like pressOnDisplayMessage but invokes the binding with a `selection`\n   * payload — emulating visual-mode F where the lua side captures the visual\n   * selection and forwards it to node.\n   */\n  async pressOnDisplayMessageWithSelection(\n    textSnippet: string,\n    key: BindingKey,\n    selection: string[],\n  ): Promise\u003cvoid\u003e",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method pressOnDisplayMessageWithSelection\n\n/** Like pressOnDisplayMessage but invokes the binding with a `selection`\n   * payload — emulating visual-mode F where the lua side captures the visual\n   * selection and forwards it to node.\n   */\n  async pressOnDisplayMessageWithSelection(\n    textSnippet: string,\n    key: BindingKey,\n    selection: string[],\n  ): Promise\u003cvoid\u003e",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method pressOnDisplayMessageWithSelection",
-      "startLine": 478,
-      "startCol": 3,
-      "endLine": 486,
-      "endCol": 19
-    },
-    {
-      "text": "{\n    let latestContent;\n    await pollUntil(\n      async () =\u003e {\n        const displayBuffer = this.getDisplayBuffer();\n        const versionBefore =\n          this.magenta.bufferManager.getMountedApp(this.getActiveKey())\n            ?.renderVersion ?? 0;\n\n        const lines = await displayBuffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        latestContent = lines.join(\"\\n\");\n        const index = Buffer.from(latestContent).indexOf(\n          textSnippet,\n        ) as ByteIdx;\n        if (index === -1) {\n          throw new Error(\n            `! Unable to find text ${textSnippet} in displayBuffer`,\n          );\n        }\n        const position = calculatePosition(\n          { row: 0, col: 0 } as Position0Indexed,\n          Buffer.from(latestContent),\n          index,\n        );\n\n        const { displayWindow } = this.getVisibleState();\n        await this.nvim.call(\"nvim_set_current_win\", [displayWindow.id]);\n        await displayWindow.setCursor(pos0to1(position));\n\n        const versionAfter =\n          this.magenta.bufferManager.getMountedApp(this.getActiveKey())\n            ?.renderVersion ?? 0;\n        if (versionBefore !== versionAfter) {\n          throw new Error(\n            `! Re-render occurred while setting cursor. Retrying.`,\n          );\n        }\n\n        const mountedNode = this.magenta.bufferManager\n          .getMountedApp(this.getActiveKey())\n          ?.getMountedNode();\n        if (!mountedNode) {\n          throw new Error(`! mountedChatApp not available`);\n        }\n        const binding = getBinding(mountedNode, position, \"v\", key);\n        if (!binding) {\n          throw new Error(\n            `! No binding for key \"${key}\" at position ${JSON.stringify(position)}`,\n          );\n        }\n        binding({ selection });\n      },\n      { timeout: 2000 },\n    );\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method pressOnDisplayMessageWithSelection\n\n{\n    let latestContent;\n    await pollUntil(\n      async () =\u003e {\n        const displayBuffer = this.getDisplayBuffer();\n        const versionBefore =\n          this.magenta.bufferManager.getMountedApp(this.getActiveKey())\n            ?.renderVersion ?? 0;\n\n        const lines = await displayBuffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        latestContent = lines.join(\"\\n\");\n        const index = Buffer.from(latestContent).indexOf(\n          textSnippet,\n        ) as ByteIdx;\n        if (index === -1) {\n          throw new Error(\n            `! Unable to find text ${textSnippet} in displayBuffer`,\n          );\n        }\n        const position = calculatePosition(\n          { row: 0, col: 0 } as Position0Indexed,\n          Buffer.from(latestContent),\n          index,\n        );\n\n        const { displayWindow } = this.getVisibleState();\n        await this.nvim.call(\"nvim_set_current_win\", [displayWindow.id]);\n        await displayWindow.setCursor(pos0to1(position));\n\n        const versionAfter =\n          this.magenta.bufferManager.getMountedApp(this.getActiveKey())\n            ?.renderVersion ?? 0;\n        if (versionBefore !== versionAfter) {\n          throw new Error(\n            `! Re-render occurred while setting cursor. Retrying.`,\n          );\n        }\n\n        const mountedNode = this.magenta.bufferManager\n          .getMountedApp(this.getActiveKey())\n          ?.getMountedNode();\n        if (!mountedNode) {\n          throw new Error(`! mountedChatApp not available`);\n        }\n        const binding = getBinding(mountedNode, position, \"v\", key);\n        if (!binding) {\n          throw new Error(\n            `! No binding for key \"${key}\" at position ${JSON.stringify(position)}`,\n          );\n        }\n        binding({ selection });\n      },\n      { timeout: 2000 },\n    );\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method pressOnDisplayMessageWithSelection",
-      "startLine": 486,
-      "startCol": 20,
-      "endLine": 543,
-      "endCol": 4
-    },
-    {
-      "text": "  async triggerDisplayBufferKeyOnContent(\n    text: string,\n    key: BindingKey,\n    start: number = 0,\n  ): Promise\u003cvoid\u003e {\n    let latestContent;\n    try {\n      await pollUntil(\n        async () =\u003e {\n          const displayBuffer = this.getDisplayBuffer();\n          // Capture renderVersion before any async operations so we can\n          // detect if a re-render happens at any point during this attempt.\n          const versionBefore =\n            this.magenta.bufferManager.getMountedApp(this.getActiveKey())\n              ?.renderVersion ?? 0;\n\n          const lines = await displayBuffer.getLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n          });\n          latestContent = lines.slice(start).join(\"\\n\");\n          const index = Buffer.from(latestContent).indexOf(text) as ByteIdx;\n          if (index === -1) {\n            throw new Error(\n              `! Unable to find text ${text} after line ${start} in displayBuffer`,\n            );\n          }\n          const position = calculatePosition(\n            { row: start, col: 0 } as Position0Indexed,\n            Buffer.from(latestContent),\n            index,\n          );\n\n          const { displayWindow } = this.getVisibleState();\n          await this.nvim.call(\"nvim_set_current_win\", [displayWindow.id]);\n          await displayWindow.setCursor(pos0to1(position));\n\n          const versionAfter =\n            this.magenta.bufferManager.getMountedApp(this.getActiveKey())\n              ?.renderVersion ?? 0;\n          if (versionBefore !== versionAfter) {\n            throw new Error(\n              `! Re-render occurred while setting cursor. Retrying.`,\n            );\n          }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method triggerDisplayBufferKeyOnContent\n\n  async triggerDisplayBufferKeyOnContent(\n    text: string,\n    key: BindingKey,\n    start: number = 0,\n  ): Promise\u003cvoid\u003e {\n    let latestContent;\n    try {\n      await pollUntil(\n        async () =\u003e {\n          const displayBuffer = this.getDisplayBuffer();\n          // Capture renderVersion before any async operations so we can\n          // detect if a re-render happens at any point during this attempt.\n          const versionBefore =\n            this.magenta.bufferManager.getMountedApp(this.getActiveKey())\n              ?.renderVersion ?? 0;\n\n          const lines = await displayBuffer.getLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n          });\n          latestContent = lines.slice(start).join(\"\\n\");\n          const index = Buffer.from(latestContent).indexOf(text) as ByteIdx;\n          if (index === -1) {\n            throw new Error(\n              `! Unable to find text ${text} after line ${start} in displayBuffer`,\n            );\n          }\n          const position = calculatePosition(\n            { row: start, col: 0 } as Position0Indexed,\n            Buffer.from(latestContent),\n            index,\n          );\n\n          const { displayWindow } = this.getVisibleState();\n          await this.nvim.call(\"nvim_set_current_win\", [displayWindow.id]);\n          await displayWindow.setCursor(pos0to1(position));\n\n          const versionAfter =\n            this.magenta.bufferManager.getMountedApp(this.getActiveKey())\n              ?.renderVersion ?? 0;\n          if (versionBefore !== versionAfter) {\n            throw new Error(\n              `! Re-render occurred while setting cursor. Retrying.`,\n            );\n          }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method triggerDisplayBufferKeyOnContent",
-      "startLine": 545,
-      "startCol": 1,
-      "endLine": 589,
-      "endCol": 12
-    },
-    {
-      "text": "// Directly resolve and invoke the binding at the known position\n          // instead of going through rpcnotify + getCursor, which is\n          // vulnerable to re-renders moving the cursor.\n          const mountedNode = this.magenta.bufferManager\n            .getMountedApp(this.getActiveKey())\n            ?.getMountedNode();\n          if (!mountedNode) {\n            throw new Error(`! mountedChatApp not available`);\n          }\n          const binding = getBinding(mountedNode, position, \"n\", key);\n          if (!binding) {\n            throw new Error(\n              `! No binding for key \"${key}\" at position ${JSON.stringify(position)}`,\n            );\n          }\n          binding();\n        },\n        { timeout: 2000 },\n      );\n    } catch (e) {\n      expect(latestContent, (e as Error).message).toContain(text);\n      throw e;\n    }\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method triggerDisplayBufferKeyOnContent\n\n// Directly resolve and invoke the binding at the known position\n          // instead of going through rpcnotify + getCursor, which is\n          // vulnerable to re-renders moving the cursor.\n          const mountedNode = this.magenta.bufferManager\n            .getMountedApp(this.getActiveKey())\n            ?.getMountedNode();\n          if (!mountedNode) {\n            throw new Error(`! mountedChatApp not available`);\n          }\n          const binding = getBinding(mountedNode, position, \"n\", key);\n          if (!binding) {\n            throw new Error(\n              `! No binding for key \"${key}\" at position ${JSON.stringify(position)}`,\n            );\n          }\n          binding();\n        },\n        { timeout: 2000 },\n      );\n    } catch (e) {\n      expect(latestContent, (e as Error).message).toContain(text);\n      throw e;\n    }\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method triggerDisplayBufferKeyOnContent",
-      "startLine": 591,
-      "startCol": 11,
-      "endLine": 614,
-      "endCol": 4
-    },
-    {
-      "text": "  async assertWindowCount(n: number, message?: string) {\n    return await pollUntil(\n      async () =\u003e {\n        const windows = await getAllWindows(this.nvim);\n        if (windows.length !== n) {\n          const windowDetails = await Promise.all(\n            windows.map(async (w) =\u003e {\n              const buffer = await w.buffer();\n              const name = await buffer.getName();\n              return `window ${w.id} containing buffer \"${name}\"`;\n            }),\n          );\n          throw new Error(\n            `${message ?? `Expected ${n} windows to appear`}. Saw ${windows.length} windows: ${JSON.stringify(windowDetails, null, 2)}`,\n          );\n        }\n\n        return windows;\n      },\n      { timeout: 200 },\n    );\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method assertWindowCount\n\n  async assertWindowCount(n: number, message?: string) {\n    return await pollUntil(\n      async () =\u003e {\n        const windows = await getAllWindows(this.nvim);\n        if (windows.length !== n) {\n          const windowDetails = await Promise.all(\n            windows.map(async (w) =\u003e {\n              const buffer = await w.buffer();\n              const name = await buffer.getName();\n              return `window ${w.id} containing buffer \"${name}\"`;\n            }),\n          );\n          throw new Error(\n            `${message ?? `Expected ${n} windows to appear`}. Saw ${windows.length} windows: ${JSON.stringify(windowDetails, null, 2)}`,\n          );\n        }\n\n        return windows;\n      },\n      { timeout: 200 },\n    );\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method assertWindowCount",
-      "startLine": 616,
-      "startCol": 1,
-      "endLine": 637,
-      "endCol": 4
-    },
-    {
-      "text": "  async findWindow(\n    predicate: (w: NvimWindow) =\u003e Promise\u003cboolean\u003e,\n  ): Promise\u003cNvimWindow\u003e {\n    return await pollUntil(\n      async () =\u003e {\n        const windows = await getAllWindows(this.nvim);\n        for (const window of windows) {\n          if (await predicate(window)) {\n            return window;\n          }\n        }\n\n        const windowDetails = await Promise.all(\n          windows.map(async (w) =\u003e {\n            const buffer = await w.buffer();\n            const name = await buffer.getName();\n            return `window ${w.id} containing buffer \"${name}\"`;\n          }),\n        );\n\n        throw new Error(\n          `No window matched predicate ${predicate.toString()}: [${windowDetails.join(\", \")}]`,\n        );\n      },\n      { timeout: 200 },\n    );\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method findWindow\n\n  async findWindow(\n    predicate: (w: NvimWindow) =\u003e Promise\u003cboolean\u003e,\n  ): Promise\u003cNvimWindow\u003e {\n    return await pollUntil(\n      async () =\u003e {\n        const windows = await getAllWindows(this.nvim);\n        for (const window of windows) {\n          if (await predicate(window)) {\n            return window;\n          }\n        }\n\n        const windowDetails = await Promise.all(\n          windows.map(async (w) =\u003e {\n            const buffer = await w.buffer();\n            const name = await buffer.getName();\n            return `window ${w.id} containing buffer \"${name}\"`;\n          }),\n        );\n\n        throw new Error(\n          `No window matched predicate ${predicate.toString()}: [${windowDetails.join(\", \")}]`,\n        );\n      },\n      { timeout: 200 },\n    );\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method findWindow",
-      "startLine": 639,
-      "startCol": 1,
-      "endLine": 665,
-      "endCol": 4
-    },
-    {
-      "text": "/** Set a window's buffer, bypassing 'winfixbuf'. Magenta windows keep\n   * 'winfixbuf' enabled to block accidental buffer swaps; this simulates the\n   * forced-open scenario (e.g. `:edit!`) that the BufEnter fallback must\n   * still handle. */\n  async forceWinSetBuf(winId: WindowId, bufId: BufNr): Promise\u003cvoid\u003e {\n    // `:buffer!` uses the \"!\" modifier to force past 'winfixbuf' without\n    // toggling the option, avoiding a race with the handler (a separate\n    // process) that also toggles 'winfixbuf' during its restore.\n    await this.nvim.call(\"nvim_set_current_win\", [winId]);\n    await this.nvim.call(\"nvim_exec2\", [`buffer! ${bufId}`, {}]);\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method forceWinSetBuf\n\n/** Set a window's buffer, bypassing 'winfixbuf'. Magenta windows keep\n   * 'winfixbuf' enabled to block accidental buffer swaps; this simulates the\n   * forced-open scenario (e.g. `:edit!`) that the BufEnter fallback must\n   * still handle. */\n  async forceWinSetBuf(winId: WindowId, bufId: BufNr): Promise\u003cvoid\u003e {\n    // `:buffer!` uses the \"!\" modifier to force past 'winfixbuf' without\n    // toggling the option, avoiding a race with the handler (a separate\n    // process) that also toggles 'winfixbuf' during its restore.\n    await this.nvim.call(\"nvim_set_current_win\", [winId]);\n    await this.nvim.call(\"nvim_exec2\", [`buffer! ${bufId}`, {}]);\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method forceWinSetBuf",
-      "startLine": 667,
-      "startCol": 3,
-      "endLine": 677,
-      "endCol": 4
-    },
-    {
-      "text": "  async editFile(filePath: string): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec2\", [`edit ${filePath}`, {}]);\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method editFile\n\n  async editFile(filePath: string): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec2\", [`edit ${filePath}`, {}]);\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method editFile",
-      "startLine": 679,
-      "startCol": 1,
-      "endLine": 681,
-      "endCol": 4
-    },
-    {
-      "text": "/** Open a file and wait for LSP to attach with hover capability.\n   *  Useful for tests that depend on LSP being ready before proceeding.\n   */\n  async editFileAndWaitForLsp(\n    filePath: string,\n    timeout = 15_000,\n  ): Promise\u003cvoid\u003e {\n    await this.editFile(filePath);\n    const buf = await this.nvim.call(\"nvim_get_current_buf\", []);\n    await pollUntil(\n      async () =\u003e {\n        const result = await this.nvim.call(\"nvim_exec_lua\", [\n          `local clients = vim.lsp.get_clients({ bufnr = ... })\n           for _, client in ipairs(clients) do\n             if client.server_capabilities.hoverProvider then\n               return true\n             end\n           end\n           return false`,\n          [buf],\n        ]);\n        if (!result) {\n          throw new Error(\"LSP not attached yet\");\n        }\n        return result;\n      },\n      { timeout },\n    );\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method editFileAndWaitForLsp\n\n/** Open a file and wait for LSP to attach with hover capability.\n   *  Useful for tests that depend on LSP being ready before proceeding.\n   */\n  async editFileAndWaitForLsp(\n    filePath: string,\n    timeout = 15_000,\n  ): Promise\u003cvoid\u003e {\n    await this.editFile(filePath);\n    const buf = await this.nvim.call(\"nvim_get_current_buf\", []);\n    await pollUntil(\n      async () =\u003e {\n        const result = await this.nvim.call(\"nvim_exec_lua\", [\n          `local clients = vim.lsp.get_clients({ bufnr = ... })\n           for _, client in ipairs(clients) do\n             if client.server_capabilities.hoverProvider then\n               return true\n             end\n           end\n           return false`,\n          [buf],\n        ]);\n        if (!result) {\n          throw new Error(\"LSP not attached yet\");\n        }\n        return result;\n      },\n      { timeout },\n    );\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method editFileAndWaitForLsp",
-      "startLine": 682,
-      "startCol": 3,
-      "endLine": 710,
-      "endCol": 4
-    },
-    {
-      "text": "// For compatibility with tests using nvim.command\n  async command(cmd: string): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_command\", [cmd]);\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method command\n\n// For compatibility with tests using nvim.command\n  async command(cmd: string): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_command\", [cmd]);\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method command",
-      "startLine": 712,
-      "startCol": 3,
-      "endLine": 715,
-      "endCol": 4
-    },
-    {
-      "text": "  async selectRange(startPos: Position0Indexed, endPos: Position0Indexed) {\n    const window = await getCurrentWindow(this.nvim);\n    const buf = await window.buffer();\n\n    await window.setCursor(pos0to1(startPos));\n    await buf.setMark({ mark: \"\u003c\", pos: pos0to1(startPos) });\n    await this.nvim.call(\"nvim_exec2\", [`normal! v`, {}]);\n    await window.setCursor(pos0to1(endPos));\n    await buf.setMark({ mark: \"\u003e\", pos: pos0to1(endPos) });\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method selectRange\n\n  async selectRange(startPos: Position0Indexed, endPos: Position0Indexed) {\n    const window = await getCurrentWindow(this.nvim);\n    const buf = await window.buffer();\n\n    await window.setCursor(pos0to1(startPos));\n    await buf.setMark({ mark: \"\u003c\", pos: pos0to1(startPos) });\n    await this.nvim.call(\"nvim_exec2\", [`normal! v`, {}]);\n    await window.setCursor(pos0to1(endPos));\n    await buf.setMark({ mark: \"\u003e\", pos: pos0to1(endPos) });\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method selectRange",
-      "startLine": 717,
-      "startCol": 1,
-      "endLine": 726,
-      "endCol": 4
-    },
-    {
-      "text": "  async addContextFiles(...filePaths: string[]) {\n    const quotedPaths = filePaths.map((path) =\u003e `'${path}'`).join(\" \");\n    await this.nvim.call(\"nvim_command\", [\n      `Magenta context-files ${quotedPaths}`,\n    ]);\n\n    // Wait for all files to be tracked in the context manager\n    await pollUntil(async () =\u003e {\n      const contextManager = this.magenta.chat.getActiveThread().contextManager;\n      const tracked = Object.values(contextManager.files).map(\n        (f) =\u003e f.relFilePath,\n      );\n      for (const filePath of filePaths) {\n        const normalizedPath = filePath.replace(/^\\.\\//, \"\");\n        if (!tracked.some((rel) =\u003e rel === normalizedPath)) {\n          throw new Error(`Context file ${filePath} not yet tracked`);\n        }\n      }\n    });\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method addContextFiles\n\n  async addContextFiles(...filePaths: string[]) {\n    const quotedPaths = filePaths.map((path) =\u003e `'${path}'`).join(\" \");\n    await this.nvim.call(\"nvim_command\", [\n      `Magenta context-files ${quotedPaths}`,\n    ]);\n\n    // Wait for all files to be tracked in the context manager\n    await pollUntil(async () =\u003e {\n      const contextManager = this.magenta.chat.getActiveThread().contextManager;\n      const tracked = Object.values(contextManager.files).map(\n        (f) =\u003e f.relFilePath,\n      );\n      for (const filePath of filePaths) {\n        const normalizedPath = filePath.replace(/^\\.\\//, \"\");\n        if (!tracked.some((rel) =\u003e rel === normalizedPath)) {\n          throw new Error(`Context file ${filePath} not yet tracked`);\n        }\n      }\n    });\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method addContextFiles",
-      "startLine": 727,
-      "startCol": 1,
-      "endLine": 746,
-      "endCol": 4
-    },
-    {
-      "text": "  async sendKeysToInputBuffer(keys: string): Promise\u003cvoid\u003e {\n    const { inputWindow } = this.getVisibleState();\n    await this.nvim.call(\"nvim_set_current_win\", [inputWindow.id]);\n    const escapedKeys = await this.nvim.call(\"nvim_replace_termcodes\", [\n      keys,\n      true,\n      false,\n      true,\n    ]);\n    await this.nvim.call(\"nvim_feedkeys\", [escapedKeys, \"n\", false]);\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method sendKeysToInputBuffer\n\n  async sendKeysToInputBuffer(keys: string): Promise\u003cvoid\u003e {\n    const { inputWindow } = this.getVisibleState();\n    await this.nvim.call(\"nvim_set_current_win\", [inputWindow.id]);\n    const escapedKeys = await this.nvim.call(\"nvim_replace_termcodes\", [\n      keys,\n      true,\n      false,\n      true,\n    ]);\n    await this.nvim.call(\"nvim_feedkeys\", [escapedKeys, \"n\", false]);\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method sendKeysToInputBuffer",
-      "startLine": 748,
-      "startCol": 1,
-      "endLine": 758,
-      "endCol": 4
-    },
-    {
-      "text": "  async getVimMessages(): Promise\u003cstring\u003e {\n    const messages = await this.nvim.call(\"nvim_exec2\", [\n      \"messages\",\n      { output: true },\n    ]);\n    return (messages.output as string) || \"\";\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method getVimMessages\n\n  async getVimMessages(): Promise\u003cstring\u003e {\n    const messages = await this.nvim.call(\"nvim_exec2\", [\n      \"messages\",\n      { output: true },\n    ]);\n    return (messages.output as string) || \"\";\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method getVimMessages",
-      "startLine": 760,
-      "startCol": 1,
-      "endLine": 766,
-      "endCol": 4
-    },
-    {
-      "text": "  async clearVimMessages(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec2\", [\"messages clear\", {}]);\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method clearVimMessages\n\n  async clearVimMessages(): Promise\u003cvoid\u003e {\n    await this.nvim.call(\"nvim_exec2\", [\"messages clear\", {}]);\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method clearVimMessages",
-      "startLine": 768,
-      "startCol": 1,
-      "endLine": 770,
-      "endCol": 4
-    },
-    {
-      "text": "  async awaitExtmarks(\n    buffer: NvimBuffer,\n    expectedCount?: number,\n    timeout: number = 2000,\n    predicate?: (\n      marks: Awaited\u003cReturnType\u003cNvimBuffer[\"getExtmarks\"]\u003e\u003e,\n    ) =\u003e boolean,\n  ) {\n    return await pollUntil(\n      async () =\u003e {\n        const marks = await buffer.getExtmarks();\n\n        // If predicate is provided, use it as the primary filter\n        if (predicate) {\n          if (!predicate(marks)) {\n            throw new Error(\n              `Extmarks predicate not satisfied. Buffer ${buffer.id}. Extmarks: ${JSON.stringify(marks, null, 2)}`,\n            );\n          }\n        }\n\n        // Then apply count check if specified\n        if (expectedCount !== undefined) {\n          if (marks.length !== expectedCount) {\n            throw new Error(\n              `Expected ${expectedCount} extmarks, but found ${marks.length}`,\n            );\n          }\n        } else if (!predicate \u0026\u0026 marks.length === 0) {\n          throw new Error(\"No extmarks found yet\");\n        }\n        return marks;\n      },\n      {\n        timeout,\n      },\n    );\n  }",
-      "contextualizedText": "// node/test/driver.ts \u003e class NvimDriver \u003e method awaitExtmarks\n\n  async awaitExtmarks(\n    buffer: NvimBuffer,\n    expectedCount?: number,\n    timeout: number = 2000,\n    predicate?: (\n      marks: Awaited\u003cReturnType\u003cNvimBuffer[\"getExtmarks\"]\u003e\u003e,\n    ) =\u003e boolean,\n  ) {\n    return await pollUntil(\n      async () =\u003e {\n        const marks = await buffer.getExtmarks();\n\n        // If predicate is provided, use it as the primary filter\n        if (predicate) {\n          if (!predicate(marks)) {\n            throw new Error(\n              `Extmarks predicate not satisfied. Buffer ${buffer.id}. Extmarks: ${JSON.stringify(marks, null, 2)}`,\n            );\n          }\n        }\n\n        // Then apply count check if specified\n        if (expectedCount !== undefined) {\n          if (marks.length !== expectedCount) {\n            throw new Error(\n              `Expected ${expectedCount} extmarks, but found ${marks.length}`,\n            );\n          }\n        } else if (!predicate \u0026\u0026 marks.length === 0) {\n          throw new Error(\"No extmarks found yet\");\n        }\n        return marks;\n      },\n      {\n        timeout,\n      },\n    );\n  }",
-      "headingContext": "node/test/driver.ts \u003e class NvimDriver \u003e method awaitExtmarks",
-      "startLine": 772,
-      "startCol": 1,
-      "endLine": 809,
-      "endCol": 4
+      "start": 24055,
+      "end": 25134
     }
   ]
 }

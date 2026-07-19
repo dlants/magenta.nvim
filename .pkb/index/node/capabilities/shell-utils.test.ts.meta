@@ -1,15 +1,11 @@
 {
   "blobSha": "184405bd5a5bac5dfddb4cded844920b0f01e0e4",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { describe, expect, test } from \"vitest\";\nimport { createLogWriter } from \"./shell-utils.ts\";\n\ndescribe(\"createLogWriter\", () =\u003e {\n  test(\"writes after end() are no-ops and do not throw\", () =\u003e {\n    const logWriter = createLogWriter(\n      \"logwriter-test-thread\",\n      `logwriter-test-${Date.now()}`,\n      \"echo hi\",\n    );\n\n    logWriter.write(\"stdout\", \"before end\");\n    logWriter.end();\n\n    // Simulate late data events from a killed detached process group.\n    expect(() =\u003e {\n      logWriter.write(\"stdout\", \"after end\");\n      logWriter.writeRaw(\"after end raw\");\n      logWriter.end();\n    }).not.toThrow();\n  });\n});",
-      "contextualizedText": "// node/capabilities/shell-utils.test.ts\n\nimport { describe, expect, test } from \"vitest\";\nimport { createLogWriter } from \"./shell-utils.ts\";\n\ndescribe(\"createLogWriter\", () =\u003e {\n  test(\"writes after end() are no-ops and do not throw\", () =\u003e {\n    const logWriter = createLogWriter(\n      \"logwriter-test-thread\",\n      `logwriter-test-${Date.now()}`,\n      \"echo hi\",\n    );\n\n    logWriter.write(\"stdout\", \"before end\");\n    logWriter.end();\n\n    // Simulate late data events from a killed detached process group.\n    expect(() =\u003e {\n      logWriter.write(\"stdout\", \"after end\");\n      logWriter.writeRaw(\"after end raw\");\n      logWriter.end();\n    }).not.toThrow();\n  });\n});",
-      "headingContext": "node/capabilities/shell-utils.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 22,
-      "endCol": 4
+      "start": 0,
+      "end": 636
     }
   ]
 }

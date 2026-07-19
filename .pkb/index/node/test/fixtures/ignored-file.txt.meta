@@ -1,15 +1,11 @@
 {
   "blobSha": "9579caf9ba9340691a7fe097257d34c6f008c4c9",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "this file shoudl be gitignored",
-      "contextualizedText": "this file shoudl be gitignored",
-      "headingContext": "",
-      "startLine": 0,
-      "startCol": 0,
-      "endLine": 0,
-      "endCol": 0
+      "start": 0,
+      "end": 30
     }
   ]
 }

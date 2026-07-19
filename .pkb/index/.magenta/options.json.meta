@@ -1,15 +1,11 @@
 {
   "blobSha": "cbc3bfd94f4bf29daa5990f01775efbf4152b0ed",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "{\n  \"sandbox\": {\n    \"network\": {\n      \"allowUnixSockets\": [\"/private/tmp\", \"/tmp/claude\"],\n      \"allowAllUnixSockets\": true,\n      \"allowedDomains\": [\"mcp.slack.com\"]\n    },\n    \"filesystem\": {\n      \"allowRead\": [\n        \"./.github\",\n        \"./.magenta\",\n        \"./.vscode\",\n        \"./test-plugins/nvim-cmp/.githooks\",\n        \"./test-plugins/nvim-cmp/.github\",\n        \"./node/packages/sandbox-runtime/.github\",\n        \"./node/packages/sandbox-runtime/.vscode\",\n        \"~/.config/slack-skill\"\n      ],\n      \"allowWrite\": [\n        \"/private/tmp/magenta/\",\n        \"/tmp/claude\"\n      ]\n    }\n  }\n}",
-      "contextualizedText": "// .magenta/options.json\n\n{\n  \"sandbox\": {\n    \"network\": {\n      \"allowUnixSockets\": [\"/private/tmp\", \"/tmp/claude\"],\n      \"allowAllUnixSockets\": true,\n      \"allowedDomains\": [\"mcp.slack.com\"]\n    },\n    \"filesystem\": {\n      \"allowRead\": [\n        \"./.github\",\n        \"./.magenta\",\n        \"./.vscode\",\n        \"./test-plugins/nvim-cmp/.githooks\",\n        \"./test-plugins/nvim-cmp/.github\",\n        \"./node/packages/sandbox-runtime/.github\",\n        \"./node/packages/sandbox-runtime/.vscode\",\n        \"~/.config/slack-skill\"\n      ],\n      \"allowWrite\": [\n        \"/private/tmp/magenta/\",\n        \"/tmp/claude\"\n      ]\n    }\n  }\n}",
-      "headingContext": ".magenta/options.json",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 25,
-      "endCol": 2
+      "start": 0,
+      "end": 609
     }
   ]
 }

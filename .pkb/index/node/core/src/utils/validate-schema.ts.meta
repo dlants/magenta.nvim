@@ -1,60 +1,15 @@
 {
   "blobSha": "b54bcb986cb3d0afefef978b6059719fcb606101",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "/**\n * Minimal, dependency-free JSON Schema validator. Covers the subset that\n * magenta scripts use to describe their parameters: `type` (object, array,\n * string, number, integer, boolean, null — single or union), `properties`,\n * `required`, `items`, `enum`, and `additionalProperties: false`. Returns a\n * list of human-readable error strings; an empty list means the value is valid.\n */\nexport function validateAgainstSchema(\n  value: unknown,\n  schema: Record\u003cstring, unknown\u003e,\n  path = \"$\",\n): string[]",
-      "contextualizedText": "// node/core/src/utils/validate-schema.ts \u003e function validateAgainstSchema\n\n/**\n * Minimal, dependency-free JSON Schema validator. Covers the subset that\n * magenta scripts use to describe their parameters: `type` (object, array,\n * string, number, integer, boolean, null — single or union), `properties`,\n * `required`, `items`, `enum`, and `additionalProperties: false`. Returns a\n * list of human-readable error strings; an empty list means the value is valid.\n */\nexport function validateAgainstSchema(\n  value: unknown,\n  schema: Record\u003cstring, unknown\u003e,\n  path = \"$\",\n): string[]",
-      "headingContext": "node/core/src/utils/validate-schema.ts \u003e function validateAgainstSchema",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 12,
-      "endCol": 12
+      "start": 0,
+      "end": 1951
     },
     {
-      "text": "{\n  const errors: string[] = [];\n\n  if (Array.isArray(schema.enum)) {\n    const ok = schema.enum.some((e) =\u003e deepEqual(e, value));\n    if (!ok) {\n      errors.push(`${path}: expected one of ${JSON.stringify(schema.enum)}`);\n      return errors;\n    }\n  }\n\n  const type = schema.type;\n  if (typeof type === \"string\" || Array.isArray(type)) {\n    const types = Array.isArray(type) ? type : [type];\n    if (!types.some((t) =\u003e matchesType(value, t))) {\n      errors.push(\n        `${path}: expected type ${types.join(\"|\")} but got ${jsTypeOf(value)}`,\n      );\n      return errors;\n    }\n  }\n\n  if (matchesType(value, \"object\") \u0026\u0026 isPlainObject(value)) {\n    const obj = value;\n    const required = Array.isArray(schema.required)\n      ? (schema.required as string[])\n      : [];\n    for (const key of required) {\n      if (!(key in obj)) {\n        errors.push(`${path}.${key}: required property is missing`);\n      }\n    }\n    const props = isPlainObject(schema.properties)\n      ? (schema.properties as Record\u003cstring, Record\u003cstring, unknown\u003e\u003e)\n      : {};\n    for (const [key, sub] of Object.entries(props)) {\n      if (key in obj) {\n        errors.push(...validateAgainstSchema(obj[key], sub, `${path}.${key}`));\n      }\n    }\n    if (schema.additionalProperties === false) {\n      for (const key of Object.keys(obj)) {\n        if (!(key in props)) {\n          errors.push(`${path}.${key}: unexpected property`);\n        }\n      }\n    }\n  }\n\n  if (Array.isArray(value) \u0026\u0026 isPlainObject(schema.items)) {\n    const itemSchema = schema.items as Record\u003cstring, unknown\u003e;\n    value.forEach((item, i) =\u003e {\n      errors.push(...validateAgainstSchema(item, itemSchema, `${path}[${i}]`));\n    });\n  }\n\n  return errors;\n}",
-      "contextualizedText": "// node/core/src/utils/validate-schema.ts \u003e function validateAgainstSchema\n\n{\n  const errors: string[] = [];\n\n  if (Array.isArray(schema.enum)) {\n    const ok = schema.enum.some((e) =\u003e deepEqual(e, value));\n    if (!ok) {\n      errors.push(`${path}: expected one of ${JSON.stringify(schema.enum)}`);\n      return errors;\n    }\n  }\n\n  const type = schema.type;\n  if (typeof type === \"string\" || Array.isArray(type)) {\n    const types = Array.isArray(type) ? type : [type];\n    if (!types.some((t) =\u003e matchesType(value, t))) {\n      errors.push(\n        `${path}: expected type ${types.join(\"|\")} but got ${jsTypeOf(value)}`,\n      );\n      return errors;\n    }\n  }\n\n  if (matchesType(value, \"object\") \u0026\u0026 isPlainObject(value)) {\n    const obj = value;\n    const required = Array.isArray(schema.required)\n      ? (schema.required as string[])\n      : [];\n    for (const key of required) {\n      if (!(key in obj)) {\n        errors.push(`${path}.${key}: required property is missing`);\n      }\n    }\n    const props = isPlainObject(schema.properties)\n      ? (schema.properties as Record\u003cstring, Record\u003cstring, unknown\u003e\u003e)\n      : {};\n    for (const [key, sub] of Object.entries(props)) {\n      if (key in obj) {\n        errors.push(...validateAgainstSchema(obj[key], sub, `${path}.${key}`));\n      }\n    }\n    if (schema.additionalProperties === false) {\n      for (const key of Object.keys(obj)) {\n        if (!(key in props)) {\n          errors.push(`${path}.${key}: unexpected property`);\n        }\n      }\n    }\n  }\n\n  if (Array.isArray(value) \u0026\u0026 isPlainObject(schema.items)) {\n    const itemSchema = schema.items as Record\u003cstring, unknown\u003e;\n    value.forEach((item, i) =\u003e {\n      errors.push(...validateAgainstSchema(item, itemSchema, `${path}[${i}]`));\n    });\n  }\n\n  return errors;\n}",
-      "headingContext": "node/core/src/utils/validate-schema.ts \u003e function validateAgainstSchema",
-      "startLine": 12,
-      "startCol": 13,
-      "endLine": 69,
-      "endCol": 2
-    },
-    {
-      "text": "function matchesType(value: unknown, type: string): boolean {\n  switch (type) {\n    case \"object\":\n      return isPlainObject(value);\n    case \"array\":\n      return Array.isArray(value);\n    case \"string\":\n      return typeof value === \"string\";\n    case \"number\":\n      return typeof value === \"number\" \u0026\u0026 Number.isFinite(value);\n    case \"integer\":\n      return typeof value === \"number\" \u0026\u0026 Number.isInteger(value);\n    case \"boolean\":\n      return typeof value === \"boolean\";\n    case \"null\":\n      return value === null;\n    default:\n      // Unknown type keyword — don't block.\n      return true;\n  }\n}",
-      "contextualizedText": "// node/core/src/utils/validate-schema.ts \u003e function matchesType\n\nfunction matchesType(value: unknown, type: string): boolean {\n  switch (type) {\n    case \"object\":\n      return isPlainObject(value);\n    case \"array\":\n      return Array.isArray(value);\n    case \"string\":\n      return typeof value === \"string\";\n    case \"number\":\n      return typeof value === \"number\" \u0026\u0026 Number.isFinite(value);\n    case \"integer\":\n      return typeof value === \"number\" \u0026\u0026 Number.isInteger(value);\n    case \"boolean\":\n      return typeof value === \"boolean\";\n    case \"null\":\n      return value === null;\n    default:\n      // Unknown type keyword — don't block.\n      return true;\n  }\n}",
-      "headingContext": "node/core/src/utils/validate-schema.ts \u003e function matchesType",
-      "startLine": 71,
-      "startCol": 1,
-      "endLine": 91,
-      "endCol": 2
-    },
-    {
-      "text": "function isPlainObject(value: unknown): value is Record\u003cstring, unknown\u003e {\n  return typeof value === \"object\" \u0026\u0026 value !== null \u0026\u0026 !Array.isArray(value);\n}",
-      "contextualizedText": "// node/core/src/utils/validate-schema.ts \u003e function isPlainObject\n\nfunction isPlainObject(value: unknown): value is Record\u003cstring, unknown\u003e {\n  return typeof value === \"object\" \u0026\u0026 value !== null \u0026\u0026 !Array.isArray(value);\n}",
-      "headingContext": "node/core/src/utils/validate-schema.ts \u003e function isPlainObject",
-      "startLine": 93,
-      "startCol": 1,
-      "endLine": 95,
-      "endCol": 2
-    },
-    {
-      "text": "function jsTypeOf(value: unknown): string {\n  if (value === null) return \"null\";\n  if (Array.isArray(value)) return \"array\";\n  return typeof value;\n}",
-      "contextualizedText": "// node/core/src/utils/validate-schema.ts \u003e function jsTypeOf\n\nfunction jsTypeOf(value: unknown): string {\n  if (value === null) return \"null\";\n  if (Array.isArray(value)) return \"array\";\n  return typeof value;\n}",
-      "headingContext": "node/core/src/utils/validate-schema.ts \u003e function jsTypeOf",
-      "startLine": 97,
-      "startCol": 1,
-      "endLine": 101,
-      "endCol": 2
-    },
-    {
-      "text": "function deepEqual(a: unknown, b: unknown): boolean {\n  return JSON.stringify(a) === JSON.stringify(b);\n}",
-      "contextualizedText": "// node/core/src/utils/validate-schema.ts \u003e function deepEqual\n\nfunction deepEqual(a: unknown, b: unknown): boolean {\n  return JSON.stringify(a) === JSON.stringify(b);\n}",
-      "headingContext": "node/core/src/utils/validate-schema.ts \u003e function deepEqual",
-      "startLine": 103,
-      "startCol": 1,
-      "endLine": 105,
-      "endCol": 2
+      "start": 1955,
+      "end": 3248
     }
   ]
 }

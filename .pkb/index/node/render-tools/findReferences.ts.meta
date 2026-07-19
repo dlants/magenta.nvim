@@ -1,33 +1,11 @@
 {
   "blobSha": "08c7d8f8077d9acf0b9be74ac14d199d1e2bf751",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type {\n  CompletedToolInfo,\n  DisplayContext,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode, withInlineCode } from \"../tea/view.ts\";\nimport {\n  displayPath,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"../utils/files.ts\";\n\ntype Input = {\n  filePath: UnresolvedFilePath;\n  symbol: string;\n};",
-      "contextualizedText": "// node/render-tools/findReferences.ts\n\nimport type {\n  CompletedToolInfo,\n  DisplayContext,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode, withInlineCode } from \"../tea/view.ts\";\nimport {\n  displayPath,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"../utils/files.ts\";\n\ntype Input = {\n  filePath: UnresolvedFilePath;\n  symbol: string;\n};",
-      "headingContext": "node/render-tools/findReferences.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 16,
-      "endCol": 3
-    },
-    {
-      "text": "export function renderSummary(\n  request: UnionToolRequest,\n  displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  const absFilePath = resolveFilePath(\n    displayContext.cwd,\n    input.filePath,\n    displayContext.homeDir,\n  );\n  const pathForDisplay = displayPath(\n    displayContext.cwd,\n    absFilePath,\n    displayContext.homeDir,\n  );\n  return d`🔍 ${withInlineCode(d`\\`${input.symbol}\\``)} in ${withInlineCode(d`\\`${pathForDisplay}\\``)}`;\n}",
-      "contextualizedText": "// node/render-tools/findReferences.ts \u003e function renderSummary\n\nexport function renderSummary(\n  request: UnionToolRequest,\n  displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  const absFilePath = resolveFilePath(\n    displayContext.cwd,\n    input.filePath,\n    displayContext.homeDir,\n  );\n  const pathForDisplay = displayPath(\n    displayContext.cwd,\n    absFilePath,\n    displayContext.homeDir,\n  );\n  return d`🔍 ${withInlineCode(d`\\`${input.symbol}\\``)} in ${withInlineCode(d`\\`${pathForDisplay}\\``)}`;\n}",
-      "headingContext": "node/render-tools/findReferences.ts \u003e function renderSummary",
-      "startLine": 18,
-      "startCol": 1,
-      "endLine": 34,
-      "endCol": 2
-    },
-    {
-      "text": "export function renderResultSummary(\n  info: CompletedToolInfo,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const result = info.result.result;\n  if (result.status === \"error\") {\n    return d`${result.error}`;\n  }\n\n  let refCount = 0;\n  for (const content of result.value) {\n    if (content.type === \"text\") {\n      refCount += content.text\n        .split(\"\\n\")\n        .filter((l) =\u003e l.trim().length \u003e 0).length;\n    }\n  }\n  return d`${refCount.toString()} references`;\n}",
-      "contextualizedText": "// node/render-tools/findReferences.ts \u003e function renderResultSummary\n\nexport function renderResultSummary(\n  info: CompletedToolInfo,\n  _displayContext: DisplayContext,\n): VDOMNode {\n  const result = info.result.result;\n  if (result.status === \"error\") {\n    return d`${result.error}`;\n  }\n\n  let refCount = 0;\n  for (const content of result.value) {\n    if (content.type === \"text\") {\n      refCount += content.text\n        .split(\"\\n\")\n        .filter((l) =\u003e l.trim().length \u003e 0).length;\n    }\n  }\n  return d`${refCount.toString()} references`;\n}",
-      "headingContext": "node/render-tools/findReferences.ts \u003e function renderResultSummary",
-      "startLine": 36,
-      "startCol": 1,
-      "endLine": 54,
-      "endCol": 2
+      "start": 0,
+      "end": 1311
     }
   ]
 }

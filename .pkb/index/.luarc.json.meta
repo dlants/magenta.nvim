@@ -1,15 +1,11 @@
 {
   "blobSha": "f4a4678957b8e7ca801441b3e6688d5016b7a9f3",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "{\n  \"$schema\": \"https://raw.githubusercontent.com/sumneko/vscode-lua/master/setting/schema.json\",\n  \"Lua.diagnostics.globals\": [\"vim\"],\n  \"Lua.workspace.library\": [\"lua\", \"${3rd}/luv/library\"],\n  \"Lua.workspace.checkThirdParty\": false,\n  \"Lua.runtime.version\": \"LuaJIT\",\n  \"Lua.workspace.ignoreDir\": [\"lua_modules\", \".git\"],\n  \"Lua.diagnostics.disable\": [\"different-requires\"]\n}",
-      "contextualizedText": "// .luarc.json\n\n{\n  \"$schema\": \"https://raw.githubusercontent.com/sumneko/vscode-lua/master/setting/schema.json\",\n  \"Lua.diagnostics.globals\": [\"vim\"],\n  \"Lua.workspace.library\": [\"lua\", \"${3rd}/luv/library\"],\n  \"Lua.workspace.checkThirdParty\": false,\n  \"Lua.runtime.version\": \"LuaJIT\",\n  \"Lua.workspace.ignoreDir\": [\"lua_modules\", \".git\"],\n  \"Lua.diagnostics.disable\": [\"different-requires\"]\n}",
-      "headingContext": ".luarc.json",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 9,
-      "endCol": 2
+      "start": 0,
+      "end": 378
     }
   ]
 }

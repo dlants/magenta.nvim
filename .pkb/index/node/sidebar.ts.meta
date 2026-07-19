@@ -1,177 +1,35 @@
 {
   "blobSha": "941e3763cd4abf82037e445a9aa55394891aeec8",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { ThreadId } from \"@magenta/core\";\nimport type { BufferManager } from \"./buffer-manager.ts\";\nimport { type Line, NvimBuffer } from \"./nvim/buffer.ts\";\nimport { getOption } from \"./nvim/nvim.ts\";\nimport type { Nvim } from \"./nvim/nvim-node/index.ts\";\nimport {\n  NvimWindow,\n  type Position1Indexed,\n  type Row0Indexed,\n  type WindowId,\n} from \"./nvim/window.ts\";\nimport type {\n  Profile,\n  SidebarPositionOpts,\n  SidebarPositions,\n} from \"./options.ts\";\nimport { formatTokenCount } from \"./utils/tokens.ts\";",
-      "contextualizedText": "// node/sidebar.ts\n\nimport type { ThreadId } from \"@magenta/core\";\nimport type { BufferManager } from \"./buffer-manager.ts\";\nimport { type Line, NvimBuffer } from \"./nvim/buffer.ts\";\nimport { getOption } from \"./nvim/nvim.ts\";\nimport type { Nvim } from \"./nvim/nvim-node/index.ts\";\nimport {\n  NvimWindow,\n  type Position1Indexed,\n  type Row0Indexed,\n  type WindowId,\n} from \"./nvim/window.ts\";\nimport type {\n  Profile,\n  SidebarPositionOpts,\n  SidebarPositions,\n} from \"./options.ts\";\nimport { formatTokenCount } from \"./utils/tokens.ts\";",
-      "headingContext": "node/sidebar.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 17,
-      "endCol": 54
+      "start": 0,
+      "end": 1946
     },
     {
-      "text": "/** Resolves responsive positions based on terminal orientation */\nfunction resolveResponsivePosition(\n  position: SidebarPositions,\n  totalWidth: number,\n  totalHeight: number,\n): SidebarPositions {\n  // If not a responsive position, return as-is\n  if (\n    ![\"leftbelow\", \"leftabove\", \"rightbelow\", \"rightabove\"].includes(position)\n  ) {\n    return position;\n  }\n\n  // Determine if terminal is in landscape (wider than tall) or portrait mode\n  const isLandscape = totalWidth \u003e totalHeight;\n\n  switch (position) {\n    case \"leftbelow\":\n      return isLandscape ? \"left\" : \"below\";\n    case \"leftabove\":\n      return isLandscape ? \"left\" : \"above\";\n    case \"rightbelow\":\n      return isLandscape ? \"right\" : \"below\";\n    case \"rightabove\":\n      return isLandscape ? \"right\" : \"above\";\n    default:\n      return position;\n  }\n}",
-      "contextualizedText": "// node/sidebar.ts \u003e function resolveResponsivePosition\n\n/** Resolves responsive positions based on terminal orientation */\nfunction resolveResponsivePosition(\n  position: SidebarPositions,\n  totalWidth: number,\n  totalHeight: number,\n): SidebarPositions {\n  // If not a responsive position, return as-is\n  if (\n    ![\"leftbelow\", \"leftabove\", \"rightbelow\", \"rightabove\"].includes(position)\n  ) {\n    return position;\n  }\n\n  // Determine if terminal is in landscape (wider than tall) or portrait mode\n  const isLandscape = totalWidth \u003e totalHeight;\n\n  switch (position) {\n    case \"leftbelow\":\n      return isLandscape ? \"left\" : \"below\";\n    case \"leftabove\":\n      return isLandscape ? \"left\" : \"above\";\n    case \"rightbelow\":\n      return isLandscape ? \"right\" : \"below\";\n    case \"rightabove\":\n      return isLandscape ? \"right\" : \"above\";\n    default:\n      return position;\n  }\n}",
-      "headingContext": "node/sidebar.ts \u003e function resolveResponsivePosition",
-      "startLine": 19,
-      "startCol": 1,
-      "endLine": 47,
-      "endCol": 2
+      "start": 1952,
+      "end": 4407
     },
     {
-      "text": "/** This will mostly manage the window toggle\n */\nexport class Sidebar",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar\n\n/** This will mostly manage the window toggle\n */\nexport class Sidebar",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar",
-      "startLine": 49,
-      "startCol": 1,
-      "endLine": 51,
-      "endCol": 21
+      "start": 4411,
+      "end": 6512
     },
     {
-      "text": "  static async calculateWindowDimensions(\n    sidebarPosition: SidebarPositions,\n    sidebarPositionOpts: SidebarPositionOpts,\n    nvim: Nvim,\n  ): Promise\u003c{\n    inputHeight: number;\n    inputWidth: number;\n    displayHeight: number;\n    displayWidth: number;\n  }\u003e {\n    const totalHeight = (await getOption(\"lines\", nvim)) as number;\n    const cmdHeight = (await getOption(\"cmdheight\", nvim)) as number;\n    const windowHeight = totalHeight - cmdHeight;\n    const totalWidth = (await getOption(\"columns\", nvim)) as number;\n\n    // Resolve responsive positions based on terminal orientation\n    const resolvedPosition = resolveResponsivePosition(\n      sidebarPosition,\n      totalWidth,\n      totalHeight,\n    );\n\n    let inputHeight;\n    let inputWidth;\n    let displayHeight;\n    let displayWidth;",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method calculateWindowDimensions\n\n  static async calculateWindowDimensions(\n    sidebarPosition: SidebarPositions,\n    sidebarPositionOpts: SidebarPositionOpts,\n    nvim: Nvim,\n  ): Promise\u003c{\n    inputHeight: number;\n    inputWidth: number;\n    displayHeight: number;\n    displayWidth: number;\n  }\u003e {\n    const totalHeight = (await getOption(\"lines\", nvim)) as number;\n    const cmdHeight = (await getOption(\"cmdheight\", nvim)) as number;\n    const windowHeight = totalHeight - cmdHeight;\n    const totalWidth = (await getOption(\"columns\", nvim)) as number;\n\n    // Resolve responsive positions based on terminal orientation\n    const resolvedPosition = resolveResponsivePosition(\n      sidebarPosition,\n      totalWidth,\n      totalHeight,\n    );\n\n    let inputHeight;\n    let inputWidth;\n    let displayHeight;\n    let displayWidth;",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method calculateWindowDimensions",
-      "startLine": 52,
-      "startCol": 1,
-      "endLine": 77,
-      "endCol": 22
+      "start": 6518,
+      "end": 8093
     },
     {
-      "text": "switch (resolvedPosition) {\n      case \"left\":\n        displayHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.left.displayHeightPercentage,\n        );\n        inputHeight = totalHeight - displayHeight - 2;\n        inputWidth = Math.floor(\n          totalWidth * sidebarPositionOpts.left.widthPercentage,\n        );\n        displayWidth = inputWidth;\n        break;\n      case \"right\":\n        displayHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.right.displayHeightPercentage,\n        );\n        inputHeight = totalHeight - displayHeight - 2;\n        inputWidth = Math.floor(\n          totalWidth * sidebarPositionOpts.right.widthPercentage,\n        );\n        displayWidth = inputWidth;\n        break;\n      case \"above\":\n        displayHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.above.displayHeightPercentage,\n        );\n        inputHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.above.inputHeightPercentage,\n        );\n        inputWidth = totalWidth;\n        displayWidth = totalWidth;\n        break;\n      case \"below\":\n        displayHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.below.displayHeightPercentage,\n        );\n        inputHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.below.inputHeightPercentage,\n        );\n        inputWidth = totalWidth;\n        displayWidth = totalWidth;\n        break;\n      case \"tab\":\n        displayHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.tab.displayHeightPercentage,\n        );\n        inputHeight = totalHeight - displayHeight - 2;\n        inputWidth = totalWidth;\n        displayWidth = totalWidth;\n        break;\n      default:\n        // This should never happen since resolveResponsivePosition always returns a base position\n        throw new Error(`Unexpected resolved position: ${resolvedPosition}`);\n    }\n\n    return { inputHeight, inputWidth, displayHeight, displayWidth };\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method calculateWindowDimensions\n\nswitch (resolvedPosition) {\n      case \"left\":\n        displayHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.left.displayHeightPercentage,\n        );\n        inputHeight = totalHeight - displayHeight - 2;\n        inputWidth = Math.floor(\n          totalWidth * sidebarPositionOpts.left.widthPercentage,\n        );\n        displayWidth = inputWidth;\n        break;\n      case \"right\":\n        displayHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.right.displayHeightPercentage,\n        );\n        inputHeight = totalHeight - displayHeight - 2;\n        inputWidth = Math.floor(\n          totalWidth * sidebarPositionOpts.right.widthPercentage,\n        );\n        displayWidth = inputWidth;\n        break;\n      case \"above\":\n        displayHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.above.displayHeightPercentage,\n        );\n        inputHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.above.inputHeightPercentage,\n        );\n        inputWidth = totalWidth;\n        displayWidth = totalWidth;\n        break;\n      case \"below\":\n        displayHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.below.displayHeightPercentage,\n        );\n        inputHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.below.inputHeightPercentage,\n        );\n        inputWidth = totalWidth;\n        displayWidth = totalWidth;\n        break;\n      case \"tab\":\n        displayHeight = Math.floor(\n          windowHeight * sidebarPositionOpts.tab.displayHeightPercentage,\n        );\n        inputHeight = totalHeight - displayHeight - 2;\n        inputWidth = totalWidth;\n        displayWidth = totalWidth;\n        break;\n      default:\n        // This should never happen since resolveResponsivePosition always returns a base position\n        throw new Error(`Unexpected resolved position: ${resolvedPosition}`);\n    }\n\n    return { inputHeight, inputWidth, displayHeight, displayWidth };\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method calculateWindowDimensions",
-      "startLine": 79,
-      "startCol": 5,
-      "endLine": 134,
-      "endCol": 4
+      "start": 8099,
+      "end": 10100
     },
     {
-      "text": "public state:\n    | {\n        state: \"hidden\";\n      }\n    | {\n        state: \"visible\";\n        displayWindow: NvimWindow;\n        displayWidth: number;\n        inputWindow: NvimWindow;\n      };\n\n  constructor(\n    private nvim: Nvim,\n    private getProfile: () =\u003e Profile,\n    private getTokenCount: () =\u003e number,\n    public bufferManager: BufferManager,\n    private getActiveKey: () =\u003e ThreadId | \"overview\",\n    private getIsSandboxBypassed: () =\u003e boolean,\n  ) {\n    this.state = {\n      state: \"hidden\",\n    };\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar\n\npublic state:\n    | {\n        state: \"hidden\";\n      }\n    | {\n        state: \"visible\";\n        displayWindow: NvimWindow;\n        displayWidth: number;\n        inputWindow: NvimWindow;\n      };\n\n  constructor(\n    private nvim: Nvim,\n    private getProfile: () =\u003e Profile,\n    private getTokenCount: () =\u003e number,\n    public bufferManager: BufferManager,\n    private getActiveKey: () =\u003e ThreadId | \"overview\",\n    private getIsSandboxBypassed: () =\u003e boolean,\n  ) {\n    this.state = {\n      state: \"hidden\",\n    };\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar",
-      "startLine": 136,
-      "startCol": 3,
-      "endLine": 158,
-      "endCol": 4
+      "start": 10108,
+      "end": 12359
     },
     {
-      "text": "  private getDisplayWindowTitle(): string {\n    return \"Magenta Chat\";\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method getDisplayWindowTitle\n\n  private getDisplayWindowTitle(): string {\n    return \"Magenta Chat\";\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method getDisplayWindowTitle",
-      "startLine": 160,
-      "startCol": 1,
-      "endLine": 162,
-      "endCol": 4
-    },
-    {
-      "text": "  private getInputWindowTitle(): string {\n    const profile = this.getProfile();\n    const thinkingStatus = profile.thinking?.enabled\n      ? profile.thinking.effort\n        ? ` thinking:${profile.thinking.effort}`\n        : \" thinking\"\n      : \"\";\n    const baseTitle = `Magenta Input (${profile.name}${thinkingStatus})`;\n    const tokenCount = this.getTokenCount();\n\n    const bypassIndicator = this.getIsSandboxBypassed()\n      ? \" %#ErrorMsg# SANDBOX OFF %#Normal#\"\n      : \"\";\n\n    return `${baseTitle} [${formatTokenCount(tokenCount)}]${bypassIndicator}`;\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method getInputWindowTitle\n\n  private getInputWindowTitle(): string {\n    const profile = this.getProfile();\n    const thinkingStatus = profile.thinking?.enabled\n      ? profile.thinking.effort\n        ? ` thinking:${profile.thinking.effort}`\n        : \" thinking\"\n      : \"\";\n    const baseTitle = `Magenta Input (${profile.name}${thinkingStatus})`;\n    const tokenCount = this.getTokenCount();\n\n    const bypassIndicator = this.getIsSandboxBypassed()\n      ? \" %#ErrorMsg# SANDBOX OFF %#Normal#\"\n      : \"\";\n\n    return `${baseTitle} [${formatTokenCount(tokenCount)}]${bypassIndicator}`;\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method getInputWindowTitle",
-      "startLine": 164,
-      "startCol": 1,
-      "endLine": 179,
-      "endCol": 4
-    },
-    {
-      "text": "  async onWinClosed() {\n    if (this.state.state === \"visible\") {\n      const [displayWindowValid, inputWindowValid] = await Promise.all([\n        this.state.displayWindow.valid(),\n        this.state.inputWindow.valid(),\n      ]);\n\n      if (!(displayWindowValid \u0026\u0026 inputWindowValid)) {\n        await this.hide();\n      }\n    }\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method onWinClosed\n\n  async onWinClosed() {\n    if (this.state.state === \"visible\") {\n      const [displayWindowValid, inputWindowValid] = await Promise.all([\n        this.state.displayWindow.valid(),\n        this.state.inputWindow.valid(),\n      ]);\n\n      if (!(displayWindowValid \u0026\u0026 inputWindowValid)) {\n        await this.hide();\n      }\n    }\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method onWinClosed",
-      "startLine": 181,
-      "startCol": 1,
-      "endLine": 192,
-      "endCol": 4
-    },
-    {
-      "text": "  async toggle(\n    sidebarPosition: SidebarPositions,\n    sidebarPositionOpts: SidebarPositionOpts,\n  ): Promise\u003cboolean\u003e {\n    if (this.state.state === \"hidden\") {\n      await this.show(sidebarPosition, sidebarPositionOpts);\n      return true;\n    } else {\n      await this.hide();\n      return false;\n    }\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method toggle\n\n  async toggle(\n    sidebarPosition: SidebarPositions,\n    sidebarPositionOpts: SidebarPositionOpts,\n  ): Promise\u003cboolean\u003e {\n    if (this.state.state === \"hidden\") {\n      await this.show(sidebarPosition, sidebarPositionOpts);\n      return true;\n    } else {\n      await this.hide();\n      return false;\n    }\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method toggle",
-      "startLine": 194,
-      "startCol": 1,
-      "endLine": 205,
-      "endCol": 4
-    },
-    {
-      "text": "  private async show(\n    sidebarPosition: SidebarPositions,\n    sidebarPositionOpts: SidebarPositionOpts,\n  ): Promise\u003cvoid\u003e {\n    this.nvim.logger.debug(`sidebar.show`);\n\n    const { displayBuffer, inputBuffer } =\n      await this.bufferManager.ensureActiveIsMounted(this.getActiveKey());\n    const { inputHeight, inputWidth, displayHeight, displayWidth } =\n      await Sidebar.calculateWindowDimensions(\n        sidebarPosition,\n        sidebarPositionOpts,\n        this.nvim,\n      );\n\n    // Get terminal dimensions for resolving responsive positions\n    const totalHeight = (await getOption(\"lines\", this.nvim)) as number;\n    const totalWidth = (await getOption(\"columns\", this.nvim)) as number;\n    const resolvedPosition = resolveResponsivePosition(\n      sidebarPosition,\n      totalWidth,\n      totalHeight,\n    );\n\n    let displayWindowId: WindowId;\n\n    if (resolvedPosition === \"tab\") {\n      await this.nvim.call(\"nvim_command\", [\"tabnew\"]);\n      displayWindowId = (await this.nvim.call(\n        \"nvim_get_current_win\",\n        [],\n      )) as unknown as WindowId;\n      await this.nvim.call(\"nvim_win_set_buf\", [\n        displayWindowId,\n        displayBuffer.id,\n      ]);\n    } else {\n      displayWindowId = (await this.nvim.call(\"nvim_open_win\", [\n        displayBuffer.id,\n        false,\n        {\n          win: -1, // global split\n          split: resolvedPosition,\n          height: displayHeight,\n          width: displayWidth,\n        },\n      ])) as WindowId;\n    }\n    const displayWindow = new NvimWindow(displayWindowId, this.nvim);\n\n    const inputWindowId = (await this.nvim.call(\"nvim_open_win\", [\n      inputBuffer.id,\n      true, // enter the input window\n      {\n        win: displayWindow.id, // split inside this window\n        split: \"below\",\n        height: inputHeight,\n        width: inputWidth,\n      },\n    ])) as WindowId;\n\n    const inputWindow = new NvimWindow(inputWindowId, this.nvim);\n    await inputWindow.clearjumps();",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method show\n\n  private async show(\n    sidebarPosition: SidebarPositions,\n    sidebarPositionOpts: SidebarPositionOpts,\n  ): Promise\u003cvoid\u003e {\n    this.nvim.logger.debug(`sidebar.show`);\n\n    const { displayBuffer, inputBuffer } =\n      await this.bufferManager.ensureActiveIsMounted(this.getActiveKey());\n    const { inputHeight, inputWidth, displayHeight, displayWidth } =\n      await Sidebar.calculateWindowDimensions(\n        sidebarPosition,\n        sidebarPositionOpts,\n        this.nvim,\n      );\n\n    // Get terminal dimensions for resolving responsive positions\n    const totalHeight = (await getOption(\"lines\", this.nvim)) as number;\n    const totalWidth = (await getOption(\"columns\", this.nvim)) as number;\n    const resolvedPosition = resolveResponsivePosition(\n      sidebarPosition,\n      totalWidth,\n      totalHeight,\n    );\n\n    let displayWindowId: WindowId;\n\n    if (resolvedPosition === \"tab\") {\n      await this.nvim.call(\"nvim_command\", [\"tabnew\"]);\n      displayWindowId = (await this.nvim.call(\n        \"nvim_get_current_win\",\n        [],\n      )) as unknown as WindowId;\n      await this.nvim.call(\"nvim_win_set_buf\", [\n        displayWindowId,\n        displayBuffer.id,\n      ]);\n    } else {\n      displayWindowId = (await this.nvim.call(\"nvim_open_win\", [\n        displayBuffer.id,\n        false,\n        {\n          win: -1, // global split\n          split: resolvedPosition,\n          height: displayHeight,\n          width: displayWidth,\n        },\n      ])) as WindowId;\n    }\n    const displayWindow = new NvimWindow(displayWindowId, this.nvim);\n\n    const inputWindowId = (await this.nvim.call(\"nvim_open_win\", [\n      inputBuffer.id,\n      true, // enter the input window\n      {\n        win: displayWindow.id, // split inside this window\n        split: \"below\",\n        height: inputHeight,\n        width: inputWidth,\n      },\n    ])) as WindowId;\n\n    const inputWindow = new NvimWindow(inputWindowId, this.nvim);\n    await inputWindow.clearjumps();",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method show",
-      "startLine": 207,
-      "startCol": 1,
-      "endLine": 269,
-      "endCol": 36
-    },
-    {
-      "text": "const winOptions = {\n      wrap: true,\n      linebreak: true,\n      cursorline: true,\n    };\n\n    for (const [key, value] of Object.entries(winOptions)) {\n      await displayWindow.setOption(key, value);\n      await inputWindow.setOption(key, value);\n    }\n    await displayWindow.setOption(\"winbar\", this.getDisplayWindowTitle());\n    // set vars so we can identify this as the magenta display window\n    await displayWindow.setVar(\"magenta\", true);\n    await displayWindow.setVar(\"magenta_display_window\", true);\n    await displayWindow.setOption(\"winfixbuf\", true);\n    await inputWindow.setOption(\"winbar\", this.getInputWindowTitle());\n    // set var so we can avoid closing this window when displaying a diff\n    await inputWindow.setVar(\"magenta\", true);\n    await inputWindow.setOption(\"winfixheight\", true);\n    await inputWindow.setOption(\"winfixbuf\", true);\n\n    this.nvim.logger.debug(`sidebar.create setting state`);\n    this.state = {\n      state: \"visible\",\n      displayWindow,\n      displayWidth,\n      inputWindow,\n    };\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method show\n\nconst winOptions = {\n      wrap: true,\n      linebreak: true,\n      cursorline: true,\n    };\n\n    for (const [key, value] of Object.entries(winOptions)) {\n      await displayWindow.setOption(key, value);\n      await inputWindow.setOption(key, value);\n    }\n    await displayWindow.setOption(\"winbar\", this.getDisplayWindowTitle());\n    // set vars so we can identify this as the magenta display window\n    await displayWindow.setVar(\"magenta\", true);\n    await displayWindow.setVar(\"magenta_display_window\", true);\n    await displayWindow.setOption(\"winfixbuf\", true);\n    await inputWindow.setOption(\"winbar\", this.getInputWindowTitle());\n    // set var so we can avoid closing this window when displaying a diff\n    await inputWindow.setVar(\"magenta\", true);\n    await inputWindow.setOption(\"winfixheight\", true);\n    await inputWindow.setOption(\"winfixbuf\", true);\n\n    this.nvim.logger.debug(`sidebar.create setting state`);\n    this.state = {\n      state: \"visible\",\n      displayWindow,\n      displayWidth,\n      inputWindow,\n    };\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method show",
-      "startLine": 271,
-      "startCol": 5,
-      "endLine": 299,
-      "endCol": 4
-    },
-    {
-      "text": "  async renderInputHeader() {\n    if (this.state.state === \"visible\") {\n      // The input window may have been closed out from under us (e.g. by `:bd`\n      // on a magenta buffer, which can also close its window). Guard against\n      // touching an invalid window id.\n      if (!(await this.state.inputWindow.valid())) {\n        return;\n      }\n      await this.state.inputWindow.setOption(\n        \"winbar\",\n        this.getInputWindowTitle(),\n      );\n    }\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method renderInputHeader\n\n  async renderInputHeader() {\n    if (this.state.state === \"visible\") {\n      // The input window may have been closed out from under us (e.g. by `:bd`\n      // on a magenta buffer, which can also close its window). Guard against\n      // touching an invalid window id.\n      if (!(await this.state.inputWindow.valid())) {\n        return;\n      }\n      await this.state.inputWindow.setOption(\n        \"winbar\",\n        this.getInputWindowTitle(),\n      );\n    }\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method renderInputHeader",
-      "startLine": 301,
-      "startCol": 1,
-      "endLine": 314,
-      "endCol": 4
-    },
-    {
-      "text": "  async hide() {\n    if (this.state.state === \"visible\") {\n      const { displayWindow, inputWindow } = this.state;\n\n      // Check if the only windows open are magenta windows\n      const allWindows = (await this.nvim.call(\n        \"nvim_list_wins\",\n        [],\n      )) as WindowId[];\n\n      const nonMagentaWindows: WindowId[] = [];\n      for (const winId of allWindows) {\n        const win = new NvimWindow(winId, this.nvim);\n        const isMagenta = await win.getVar(\"magenta\").catch(() =\u003e false);\n        if (!isMagenta) {\n          nonMagentaWindows.push(winId);\n        }\n      }\n\n      // If only magenta windows are open, create a new empty window first\n      if (nonMagentaWindows.length === 0) {\n        // Create a new empty buffer and open it in a new window\n        const emptyBuf = await NvimBuffer.create(false, true, this.nvim);\n        await this.nvim.call(\"nvim_open_win\", [\n          emptyBuf.id,\n          true,\n          {\n            win: -1, // global split\n            split: \"left\",\n          },\n        ]);\n      }\n\n      try {\n        await Promise.all([displayWindow.close(), inputWindow.close()]);\n      } catch {\n        // windows may fail to close if they're already closed\n      }\n      this.state = {\n        state: \"hidden\",\n      };\n    }\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method hide\n\n  async hide() {\n    if (this.state.state === \"visible\") {\n      const { displayWindow, inputWindow } = this.state;\n\n      // Check if the only windows open are magenta windows\n      const allWindows = (await this.nvim.call(\n        \"nvim_list_wins\",\n        [],\n      )) as WindowId[];\n\n      const nonMagentaWindows: WindowId[] = [];\n      for (const winId of allWindows) {\n        const win = new NvimWindow(winId, this.nvim);\n        const isMagenta = await win.getVar(\"magenta\").catch(() =\u003e false);\n        if (!isMagenta) {\n          nonMagentaWindows.push(winId);\n        }\n      }\n\n      // If only magenta windows are open, create a new empty window first\n      if (nonMagentaWindows.length === 0) {\n        // Create a new empty buffer and open it in a new window\n        const emptyBuf = await NvimBuffer.create(false, true, this.nvim);\n        await this.nvim.call(\"nvim_open_win\", [\n          emptyBuf.id,\n          true,\n          {\n            win: -1, // global split\n            split: \"left\",\n          },\n        ]);\n      }\n\n      try {\n        await Promise.all([displayWindow.close(), inputWindow.close()]);\n      } catch {\n        // windows may fail to close if they're already closed\n      }\n      this.state = {\n        state: \"hidden\",\n      };\n    }\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method hide",
-      "startLine": 316,
-      "startCol": 1,
-      "endLine": 358,
-      "endCol": 4
-    },
-    {
-      "text": "  async scrollToLastUserMessage() {\n    const { displayWindow } = await this.getWindowIfVisible();\n    if (displayWindow) {\n      const displayBuffer = await displayWindow.buffer();\n      const lines = await displayBuffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      const lineIdx = lines.lastIndexOf(\"# user:\" as Line);\n      if (lineIdx !== -1) {\n        await displayWindow.setCursor({\n          row: lineIdx + 1,\n          col: 0,\n        } as Position1Indexed);\n        await displayWindow.zt();\n      }\n\n      // Place cursor at the end of the buffer without scrolling - use neovim\n      // commands so this stays consistent even as the buffer is streaming.\n      await displayWindow.cursorToEnd();\n    }\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method scrollToLastUserMessage\n\n  async scrollToLastUserMessage() {\n    const { displayWindow } = await this.getWindowIfVisible();\n    if (displayWindow) {\n      const displayBuffer = await displayWindow.buffer();\n      const lines = await displayBuffer.getLines({\n        start: 0 as Row0Indexed,\n        end: -1 as Row0Indexed,\n      });\n      const lineIdx = lines.lastIndexOf(\"# user:\" as Line);\n      if (lineIdx !== -1) {\n        await displayWindow.setCursor({\n          row: lineIdx + 1,\n          col: 0,\n        } as Position1Indexed);\n        await displayWindow.zt();\n      }\n\n      // Place cursor at the end of the buffer without scrolling - use neovim\n      // commands so this stays consistent even as the buffer is streaming.\n      await displayWindow.cursorToEnd();\n    }\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method scrollToLastUserMessage",
-      "startLine": 360,
-      "startCol": 1,
-      "endLine": 381,
-      "endCol": 4
-    },
-    {
-      "text": "  async setCursorToBottom() {\n    const { displayWindow } = await this.getWindowIfVisible();\n    if (displayWindow) {\n      await displayWindow.cursorToEnd();\n      await displayWindow.zb();\n    }\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method setCursorToBottom\n\n  async setCursorToBottom() {\n    const { displayWindow } = await this.getWindowIfVisible();\n    if (displayWindow) {\n      await displayWindow.cursorToEnd();\n      await displayWindow.zb();\n    }\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method setCursorToBottom",
-      "startLine": 383,
-      "startCol": 1,
-      "endLine": 389,
-      "endCol": 4
-    },
-    {
-      "text": "  async getWindowIfVisible(): Promise\u003c{\n    displayWindow?: NvimWindow | undefined;\n    inputWindow?: NvimWindow | undefined;\n  }\u003e {\n    if (this.state.state !== \"visible\") {\n      return {};\n    }\n\n    const { displayWindow, inputWindow } = this.state;\n    const displayWindowValid = await displayWindow.valid();\n    const inputWindowValid = await inputWindow.valid();\n\n    return {\n      displayWindow: displayWindowValid ? displayWindow : undefined,\n      inputWindow: inputWindowValid ? inputWindow : undefined,\n    };\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method getWindowIfVisible\n\n  async getWindowIfVisible(): Promise\u003c{\n    displayWindow?: NvimWindow | undefined;\n    inputWindow?: NvimWindow | undefined;\n  }\u003e {\n    if (this.state.state !== \"visible\") {\n      return {};\n    }\n\n    const { displayWindow, inputWindow } = this.state;\n    const displayWindowValid = await displayWindow.valid();\n    const inputWindowValid = await inputWindow.valid();\n\n    return {\n      displayWindow: displayWindowValid ? displayWindow : undefined,\n      inputWindow: inputWindowValid ? inputWindow : undefined,\n    };\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method getWindowIfVisible",
-      "startLine": 391,
-      "startCol": 1,
-      "endLine": 407,
-      "endCol": 4
-    },
-    {
-      "text": "  isVisible(): boolean {\n    return this.state.state === \"visible\";\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method isVisible\n\n  isVisible(): boolean {\n    return this.state.state === \"visible\";\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method isVisible",
-      "startLine": 409,
-      "startCol": 1,
-      "endLine": 411,
-      "endCol": 4
-    },
-    {
-      "text": "  async getMessage(inputBuffer: NvimBuffer): Promise\u003cstring\u003e {\n    const lines = await inputBuffer.getLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n    });\n\n    this.nvim.logger.debug(\n      `sidebar got lines ${JSON.stringify(lines)} from inputBuffer`,\n    );\n    const message = lines.join(\"\\n\");\n    await inputBuffer.setLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: [\"\"] as Line[],\n    });\n\n    return message;\n  }",
-      "contextualizedText": "// node/sidebar.ts \u003e class Sidebar \u003e method getMessage\n\n  async getMessage(inputBuffer: NvimBuffer): Promise\u003cstring\u003e {\n    const lines = await inputBuffer.getLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n    });\n\n    this.nvim.logger.debug(\n      `sidebar got lines ${JSON.stringify(lines)} from inputBuffer`,\n    );\n    const message = lines.join(\"\\n\");\n    await inputBuffer.setLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: [\"\"] as Line[],\n    });\n\n    return message;\n  }",
-      "headingContext": "node/sidebar.ts \u003e class Sidebar \u003e method getMessage",
-      "startLine": 413,
-      "startCol": 1,
-      "endLine": 430,
-      "endCol": 4
+      "start": 12363,
+      "end": 12840
     }
   ]
 }

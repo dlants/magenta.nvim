@@ -1,69 +1,19 @@
 {
   "blobSha": "016b3184dc3f5a63f410c2f5a816335091e6b525",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type {\n  ProviderMessage,\n  ProviderMessageContent,\n  ProviderToolResult,\n  ProviderToolUseContent,\n} from \"./providers/provider-types.ts\";\nimport type { ThreadLogEntry } from \"./thread-logger.ts\";\nimport type { ToolName, ToolRequestId } from \"./tool-types.ts\";\n\ntype ToolInfoMap = Map\u003cToolRequestId, ToolName\u003e;",
-      "contextualizedText": "// node/core/src/archive-renderer.ts\n\nimport type {\n  ProviderMessage,\n  ProviderMessageContent,\n  ProviderToolResult,\n  ProviderToolUseContent,\n} from \"./providers/provider-types.ts\";\nimport type { ThreadLogEntry } from \"./thread-logger.ts\";\nimport type { ToolName, ToolRequestId } from \"./tool-types.ts\";\n\ntype ToolInfoMap = Map\u003cToolRequestId, ToolName\u003e;",
-      "headingContext": "node/core/src/archive-renderer.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 10,
-      "endCol": 49
+      "start": 0,
+      "end": 2060
     },
     {
-      "text": "/**\n * Render a thread's full log stream to markdown for a human browsing the\n * archive. Unlike `renderThreadToMarkdown` (compaction), this renders\n * liberally: thinking blocks, system reminders/info, context updates, and full\n * tool results (including `get_file` contents) are kept. Non-message log\n * entries (compaction/title/fork/thread_start/restart) are emitted inline so\n * the transcript reflects the actual sequence of events.\n */\nexport function renderThreadLogToMarkdown(\n  entries: ReadonlyArray\u003cThreadLogEntry\u003e,\n): string {\n  const toolInfoMap: ToolInfoMap = new Map();\n  for (const entry of entries) {\n    if (entry.type !== \"message\") continue;\n    for (const block of entry.message.content) {\n      if (block.type === \"tool_use\" \u0026\u0026 block.request.status === \"ok\") {\n        toolInfoMap.set(block.request.value.id, block.request.value.toolName);\n      }\n    }\n  }\n\n  const parts: string[] = [];\n  for (const entry of entries) {\n    parts.push(renderEntry(entry, toolInfoMap));\n  }\n  return parts.join(\"\\n\");\n}",
-      "contextualizedText": "// node/core/src/archive-renderer.ts \u003e function renderThreadLogToMarkdown\n\n/**\n * Render a thread's full log stream to markdown for a human browsing the\n * archive. Unlike `renderThreadToMarkdown` (compaction), this renders\n * liberally: thinking blocks, system reminders/info, context updates, and full\n * tool results (including `get_file` contents) are kept. Non-message log\n * entries (compaction/title/fork/thread_start/restart) are emitted inline so\n * the transcript reflects the actual sequence of events.\n */\nexport function renderThreadLogToMarkdown(\n  entries: ReadonlyArray\u003cThreadLogEntry\u003e,\n): string {\n  const toolInfoMap: ToolInfoMap = new Map();\n  for (const entry of entries) {\n    if (entry.type !== \"message\") continue;\n    for (const block of entry.message.content) {\n      if (block.type === \"tool_use\" \u0026\u0026 block.request.status === \"ok\") {\n        toolInfoMap.set(block.request.value.id, block.request.value.toolName);\n      }\n    }\n  }\n\n  const parts: string[] = [];\n  for (const entry of entries) {\n    parts.push(renderEntry(entry, toolInfoMap));\n  }\n  return parts.join(\"\\n\");\n}",
-      "headingContext": "node/core/src/archive-renderer.ts \u003e function renderThreadLogToMarkdown",
-      "startLine": 12,
-      "startCol": 1,
-      "endLine": 38,
-      "endCol": 2
+      "start": 2062,
+      "end": 4084
     },
     {
-      "text": "function renderEntry(entry: ThreadLogEntry, toolInfoMap: ToolInfoMap): string {\n  switch (entry.type) {\n    case \"message\":\n      return renderMessage(entry.message, toolInfoMap);\n    case \"thread_start\":\n      return `--- thread start (${entry.threadType}) ---\\n`;\n    case \"restart\":\n      return `--- restart ---\\n`;\n    case \"fork\":\n      return `--- fork from ${entry.fromThreadId} @ message ${entry.nativeMessageIdx} ---\\n`;\n    case \"title\":\n      return `# title: \"${entry.title}\"\\n`;\n    case \"compaction\": {\n      const header = `--- compaction (${entry.chunkCount} chunks) ---`;\n      if (entry.summary) {\n        return `${header}\\n${entry.summary}\\n`;\n      }\n      return `${header}\\n`;\n    }\n  }\n}",
-      "contextualizedText": "// node/core/src/archive-renderer.ts \u003e function renderEntry\n\nfunction renderEntry(entry: ThreadLogEntry, toolInfoMap: ToolInfoMap): string {\n  switch (entry.type) {\n    case \"message\":\n      return renderMessage(entry.message, toolInfoMap);\n    case \"thread_start\":\n      return `--- thread start (${entry.threadType}) ---\\n`;\n    case \"restart\":\n      return `--- restart ---\\n`;\n    case \"fork\":\n      return `--- fork from ${entry.fromThreadId} @ message ${entry.nativeMessageIdx} ---\\n`;\n    case \"title\":\n      return `# title: \"${entry.title}\"\\n`;\n    case \"compaction\": {\n      const header = `--- compaction (${entry.chunkCount} chunks) ---`;\n      if (entry.summary) {\n        return `${header}\\n${entry.summary}\\n`;\n      }\n      return `${header}\\n`;\n    }\n  }\n}",
-      "headingContext": "node/core/src/archive-renderer.ts \u003e function renderEntry",
-      "startLine": 40,
-      "startCol": 1,
-      "endLine": 60,
-      "endCol": 2
-    },
-    {
-      "text": "function renderMessage(\n  message: ProviderMessage,\n  toolInfoMap: ToolInfoMap,\n): string {\n  const parts: string[] = [`# ${message.role}:\\n`];\n  for (const block of message.content) {\n    parts.push(renderContentBlock(block, toolInfoMap));\n  }\n  return parts.join(\"\\n\");\n}",
-      "contextualizedText": "// node/core/src/archive-renderer.ts \u003e function renderMessage\n\nfunction renderMessage(\n  message: ProviderMessage,\n  toolInfoMap: ToolInfoMap,\n): string {\n  const parts: string[] = [`# ${message.role}:\\n`];\n  for (const block of message.content) {\n    parts.push(renderContentBlock(block, toolInfoMap));\n  }\n  return parts.join(\"\\n\");\n}",
-      "headingContext": "node/core/src/archive-renderer.ts \u003e function renderMessage",
-      "startLine": 62,
-      "startCol": 1,
-      "endLine": 71,
-      "endCol": 2
-    },
-    {
-      "text": "function renderContentBlock(\n  block: ProviderMessageContent,\n  toolInfoMap: ToolInfoMap,\n): string {\n  switch (block.type) {\n    case \"text\":\n      return `${block.text}\\n`;\n\n    case \"thinking\":\n      return `## thinking\\n${block.thinking}\\n`;\n\n    case \"redacted_thinking\":\n      return `## redacted thinking\\n[redacted]\\n`;\n\n    case \"system_reminder\":\n      return `## system reminder\\n${block.text}\\n`;\n\n    case \"system_info\":\n      return `## system info\\n${block.text}\\n`;\n\n    case \"fork_notification\":\n      return `## fork notification\\n${block.text}\\n`;\n\n    case \"context_update\":\n      return `## context update\\n${block.text}\\n`;\n\n    case \"tool_use\":\n      return renderToolUse(block);\n\n    case \"tool_result\":\n      return renderToolResult(block, toolInfoMap);\n\n    case \"image\":\n      return `[Image]\\n`;\n\n    case \"document\":\n      return `[Document${block.title ? `: ${block.title}` : \"\"}]\\n`;\n\n    case \"server_tool_use\":\n      return `[web search: ${block.input.query}]\\n`;\n\n    case \"web_search_tool_result\": {\n      if (\n        \"type\" in block.content \u0026\u0026\n        block.content.type === \"web_search_tool_result_error\"\n      ) {\n        return `[search error: ${block.content.error_code}]\\n`;\n      }\n      if (Array.isArray(block.content)) {\n        const results = block.content\n          .filter(\n            (r): r is Extract\u003ctypeof r, { type: \"web_search_result\" }\u003e =\u003e\n              r.type === \"web_search_result\",\n          )\n          .map(\n            (r) =\u003e\n              `  - [${r.title}](${r.url})${r.page_age ? ` (${r.page_age})` : \"\"}`,\n          );\n        if (results.length \u003e 0) {\n          return `[search results]\\n${results.join(\"\\n\")}\\n`;\n        }\n      }\n      return `[search results]\\n`;\n    }\n  }\n}",
-      "contextualizedText": "// node/core/src/archive-renderer.ts \u003e function renderContentBlock\n\nfunction renderContentBlock(\n  block: ProviderMessageContent,\n  toolInfoMap: ToolInfoMap,\n): string {\n  switch (block.type) {\n    case \"text\":\n      return `${block.text}\\n`;\n\n    case \"thinking\":\n      return `## thinking\\n${block.thinking}\\n`;\n\n    case \"redacted_thinking\":\n      return `## redacted thinking\\n[redacted]\\n`;\n\n    case \"system_reminder\":\n      return `## system reminder\\n${block.text}\\n`;\n\n    case \"system_info\":\n      return `## system info\\n${block.text}\\n`;\n\n    case \"fork_notification\":\n      return `## fork notification\\n${block.text}\\n`;\n\n    case \"context_update\":\n      return `## context update\\n${block.text}\\n`;\n\n    case \"tool_use\":\n      return renderToolUse(block);\n\n    case \"tool_result\":\n      return renderToolResult(block, toolInfoMap);\n\n    case \"image\":\n      return `[Image]\\n`;\n\n    case \"document\":\n      return `[Document${block.title ? `: ${block.title}` : \"\"}]\\n`;\n\n    case \"server_tool_use\":\n      return `[web search: ${block.input.query}]\\n`;\n\n    case \"web_search_tool_result\": {\n      if (\n        \"type\" in block.content \u0026\u0026\n        block.content.type === \"web_search_tool_result_error\"\n      ) {\n        return `[search error: ${block.content.error_code}]\\n`;\n      }\n      if (Array.isArray(block.content)) {\n        const results = block.content\n          .filter(\n            (r): r is Extract\u003ctypeof r, { type: \"web_search_result\" }\u003e =\u003e\n              r.type === \"web_search_result\",\n          )\n          .map(\n            (r) =\u003e\n              `  - [${r.title}](${r.url})${r.page_age ? ` (${r.page_age})` : \"\"}`,\n          );\n        if (results.length \u003e 0) {\n          return `[search results]\\n${results.join(\"\\n\")}\\n`;\n        }\n      }\n      return `[search results]\\n`;\n    }\n  }\n}",
-      "headingContext": "node/core/src/archive-renderer.ts \u003e function renderContentBlock",
-      "startLine": 73,
-      "startCol": 1,
-      "endLine": 138,
-      "endCol": 2
-    },
-    {
-      "text": "function renderToolUse(block: ProviderToolUseContent): string {\n  if (block.request.status === \"ok\") {\n    const { toolName, input } = block.request.value;\n    return `## tool_use: ${toolName}\\n\\`\\`\\`json\\n${JSON.stringify(input, undefined, 2)}\\n\\`\\`\\`\\n`;\n  }\n  return `## tool_use: (parse error)\\n`;\n}",
-      "contextualizedText": "// node/core/src/archive-renderer.ts \u003e function renderToolUse\n\nfunction renderToolUse(block: ProviderToolUseContent): string {\n  if (block.request.status === \"ok\") {\n    const { toolName, input } = block.request.value;\n    return `## tool_use: ${toolName}\\n\\`\\`\\`json\\n${JSON.stringify(input, undefined, 2)}\\n\\`\\`\\`\\n`;\n  }\n  return `## tool_use: (parse error)\\n`;\n}",
-      "headingContext": "node/core/src/archive-renderer.ts \u003e function renderToolUse",
-      "startLine": 140,
-      "startCol": 1,
-      "endLine": 146,
-      "endCol": 2
-    },
-    {
-      "text": "function renderToolResult(\n  block: ProviderToolResult,\n  toolInfoMap: ToolInfoMap,\n): string {\n  const toolName = toolInfoMap.get(block.id);\n  const label = toolName ? `## tool_result: ${toolName}` : `## tool_result`;\n\n  if (block.result.status === \"ok\") {\n    const contentParts: string[] = [];\n    for (const item of block.result.value) {\n      switch (item.type) {\n        case \"text\":\n          contentParts.push(item.text);\n          break;\n        case \"image\":\n          contentParts.push(\"[Image]\");\n          break;\n        case \"document\":\n          contentParts.push(`[Document${item.title ? `: ${item.title}` : \"\"}]`);\n          break;\n      }\n    }\n    return `${label}\\n${contentParts.join(\"\\n\")}\\n`;\n  }\n  return `${label} (error)\\n${block.result.error}\\n`;\n}",
-      "contextualizedText": "// node/core/src/archive-renderer.ts \u003e function renderToolResult\n\nfunction renderToolResult(\n  block: ProviderToolResult,\n  toolInfoMap: ToolInfoMap,\n): string {\n  const toolName = toolInfoMap.get(block.id);\n  const label = toolName ? `## tool_result: ${toolName}` : `## tool_result`;\n\n  if (block.result.status === \"ok\") {\n    const contentParts: string[] = [];\n    for (const item of block.result.value) {\n      switch (item.type) {\n        case \"text\":\n          contentParts.push(item.text);\n          break;\n        case \"image\":\n          contentParts.push(\"[Image]\");\n          break;\n        case \"document\":\n          contentParts.push(`[Document${item.title ? `: ${item.title}` : \"\"}]`);\n          break;\n      }\n    }\n    return `${label}\\n${contentParts.join(\"\\n\")}\\n`;\n  }\n  return `${label} (error)\\n${block.result.error}\\n`;\n}",
-      "headingContext": "node/core/src/archive-renderer.ts \u003e function renderToolResult",
-      "startLine": 148,
-      "startCol": 1,
-      "endLine": 173,
-      "endCol": 2
+      "start": 4086,
+      "end": 5166
     }
   ]
 }

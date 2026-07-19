@@ -1,15 +1,11 @@
 {
   "blobSha": "945d1df422f4a9e421ab2df7da3e0571eff190b1",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export {\n  buildFrequencyTable,\n  type Chunk,\n  chunkFile,\n  computeScopeSize,\n  type FileSummary,\n  formatSummary,\n  scoreChunk,\n  selectChunks,\n  summarizeFile,\n  tokenize,\n} from \"@magenta/core\";",
-      "contextualizedText": "// node/utils/file-summary.ts\n\nexport {\n  buildFrequencyTable,\n  type Chunk,\n  chunkFile,\n  computeScopeSize,\n  type FileSummary,\n  formatSummary,\n  scoreChunk,\n  selectChunks,\n  summarizeFile,\n  tokenize,\n} from \"@magenta/core\";",
-      "headingContext": "node/utils/file-summary.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 12,
-      "endCol": 24
+      "start": 0,
+      "end": 198
     }
   ]
 }

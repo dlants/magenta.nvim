@@ -1,24 +1,11 @@
 {
   "blobSha": "60f66f3c7c0cb6573a02017cefa840efdab5d208",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export interface LuaExecutor",
-      "contextualizedText": "// node/core/src/capabilities/lua-executor.ts \u003e interface LuaExecutor\n\nexport interface LuaExecutor",
-      "headingContext": "node/core/src/capabilities/lua-executor.ts \u003e interface LuaExecutor",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 1,
-      "endCol": 29
-    },
-    {
-      "text": "  execLua(code: string): Promise\u003cunknown\u003e",
-      "contextualizedText": "// node/core/src/capabilities/lua-executor.ts \u003e interface LuaExecutor \u003e method execLua\n\n  execLua(code: string): Promise\u003cunknown\u003e",
-      "headingContext": "node/core/src/capabilities/lua-executor.ts \u003e interface LuaExecutor \u003e method execLua",
-      "startLine": 2,
-      "startCol": 1,
-      "endLine": 2,
-      "endCol": 42
+      "start": 0,
+      "end": 75
     }
   ]
 }

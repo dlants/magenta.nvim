@@ -1,42 +1,11 @@
 {
   "blobSha": "dfe9a22d1ba61986df21382e6915454922283b9d",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { AuthUI } from \"@magenta/core\";\nimport open from \"open\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";",
-      "contextualizedText": "// node/auth/auth-ui.ts\n\nimport type { AuthUI } from \"@magenta/core\";\nimport open from \"open\";\nimport type { Nvim } from \"../nvim/nvim-node/index.ts\";",
-      "headingContext": "node/auth/auth-ui.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 3,
-      "endCol": 56
-    },
-    {
-      "text": "export class NvimAuthUI implements AuthUI {\n  constructor(private nvim: Nvim) {}",
-      "contextualizedText": "// node/auth/auth-ui.ts \u003e class NvimAuthUI\n\nexport class NvimAuthUI implements AuthUI {\n  constructor(private nvim: Nvim) {}",
-      "headingContext": "node/auth/auth-ui.ts \u003e class NvimAuthUI",
-      "startLine": 5,
-      "startCol": 1,
-      "endLine": 6,
-      "endCol": 37
-    },
-    {
-      "text": "  async showOAuthFlow(authUrl: string): Promise\u003cstring\u003e {\n    try {\n      await open(authUrl);\n    } catch {\n      this.nvim.logger.warn(\n        \"Could not automatically open browser, please open URL manually\",\n      );\n    }\n\n    const luaScript = `\n      vim.notify(\n        \"Claude Max Authentication Required\\\\n\\\\nThe browser should open automatically. If not, open this URL:\\\\n${authUrl}\\\\n\\\\nAfter completing the authorization process, copy the authorization code and paste it below.\",\n        vim.log.levels.INFO\n      )\n      return vim.fn.input(\"Enter authorization code: \")\n    `;\n\n    const code = await this.nvim.call(\"nvim_exec_lua\", [luaScript, []]);\n\n    if (!code || typeof code !== \"string\" || code.trim() === \"\") {\n      throw new Error(\"No authorization code provided\");\n    }\n\n    return code.trim();\n  }",
-      "contextualizedText": "// node/auth/auth-ui.ts \u003e class NvimAuthUI \u003e method showOAuthFlow\n\n  async showOAuthFlow(authUrl: string): Promise\u003cstring\u003e {\n    try {\n      await open(authUrl);\n    } catch {\n      this.nvim.logger.warn(\n        \"Could not automatically open browser, please open URL manually\",\n      );\n    }\n\n    const luaScript = `\n      vim.notify(\n        \"Claude Max Authentication Required\\\\n\\\\nThe browser should open automatically. If not, open this URL:\\\\n${authUrl}\\\\n\\\\nAfter completing the authorization process, copy the authorization code and paste it below.\",\n        vim.log.levels.INFO\n      )\n      return vim.fn.input(\"Enter authorization code: \")\n    `;\n\n    const code = await this.nvim.call(\"nvim_exec_lua\", [luaScript, []]);\n\n    if (!code || typeof code !== \"string\" || code.trim() === \"\") {\n      throw new Error(\"No authorization code provided\");\n    }\n\n    return code.trim();\n  }",
-      "headingContext": "node/auth/auth-ui.ts \u003e class NvimAuthUI \u003e method showOAuthFlow",
-      "startLine": 8,
-      "startCol": 1,
-      "endLine": 32,
-      "endCol": 4
-    },
-    {
-      "text": "  showError(message: string): void {\n    this.nvim\n      .call(\"nvim_exec_lua\", [\n        `vim.notify((...), vim.log.levels.ERROR)`,\n        [message],\n      ])\n      .catch((err: unknown) =\u003e {\n        this.nvim.logger.error(\n          `Failed to show auth error notification: ${err}`,\n        );\n      });\n  }",
-      "contextualizedText": "// node/auth/auth-ui.ts \u003e class NvimAuthUI \u003e method showError\n\n  showError(message: string): void {\n    this.nvim\n      .call(\"nvim_exec_lua\", [\n        `vim.notify((...), vim.log.levels.ERROR)`,\n        [message],\n      ])\n      .catch((err: unknown) =\u003e {\n        this.nvim.logger.error(\n          `Failed to show auth error notification: ${err}`,\n        );\n      });\n  }",
-      "headingContext": "node/auth/auth-ui.ts \u003e class NvimAuthUI \u003e method showError",
-      "startLine": 34,
-      "startCol": 1,
-      "endLine": 45,
-      "endCol": 4
+      "start": 0,
+      "end": 1348
     }
   ]
 }

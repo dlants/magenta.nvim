@@ -1,15 +1,11 @@
 {
   "blobSha": "01c81fb7fb7abd607261c93bc904460ddcae643c",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { AgentTier } from \"./agents/agents.ts\";\nimport type { ThinkingEffort } from \"./provider-options.ts\";\n\nexport type Role = \"user\" | \"assistant\";\n\nexport type ThreadId = string \u0026 { __threadId: true };\n\nexport type MessageIdx = number \u0026 { __messageIdx: true };\n\nexport type ThreadType = \"subagent\" | \"compact\" | \"root\" | \"docker_root\";\n\nexport type SubagentConfig = {\n  agentName?: string | undefined;\n  fastModel?: boolean | undefined;\n  thinkingModel?: boolean | undefined;\n  systemPrompt?: string | undefined;\n  systemReminder?: string | undefined;\n  tier?: AgentTier | undefined;\n  effort?: ThinkingEffort | undefined;\n};",
-      "contextualizedText": "// node/core/src/chat-types.ts\n\nimport type { AgentTier } from \"./agents/agents.ts\";\nimport type { ThinkingEffort } from \"./provider-options.ts\";\n\nexport type Role = \"user\" | \"assistant\";\n\nexport type ThreadId = string \u0026 { __threadId: true };\n\nexport type MessageIdx = number \u0026 { __messageIdx: true };\n\nexport type ThreadType = \"subagent\" | \"compact\" | \"root\" | \"docker_root\";\n\nexport type SubagentConfig = {\n  agentName?: string | undefined;\n  fastModel?: boolean | undefined;\n  thinkingModel?: boolean | undefined;\n  systemPrompt?: string | undefined;\n  systemReminder?: string | undefined;\n  tier?: AgentTier | undefined;\n  effort?: ThinkingEffort | undefined;\n};",
-      "headingContext": "node/core/src/chat-types.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 20,
-      "endCol": 3
+      "start": 0,
+      "end": 634
     }
   ]
 }

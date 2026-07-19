@@ -1,15 +1,11 @@
 {
   "blobSha": "84b3f4967efa76e7cf236a0eaa792a8f7b4c00ec",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "maxReindexCost = 5.0\nexclude = [\"node_modules\", \"dist\", \"plans\"]\n\n[embedding]\nprovider = \"voyage\"\nmodel = \"voyage-context-4\"\ndimensions = 256\napikeyenv = \"VOYAGE_API_KEY\"\n",
-      "contextualizedText": "# pkb.toml\n\nmaxReindexCost = 5.0\nexclude = [\"node_modules\", \"dist\", \"plans\"]\n\n[embedding]\nprovider = \"voyage\"\nmodel = \"voyage-context-4\"\ndimensions = 256\napikeyenv = \"VOYAGE_API_KEY\"\n",
-      "headingContext": "pkb.toml",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 9,
-      "endCol": 1
+      "start": 0,
+      "end": 170
     }
   ]
 }

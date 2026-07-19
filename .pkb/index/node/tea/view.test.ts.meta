@@ -1,42 +1,19 @@
 {
   "blobSha": "de983403745bf08bfbbd52bc72dab1e08a0a1971",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as assert from \"node:assert\";\nimport { describe, it } from \"vitest\";\nimport { type Line, NvimBuffer } from \"../nvim/buffer.ts\";\nimport type { Row0Indexed } from \"../nvim/window.ts\";\nimport { extractMountTree, withNvimClient } from \"../test/preamble.ts\";\nimport { d, mountView, pos } from \"./view.ts\";\n\ndescribe(\"Neovim Plugin Tests\", () =\u003e {\n  it(\"basic rendering \u0026 update\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const buffer = await NvimBuffer.create(false, true, nvim);\n      await buffer.setLines({\n        start: 0 as Row0Indexed,\n        end: 0 as Row0Indexed,\n        lines: [\"\"] as Line[],\n      });\n\n      await buffer.setOption(\"modifiable\", false);",
-      "contextualizedText": "// node/tea/view.test.ts\n\nimport * as assert from \"node:assert\";\nimport { describe, it } from \"vitest\";\nimport { type Line, NvimBuffer } from \"../nvim/buffer.ts\";\nimport type { Row0Indexed } from \"../nvim/window.ts\";\nimport { extractMountTree, withNvimClient } from \"../test/preamble.ts\";\nimport { d, mountView, pos } from \"./view.ts\";\n\ndescribe(\"Neovim Plugin Tests\", () =\u003e {\n  it(\"basic rendering \u0026 update\", async () =\u003e {\n    await withNvimClient(async (nvim) =\u003e {\n      const buffer = await NvimBuffer.create(false, true, nvim);\n      await buffer.setLines({\n        start: 0 as Row0Indexed,\n        end: 0 as Row0Indexed,\n        lines: [\"\"] as Line[],\n      });\n\n      await buffer.setOption(\"modifiable\", false);",
-      "headingContext": "node/tea/view.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 18,
-      "endCol": 51
+      "start": 0,
+      "end": 1197
     },
     {
-      "text": "      const view = (props: { helloTo: string }) =\u003e d`hello, ${props.helloTo}!`",
-      "contextualizedText": "// node/tea/view.test.ts \u003e function view\n\n      const view = (props: { helloTo: string }) =\u003e d`hello, ${props.helloTo}!`",
-      "headingContext": "node/tea/view.test.ts \u003e function view",
-      "startLine": 20,
-      "startCol": 1,
-      "endLine": 20,
-      "endCol": 79
+      "start": 1205,
+      "end": 2708
     },
     {
-      "text": "const mountedView = await mountView({\n        view,\n        props: { helloTo: \"world\" },\n        mount: {\n          nvim,\n          buffer,\n          startPos: pos(0 as Row0Indexed, 0),\n          endPos: pos(0 as Row0Indexed, 0),\n        },\n      });\n\n      const lines = await buffer.getLines({\n        start: 0 as Row0Indexed,\n        end: 1 as Row0Indexed,\n      });\n\n      assert.equal(lines[0], \"hello, world!\");\n\n      assert.deepStrictEqual(\n        await extractMountTree(mountedView._getMountedNode()),\n        {\n          type: \"node\",\n          endPos: {\n            col: 13,\n            row: 0 as Row0Indexed,\n          },\n          startPos: {\n            col: 0,\n            row: 0 as Row0Indexed,\n          },\n          children: [\n            {\n              content: \"hello, \",\n              startPos: {\n                col: 0,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 7,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n            {\n              content: \"world\",\n              startPos: {\n                col: 7,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 12,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n            {\n              content: \"!\",\n              startPos: {\n                col: 12,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 13,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n          ],\n        },\n      );\n\n      await mountedView.render({ helloTo: \"nvim\" });\n      {\n        const lines = await buffer.getLines({\n          start: 0 as Row0Indexed,\n          end: 1 as Row0Indexed,\n        });\n\n        assert.equal(lines[0], \"hello, nvim!\");\n      }",
-      "contextualizedText": "// node/tea/view.test.ts\n\nconst mountedView = await mountView({\n        view,\n        props: { helloTo: \"world\" },\n        mount: {\n          nvim,\n          buffer,\n          startPos: pos(0 as Row0Indexed, 0),\n          endPos: pos(0 as Row0Indexed, 0),\n        },\n      });\n\n      const lines = await buffer.getLines({\n        start: 0 as Row0Indexed,\n        end: 1 as Row0Indexed,\n      });\n\n      assert.equal(lines[0], \"hello, world!\");\n\n      assert.deepStrictEqual(\n        await extractMountTree(mountedView._getMountedNode()),\n        {\n          type: \"node\",\n          endPos: {\n            col: 13,\n            row: 0 as Row0Indexed,\n          },\n          startPos: {\n            col: 0,\n            row: 0 as Row0Indexed,\n          },\n          children: [\n            {\n              content: \"hello, \",\n              startPos: {\n                col: 0,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 7,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n            {\n              content: \"world\",\n              startPos: {\n                col: 7,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 12,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n            {\n              content: \"!\",\n              startPos: {\n                col: 12,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 13,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n          ],\n        },\n      );\n\n      await mountedView.render({ helloTo: \"nvim\" });\n      {\n        const lines = await buffer.getLines({\n          start: 0 as Row0Indexed,\n          end: 1 as Row0Indexed,\n        });\n\n        assert.equal(lines[0], \"hello, nvim!\");\n      }",
-      "headingContext": "node/tea/view.test.ts",
-      "startLine": 21,
-      "startCol": 7,
-      "endLine": 100,
-      "endCol": 8
-    },
-    {
-      "text": "assert.deepStrictEqual(\n        await extractMountTree(mountedView._getMountedNode()),\n        {\n          type: \"node\",\n          endPos: {\n            col: 12,\n            row: 0 as Row0Indexed,\n          },\n          startPos: {\n            col: 0,\n            row: 0 as Row0Indexed,\n          },\n          children: [\n            {\n              content: \"hello, \",\n              startPos: {\n                col: 0,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 7,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n            {\n              content: \"nvim\",\n              startPos: {\n                col: 7,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 11,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n            {\n              content: \"!\",\n              startPos: {\n                col: 11,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 12,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n          ],\n        },\n      );",
-      "contextualizedText": "// node/tea/view.test.ts\n\nassert.deepStrictEqual(\n        await extractMountTree(mountedView._getMountedNode()),\n        {\n          type: \"node\",\n          endPos: {\n            col: 12,\n            row: 0 as Row0Indexed,\n          },\n          startPos: {\n            col: 0,\n            row: 0 as Row0Indexed,\n          },\n          children: [\n            {\n              content: \"hello, \",\n              startPos: {\n                col: 0,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 7,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n            {\n              content: \"nvim\",\n              startPos: {\n                col: 7,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 11,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n            {\n              content: \"!\",\n              startPos: {\n                col: 11,\n                row: 0 as Row0Indexed,\n              },\n              endPos: {\n                col: 12,\n                row: 0 as Row0Indexed,\n              },\n              type: \"string\",\n            },\n          ],\n        },\n      );",
-      "headingContext": "node/tea/view.test.ts",
-      "startLine": 102,
-      "startCol": 7,
-      "endLine": 153,
-      "endCol": 9
+      "start": 2716,
+      "end": 3991
     }
   ]
 }

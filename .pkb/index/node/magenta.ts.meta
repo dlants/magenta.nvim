@@ -1,717 +1,91 @@
 {
   "blobSha": "6f6ca92695cb3dd59737f5ca213ee4b3385cfa20",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as os from \"node:os\";\nimport type { SandboxAskCallback } from \"@anthropic-ai/sandbox-runtime\";\nimport type { InputMessage, NativeMessageIdx, ThreadId } from \"@magenta/core\";\nimport { probeAndSaveClipboardImage } from \"@magenta/core\";\nimport { type BufferInfo, BufferManager } from \"./buffer-manager.ts\";\nimport { Lsp } from \"./capabilities/lsp.ts\";\nimport { StraceUnavailableError } from \"./capabilities/strace.ts\";\nimport { Chat } from \"./chat/chat.ts\";\nimport { CommandRegistry } from \"./chat/commands/registry.ts\";\nimport {\n  type BufNr,\n  type Line,\n  MAGENTA_HIGHLIGHT_NAMESPACE,\n  NvimBuffer,\n} from \"./nvim/buffer.ts\";\nimport { initializeMagentaHighlightGroups } from \"./nvim/extmarks.ts\";\nimport { getCurrentBuffer, getcwd, getpos, notifyErr } from \"./nvim/nvim.ts\";\nimport type { Nvim } from \"./nvim/nvim-node/index.ts\";\nimport { findOrCreateNonMagentaWindow } from \"./nvim/openFileInNonMagentaWindow.ts\";\nimport {\n  NvimWindow,\n  type Position1Indexed,\n  pos1col1to0,\n  type Row0Indexed,\n  type WindowId,\n} from \"./nvim/window.ts\";\nimport { openTargetUnderCursor } from \"./open-target-under-cursor.ts\";\nimport {\n  getActiveProfile,\n  type MagentaOptions,\n  parseOptions,\n} from \"./options.ts\";\nimport { DynamicOptionsLoader } from \"./options-loader.ts\";\nimport type { RootMsg, SidebarMsg } from \"./root-msg.ts\";\nimport { initializeSandbox, type Sandbox } from \"./sandbox-manager.ts\";\nimport { ScriptManager } from \"./scripts/script-manager.ts\";\nimport { Sidebar } from \"./sidebar.ts\";\nimport {\n  BINDING_KEYS,\n  type BindingCtx,\n  type BindingKey,\n} from \"./tea/bindings.ts\";\nimport type { Dispatch } from \"./tea/tea.ts\";\nimport * as TEA from \"./tea/tea.ts\";\nimport { d } from \"./tea/view.ts\";\nimport { record as recordTiming } from \"./timings.ts\";\nimport { assertUnreachable } from \"./utils/assertUnreachable.ts\";\nimport type { HomeDir } from \"./utils/files.ts\";",
-      "contextualizedText": "// node/magenta.ts\n\nimport * as os from \"node:os\";\nimport type { SandboxAskCallback } from \"@anthropic-ai/sandbox-runtime\";\nimport type { InputMessage, NativeMessageIdx, ThreadId } from \"@magenta/core\";\nimport { probeAndSaveClipboardImage } from \"@magenta/core\";\nimport { type BufferInfo, BufferManager } from \"./buffer-manager.ts\";\nimport { Lsp } from \"./capabilities/lsp.ts\";\nimport { StraceUnavailableError } from \"./capabilities/strace.ts\";\nimport { Chat } from \"./chat/chat.ts\";\nimport { CommandRegistry } from \"./chat/commands/registry.ts\";\nimport {\n  type BufNr,\n  type Line,\n  MAGENTA_HIGHLIGHT_NAMESPACE,\n  NvimBuffer,\n} from \"./nvim/buffer.ts\";\nimport { initializeMagentaHighlightGroups } from \"./nvim/extmarks.ts\";\nimport { getCurrentBuffer, getcwd, getpos, notifyErr } from \"./nvim/nvim.ts\";\nimport type { Nvim } from \"./nvim/nvim-node/index.ts\";\nimport { findOrCreateNonMagentaWindow } from \"./nvim/openFileInNonMagentaWindow.ts\";\nimport {\n  NvimWindow,\n  type Position1Indexed,\n  pos1col1to0,\n  type Row0Indexed,\n  type WindowId,\n} from \"./nvim/window.ts\";\nimport { openTargetUnderCursor } from \"./open-target-under-cursor.ts\";\nimport {\n  getActiveProfile,\n  type MagentaOptions,\n  parseOptions,\n} from \"./options.ts\";\nimport { DynamicOptionsLoader } from \"./options-loader.ts\";\nimport type { RootMsg, SidebarMsg } from \"./root-msg.ts\";\nimport { initializeSandbox, type Sandbox } from \"./sandbox-manager.ts\";\nimport { ScriptManager } from \"./scripts/script-manager.ts\";\nimport { Sidebar } from \"./sidebar.ts\";\nimport {\n  BINDING_KEYS,\n  type BindingCtx,\n  type BindingKey,\n} from \"./tea/bindings.ts\";\nimport type { Dispatch } from \"./tea/tea.ts\";\nimport * as TEA from \"./tea/tea.ts\";\nimport { d } from \"./tea/view.ts\";\nimport { record as recordTiming } from \"./timings.ts\";\nimport { assertUnreachable } from \"./utils/assertUnreachable.ts\";\nimport type { HomeDir } from \"./utils/files.ts\";",
-      "headingContext": "node/magenta.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 48,
-      "endCol": 49
+      "start": 0,
+      "end": 2004
     },
     {
-      "text": "import {\n  detectFileType,\n  formatFileRef,\n  type NvimCwd,\n  relativePath,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"./utils/files.ts\";\nimport { getMarkdownExt } from \"./utils/markdown.ts\";\n\n// these constants should match lua/magenta/init.lua\nconst MAGENTA_COMMAND = \"magentaCommand\";\nconst MAGENTA_ON_WINDOW_CLOSED = \"magentaWindowClosed\";\nconst MAGENTA_KEY = \"magentaKey\";\nconst MAGENTA_LSP_RESPONSE = \"magentaLspResponse\";\nconst MAGENTA_BUF_ENTER = \"magentaBufEnter\";\nconst MAGENTA_BUF_DELETE = \"magentaBufDelete\";\nconst MAGENTA_CLIPBOARD_IMAGE_PASTE = \"magentaClipboardImagePaste\";\nconst MAGENTA_CLIPBOARD_TEXT_PASTE = \"magentaClipboardTextPaste\";",
-      "contextualizedText": "// node/magenta.ts\n\nimport {\n  detectFileType,\n  formatFileRef,\n  type NvimCwd,\n  relativePath,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"./utils/files.ts\";\nimport { getMarkdownExt } from \"./utils/markdown.ts\";\n\n// these constants should match lua/magenta/init.lua\nconst MAGENTA_COMMAND = \"magentaCommand\";\nconst MAGENTA_ON_WINDOW_CLOSED = \"magentaWindowClosed\";\nconst MAGENTA_KEY = \"magentaKey\";\nconst MAGENTA_LSP_RESPONSE = \"magentaLspResponse\";\nconst MAGENTA_BUF_ENTER = \"magentaBufEnter\";\nconst MAGENTA_BUF_DELETE = \"magentaBufDelete\";\nconst MAGENTA_CLIPBOARD_IMAGE_PASTE = \"magentaClipboardImagePaste\";\nconst MAGENTA_CLIPBOARD_TEXT_PASTE = \"magentaClipboardTextPaste\";",
-      "headingContext": "node/magenta.ts",
-      "startLine": 49,
-      "startCol": 1,
-      "endLine": 67,
-      "endCol": 66
+      "start": 2005,
+      "end": 2085
     },
     {
-      "text": "function formatAsQuote(text: string): string {\n  return text\n    .split(\"\\n\")\n    .map((line) =\u003e `\u003e ${line}`)\n    .join(\"\\n\");\n}",
-      "contextualizedText": "// node/magenta.ts \u003e function formatAsQuote\n\nfunction formatAsQuote(text: string): string {\n  return text\n    .split(\"\\n\")\n    .map((line) =\u003e `\u003e ${line}`)\n    .join(\"\\n\");\n}",
-      "headingContext": "node/magenta.ts \u003e function formatAsQuote",
-      "startLine": 69,
-      "startCol": 1,
-      "endLine": 74,
-      "endCol": 2
+      "start": 2087,
+      "end": 4036
     },
     {
-      "text": "export class Magenta {\n  public sidebar: Sidebar;\n  public bufferManager: BufferManager;\n  public chat: Chat;\n  public scriptManager: ScriptManager;\n  public dispatch: Dispatch\u003cRootMsg\u003e;\n  public commandRegistry: CommandRegistry;\n  public optionsLoader: DynamicOptionsLoader;\n  public activeBuffers: { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer };\n\n  constructor(\n    public nvim: Nvim,\n    public lsp: Lsp,\n    public cwd: NvimCwd,\n    public homeDir: HomeDir,\n    optionsLoader: DynamicOptionsLoader,\n    private sandbox: Sandbox,\n    bufferManager: BufferManager,\n  ) {\n    this.optionsLoader = optionsLoader;\n    this.commandRegistry = new CommandRegistry();\n    if (this.options.customCommands) {\n      for (const customCommand of this.options.customCommands) {\n        this.commandRegistry.registerCustomCommand(customCommand);\n      }\n    }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta\n\nexport class Magenta {\n  public sidebar: Sidebar;\n  public bufferManager: BufferManager;\n  public chat: Chat;\n  public scriptManager: ScriptManager;\n  public dispatch: Dispatch\u003cRootMsg\u003e;\n  public commandRegistry: CommandRegistry;\n  public optionsLoader: DynamicOptionsLoader;\n  public activeBuffers: { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer };\n\n  constructor(\n    public nvim: Nvim,\n    public lsp: Lsp,\n    public cwd: NvimCwd,\n    public homeDir: HomeDir,\n    optionsLoader: DynamicOptionsLoader,\n    private sandbox: Sandbox,\n    bufferManager: BufferManager,\n  ) {\n    this.optionsLoader = optionsLoader;\n    this.commandRegistry = new CommandRegistry();\n    if (this.options.customCommands) {\n      for (const customCommand of this.options.customCommands) {\n        this.commandRegistry.registerCustomCommand(customCommand);\n      }\n    }",
-      "headingContext": "node/magenta.ts \u003e class Magenta",
-      "startLine": 76,
-      "startCol": 1,
-      "endLine": 101,
-      "endCol": 6
+      "start": 4046,
+      "end": 5851
     },
     {
-      "text": "    this.dispatch = (msg: RootMsg) =\u003e {\n      try {\n        // select-thread-effect: update chat state + fire-and-forget buffer sync.\n        // Used by view bindings that need to trigger thread navigation.\n        if (msg.type === \"select-thread-effect\") {\n          this.selectThreadEffect(msg.id).catch((e) =\u003e {\n            nvim.logger.error(\n              `Error syncing active view: ${e instanceof Error ? `${e.message}\\n${e.stack}` : JSON.stringify(e)}`,\n            );\n          });\n        }\n\n        if (msg.type === \"set-thread-title-effect\") {\n          this.bufferManager.setThreadTitle(msg.id, msg.title).catch((e) =\u003e {\n            nvim.logger.error(\n              `Error setting thread title: ${e instanceof Error ? `${e.message}\\n${e.stack}` : JSON.stringify(e)}`,\n            );\n          });\n        }\n\n        // fork-message: F binding from the view dispatches this. We handle it\n        // here at the dispatch layer (clone agent + truncate + switch + populate\n        // input buffer) rather than letting it flow into Thread.update.\n        if (msg.type === \"thread-msg\" \u0026\u0026 msg.msg.type === \"fork-message\") {\n          const sourceThreadId = msg.id;\n          const { nativeMessageIdx, prepopulate } = msg.msg;\n          this.forkAtMessageAndSwitch(\n            sourceThreadId,\n            nativeMessageIdx,\n            prepopulate,\n          ).catch((e) =\u003e {\n            nvim.logger.error(\n              `Error forking thread at message: ${e instanceof Error ? `${e.message}\\n${e.stack}` : JSON.stringify(e)}`,\n            );\n          });\n          return;\n        }\n\n        this.chat.update(msg);\n        this.scriptManager.update(msg);\n\n        if (msg.type === \"sidebar-msg\") {\n          this.handleSidebarMsg(msg.msg);\n        }\n\n        // Render only the active buffer's mounted app\n        const activeMountedApp = this.bufferManager.getMountedApp(\n          this.getActiveKey(),\n        );\n        if (activeMountedApp) {\n          activeMountedApp.render();\n        }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function dispatch\n\n    this.dispatch = (msg: RootMsg) =\u003e {\n      try {\n        // select-thread-effect: update chat state + fire-and-forget buffer sync.\n        // Used by view bindings that need to trigger thread navigation.\n        if (msg.type === \"select-thread-effect\") {\n          this.selectThreadEffect(msg.id).catch((e) =\u003e {\n            nvim.logger.error(\n              `Error syncing active view: ${e instanceof Error ? `${e.message}\\n${e.stack}` : JSON.stringify(e)}`,\n            );\n          });\n        }\n\n        if (msg.type === \"set-thread-title-effect\") {\n          this.bufferManager.setThreadTitle(msg.id, msg.title).catch((e) =\u003e {\n            nvim.logger.error(\n              `Error setting thread title: ${e instanceof Error ? `${e.message}\\n${e.stack}` : JSON.stringify(e)}`,\n            );\n          });\n        }\n\n        // fork-message: F binding from the view dispatches this. We handle it\n        // here at the dispatch layer (clone agent + truncate + switch + populate\n        // input buffer) rather than letting it flow into Thread.update.\n        if (msg.type === \"thread-msg\" \u0026\u0026 msg.msg.type === \"fork-message\") {\n          const sourceThreadId = msg.id;\n          const { nativeMessageIdx, prepopulate } = msg.msg;\n          this.forkAtMessageAndSwitch(\n            sourceThreadId,\n            nativeMessageIdx,\n            prepopulate,\n          ).catch((e) =\u003e {\n            nvim.logger.error(\n              `Error forking thread at message: ${e instanceof Error ? `${e.message}\\n${e.stack}` : JSON.stringify(e)}`,\n            );\n          });\n          return;\n        }\n\n        this.chat.update(msg);\n        this.scriptManager.update(msg);\n\n        if (msg.type === \"sidebar-msg\") {\n          this.handleSidebarMsg(msg.msg);\n        }\n\n        // Render only the active buffer's mounted app\n        const activeMountedApp = this.bufferManager.getMountedApp(\n          this.getActiveKey(),\n        );\n        if (activeMountedApp) {\n          activeMountedApp.render();\n        }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function dispatch",
-      "startLine": 103,
-      "startCol": 1,
-      "endLine": 154,
-      "endCol": 10
+      "start": 5857,
+      "end": 7877
     },
     {
-      "text": "this.sidebar.renderInputHeader().catch((e) =\u003e {\n          this.nvim.logger.error(\n            `Error rendering sidebar input header: ${e instanceof Error ? `${e.message}\\n${e.stack}` : JSON.stringify(e)}`,\n          );\n        });\n      } catch (e) {\n        nvim.logger.error(e as Error);\n      }\n    }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function dispatch\n\nthis.sidebar.renderInputHeader().catch((e) =\u003e {\n          this.nvim.logger.error(\n            `Error rendering sidebar input header: ${e instanceof Error ? `${e.message}\\n${e.stack}` : JSON.stringify(e)}`,\n          );\n        });\n      } catch (e) {\n        nvim.logger.error(e as Error);\n      }\n    }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function dispatch",
-      "startLine": 156,
-      "startCol": 9,
-      "endLine": 164,
-      "endCol": 6
+      "start": 7883,
+      "end": 10033
     },
     {
-      "text": "this.chat = new Chat({\n      dispatch: this.dispatch",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta\n\nthis.chat = new Chat({\n      dispatch: this.dispatch",
-      "headingContext": "node/magenta.ts \u003e class Magenta",
-      "startLine": 166,
-      "startCol": 5,
-      "endLine": 167,
-      "endCol": 30
+      "start": 10037,
+      "end": 11661
     },
     {
-      "text": "      getDisplayWidth: () =\u003e {\n        if (this.sidebar.state.state === \"visible\") {\n          return this.sidebar.state.displayWidth;\n        } else {\n          return 100;\n        }\n      }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function getDisplayWidth\n\n      getDisplayWidth: () =\u003e {\n        if (this.sidebar.state.state === \"visible\") {\n          return this.sidebar.state.displayWidth;\n        } else {\n          return 100;\n        }\n      }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function getDisplayWidth",
-      "startLine": 168,
-      "startCol": 1,
-      "endLine": 174,
-      "endCol": 8
+      "start": 11667,
+      "end": 13997
     },
     {
-      "text": "cwd: this.cwd,\n      homeDir: this.homeDir,\n      nvim: this.nvim",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta\n\ncwd: this.cwd,\n      homeDir: this.homeDir,\n      nvim: this.nvim",
-      "headingContext": "node/magenta.ts \u003e class Magenta",
-      "startLine": 175,
-      "startCol": 7,
-      "endLine": 177,
-      "endCol": 22
+      "start": 14008,
+      "end": 15026
     },
     {
-      "text": "      getOptions: () =\u003e this.options",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function getOptions\n\n      getOptions: () =\u003e this.options",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function getOptions",
-      "startLine": 178,
-      "startCol": 1,
-      "endLine": 178,
-      "endCol": 37
+      "start": 15030,
+      "end": 17177
     },
     {
-      "text": "lsp: this.lsp,\n      sandbox: this.sandbox",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta\n\nlsp: this.lsp,\n      sandbox: this.sandbox",
-      "headingContext": "node/magenta.ts \u003e class Magenta",
-      "startLine": 179,
-      "startCol": 7,
-      "endLine": 180,
-      "endCol": 28
+      "start": 17187,
+      "end": 19481
     },
     {
-      "text": "      removeThreadBuffers: (ids) =\u003e {\n        for (const id of ids) {\n          bufferManager.removeThread(id).catch((e: Error) =\u003e {\n            this.nvim.logger.error(\n              `Error removing buffers for thread ${id}: ${e.message}`,\n            );\n          });\n        }\n      }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function removeThreadBuffers\n\n      removeThreadBuffers: (ids) =\u003e {\n        for (const id of ids) {\n          bufferManager.removeThread(id).catch((e: Error) =\u003e {\n            this.nvim.logger.error(\n              `Error removing buffers for thread ${id}: ${e.message}`,\n            );\n          });\n        }\n      }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function removeThreadBuffers",
-      "startLine": 181,
-      "startCol": 1,
-      "endLine": 189,
-      "endCol": 8
+      "start": 19489,
+      "end": 21769
     },
     {
-      "text": "this.scriptManager = new ScriptManager({\n      dispatch: this.dispatch,\n      chat: this.chat,\n      nvim: this.nvim,\n      cwd: this.cwd,\n      homeDir: this.homeDir",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta\n\nthis.scriptManager = new ScriptManager({\n      dispatch: this.dispatch,\n      chat: this.chat,\n      nvim: this.nvim,\n      cwd: this.cwd,\n      homeDir: this.homeDir",
-      "headingContext": "node/magenta.ts \u003e class Magenta",
-      "startLine": 192,
-      "startCol": 5,
-      "endLine": 197,
-      "endCol": 28
+      "start": 21773,
+      "end": 23647
     },
     {
-      "text": "      getScriptsPaths: () =\u003e this.options.scriptsPaths",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function getScriptsPaths\n\n      getScriptsPaths: () =\u003e this.options.scriptsPaths",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function getScriptsPaths",
-      "startLine": 198,
-      "startCol": 1,
-      "endLine": 198,
-      "endCol": 55
+      "start": 23651,
+      "end": 25394
     },
     {
-      "text": "      getOptions: () =\u003e this.options",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function getOptions\n\n      getOptions: () =\u003e this.options",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function getOptions",
-      "startLine": 199,
-      "startCol": 1,
-      "endLine": 199,
-      "endCol": 37
+      "start": 25402,
+      "end": 27391
     },
     {
-      "text": "this.chat.scriptRunner",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta\n\nthis.chat.scriptRunner",
-      "headingContext": "node/magenta.ts \u003e class Magenta",
-      "startLine": 201,
-      "startCol": 5,
-      "endLine": 201,
-      "endCol": 27
+      "start": 27397,
+      "end": 29507
     },
     {
-      "text": "      discover: () =\u003e this.scriptManager.discover()",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function discover\n\n      discover: () =\u003e this.scriptManager.discover()",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function discover",
-      "startLine": 202,
-      "startCol": 1,
-      "endLine": 202,
-      "endCol": 52
+      "start": 29513,
+      "end": 31355
     },
     {
-      "text": "      getScriptCatalog: () =\u003e this.scriptManager.getScriptCatalog()",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function getScriptCatalog\n\n      getScriptCatalog: () =\u003e this.scriptManager.getScriptCatalog()",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function getScriptCatalog",
-      "startLine": 203,
-      "startCol": 1,
-      "endLine": 203,
-      "endCol": 68
+      "start": 31361,
+      "end": 33255
     },
     {
-      "text": "      runScript: ({ scriptName, parameters, triggeringThreadId }) =\u003e {\n        this.scriptManager.runScript(scriptName, parameters, {\n          sandboxBypassed: this.chat.isSandboxBypassed(triggeringThreadId),\n        });\n      }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function runScript\n\n      runScript: ({ scriptName, parameters, triggeringThreadId }) =\u003e {\n        this.scriptManager.runScript(scriptName, parameters, {\n          sandboxBypassed: this.chat.isSandboxBypassed(triggeringThreadId),\n        });\n      }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function runScript",
-      "startLine": 204,
-      "startCol": 1,
-      "endLine": 208,
-      "endCol": 8
+      "start": 33261,
+      "end": 35497
     },
     {
-      "text": "this.bufferManager = bufferManager;\n    this.activeBuffers = bufferManager.getOverviewBuffers();",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta\n\nthis.bufferManager = bufferManager;\n    this.activeBuffers = bufferManager.getOverviewBuffers();",
-      "headingContext": "node/magenta.ts \u003e class Magenta",
-      "startLine": 210,
-      "startCol": 5,
-      "endLine": 211,
-      "endCol": 61
+      "start": 35503,
+      "end": 37767
     },
     {
-      "text": "    const onUnhandledKey = async ({\n      key,\n    }: {\n      key: BindingKey;\n    }): Promise\u003cvoid\u003e =\u003e {\n      if (key === \"\u003cCR\u003e\") {\n        try {\n          await openTargetUnderCursor({\n            nvim: this.nvim,\n            cwd: this.cwd,\n            homeDir: this.homeDir,\n            options: this.options,\n          });\n        } catch (err) {\n          this.nvim.logger.error(\n            `openTargetUnderCursor failed: ${err instanceof Error ? err.message : JSON.stringify(err)}`,\n          );\n          throw err;\n        }\n      }\n    }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function onUnhandledKey\n\n    const onUnhandledKey = async ({\n      key,\n    }: {\n      key: BindingKey;\n    }): Promise\u003cvoid\u003e =\u003e {\n      if (key === \"\u003cCR\u003e\") {\n        try {\n          await openTargetUnderCursor({\n            nvim: this.nvim,\n            cwd: this.cwd,\n            homeDir: this.homeDir,\n            options: this.options,\n          });\n        } catch (err) {\n          this.nvim.logger.error(\n            `openTargetUnderCursor failed: ${err instanceof Error ? err.message : JSON.stringify(err)}`,\n          );\n          throw err;\n        }\n      }\n    }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function onUnhandledKey",
-      "startLine": 212,
-      "startCol": 1,
-      "endLine": 232,
-      "endCol": 6
-    },
-    {
-      "text": "this.bufferManager.setAppFactories(\n      (threadId: ThreadId) =\u003e\n        TEA.createApp\u003cChat\u003e({\n          nvim: this.nvim,\n          initialModel: this.chat",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta\n\nthis.bufferManager.setAppFactories(\n      (threadId: ThreadId) =\u003e\n        TEA.createApp\u003cChat\u003e({\n          nvim: this.nvim,\n          initialModel: this.chat",
-      "headingContext": "node/magenta.ts \u003e class Magenta",
-      "startLine": 234,
-      "startCol": 5,
-      "endLine": 238,
-      "endCol": 34
-    },
-    {
-      "text": "          View: () =\u003e this.chat.renderSingleThread(threadId)",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function View\n\n          View: () =\u003e this.chat.renderSingleThread(threadId)",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function View",
-      "startLine": 239,
-      "startCol": 1,
-      "endLine": 239,
-      "endCol": 61
-    },
-    {
-      "text": "onUnhandledKey,\n        }),\n      () =\u003e\n        TEA.createApp\u003cChat\u003e({\n          nvim: this.nvim,\n          initialModel: this.chat",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta\n\nonUnhandledKey,\n        }),\n      () =\u003e\n        TEA.createApp\u003cChat\u003e({\n          nvim: this.nvim,\n          initialModel: this.chat",
-      "headingContext": "node/magenta.ts \u003e class Magenta",
-      "startLine": 240,
-      "startCol": 11,
-      "endLine": 245,
-      "endCol": 34
-    },
-    {
-      "text": "          View: () =\u003e\n            this.chat.state.state === \"archive\"\n              ? this.chat.renderArchive()\n              : d`${this.chat.renderThreadOverview()}${this.scriptManager.view()}`",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e function View\n\n          View: () =\u003e\n            this.chat.state.state === \"archive\"\n              ? this.chat.renderArchive()\n              : d`${this.chat.renderThreadOverview()}${this.scriptManager.view()}`",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e function View",
-      "startLine": 246,
-      "startCol": 1,
-      "endLine": 249,
-      "endCol": 83
-    },
-    {
-      "text": "onUnhandledKey,\n        }),\n    );\n\n    this.sidebar = new Sidebar(\n      this.nvim,\n      () =\u003e this.getActiveProfile(),\n      () =\u003e {\n        if (!this.chat.state.activeThreadId) {\n          return 0;\n        }\n        const wrapper =\n          this.chat.threadWrappers[this.chat.state.activeThreadId];\n        if (!wrapper || wrapper.state !== \"initialized\") {\n          return 0;\n        }\n        return wrapper.thread.getLastStopTokenCount();\n      },\n      this.bufferManager,\n      () =\u003e this.getActiveKey(),\n      () =\u003e this.chat.isSandboxBypassed(this.chat.state.activeThreadId),\n    );",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta\n\nonUnhandledKey,\n        }),\n    );\n\n    this.sidebar = new Sidebar(\n      this.nvim,\n      () =\u003e this.getActiveProfile(),\n      () =\u003e {\n        if (!this.chat.state.activeThreadId) {\n          return 0;\n        }\n        const wrapper =\n          this.chat.threadWrappers[this.chat.state.activeThreadId];\n        if (!wrapper || wrapper.state !== \"initialized\") {\n          return 0;\n        }\n        return wrapper.thread.getLastStopTokenCount();\n      },\n      this.bufferManager,\n      () =\u003e this.getActiveKey(),\n      () =\u003e this.chat.isSandboxBypassed(this.chat.state.activeThreadId),\n    );",
-      "headingContext": "node/magenta.ts \u003e class Magenta",
-      "startLine": 250,
-      "startCol": 11,
-      "endLine": 271,
-      "endCol": 7
-    },
-    {
-      "text": "  get options(): MagentaOptions {\n    return this.optionsLoader.getOptions();\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method options\n\n  get options(): MagentaOptions {\n    return this.optionsLoader.getOptions();\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method options",
-      "startLine": 274,
-      "startCol": 1,
-      "endLine": 276,
-      "endCol": 4
-    },
-    {
-      "text": "  getActiveProfile() {\n    return getActiveProfile(this.options.profiles, this.options.activeProfile);\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method getActiveProfile\n\n  getActiveProfile() {\n    return getActiveProfile(this.options.profiles, this.options.activeProfile);\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method getActiveProfile",
-      "startLine": 278,
-      "startCol": 1,
-      "endLine": 280,
-      "endCol": 4
-    },
-    {
-      "text": "  getActiveKey(): ThreadId | \"overview\" {\n    return this.chat.state.state === \"thread-selected\"\n      ? this.chat.state.activeThreadId\n      : \"overview\";\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method getActiveKey\n\n  getActiveKey(): ThreadId | \"overview\" {\n    return this.chat.state.state === \"thread-selected\"\n      ? this.chat.state.activeThreadId\n      : \"overview\";\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method getActiveKey",
-      "startLine": 282,
-      "startCol": 1,
-      "endLine": 286,
-      "endCol": 4
-    },
-    {
-      "text": "  async selectThreadEffect(id: ThreadId): Promise\u003cvoid\u003e {\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id },\n    });\n    await this.syncActiveView();\n    this.dispatch({\n      type: \"sidebar-msg\",\n      msg: { type: \"set-cursor-to-bottom\" },\n    });\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method selectThreadEffect\n\n  async selectThreadEffect(id: ThreadId): Promise\u003cvoid\u003e {\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id },\n    });\n    await this.syncActiveView();\n    this.dispatch({\n      type: \"sidebar-msg\",\n      msg: { type: \"set-cursor-to-bottom\" },\n    });\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method selectThreadEffect",
-      "startLine": 288,
-      "startCol": 1,
-      "endLine": 298,
-      "endCol": 4
-    },
-    {
-      "text": "  async createAndSwitchToNewThread(): Promise\u003cThreadId\u003e {\n    const threadId = await this.chat.createNewThread();\n    await this.bufferManager.registerThread(threadId);\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id: threadId },\n    });\n    await this.syncActiveView();\n    return threadId;\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method createAndSwitchToNewThread\n\n  async createAndSwitchToNewThread(): Promise\u003cThreadId\u003e {\n    const threadId = await this.chat.createNewThread();\n    await this.bufferManager.registerThread(threadId);\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id: threadId },\n    });\n    await this.syncActiveView();\n    return threadId;\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method createAndSwitchToNewThread",
-      "startLine": 300,
-      "startCol": 1,
-      "endLine": 309,
-      "endCol": 4
-    },
-    {
-      "text": "  async createAndSwitchToAgentThread(agentName: string): Promise\u003cThreadId\u003e {\n    const threadId = await this.chat.createNewAgentThread(agentName);\n    await this.bufferManager.registerThread(threadId);\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id: threadId },\n    });\n    await this.syncActiveView();\n    return threadId;\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method createAndSwitchToAgentThread\n\n  async createAndSwitchToAgentThread(agentName: string): Promise\u003cThreadId\u003e {\n    const threadId = await this.chat.createNewAgentThread(agentName);\n    await this.bufferManager.registerThread(threadId);\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id: threadId },\n    });\n    await this.syncActiveView();\n    return threadId;\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method createAndSwitchToAgentThread",
-      "startLine": 311,
-      "startCol": 1,
-      "endLine": 320,
-      "endCol": 4
-    },
-    {
-      "text": "  async forkAndSwitchToThread(sourceThreadId: ThreadId): Promise\u003cThreadId\u003e {\n    const threadId = await this.chat.handleForkThread({ sourceThreadId });\n    await this.bufferManager.registerThread(threadId);\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id: threadId },\n    });\n    await this.syncActiveView();\n    return threadId;\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method forkAndSwitchToThread\n\n  async forkAndSwitchToThread(sourceThreadId: ThreadId): Promise\u003cThreadId\u003e {\n    const threadId = await this.chat.handleForkThread({ sourceThreadId });\n    await this.bufferManager.registerThread(threadId);\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id: threadId },\n    });\n    await this.syncActiveView();\n    return threadId;\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method forkAndSwitchToThread",
-      "startLine": 322,
-      "startCol": 1,
-      "endLine": 331,
-      "endCol": 4
-    },
-    {
-      "text": "  async forkAtMessageAndSwitch(\n    sourceThreadId: ThreadId,\n    nativeMessageIdx: NativeMessageIdx,\n    prepopulate?: string[],\n  ): Promise\u003cThreadId\u003e {\n    const threadId = await this.chat.handleForkThread({\n      sourceThreadId,\n      truncateAtMessageIdx: nativeMessageIdx,\n    });\n    await this.bufferManager.registerThread(threadId);\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id: threadId },\n    });\n    await this.syncActiveView();\n\n    if (!this.sidebar.isVisible()) {\n      await this.command(\"toggle\");\n    }\n\n    const quotedLines: Line[] =\n      prepopulate \u0026\u0026 prepopulate.length \u003e 0\n        ? ([...prepopulate.map((l) =\u003e `\u003e ${l}`), \"\", \"\"] as Line[])\n        : ([\"\"] as Line[]);\n\n    await this.activeBuffers.inputBuffer.setLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: quotedLines,\n    });\n\n    if (this.sidebar.state.state === \"visible\") {\n      const inputWindow = this.sidebar.state.inputWindow;\n      await this.nvim.call(\"nvim_set_current_win\", [inputWindow.id]);\n      const cursorRow = quotedLines.length;\n      await inputWindow.setCursor({\n        row: cursorRow,\n        col: 0,\n      } as Position1Indexed);\n    }\n    return threadId;\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method forkAtMessageAndSwitch\n\n  async forkAtMessageAndSwitch(\n    sourceThreadId: ThreadId,\n    nativeMessageIdx: NativeMessageIdx,\n    prepopulate?: string[],\n  ): Promise\u003cThreadId\u003e {\n    const threadId = await this.chat.handleForkThread({\n      sourceThreadId,\n      truncateAtMessageIdx: nativeMessageIdx,\n    });\n    await this.bufferManager.registerThread(threadId);\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id: threadId },\n    });\n    await this.syncActiveView();\n\n    if (!this.sidebar.isVisible()) {\n      await this.command(\"toggle\");\n    }\n\n    const quotedLines: Line[] =\n      prepopulate \u0026\u0026 prepopulate.length \u003e 0\n        ? ([...prepopulate.map((l) =\u003e `\u003e ${l}`), \"\", \"\"] as Line[])\n        : ([\"\"] as Line[]);\n\n    await this.activeBuffers.inputBuffer.setLines({\n      start: 0 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: quotedLines,\n    });\n\n    if (this.sidebar.state.state === \"visible\") {\n      const inputWindow = this.sidebar.state.inputWindow;\n      await this.nvim.call(\"nvim_set_current_win\", [inputWindow.id]);\n      const cursorRow = quotedLines.length;\n      await inputWindow.setCursor({\n        row: cursorRow,\n        col: 0,\n      } as Position1Indexed);\n    }\n    return threadId;\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method forkAtMessageAndSwitch",
-      "startLine": 333,
-      "startCol": 1,
-      "endLine": 374,
-      "endCol": 4
-    },
-    {
-      "text": "  private handleSidebarMsg(msg: SidebarMsg): void {\n    switch (msg.type) {\n      case \"setup-resubmit\": {\n        const wrapper = this.chat.threadWrappers[msg.threadId];\n        if (!wrapper || wrapper.state !== \"initialized\") {\n          this.nvim.logger.warn(\n            `setup-resubmit: thread ${msg.threadId} not found or not initialized`,\n          );\n          break;\n        }\n        const buffers = this.bufferManager.getThreadBuffers(msg.threadId);\n        if (!buffers) {\n          break;\n        }\n        wrapper.thread.core.discardFailedSubmit();\n        buffers.inputBuffer\n          .setLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n            lines: msg.lastUserMessage.split(\"\\n\") as Line[],\n          })\n          .catch((error) =\u003e {\n            this.nvim.logger.error(`Error updating sidebar input: ${error}`);\n          });\n        break;\n      }\n      case \"append-to-input\": {\n        const buffers = this.bufferManager.getThreadBuffers(msg.threadId);\n        if (!buffers) {\n          break;\n        }\n        (async () =\u003e {\n          const existingLines = await buffers.inputBuffer.getLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n          });\n          const hasExistingText = existingLines.some(\n            (line) =\u003e line.trim().length \u003e 0,\n          );\n          const appendedLines = msg.text.split(\"\\n\") as Line[];\n          const newLines = hasExistingText\n            ? ([...existingLines, ...appendedLines] as Line[])\n            : appendedLines;\n          await buffers.inputBuffer.setLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n            lines: newLines,\n          });\n        })().catch((error) =\u003e {\n          this.nvim.logger.error(`Error appending to sidebar input: ${error}`);\n        });\n        break;\n      }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method handleSidebarMsg\n\n  private handleSidebarMsg(msg: SidebarMsg): void {\n    switch (msg.type) {\n      case \"setup-resubmit\": {\n        const wrapper = this.chat.threadWrappers[msg.threadId];\n        if (!wrapper || wrapper.state !== \"initialized\") {\n          this.nvim.logger.warn(\n            `setup-resubmit: thread ${msg.threadId} not found or not initialized`,\n          );\n          break;\n        }\n        const buffers = this.bufferManager.getThreadBuffers(msg.threadId);\n        if (!buffers) {\n          break;\n        }\n        wrapper.thread.core.discardFailedSubmit();\n        buffers.inputBuffer\n          .setLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n            lines: msg.lastUserMessage.split(\"\\n\") as Line[],\n          })\n          .catch((error) =\u003e {\n            this.nvim.logger.error(`Error updating sidebar input: ${error}`);\n          });\n        break;\n      }\n      case \"append-to-input\": {\n        const buffers = this.bufferManager.getThreadBuffers(msg.threadId);\n        if (!buffers) {\n          break;\n        }\n        (async () =\u003e {\n          const existingLines = await buffers.inputBuffer.getLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n          });\n          const hasExistingText = existingLines.some(\n            (line) =\u003e line.trim().length \u003e 0,\n          );\n          const appendedLines = msg.text.split(\"\\n\") as Line[];\n          const newLines = hasExistingText\n            ? ([...existingLines, ...appendedLines] as Line[])\n            : appendedLines;\n          await buffers.inputBuffer.setLines({\n            start: 0 as Row0Indexed,\n            end: -1 as Row0Indexed,\n            lines: newLines,\n          });\n        })().catch((error) =\u003e {\n          this.nvim.logger.error(`Error appending to sidebar input: ${error}`);\n        });\n        break;\n      }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method handleSidebarMsg",
-      "startLine": 375,
-      "startCol": 1,
-      "endLine": 427,
-      "endCol": 8
-    },
-    {
-      "text": "case \"scroll-to-last-user-message\": {\n        const activeMountedApp = this.bufferManager.getMountedApp(\n          this.getActiveKey(),\n        );\n        if (activeMountedApp) {\n          (async () =\u003e {\n            await activeMountedApp.waitForNextRender();\n            await this.sidebar.scrollToLastUserMessage();\n          })().catch((error: Error) =\u003e\n            this.nvim.logger.error(\n              `Error scrolling to last user message: ${`${error.message}\\n${error.stack}`}`,\n            ),\n          );\n        }\n        break;\n      }\n      case \"set-cursor-to-bottom\": {\n        const activeMountedApp = this.bufferManager.getMountedApp(\n          this.getActiveKey(),\n        );\n        if (activeMountedApp) {\n          (async () =\u003e {\n            await activeMountedApp.waitForRender();\n            await this.sidebar.setCursorToBottom();\n          })().catch((error: Error) =\u003e\n            this.nvim.logger.error(\n              `Error setting cursor to bottom: ${`${error.message}\\n${error.stack}`}`,\n            ),\n          );\n        }\n        break;\n      }\n      default:\n        assertUnreachable(msg);\n    }\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method handleSidebarMsg\n\ncase \"scroll-to-last-user-message\": {\n        const activeMountedApp = this.bufferManager.getMountedApp(\n          this.getActiveKey(),\n        );\n        if (activeMountedApp) {\n          (async () =\u003e {\n            await activeMountedApp.waitForNextRender();\n            await this.sidebar.scrollToLastUserMessage();\n          })().catch((error: Error) =\u003e\n            this.nvim.logger.error(\n              `Error scrolling to last user message: ${`${error.message}\\n${error.stack}`}`,\n            ),\n          );\n        }\n        break;\n      }\n      case \"set-cursor-to-bottom\": {\n        const activeMountedApp = this.bufferManager.getMountedApp(\n          this.getActiveKey(),\n        );\n        if (activeMountedApp) {\n          (async () =\u003e {\n            await activeMountedApp.waitForRender();\n            await this.sidebar.setCursorToBottom();\n          })().catch((error: Error) =\u003e\n            this.nvim.logger.error(\n              `Error setting cursor to bottom: ${`${error.message}\\n${error.stack}`}`,\n            ),\n          );\n        }\n        break;\n      }\n      default:\n        assertUnreachable(msg);\n    }\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method handleSidebarMsg",
-      "startLine": 428,
-      "startCol": 7,
-      "endLine": 463,
-      "endCol": 4
-    },
-    {
-      "text": "/** After dispatching a chat-msg that changes the active view,\n   * call this to update activeBuffers and switch sidebar windows.\n   */\n  private async syncActiveView(): Promise\u003cvoid\u003e {\n    const activeKey = this.getActiveKey();\n    if (activeKey === \"overview\") {\n      this.activeBuffers = this.bufferManager.getOverviewBuffers();\n      if (this.sidebar.state.state === \"visible\") {\n        const { displayWindow, inputWindow } = this.sidebar.state;\n        await this.bufferManager.switchToOverview(displayWindow, inputWindow);\n      }\n    } else {\n      this.activeBuffers = await this.bufferManager.registerThread(activeKey);\n      if (this.sidebar.state.state === \"visible\") {\n        const { displayWindow, inputWindow } = this.sidebar.state;\n        await this.bufferManager.switchToThread(\n          activeKey,\n          displayWindow,\n          inputWindow,\n        );\n      }\n    }\n    // Step 7: update input window title (profile + token count) after switching threads\n    await this.sidebar.renderInputHeader();\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method syncActiveView\n\n/** After dispatching a chat-msg that changes the active view,\n   * call this to update activeBuffers and switch sidebar windows.\n   */\n  private async syncActiveView(): Promise\u003cvoid\u003e {\n    const activeKey = this.getActiveKey();\n    if (activeKey === \"overview\") {\n      this.activeBuffers = this.bufferManager.getOverviewBuffers();\n      if (this.sidebar.state.state === \"visible\") {\n        const { displayWindow, inputWindow } = this.sidebar.state;\n        await this.bufferManager.switchToOverview(displayWindow, inputWindow);\n      }\n    } else {\n      this.activeBuffers = await this.bufferManager.registerThread(activeKey);\n      if (this.sidebar.state.state === \"visible\") {\n        const { displayWindow, inputWindow } = this.sidebar.state;\n        await this.bufferManager.switchToThread(\n          activeKey,\n          displayWindow,\n          inputWindow,\n        );\n      }\n    }\n    // Step 7: update input window title (profile + token count) after switching threads\n    await this.sidebar.renderInputHeader();\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method syncActiveView",
-      "startLine": 465,
-      "startCol": 3,
-      "endLine": 489,
-      "endCol": 4
-    },
-    {
-      "text": "  async command(input: string): Promise\u003cvoid\u003e {\n    const [command, ...rest] = input.trim().split(/\\s+/);\n    this.nvim.logger.debug(`Received command ${command}`);\n    switch (command) {\n      case \"profile\": {\n        const profileName = rest.join(\" \");\n        const profile = this.options.profiles.find(\n          (p) =\u003e p.name === profileName,\n        );\n\n        if (profile) {\n          this.options.activeProfile = profile.name;\n        } else {\n          this.nvim.logger.error(`Profile \"${profileName}\" not found.`);\n          notifyErr(\n            this.nvim,\n            \"profile command\",\n            new Error(`Profile \"${profileName}\" not found.`),\n          );\n        }\n        break;\n      }\n\n      case \"context-files\": {\n        if (!this.sidebar.isVisible()) {\n          await this.command(\"toggle\");\n        }\n\n        const thread = this.chat.getActiveThread();\n\n        const parts = input.trim().match(/[^\\s']+|'([^']*)'|\\S+/g) || [];\n        const paths = parts\n          .slice(1)\n          .map((str) =\u003e (str.startsWith(\"'\") ? str.slice(1, -1) : str))\n          .map((str) =\u003e str.trim());\n\n        for (const filePath of paths) {\n          const absFilePath = resolveFilePath(\n            this.cwd,\n            filePath as UnresolvedFilePath,\n            this.homeDir,\n          );\n          const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);\n          const fileTypeInfo = await detectFileType(absFilePath);\n          if (!fileTypeInfo) {\n            this.nvim.logger.error(`File ${filePath} does not exist.`);\n            continue;\n          }\n\n          thread.contextManager.addFileContext(\n            absFilePath,\n            relFilePath,\n            fileTypeInfo,\n          );\n        }\n\n        break;\n      }\n\n      case \"toggle\": {\n        await this.sidebar.toggle(\n          this.options.sidebarPosition,\n          this.options.sidebarPositionOpts,\n        );\n        break;\n      }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method command\n\n  async command(input: string): Promise\u003cvoid\u003e {\n    const [command, ...rest] = input.trim().split(/\\s+/);\n    this.nvim.logger.debug(`Received command ${command}`);\n    switch (command) {\n      case \"profile\": {\n        const profileName = rest.join(\" \");\n        const profile = this.options.profiles.find(\n          (p) =\u003e p.name === profileName,\n        );\n\n        if (profile) {\n          this.options.activeProfile = profile.name;\n        } else {\n          this.nvim.logger.error(`Profile \"${profileName}\" not found.`);\n          notifyErr(\n            this.nvim,\n            \"profile command\",\n            new Error(`Profile \"${profileName}\" not found.`),\n          );\n        }\n        break;\n      }\n\n      case \"context-files\": {\n        if (!this.sidebar.isVisible()) {\n          await this.command(\"toggle\");\n        }\n\n        const thread = this.chat.getActiveThread();\n\n        const parts = input.trim().match(/[^\\s']+|'([^']*)'|\\S+/g) || [];\n        const paths = parts\n          .slice(1)\n          .map((str) =\u003e (str.startsWith(\"'\") ? str.slice(1, -1) : str))\n          .map((str) =\u003e str.trim());\n\n        for (const filePath of paths) {\n          const absFilePath = resolveFilePath(\n            this.cwd,\n            filePath as UnresolvedFilePath,\n            this.homeDir,\n          );\n          const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);\n          const fileTypeInfo = await detectFileType(absFilePath);\n          if (!fileTypeInfo) {\n            this.nvim.logger.error(`File ${filePath} does not exist.`);\n            continue;\n          }\n\n          thread.contextManager.addFileContext(\n            absFilePath,\n            relFilePath,\n            fileTypeInfo,\n          );\n        }\n\n        break;\n      }\n\n      case \"toggle\": {\n        await this.sidebar.toggle(\n          this.options.sidebarPosition,\n          this.options.sidebarPositionOpts,\n        );\n        break;\n      }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method command",
-      "startLine": 491,
-      "startCol": 1,
-      "endLine": 556,
-      "endCol": 8
-    },
-    {
-      "text": "case \"send\": {\n        const text = await this.sidebar.getMessage(\n          this.activeBuffers.inputBuffer,\n        );\n        this.nvim.logger.debug(`current message: ${text}`);\n        if (!text) return;\n\n        await this.preprocessAndSend(text);\n        break;\n      }\n\n      case \"abort\": {\n        this.dispatch({\n          type: \"thread-msg\",\n          id: this.chat.getActiveThread().id,\n          msg: {\n            type: \"abort\",\n          },\n        });\n\n        break;\n      }\n\n      case \"new-thread\": {\n        await this.createAndSwitchToNewThread();\n        if (!this.sidebar.isVisible()) {\n          await this.command(\"toggle\");\n        }\n        break;\n      }\n      case \"agent\": {\n        const agentName = rest[0];\n        if (!agentName) {\n          await this.nvim.call(\"nvim_err_writeln\", [\n            \"Usage: :Magenta agent \u003cname\u003e\",\n          ]);\n          break;\n        }\n\n        await this.createAndSwitchToAgentThread(agentName);\n        if (!this.sidebar.isVisible()) {\n          await this.command(\"toggle\");\n        }\n        break;\n      }\n\n      case \"threads-navigate-up\": {\n        this.dispatch({\n          type: \"chat-msg\",\n          msg: { type: \"threads-navigate-up\" },\n        });\n        await this.syncActiveView();\n        if (this.getActiveKey() !== \"overview\") {\n          this.dispatch({\n            type: \"sidebar-msg\",\n            msg: { type: \"set-cursor-to-bottom\" },\n          });\n        }\n        break;\n      }\n\n      case \"threads-overview\": {\n        this.dispatch({\n          type: \"chat-msg\",\n          msg: { type: \"threads-overview\" },\n        });\n        await this.syncActiveView();\n        break;\n      }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method command\n\ncase \"send\": {\n        const text = await this.sidebar.getMessage(\n          this.activeBuffers.inputBuffer,\n        );\n        this.nvim.logger.debug(`current message: ${text}`);\n        if (!text) return;\n\n        await this.preprocessAndSend(text);\n        break;\n      }\n\n      case \"abort\": {\n        this.dispatch({\n          type: \"thread-msg\",\n          id: this.chat.getActiveThread().id,\n          msg: {\n            type: \"abort\",\n          },\n        });\n\n        break;\n      }\n\n      case \"new-thread\": {\n        await this.createAndSwitchToNewThread();\n        if (!this.sidebar.isVisible()) {\n          await this.command(\"toggle\");\n        }\n        break;\n      }\n      case \"agent\": {\n        const agentName = rest[0];\n        if (!agentName) {\n          await this.nvim.call(\"nvim_err_writeln\", [\n            \"Usage: :Magenta agent \u003cname\u003e\",\n          ]);\n          break;\n        }\n\n        await this.createAndSwitchToAgentThread(agentName);\n        if (!this.sidebar.isVisible()) {\n          await this.command(\"toggle\");\n        }\n        break;\n      }\n\n      case \"threads-navigate-up\": {\n        this.dispatch({\n          type: \"chat-msg\",\n          msg: { type: \"threads-navigate-up\" },\n        });\n        await this.syncActiveView();\n        if (this.getActiveKey() !== \"overview\") {\n          this.dispatch({\n            type: \"sidebar-msg\",\n            msg: { type: \"set-cursor-to-bottom\" },\n          });\n        }\n        break;\n      }\n\n      case \"threads-overview\": {\n        this.dispatch({\n          type: \"chat-msg\",\n          msg: { type: \"threads-overview\" },\n        });\n        await this.syncActiveView();\n        break;\n      }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method command",
-      "startLine": 558,
-      "startCol": 7,
-      "endLine": 626,
-      "endCol": 8
-    },
-    {
-      "text": "case \"sandbox-bypass\": {\n        const activeKey = this.getActiveKey();\n        if (activeKey === \"overview\") {\n          // In the overview, toggle whatever thread or script is under the\n          // cursor by routing through the \"t\" binding.\n          const mountedApp = this.bufferManager.getMountedApp(activeKey);\n          if (mountedApp) {\n            await mountedApp.onKey(\"t\");\n          }\n        } else {\n          this.dispatch({\n            type: \"thread-msg\",\n            id: activeKey,\n            msg: { type: \"toggle-sandbox-bypass\" },\n          });\n        }\n        break;\n      }\n\n      case \"paste-selection\": {\n        const [startPos, endPos, currentBuffer] = await Promise.all([\n          getpos(this.nvim, \"'\u003c\"),\n          getpos(this.nvim, \"'\u003e\"),\n          getCurrentBuffer(this.nvim),\n        ]);\n\n        const lines = await currentBuffer.getText({\n          startPos: pos1col1to0(startPos),\n          endPos: pos1col1to0(endPos),\n        });\n\n        const bufInfo = this.bufferManager.lookupBuffer(currentBuffer.id);\n        let content: string;\n        if (bufInfo?.role === \"display\") {\n          content = `\\n${formatAsQuote(lines.join(\"\\n\"))}\\n`;\n        } else {\n          const absFilePath = resolveFilePath(\n            this.cwd,\n            await currentBuffer.getName(),\n            this.homeDir,\n          );\n          content = `\nHere is a snippet from the file \\`${absFilePath}\\`, lines ${startPos.row}-${endPos.row}:\n\\`\\`\\`${getMarkdownExt(absFilePath)}\n${lines.join(\"\\n\")}\n\\`\\`\\`\n`;\n        }\n\n        if (!this.sidebar.isVisible()) {\n          await this.command(\"toggle\");\n        }\n\n        await this.activeBuffers.inputBuffer.setLines({\n          start: -1 as Row0Indexed,\n          end: -1 as Row0Indexed,\n          lines: content.split(\"\\n\") as Line[],\n        });\n\n        break;\n      }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method command\n\ncase \"sandbox-bypass\": {\n        const activeKey = this.getActiveKey();\n        if (activeKey === \"overview\") {\n          // In the overview, toggle whatever thread or script is under the\n          // cursor by routing through the \"t\" binding.\n          const mountedApp = this.bufferManager.getMountedApp(activeKey);\n          if (mountedApp) {\n            await mountedApp.onKey(\"t\");\n          }\n        } else {\n          this.dispatch({\n            type: \"thread-msg\",\n            id: activeKey,\n            msg: { type: \"toggle-sandbox-bypass\" },\n          });\n        }\n        break;\n      }\n\n      case \"paste-selection\": {\n        const [startPos, endPos, currentBuffer] = await Promise.all([\n          getpos(this.nvim, \"'\u003c\"),\n          getpos(this.nvim, \"'\u003e\"),\n          getCurrentBuffer(this.nvim),\n        ]);\n\n        const lines = await currentBuffer.getText({\n          startPos: pos1col1to0(startPos),\n          endPos: pos1col1to0(endPos),\n        });\n\n        const bufInfo = this.bufferManager.lookupBuffer(currentBuffer.id);\n        let content: string;\n        if (bufInfo?.role === \"display\") {\n          content = `\\n${formatAsQuote(lines.join(\"\\n\"))}\\n`;\n        } else {\n          const absFilePath = resolveFilePath(\n            this.cwd,\n            await currentBuffer.getName(),\n            this.homeDir,\n          );\n          content = `\nHere is a snippet from the file \\`${absFilePath}\\`, lines ${startPos.row}-${endPos.row}:\n\\`\\`\\`${getMarkdownExt(absFilePath)}\n${lines.join(\"\\n\")}\n\\`\\`\\`\n`;\n        }\n\n        if (!this.sidebar.isVisible()) {\n          await this.command(\"toggle\");\n        }\n\n        await this.activeBuffers.inputBuffer.setLines({\n          start: -1 as Row0Indexed,\n          end: -1 as Row0Indexed,\n          lines: content.split(\"\\n\") as Line[],\n        });\n\n        break;\n      }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method command",
-      "startLine": 628,
-      "startCol": 7,
-      "endLine": 688,
-      "endCol": 8
-    },
-    {
-      "text": "default:\n        this.nvim.logger.error(`Unrecognized command ${command}\\n`);\n        notifyErr(\n          this.nvim,\n          \"unrecognized command\",\n          new Error(`Unrecognized command ${command}\\n`),\n        );\n    }\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method command\n\ndefault:\n        this.nvim.logger.error(`Unrecognized command ${command}\\n`);\n        notifyErr(\n          this.nvim,\n          \"unrecognized command\",\n          new Error(`Unrecognized command ${command}\\n`),\n        );\n    }\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method command",
-      "startLine": 690,
-      "startCol": 7,
-      "endLine": 698,
-      "endCol": 4
-    },
-    {
-      "text": "  onKey(args: unknown[]) {\n    const key = args[0] as string;\n    const rawCtx = args[1] as { selection?: unknown } | undefined;\n    let ctx: BindingCtx | undefined;\n    if (rawCtx \u0026\u0026 Array.isArray(rawCtx.selection)) {\n      ctx = { selection: rawCtx.selection.map((s) =\u003e String(s)) };\n    }\n    const mountedApp = this.bufferManager.getMountedApp(this.getActiveKey());\n    if (mountedApp) {\n      if (BINDING_KEYS.indexOf(key as BindingKey) \u003e -1) {\n        mountedApp.onKey(key as BindingKey, ctx).catch((err) =\u003e {\n          this.nvim.logger.error(err);\n          throw err;\n        });\n      } else {\n        this.nvim.logger.error(`Unexpected MagentaKey ${JSON.stringify(key)}`);\n        notifyErr(\n          this.nvim,\n          \"unexpected key\",\n          new Error(`Unexpected MagentaKey ${JSON.stringify(key)}`),\n        );\n      }\n    }\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method onKey\n\n  onKey(args: unknown[]) {\n    const key = args[0] as string;\n    const rawCtx = args[1] as { selection?: unknown } | undefined;\n    let ctx: BindingCtx | undefined;\n    if (rawCtx \u0026\u0026 Array.isArray(rawCtx.selection)) {\n      ctx = { selection: rawCtx.selection.map((s) =\u003e String(s)) };\n    }\n    const mountedApp = this.bufferManager.getMountedApp(this.getActiveKey());\n    if (mountedApp) {\n      if (BINDING_KEYS.indexOf(key as BindingKey) \u003e -1) {\n        mountedApp.onKey(key as BindingKey, ctx).catch((err) =\u003e {\n          this.nvim.logger.error(err);\n          throw err;\n        });\n      } else {\n        this.nvim.logger.error(`Unexpected MagentaKey ${JSON.stringify(key)}`);\n        notifyErr(\n          this.nvim,\n          \"unexpected key\",\n          new Error(`Unexpected MagentaKey ${JSON.stringify(key)}`),\n        );\n      }\n    }\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method onKey",
-      "startLine": 700,
-      "startCol": 1,
-      "endLine": 723,
-      "endCol": 4
-    },
-    {
-      "text": "private handlingBufEnter = false",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta\n\nprivate handlingBufEnter = false",
-      "headingContext": "node/magenta.ts \u003e class Magenta",
-      "startLine": 725,
-      "startCol": 3,
-      "endLine": 725,
-      "endCol": 35
-    },
-    {
-      "text": "/** Handle BufEnter events. Ensures magenta buffers stay in magenta windows\n   * and non-magenta buffers don't take over magenta windows.\n   */\n  async onBufEnter(bufNr: BufNr, winId: WindowId): Promise\u003cvoid\u003e {\n    if (this.handlingBufEnter) return;\n    if (this.sidebar.state.state !== \"visible\") return;\n\n    const { displayWindow, inputWindow } = this.sidebar.state;\n    const isMagentaWindow =\n      winId === displayWindow.id || winId === inputWindow.id;\n    const bufInfo = this.bufferManager.lookupBuffer(bufNr);\n\n    this.handlingBufEnter = true;\n    try {\n      if (bufInfo) {\n        // Magenta buffer opened anywhere → treat as \"select thread\" action\n        await this.handleMagentaBufOpened(bufNr, bufInfo, winId);\n      } else if (!bufInfo \u0026\u0026 isMagentaWindow) {\n        // Non-magenta buffer opened in a magenta window → eject it\n        await this.handleNonMagentaBufInMagentaWindow(bufNr, winId);\n      }\n    } finally {\n      this.handlingBufEnter = false;\n    }\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method onBufEnter\n\n/** Handle BufEnter events. Ensures magenta buffers stay in magenta windows\n   * and non-magenta buffers don't take over magenta windows.\n   */\n  async onBufEnter(bufNr: BufNr, winId: WindowId): Promise\u003cvoid\u003e {\n    if (this.handlingBufEnter) return;\n    if (this.sidebar.state.state !== \"visible\") return;\n\n    const { displayWindow, inputWindow } = this.sidebar.state;\n    const isMagentaWindow =\n      winId === displayWindow.id || winId === inputWindow.id;\n    const bufInfo = this.bufferManager.lookupBuffer(bufNr);\n\n    this.handlingBufEnter = true;\n    try {\n      if (bufInfo) {\n        // Magenta buffer opened anywhere → treat as \"select thread\" action\n        await this.handleMagentaBufOpened(bufNr, bufInfo, winId);\n      } else if (!bufInfo \u0026\u0026 isMagentaWindow) {\n        // Non-magenta buffer opened in a magenta window → eject it\n        await this.handleNonMagentaBufInMagentaWindow(bufNr, winId);\n      }\n    } finally {\n      this.handlingBufEnter = false;\n    }\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method onBufEnter",
-      "startLine": 727,
-      "startCol": 3,
-      "endLine": 751,
-      "endCol": 4
-    },
-    {
-      "text": "/** A buffer was deleted (`:bd`/`:bw`). If it backs a thread, remove that\n   * thread and its descendants (no escalation to the root ancestor). If it\n   * backs the overview, recover by recreating the overview buffers. */\n  async onBufDelete(bufNr: BufNr): Promise\u003cvoid\u003e {\n    const bufInfo = this.bufferManager.lookupBuffer(bufNr);\n    if (!bufInfo) return;\n\n    if (bufInfo.key === \"overview\") {\n      const wasActive = this.getActiveKey() === \"overview\";\n      await this.bufferManager.recreateOverview();\n      this.activeBuffers = this.bufferManager.getOverviewBuffers();\n      if (wasActive) {\n        await this.syncActiveView();\n      }\n      return;\n    }\n\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"delete-thread-subtree\", id: bufInfo.key },\n    });\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method onBufDelete\n\n/** A buffer was deleted (`:bd`/`:bw`). If it backs a thread, remove that\n   * thread and its descendants (no escalation to the root ancestor). If it\n   * backs the overview, recover by recreating the overview buffers. */\n  async onBufDelete(bufNr: BufNr): Promise\u003cvoid\u003e {\n    const bufInfo = this.bufferManager.lookupBuffer(bufNr);\n    if (!bufInfo) return;\n\n    if (bufInfo.key === \"overview\") {\n      const wasActive = this.getActiveKey() === \"overview\";\n      await this.bufferManager.recreateOverview();\n      this.activeBuffers = this.bufferManager.getOverviewBuffers();\n      if (wasActive) {\n        await this.syncActiveView();\n      }\n      return;\n    }\n\n    this.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"delete-thread-subtree\", id: bufInfo.key },\n    });\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method onBufDelete",
-      "startLine": 753,
-      "startCol": 3,
-      "endLine": 774,
-      "endCol": 4
-    },
-    {
-      "text": "/** Any magenta buffer was opened (in any window). Treat as a \"select thread\" action.\n   * If it was in a non-magenta window, revert the open first.\n   * Then switch the sidebar to show the correct thread/overview.\n   */\n  private async handleMagentaBufOpened(\n    _bufNr: BufNr,\n    bufInfo: BufferInfo,\n    winId: WindowId,\n  ): Promise\u003cvoid\u003e",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method handleMagentaBufOpened\n\n/** Any magenta buffer was opened (in any window). Treat as a \"select thread\" action.\n   * If it was in a non-magenta window, revert the open first.\n   * Then switch the sidebar to show the correct thread/overview.\n   */\n  private async handleMagentaBufOpened(\n    _bufNr: BufNr,\n    bufInfo: BufferInfo,\n    winId: WindowId,\n  ): Promise\u003cvoid\u003e",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method handleMagentaBufOpened",
-      "startLine": 776,
-      "startCol": 3,
-      "endLine": 784,
-      "endCol": 19
-    },
-    {
-      "text": "{\n    const { displayWindow, inputWindow } = this.sidebar.state as {\n      state: \"visible\";\n      displayWindow: NvimWindow;\n      inputWindow: NvimWindow;\n    };\n\n    const isMagentaWindow =\n      winId === displayWindow.id || winId === inputWindow.id;\n\n    // If this is a non-magenta window, revert it to its previous buffer\n    if (!isMagentaWindow) {\n      const win = new NvimWindow(winId, this.nvim);\n      const altBufNr = (await this.nvim.call(\"nvim_exec2\", [\n        `echo bufnr('#', ${winId})`,\n        { output: true },\n      ])) as { output: string };\n      const altNr = Number(altBufNr.output);\n\n      if (altNr \u003e 0 \u0026\u0026 !this.bufferManager.isMagentaBuffer(altNr as BufNr)) {\n        await this.nvim.call(\"nvim_win_set_buf\", [winId, altNr]);\n      } else {\n        const emptyBuf = await NvimBuffer.create(false, true, this.nvim);\n        await win.setBuffer(emptyBuf);\n      }\n    }\n\n    const targetKey = bufInfo.key;\n    const currentKey = this.getActiveKey();\n\n    // If already showing the correct thread in the correct role, nothing to do\n    if (isMagentaWindow \u0026\u0026 targetKey === currentKey) {\n      const isDisplayWindow = winId === displayWindow.id;\n      const isCorrectRole =\n        (isDisplayWindow \u0026\u0026 bufInfo.role === \"display\") ||\n        (!isDisplayWindow \u0026\u0026 bufInfo.role === \"input\");\n      if (isCorrectRole) return;\n    }\n\n    // Select the target thread/overview — syncActiveView sets both windows\n    if (targetKey === \"overview\") {\n      this.dispatch({\n        type: \"chat-msg\",\n        msg: { type: \"threads-overview\" },\n      });\n      await this.syncActiveView();\n    } else {\n      await this.selectThreadEffect(targetKey);\n    }\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method handleMagentaBufOpened\n\n{\n    const { displayWindow, inputWindow } = this.sidebar.state as {\n      state: \"visible\";\n      displayWindow: NvimWindow;\n      inputWindow: NvimWindow;\n    };\n\n    const isMagentaWindow =\n      winId === displayWindow.id || winId === inputWindow.id;\n\n    // If this is a non-magenta window, revert it to its previous buffer\n    if (!isMagentaWindow) {\n      const win = new NvimWindow(winId, this.nvim);\n      const altBufNr = (await this.nvim.call(\"nvim_exec2\", [\n        `echo bufnr('#', ${winId})`,\n        { output: true },\n      ])) as { output: string };\n      const altNr = Number(altBufNr.output);\n\n      if (altNr \u003e 0 \u0026\u0026 !this.bufferManager.isMagentaBuffer(altNr as BufNr)) {\n        await this.nvim.call(\"nvim_win_set_buf\", [winId, altNr]);\n      } else {\n        const emptyBuf = await NvimBuffer.create(false, true, this.nvim);\n        await win.setBuffer(emptyBuf);\n      }\n    }\n\n    const targetKey = bufInfo.key;\n    const currentKey = this.getActiveKey();\n\n    // If already showing the correct thread in the correct role, nothing to do\n    if (isMagentaWindow \u0026\u0026 targetKey === currentKey) {\n      const isDisplayWindow = winId === displayWindow.id;\n      const isCorrectRole =\n        (isDisplayWindow \u0026\u0026 bufInfo.role === \"display\") ||\n        (!isDisplayWindow \u0026\u0026 bufInfo.role === \"input\");\n      if (isCorrectRole) return;\n    }\n\n    // Select the target thread/overview — syncActiveView sets both windows\n    if (targetKey === \"overview\") {\n      this.dispatch({\n        type: \"chat-msg\",\n        msg: { type: \"threads-overview\" },\n      });\n      await this.syncActiveView();\n    } else {\n      await this.selectThreadEffect(targetKey);\n    }\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method handleMagentaBufOpened",
-      "startLine": 784,
-      "startCol": 20,
-      "endLine": 833,
-      "endCol": 4
-    },
-    {
-      "text": "/** A non-magenta buffer was opened in a magenta window (e.g. via :e or :b).\n   * Restore the magenta window and open the buffer in a non-magenta window instead.\n   */\n  private async handleNonMagentaBufInMagentaWindow(\n    bufNr: BufNr,\n    winId: WindowId,\n  ): Promise\u003cvoid\u003e {\n    const { displayWindow, inputWindow } = this.sidebar.state as {\n      state: \"visible\";\n      displayWindow: NvimWindow;\n      inputWindow: NvimWindow;\n    };\n\n    // Determine which magenta buffer should be in this window and restore it\n    const activeKey = this.getActiveKey();\n    if (winId === displayWindow.id) {\n      const { displayBuffer } =\n        await this.bufferManager.ensureActiveIsMounted(activeKey);\n      await displayWindow.setBufferForced(displayBuffer);\n    } else {\n      const { inputBuffer } =\n        await this.bufferManager.ensureActiveIsMounted(activeKey);\n      await inputWindow.setBufferForced(inputBuffer);\n    }\n\n    // Move the non-magenta buffer to a non-magenta window\n    const foreignBuffer = new NvimBuffer(bufNr, this.nvim);\n    const targetWindow = await findOrCreateNonMagentaWindow({\n      nvim: this.nvim,\n      options: this.options,\n    });\n    await targetWindow.setBuffer(foreignBuffer);\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method handleNonMagentaBufInMagentaWindow\n\n/** A non-magenta buffer was opened in a magenta window (e.g. via :e or :b).\n   * Restore the magenta window and open the buffer in a non-magenta window instead.\n   */\n  private async handleNonMagentaBufInMagentaWindow(\n    bufNr: BufNr,\n    winId: WindowId,\n  ): Promise\u003cvoid\u003e {\n    const { displayWindow, inputWindow } = this.sidebar.state as {\n      state: \"visible\";\n      displayWindow: NvimWindow;\n      inputWindow: NvimWindow;\n    };\n\n    // Determine which magenta buffer should be in this window and restore it\n    const activeKey = this.getActiveKey();\n    if (winId === displayWindow.id) {\n      const { displayBuffer } =\n        await this.bufferManager.ensureActiveIsMounted(activeKey);\n      await displayWindow.setBufferForced(displayBuffer);\n    } else {\n      const { inputBuffer } =\n        await this.bufferManager.ensureActiveIsMounted(activeKey);\n      await inputWindow.setBufferForced(inputBuffer);\n    }\n\n    // Move the non-magenta buffer to a non-magenta window\n    const foreignBuffer = new NvimBuffer(bufNr, this.nvim);\n    const targetWindow = await findOrCreateNonMagentaWindow({\n      nvim: this.nvim,\n      options: this.options,\n    });\n    await targetWindow.setBuffer(foreignBuffer);\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method handleNonMagentaBufInMagentaWindow",
-      "startLine": 835,
-      "startCol": 3,
-      "endLine": 867,
-      "endCol": 4
-    },
-    {
-      "text": "  async onClipboardImagePaste(): Promise\u003cvoid\u003e {\n    const result = await probeAndSaveClipboardImage(this.nvim.logger);\n    if (result.kind !== \"image\") {\n      this.nvim.logger.warn(\n        \"magentaClipboardImagePaste: no image found in clipboard (or probe failed)\",\n      );\n      return;\n    }\n    await this.pasteIntoActiveInputBuffer(formatFileRef(result.tmpPath));\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method onClipboardImagePaste\n\n  async onClipboardImagePaste(): Promise\u003cvoid\u003e {\n    const result = await probeAndSaveClipboardImage(this.nvim.logger);\n    if (result.kind !== \"image\") {\n      this.nvim.logger.warn(\n        \"magentaClipboardImagePaste: no image found in clipboard (or probe failed)\",\n      );\n      return;\n    }\n    await this.pasteIntoActiveInputBuffer(formatFileRef(result.tmpPath));\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method onClipboardImagePaste",
-      "startLine": 869,
-      "startCol": 1,
-      "endLine": 878,
-      "endCol": 4
-    },
-    {
-      "text": "  async onClipboardTextPaste(\n    text: string,\n    fromDisplay?: boolean,\n  ): Promise\u003cvoid\u003e {\n    const content = fromDisplay ? formatAsQuote(text) : text;\n    await this.pasteIntoActiveInputBuffer(content);\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method onClipboardTextPaste\n\n  async onClipboardTextPaste(\n    text: string,\n    fromDisplay?: boolean,\n  ): Promise\u003cvoid\u003e {\n    const content = fromDisplay ? formatAsQuote(text) : text;\n    await this.pasteIntoActiveInputBuffer(content);\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method onClipboardTextPaste",
-      "startLine": 880,
-      "startCol": 1,
-      "endLine": 886,
-      "endCol": 4
-    },
-    {
-      "text": "// Open the sidebar if it isn't visible, then append the given content to\n  // the active thread's input buffer. Matches the paste-selection flow.\n  private async pasteIntoActiveInputBuffer(content: string): Promise\u003cvoid\u003e {\n    if (!this.sidebar.isVisible()) {\n      await this.command(\"toggle\");\n    }\n    await this.activeBuffers.inputBuffer.setLines({\n      start: -1 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: content.split(\"\\n\") as Line[],\n    });\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method pasteIntoActiveInputBuffer\n\n// Open the sidebar if it isn't visible, then append the given content to\n  // the active thread's input buffer. Matches the paste-selection flow.\n  private async pasteIntoActiveInputBuffer(content: string): Promise\u003cvoid\u003e {\n    if (!this.sidebar.isVisible()) {\n      await this.command(\"toggle\");\n    }\n    await this.activeBuffers.inputBuffer.setLines({\n      start: -1 as Row0Indexed,\n      end: -1 as Row0Indexed,\n      lines: content.split(\"\\n\") as Line[],\n    });\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method pasteIntoActiveInputBuffer",
-      "startLine": 888,
-      "startCol": 3,
-      "endLine": 899,
-      "endCol": 4
-    },
-    {
-      "text": "  async onWinClosed() {\n    await this.sidebar.onWinClosed();\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method onWinClosed\n\n  async onWinClosed() {\n    await this.sidebar.onWinClosed();\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method onWinClosed",
-      "startLine": 901,
-      "startCol": 1,
-      "endLine": 903,
-      "endCol": 4
-    },
-    {
-      "text": "  destroy() {\n    this.scriptManager.terminateAll();\n    // BufferManager's mounted apps will be cleaned up when nvim exits\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method destroy\n\n  destroy() {\n    this.scriptManager.terminateAll();\n    // BufferManager's mounted apps will be cleaned up when nvim exits\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method destroy",
-      "startLine": 905,
-      "startCol": 1,
-      "endLine": 908,
-      "endCol": 4
-    },
-    {
-      "text": "  static async start(nvim: Nvim, homeDir?: HomeDir, sandboxOverride?: Sandbox) {\n    const lsp = new Lsp(nvim);\n    nvim.onNotification(MAGENTA_COMMAND, async (args: unknown[]) =\u003e {\n      try {\n        await magenta.command(args[0] as string);\n      } catch (err) {\n        nvim.logger.error(\n          err instanceof Error\n            ? `Error executing command ${args[0] as string}: ${err.message}\\n${err.stack}`\n            : JSON.stringify(err),\n        );\n        notifyErr(nvim, `error processing command ${args[0] as string}`, err);\n      }\n    });\n\n    nvim.onNotification(MAGENTA_ON_WINDOW_CLOSED, async () =\u003e {\n      try {\n        await magenta.onWinClosed();\n      } catch (err) {\n        nvim.logger.error(err as Error);\n      }\n    });\n\n    nvim.onNotification(MAGENTA_KEY, (args) =\u003e {\n      try {\n        magenta.onKey(args);\n      } catch (err) {\n        nvim.logger.error(err as Error);\n      }\n    });\n\n    nvim.onNotification(MAGENTA_LSP_RESPONSE, (...args) =\u003e {\n      try {\n        lsp.onLspResponse(args);\n      } catch (err) {\n        nvim.logger.error(JSON.stringify(err));\n      }\n    });\n\n    nvim.onNotification(MAGENTA_CLIPBOARD_IMAGE_PASTE, async () =\u003e {\n      try {\n        await magenta.onClipboardImagePaste();\n      } catch (err) {\n        nvim.logger.error(\n          err instanceof Error\n            ? `Error in ClipboardImagePaste handler: ${err.message}\\n${err.stack}`\n            : JSON.stringify(err),\n        );\n      }\n    });\n\n    nvim.onNotification(MAGENTA_CLIPBOARD_TEXT_PASTE, async (args) =\u003e {\n      try {\n        const data = (\n          args as unknown as { text: string; fromDisplay?: boolean }[]\n        )[0];\n        await magenta.onClipboardTextPaste(data.text, data.fromDisplay);\n      } catch (err) {\n        nvim.logger.error(\n          err instanceof Error\n            ? `Error in ClipboardTextPaste handler: ${err.message}\\n${err.stack}`\n            : JSON.stringify(err),\n        );\n      }\n    });",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start\n\n  static async start(nvim: Nvim, homeDir?: HomeDir, sandboxOverride?: Sandbox) {\n    const lsp = new Lsp(nvim);\n    nvim.onNotification(MAGENTA_COMMAND, async (args: unknown[]) =\u003e {\n      try {\n        await magenta.command(args[0] as string);\n      } catch (err) {\n        nvim.logger.error(\n          err instanceof Error\n            ? `Error executing command ${args[0] as string}: ${err.message}\\n${err.stack}`\n            : JSON.stringify(err),\n        );\n        notifyErr(nvim, `error processing command ${args[0] as string}`, err);\n      }\n    });\n\n    nvim.onNotification(MAGENTA_ON_WINDOW_CLOSED, async () =\u003e {\n      try {\n        await magenta.onWinClosed();\n      } catch (err) {\n        nvim.logger.error(err as Error);\n      }\n    });\n\n    nvim.onNotification(MAGENTA_KEY, (args) =\u003e {\n      try {\n        magenta.onKey(args);\n      } catch (err) {\n        nvim.logger.error(err as Error);\n      }\n    });\n\n    nvim.onNotification(MAGENTA_LSP_RESPONSE, (...args) =\u003e {\n      try {\n        lsp.onLspResponse(args);\n      } catch (err) {\n        nvim.logger.error(JSON.stringify(err));\n      }\n    });\n\n    nvim.onNotification(MAGENTA_CLIPBOARD_IMAGE_PASTE, async () =\u003e {\n      try {\n        await magenta.onClipboardImagePaste();\n      } catch (err) {\n        nvim.logger.error(\n          err instanceof Error\n            ? `Error in ClipboardImagePaste handler: ${err.message}\\n${err.stack}`\n            : JSON.stringify(err),\n        );\n      }\n    });\n\n    nvim.onNotification(MAGENTA_CLIPBOARD_TEXT_PASTE, async (args) =\u003e {\n      try {\n        const data = (\n          args as unknown as { text: string; fromDisplay?: boolean }[]\n        )[0];\n        await magenta.onClipboardTextPaste(data.text, data.fromDisplay);\n      } catch (err) {\n        nvim.logger.error(\n          err instanceof Error\n            ? `Error in ClipboardTextPaste handler: ${err.message}\\n${err.stack}`\n            : JSON.stringify(err),\n        );\n      }\n    });",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start",
-      "startLine": 910,
-      "startCol": 1,
-      "endLine": 974,
-      "endCol": 8
-    },
-    {
-      "text": "nvim.onNotification(MAGENTA_BUF_ENTER, async (args) =\u003e {\n      try {\n        const data = (args as unknown as { bufnr: number; winid: number }[])[0];\n        await magenta.onBufEnter(data.bufnr as BufNr, data.winid as WindowId);\n      } catch (err) {\n        nvim.logger.error(\n          err instanceof Error\n            ? `Error in BufEnter handler: ${err.message}\\n${err.stack}`\n            : JSON.stringify(err),\n        );\n      }\n    });\n\n    nvim.onNotification(MAGENTA_BUF_DELETE, async (args) =\u003e {\n      try {\n        const data = (args as unknown as { bufnr: number }[])[0];\n        await magenta.onBufDelete(data.bufnr as BufNr);\n      } catch (err) {\n        nvim.logger.error(\n          err instanceof Error\n            ? `Error in BufDelete handler: ${err.message}\\n${err.stack}`\n            : JSON.stringify(err),\n        );\n      }\n    });\n\n    recordTiming(\"node: notifications registered\");\n\n    const opts = await nvim.call(\"nvim_exec_lua\", [\n      `return require('magenta').bridge(${nvim.channelId})`,\n      [],\n    ]);\n    recordTiming(\"node: bridge call returned\");\n\n    // Parse base options from Lua\n    const baseOptions = parseOptions(opts, nvim.logger);\n\n    // Determine home directory - use provided value or fall back to os.homedir()\n    const resolvedHomeDir = homeDir ?? (os.homedir() as HomeDir);\n\n    // Get the current working directory\n    const cwd = await getcwd(nvim);\n\n    const optionsLoader = new DynamicOptionsLoader(\n      baseOptions,\n      cwd,\n      resolvedHomeDir",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start\n\nnvim.onNotification(MAGENTA_BUF_ENTER, async (args) =\u003e {\n      try {\n        const data = (args as unknown as { bufnr: number; winid: number }[])[0];\n        await magenta.onBufEnter(data.bufnr as BufNr, data.winid as WindowId);\n      } catch (err) {\n        nvim.logger.error(\n          err instanceof Error\n            ? `Error in BufEnter handler: ${err.message}\\n${err.stack}`\n            : JSON.stringify(err),\n        );\n      }\n    });\n\n    nvim.onNotification(MAGENTA_BUF_DELETE, async (args) =\u003e {\n      try {\n        const data = (args as unknown as { bufnr: number }[])[0];\n        await magenta.onBufDelete(data.bufnr as BufNr);\n      } catch (err) {\n        nvim.logger.error(\n          err instanceof Error\n            ? `Error in BufDelete handler: ${err.message}\\n${err.stack}`\n            : JSON.stringify(err),\n        );\n      }\n    });\n\n    recordTiming(\"node: notifications registered\");\n\n    const opts = await nvim.call(\"nvim_exec_lua\", [\n      `return require('magenta').bridge(${nvim.channelId})`,\n      [],\n    ]);\n    recordTiming(\"node: bridge call returned\");\n\n    // Parse base options from Lua\n    const baseOptions = parseOptions(opts, nvim.logger);\n\n    // Determine home directory - use provided value or fall back to os.homedir()\n    const resolvedHomeDir = homeDir ?? (os.homedir() as HomeDir);\n\n    // Get the current working directory\n    const cwd = await getcwd(nvim);\n\n    const optionsLoader = new DynamicOptionsLoader(\n      baseOptions,\n      cwd,\n      resolvedHomeDir",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start",
-      "startLine": 976,
-      "startCol": 5,
-      "endLine": 1022,
-      "endCol": 22
-    },
-    {
-      "text": "      { warn: (msg) =\u003e nvim.logger.warn(`Settings: ${msg}`)",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function warn\n\n      { warn: (msg) =\u003e nvim.logger.warn(`Settings: ${msg}`)",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function warn",
-      "startLine": 1023,
-      "startCol": 1,
-      "endLine": 1023,
-      "endCol": 60
-    },
-    {
-      "text": "const parsedOptions = optionsLoader.getOptions();\n\n    // The sandbox owns exactly one global network-ask callback, but UI prompts\n    // live in per-command handlers. Each in-flight sandboxed command pushes\n    // itself as the active target; this callback forwards to the top of that\n    // stack via routeNetworkAsk. An empty stack fails closed (deny). The\n    // sandbox is created below, so we route through a mutable reference that is\n    // assigned immediately after construction.\n    let sandboxRef: Sandbox | undefined;",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start\n\nconst parsedOptions = optionsLoader.getOptions();\n\n    // The sandbox owns exactly one global network-ask callback, but UI prompts\n    // live in per-command handlers. Each in-flight sandboxed command pushes\n    // itself as the active target; this callback forwards to the top of that\n    // stack via routeNetworkAsk. An empty stack fails closed (deny). The\n    // sandbox is created below, so we route through a mutable reference that is\n    // assigned immediately after construction.\n    let sandboxRef: Sandbox | undefined;",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start",
-      "startLine": 1025,
-      "startCol": 5,
-      "endLine": 1033,
-      "endCol": 41
-    },
-    {
-      "text": "    const askCallback: SandboxAskCallback = (params) =\u003e {\n      if (!sandboxRef) return Promise.resolve(false);\n      return sandboxRef.routeNetworkAsk({\n        host: params.host,\n        port: params.port,\n      });\n    }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function askCallback\n\n    const askCallback: SandboxAskCallback = (params) =\u003e {\n      if (!sandboxRef) return Promise.resolve(false);\n      return sandboxRef.routeNetworkAsk({\n        host: params.host,\n        port: params.port,\n      });\n    }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function askCallback",
-      "startLine": 1034,
-      "startCol": 1,
-      "endLine": 1040,
-      "endCol": 6
-    },
-    {
-      "text": "sandbox =\n      sandboxOverride ??\n      (await initializeSandbox(\n        parsedOptions.sandbox,\n        cwd,\n        resolvedHomeDir,\n        askCallback",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start\n\nsandbox =\n      sandboxOverride ??\n      (await initializeSandbox(\n        parsedOptions.sandbox,\n        cwd,\n        resolvedHomeDir,\n        askCallback",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start",
-      "startLine": 1042,
-      "startCol": 11,
-      "endLine": 1048,
-      "endCol": 20
-    },
-    {
-      "text": "        { warn: (msg) =\u003e nvim.logger.warn(`Sandbox: ${msg}`)",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function warn\n\n        { warn: (msg) =\u003e nvim.logger.warn(`Sandbox: ${msg}`)",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function warn",
-      "startLine": 1049,
-      "startCol": 1,
-      "endLine": 1049,
-      "endCol": 61
-    },
-    {
-      "text": "catch((err) =\u003e {\n        // strace is a hard requirement on Linux (no regex fallback). If it is\n        // missing/cannot attach, refuse to start rather than silently degrading.\n        if (err instanceof StraceUnavailableError) {\n          throw err;\n        }\n        const reason = err instanceof Error ? err.message : String(err);\n        nvim.logger.warn(\n          `Failed to initialize sandbox, continuing without it: ${reason}`,\n        );",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start\n\ncatch((err) =\u003e {\n        // strace is a hard requirement on Linux (no regex fallback). If it is\n        // missing/cannot attach, refuse to start rather than silently degrading.\n        if (err instanceof StraceUnavailableError) {\n          throw err;\n        }\n        const reason = err instanceof Error ? err.message : String(err);\n        nvim.logger.warn(\n          `Failed to initialize sandbox, continuing without it: ${reason}`,\n        );",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start",
-      "startLine": 1050,
-      "startCol": 9,
-      "endLine": 1059,
-      "endCol": 11
-    },
-    {
-      "text": "// Return an unsupported sandbox on failure\n        return {\n          getState: () =\u003e ({\n            status: \"unsupported\" as const,\n            reason: `initialization failed: ${reason}`,\n          })",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function getState\n\n// Return an unsupported sandbox on failure\n        return {\n          getState: () =\u003e ({\n            status: \"unsupported\" as const,\n            reason: `initialization failed: ${reason}`,\n          })",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function getState",
-      "startLine": 1060,
-      "startCol": 9,
-      "endLine": 1065,
-      "endCol": 13
-    },
-    {
-      "text": "          wrapWithSandbox: (cmd: string) =\u003e Promise.resolve(cmd)",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function wrapWithSandbox\n\n          wrapWithSandbox: (cmd: string) =\u003e Promise.resolve(cmd)",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function wrapWithSandbox",
-      "startLine": 1066,
-      "startCol": 1,
-      "endLine": 1066,
-      "endCol": 65
-    },
-    {
-      "text": "          getViolationStore: ()",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function getViolationStore\n\n          getViolationStore: ()",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function getViolationStore",
-      "startLine": 1067,
-      "startCol": 1,
-      "endLine": 1067,
-      "endCol": 32
-    },
-    {
-      "text": "            getTotalCount: () =\u003e 0",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function getViolationStore \u003e function getTotalCount\n\n            getTotalCount: () =\u003e 0",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function getViolationStore \u003e function getTotalCount",
-      "startLine": 1068,
-      "startCol": 1,
-      "endLine": 1068,
-      "endCol": 35
-    },
-    {
-      "text": "            getViolations: () =\u003e []",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function getViolationStore \u003e function getViolations\n\n            getViolations: () =\u003e []",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function getViolationStore \u003e function getViolations",
-      "startLine": 1069,
-      "startCol": 1,
-      "endLine": 1069,
-      "endCol": 36
-    },
-    {
-      "text": "            addViolation: () =\u003e {}",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function getViolationStore \u003e function addViolation\n\n            addViolation: () =\u003e {}",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function getViolationStore \u003e function addViolation",
-      "startLine": 1070,
-      "startCol": 1,
-      "endLine": 1070,
-      "endCol": 35
-    },
-    {
-      "text": "          annotateStderrWithSandboxFailures: (_cmd: string, stderr: string) =\u003e\n            stderr",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function annotateStderrWithSandboxFailures\n\n          annotateStderrWithSandboxFailures: (_cmd: string, stderr: string) =\u003e\n            stderr",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function annotateStderrWithSandboxFailures",
-      "startLine": 1072,
-      "startCol": 1,
-      "endLine": 1073,
-      "endCol": 19
-    },
-    {
-      "text": "          getFsReadConfig: () =\u003e ({ denyOnly: [] })",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function getFsReadConfig\n\n          getFsReadConfig: () =\u003e ({ denyOnly: [] })",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function getFsReadConfig",
-      "startLine": 1074,
-      "startCol": 1,
-      "endLine": 1074,
-      "endCol": 52
-    },
-    {
-      "text": "          getFsWriteConfig: () =\u003e ({ allowOnly: [], denyWithinAllow: [] })",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function getFsWriteConfig\n\n          getFsWriteConfig: () =\u003e ({ allowOnly: [], denyWithinAllow: [] })",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function getFsWriteConfig",
-      "startLine": 1075,
-      "startCol": 1,
-      "endLine": 1075,
-      "endCol": 75
-    },
-    {
-      "text": "          updateConfigIfChanged: () =\u003e {}",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function updateConfigIfChanged\n\n          updateConfigIfChanged: () =\u003e {}",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function updateConfigIfChanged",
-      "startLine": 1076,
-      "startCol": 1,
-      "endLine": 1076,
-      "endCol": 42
-    },
-    {
-      "text": "          cleanupAfterCommand: () =\u003e {}",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function cleanupAfterCommand\n\n          cleanupAfterCommand: () =\u003e {}",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function cleanupAfterCommand",
-      "startLine": 1077,
-      "startCol": 1,
-      "endLine": 1077,
-      "endCol": 40
-    },
-    {
-      "text": "          pushNetworkAskTarget: () =\u003e {}",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function pushNetworkAskTarget\n\n          pushNetworkAskTarget: () =\u003e {}",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function pushNetworkAskTarget",
-      "startLine": 1078,
-      "startCol": 1,
-      "endLine": 1078,
-      "endCol": 41
-    },
-    {
-      "text": "          popNetworkAskTarget: () =\u003e {}",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function popNetworkAskTarget\n\n          popNetworkAskTarget: () =\u003e {}",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function popNetworkAskTarget",
-      "startLine": 1079,
-      "startCol": 1,
-      "endLine": 1079,
-      "endCol": 40
-    },
-    {
-      "text": "          routeNetworkAsk: () =\u003e Promise.resolve(false)",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function routeNetworkAsk\n\n          routeNetworkAsk: () =\u003e Promise.resolve(false)",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function routeNetworkAsk",
-      "startLine": 1080,
-      "startCol": 1,
-      "endLine": 1080,
-      "endCol": 56
-    },
-    {
-      "text": "          recordSessionApprovedHost: () =\u003e {}",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start \u003e function recordSessionApprovedHost\n\n          recordSessionApprovedHost: () =\u003e {}",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start \u003e function recordSessionApprovedHost",
-      "startLine": 1081,
-      "startCol": 1,
-      "endLine": 1081,
-      "endCol": 46
-    },
-    {
-      "text": "Sandbox;\n      }));\n    sandboxRef = sandbox;\n\n    // Initialize highlight groups in the magenta namespace\n    try {\n      await nvim.call(\"nvim_create_namespace\", [MAGENTA_HIGHLIGHT_NAMESPACE]);\n      await initializeMagentaHighlightGroups(nvim);\n    } catch (error) {\n      nvim.logger.error(\n        \"Failed to initialize highlight groups:\",\n        error instanceof Error ? error.message : String(error),\n      );\n    }\n\n    recordTiming(\"node: sandbox + highlights initialized\");\n\n    const bufferManager = await BufferManager.create(nvim);\n\n    recordTiming(\"node: bufferManager created\");\n\n    const magenta = new Magenta(\n      nvim,\n      lsp,\n      cwd,\n      resolvedHomeDir,\n      optionsLoader,\n      sandbox,\n      bufferManager,\n    );\n\n    // Create the first thread eagerly so there's always an active thread\n    const initialThreadId = await magenta.chat.createNewThread();\n    magenta.activeBuffers =\n      await magenta.bufferManager.registerThread(initialThreadId);\n    magenta.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id: initialThreadId },\n    });\n\n    recordTiming(\"node: initial thread created\");\n    nvim.logger.info(`Magenta initialized. ${JSON.stringify(parsedOptions)}`);\n    return magenta;\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method start\n\nSandbox;\n      }));\n    sandboxRef = sandbox;\n\n    // Initialize highlight groups in the magenta namespace\n    try {\n      await nvim.call(\"nvim_create_namespace\", [MAGENTA_HIGHLIGHT_NAMESPACE]);\n      await initializeMagentaHighlightGroups(nvim);\n    } catch (error) {\n      nvim.logger.error(\n        \"Failed to initialize highlight groups:\",\n        error instanceof Error ? error.message : String(error),\n      );\n    }\n\n    recordTiming(\"node: sandbox + highlights initialized\");\n\n    const bufferManager = await BufferManager.create(nvim);\n\n    recordTiming(\"node: bufferManager created\");\n\n    const magenta = new Magenta(\n      nvim,\n      lsp,\n      cwd,\n      resolvedHomeDir,\n      optionsLoader,\n      sandbox,\n      bufferManager,\n    );\n\n    // Create the first thread eagerly so there's always an active thread\n    const initialThreadId = await magenta.chat.createNewThread();\n    magenta.activeBuffers =\n      await magenta.bufferManager.registerThread(initialThreadId);\n    magenta.dispatch({\n      type: \"chat-msg\",\n      msg: { type: \"set-active-thread\", id: initialThreadId },\n    });\n\n    recordTiming(\"node: initial thread created\");\n    nvim.logger.info(`Magenta initialized. ${JSON.stringify(parsedOptions)}`);\n    return magenta;\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method start",
-      "startLine": 1082,
-      "startCol": 21,
-      "endLine": 1125,
-      "endCol": 4
-    },
-    {
-      "text": "/** Preprocess user input text and dispatch the appropriate message.\n   * Handles @fork, @compact, @async detection and command expansion.\n   */\n  private async preprocessAndSend(text: string): Promise\u003cvoid\u003e {\n    const thread = this.chat.getActiveThread();\n\n    // @compact: tell the thread to start compaction\n    if (text.trim().startsWith(\"@compact\")) {\n      const rawNextPrompt = text.replace(/^\\s*@compact\\s*/, \"\").trim();\n      // Reminders collected here are intentionally dropped: compaction clears\n      // activeReminders, so activating them on this thread would have no effect.\n      const nextMessages = rawNextPrompt\n        ? (await this.processCommands(rawNextPrompt, thread)).messages\n        : undefined;\n      const nextPrompt = nextMessages?.map((m) =\u003e m.text).join(\"\\n\");\n      this.dispatch({\n        type: \"thread-msg\",\n        id: thread.id,\n        msg: {\n          type: \"start-compaction\",\n          ...(nextPrompt ? { nextPrompt } : {}),\n        },\n      });\n      return;\n    }\n\n    // @async: strip prefix and set flag\n    // Note: @async @compact is not supported. Use @compact @async instead.\n    const isAsync = text.trim().startsWith(\"@async\");\n    const cleanText = isAsync ? text.replace(/^\\s*@async\\s*/, \"\") : text;\n\n    const { messages, reminders } = await this.processCommands(\n      cleanText,\n      thread,\n    );\n\n    this.dispatch({\n      type: \"thread-msg\",\n      id: thread.id,\n      msg: {\n        type: \"send-message\",\n        messages,\n        ...(isAsync ? { async: true } : {}),\n        ...(reminders.length ? { reminders } : {}),\n      },\n    });\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method preprocessAndSend\n\n/** Preprocess user input text and dispatch the appropriate message.\n   * Handles @fork, @compact, @async detection and command expansion.\n   */\n  private async preprocessAndSend(text: string): Promise\u003cvoid\u003e {\n    const thread = this.chat.getActiveThread();\n\n    // @compact: tell the thread to start compaction\n    if (text.trim().startsWith(\"@compact\")) {\n      const rawNextPrompt = text.replace(/^\\s*@compact\\s*/, \"\").trim();\n      // Reminders collected here are intentionally dropped: compaction clears\n      // activeReminders, so activating them on this thread would have no effect.\n      const nextMessages = rawNextPrompt\n        ? (await this.processCommands(rawNextPrompt, thread)).messages\n        : undefined;\n      const nextPrompt = nextMessages?.map((m) =\u003e m.text).join(\"\\n\");\n      this.dispatch({\n        type: \"thread-msg\",\n        id: thread.id,\n        msg: {\n          type: \"start-compaction\",\n          ...(nextPrompt ? { nextPrompt } : {}),\n        },\n      });\n      return;\n    }\n\n    // @async: strip prefix and set flag\n    // Note: @async @compact is not supported. Use @compact @async instead.\n    const isAsync = text.trim().startsWith(\"@async\");\n    const cleanText = isAsync ? text.replace(/^\\s*@async\\s*/, \"\") : text;\n\n    const { messages, reminders } = await this.processCommands(\n      cleanText,\n      thread,\n    );\n\n    this.dispatch({\n      type: \"thread-msg\",\n      id: thread.id,\n      msg: {\n        type: \"send-message\",\n        messages,\n        ...(isAsync ? { async: true } : {}),\n        ...(reminders.length ? { reminders } : {}),\n      },\n    });\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method preprocessAndSend",
-      "startLine": 1127,
-      "startCol": 3,
-      "endLine": 1173,
-      "endCol": 4
-    },
-    {
-      "text": "/** Run CommandRegistry on user text, returning processed InputMessages. */\n  private async processCommands(\n    text: string,\n    thread: import(\"./chat/thread.ts\").Thread,\n  ): Promise\u003c{ messages: InputMessage[]; reminders: string[] }\u003e {\n    const { processedText, additionalContent, reminders } =\n      await this.commandRegistry.processMessage(text, {\n        nvim: this.nvim,\n        cwd: thread.context.environment.cwd,\n        homeDir: thread.context.environment.homeDir,\n        contextManager: thread.contextManager,\n        options: this.options,\n      });\n\n    const messages: InputMessage[] = [{ type: \"user\", text: processedText }];\n\n    // Fold additional content (from @diff, @staged, etc.) into text messages\n    for (const content of additionalContent) {\n      if (content.type === \"text\") {\n        messages.push({ type: \"user\", text: content.text });\n      }\n    }\n\n    return { messages, reminders };\n  }",
-      "contextualizedText": "// node/magenta.ts \u003e class Magenta \u003e method processCommands\n\n/** Run CommandRegistry on user text, returning processed InputMessages. */\n  private async processCommands(\n    text: string,\n    thread: import(\"./chat/thread.ts\").Thread,\n  ): Promise\u003c{ messages: InputMessage[]; reminders: string[] }\u003e {\n    const { processedText, additionalContent, reminders } =\n      await this.commandRegistry.processMessage(text, {\n        nvim: this.nvim,\n        cwd: thread.context.environment.cwd,\n        homeDir: thread.context.environment.homeDir,\n        contextManager: thread.contextManager,\n        options: this.options,\n      });\n\n    const messages: InputMessage[] = [{ type: \"user\", text: processedText }];\n\n    // Fold additional content (from @diff, @staged, etc.) into text messages\n    for (const content of additionalContent) {\n      if (content.type === \"text\") {\n        messages.push({ type: \"user\", text: content.text });\n      }\n    }\n\n    return { messages, reminders };\n  }",
-      "headingContext": "node/magenta.ts \u003e class Magenta \u003e method processCommands",
-      "startLine": 1175,
-      "startCol": 3,
-      "endLine": 1199,
-      "endCol": 4
+      "start": 37771,
+      "end": 38697
     }
   ]
 }

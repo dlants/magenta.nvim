@@ -1,15 +1,11 @@
 {
   "blobSha": "06571af3d166e2b306abf23b133ca457d38e9ba5",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "---\napplyTo: \"**/*.ts\"\n---\n\n# Test Coverage Review\n\n## Purpose\n\nEvaluate whether the changes in this PR carry adequate test coverage. The goal\nis confidence in correctness, not a coverage percentage.\n\n## Guidance\n\n- Take an 80/20 approach. Aim to cover the load-bearing parts of the change with\n  a small number of high-value tests. Do NOT push for 100% coverage — exhaustive\n  tests for trivial code waste time to write and run and add little value.\n- Focus on the parts of the change that are most likely to break or be misused:\n  - **Invariants** the code relies on or establishes.\n  - **Edge cases** that are realistically likely to occur (empty inputs,\n    boundary values, error/failure paths, concurrent or out-of-order events,\n    undefined/optional fields).\n  - **Branching logic** where a wrong branch would produce incorrect behavior.\n- Flag load-bearing logic that is introduced or modified but left untested.\n- Do NOT request tests for trivial glue code, simple pass-throughs, or behavior\n  that is already exercised indirectly by existing tests.\n- Prefer pointing at the specific untested scenario (\"the failure branch in\n  `foo()` when the request aborts is not covered\") rather than asking for\n  \"more tests\" generically.\n- Match the project's testing conventions (see `.magenta/skills/doc-testing`):\n  prefer unit tests for core logic that doesn't need neovim, and integration\n  tests via `withDriver()` for UX/neovim interactions.",
-      "contextualizedText": "---\napplyTo: \"**/*.ts\"\n---\n\n# Test Coverage Review\n\n## Purpose\n\nEvaluate whether the changes in this PR carry adequate test coverage. The goal\nis confidence in correctness, not a coverage percentage.\n\n## Guidance\n\n- Take an 80/20 approach. Aim to cover the load-bearing parts of the change with\n  a small number of high-value tests. Do NOT push for 100% coverage — exhaustive\n  tests for trivial code waste time to write and run and add little value.\n- Focus on the parts of the change that are most likely to break or be misused:\n  - **Invariants** the code relies on or establishes.\n  - **Edge cases** that are realistically likely to occur (empty inputs,\n    boundary values, error/failure paths, concurrent or out-of-order events,\n    undefined/optional fields).\n  - **Branching logic** where a wrong branch would produce incorrect behavior.\n- Flag load-bearing logic that is introduced or modified but left untested.\n- Do NOT request tests for trivial glue code, simple pass-throughs, or behavior\n  that is already exercised indirectly by existing tests.\n- Prefer pointing at the specific untested scenario (\"the failure branch in\n  `foo()` when the request aborts is not covered\") rather than asking for\n  \"more tests\" generically.\n- Match the project's testing conventions (see `.magenta/skills/doc-testing`):\n  prefer unit tests for core logic that doesn't need neovim, and integration\n  tests via `withDriver()` for UX/neovim interactions.",
-      "headingContext": "",
-      "startLine": 0,
-      "startCol": 0,
-      "endLine": 0,
-      "endCol": 0
+      "start": 0,
+      "end": 1450
     }
   ]
 }

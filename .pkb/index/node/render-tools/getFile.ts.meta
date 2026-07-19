@@ -1,42 +1,11 @@
 {
   "blobSha": "7fe74ef26e644a1d07f603504b9135dde4361947",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type {\n  CompletedToolInfo,\n  DisplayContext,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode, withInlineCode } from \"../tea/view.ts\";\nimport {\n  displayPath,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"../utils/files.ts\";\n\ntype Input = {\n  filePath: UnresolvedFilePath;\n  force?: boolean;\n  pdfPage?: number;\n  startLine?: number;\n  numLines?: number;\n};",
-      "contextualizedText": "// node/render-tools/getFile.ts\n\nimport type {\n  CompletedToolInfo,\n  DisplayContext,\n  ToolRequest as UnionToolRequest,\n} from \"@magenta/core\";\nimport { d, type VDOMNode, withInlineCode } from \"../tea/view.ts\";\nimport {\n  displayPath,\n  resolveFilePath,\n  type UnresolvedFilePath,\n} from \"../utils/files.ts\";\n\ntype Input = {\n  filePath: UnresolvedFilePath;\n  force?: boolean;\n  pdfPage?: number;\n  startLine?: number;\n  numLines?: number;\n};",
-      "headingContext": "node/render-tools/getFile.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 19,
-      "endCol": 3
-    },
-    {
-      "text": "function formatGetFileDisplay(\n  input: Input,\n  displayContext: DisplayContext,\n): VDOMNode {\n  const absFilePath = resolveFilePath(\n    displayContext.cwd,\n    input.filePath,\n    displayContext.homeDir,\n  );\n  const pathForDisplay = displayPath(\n    displayContext.cwd,\n    absFilePath,\n    displayContext.homeDir,\n  );\n  let extraInfo = \"\";\n  if (input.pdfPage !== undefined) {\n    extraInfo = ` (page ${input.pdfPage})`;\n  } else if (input.startLine !== undefined || input.numLines !== undefined) {\n    const start = input.startLine ?? 1;\n    const num = input.numLines;\n    extraInfo =\n      num !== undefined\n        ? ` (lines ${start}-${start + num - 1})`\n        : ` (from line ${start})`;\n  }\n  return withInlineCode(d`\\`${pathForDisplay}\\`${extraInfo}`);\n}",
-      "contextualizedText": "// node/render-tools/getFile.ts \u003e function formatGetFileDisplay\n\nfunction formatGetFileDisplay(\n  input: Input,\n  displayContext: DisplayContext,\n): VDOMNode {\n  const absFilePath = resolveFilePath(\n    displayContext.cwd,\n    input.filePath,\n    displayContext.homeDir,\n  );\n  const pathForDisplay = displayPath(\n    displayContext.cwd,\n    absFilePath,\n    displayContext.homeDir,\n  );\n  let extraInfo = \"\";\n  if (input.pdfPage !== undefined) {\n    extraInfo = ` (page ${input.pdfPage})`;\n  } else if (input.startLine !== undefined || input.numLines !== undefined) {\n    const start = input.startLine ?? 1;\n    const num = input.numLines;\n    extraInfo =\n      num !== undefined\n        ? ` (lines ${start}-${start + num - 1})`\n        : ` (from line ${start})`;\n  }\n  return withInlineCode(d`\\`${pathForDisplay}\\`${extraInfo}`);\n}",
-      "headingContext": "node/render-tools/getFile.ts \u003e function formatGetFileDisplay",
-      "startLine": 21,
-      "startCol": 1,
-      "endLine": 47,
-      "endCol": 2
-    },
-    {
-      "text": "export function renderSummary(\n  request: UnionToolRequest,\n  displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  return d`👀 ${formatGetFileDisplay(input, displayContext)}`;\n}",
-      "contextualizedText": "// node/render-tools/getFile.ts \u003e function renderSummary\n\nexport function renderSummary(\n  request: UnionToolRequest,\n  displayContext: DisplayContext,\n): VDOMNode {\n  const input = request.input as Input;\n  return d`👀 ${formatGetFileDisplay(input, displayContext)}`;\n}",
-      "headingContext": "node/render-tools/getFile.ts \u003e function renderSummary",
-      "startLine": 49,
-      "startCol": 1,
-      "endLine": 55,
-      "endCol": 2
-    },
-    {
-      "text": "export function renderResultSummary(\n  info: CompletedToolInfo,\n  displayContext: DisplayContext,\n): VDOMNode {\n  const result = info.result.result;\n\n  if (result.status === \"error\") {\n    return d`${result.error}`;\n  }\n\n  return formatGetFileDisplay(info.request.input as Input, displayContext);\n}",
-      "contextualizedText": "// node/render-tools/getFile.ts \u003e function renderResultSummary\n\nexport function renderResultSummary(\n  info: CompletedToolInfo,\n  displayContext: DisplayContext,\n): VDOMNode {\n  const result = info.result.result;\n\n  if (result.status === \"error\") {\n    return d`${result.error}`;\n  }\n\n  return formatGetFileDisplay(info.request.input as Input, displayContext);\n}",
-      "headingContext": "node/render-tools/getFile.ts \u003e function renderResultSummary",
-      "startLine": 57,
-      "startCol": 1,
-      "endLine": 68,
-      "endCol": 2
+      "start": 0,
+      "end": 1695
     }
   ]
 }

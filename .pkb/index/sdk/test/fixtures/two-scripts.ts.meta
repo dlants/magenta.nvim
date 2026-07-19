@@ -1,15 +1,11 @@
 {
   "blobSha": "9553b493a14733b58549386629546267c6c07765",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { registerScript } from \"../../index.ts\";\n\nregisterScript(\n  \"alpha\",\n  \"the alpha script\",\n  { type: \"object\", properties: { x: { type: \"string\" } }, required: [\"x\"] },\n  async (_parameters, _thread, log) =\u003e {\n    log(\"alpha ran\");\n  },\n);\n\nregisterScript(\n  \"beta\",\n  \"the beta script\",\n  { type: \"object\", properties: { y: { type: \"number\" } }, required: [\"y\"] },\n  async (_parameters, _thread, log) =\u003e {\n    log(\"beta ran\");\n  },\n);",
-      "contextualizedText": "// sdk/test/fixtures/two-scripts.ts\n\nimport { registerScript } from \"../../index.ts\";\n\nregisterScript(\n  \"alpha\",\n  \"the alpha script\",\n  { type: \"object\", properties: { x: { type: \"string\" } }, required: [\"x\"] },\n  async (_parameters, _thread, log) =\u003e {\n    log(\"alpha ran\");\n  },\n);\n\nregisterScript(\n  \"beta\",\n  \"the beta script\",\n  { type: \"object\", properties: { y: { type: \"number\" } }, required: [\"y\"] },\n  async (_parameters, _thread, log) =\u003e {\n    log(\"beta ran\");\n  },\n);",
-      "headingContext": "sdk/test/fixtures/two-scripts.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 19,
-      "endCol": 3
+      "start": 0,
+      "end": 443
     }
   ]
 }

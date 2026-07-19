@@ -1,15 +1,11 @@
 {
   "blobSha": "e6b3ac8d6805dc046863a4f8851e3f869b0598d7",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "/** 1-indexed line, 0-indexed column */\nexport type Pos = { line: number; col: number };\n\n/** Character offset range, end-exclusive */\nexport type Range = { start: number; end: number; isLineSelection?: boolean };\n\nexport type TraceEntry = {\n  command: string;\n  ranges: Range[];\n  snippet: string;\n};\n\nexport type FileMutationSummary = {\n  insertions: number;\n  deletions: number;\n  replacements: number;\n  linesAdded: number;\n  linesRemoved: number;\n};\n\nexport type RangeWithPos = {\n  range: Range;\n  startPos: Pos;\n  endPos: Pos;\n  content: string;\n};\n\nexport type SavedRegisterInfo = {\n  name: string;\n  sizeChars: number;\n};\n\nexport type FileError = {\n  path: string;\n  error: string;\n  failedMutations: number;\n  trace: TraceEntry[];\n  savedRegisters: SavedRegisterInfo[];\n};\n\nexport type ScriptResult = {\n  warnings: string[];\n  trace: TraceEntry[];\n  finalSelection: { ranges: RangeWithPos[] } | undefined;\n  mutations: Map\u003cstring, FileMutationSummary\u003e;\n  fileContents: Map\u003cstring, { content: string; previousContent: string }\u003e;\n  fileErrors: FileError[];\n};",
-      "contextualizedText": "// node/core/src/edl/types.ts\n\n/** 1-indexed line, 0-indexed column */\nexport type Pos = { line: number; col: number };\n\n/** Character offset range, end-exclusive */\nexport type Range = { start: number; end: number; isLineSelection?: boolean };\n\nexport type TraceEntry = {\n  command: string;\n  ranges: Range[];\n  snippet: string;\n};\n\nexport type FileMutationSummary = {\n  insertions: number;\n  deletions: number;\n  replacements: number;\n  linesAdded: number;\n  linesRemoved: number;\n};\n\nexport type RangeWithPos = {\n  range: Range;\n  startPos: Pos;\n  endPos: Pos;\n  content: string;\n};\n\nexport type SavedRegisterInfo = {\n  name: string;\n  sizeChars: number;\n};\n\nexport type FileError = {\n  path: string;\n  error: string;\n  failedMutations: number;\n  trace: TraceEntry[];\n  savedRegisters: SavedRegisterInfo[];\n};\n\nexport type ScriptResult = {\n  warnings: string[];\n  trace: TraceEntry[];\n  finalSelection: { ranges: RangeWithPos[] } | undefined;\n  mutations: Map\u003cstring, FileMutationSummary\u003e;\n  fileContents: Map\u003cstring, { content: string; previousContent: string }\u003e;\n  fileErrors: FileError[];\n};",
-      "headingContext": "node/core/src/edl/types.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 48,
-      "endCol": 3
+      "start": 0,
+      "end": 1066
     }
   ]
 }

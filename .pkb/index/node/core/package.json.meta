@@ -1,15 +1,11 @@
 {
   "blobSha": "f7899cc70bde12aa866d2d12f3859407873d9d78",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "{\n  \"name\": \"@magenta/core\",\n  \"version\": \"0.0.0\",\n  \"type\": \"module\",\n  \"main\": \"./src/index.ts\",\n  \"types\": \"./src/index.ts\",\n  \"dependencies\": {\n    \"file-type\": \"^21.0.0\",\n    \"mime-types\": \"^3.0.1\",\n    \"pdf-lib\": \"^1.17.1\",\n    \"@modelcontextprotocol/sdk\": \"^1.15.1\",\n    \"openai\": \"^5.12.1\",\n    \"zod\": \"^3.25.76\",\n    \"diff\": \"^8.0.3\"\n  },\n  \"devDependencies\": {\n    \"@types/mime-types\": \"^3.0.1\",\n    \"@types/diff\": \"^8.0.0\"\n  }\n}",
-      "contextualizedText": "// node/core/package.json\n\n{\n  \"name\": \"@magenta/core\",\n  \"version\": \"0.0.0\",\n  \"type\": \"module\",\n  \"main\": \"./src/index.ts\",\n  \"types\": \"./src/index.ts\",\n  \"dependencies\": {\n    \"file-type\": \"^21.0.0\",\n    \"mime-types\": \"^3.0.1\",\n    \"pdf-lib\": \"^1.17.1\",\n    \"@modelcontextprotocol/sdk\": \"^1.15.1\",\n    \"openai\": \"^5.12.1\",\n    \"zod\": \"^3.25.76\",\n    \"diff\": \"^8.0.3\"\n  },\n  \"devDependencies\": {\n    \"@types/mime-types\": \"^3.0.1\",\n    \"@types/diff\": \"^8.0.0\"\n  }\n}",
-      "headingContext": "node/core/package.json",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 20,
-      "endCol": 2
+      "start": 0,
+      "end": 439
     }
   ]
 }

@@ -1,15 +1,11 @@
 {
   "blobSha": "a9e6ef7a2e18cdc819fb53d3c944ed41cf34a09b",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export type { AbsFilePath, NvimCwd, NvimCwd as Cwd } from \"./utils/files.ts\";",
-      "contextualizedText": "// node/core/src/paths.ts\n\nexport type { AbsFilePath, NvimCwd, NvimCwd as Cwd } from \"./utils/files.ts\";",
-      "headingContext": "node/core/src/paths.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 1,
-      "endCol": 78
+      "start": 0,
+      "end": 77
     }
   ]
 }

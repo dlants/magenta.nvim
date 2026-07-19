@@ -1,159 +1,35 @@
 {
   "blobSha": "b7b1156e7510c6869a56537381632460d02df476",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport type { ToolName, ToolRequestId } from \"@magenta/core\";\nimport { describe, expect, test } from \"vitest\";\nimport type { Line } from \"../nvim/buffer.ts\";\nimport { getAllBuffers, getAllWindows } from \"../nvim/nvim.ts\";\nimport type { Row0Indexed } from \"../nvim/window.ts\";\nimport { withDriver } from \"../test/preamble.ts\";\nimport { pollUntil } from \"../utils/async.ts\";\n\ndescribe(\"edl tool\", () =\u003e {\n  test(\"shows mutation summary in display\", async () =\u003e {\n    await withDriver",
-      "contextualizedText": "// node/tools/edl.test.ts\n\nimport * as fs from \"node:fs/promises\";\nimport * as path from \"node:path\";\nimport type { ToolName, ToolRequestId } from \"@magenta/core\";\nimport { describe, expect, test } from \"vitest\";\nimport type { Line } from \"../nvim/buffer.ts\";\nimport { getAllBuffers, getAllWindows } from \"../nvim/nvim.ts\";\nimport type { Row0Indexed } from \"../nvim/window.ts\";\nimport { withDriver } from \"../test/preamble.ts\";\nimport { pollUntil } from \"../utils/async.ts\";\n\ndescribe(\"edl tool\", () =\u003e {\n  test(\"shows mutation summary in display\", async () =\u003e {\n    await withDriver",
-      "headingContext": "node/tools/edl.test.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 13,
-      "endCol": 21
+      "start": 0,
+      "end": 2213
     },
     {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "contextualizedText": "// node/tools/edl.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "headingContext": "node/tools/edl.test.ts \u003e function setupFiles",
-      "startLine": 15,
-      "startCol": 1,
-      "endLine": 17,
-      "endCol": 10
+      "start": 2223,
+      "end": 4555
     },
     {
-      "text": "async (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        // Summary should show mutation count\n        await driver.assertDisplayBufferContains(\n          \"✅ edl: 1 mutations in 1 file\",\n        );\n\n        // Preview should show per-file stats\n        await driver.assertDisplayBufferContains(\"1 replace\");\n        await driver.assertDisplayBufferContains(\"Final selection: 1 range\");\n      },\n    );\n  });\n\n  test(\"= expands the result into an edl trace (not the script)\", async () =\u003e {\n    await withDriver",
-      "contextualizedText": "// node/tools/edl.test.ts\n\nasync (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        // Summary should show mutation count\n        await driver.assertDisplayBufferContains(\n          \"✅ edl: 1 mutations in 1 file\",\n        );\n\n        // Preview should show per-file stats\n        await driver.assertDisplayBufferContains(\"1 replace\");\n        await driver.assertDisplayBufferContains(\"Final selection: 1 range\");\n      },\n    );\n  });\n\n  test(\"= expands the result into an edl trace (not the script)\", async () =\u003e {\n    await withDriver",
-      "headingContext": "node/tools/edl.test.ts",
-      "startLine": 19,
-      "startCol": 7,
-      "endLine": 58,
-      "endCol": 21
+      "start": 4565,
+      "end": 6936
     },
     {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "contextualizedText": "// node/tools/edl.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "headingContext": "node/tools/edl.test.ts \u003e function setupFiles",
-      "startLine": 60,
-      "startCol": 1,
-      "endLine": 62,
-      "endCol": 10
+      "start": 6940,
+      "end": 9226
     },
     {
-      "text": "async (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\n# UNIQUE_SEGMENT_MARKER\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n\n        // The raw script is not shown in the result rows\n        await driver.assertDisplayBufferDoesNotContain(\"UNIQUE_SEGMENT_MARKER\");\n\n        // Expanding the result shows a trace, not the script\n        await driver.triggerDisplayBufferKeyOnContent(\"1 replace\", \"=\");\n        await driver.assertDisplayBufferContains(\"Trace:\");\n        await driver.assertDisplayBufferDoesNotContain(\"UNIQUE_SEGMENT_MARKER\");\n\n        // Collapse again\n        await driver.triggerDisplayBufferKeyOnContent(\"Trace:\", \"=\");\n        await driver.assertDisplayBufferContains(\"1 replace\");\n      },\n    );\n  });\n\n  test(\"= on the result summary line pretty-prints the trace (not JSON)\", async () =\u003e {\n    await withDriver",
-      "contextualizedText": "// node/tools/edl.test.ts\n\nasync (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\n# UNIQUE_SEGMENT_MARKER\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n\n        // The raw script is not shown in the result rows\n        await driver.assertDisplayBufferDoesNotContain(\"UNIQUE_SEGMENT_MARKER\");\n\n        // Expanding the result shows a trace, not the script\n        await driver.triggerDisplayBufferKeyOnContent(\"1 replace\", \"=\");\n        await driver.assertDisplayBufferContains(\"Trace:\");\n        await driver.assertDisplayBufferDoesNotContain(\"UNIQUE_SEGMENT_MARKER\");\n\n        // Collapse again\n        await driver.triggerDisplayBufferKeyOnContent(\"Trace:\", \"=\");\n        await driver.assertDisplayBufferContains(\"1 replace\");\n      },\n    );\n  });\n\n  test(\"= on the result summary line pretty-prints the trace (not JSON)\", async () =\u003e {\n    await withDriver",
-      "headingContext": "node/tools/edl.test.ts",
-      "startLine": 64,
-      "startCol": 7,
-      "endLine": 109,
-      "endCol": 21
+      "start": 9236,
+      "end": 11572
     },
     {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "contextualizedText": "// node/tools/edl.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "headingContext": "node/tools/edl.test.ts \u003e function setupFiles",
-      "startLine": 111,
-      "startCol": 1,
-      "endLine": 113,
-      "endCol": 10
+      "start": 11582,
+      "end": 13916
     },
     {
-      "text": "async (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n\n        // Expanding the result summary shows the formatted trace, not a raw\n        // JSON.stringify of the tool result value.\n        await driver.triggerDisplayBufferKeyOnContent(\"✅ edl:\", \"=\");\n        await driver.assertDisplayBufferContains(\"Trace:\");\n        await driver.assertDisplayBufferContains(\"Mutations:\");\n        await driver.assertDisplayBufferDoesNotContain('\"type\": \"text\"');\n\n        // Collapse again\n        await driver.triggerDisplayBufferKeyOnContent(\"✅ edl:\", \"=\");\n        await driver.assertDisplayBufferDoesNotContain(\"Mutations:\");\n      },\n    );\n  });\n\n  test(\"\u003cCR\u003e navigates to the edited file\", async () =\u003e {\n    await withDriver",
-      "contextualizedText": "// node/tools/edl.test.ts\n\nasync (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n\n        // Expanding the result summary shows the formatted trace, not a raw\n        // JSON.stringify of the tool result value.\n        await driver.triggerDisplayBufferKeyOnContent(\"✅ edl:\", \"=\");\n        await driver.assertDisplayBufferContains(\"Trace:\");\n        await driver.assertDisplayBufferContains(\"Mutations:\");\n        await driver.assertDisplayBufferDoesNotContain('\"type\": \"text\"');\n\n        // Collapse again\n        await driver.triggerDisplayBufferKeyOnContent(\"✅ edl:\", \"=\");\n        await driver.assertDisplayBufferDoesNotContain(\"Mutations:\");\n      },\n    );\n  });\n\n  test(\"\u003cCR\u003e navigates to the edited file\", async () =\u003e {\n    await withDriver",
-      "headingContext": "node/tools/edl.test.ts",
-      "startLine": 115,
-      "startCol": 7,
-      "endLine": 158,
-      "endCol": 21
-    },
-    {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "contextualizedText": "// node/tools/edl.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "headingContext": "node/tools/edl.test.ts \u003e function setupFiles",
-      "startLine": 160,
-      "startCol": 1,
-      "endLine": 162,
-      "endCol": 10
-    },
-    {
-      "text": "async (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n        await driver.triggerDisplayBufferKeyOnContent(\"1 replace\", \"\u003cCR\u003e\");\n\n        const targetBufferName = await pollUntil(\n          async () =\u003e {\n            const windows = await getAllWindows(driver.nvim);\n            for (const w of windows) {\n              const isMagenta = await w.getVar(\"magenta\");\n              if (isMagenta) continue;\n              const buf = await w.buffer();\n              const name = await buf.getName();\n              if (/test\\.txt$/.test(name)) {\n                return name;\n              }\n            }\n            throw new Error(\"test.txt not yet opened in non-magenta window\");\n          },\n          { timeout: 2000 },\n        );\n        expect(targetBufferName).toMatch(/test\\.txt$/);\n      },\n    );\n  });\n\n  test(\"hides the script preview once the tool completes\", async () =\u003e {\n    await withDriver",
-      "contextualizedText": "// node/tools/edl.test.ts\n\nasync (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n        await driver.triggerDisplayBufferKeyOnContent(\"1 replace\", \"\u003cCR\u003e\");\n\n        const targetBufferName = await pollUntil(\n          async () =\u003e {\n            const windows = await getAllWindows(driver.nvim);\n            for (const w of windows) {\n              const isMagenta = await w.getVar(\"magenta\");\n              if (isMagenta) continue;\n              const buf = await w.buffer();\n              const name = await buf.getName();\n              if (/test\\.txt$/.test(name)) {\n                return name;\n              }\n            }\n            throw new Error(\"test.txt not yet opened in non-magenta window\");\n          },\n          { timeout: 2000 },\n        );\n        expect(targetBufferName).toMatch(/test\\.txt$/);\n      },\n    );\n  });\n\n  test(\"hides the script preview once the tool completes\", async () =\u003e {\n    await withDriver",
-      "headingContext": "node/tools/edl.test.ts",
-      "startLine": 164,
-      "startCol": 7,
-      "endLine": 215,
-      "endCol": 21
-    },
-    {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "contextualizedText": "// node/tools/edl.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "headingContext": "node/tools/edl.test.ts \u003e function setupFiles",
-      "startLine": 217,
-      "startCol": 1,
-      "endLine": 219,
-      "endCol": 10
-    },
-    {
-      "text": "async (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\n# PREVIEW_ONLY_MARKER\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n\n        // Once completed, the streaming script preview is hidden\n        await driver.assertDisplayBufferDoesNotContain(\"PREVIEW_ONLY_MARKER\");\n      },\n    );\n  });\n\n  test(\"detail view shows full unabridged script\", async () =\u003e {\n    await withDriver",
-      "contextualizedText": "// node/tools/edl.test.ts\n\nasync (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\n# PREVIEW_ONLY_MARKER\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n\n        // Once completed, the streaming script preview is hidden\n        await driver.assertDisplayBufferDoesNotContain(\"PREVIEW_ONLY_MARKER\");\n      },\n    );\n  });\n\n  test(\"detail view shows full unabridged script\", async () =\u003e {\n    await withDriver",
-      "headingContext": "node/tools/edl.test.ts",
-      "startLine": 221,
-      "startCol": 7,
-      "endLine": 257,
-      "endCol": 21
-    },
-    {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "contextualizedText": "// node/tools/edl.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "headingContext": "node/tools/edl.test.ts \u003e function setupFiles",
-      "startLine": 259,
-      "startCol": 1,
-      "endLine": 261,
-      "endCol": 10
-    },
-    {
-      "text": "async (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\nnarrow /hello/\nreplace \u003c\u003cEND\ngoodbye\nEND`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n\n        // After completion the preview is hidden\n        await driver.assertDisplayBufferDoesNotContain(\"narrow /hello/\");\n\n        // Expanding the request summary shows the raw input (full script)\n        await driver.triggerDisplayBufferKeyOnContent(\"📝 edl script\", \"=\");\n        await driver.assertDisplayBufferContains(\"narrow /hello/\");\n        await driver.assertDisplayBufferContains(\"replace \u003c\u003cEND\");\n        // The script is shown verbatim, not as a JSON.stringify of the input\n        await driver.assertDisplayBufferDoesNotContain('\"script\":');\n      },\n    );\n  });\n});\n\ndescribe(\"edl tool buffer integration\", () =\u003e {\n  test(\"edl writes to nvim buffer when file is open\", async () =\u003e {\n    await withDriver",
-      "contextualizedText": "// node/tools/edl.test.ts\n\nasync (driver, dirs) =\u003e {\n        await driver.showSidebar();\n        await driver.inputMagentaText(\"run edl script\");\n        await driver.send();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n        const script = `file \\`${filePath}\\`\nnarrow /hello/\nreplace \u003c\u003cEND\ngoodbye\nEND`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"I'll run an EDL script\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n\n        // After completion the preview is hidden\n        await driver.assertDisplayBufferDoesNotContain(\"narrow /hello/\");\n\n        // Expanding the request summary shows the raw input (full script)\n        await driver.triggerDisplayBufferKeyOnContent(\"📝 edl script\", \"=\");\n        await driver.assertDisplayBufferContains(\"narrow /hello/\");\n        await driver.assertDisplayBufferContains(\"replace \u003c\u003cEND\");\n        // The script is shown verbatim, not as a JSON.stringify of the input\n        await driver.assertDisplayBufferDoesNotContain('\"script\":');\n      },\n    );\n  });\n});\n\ndescribe(\"edl tool buffer integration\", () =\u003e {\n  test(\"edl writes to nvim buffer when file is open\", async () =\u003e {\n    await withDriver",
-      "headingContext": "node/tools/edl.test.ts",
-      "startLine": 263,
-      "startCol": 7,
-      "endLine": 309,
-      "endCol": 21
-    },
-    {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "contextualizedText": "// node/tools/edl.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(path.join(tmpDir, \"test.txt\"), \"hello world\\n\");\n        }",
-      "headingContext": "node/tools/edl.test.ts \u003e function setupFiles",
-      "startLine": 311,
-      "startCol": 1,
-      "endLine": 313,
-      "endCol": 10
-    },
-    {
-      "text": "async (driver, dirs) =\u003e {\n        await driver.editFile(\"test.txt\");\n        await driver.showSidebar();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n\n        await driver.inputMagentaText(\"edit the file\");\n        await driver.send();\n\n        const script = `file \\`${filePath}\\`\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"editing\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n\n        // Verify the nvim buffer was updated (not just disk)\n        const buffers = await getAllBuffers(driver.nvim);\n        let testBuffer;\n        for (const buf of buffers) {\n          const name = await buf.getName();\n          if (name.includes(\"test.txt\")) {\n            testBuffer = buf;\n            break;\n          }\n        }\n        expect(testBuffer).toBeDefined();\n        if (!testBuffer) throw new Error(\"testBuffer undefined\");\n\n        const lines = await testBuffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        expect(lines.join(\"\\n\")).toBe(\"goodbye world\");\n\n        // Verify disk was also saved (nvim adds trailing newline on save)\n        const diskContent = await fs.readFile(filePath, \"utf-8\");\n        expect(diskContent).toBe(\"goodbye world\\n\");\n      },\n    );\n  });\n\n  test(\"edl reads from disk even when buffer has unsaved changes\", async () =\u003e {\n    await withDriver",
-      "contextualizedText": "// node/tools/edl.test.ts\n\nasync (driver, dirs) =\u003e {\n        await driver.editFile(\"test.txt\");\n        await driver.showSidebar();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n\n        await driver.inputMagentaText(\"edit the file\");\n        await driver.send();\n\n        const script = `file \\`${filePath}\\`\nnarrow /hello/\nreplace \"goodbye\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"editing\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        await driver.assertDisplayBufferContains(\"✅ edl:\");\n\n        // Verify the nvim buffer was updated (not just disk)\n        const buffers = await getAllBuffers(driver.nvim);\n        let testBuffer;\n        for (const buf of buffers) {\n          const name = await buf.getName();\n          if (name.includes(\"test.txt\")) {\n            testBuffer = buf;\n            break;\n          }\n        }\n        expect(testBuffer).toBeDefined();\n        if (!testBuffer) throw new Error(\"testBuffer undefined\");\n\n        const lines = await testBuffer.getLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n        });\n        expect(lines.join(\"\\n\")).toBe(\"goodbye world\");\n\n        // Verify disk was also saved (nvim adds trailing newline on save)\n        const diskContent = await fs.readFile(filePath, \"utf-8\");\n        expect(diskContent).toBe(\"goodbye world\\n\");\n      },\n    );\n  });\n\n  test(\"edl reads from disk even when buffer has unsaved changes\", async () =\u003e {\n    await withDriver",
-      "headingContext": "node/tools/edl.test.ts",
-      "startLine": 315,
-      "startCol": 7,
-      "endLine": 373,
-      "endCol": 21
-    },
-    {
-      "text": "        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(\n            path.join(tmpDir, \"test.txt\"),\n            \"original content\\n\",\n          );\n        }",
-      "contextualizedText": "// node/tools/edl.test.ts \u003e function setupFiles\n\n        setupFiles: async (tmpDir) =\u003e {\n          await fs.writeFile(\n            path.join(tmpDir, \"test.txt\"),\n            \"original content\\n\",\n          );\n        }",
-      "headingContext": "node/tools/edl.test.ts \u003e function setupFiles",
-      "startLine": 375,
-      "startCol": 1,
-      "endLine": 380,
-      "endCol": 10
-    },
-    {
-      "text": "async (driver, dirs) =\u003e {\n        await driver.editFile(\"test.txt\");\n        await driver.showSidebar();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n\n        // Modify buffer without saving so buffer and disk differ\n        const buffers = await getAllBuffers(driver.nvim);\n        let testBuffer;\n        for (const buf of buffers) {\n          const name = await buf.getName();\n          if (name.includes(\"test.txt\")) {\n            testBuffer = buf;\n            break;\n          }\n        }\n        expect(testBuffer).toBeDefined();\n        if (!testBuffer) throw new Error(\"expected testBuffer to be defined\");\n\n        await testBuffer.setLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n          lines: [\"buffer only content\" as Line],\n        });\n\n        // Disk still has original content\n        const diskContent = await fs.readFile(filePath, \"utf-8\");\n        expect(diskContent).toBe(\"original content\\n\");\n\n        // Run EDL that searches for content on disk (not in buffer)\n        await driver.inputMagentaText(\"edit the file\");\n        await driver.send();\n\n        const script = `file \\`${filePath}\\`\nnarrow /original/\nreplace \"disk-based\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"editing\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        // EDL should succeed because it reads from disk where \"original\" exists\n        await driver.assertDisplayBufferContains(\n          \"✅ edl: 1 mutations in 1 file\",\n        );\n\n        // Verify disk was updated\n        const updatedDisk = await fs.readFile(filePath, \"utf-8\");\n        expect(updatedDisk).toBe(\"disk-based content\\n\");\n      }",
-      "contextualizedText": "// node/tools/edl.test.ts\n\nasync (driver, dirs) =\u003e {\n        await driver.editFile(\"test.txt\");\n        await driver.showSidebar();\n\n        const filePath = path.join(dirs.tmpDir, \"test.txt\");\n\n        // Modify buffer without saving so buffer and disk differ\n        const buffers = await getAllBuffers(driver.nvim);\n        let testBuffer;\n        for (const buf of buffers) {\n          const name = await buf.getName();\n          if (name.includes(\"test.txt\")) {\n            testBuffer = buf;\n            break;\n          }\n        }\n        expect(testBuffer).toBeDefined();\n        if (!testBuffer) throw new Error(\"expected testBuffer to be defined\");\n\n        await testBuffer.setLines({\n          start: 0 as Row0Indexed,\n          end: -1 as Row0Indexed,\n          lines: [\"buffer only content\" as Line],\n        });\n\n        // Disk still has original content\n        const diskContent = await fs.readFile(filePath, \"utf-8\");\n        expect(diskContent).toBe(\"original content\\n\");\n\n        // Run EDL that searches for content on disk (not in buffer)\n        await driver.inputMagentaText(\"edit the file\");\n        await driver.send();\n\n        const script = `file \\`${filePath}\\`\nnarrow /original/\nreplace \"disk-based\"`;\n\n        const stream = await driver.mockAnthropic.awaitPendingStream();\n        stream.respond({\n          stopReason: \"tool_use\",\n          text: \"editing\",\n          toolRequests: [\n            {\n              status: \"ok\",\n              value: {\n                id: \"tool_1\" as ToolRequestId,\n                toolName: \"edl\" as ToolName,\n                input: { script },\n              },\n            },\n          ],\n        });\n\n        // EDL should succeed because it reads from disk where \"original\" exists\n        await driver.assertDisplayBufferContains(\n          \"✅ edl: 1 mutations in 1 file\",\n        );\n\n        // Verify disk was updated\n        const updatedDisk = await fs.readFile(filePath, \"utf-8\");\n        expect(updatedDisk).toBe(\"disk-based content\\n\");\n      }",
-      "headingContext": "node/tools/edl.test.ts",
-      "startLine": 382,
-      "startCol": 7,
-      "endLine": 443,
-      "endCol": 8
+      "start": 13926,
+      "end": 14102
     }
   ]
 }

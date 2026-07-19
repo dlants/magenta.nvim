@@ -1,60 +1,23 @@
 {
   "blobSha": "7bf262cfab2222ee6717bbd8cdd996e9712078e9",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport type { AgentsMap } from \"../agents/agents.ts\";\nimport type { ScriptCatalogEntry } from \"../capabilities/script-runner.ts\";\nimport type { SubagentConfig, ThreadId, ThreadType } from \"../chat-types.ts\";\nimport type {\n  ProviderToolSpec as MCPProviderToolSpec,\n  ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type { ToolRequest, ToolRequestId } from \"../tool-types.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport * as BashCommand from \"./bashCommand.ts\";\nimport * as Docs from \"./docs.ts\";\nimport * as Edl from \"./edl.ts\";\nimport * as FindReferences from \"./findReferences.ts\";\nimport * as GetFile from \"./getFile.ts\";\nimport * as Hover from \"./hover.ts\";\nimport * as NvimLua from \"./nvimLua.ts\";\nimport * as RunScript from \"./run-script.ts\";\nimport * as Scratchpad from \"./scratchpad.ts\";\nimport * as SpawnSubagents from \"./spawn-subagents.ts\";\nimport * as ThreadTitle from \"./thread-title.ts\";\nimport {\n  CHAT_STATIC_TOOL_NAMES,\n  COMPACT_STATIC_TOOL_NAMES,\n  DOCKER_ROOT_STATIC_TOOL_NAMES,\n  type StaticToolName,\n  SUBAGENT_STATIC_TOOL_NAMES,\n  TOOL_REQUIRED_CAPABILITIES,\n  type ToolCapability,\n} from \"./tool-registry.ts\";\nimport * as YieldToParent from \"./yield-to-parent.ts\";\n\nexport type { CompletedToolInfo, ToolRequestId } from \"../tool-types.ts\";",
-      "contextualizedText": "// node/core/src/tools/toolManager.ts\n\nimport type { JSONSchemaType } from \"openai/lib/jsonschema.mjs\";\nimport type { AgentsMap } from \"../agents/agents.ts\";\nimport type { ScriptCatalogEntry } from \"../capabilities/script-runner.ts\";\nimport type { SubagentConfig, ThreadId, ThreadType } from \"../chat-types.ts\";\nimport type {\n  ProviderToolSpec as MCPProviderToolSpec,\n  ProviderToolSpec,\n} from \"../providers/provider-types.ts\";\nimport type { ToolRequest, ToolRequestId } from \"../tool-types.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport * as BashCommand from \"./bashCommand.ts\";\nimport * as Docs from \"./docs.ts\";\nimport * as Edl from \"./edl.ts\";\nimport * as FindReferences from \"./findReferences.ts\";\nimport * as GetFile from \"./getFile.ts\";\nimport * as Hover from \"./hover.ts\";\nimport * as NvimLua from \"./nvimLua.ts\";\nimport * as RunScript from \"./run-script.ts\";\nimport * as Scratchpad from \"./scratchpad.ts\";\nimport * as SpawnSubagents from \"./spawn-subagents.ts\";\nimport * as ThreadTitle from \"./thread-title.ts\";\nimport {\n  CHAT_STATIC_TOOL_NAMES,\n  COMPACT_STATIC_TOOL_NAMES,\n  DOCKER_ROOT_STATIC_TOOL_NAMES,\n  type StaticToolName,\n  SUBAGENT_STATIC_TOOL_NAMES,\n  TOOL_REQUIRED_CAPABILITIES,\n  type ToolCapability,\n} from \"./tool-registry.ts\";\nimport * as YieldToParent from \"./yield-to-parent.ts\";\n\nexport type { CompletedToolInfo, ToolRequestId } from \"../tool-types.ts\";",
-      "headingContext": "node/core/src/tools/toolManager.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 33,
-      "endCol": 74
+      "start": 0,
+      "end": 1990
     },
     {
-      "text": "export interface MCPToolManager",
-      "contextualizedText": "// node/core/src/tools/toolManager.ts \u003e interface MCPToolManager\n\nexport interface MCPToolManager",
-      "headingContext": "node/core/src/tools/toolManager.ts \u003e interface MCPToolManager",
-      "startLine": 35,
-      "startCol": 1,
-      "endLine": 35,
-      "endCol": 32
+      "start": 1992,
+      "end": 2609
     },
     {
-      "text": "  getToolSpecs(): MCPProviderToolSpec[]",
-      "contextualizedText": "// node/core/src/tools/toolManager.ts \u003e interface MCPToolManager \u003e method getToolSpecs\n\n  getToolSpecs(): MCPProviderToolSpec[]",
-      "headingContext": "node/core/src/tools/toolManager.ts \u003e interface MCPToolManager \u003e method getToolSpecs",
-      "startLine": 36,
-      "startCol": 1,
-      "endLine": 36,
-      "endCol": 40
+      "start": 2611,
+      "end": 4756
     },
     {
-      "text": "export type StaticToolMap = {\n  get_file: { input: GetFile.Input };\n  hover: { input: Hover.Input };\n  find_references: { input: FindReferences.Input };\n  bash_command: { input: BashCommand.Input };\n  thread_title: { input: ThreadTitle.Input };\n  spawn_subagents: { input: SpawnSubagents.Input };\n  yield_to_parent: { input: YieldToParent.Input };\n  edl: { input: Edl.Input };\n  docs: { input: Docs.Input };\n  run_script: { input: RunScript.Input };\n  nvim_lua: { input: NvimLua.Input };\n  scratchpad: { input: Scratchpad.Input };\n};\n\nexport type StaticToolRequest = {\n  [K in keyof StaticToolMap]: {\n    id: ToolRequestId;\n    toolName: K;\n    input: StaticToolMap[K][\"input\"];\n  };\n}[keyof StaticToolMap];\n\nexport type Msg = {\n  type: \"init-tool-use\";\n  threadId: ThreadId;\n  request: ToolRequest;\n};\n\nconst TOOL_SPEC_MAP: Partial\u003cRecord\u003cStaticToolName, ProviderToolSpec\u003e\u003e = {\n  get_file: GetFile.spec,\n\n  hover: Hover.spec,\n  find_references: FindReferences.spec,\n\n  bash_command: BashCommand.spec,\n  thread_title: ThreadTitle.spec,\n  yield_to_parent: YieldToParent.spec,\n\n  edl: Edl.spec,\n  nvim_lua: NvimLua.spec,\n  scratchpad: Scratchpad.spec,\n};",
-      "contextualizedText": "// node/core/src/tools/toolManager.ts\n\nexport type StaticToolMap = {\n  get_file: { input: GetFile.Input };\n  hover: { input: Hover.Input };\n  find_references: { input: FindReferences.Input };\n  bash_command: { input: BashCommand.Input };\n  thread_title: { input: ThreadTitle.Input };\n  spawn_subagents: { input: SpawnSubagents.Input };\n  yield_to_parent: { input: YieldToParent.Input };\n  edl: { input: Edl.Input };\n  docs: { input: Docs.Input };\n  run_script: { input: RunScript.Input };\n  nvim_lua: { input: NvimLua.Input };\n  scratchpad: { input: Scratchpad.Input };\n};\n\nexport type StaticToolRequest = {\n  [K in keyof StaticToolMap]: {\n    id: ToolRequestId;\n    toolName: K;\n    input: StaticToolMap[K][\"input\"];\n  };\n}[keyof StaticToolMap];\n\nexport type Msg = {\n  type: \"init-tool-use\";\n  threadId: ThreadId;\n  request: ToolRequest;\n};\n\nconst TOOL_SPEC_MAP: Partial\u003cRecord\u003cStaticToolName, ProviderToolSpec\u003e\u003e = {\n  get_file: GetFile.spec,\n\n  hover: Hover.spec,\n  find_references: FindReferences.spec,\n\n  bash_command: BashCommand.spec,\n  thread_title: ThreadTitle.spec,\n  yield_to_parent: YieldToParent.spec,\n\n  edl: Edl.spec,\n  nvim_lua: NvimLua.spec,\n  scratchpad: Scratchpad.spec,\n};",
-      "headingContext": "node/core/src/tools/toolManager.ts",
-      "startLine": 39,
-      "startCol": 1,
-      "endLine": 81,
-      "endCol": 3
-    },
-    {
-      "text": "export function getToolSpecs(\n  threadType: ThreadType,\n  mcpToolManager: MCPToolManager,\n  availableCapabilities?: Set\u003cToolCapability\u003e,\n  agents?: AgentsMap,\n  subagentConfig?: SubagentConfig,\n  yieldSchema?: JSONSchemaType,\n  scriptCatalog?: ScriptCatalogEntry[],\n): ProviderToolSpec[] {\n  let staticToolNames: StaticToolName[] = [];\n  switch (threadType) {\n    case \"subagent\": {\n      const tier = subagentConfig?.tier;\n      if (tier === \"thread\" || tier === \"orchestrator\") {\n        staticToolNames = [...SUBAGENT_STATIC_TOOL_NAMES, \"spawn_subagents\"];\n      } else {\n        staticToolNames = SUBAGENT_STATIC_TOOL_NAMES;\n      }\n      break;\n    }\n    case \"compact\":\n      staticToolNames = COMPACT_STATIC_TOOL_NAMES;\n      break;\n    case \"docker_root\": {\n      const tier = subagentConfig?.tier;\n      if (tier === \"leaf\" || tier === undefined) {\n        staticToolNames = DOCKER_ROOT_STATIC_TOOL_NAMES.filter(\n          (t) =\u003e t !== \"spawn_subagents\",\n        );\n      } else {\n        staticToolNames = DOCKER_ROOT_STATIC_TOOL_NAMES;\n      }\n      break;\n    }\n    case \"root\":\n      staticToolNames = CHAT_STATIC_TOOL_NAMES;\n      break;\n    default:\n      assertUnreachable(threadType);\n  }\n  const filteredToolNames =\n    availableCapabilities !== undefined\n      ? staticToolNames.filter((toolName) =\u003e {\n          const required = TOOL_REQUIRED_CAPABILITIES[toolName];\n          for (const cap of required) {\n            if (!availableCapabilities.has(cap)) {\n              return false;\n            }\n          }\n          return true;\n        })\n      : staticToolNames;\n  const specs: ProviderToolSpec[] = [];",
-      "contextualizedText": "// node/core/src/tools/toolManager.ts \u003e function getToolSpecs\n\nexport function getToolSpecs(\n  threadType: ThreadType,\n  mcpToolManager: MCPToolManager,\n  availableCapabilities?: Set\u003cToolCapability\u003e,\n  agents?: AgentsMap,\n  subagentConfig?: SubagentConfig,\n  yieldSchema?: JSONSchemaType,\n  scriptCatalog?: ScriptCatalogEntry[],\n): ProviderToolSpec[] {\n  let staticToolNames: StaticToolName[] = [];\n  switch (threadType) {\n    case \"subagent\": {\n      const tier = subagentConfig?.tier;\n      if (tier === \"thread\" || tier === \"orchestrator\") {\n        staticToolNames = [...SUBAGENT_STATIC_TOOL_NAMES, \"spawn_subagents\"];\n      } else {\n        staticToolNames = SUBAGENT_STATIC_TOOL_NAMES;\n      }\n      break;\n    }\n    case \"compact\":\n      staticToolNames = COMPACT_STATIC_TOOL_NAMES;\n      break;\n    case \"docker_root\": {\n      const tier = subagentConfig?.tier;\n      if (tier === \"leaf\" || tier === undefined) {\n        staticToolNames = DOCKER_ROOT_STATIC_TOOL_NAMES.filter(\n          (t) =\u003e t !== \"spawn_subagents\",\n        );\n      } else {\n        staticToolNames = DOCKER_ROOT_STATIC_TOOL_NAMES;\n      }\n      break;\n    }\n    case \"root\":\n      staticToolNames = CHAT_STATIC_TOOL_NAMES;\n      break;\n    default:\n      assertUnreachable(threadType);\n  }\n  const filteredToolNames =\n    availableCapabilities !== undefined\n      ? staticToolNames.filter((toolName) =\u003e {\n          const required = TOOL_REQUIRED_CAPABILITIES[toolName];\n          for (const cap of required) {\n            if (!availableCapabilities.has(cap)) {\n              return false;\n            }\n          }\n          return true;\n        })\n      : staticToolNames;\n  const specs: ProviderToolSpec[] = [];",
-      "headingContext": "node/core/src/tools/toolManager.ts \u003e function getToolSpecs",
-      "startLine": 83,
-      "startCol": 1,
-      "endLine": 135,
-      "endCol": 40
-    },
-    {
-      "text": "for (const toolName of filteredToolNames) {\n    if (toolName === \"spawn_subagents\") {\n      specs.push(SpawnSubagents.getSpec(agents ?? {}, subagentConfig?.tier));\n    } else if (toolName === \"docs\") {\n      specs.push(Docs.getSpec());\n    } else if (toolName === \"yield_to_parent\") {\n      specs.push(YieldToParent.getSpec(yieldSchema));\n    } else if (toolName === \"run_script\") {\n      const catalog = scriptCatalog ?? [];\n      if (catalog.length \u003e 0) {\n        specs.push(RunScript.getSpec(catalog));\n      }\n    } else {\n      const spec = TOOL_SPEC_MAP[toolName];\n      if (spec) {\n        specs.push(spec);\n      }\n    }\n  }\n  return [...specs, ...mcpToolManager.getToolSpecs()];\n}",
-      "contextualizedText": "// node/core/src/tools/toolManager.ts \u003e function getToolSpecs\n\nfor (const toolName of filteredToolNames) {\n    if (toolName === \"spawn_subagents\") {\n      specs.push(SpawnSubagents.getSpec(agents ?? {}, subagentConfig?.tier));\n    } else if (toolName === \"docs\") {\n      specs.push(Docs.getSpec());\n    } else if (toolName === \"yield_to_parent\") {\n      specs.push(YieldToParent.getSpec(yieldSchema));\n    } else if (toolName === \"run_script\") {\n      const catalog = scriptCatalog ?? [];\n      if (catalog.length \u003e 0) {\n        specs.push(RunScript.getSpec(catalog));\n      }\n    } else {\n      const spec = TOOL_SPEC_MAP[toolName];\n      if (spec) {\n        specs.push(spec);\n      }\n    }\n  }\n  return [...specs, ...mcpToolManager.getToolSpecs()];\n}",
-      "headingContext": "node/core/src/tools/toolManager.ts \u003e function getToolSpecs",
-      "startLine": 136,
-      "startCol": 3,
-      "endLine": 156,
-      "endCol": 2
+      "start": 4761,
+      "end": 4932
     }
   ]
 }

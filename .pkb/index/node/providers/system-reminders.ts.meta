@@ -1,15 +1,11 @@
 {
   "blobSha": "8a898226697ae9d56c3ffe98f368bbc3f98c4ca3",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "export { buildSystemReminder, type ReminderKind } from \"@magenta/core\";",
-      "contextualizedText": "// node/providers/system-reminders.ts\n\nexport { buildSystemReminder, type ReminderKind } from \"@magenta/core\";",
-      "headingContext": "node/providers/system-reminders.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 1,
-      "endCol": 72
+      "start": 0,
+      "end": 71
     }
   ]
 }

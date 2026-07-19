@@ -1,411 +1,79 @@
 {
   "blobSha": "df4bada96ebff2e22612f6f17eb65304376274f8",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { readFileSync } from \"node:fs\";\nimport { dirname, join } from \"node:path\";\nimport { fileURLToPath } from \"node:url\";\nimport {\n  type AbsFilePath,\n  type CompactionRecord,\n  type CompletedToolInfo,\n  type ContextManager,\n  displayPath,\n  formatToolSpec,\n  formatToolSpecs,\n  type NativeMessageIdx,\n  type ProviderToolSpec,\n  renderThreadToMarkdown,\n  type ThreadId,\n  type ThreadMode,\n  type ToolName,\n  type ToolRequestId,\n} from \"@magenta/core\";\nimport {\n  type ContextViewContext,\n  contextFilesView,\n  renderContextUpdate,\n  renderGitUpdate,\n} from \"../context/context-manager.ts\";\nimport type {\n  AgentStatus,\n  ProviderMessage,\n  ProviderMessageContent,\n  ProviderToolResult,\n  StopReason,\n  Usage,\n} from \"../providers/provider.ts\";\nimport type { SystemPrompt } from \"../providers/system-prompt.ts\";\nimport {\n  renderToolInput,\n  renderToolInputSummaryExpansion,\n  renderToolProgress,\n  renderToolResult,\n  renderToolResultSummary,\n  renderToolResultSummaryExpansion,\n  renderToolSummary,\n} from \"../render-tools/index.ts\";\nimport { renderStreamdedTool } from \"../render-tools/streaming.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport {\n  d,\n  type VDOMNode,\n  type View,\n  withBindings,\n  withExtmark,\n} from \"../tea/view.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport { formatTokens } from \"../utils/tokens.ts\";\nimport type { Msg, Thread, ToolViewState } from \"./thread.ts\";",
-      "contextualizedText": "// node/chat/thread-view.ts\n\nimport { readFileSync } from \"node:fs\";\nimport { dirname, join } from \"node:path\";\nimport { fileURLToPath } from \"node:url\";\nimport {\n  type AbsFilePath,\n  type CompactionRecord,\n  type CompletedToolInfo,\n  type ContextManager,\n  displayPath,\n  formatToolSpec,\n  formatToolSpecs,\n  type NativeMessageIdx,\n  type ProviderToolSpec,\n  renderThreadToMarkdown,\n  type ThreadId,\n  type ThreadMode,\n  type ToolName,\n  type ToolRequestId,\n} from \"@magenta/core\";\nimport {\n  type ContextViewContext,\n  contextFilesView,\n  renderContextUpdate,\n  renderGitUpdate,\n} from \"../context/context-manager.ts\";\nimport type {\n  AgentStatus,\n  ProviderMessage,\n  ProviderMessageContent,\n  ProviderToolResult,\n  StopReason,\n  Usage,\n} from \"../providers/provider.ts\";\nimport type { SystemPrompt } from \"../providers/system-prompt.ts\";\nimport {\n  renderToolInput,\n  renderToolInputSummaryExpansion,\n  renderToolProgress,\n  renderToolResult,\n  renderToolResultSummary,\n  renderToolResultSummaryExpansion,\n  renderToolSummary,\n} from \"../render-tools/index.ts\";\nimport { renderStreamdedTool } from \"../render-tools/streaming.ts\";\nimport type { Dispatch } from \"../tea/tea.ts\";\nimport {\n  d,\n  type VDOMNode,\n  type View,\n  withBindings,\n  withExtmark,\n} from \"../tea/view.ts\";\nimport { assertUnreachable } from \"../utils/assertUnreachable.ts\";\nimport { formatTokens } from \"../utils/tokens.ts\";\nimport type { Msg, Thread, ToolViewState } from \"./thread.ts\";",
-      "headingContext": "node/chat/thread-view.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 55,
-      "endCol": 63
+      "start": 0,
+      "end": 2066
     },
     {
-      "text": "function contextViewCtx(thread: Thread): ContextViewContext {\n  return {\n    cwd: thread.context.cwd,\n    homeDir: thread.context.homeDir,\n    nvim: thread.context.nvim,\n    options: thread.context.options,\n  };\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function contextViewCtx\n\nfunction contextViewCtx(thread: Thread): ContextViewContext {\n  return {\n    cwd: thread.context.cwd,\n    homeDir: thread.context.homeDir,\n    nvim: thread.context.nvim,\n    options: thread.context.options,\n  };\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function contextViewCtx",
-      "startLine": 57,
-      "startCol": 1,
-      "endLine": 64,
-      "endCol": 2
+      "start": 2070,
+      "end": 3984
     },
     {
-      "text": "/**\n * Helper function to render the animation frame for in-progress operations\n */\nconst shortErrorMessage = (error: Error): string =\u003e {\n  const msg = error.message.split(\"\\n\")[0].trim();\n  return msg.length \u003e 80 ? `${msg.slice(0, 77)}...` : msg;\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function shortErrorMessage\n\n/**\n * Helper function to render the animation frame for in-progress operations\n */\nconst shortErrorMessage = (error: Error): string =\u003e {\n  const msg = error.message.split(\"\\n\")[0].trim();\n  return msg.length \u003e 80 ? `${msg.slice(0, 77)}...` : msg;\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function shortErrorMessage",
-      "startLine": 66,
-      "startCol": 1,
-      "endLine": 72,
-      "endCol": 2
+      "start": 3986,
+      "end": 5783
     },
     {
-      "text": "const getAnimationFrame = (sendDate: Date): string =\u003e {\n  const frameIndex =\n    Math.floor((Date.now() - sendDate.getTime()) / 333) %\n    MESSAGE_ANIMATION.length;\n\n  return MESSAGE_ANIMATION[frameIndex];\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function getAnimationFrame\n\nconst getAnimationFrame = (sendDate: Date): string =\u003e {\n  const frameIndex =\n    Math.floor((Date.now() - sendDate.getTime()) / 333) %\n    MESSAGE_ANIMATION.length;\n\n  return MESSAGE_ANIMATION[frameIndex];\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function getAnimationFrame",
-      "startLine": 74,
-      "startCol": 1,
-      "endLine": 80,
-      "endCol": 2
+      "start": 5785,
+      "end": 7496
     },
     {
-      "text": "/**\n * Helper function to render the status message\n * Composes agent status with thread mode for complete display\n */\nexport const renderStatus = (\n  agentStatus: AgentStatus,\n  mode: ThreadMode,\n  latestUsage: Usage | undefined,\n): VDOMNode =\u003e {\n  const yieldedResponse = mode.type === \"yielded\" ? mode.response : undefined;\n  // First check mode for thread-specific states\n  if (mode.type === \"tool_use\") {\n    return d`Executing tools...`;\n  }\n  if (yieldedResponse !== undefined) {\n    return d`↗️ yielded to parent: ${yieldedResponse}`;\n  }\n  if (mode.type === \"compacting\") {\n    return d`📦 Compacting thread... (chunk ${String(mode.chunkIndex + 1)} / ${String(mode.totalChunks)})`;\n  }\n\n  // Then render based on agent status\n  switch (agentStatus.type) {\n    case \"streaming\": {\n      if (agentStatus.retryStatus) {\n        const secsLeft = Math.max(\n          1,\n          Math.ceil(\n            (agentStatus.retryStatus.nextRetryAt.getTime() - Date.now()) / 1000,\n          ),\n        );\n        const reason = shortErrorMessage(agentStatus.retryStatus.error);\n        return d`⏳ Retrying in ${String(secsLeft)}s (attempt ${String(agentStatus.retryStatus.attempt)}) — ${reason}`;\n      }\n      const waitedMs = Date.now() - agentStatus.lastEventTime.getTime();\n      if (waitedMs \u003e 3000) {\n        const waitedSecs = Math.floor(waitedMs / 1000);\n        return d`Streaming response ${getAnimationFrame(agentStatus.startTime)} (waiting ${String(waitedSecs)}s)`;\n      }\n      return d`Streaming response ${getAnimationFrame(agentStatus.startTime)}`;\n    }\n    case \"stopped\":\n      return renderStopReason(agentStatus.stopReason, latestUsage);\n    case \"error\":\n      return d`Error ${agentStatus.error.message}${\n        agentStatus.error.stack ? `\\n${agentStatus.error.stack}` : \"\"\n      }`;\n    default:\n      assertUnreachable(agentStatus);\n  }\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderStatus\n\n/**\n * Helper function to render the status message\n * Composes agent status with thread mode for complete display\n */\nexport const renderStatus = (\n  agentStatus: AgentStatus,\n  mode: ThreadMode,\n  latestUsage: Usage | undefined,\n): VDOMNode =\u003e {\n  const yieldedResponse = mode.type === \"yielded\" ? mode.response : undefined;\n  // First check mode for thread-specific states\n  if (mode.type === \"tool_use\") {\n    return d`Executing tools...`;\n  }\n  if (yieldedResponse !== undefined) {\n    return d`↗️ yielded to parent: ${yieldedResponse}`;\n  }\n  if (mode.type === \"compacting\") {\n    return d`📦 Compacting thread... (chunk ${String(mode.chunkIndex + 1)} / ${String(mode.totalChunks)})`;\n  }\n\n  // Then render based on agent status\n  switch (agentStatus.type) {\n    case \"streaming\": {\n      if (agentStatus.retryStatus) {\n        const secsLeft = Math.max(\n          1,\n          Math.ceil(\n            (agentStatus.retryStatus.nextRetryAt.getTime() - Date.now()) / 1000,\n          ),\n        );\n        const reason = shortErrorMessage(agentStatus.retryStatus.error);\n        return d`⏳ Retrying in ${String(secsLeft)}s (attempt ${String(agentStatus.retryStatus.attempt)}) — ${reason}`;\n      }\n      const waitedMs = Date.now() - agentStatus.lastEventTime.getTime();\n      if (waitedMs \u003e 3000) {\n        const waitedSecs = Math.floor(waitedMs / 1000);\n        return d`Streaming response ${getAnimationFrame(agentStatus.startTime)} (waiting ${String(waitedSecs)}s)`;\n      }\n      return d`Streaming response ${getAnimationFrame(agentStatus.startTime)}`;\n    }\n    case \"stopped\":\n      return renderStopReason(agentStatus.stopReason, latestUsage);\n    case \"error\":\n      return d`Error ${agentStatus.error.message}${\n        agentStatus.error.stack ? `\\n${agentStatus.error.stack}` : \"\"\n      }`;\n    default:\n      assertUnreachable(agentStatus);\n  }\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderStatus",
-      "startLine": 82,
-      "startCol": 1,
-      "endLine": 132,
-      "endCol": 2
+      "start": 7502,
+      "end": 9118
     },
     {
-      "text": "function renderStopReason(\n  stopReason: StopReason,\n  usage: Usage | undefined,\n): VDOMNode {\n  const usageView = usage ? d` ${renderUsage(usage)}` : d``;\n  if (stopReason === \"aborted\") {\n    return d`[ABORTED] ${usageView} `;\n  }\n  return d`Stopped (${stopReason}) ${usageView} `;\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderStopReason\n\nfunction renderStopReason(\n  stopReason: StopReason,\n  usage: Usage | undefined,\n): VDOMNode {\n  const usageView = usage ? d` ${renderUsage(usage)}` : d``;\n  if (stopReason === \"aborted\") {\n    return d`[ABORTED] ${usageView} `;\n  }\n  return d`Stopped (${stopReason}) ${usageView} `;\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderStopReason",
-      "startLine": 134,
-      "startCol": 1,
-      "endLine": 143,
-      "endCol": 2
+      "start": 9122,
+      "end": 10997
     },
     {
-      "text": "function renderUsage(usage: Usage): VDOMNode {\n  return d`[input: ${usage.inputTokens.toString()}, output: ${usage.outputTokens.toString()}${\n    usage.cacheHits !== undefined\n      ? d`, cache hits: ${usage.cacheHits.toString()}`\n      : \"\"\n  }${\n    usage.cacheMisses !== undefined\n      ? d`, cache misses: ${usage.cacheMisses.toString()}`\n      : \"\"\n  }]`;\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderUsage\n\nfunction renderUsage(usage: Usage): VDOMNode {\n  return d`[input: ${usage.inputTokens.toString()}, output: ${usage.outputTokens.toString()}${\n    usage.cacheHits !== undefined\n      ? d`, cache hits: ${usage.cacheHits.toString()}`\n      : \"\"\n  }${\n    usage.cacheMisses !== undefined\n      ? d`, cache misses: ${usage.cacheMisses.toString()}`\n      : \"\"\n  }]`;\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderUsage",
-      "startLine": 145,
-      "startCol": 1,
-      "endLine": 155,
-      "endCol": 2
+      "start": 11001,
+      "end": 13059
     },
     {
-      "text": "/**\n * Helper function to determine if context manager view should be shown\n */\nconst shouldShowContextFiles = (\n  agentStatus: AgentStatus,\n  mode: ThreadMode,\n  contextManager: ContextManager,\n): boolean =\u003e {\n  return (\n    agentStatus.type !== \"streaming\" \u0026\u0026\n    mode.type === \"normal\" \u0026\u0026\n    Object.keys(contextManager.files).length \u003e 0\n  );\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function shouldShowContextFiles\n\n/**\n * Helper function to determine if context manager view should be shown\n */\nconst shouldShowContextFiles = (\n  agentStatus: AgentStatus,\n  mode: ThreadMode,\n  contextManager: ContextManager,\n): boolean =\u003e {\n  return (\n    agentStatus.type !== \"streaming\" \u0026\u0026\n    mode.type === \"normal\" \u0026\u0026\n    Object.keys(contextManager.files).length \u003e 0\n  );\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function shouldShowContextFiles",
-      "startLine": 157,
-      "startCol": 1,
-      "endLine": 170,
-      "endCol": 2
+      "start": 13063,
+      "end": 14493
     },
     {
-      "text": "/**\n * Helper function to render the system prompt in collapsed/expanded state\n */\nconst renderSystemPrompt = (\n  systemPrompt: SystemPrompt,\n  showSystemPrompt: boolean,\n  dispatch: Dispatch\u003cMsg\u003e,\n): VDOMNode =\u003e {\n  if (showSystemPrompt) {\n    return withBindings(\n      withExtmark(d`⚙️ [System Prompt]\\n${systemPrompt}`, {\n        hl_group: \"@comment\",\n      }),\n      {\n        \"=\": () =\u003e {\n          dispatch({ type: \"toggle-system-prompt\" });\n        },\n      },\n    );\n  } else {\n    const tokenDisplay = formatTokens(systemPrompt.length);\n\n    return withBindings(\n      withExtmark(d`⚙️ [System Prompt ${tokenDisplay}]`, {\n        hl_group: \"@comment\",\n      }),\n      {\n        \"=\": () =\u003e {\n          dispatch({ type: \"toggle-system-prompt\" });\n        },\n      },\n    );\n  }\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderSystemPrompt\n\n/**\n * Helper function to render the system prompt in collapsed/expanded state\n */\nconst renderSystemPrompt = (\n  systemPrompt: SystemPrompt,\n  showSystemPrompt: boolean,\n  dispatch: Dispatch\u003cMsg\u003e,\n): VDOMNode =\u003e {\n  if (showSystemPrompt) {\n    return withBindings(\n      withExtmark(d`⚙️ [System Prompt]\\n${systemPrompt}`, {\n        hl_group: \"@comment\",\n      }),\n      {\n        \"=\": () =\u003e {\n          dispatch({ type: \"toggle-system-prompt\" });\n        },\n      },\n    );\n  } else {\n    const tokenDisplay = formatTokens(systemPrompt.length);\n\n    return withBindings(\n      withExtmark(d`⚙️ [System Prompt ${tokenDisplay}]`, {\n        hl_group: \"@comment\",\n      }),\n      {\n        \"=\": () =\u003e {\n          dispatch({ type: \"toggle-system-prompt\" });\n        },\n      },\n    );\n  }\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderSystemPrompt",
-      "startLine": 172,
-      "startCol": 1,
-      "endLine": 205,
-      "endCol": 2
+      "start": 14497,
+      "end": 16365
     },
     {
-      "text": "const renderToolDefinitions = (\n  specs: ProviderToolSpec[],\n  showToolDefinitions: boolean,\n  expandedToolDefinitions: { [toolName: string]: boolean },\n  dispatch: Dispatch\u003cMsg\u003e,\n): VDOMNode",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderToolDefinitions\n\nconst renderToolDefinitions = (\n  specs: ProviderToolSpec[],\n  showToolDefinitions: boolean,\n  expandedToolDefinitions: { [toolName: string]: boolean },\n  dispatch: Dispatch\u003cMsg\u003e,\n): VDOMNode",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderToolDefinitions",
-      "startLine": 207,
-      "startCol": 1,
-      "endLine": 212,
-      "endCol": 12
+      "start": 16371,
+      "end": 17744
     },
     {
-      "text": "  const toggle = () =\u003e dispatch({ type: \"toggle-tool-definitions\" })",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderToolDefinitions \u003e function toggle\n\n  const toggle = () =\u003e dispatch({ type: \"toggle-tool-definitions\" })",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderToolDefinitions \u003e function toggle",
-      "startLine": 213,
-      "startCol": 1,
-      "endLine": 213,
-      "endCol": 69
+      "start": 17750,
+      "end": 19453
     },
     {
-      "text": "const totalTokens = formatTokens(formatToolSpecs(specs).length);\n  const header = withBindings(\n    withExtmark(\n      d`🔧 [Tool Definitions (${specs.length.toString()}) ${totalTokens}]`,\n      { hl_group: \"@comment\" },\n    ),\n    { \"=\": toggle },\n  );\n\n  if (!showToolDefinitions) {\n    return header;\n  }\n\n  const toolViews = specs.map((spec) =\u003e {\n    const expanded = expandedToolDefinitions[spec.name] || false;\n    const tokenDisplay = formatTokens(formatToolSpec(spec).length);\n    const toolHeader = withBindings(\n      withExtmark(d`# ${spec.name} ${tokenDisplay}\\n`, {\n        hl_group: \"@comment\",\n      }),\n      {\n        \"=\": () =\u003e\n          dispatch({ type: \"toggle-tool-definition\", toolName: spec.name }),\n      },\n    );\n    if (!expanded) return toolHeader;\n    return d`${toolHeader}${withExtmark(d`${formatToolSpec(spec)}\\n`, { hl_group: \"@comment\" })}`;\n  });\n\n  return d`${header}\\n${toolViews}`;\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderToolDefinitions\n\nconst totalTokens = formatTokens(formatToolSpecs(specs).length);\n  const header = withBindings(\n    withExtmark(\n      d`🔧 [Tool Definitions (${specs.length.toString()}) ${totalTokens}]`,\n      { hl_group: \"@comment\" },\n    ),\n    { \"=\": toggle },\n  );\n\n  if (!showToolDefinitions) {\n    return header;\n  }\n\n  const toolViews = specs.map((spec) =\u003e {\n    const expanded = expandedToolDefinitions[spec.name] || false;\n    const tokenDisplay = formatTokens(formatToolSpec(spec).length);\n    const toolHeader = withBindings(\n      withExtmark(d`# ${spec.name} ${tokenDisplay}\\n`, {\n        hl_group: \"@comment\",\n      }),\n      {\n        \"=\": () =\u003e\n          dispatch({ type: \"toggle-tool-definition\", toolName: spec.name }),\n      },\n    );\n    if (!expanded) return toolHeader;\n    return d`${toolHeader}${withExtmark(d`${formatToolSpec(spec)}\\n`, { hl_group: \"@comment\" })}`;\n  });\n\n  return d`${header}\\n${toolViews}`;\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderToolDefinitions",
-      "startLine": 214,
-      "startCol": 3,
-      "endLine": 244,
-      "endCol": 2
+      "start": 19457,
+      "end": 21444
     },
     {
-      "text": "function renderCompactionHistory(\n  history: CompactionRecord[],\n  viewState: Thread[\"state\"][\"compactionViewState\"],\n  dispatch: Dispatch\u003cMsg\u003e,\n): VDOMNode {\n  if (history.length === 0) return d``;\n\n  return d`${history.map((record, recordIdx) =\u003e {\n    const rv = viewState[recordIdx];\n    const isExpanded = rv?.expanded || false;\n    const summaryLen = record.finalSummary?.length ?? 0;\n    const status =\n      record.finalSummary !== undefined\n        ? `summary: ${summaryLen} chars`\n        : \"⚠️ failed\";\n\n    const header = withBindings(\n      withExtmark(\n        d`📦 [Compaction ${(recordIdx + 1).toString()} — ${record.steps.length.toString()} step${record.steps.length === 1 ? \"\" : \"s\"}, ${status}]\\n`,\n        { hl_group: \"@comment\" },\n      ),\n      {\n        \"=\": () =\u003e dispatch({ type: \"toggle-compaction-record\", recordIdx }),\n      },\n    );\n\n    if (!isExpanded) return header;\n\n    const stepsView = record.steps.map((step, stepIdx) =\u003e {\n      const stepExpanded = rv?.expandedSteps[stepIdx] || false;\n      const stepHeader = withBindings(\n        withExtmark(\n          d`  📄 [Step ${(step.chunkIndex + 1).toString()} of ${step.totalChunks.toString()}]\\n`,\n          { hl_group: \"@comment\" },\n        ),\n        {\n          \"=\": () =\u003e\n            dispatch({\n              type: \"toggle-compaction-step\",\n              recordIdx,\n              stepIdx,\n            }),\n        },\n      );\n\n      if (!stepExpanded) return stepHeader;\n\n      const { markdown } = renderThreadToMarkdown(step.messages);\n      return d`${stepHeader}${withExtmark(d`${markdown}\\n`, { hl_group: \"@comment\" })}`;\n    });\n\n    const summaryView =\n      record.finalSummary !== undefined\n        ? d`  📋 Final Summary:\\n${withExtmark(d`${record.finalSummary}\\n`, { hl_group: \"@comment\" })}`\n        : d`  ⚠️ Compaction failed — no summary produced\\n`;\n\n    return d`${header}${stepsView}${summaryView}`;\n  })}`;\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderCompactionHistory\n\nfunction renderCompactionHistory(\n  history: CompactionRecord[],\n  viewState: Thread[\"state\"][\"compactionViewState\"],\n  dispatch: Dispatch\u003cMsg\u003e,\n): VDOMNode {\n  if (history.length === 0) return d``;\n\n  return d`${history.map((record, recordIdx) =\u003e {\n    const rv = viewState[recordIdx];\n    const isExpanded = rv?.expanded || false;\n    const summaryLen = record.finalSummary?.length ?? 0;\n    const status =\n      record.finalSummary !== undefined\n        ? `summary: ${summaryLen} chars`\n        : \"⚠️ failed\";\n\n    const header = withBindings(\n      withExtmark(\n        d`📦 [Compaction ${(recordIdx + 1).toString()} — ${record.steps.length.toString()} step${record.steps.length === 1 ? \"\" : \"s\"}, ${status}]\\n`,\n        { hl_group: \"@comment\" },\n      ),\n      {\n        \"=\": () =\u003e dispatch({ type: \"toggle-compaction-record\", recordIdx }),\n      },\n    );\n\n    if (!isExpanded) return header;\n\n    const stepsView = record.steps.map((step, stepIdx) =\u003e {\n      const stepExpanded = rv?.expandedSteps[stepIdx] || false;\n      const stepHeader = withBindings(\n        withExtmark(\n          d`  📄 [Step ${(step.chunkIndex + 1).toString()} of ${step.totalChunks.toString()}]\\n`,\n          { hl_group: \"@comment\" },\n        ),\n        {\n          \"=\": () =\u003e\n            dispatch({\n              type: \"toggle-compaction-step\",\n              recordIdx,\n              stepIdx,\n            }),\n        },\n      );\n\n      if (!stepExpanded) return stepHeader;\n\n      const { markdown } = renderThreadToMarkdown(step.messages);\n      return d`${stepHeader}${withExtmark(d`${markdown}\\n`, { hl_group: \"@comment\" })}`;\n    });\n\n    const summaryView =\n      record.finalSummary !== undefined\n        ? d`  📋 Final Summary:\\n${withExtmark(d`${record.finalSummary}\\n`, { hl_group: \"@comment\" })}`\n        : d`  ⚠️ Compaction failed — no summary produced\\n`;\n\n    return d`${header}${stepsView}${summaryView}`;\n  })}`;\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderCompactionHistory",
-      "startLine": 246,
-      "startCol": 1,
-      "endLine": 304,
-      "endCol": 2
+      "start": 21450,
+      "end": 23605
     },
     {
-      "text": "function editedFilesSummaryView(\n  editedFiles: ReadonlyArray\u003c{ path: AbsFilePath; snapshot: string }\u003e,\n  thread: Thread,\n  dispatch: Dispatch\u003cMsg\u003e,\n): VDOMNode {\n  if (editedFiles.length === 0) return d``;\n\n  const { cwd, homeDir } = thread.context;\n  return d`\\n${withExtmark(d`Files edited this turn:\\n`, { hl_group: \"@comment\" })}${editedFiles.map(\n    ({ path: filePath, snapshot }) =\u003e {\n      const display = displayPath(cwd, filePath, homeDir);\n      const expanded = thread.state.editedFilesExpanded[filePath];\n      const marker = expanded ? \"▼\" : \"▶\";\n      const row = withBindings(d`  ${marker} ${display}\\n`, {\n        \"=\": () =\u003e dispatch({ type: \"toggle-edited-file-expanded\", filePath }),\n        \"\u003cCR\u003e\": () =\u003e\n          dispatch({ type: \"open-edit-file-diff\", filePath, snapshot }),\n      });\n      const body = expanded\n        ? withExtmark(d`${expanded.patch}\\n`, { hl_group: \"@comment\" })\n        : d``;\n      return d`${row}${body}`;\n    },\n  )}`;\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function editedFilesSummaryView\n\nfunction editedFilesSummaryView(\n  editedFiles: ReadonlyArray\u003c{ path: AbsFilePath; snapshot: string }\u003e,\n  thread: Thread,\n  dispatch: Dispatch\u003cMsg\u003e,\n): VDOMNode {\n  if (editedFiles.length === 0) return d``;\n\n  const { cwd, homeDir } = thread.context;\n  return d`\\n${withExtmark(d`Files edited this turn:\\n`, { hl_group: \"@comment\" })}${editedFiles.map(\n    ({ path: filePath, snapshot }) =\u003e {\n      const display = displayPath(cwd, filePath, homeDir);\n      const expanded = thread.state.editedFilesExpanded[filePath];\n      const marker = expanded ? \"▼\" : \"▶\";\n      const row = withBindings(d`  ${marker} ${display}\\n`, {\n        \"=\": () =\u003e dispatch({ type: \"toggle-edited-file-expanded\", filePath }),\n        \"\u003cCR\u003e\": () =\u003e\n          dispatch({ type: \"open-edit-file-diff\", filePath, snapshot }),\n      });\n      const body = expanded\n        ? withExtmark(d`${expanded.patch}\\n`, { hl_group: \"@comment\" })\n        : d``;\n      return d`${row}${body}`;\n    },\n  )}`;\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function editedFilesSummaryView",
-      "startLine": 305,
-      "startCol": 1,
-      "endLine": 329,
-      "endCol": 2
+      "start": 23613,
+      "end": 25942
     },
     {
-      "text": "const PENDING_PREVIEW_LINES = 3;\nconst PENDING_PREVIEW_CHARS = 200;",
-      "contextualizedText": "// node/chat/thread-view.ts\n\nconst PENDING_PREVIEW_LINES = 3;\nconst PENDING_PREVIEW_CHARS = 200;",
-      "headingContext": "node/chat/thread-view.ts",
-      "startLine": 331,
-      "startCol": 1,
-      "endLine": 332,
-      "endCol": 35
+      "start": 25950,
+      "end": 28459
     },
     {
-      "text": "function renderPendingMessage(\n  text: string,\n  index: number,\n  thread: Thread,\n  dispatch: Dispatch\u003cMsg\u003e,\n): VDOMNode {\n  const expanded = thread.state.pendingMessagesExpanded[index] || false;\n  const lines = text.split(\"\\n\");\n  const needsTrim =\n    lines.length \u003e PENDING_PREVIEW_LINES || text.length \u003e PENDING_PREVIEW_CHARS;\n\n  let body: VDOMNode;\n  let toggle: VDOMNode = d``;\n  if (needsTrim \u0026\u0026 !expanded) {\n    let preview = lines.slice(0, PENDING_PREVIEW_LINES).join(\"\\n\");\n    if (preview.length \u003e PENDING_PREVIEW_CHARS) {\n      preview = preview.slice(0, PENDING_PREVIEW_CHARS);\n    }\n    body = d`${preview}…\\n`;\n    toggle = withBindings(\n      withExtmark(d`[expand]\\n`, { hl_group: \"@comment\" }),\n      { \"=\": () =\u003e dispatch({ type: \"toggle-pending-message\", index }) },\n    );\n  } else {\n    body = d`${text}\\n`;\n    if (needsTrim) {\n      toggle = withBindings(\n        withExtmark(d`[collapse]\\n`, { hl_group: \"@comment\" }),\n        { \"=\": () =\u003e dispatch({ type: \"toggle-pending-message\", index }) },\n      );\n    }\n  }\n\n  return withExtmark(\n    d`${withExtmark(d`# ✉️ queued:\\n`, {\n      hl_group: \"@markup.heading.1.markdown\",\n    })}${body}${toggle}`,\n    { hl_group: \"CursorLine\", hl_eol: true },\n  );\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderPendingMessage\n\nfunction renderPendingMessage(\n  text: string,\n  index: number,\n  thread: Thread,\n  dispatch: Dispatch\u003cMsg\u003e,\n): VDOMNode {\n  const expanded = thread.state.pendingMessagesExpanded[index] || false;\n  const lines = text.split(\"\\n\");\n  const needsTrim =\n    lines.length \u003e PENDING_PREVIEW_LINES || text.length \u003e PENDING_PREVIEW_CHARS;\n\n  let body: VDOMNode;\n  let toggle: VDOMNode = d``;\n  if (needsTrim \u0026\u0026 !expanded) {\n    let preview = lines.slice(0, PENDING_PREVIEW_LINES).join(\"\\n\");\n    if (preview.length \u003e PENDING_PREVIEW_CHARS) {\n      preview = preview.slice(0, PENDING_PREVIEW_CHARS);\n    }\n    body = d`${preview}…\\n`;\n    toggle = withBindings(\n      withExtmark(d`[expand]\\n`, { hl_group: \"@comment\" }),\n      { \"=\": () =\u003e dispatch({ type: \"toggle-pending-message\", index }) },\n    );\n  } else {\n    body = d`${text}\\n`;\n    if (needsTrim) {\n      toggle = withBindings(\n        withExtmark(d`[collapse]\\n`, { hl_group: \"@comment\" }),\n        { \"=\": () =\u003e dispatch({ type: \"toggle-pending-message\", index }) },\n      );\n    }\n  }\n\n  return withExtmark(\n    d`${withExtmark(d`# ✉️ queued:\\n`, {\n      hl_group: \"@markup.heading.1.markdown\",\n    })}${body}${toggle}`,\n    { hl_group: \"CursorLine\", hl_eol: true },\n  );\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderPendingMessage",
-      "startLine": 334,
-      "startCol": 1,
-      "endLine": 373,
-      "endCol": 2
+      "start": 28467,
+      "end": 31004
     },
     {
-      "text": "export const view: View\u003c{\n  thread: Thread;\n  dispatch: Dispatch\u003cMsg\u003e;\n}\u003e = ({ thread, dispatch }) =\u003e {\n  const threadType = thread.core.state.threadType;\n  const titlePrefix = threadType === \"docker_root\" ? \"🐳 \" : \"\";\n  const titleView = thread.core.state.title\n    ? d`# ${titlePrefix}${thread.core.state.title}`\n    : d`# ${titlePrefix}[ Untitled ]`;\n\n  const systemPromptView = renderSystemPrompt(\n    thread.core.state.systemPrompt,\n    thread.state.showSystemPrompt,\n    dispatch,\n  );\n\n  const toolDefinitionsView = renderToolDefinitions(\n    thread.core.state.toolSpecs,\n    thread.state.showToolDefinitions,\n    thread.state.expandedToolDefinitions,\n    dispatch,\n  );\n\n  const messages = thread.getProviderMessages();\n  const agentStatus = thread.agent.getState().status;\n  const mode = thread.core.state.mode;\n\n  // Show logo when empty and not busy\n  const isIdle =\n    agentStatus.type === \"stopped\" \u0026\u0026 agentStatus.stopReason === \"end_turn\";\n  if (\n    messages.length === 0 \u0026\u0026\n    isIdle \u0026\u0026\n    mode.type === \"normal\" \u0026\u0026\n    thread.core.state.failedSubmit === undefined\n  ) {\n    return d`\\\n${titleView}\n${systemPromptView}\n${toolDefinitionsView}\n\n${LOGO}\n\nmagenta is for agentic flow\n\n${contextFilesView(thread.contextManager, contextViewCtx(thread), {\n  expanded: thread.state.contextFilesExpanded",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view\n\nexport const view: View\u003c{\n  thread: Thread;\n  dispatch: Dispatch\u003cMsg\u003e;\n}\u003e = ({ thread, dispatch }) =\u003e {\n  const threadType = thread.core.state.threadType;\n  const titlePrefix = threadType === \"docker_root\" ? \"🐳 \" : \"\";\n  const titleView = thread.core.state.title\n    ? d`# ${titlePrefix}${thread.core.state.title}`\n    : d`# ${titlePrefix}[ Untitled ]`;\n\n  const systemPromptView = renderSystemPrompt(\n    thread.core.state.systemPrompt,\n    thread.state.showSystemPrompt,\n    dispatch,\n  );\n\n  const toolDefinitionsView = renderToolDefinitions(\n    thread.core.state.toolSpecs,\n    thread.state.showToolDefinitions,\n    thread.state.expandedToolDefinitions,\n    dispatch,\n  );\n\n  const messages = thread.getProviderMessages();\n  const agentStatus = thread.agent.getState().status;\n  const mode = thread.core.state.mode;\n\n  // Show logo when empty and not busy\n  const isIdle =\n    agentStatus.type === \"stopped\" \u0026\u0026 agentStatus.stopReason === \"end_turn\";\n  if (\n    messages.length === 0 \u0026\u0026\n    isIdle \u0026\u0026\n    mode.type === \"normal\" \u0026\u0026\n    thread.core.state.failedSubmit === undefined\n  ) {\n    return d`\\\n${titleView}\n${systemPromptView}\n${toolDefinitionsView}\n\n${LOGO}\n\nmagenta is for agentic flow\n\n${contextFilesView(thread.contextManager, contextViewCtx(thread), {\n  expanded: thread.state.contextFilesExpanded",
-      "headingContext": "node/chat/thread-view.ts \u003e function view",
-      "startLine": 375,
-      "startCol": 1,
-      "endLine": 421,
-      "endCol": 46
+      "start": 31010,
+      "end": 32805
     },
     {
-      "text": "  onToggle: () =\u003e dispatch({ type: \"toggle-context-files-expanded\" })",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view \u003e function onToggle\n\n  onToggle: () =\u003e dispatch({ type: \"toggle-context-files-expanded\" })",
-      "headingContext": "node/chat/thread-view.ts \u003e function view \u003e function onToggle",
-      "startLine": 422,
-      "startCol": 1,
-      "endLine": 422,
-      "endCol": 70
-    },
-    {
-      "text": "const latestUsage = thread.agent.getState().latestUsage;\n  const statusView = renderStatus(agentStatus, mode, latestUsage);\n\n  const contextManagerView = shouldShowContextFiles(\n    agentStatus,\n    mode,\n    thread.contextManager,\n  )\n    ? d`\\n${contextFilesView(thread.contextManager, contextViewCtx(thread), {\n        expanded: thread.state.contextFilesExpanded",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view\n\nconst latestUsage = thread.agent.getState().latestUsage;\n  const statusView = renderStatus(agentStatus, mode, latestUsage);\n\n  const contextManagerView = shouldShowContextFiles(\n    agentStatus,\n    mode,\n    thread.contextManager,\n  )\n    ? d`\\n${contextFilesView(thread.contextManager, contextViewCtx(thread), {\n        expanded: thread.state.contextFilesExpanded",
-      "headingContext": "node/chat/thread-view.ts \u003e function view",
-      "startLine": 426,
-      "startCol": 3,
-      "endLine": 435,
-      "endCol": 52
-    },
-    {
-      "text": "        onToggle: () =\u003e dispatch({ type: \"toggle-context-files-expanded\" })",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view \u003e function onToggle\n\n        onToggle: () =\u003e dispatch({ type: \"toggle-context-files-expanded\" })",
-      "headingContext": "node/chat/thread-view.ts \u003e function view \u003e function onToggle",
-      "startLine": 436,
-      "startCol": 1,
-      "endLine": 436,
-      "endCol": 76
-    },
-    {
-      "text": "d``;\n\n  const sandboxView = thread.sandboxViolationHandler?.getPendingViolations()\n    .size\n    ? d`\\n${thread.sandboxViolationHandler.view()}`\n    : d``;\n  const compactionHistoryView = renderCompactionHistory(\n    thread.core.state.compactionHistory,\n    thread.state.compactionViewState,\n    dispatch,\n  );\n  const editedFilesView = editedFilesSummaryView(\n    thread.core.state.editedFilesThisTurn,\n    thread,\n    dispatch,\n  );\n  const pendingMessagesView =\n    thread.core.state.pendingMessages.length \u003e 0\n      ? d`\\n${thread.core.state.pendingMessages.map((m, index) =\u003e\n          renderPendingMessage(m.text, index, thread, dispatch),\n        )}`\n      : d``;\n\n  // Helper to check if a message is composed entirely of auto-generated content",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view\n\nd``;\n\n  const sandboxView = thread.sandboxViolationHandler?.getPendingViolations()\n    .size\n    ? d`\\n${thread.sandboxViolationHandler.view()}`\n    : d``;\n  const compactionHistoryView = renderCompactionHistory(\n    thread.core.state.compactionHistory,\n    thread.state.compactionViewState,\n    dispatch,\n  );\n  const editedFilesView = editedFilesSummaryView(\n    thread.core.state.editedFilesThisTurn,\n    thread,\n    dispatch,\n  );\n  const pendingMessagesView =\n    thread.core.state.pendingMessages.length \u003e 0\n      ? d`\\n${thread.core.state.pendingMessages.map((m, index) =\u003e\n          renderPendingMessage(m.text, index, thread, dispatch),\n        )}`\n      : d``;\n\n  // Helper to check if a message is composed entirely of auto-generated content",
-      "headingContext": "node/chat/thread-view.ts \u003e function view",
-      "startLine": 438,
-      "startCol": 7,
-      "endLine": 461,
-      "endCol": 81
-    },
-    {
-      "text": "  const renderForkIndicator = (fork: {\n    childThreadId: ThreadId;\n    atMessageIdx: NativeMessageIdx;\n  }) =\u003e\n    withBindings(\n      withExtmark(d`↳ forked to thread ${fork.childThreadId.slice(-8)}\\n`, {\n        hl_group: \"@comment\",\n      }),\n      {\n        \"\u003cCR\u003e\": () =\u003e\n          thread.context.dispatch({\n            type: \"select-thread-effect\",\n            id: fork.childThreadId,\n          }),\n      },\n    )",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view \u003e function renderForkIndicator\n\n  const renderForkIndicator = (fork: {\n    childThreadId: ThreadId;\n    atMessageIdx: NativeMessageIdx;\n  }) =\u003e\n    withBindings(\n      withExtmark(d`↳ forked to thread ${fork.childThreadId.slice(-8)}\\n`, {\n        hl_group: \"@comment\",\n      }),\n      {\n        \"\u003cCR\u003e\": () =\u003e\n          thread.context.dispatch({\n            type: \"select-thread-effect\",\n            id: fork.childThreadId,\n          }),\n      },\n    )",
-      "headingContext": "node/chat/thread-view.ts \u003e function view \u003e function renderForkIndicator",
-      "startLine": 463,
-      "startCol": 1,
-      "endLine": 478,
-      "endCol": 6
-    },
-    {
-      "text": "  const forkedToAtIdx = (messageIdx: number) =\u003e {\n    const forks = thread.state.forkedTo.filter(\n      (fork) =\u003e fork.atMessageIdx === messageIdx,\n    );\n    return forks.length \u003e 0\n      ? d`${forks.map((fork) =\u003e renderForkIndicator(fork))}`\n      : d``;\n  }",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view \u003e function forkedToAtIdx\n\n  const forkedToAtIdx = (messageIdx: number) =\u003e {\n    const forks = thread.state.forkedTo.filter(\n      (fork) =\u003e fork.atMessageIdx === messageIdx,\n    );\n    return forks.length \u003e 0\n      ? d`${forks.map((fork) =\u003e renderForkIndicator(fork))}`\n      : d``;\n  }",
-      "headingContext": "node/chat/thread-view.ts \u003e function view \u003e function forkedToAtIdx",
-      "startLine": 480,
-      "startCol": 1,
-      "endLine": 487,
-      "endCol": 4
-    },
-    {
-      "text": "// Forks whose atMessageIdx is past the last rendered message are appended at\n  // the end so they aren't lost.\n  const trailingForkedToView =\n    thread.state.forkedTo.filter((fork) =\u003e fork.atMessageIdx \u003e= messages.length)\n      .length \u003e 0\n      ? d`\\n${thread.state.forkedTo\n          .filter((fork) =\u003e fork.atMessageIdx \u003e= messages.length)\n          .map((fork) =\u003e renderForkIndicator(fork))}`\n      : d``;",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view\n\n// Forks whose atMessageIdx is past the last rendered message are appended at\n  // the end so they aren't lost.\n  const trailingForkedToView =\n    thread.state.forkedTo.filter((fork) =\u003e fork.atMessageIdx \u003e= messages.length)\n      .length \u003e 0\n      ? d`\\n${thread.state.forkedTo\n          .filter((fork) =\u003e fork.atMessageIdx \u003e= messages.length)\n          .map((fork) =\u003e renderForkIndicator(fork))}`\n      : d``;",
-      "headingContext": "node/chat/thread-view.ts \u003e function view",
-      "startLine": 489,
-      "startCol": 3,
-      "endLine": 497,
-      "endCol": 13
-    },
-    {
-      "text": "// (tool results, system reminders, context updates) — used to suppress the\n  // \"# user:\" header for messages that contain no user-authored text.\n  const isToolResultOnlyMessage = (msg: ProviderMessage): boolean =\u003e\n    msg.role === \"user\" \u0026\u0026\n    msg.content.every(\n      (c) =\u003e\n        c.type === \"tool_result\" ||\n        c.type === \"system_reminder\" ||\n        c.type === \"system_info\" ||\n        c.type === \"context_update\" ||\n        c.type === \"fork_notification\",\n    )",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view \u003e function isToolResultOnlyMessage\n\n// (tool results, system reminders, context updates) — used to suppress the\n  // \"# user:\" header for messages that contain no user-authored text.\n  const isToolResultOnlyMessage = (msg: ProviderMessage): boolean =\u003e\n    msg.role === \"user\" \u0026\u0026\n    msg.content.every(\n      (c) =\u003e\n        c.type === \"tool_result\" ||\n        c.type === \"system_reminder\" ||\n        c.type === \"system_info\" ||\n        c.type === \"context_update\" ||\n        c.type === \"fork_notification\",\n    )",
-      "headingContext": "node/chat/thread-view.ts \u003e function view \u003e function isToolResultOnlyMessage",
-      "startLine": 498,
-      "startCol": 3,
-      "endLine": 509,
-      "endCol": 6
-    },
-    {
-      "text": "// Render messages from provider thread\n  const messagesView = messages.map((message, messageIdx) =\u003e {\n    // Skip user messages that only contain tool results (no system_reminder)\n    if (\n      message.role === \"user\" \u0026\u0026\n      message.content.every((c) =\u003e c.type === \"tool_result\")\n    ) {\n      return d``;\n    }\n\n    // For user messages composed only of auto-generated content (tool_result,\n    // system_reminder, context_update) that include at least one system_reminder,\n    // skip the user header and inline the reminder.\n    const isToolResultWithReminder =\n      message.role === \"user\" \u0026\u0026\n      message.content.every(\n        (c) =\u003e\n          c.type === \"tool_result\" ||\n          c.type === \"system_reminder\" ||\n          c.type === \"system_info\" ||\n          c.type === \"context_update\" ||\n          c.type === \"fork_notification\",\n      ) \u0026\u0026\n      message.content.some(\n        (c) =\u003e c.type === \"system_reminder\" || c.type === \"fork_notification\",\n      );\n\n    // Skip \"# assistant:\" header if this is a continuation of a tool-use turn\n    // (i.e., previous message was a tool-result-only user message)\n    const prevMessage = messageIdx \u003e 0 ? messages[messageIdx - 1] : undefined;\n    const isAssistantContinuation =\n      message.role === \"assistant\" \u0026\u0026\n      prevMessage \u0026\u0026\n      isToolResultOnlyMessage(prevMessage);\n\n    const showRoleHeader =\n      !isToolResultWithReminder \u0026\u0026 !isAssistantContinuation;\n    const isUserBlock = showRoleHeader \u0026\u0026 message.role === \"user\";\n\n    const roleHeader = showRoleHeader\n      ? withExtmark(d`# ${message.role}:\\n`, {\n          hl_group: \"@markup.heading.1.markdown\",\n        })\n      : d``;\n\n    // Get view state for this message\n    const viewState = thread.state.messageViewState[messageIdx];\n\n    // Render context updates for user messages\n    const contextUpdateView = viewState?.contextUpdates\n      ? renderContextUpdate(\n          viewState.contextUpdates,\n          thread.contextManager,\n          contextViewCtx(thread)",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view\n\n// Render messages from provider thread\n  const messagesView = messages.map((message, messageIdx) =\u003e {\n    // Skip user messages that only contain tool results (no system_reminder)\n    if (\n      message.role === \"user\" \u0026\u0026\n      message.content.every((c) =\u003e c.type === \"tool_result\")\n    ) {\n      return d``;\n    }\n\n    // For user messages composed only of auto-generated content (tool_result,\n    // system_reminder, context_update) that include at least one system_reminder,\n    // skip the user header and inline the reminder.\n    const isToolResultWithReminder =\n      message.role === \"user\" \u0026\u0026\n      message.content.every(\n        (c) =\u003e\n          c.type === \"tool_result\" ||\n          c.type === \"system_reminder\" ||\n          c.type === \"system_info\" ||\n          c.type === \"context_update\" ||\n          c.type === \"fork_notification\",\n      ) \u0026\u0026\n      message.content.some(\n        (c) =\u003e c.type === \"system_reminder\" || c.type === \"fork_notification\",\n      );\n\n    // Skip \"# assistant:\" header if this is a continuation of a tool-use turn\n    // (i.e., previous message was a tool-result-only user message)\n    const prevMessage = messageIdx \u003e 0 ? messages[messageIdx - 1] : undefined;\n    const isAssistantContinuation =\n      message.role === \"assistant\" \u0026\u0026\n      prevMessage \u0026\u0026\n      isToolResultOnlyMessage(prevMessage);\n\n    const showRoleHeader =\n      !isToolResultWithReminder \u0026\u0026 !isAssistantContinuation;\n    const isUserBlock = showRoleHeader \u0026\u0026 message.role === \"user\";\n\n    const roleHeader = showRoleHeader\n      ? withExtmark(d`# ${message.role}:\\n`, {\n          hl_group: \"@markup.heading.1.markdown\",\n        })\n      : d``;\n\n    // Get view state for this message\n    const viewState = thread.state.messageViewState[messageIdx];\n\n    // Render context updates for user messages\n    const contextUpdateView = viewState?.contextUpdates\n      ? renderContextUpdate(\n          viewState.contextUpdates,\n          thread.contextManager,\n          contextViewCtx(thread)",
-      "headingContext": "node/chat/thread-view.ts \u003e function view",
-      "startLine": 511,
-      "startCol": 3,
-      "endLine": 564,
-      "endCol": 33
-    },
-    {
-      "text": "expandedUpdates: viewState.expandedUpdates ?? {}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view\n\nexpandedUpdates: viewState.expandedUpdates ?? {}",
-      "headingContext": "node/chat/thread-view.ts \u003e function view",
-      "startLine": 566,
-      "startCol": 13,
-      "endLine": 566,
-      "endCol": 61
-    },
-    {
-      "text": "            onToggle: (filePath) =\u003e\n              dispatch({\n                type: \"toggle-expand-update\",\n                messageIdx,\n                filePath,\n              })",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view \u003e function onToggle\n\n            onToggle: (filePath) =\u003e\n              dispatch({\n                type: \"toggle-expand-update\",\n                messageIdx,\n                filePath,\n              })",
-      "headingContext": "node/chat/thread-view.ts \u003e function view \u003e function onToggle",
-      "startLine": 567,
-      "startCol": 1,
-      "endLine": 572,
-      "endCol": 17
-    },
-    {
-      "text": "d``;\n\n    const gitUpdateView = renderGitUpdate(viewState?.gitUpdate);\n\n    // Render content blocks. For user messages we render auto-generated meta\n    // blocks (system_reminder, system_info) before the user's own text so the\n    // user's message stays the most prominent (last) thing on screen, even\n    // though the underlying message keeps the user text first for the API.\n    const orderedContentIndices = message.content.map((_, idx) =\u003e idx);\n    if (message.role === \"user\") {\n      orderedContentIndices.sort((a, b)",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view\n\nd``;\n\n    const gitUpdateView = renderGitUpdate(viewState?.gitUpdate);\n\n    // Render content blocks. For user messages we render auto-generated meta\n    // blocks (system_reminder, system_info) before the user's own text so the\n    // user's message stays the most prominent (last) thing on screen, even\n    // though the underlying message keeps the user text first for the API.\n    const orderedContentIndices = message.content.map((_, idx) =\u003e idx);\n    if (message.role === \"user\") {\n      orderedContentIndices.sort((a, b)",
-      "headingContext": "node/chat/thread-view.ts \u003e function view",
-      "startLine": 575,
-      "startCol": 9,
-      "endLine": 585,
-      "endCol": 40
-    },
-    {
-      "text": "        const isMeta = (c: (typeof message.content)[number]) =\u003e\n          c.type === \"system_reminder\" || c.type === \"system_info\"",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view \u003e function isMeta\n\n        const isMeta = (c: (typeof message.content)[number]) =\u003e\n          c.type === \"system_reminder\" || c.type === \"system_info\"",
-      "headingContext": "node/chat/thread-view.ts \u003e function view \u003e function isMeta",
-      "startLine": 586,
-      "startCol": 1,
-      "endLine": 587,
-      "endCol": 67
-    },
-    {
-      "text": "const aMeta = isMeta(message.content[a]) ? 0 : 1;\n        const bMeta = isMeta(message.content[b]) ? 0 : 1;\n        if (aMeta !== bMeta) return aMeta - bMeta;\n        return a - b;\n      });\n    }\n    const lastContentIdx =\n      orderedContentIndices[orderedContentIndices.length - 1];\n    const contentView = orderedContentIndices.map((contentIdx) =\u003e {\n      const content = message.content[contentIdx];\n      const isLastBlock = contentIdx === lastContentIdx;\n      return renderMessageContent(\n        content,\n        messageIdx,\n        contentIdx,\n        thread,\n        dispatch,\n        message.usage,\n        isLastBlock,\n      );\n    });\n\n    const messageBody = d`\\\n${roleHeader}\\\n${gitUpdateView}\\\n${contextUpdateView}\\\n${contentView}`;\n\n    const renderedBody = isUserBlock\n      ? withExtmark(messageBody, {\n          hl_group: \"CursorLine\",\n          hl_eol: true,\n        })\n      : messageBody;\n\n    return d`${renderedBody}${forkedToAtIdx(messageIdx)}`;\n  });\n\n  const streamingBlockView =\n    agentStatus.type === \"streaming\"\n      ? d`\\n${renderStreamingBlock(thread)}\\n`\n      : d``;\n\n  const failedSubmit = thread.core.state.failedSubmit;\n  const failedSubmitView =\n    failedSubmit !== undefined\n      ? d`${withExtmark(\n          d`${withExtmark(d`# user:\\n`, {\n            hl_group: \"@markup.heading.1.markdown\",\n          })}${failedSubmit.userMessage}\\n`,\n          { hl_group: \"CursorLine\", hl_eol: true },\n        )}${withExtmark(d`Error: ${failedSubmit.errorMessage}\\n`, {\n          hl_group: \"ErrorMsg\",\n        })}`\n      : d``;\n\n  return d`\\\n${titleView}\n${systemPromptView}\n${toolDefinitionsView}\n${compactionHistoryView}\n${messagesView}\\\n${failedSubmitView}\\\n${streamingBlockView}\\\n${contextManagerView}\\\n${sandboxView}\\\n${pendingMessagesView}\\\n${trailingForkedToView}\\\n${editedFilesView}\n${statusView}`;\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function view\n\nconst aMeta = isMeta(message.content[a]) ? 0 : 1;\n        const bMeta = isMeta(message.content[b]) ? 0 : 1;\n        if (aMeta !== bMeta) return aMeta - bMeta;\n        return a - b;\n      });\n    }\n    const lastContentIdx =\n      orderedContentIndices[orderedContentIndices.length - 1];\n    const contentView = orderedContentIndices.map((contentIdx) =\u003e {\n      const content = message.content[contentIdx];\n      const isLastBlock = contentIdx === lastContentIdx;\n      return renderMessageContent(\n        content,\n        messageIdx,\n        contentIdx,\n        thread,\n        dispatch,\n        message.usage,\n        isLastBlock,\n      );\n    });\n\n    const messageBody = d`\\\n${roleHeader}\\\n${gitUpdateView}\\\n${contextUpdateView}\\\n${contentView}`;\n\n    const renderedBody = isUserBlock\n      ? withExtmark(messageBody, {\n          hl_group: \"CursorLine\",\n          hl_eol: true,\n        })\n      : messageBody;\n\n    return d`${renderedBody}${forkedToAtIdx(messageIdx)}`;\n  });\n\n  const streamingBlockView =\n    agentStatus.type === \"streaming\"\n      ? d`\\n${renderStreamingBlock(thread)}\\n`\n      : d``;\n\n  const failedSubmit = thread.core.state.failedSubmit;\n  const failedSubmitView =\n    failedSubmit !== undefined\n      ? d`${withExtmark(\n          d`${withExtmark(d`# user:\\n`, {\n            hl_group: \"@markup.heading.1.markdown\",\n          })}${failedSubmit.userMessage}\\n`,\n          { hl_group: \"CursorLine\", hl_eol: true },\n        )}${withExtmark(d`Error: ${failedSubmit.errorMessage}\\n`, {\n          hl_group: \"ErrorMsg\",\n        })}`\n      : d``;\n\n  return d`\\\n${titleView}\n${systemPromptView}\n${toolDefinitionsView}\n${compactionHistoryView}\n${messagesView}\\\n${failedSubmitView}\\\n${streamingBlockView}\\\n${contextManagerView}\\\n${sandboxView}\\\n${pendingMessagesView}\\\n${trailingForkedToView}\\\n${editedFilesView}\n${statusView}`;\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function view",
-      "startLine": 588,
-      "startCol": 9,
-      "endLine": 658,
-      "endCol": 2
-    },
-    {
-      "text": "/** Render a single content block from a message */\nfunction renderMessageContent(\n  content: ProviderMessageContent,\n  messageIdx: number,\n  contentIdx: number,\n  thread: Thread,\n  dispatch: Dispatch\u003cMsg\u003e,\n  messageUsage: Usage | undefined,\n  isLastBlock: boolean,\n): VDOMNode {\n  const inner = renderMessageContentBlock(\n    content,\n    messageIdx,\n    contentIdx,\n    thread,\n    dispatch,\n    messageUsage,\n    isLastBlock,\n  );\n  // Wrap the inner block in a fresh `d` node so that its own bindings (e.g.\n  // \u003cCR\u003e to expand a thinking block) live on a child node and continue to\n  // take precedence per getBindings' \"most specific wins\" traversal. The F\n  // binding lives on the outer wrapper.\n  return withBindings(d`${inner}`",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderMessageContent\n\n/** Render a single content block from a message */\nfunction renderMessageContent(\n  content: ProviderMessageContent,\n  messageIdx: number,\n  contentIdx: number,\n  thread: Thread,\n  dispatch: Dispatch\u003cMsg\u003e,\n  messageUsage: Usage | undefined,\n  isLastBlock: boolean,\n): VDOMNode {\n  const inner = renderMessageContentBlock(\n    content,\n    messageIdx,\n    contentIdx,\n    thread,\n    dispatch,\n    messageUsage,\n    isLastBlock,\n  );\n  // Wrap the inner block in a fresh `d` node so that its own bindings (e.g.\n  // \u003cCR\u003e to expand a thinking block) live on a child node and continue to\n  // take precedence per getBindings' \"most specific wins\" traversal. The F\n  // binding lives on the outer wrapper.\n  return withBindings(d`${inner}`",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderMessageContent",
-      "startLine": 660,
-      "startCol": 1,
-      "endLine": 683,
-      "endCol": 34
-    },
-    {
-      "text": "    F: (ctx) =\u003e\n      dispatch({\n        type: \"fork-message\",\n        nativeMessageIdx: content.nativeMessageIdx,\n        ...(ctx?.selection ? { prepopulate: ctx.selection } : {}),\n      })",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderMessageContent \u003e function F\n\n    F: (ctx) =\u003e\n      dispatch({\n        type: \"fork-message\",\n        nativeMessageIdx: content.nativeMessageIdx,\n        ...(ctx?.selection ? { prepopulate: ctx.selection } : {}),\n      })",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderMessageContent \u003e function F",
-      "startLine": 684,
-      "startCol": 1,
-      "endLine": 689,
-      "endCol": 9
-    },
-    {
-      "text": "function renderMessageContentBlock(\n  content: ProviderMessageContent,\n  messageIdx: number,\n  contentIdx: number,\n  thread: Thread,\n  dispatch: Dispatch\u003cMsg\u003e,\n  messageUsage: Usage | undefined,\n  isLastBlock: boolean,\n): VDOMNode {\n  switch (content.type) {\n    case \"text\":\n      return d`${content.text}\\n`;\n\n    case \"thinking\": {\n      const viewState = thread.state.messageViewState[messageIdx];\n      const isExpanded = viewState?.expandedContent?.[contentIdx] || false;\n\n      if (isExpanded) {\n        return withBindings(\n          withExtmark(d`💭 [Thinking]\\n${content.thinking}\\n`, {\n            hl_group: \"@comment\",\n          }),\n          {\n            \"=\": () =\u003e {\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              });\n            },\n          },\n        );\n      } else {\n        return withBindings(\n          withExtmark(d`💭 [Thinking]\\n`, { hl_group: \"@comment\" }),\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          },\n        );\n      }\n    }\n\n    case \"redacted_thinking\":\n      return withExtmark(d`💭 [Redacted Thinking]\\n`, { hl_group: \"@comment\" });",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderMessageContentBlock\n\nfunction renderMessageContentBlock(\n  content: ProviderMessageContent,\n  messageIdx: number,\n  contentIdx: number,\n  thread: Thread,\n  dispatch: Dispatch\u003cMsg\u003e,\n  messageUsage: Usage | undefined,\n  isLastBlock: boolean,\n): VDOMNode {\n  switch (content.type) {\n    case \"text\":\n      return d`${content.text}\\n`;\n\n    case \"thinking\": {\n      const viewState = thread.state.messageViewState[messageIdx];\n      const isExpanded = viewState?.expandedContent?.[contentIdx] || false;\n\n      if (isExpanded) {\n        return withBindings(\n          withExtmark(d`💭 [Thinking]\\n${content.thinking}\\n`, {\n            hl_group: \"@comment\",\n          }),\n          {\n            \"=\": () =\u003e {\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              });\n            },\n          },\n        );\n      } else {\n        return withBindings(\n          withExtmark(d`💭 [Thinking]\\n`, { hl_group: \"@comment\" }),\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          },\n        );\n      }\n    }\n\n    case \"redacted_thinking\":\n      return withExtmark(d`💭 [Redacted Thinking]\\n`, { hl_group: \"@comment\" });",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderMessageContentBlock",
-      "startLine": 693,
-      "startCol": 1,
-      "endLine": 741,
-      "endCol": 83
-    },
-    {
-      "text": "case \"system_reminder\": {\n      const viewState = thread.state.messageViewState[messageIdx];\n      const isExpanded = viewState?.expandedContent?.[contentIdx] || false;\n\n      if (isExpanded) {\n        return withBindings(\n          withExtmark(d`📋 [System Reminder]\\n${content.text}\\n`, {\n            hl_group: \"@comment\",\n          }),\n          {\n            \"=\": () =\u003e {\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              });\n            },\n          },\n        );\n      } else {\n        // Render inline (no newline) so checkpoint can follow on same line\n        return withBindings(\n          withExtmark(d`📋 [System Reminder]\\n`, { hl_group: \"@comment\" }),\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          },\n        );\n      }\n    }\n\n    case \"system_info\": {\n      const viewState = thread.state.messageViewState[messageIdx];\n      const isExpanded = viewState?.expandedContent?.[contentIdx] || false;\n\n      if (isExpanded) {\n        return withBindings(\n          withExtmark(d`🖥️  [System Info]\\n${content.text}\\n`, {\n            hl_group: \"@comment\",\n          }),\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          },\n        );\n      } else {\n        return withBindings(\n          withExtmark(d`🖥️  [System Info]\\n`, { hl_group: \"@comment\" }),\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          },\n        );\n      }\n    }\n\n    case \"tool_use\"",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderMessageContentBlock\n\ncase \"system_reminder\": {\n      const viewState = thread.state.messageViewState[messageIdx];\n      const isExpanded = viewState?.expandedContent?.[contentIdx] || false;\n\n      if (isExpanded) {\n        return withBindings(\n          withExtmark(d`📋 [System Reminder]\\n${content.text}\\n`, {\n            hl_group: \"@comment\",\n          }),\n          {\n            \"=\": () =\u003e {\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              });\n            },\n          },\n        );\n      } else {\n        // Render inline (no newline) so checkpoint can follow on same line\n        return withBindings(\n          withExtmark(d`📋 [System Reminder]\\n`, { hl_group: \"@comment\" }),\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          },\n        );\n      }\n    }\n\n    case \"system_info\": {\n      const viewState = thread.state.messageViewState[messageIdx];\n      const isExpanded = viewState?.expandedContent?.[contentIdx] || false;\n\n      if (isExpanded) {\n        return withBindings(\n          withExtmark(d`🖥️  [System Info]\\n${content.text}\\n`, {\n            hl_group: \"@comment\",\n          }),\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          },\n        );\n      } else {\n        return withBindings(\n          withExtmark(d`🖥️  [System Info]\\n`, { hl_group: \"@comment\" }),\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          },\n        );\n      }\n    }\n\n    case \"tool_use\"",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderMessageContentBlock",
-      "startLine": 743,
-      "startCol": 5,
-      "endLine": 811,
-      "endCol": 20
-    },
-    {
-      "text": "if (content.request.status === \"error\") {\n        return d`Malformed request: ${content.request.error}\\n`;\n      }\n\n      const request = content.request.value;\n      const toolViewState = thread.state.toolViewState[request.id];\n\n      const displayContext = {\n        cwd: thread.context.cwd,\n        homeDir: thread.context.homeDir,\n      };\n      const renderContext = {\n        getDisplayWidth: thread.context.getDisplayWidth,\n        nvim: thread.context.nvim,\n        cwd: thread.context.cwd,\n        homeDir: thread.context.homeDir,\n        options: thread.context.options,\n        dispatch: thread.context.dispatch,\n        threadDispatch: dispatch,\n        chat: thread.context.chat,\n      };\n\n      // Check if tool is active (still running)\n      const activeEntry =\n        thread.core.state.mode.type === \"tool_use\" \u0026\u0026\n        thread.core.state.mode.activeTools.get(request.id);\n\n      const isActive = !!activeEntry;\n      const abortBinding = isActive",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderMessageContentBlock\n\nif (content.request.status === \"error\") {\n        return d`Malformed request: ${content.request.error}\\n`;\n      }\n\n      const request = content.request.value;\n      const toolViewState = thread.state.toolViewState[request.id];\n\n      const displayContext = {\n        cwd: thread.context.cwd,\n        homeDir: thread.context.homeDir,\n      };\n      const renderContext = {\n        getDisplayWidth: thread.context.getDisplayWidth,\n        nvim: thread.context.nvim,\n        cwd: thread.context.cwd,\n        homeDir: thread.context.homeDir,\n        options: thread.context.options,\n        dispatch: thread.context.dispatch,\n        threadDispatch: dispatch,\n        chat: thread.context.chat,\n      };\n\n      // Check if tool is active (still running)\n      const activeEntry =\n        thread.core.state.mode.type === \"tool_use\" \u0026\u0026\n        thread.core.state.mode.activeTools.get(request.id);\n\n      const isActive = !!activeEntry;\n      const abortBinding = isActive",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderMessageContentBlock",
-      "startLine": 812,
-      "startCol": 7,
-      "endLine": 840,
-      "endCol": 36
-    },
-    {
-      "text": "        ? { t: () =\u003e activeEntry?.handle.abort()",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderMessageContentBlock \u003e function t\n\n        ? { t: () =\u003e activeEntry?.handle.abort()",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderMessageContentBlock \u003e function t",
-      "startLine": 841,
-      "startCol": 1,
-      "endLine": 841,
-      "endCol": 49
-    },
-    {
-      "text": "{};\n\n      // A tool is \"in flight\" while its input is still streaming in or while it\n      // is executing - i.e. until a result has been recorded. Some tools (edl)\n      // show a streaming preview only while in flight.\n      const completedResult = isActive\n        ? undefined\n        : findToolResult(thread, request.id);\n      const inFlight = isActive || !completedResult;\n\n      // Show usage in details if this is the last block in the message\n      const usageInDetails =\n        isLastBlock \u0026\u0026 messageUsage ? d`\\n${renderUsage(messageUsage)}` : d``;\n\n      // Section 1: Tool summary (always shown)\n      const summaryView = withBindings(\n        d`${renderToolSummary(request, displayContext)}`,\n        {\n          \"=\": () =\u003e\n            dispatch({\n              type: \"toggle-tool-input-summary\",\n              toolRequestId: request.id,\n            }),\n          ...abortBinding,\n        },\n      );\n\n      // Section 2: Input summary expansion (pretty-printed if the tool\n      // provides one, otherwise a raw JSON.stringify of the input)\n      const inputSummaryContent =\n        renderToolInputSummaryExpansion(request) ??\n        d`${JSON.stringify(request.input, null, 2)}`;\n      const inputSummaryView = toolViewState?.inputSummaryExpanded\n        ? withBindings(d`\\n${inputSummaryContent}`, {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-tool-input-summary\",\n                toolRequestId: request.id,\n              }),\n          })\n        : d``;\n\n      // Section 3: Tool input (rich preview / detail)\n      const inputContent = renderToolInput(\n        request,\n        displayContext,\n        toolViewState?.inputExpanded || false,\n        inFlight,\n      );",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderMessageContentBlock\n\n{};\n\n      // A tool is \"in flight\" while its input is still streaming in or while it\n      // is executing - i.e. until a result has been recorded. Some tools (edl)\n      // show a streaming preview only while in flight.\n      const completedResult = isActive\n        ? undefined\n        : findToolResult(thread, request.id);\n      const inFlight = isActive || !completedResult;\n\n      // Show usage in details if this is the last block in the message\n      const usageInDetails =\n        isLastBlock \u0026\u0026 messageUsage ? d`\\n${renderUsage(messageUsage)}` : d``;\n\n      // Section 1: Tool summary (always shown)\n      const summaryView = withBindings(\n        d`${renderToolSummary(request, displayContext)}`,\n        {\n          \"=\": () =\u003e\n            dispatch({\n              type: \"toggle-tool-input-summary\",\n              toolRequestId: request.id,\n            }),\n          ...abortBinding,\n        },\n      );\n\n      // Section 2: Input summary expansion (pretty-printed if the tool\n      // provides one, otherwise a raw JSON.stringify of the input)\n      const inputSummaryContent =\n        renderToolInputSummaryExpansion(request) ??\n        d`${JSON.stringify(request.input, null, 2)}`;\n      const inputSummaryView = toolViewState?.inputSummaryExpanded\n        ? withBindings(d`\\n${inputSummaryContent}`, {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-tool-input-summary\",\n                toolRequestId: request.id,\n              }),\n          })\n        : d``;\n\n      // Section 3: Tool input (rich preview / detail)\n      const inputContent = renderToolInput(\n        request,\n        displayContext,\n        toolViewState?.inputExpanded || false,\n        inFlight,\n      );",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderMessageContentBlock",
-      "startLine": 842,
-      "startCol": 11,
-      "endLine": 890,
-      "endCol": 9
-    },
-    {
-      "text": "const inputView = inputContent\n        ? withBindings(d`\\n${inputContent}`, {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-tool-input\",\n                toolRequestId: request.id,\n              }),\n            ...abortBinding,\n          })\n        : d``;\n\n      // Section 4: Progress (in-flight only)\n      let progressView: VDOMNode = d``;\n      if (activeEntry) {\n        const progressContent = renderToolProgress(\n          activeEntry.request,\n          activeEntry.progress,\n          renderContext,\n          toolViewState?.progressExpanded || false,\n          toolViewState || {\n            inputSummaryExpanded: false,\n            inputExpanded: false,\n            progressExpanded: false,\n            resultSummaryExpanded: false,\n            resultExpanded: false,\n          },\n          request.id,\n        );\n        if (progressContent) {\n          progressView = withBindings(d`\\n${progressContent}`, {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-tool-progress\",\n                toolRequestId: request.id,\n              }),\n            ...abortBinding,\n          });\n        }\n      }\n\n      // Sections 5-7: Result (completed only)\n      let resultSummaryView: VDOMNode = d``;\n      let resultSummaryExpansionView: VDOMNode = d``;\n      let resultView: VDOMNode = d``;\n\n      if (!activeEntry) {\n        const toolResult = completedResult;\n        if (!toolResult) {\n          return d`⚠️ tool result for ${request.id} not found\\n`;\n        }\n\n        const completedInfo: CompletedToolInfo = {\n          request: request,\n          result: toolResult,\n          structuredResult:\n            toolResult.result.status === \"ok\"\n              ? toolResult.result.structuredResult\n              : { toolName: request.toolName as ToolName },\n        };",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderMessageContentBlock\n\nconst inputView = inputContent\n        ? withBindings(d`\\n${inputContent}`, {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-tool-input\",\n                toolRequestId: request.id,\n              }),\n            ...abortBinding,\n          })\n        : d``;\n\n      // Section 4: Progress (in-flight only)\n      let progressView: VDOMNode = d``;\n      if (activeEntry) {\n        const progressContent = renderToolProgress(\n          activeEntry.request,\n          activeEntry.progress,\n          renderContext,\n          toolViewState?.progressExpanded || false,\n          toolViewState || {\n            inputSummaryExpanded: false,\n            inputExpanded: false,\n            progressExpanded: false,\n            resultSummaryExpanded: false,\n            resultExpanded: false,\n          },\n          request.id,\n        );\n        if (progressContent) {\n          progressView = withBindings(d`\\n${progressContent}`, {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-tool-progress\",\n                toolRequestId: request.id,\n              }),\n            ...abortBinding,\n          });\n        }\n      }\n\n      // Sections 5-7: Result (completed only)\n      let resultSummaryView: VDOMNode = d``;\n      let resultSummaryExpansionView: VDOMNode = d``;\n      let resultView: VDOMNode = d``;\n\n      if (!activeEntry) {\n        const toolResult = completedResult;\n        if (!toolResult) {\n          return d`⚠️ tool result for ${request.id} not found\\n`;\n        }\n\n        const completedInfo: CompletedToolInfo = {\n          request: request,\n          result: toolResult,\n          structuredResult:\n            toolResult.result.status === \"ok\"\n              ? toolResult.result.structuredResult\n              : { toolName: request.toolName as ToolName },\n        };",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderMessageContentBlock",
-      "startLine": 891,
-      "startCol": 7,
-      "endLine": 949,
-      "endCol": 11
-    },
-    {
-      "text": "// Section 5: Result summary\n        resultSummaryView = withBindings(\n          d`\\n${renderToolResultSummary(completedInfo, displayContext)}`,\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-tool-result-summary\",\n                toolRequestId: request.id,\n              }),\n          },\n        );\n\n        // Section 6: Result summary expansion (pretty-printed if the tool\n        // provides one, otherwise a raw JSON.stringify of the result)\n        if (toolViewState?.resultSummaryExpanded) {\n          const prettyResult = renderToolResultSummaryExpansion(completedInfo);\n          const resultContent =\n            prettyResult ??\n            (toolResult.result.status === \"ok\"\n              ? d`${JSON.stringify(toolResult.result.value, null, 2)}`\n              : d`${JSON.stringify({ error: toolResult.result.error }, null, 2)}`);\n          resultSummaryExpansionView = withBindings(d`\\n${resultContent}`, {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-tool-result-summary\",\n                toolRequestId: request.id,\n              }),\n          });\n        }\n\n        // Section 7: Result detail (each tool owns its own bindings)\n        const effectiveToolViewState: ToolViewState = toolViewState || {\n          inputSummaryExpanded: false,\n          inputExpanded: false,\n          progressExpanded: false,\n          resultSummaryExpanded: false,\n          resultExpanded: false,\n        };\n        const resultContent = renderToolResult(\n          completedInfo,\n          renderContext,\n          effectiveToolViewState,\n          request.id,\n        );\n        if (resultContent) {\n          resultView = d`\\n${resultContent}`;\n        }\n      }\n\n      return d`${summaryView}${inputSummaryView}${inputView}${progressView}${resultSummaryView}${resultSummaryExpansionView}${resultView}${usageInDetails}\\n`;",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderMessageContentBlock\n\n// Section 5: Result summary\n        resultSummaryView = withBindings(\n          d`\\n${renderToolResultSummary(completedInfo, displayContext)}`,\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-tool-result-summary\",\n                toolRequestId: request.id,\n              }),\n          },\n        );\n\n        // Section 6: Result summary expansion (pretty-printed if the tool\n        // provides one, otherwise a raw JSON.stringify of the result)\n        if (toolViewState?.resultSummaryExpanded) {\n          const prettyResult = renderToolResultSummaryExpansion(completedInfo);\n          const resultContent =\n            prettyResult ??\n            (toolResult.result.status === \"ok\"\n              ? d`${JSON.stringify(toolResult.result.value, null, 2)}`\n              : d`${JSON.stringify({ error: toolResult.result.error }, null, 2)}`);\n          resultSummaryExpansionView = withBindings(d`\\n${resultContent}`, {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-tool-result-summary\",\n                toolRequestId: request.id,\n              }),\n          });\n        }\n\n        // Section 7: Result detail (each tool owns its own bindings)\n        const effectiveToolViewState: ToolViewState = toolViewState || {\n          inputSummaryExpanded: false,\n          inputExpanded: false,\n          progressExpanded: false,\n          resultSummaryExpanded: false,\n          resultExpanded: false,\n        };\n        const resultContent = renderToolResult(\n          completedInfo,\n          renderContext,\n          effectiveToolViewState,\n          request.id,\n        );\n        if (resultContent) {\n          resultView = d`\\n${resultContent}`;\n        }\n      }\n\n      return d`${summaryView}${inputSummaryView}${inputView}${progressView}${resultSummaryView}${resultSummaryExpansionView}${resultView}${usageInDetails}\\n`;",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderMessageContentBlock",
-      "startLine": 951,
-      "startCol": 9,
-      "endLine": 1000,
-      "endCol": 159
-    },
-    {
-      "text": "case \"tool_result\":\n      // Tool results are rendered with their corresponding tool_use\n      return d``;\n\n    case \"image\":\n      return d``;\n\n    case \"document\":\n      return d`[Document${content.title ? `: ${content.title}` : \"\"}]\\n`;\n\n    case \"server_tool_use\":\n      return d`🔍 Searching ${withExtmark(d`${content.input.query}`, { hl_group: \"@string\" })}...\\n`;\n\n    case \"web_search_tool_result\": {\n      const viewState = thread.state.messageViewState[messageIdx];\n      const isExpanded = viewState?.expandedContent?.[contentIdx] || false;\n\n      if (\n        \"type\" in content.content \u0026\u0026\n        content.content.type === \"web_search_tool_result_error\"\n      ) {\n        return d`🌐 Search error: ${withExtmark(d`${content.content.error_code}`, { hl_group: \"ErrorMsg\" })}\\n`;\n      }\n      if (Array.isArray(content.content)) {\n        const searchResults = content.content.filter(\n          (\n            r,\n          ): r is Extract\u003c\n            (typeof content.content)[number],\n            { type: \"web_search_result\" }\n          \u003e =\u003e r.type === \"web_search_result\",\n        );\n        if (isExpanded) {\n          const results = searchResults.map(\n            (r) =\u003e\n              d`  [${r.title}](${r.url})${r.page_age ? ` (${r.page_age})` : \"\"}\\n`,\n          );\n          return withBindings(d`🌐 Search results\\n${results}\\n`, {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          });\n        }\n        return withBindings(\n          d`🌐 ${searchResults.length.toString()} search result${searchResults.length === 1 ? \"\" : \"s\"}\\n`,\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          },\n        );\n      }\n      return d`🌐 Search results\\n`;\n    }",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderMessageContentBlock\n\ncase \"tool_result\":\n      // Tool results are rendered with their corresponding tool_use\n      return d``;\n\n    case \"image\":\n      return d``;\n\n    case \"document\":\n      return d`[Document${content.title ? `: ${content.title}` : \"\"}]\\n`;\n\n    case \"server_tool_use\":\n      return d`🔍 Searching ${withExtmark(d`${content.input.query}`, { hl_group: \"@string\" })}...\\n`;\n\n    case \"web_search_tool_result\": {\n      const viewState = thread.state.messageViewState[messageIdx];\n      const isExpanded = viewState?.expandedContent?.[contentIdx] || false;\n\n      if (\n        \"type\" in content.content \u0026\u0026\n        content.content.type === \"web_search_tool_result_error\"\n      ) {\n        return d`🌐 Search error: ${withExtmark(d`${content.content.error_code}`, { hl_group: \"ErrorMsg\" })}\\n`;\n      }\n      if (Array.isArray(content.content)) {\n        const searchResults = content.content.filter(\n          (\n            r,\n          ): r is Extract\u003c\n            (typeof content.content)[number],\n            { type: \"web_search_result\" }\n          \u003e =\u003e r.type === \"web_search_result\",\n        );\n        if (isExpanded) {\n          const results = searchResults.map(\n            (r) =\u003e\n              d`  [${r.title}](${r.url})${r.page_age ? ` (${r.page_age})` : \"\"}\\n`,\n          );\n          return withBindings(d`🌐 Search results\\n${results}\\n`, {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          });\n        }\n        return withBindings(\n          d`🌐 ${searchResults.length.toString()} search result${searchResults.length === 1 ? \"\" : \"s\"}\\n`,\n          {\n            \"=\": () =\u003e\n              dispatch({\n                type: \"toggle-expand-content\",\n                messageIdx,\n                contentIdx,\n              }),\n          },\n        );\n      }\n      return d`🌐 Search results\\n`;\n    }",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderMessageContentBlock",
-      "startLine": 1003,
-      "startCol": 5,
-      "endLine": 1062,
-      "endCol": 6
-    },
-    {
-      "text": "case \"fork_notification\": {\n      const viewState = thread.state.messageViewState[messageIdx];\n      const parentThreadId = viewState?.forkedFrom;\n      const shortId = parentThreadId ? parentThreadId.slice(-8) : \"unknown\";\n      const line = withExtmark(d`↰ forked from ${shortId}\\n`, {\n        hl_group: \"@comment\",\n      });\n      if (!parentThreadId) {\n        return line;\n      }\n      return withBindings(line, {\n        \"\u003cCR\u003e\": () =\u003e\n          thread.context.dispatch({\n            type: \"select-thread-effect\",\n            id: parentThreadId,\n          }),\n      });\n    }\n\n    case \"context_update\":\n      // Context updates are rendered via thread.state.messageViewState\n      return d``;\n\n    default:\n      return d`[Unknown content type]\\n`;\n  }\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderMessageContentBlock\n\ncase \"fork_notification\": {\n      const viewState = thread.state.messageViewState[messageIdx];\n      const parentThreadId = viewState?.forkedFrom;\n      const shortId = parentThreadId ? parentThreadId.slice(-8) : \"unknown\";\n      const line = withExtmark(d`↰ forked from ${shortId}\\n`, {\n        hl_group: \"@comment\",\n      });\n      if (!parentThreadId) {\n        return line;\n      }\n      return withBindings(line, {\n        \"\u003cCR\u003e\": () =\u003e\n          thread.context.dispatch({\n            type: \"select-thread-effect\",\n            id: parentThreadId,\n          }),\n      });\n    }\n\n    case \"context_update\":\n      // Context updates are rendered via thread.state.messageViewState\n      return d``;\n\n    default:\n      return d`[Unknown content type]\\n`;\n  }\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderMessageContentBlock",
-      "startLine": 1064,
-      "startCol": 5,
-      "endLine": 1090,
-      "endCol": 2
-    },
-    {
-      "text": "/** Find the tool result for a given tool request ID using the cached map */\nexport function findToolResult(\n  thread: Thread,\n  toolRequestId: ToolRequestId,\n): ProviderToolResult | undefined {\n  return thread.state.toolResultMap.get(toolRequestId);\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function findToolResult\n\n/** Find the tool result for a given tool request ID using the cached map */\nexport function findToolResult(\n  thread: Thread,\n  toolRequestId: ToolRequestId,\n): ProviderToolResult | undefined {\n  return thread.state.toolResultMap.get(toolRequestId);\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function findToolResult",
-      "startLine": 1092,
-      "startCol": 1,
-      "endLine": 1098,
-      "endCol": 2
-    },
-    {
-      "text": "function renderStreamingBlock(thread: Thread): string | VDOMNode {\n  const state = thread.agent.getState();\n  const block = state.streamingBlock;\n  if (!block) return d``;\n\n  switch (block.type) {\n    case \"text\":\n      return d`${block.text}`;\n    case \"thinking\": {\n      const lastLine = block.thinking.slice(\n        block.thinking.lastIndexOf(\"\\n\") + 1,\n      );\n      return withExtmark(d`\\n💭 [Thinking] ${lastLine}`, {\n        hl_group: \"@comment\",\n      });\n    }\n    case \"tool_use\": {\n      return renderStreamdedTool(block);\n    }\n  }\n}",
-      "contextualizedText": "// node/chat/thread-view.ts \u003e function renderStreamingBlock\n\nfunction renderStreamingBlock(thread: Thread): string | VDOMNode {\n  const state = thread.agent.getState();\n  const block = state.streamingBlock;\n  if (!block) return d``;\n\n  switch (block.type) {\n    case \"text\":\n      return d`${block.text}`;\n    case \"thinking\": {\n      const lastLine = block.thinking.slice(\n        block.thinking.lastIndexOf(\"\\n\") + 1,\n      );\n      return withExtmark(d`\\n💭 [Thinking] ${lastLine}`, {\n        hl_group: \"@comment\",\n      });\n    }\n    case \"tool_use\": {\n      return renderStreamdedTool(block);\n    }\n  }\n}",
-      "headingContext": "node/chat/thread-view.ts \u003e function renderStreamingBlock",
-      "startLine": 1100,
-      "startCol": 1,
-      "endLine": 1120,
-      "endCol": 2
-    },
-    {
-      "text": "export const LOGO = readFileSync(\n  join(dirname(fileURLToPath(import.meta.url)), \"logo.txt\"),\n  \"utf-8\",\n);\n\nconst MESSAGE_ANIMATION = [\"⠁\", \"⠂\", \"⠄\", \"⠂\"];",
-      "contextualizedText": "// node/chat/thread-view.ts\n\nexport const LOGO = readFileSync(\n  join(dirname(fileURLToPath(import.meta.url)), \"logo.txt\"),\n  \"utf-8\",\n);\n\nconst MESSAGE_ANIMATION = [\"⠁\", \"⠂\", \"⠄\", \"⠂\"];",
-      "headingContext": "node/chat/thread-view.ts",
-      "startLine": 1122,
-      "startCol": 1,
-      "endLine": 1127,
-      "endCol": 56
+      "start": 32811,
+      "end": 34547
     }
   ]
 }

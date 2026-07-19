@@ -1,24 +1,11 @@
 {
   "blobSha": "0043aaef2ad1d23dad9431220bc64f59640c7501",
   "modelName": "voyage-context-4@256",
+  "version": 10,
   "chunks": [
     {
-      "text": "import { execFile as execFileCb } from \"node:child_process\";\nimport * as fs from \"node:fs\";\nimport * as os from \"node:os\";\nimport * as path from \"node:path\";\nimport { promisify } from \"node:util\";\nimport type { TeardownResult } from \"./types.ts\";\n\nconst execFile = promisify(execFileCb);",
-      "contextualizedText": "// node/core/src/container/teardown.ts\n\nimport { execFile as execFileCb } from \"node:child_process\";\nimport * as fs from \"node:fs\";\nimport * as os from \"node:os\";\nimport * as path from \"node:path\";\nimport { promisify } from \"node:util\";\nimport type { TeardownResult } from \"./types.ts\";\n\nconst execFile = promisify(execFileCb);",
-      "headingContext": "node/core/src/container/teardown.ts",
-      "startLine": 1,
-      "startCol": 1,
-      "endLine": 8,
-      "endCol": 40
-    },
-    {
-      "text": "export async function teardownContainer({\n  containerName,\n  workspacePath,\n  hostDir,\n  onProgress,\n}: {\n  containerName: string;\n  workspacePath: string;\n  hostDir: string;\n  onProgress?: (message: string) =\u003e void;\n}): Promise\u003cTeardownResult\u003e {\n  const progress = onProgress ?? (() =\u003e {});\n\n  const tempDir = await fs.promises.mkdtemp(\n    path.join(os.tmpdir(), \"magenta-teardown-\"),\n  );\n\n  try {\n    progress(\"Copying files from container...\");\n    const containerSrc = `${containerName}:${workspacePath}/.`;\n    const tempDest = path.join(tempDir, \"workspace\");\n    await fs.promises.mkdir(tempDest, { recursive: true });\n    await execFile(\"docker\", [\"cp\", containerSrc, tempDest]);\n\n    progress(\"Syncing files to host directory...\");\n    const rsyncArgs = [\"-a\", \"--delete\", \"--exclude=.magenta/options.json\"];\n\n    const dockerignorePath = path.join(hostDir, \".dockerignore\");\n    try {\n      await fs.promises.access(dockerignorePath);\n      rsyncArgs.push(`--exclude-from=${dockerignorePath}`);\n    } catch {\n      // no .dockerignore, sync everything\n    }\n\n    // trailing slash on source is important for rsync\n    rsyncArgs.push(`${tempDest}/`, `${hostDir}/`);\n\n    const { stdout } = await execFile(\"rsync\", rsyncArgs);\n    const syncedFiles = stdout\n      .split(\"\\n\")\n      .filter((line) =\u003e line.length \u003e 0).length;\n\n    progress(\"Removing container...\");\n    await execFile(\"docker\", [\"rm\", \"-f\", containerName]).catch(() =\u003e {});\n\n    return { syncedFiles };\n  } finally {\n    await fs.promises.rm(tempDir, { recursive: true, force: true });\n  }\n}",
-      "contextualizedText": "// node/core/src/container/teardown.ts \u003e function teardownContainer\n\nexport async function teardownContainer({\n  containerName,\n  workspacePath,\n  hostDir,\n  onProgress,\n}: {\n  containerName: string;\n  workspacePath: string;\n  hostDir: string;\n  onProgress?: (message: string) =\u003e void;\n}): Promise\u003cTeardownResult\u003e {\n  const progress = onProgress ?? (() =\u003e {});\n\n  const tempDir = await fs.promises.mkdtemp(\n    path.join(os.tmpdir(), \"magenta-teardown-\"),\n  );\n\n  try {\n    progress(\"Copying files from container...\");\n    const containerSrc = `${containerName}:${workspacePath}/.`;\n    const tempDest = path.join(tempDir, \"workspace\");\n    await fs.promises.mkdir(tempDest, { recursive: true });\n    await execFile(\"docker\", [\"cp\", containerSrc, tempDest]);\n\n    progress(\"Syncing files to host directory...\");\n    const rsyncArgs = [\"-a\", \"--delete\", \"--exclude=.magenta/options.json\"];\n\n    const dockerignorePath = path.join(hostDir, \".dockerignore\");\n    try {\n      await fs.promises.access(dockerignorePath);\n      rsyncArgs.push(`--exclude-from=${dockerignorePath}`);\n    } catch {\n      // no .dockerignore, sync everything\n    }\n\n    // trailing slash on source is important for rsync\n    rsyncArgs.push(`${tempDest}/`, `${hostDir}/`);\n\n    const { stdout } = await execFile(\"rsync\", rsyncArgs);\n    const syncedFiles = stdout\n      .split(\"\\n\")\n      .filter((line) =\u003e line.length \u003e 0).length;\n\n    progress(\"Removing container...\");\n    await execFile(\"docker\", [\"rm\", \"-f\", containerName]).catch(() =\u003e {});\n\n    return { syncedFiles };\n  } finally {\n    await fs.promises.rm(tempDir, { recursive: true, force: true });\n  }\n}",
-      "headingContext": "node/core/src/container/teardown.ts \u003e function teardownContainer",
-      "startLine": 10,
-      "startCol": 1,
-      "endLine": 60,
-      "endCol": 2
+      "start": 0,
+      "end": 1857
     }
   ]
 }
