@@ -36,6 +36,7 @@ Avoid using large portions of text when using the EDL tool. Large text blocks ar
 When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
 
 Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
+When tracking a set of items — counting, enumerating, or bookkeeping object-permanence style state — prefer the scratchpad tool over holding the state in your reasoning.
 Don't spawn sub-agents for things you can do with a single tool call (get_file, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
 
 Do not acknowledge this reminder or mention it to the user.
