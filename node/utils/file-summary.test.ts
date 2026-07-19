@@ -57,21 +57,61 @@ describe("chunkFile", () => {
     expect(chunks[0]).toEqual({
       text: "line one",
       line: 1,
+      endLine: 1,
       col: 0,
       tokens: buildFrequencyTable(["line", "one"]),
     });
     expect(chunks[1]).toEqual({
       text: "line two",
       line: 2,
+      endLine: 2,
       col: 0,
       tokens: buildFrequencyTable(["line", "two"]),
     });
     expect(chunks[2]).toEqual({
       text: "line three",
       line: 3,
+      endLine: 3,
       col: 0,
       tokens: buildFrequencyTable(["line", "three"]),
     });
+  });
+
+  it("groups a scope-opening line with its body into one chunk", () => {
+    const content = ["function foo() {", "  const x = 1;", "  return x;", "}"].join(
+      "\n",
+    );
+    const chunks = chunkFile(content);
+    // The header + body fold into a single chunk (under the char threshold),
+    // then the closing brace is its own chunk.
+    expect(chunks[0].text).toBe("function foo() {\n  const x = 1;\n  return x;");
+    expect(chunks[0].line).toBe(1);
+    expect(chunks[0].endLine).toBe(3);
+    expect(chunks[1].text).toBe("}");
+    expect(chunks[1].line).toBe(4);
+  });
+
+  it("never places a source line in more than one chunk", () => {
+    const content = [
+      "class Foo {",
+      "  method() {",
+      "    return 1;",
+      "  }",
+      "",
+      "  other() {",
+      "    return 2;",
+      "  }",
+      "}",
+    ].join("\n");
+    const chunks = chunkFile(content);
+    const covered = new Set<number>();
+    for (const chunk of chunks) {
+      if (chunk.col > 0) continue;
+      for (let ln = chunk.line; ln <= (chunk.endLine ?? chunk.line); ln++) {
+        expect(covered.has(ln)).toBe(false);
+        covered.add(ln);
+      }
+    }
   });
 
   it("splits long lines into sub-chunks at word boundaries", () => {
@@ -124,6 +164,7 @@ describe("chunkFile", () => {
     expect(chunks[0]).toEqual({
       text: "",
       line: 1,
+      endLine: 1,
       col: 0,
       tokens: buildFrequencyTable([]),
     });
@@ -165,6 +206,22 @@ describe("computeScopeSize", () => {
     expect(computeScopeSize(lines, 0)).toBe(3);
   });
 
+  it("stops at a populated lower-indent line after blank lines", () => {
+    const lines = [
+      "class Foo {",
+      "  method() {",
+      "    return 1;",
+      "  }",
+      "",
+      "",
+      "  other() {}",
+      "}",
+    ];
+    // From line 1 ("  method() {", indent 2): line 2 indent 4 (deeper),
+    // line 3 indent 2 (same -> stop). Blank lines don't extend the scope.
+    expect(computeScopeSize(lines, 1)).toBe(1);
+  });
+
   it("handles flat imports (no deeper indentation)", () => {
     const lines = [
       "import { a } from 'a';",
@@ -191,7 +248,7 @@ describe("scoreChunk", () => {
       tokens: buildFrequencyTable([]),
     };
     const freq = new Map<string, number>();
-    expect(scoreChunk(chunk, freq, 10, 0, new Set())).toBe(0);
+    expect(scoreChunk(chunk, freq, 10, 0)).toBe(0);
   });
 
   it("scope headers outscore leaf statements", () => {
@@ -221,16 +278,8 @@ describe("scoreChunk", () => {
       "y",
     ]);
     const totalTokens = 8;
-    const seenTokens = new Set<string>();
-
-    const headerScore = scoreChunk(
-      headerChunk,
-      freq,
-      totalTokens,
-      10,
-      seenTokens,
-    );
-    const leafScore = scoreChunk(leafChunk, freq, totalTokens, 0, seenTokens);
+    const headerScore = scoreChunk(headerChunk, freq, totalTokens, 10);
+    const leafScore = scoreChunk(leafChunk, freq, totalTokens, 0);
 
     expect(headerScore).toBeGreaterThan(leafScore);
   });
@@ -252,39 +301,67 @@ describe("scoreChunk", () => {
       tokens: buildFrequencyTable(tokens),
     };
 
-    const seenTokens = new Set<string>();
-    const topScore = scoreChunk(topLevel, freq, 2, 0, seenTokens);
-    // Reset seen tokens so both get same first-occurrence bonus
-    const seenTokens2 = new Set<string>();
-    const indentedScore = scoreChunk(indented, freq, 2, 0, seenTokens2);
+    const topScore = scoreChunk(topLevel, freq, 2, 0);
+    const indentedScore = scoreChunk(indented, freq, 2, 0);
 
-    // indentWeight for topLevel: 1/(1+0) = 1
-    // indentWeight for indented: 1/(1+8) = 1/9
+    // The indented chunk is penalized by indentWeight.
     expect(topScore).toBeGreaterThan(indentedScore);
   });
 
-  it("first-occurrence bonus increases score", () => {
-    const chunk: Chunk = {
-      text: "unique_token",
+  it("a contentless line with large scope scores below a rich signature", () => {
+    const freq = buildFrequencyTable([
+      "if",
+      "if",
+      "if",
+      "export",
+      "function",
+      "isRetryableError",
+      "error",
+      "Error",
+      "boolean",
+    ]);
+    const totalTokens = 9;
+
+    const bareIf: Chunk = {
+      text: "  if (",
       line: 1,
       col: 0,
-      tokens: buildFrequencyTable(["unique_token"]),
+      tokens: buildFrequencyTable(["if"]),
     };
-    const freq = new Map([["unique_token", 1]]);
+    const signature: Chunk = {
+      text: "export function isRetryableError(error: Error): boolean {",
+      line: 1,
+      col: 0,
+      tokens: buildFrequencyTable([
+        "export",
+        "function",
+        "isRetryableError",
+        "error",
+        "Error",
+        "boolean",
+      ]),
+    };
 
-    const withBonus = scoreChunk(chunk, freq, 10, 0, new Set());
-    const withoutBonus = scoreChunk(
-      chunk,
-      freq,
-      10,
-      0,
-      new Set(["unique_token"]),
-    );
+    // Give the bare `if (` a large scope and the signature none.
+    const ifScore = scoreChunk(bareIf, freq, totalTokens, 30);
+    const sigScore = scoreChunk(signature, freq, totalTokens, 0);
 
-    // First occurrence gets 2x multiplier on self-information
-    expect(withBonus).toBeGreaterThan(withoutBonus);
-    // Specifically, with 1 token, the ratio should be exactly 2
-    expect(withBonus / withoutBonus).toBeCloseTo(2);
+    expect(sigScore).toBeGreaterThan(ifScore);
+  });
+
+  it("larger scope increases score", () => {
+    const chunk: Chunk = {
+      text: "class Foo {",
+      line: 1,
+      col: 0,
+      tokens: buildFrequencyTable(["class", "Foo"]),
+    };
+    const freq = buildFrequencyTable(["class", "Foo"]);
+
+    const smallScope = scoreChunk(chunk, freq, 2, 4);
+    const largeScope = scoreChunk(chunk, freq, 2, 100);
+
+    expect(largeScope).toBeGreaterThan(smallScope);
   });
 });
 
@@ -566,7 +643,7 @@ describe("formatSummary", () => {
     );
   });
 
-  it("shows gap summaries between non-adjacent chunks", () => {
+  it("omits gap markers between non-adjacent chunks", () => {
     const result = formatSummary({
       totalLines: 20,
       totalChars: 500,
@@ -585,10 +662,12 @@ describe("formatSummary", () => {
         },
       ],
     });
-    expect(result).toContain("... (8 lines omitted) ...");
+    expect(result).not.toContain("omitted");
+    expect(result).toContain("L1\nline one");
+    expect(result).toContain("L10\nline ten");
   });
 
-  it("shows trailing gap", () => {
+  it("omits trailing gap marker", () => {
     const result = formatSummary({
       totalLines: 50,
       totalChars: 1000,
@@ -601,10 +680,10 @@ describe("formatSummary", () => {
         },
       ],
     });
-    expect(result).toContain("... (49 lines omitted) ...");
+    expect(result).not.toContain("omitted");
   });
 
-  it("formats line numbers with padding", () => {
+  it("emits a line header at the start of each run", () => {
     const result = formatSummary({
       totalLines: 1000,
       totalChars: 50000,
@@ -623,12 +702,11 @@ describe("formatSummary", () => {
         },
       ],
     });
-    // totalLines=1000 -> lineNumWidth = 4
-    expect(result).toContain("   1| start");
-    expect(result).toContain(" 500| middle");
+    expect(result).toContain("L1\nstart");
+    expect(result).toContain("L500\nmiddle");
   });
 
-  it("includes col marker for sub-chunks", () => {
+  it("renders sub-chunks as bare continuation lines", () => {
     const result = formatSummary({
       totalLines: 10,
       totalChars: 500,
@@ -647,10 +725,7 @@ describe("formatSummary", () => {
         },
       ],
     });
-    // col 0 -> no col marker
-    expect(result).toContain(" 1| start of long line");
-    // col 100 -> col marker
-    expect(result).toContain(" 1:100| continuation");
+    expect(result).toContain("L1\nstart of long line\ncontinuation");
   });
 
   it("no gap between consecutive lines", () => {
