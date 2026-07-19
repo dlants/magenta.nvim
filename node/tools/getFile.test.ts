@@ -74,7 +74,7 @@ it("should expand get_file tool input on <CR>", async () => {
     });
 
     // Press = on the summary to expand input details
-    await driver.triggerDisplayBufferKeyOnContent(`\`poem.txt\``, "=");
+    await driver.triggerDisplayBufferKeyOnContent(`read 1 file`, "=");
 
     // Verify the JSON input is now visible (not file content, since get_file has no result detail)
     await driver.assertDisplayBufferContains('"filePath": "./poem.txt"');
@@ -115,6 +115,41 @@ it("expands a file's sent content with = on its result line", async () => {
     await driver.assertDisplayBufferContains(
       "Moonlight whispers through the trees,",
     );
+  });
+});
+
+it("expands the correct file's content when reading multiple files", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText(`Read poem.txt and poem 3.txt`);
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({
+      stopReason: "tool_use",
+      text: "ok, here goes",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "request_id" as ToolRequestId,
+            toolName: "get_files" as ToolName,
+            input: {
+              files: [
+                { filePath: "./poem.txt" as UnresolvedFilePath },
+                { filePath: "./poem 3.txt" as UnresolvedFilePath },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    await driver.assertDisplayBufferContains("`poem 3.txt` (~");
+
+    // Expanding the second file should show its content, not the first file's.
+    await driver.triggerDisplayBufferKeyOnContent("`poem 3.txt` (~", "=");
+    await driver.assertDisplayBufferContains("poem3");
   });
 });
 

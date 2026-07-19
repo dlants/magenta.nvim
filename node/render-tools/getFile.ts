@@ -1,47 +1,23 @@
-import type {
-  CompletedToolInfo,
-  DisplayContext,
-  ProviderToolResultContent,
-  ToolRequestId,
-  ToolRequest as UnionToolRequest,
+import { d, type VDOMNode, withBindings } from "../tea/view.ts";
+import {
+  type DisplayContext,
+  type ToolRequest,
 } from "@magenta/core";
-import type { ToolViewState } from "../chat/thread.ts";
-import type { Dispatch } from "../tea/tea.ts";
+import type { CompletedToolInfo } from "@magenta/core";
 import {
-  d,
-  type VDOMNode,
-  withBindings,
-  withCode,
-  withInlineCode,
-} from "../tea/view.ts";
-import {
+  type AbsFilePath,
   displayPath,
   resolveFilePath,
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 import { formatTokens } from "../utils/tokens.ts";
+import type * as GetFile from "../../node/core/src/tools/getFile.ts";
+import type { RenderContext } from "./index.ts";
+import type { ToolViewState } from "../chat/thread.ts";
+import type { ToolRequestId } from "@magenta/core";
 
-export type RenderContext = {
-  cwd: DisplayContext["cwd"];
-  homeDir: DisplayContext["homeDir"];
-  threadDispatch: Dispatch<{
-    type: "toggle-tool-result-item";
-    toolRequestId: ToolRequestId;
-    itemKey: string;
-  }>;
-};
-
-type FileRequest = {
-  filePath: UnresolvedFilePath;
-  force?: boolean;
-  pdfPage?: number;
-  startLine?: number;
-  numLines?: number;
-};
-
-type Input = {
-  files: FileRequest[];
-};
+type FileRequest = GetFile.FileRequest;
+type Input = GetFile.Input;
 
 function formatFileDisplay(
   file: FileRequest,
@@ -68,39 +44,70 @@ function formatFileDisplay(
         ? ` (lines ${start}-${start + num - 1})`
         : ` (from line ${start})`;
   }
-  return withInlineCode(d`\`${pathForDisplay}\`${extraInfo}`);
+  return d`\`${pathForDisplay}\`${extraInfo}`;
 }
 
 export function renderSummary(
-  request: UnionToolRequest,
-  displayContext: DisplayContext,
+  request: ToolRequest,
+  _displayContext: DisplayContext,
 ): VDOMNode {
   const input = request.input as Input;
-  if (input.files.length === 1) {
-    return d`👀 ${formatFileDisplay(input.files[0], displayContext)}`;
-  }
-  return d`👀${input.files.map(
-    (file) => d`\n  ${formatFileDisplay(file, displayContext)}`,
-  )}`;
+
+  return d`👀 read ${input.files.length.toString()} ${input.files.length === 1 ? "file" : "files"}`;
 }
 
-/** Split the result content blocks into per-file groups, delimited by the
- * `=== <path> ===` header block that precedes each file's content. */
-function groupBlocksByFile(
-  value: ProviderToolResultContent[],
-): ProviderToolResultContent[][] {
-  const groups: ProviderToolResultContent[][] = [];
-  for (const block of value) {
-    if (
-      block.type === "text" &&
-      /^=== .* ===$/.test(block.text.split("\n")[0])
-    ) {
-      groups.push([]);
-    } else if (groups.length > 0) {
-      groups[groups.length - 1].push(block);
-    }
+function estimateTokens(text: string | undefined): string {
+  if (!text) return "(0 tok)";
+  return `(${formatTokens(text.length)})`;
+}
+
+type PerFileInfo = {
+  fileDisplay: VDOMNode;
+  isError: boolean;
+  contentText: string;
+};
+
+function computeFileInfos(
+  info: CompletedToolInfo,
+  displayContext: DisplayContext,
+): PerFileInfo[] | undefined {
+  const result = info.result.result;
+  if (result.status === "error") {
+    return undefined;
   }
-  return groups;
+
+  const input = info.request.input as Input;
+  const structured = (result as any).structuredResult as
+    | GetFile.StructuredResult
+    | undefined;
+
+  if (!structured || structured.files.length === 0) {
+    return undefined;
+  }
+
+  const headerIndices = result.value.reduce<number[]>(
+    (acc, block: any, blockIdx: number) => {
+      if (block.type === "text" && block.text.startsWith("=== ")) {
+        acc.push(blockIdx);
+      }
+      return acc;
+    },
+    [],
+  );
+
+  return structured.files.map((file, idx) => {
+    const request = input.files[idx];
+    const fileDisplay = formatFileDisplay(request, displayContext);
+
+    const contentStart = headerIndices[idx] + 1;
+    const contentEnd = headerIndices[idx + 1] ?? result.value.length;
+    const contentText = result.value
+      .slice(contentStart, contentEnd)
+      .map((block: any) => (block.type === "text" ? block.text : ""))
+      .join("\n");
+
+    return { fileDisplay, isError: file.isError, contentText };
+  });
 }
 
 export function renderResultSummary(
@@ -114,38 +121,18 @@ export function renderResultSummary(
   }
 
   const input = info.request.input as Input;
-  const structured = info.structuredResult;
-  const perFileStatus =
-    structured.toolName === "get_files" && "files" in structured
-      ? structured.files
-      : [];
-  const groups = groupBlocksByFile(result.value);
+  const fileInfos = computeFileInfos(info, displayContext);
 
-  return d`${input.files.map((file, i) => {
-    const emoji = perFileStatus[i]?.isError ? "❌" : "✅";
-    const group = groups[i] ?? [];
-    const tokEst = formatTokens(JSON.stringify(group).length);
-    return d`${i > 0 ? "\n" : ""}${emoji} ${formatFileDisplay(file, displayContext)} (${tokEst})`;
-  })}`;
-}
+  if (!fileInfos) {
+    return d`✅ (${input.files.length.toString()} files)`;
+  }
 
-/** Render the content blocks of a single file as they were sent to the agent
- * (raw text, not JSON-escaped). Non-text blocks become a short placeholder. */
-function renderSentContent(blocks: ProviderToolResultContent[]): string {
-  return blocks
-    .map((block) => {
-      switch (block.type) {
-        case "text":
-          return block.text;
-        case "image":
-          return "[image]";
-        case "document":
-          return `[document${block.title ? `: ${block.title}` : ""}]`;
-        default:
-          return "";
-      }
-    })
-    .join("\n");
+  const fileLines = fileInfos.map(
+    (file) =>
+      d`${file.isError ? "❌" : "✅"} ${file.fileDisplay} ${estimateTokens(file.contentText)}`,
+  );
+
+  return d`${fileLines}`;
 }
 
 export function renderResult(
@@ -155,7 +142,6 @@ export function renderResult(
   toolRequestId: ToolRequestId,
 ): VDOMNode | undefined {
   const result = info.result.result;
-
   if (result.status === "error") {
     return d`❌ ${result.error}`;
   }
@@ -164,34 +150,29 @@ export function renderResult(
     cwd: context.cwd,
     homeDir: context.homeDir,
   };
-  const input = info.request.input as Input;
-  const structured = info.structuredResult;
-  const perFileStatus =
-    structured.toolName === "get_files" && "files" in structured
-      ? structured.files
-      : [];
-  const groups = groupBlocksByFile(result.value);
+  const fileInfos = computeFileInfos(info, displayContext);
+  if (!fileInfos) {
+    return undefined;
+  }
 
-  return d`${input.files.map((file, i) => {
-    const emoji = perFileStatus[i]?.isError ? "❌" : "✅";
-    const group = groups[i] ?? [];
-    const tokEst = formatTokens(JSON.stringify(group).length);
-    const itemKey = String(i);
-    const expanded = toolViewState.resultItemExpanded?.[itemKey] ?? false;
-    const line = withBindings(
-      d`${i > 0 ? "\n" : ""}${emoji} ${formatFileDisplay(file, displayContext)} (${tokEst})`,
-      {
-        "=": () =>
-          context.threadDispatch({
-            type: "toggle-tool-result-item",
-            toolRequestId,
-            itemKey,
-          }),
-      },
-    );
-    const detail = expanded
-      ? d`\n${withCode(d`${renderSentContent(group)}`)}`
-      : d``;
-    return d`${line}${detail}`;
-  })}`;
+  const itemExpanded = toolViewState.resultItemExpanded || {};
+
+  const fileLines = fileInfos.map((file, idx) => {
+    const itemKey = idx.toString();
+    const expanded = itemExpanded[itemKey];
+    const header = d`${file.isError ? "❌" : "✅"} ${file.fileDisplay} ${estimateTokens(file.contentText)}`;
+    const entry = expanded ? d`${header}\n${file.contentText}` : header;
+
+    const prefix = idx === 0 ? d`` : d`\n`;
+    return d`${prefix}${withBindings(entry, {
+      "=": () =>
+        context.threadDispatch({
+          type: "toggle-tool-result-item",
+          toolRequestId,
+          itemKey,
+        }),
+    })}`;
+  });
+
+  return d`${fileLines}`;
 }
