@@ -1695,8 +1695,8 @@ it("renders successive tool uses with single assistant header and inline metadat
           status: "ok",
           value: {
             id: "tool-1" as ToolRequestId,
-            toolName: "get_file" as ToolName,
-            input: { filePath: "poem.txt" as UnresolvedFilePath },
+            toolName: "get_files" as ToolName,
+            input: { files: [{ filePath: "poem.txt" as UnresolvedFilePath }] },
           },
         },
       ],
@@ -1716,8 +1716,8 @@ it("renders successive tool uses with single assistant header and inline metadat
           status: "ok",
           value: {
             id: "tool-2" as ToolRequestId,
-            toolName: "get_file" as ToolName,
-            input: { filePath: "poem2.txt" as UnresolvedFilePath },
+            toolName: "get_files" as ToolName,
+            input: { files: [{ filePath: "poem2.txt" as UnresolvedFilePath }] },
           },
         },
       ],
@@ -1769,8 +1769,10 @@ it("followup user message text is visible after tool-use cycle", async () => {
           status: "ok",
           value: {
             id: toolRequestId,
-            toolName: "get_file" as ToolName,
-            input: { filePath: "./poem.txt" as UnresolvedFilePath },
+            toolName: "get_files" as ToolName,
+            input: {
+              files: [{ filePath: "./poem.txt" as UnresolvedFilePath }],
+            },
           },
         },
       ],
@@ -1925,7 +1927,7 @@ it("handles malformed tool_use by sending error tool_result and continuing", asy
 
     // Stream a malformed get_file tool_use (missing filePath)
     stream.streamText("Let me read that file.");
-    stream.streamToolUse(toolRequestId, "get_file" as ToolName, {});
+    stream.streamToolUse(toolRequestId, "get_files" as ToolName, {});
     stream.finishResponse("tool_use");
 
     // The thread should send an error tool_result and auto-continue

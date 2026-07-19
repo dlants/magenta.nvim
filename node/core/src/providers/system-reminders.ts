@@ -4,7 +4,7 @@ export type ReminderKind = "subsequent" | "bashSummary";
 
 const SKILLS_REMINDER = `\
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
-If a skill seems like it could be relevant, use the get_file tool to read the full skill.md file for the skill.`;
+If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.`;
 
 const EDL_REMINDER = `\
 Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
@@ -22,7 +22,7 @@ const SCRATCHPAD_REMINDER = `\
 When tracking a set of items — counting, enumerating, or bookkeeping object-permanence style state — prefer the scratchpad tool over holding the state in your reasoning.`;
 
 const SUBAGENT_REMINDER = `\
-Don't spawn sub-agents for things you can do with a single tool call (get_file, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
+Don't spawn sub-agents for things you can do with a single tool call (get_files, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
 `;
 
 const BASH_SUMMARY_BODY = `\

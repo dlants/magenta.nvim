@@ -1326,7 +1326,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     return { content, updates: contextUpdates, gitUpdate };
   }
 
-  /** The union of transient get_file-read reminders and reminders derived from
+  /** The union of transient get_files-read reminders and reminders derived from
    * markdown files currently in context, deduped on text. */
   private getActiveReminders(): string[] {
     const reminders = new Set(this.state.activeReminders);
@@ -1359,15 +1359,15 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
             { silent: true },
           );
         }
-        if (
-          structured.toolName === "get_file" &&
-          "systemReminder" in structured &&
-          structured.systemReminder
-        ) {
-          this.update(
-            { type: "activate-reminder", text: structured.systemReminder },
-            { silent: true },
-          );
+        if (structured.toolName === "get_files" && "files" in structured) {
+          for (const file of structured.files) {
+            if (file.systemReminder) {
+              this.update(
+                { type: "activate-reminder", text: file.systemReminder },
+                { silent: true },
+              );
+            }
+          }
         }
       }
     }

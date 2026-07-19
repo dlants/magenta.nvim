@@ -26,7 +26,7 @@ export function validateInput(
   }
 
   switch (toolName as StaticToolName) {
-    case "get_file":
+    case "get_files":
       return GetFile.validateInput(input);
     case "hover":
       return Hover.validateInput(input);

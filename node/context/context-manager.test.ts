@@ -340,16 +340,16 @@ it("issuing a getFile request adds the file to the context but doesn't send its 
           status: "ok",
           value: {
             id: "img_request" as ToolRequestId,
-            toolName: "get_file" as ToolName,
+            toolName: "get_files" as ToolName,
             input: {
-              filePath: "test.jpg" as UnresolvedFilePath,
+              files: [{ filePath: "test.jpg" as UnresolvedFilePath }],
             },
           },
         },
       ],
     });
 
-    await driver.assertDisplayBufferContains("✅ `test.jpg`");
+    await driver.assertDisplayBufferContains("`test.jpg` (~50 tok)");
 
     // Handle the auto-respond message
     const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
@@ -701,9 +701,11 @@ describe("hierarchy context discovery", () => {
               status: "ok",
               value: {
                 id: "get_leaf" as ToolRequestId,
-                toolName: "get_file" as ToolName,
+                toolName: "get_files" as ToolName,
                 input: {
-                  filePath: "nested/dir/file.txt" as UnresolvedFilePath,
+                  files: [
+                    { filePath: "nested/dir/file.txt" as UnresolvedFilePath },
+                  ],
                 },
               },
             },

@@ -10,7 +10,7 @@ import {
   type UnresolvedFilePath,
 } from "../utils/files.ts";
 
-type Input = {
+type FileRequest = {
   filePath: UnresolvedFilePath;
   force?: boolean;
   pdfPage?: number;
@@ -18,13 +18,17 @@ type Input = {
   numLines?: number;
 };
 
-function formatGetFileDisplay(
-  input: Input,
+type Input = {
+  files: FileRequest[];
+};
+
+function formatFileDisplay(
+  file: FileRequest,
   displayContext: DisplayContext,
 ): VDOMNode {
   const absFilePath = resolveFilePath(
     displayContext.cwd,
-    input.filePath,
+    file.filePath,
     displayContext.homeDir,
   );
   const pathForDisplay = displayPath(
@@ -33,11 +37,11 @@ function formatGetFileDisplay(
     displayContext.homeDir,
   );
   let extraInfo = "";
-  if (input.pdfPage !== undefined) {
-    extraInfo = ` (page ${input.pdfPage})`;
-  } else if (input.startLine !== undefined || input.numLines !== undefined) {
-    const start = input.startLine ?? 1;
-    const num = input.numLines;
+  if (file.pdfPage !== undefined) {
+    extraInfo = ` (page ${file.pdfPage})`;
+  } else if (file.startLine !== undefined || file.numLines !== undefined) {
+    const start = file.startLine ?? 1;
+    const num = file.numLines;
     extraInfo =
       num !== undefined
         ? ` (lines ${start}-${start + num - 1})`
@@ -46,12 +50,21 @@ function formatGetFileDisplay(
   return withInlineCode(d`\`${pathForDisplay}\`${extraInfo}`);
 }
 
+function formatFilesDisplay(
+  input: Input,
+  displayContext: DisplayContext,
+): VDOMNode {
+  return d`${input.files.map(
+    (file) => d`\n  ${formatFileDisplay(file, displayContext)}`,
+  )}`;
+}
+
 export function renderSummary(
   request: UnionToolRequest,
   displayContext: DisplayContext,
 ): VDOMNode {
   const input = request.input as Input;
-  return d`👀 ${formatGetFileDisplay(input, displayContext)}`;
+  return d`👀${formatFilesDisplay(input, displayContext)}`;
 }
 
 export function renderResultSummary(
@@ -64,5 +77,5 @@ export function renderResultSummary(
     return d`${result.error}`;
   }
 
-  return formatGetFileDisplay(info.request.input as Input, displayContext);
+  return formatFilesDisplay(info.request.input as Input, displayContext);
 }

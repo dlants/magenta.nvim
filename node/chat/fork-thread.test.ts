@@ -117,8 +117,8 @@ it("tool result map survives the fork", async () => {
           status: "ok",
           value: {
             id: "get-file-1" as ToolRequestId,
-            toolName: "get_file" as ToolName,
-            input: { filePath: "./poem.txt" },
+            toolName: "get_files" as ToolName,
+            input: { files: [{ filePath: "./poem.txt" }] },
           },
         },
       ],

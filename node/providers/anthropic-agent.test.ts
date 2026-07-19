@@ -315,7 +315,7 @@ describe("toolResult", () => {
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
-        structuredResult: { toolName: "get_file" as ToolName },
+        structuredResult: { toolName: "get_files" as ToolName },
       },
       nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     };
@@ -343,8 +343,8 @@ describe("toolResult", () => {
     agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
-    stream.streamToolUse(toolUseId, "get_file" as ToolName, {
-      filePath: "test.ts",
+    stream.streamToolUse(toolUseId, "get_files" as ToolName, {
+      files: [{ filePath: "test.ts" }],
     });
     stream.finishResponse("tool_use");
 
@@ -365,7 +365,7 @@ describe("toolResult", () => {
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
-        structuredResult: { toolName: "get_file" as ToolName },
+        structuredResult: { toolName: "get_files" as ToolName },
       },
       nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     };
@@ -511,8 +511,8 @@ describe("abort", () => {
 
     // Stream a tool_use block but don't finish the response
     const toolUseId = "tool-abort-test" as ToolRequestId;
-    stream.streamToolUse(toolUseId, "get_file" as ToolName, {
-      filePath: "test.ts",
+    stream.streamToolUse(toolUseId, "get_files" as ToolName, {
+      files: [{ filePath: "test.ts" }],
     });
 
     // Abort while tool_use is the last block
@@ -981,7 +981,7 @@ describe("streaming block", () => {
       content_block: {
         type: "tool_use",
         id: toolUseId,
-        name: "get_file",
+        name: "get_files",
         input: {},
         caller: { type: "direct" as const },
       },
@@ -1275,8 +1275,8 @@ describe("web search result preservation", () => {
 
       // Stream a tool_use block
       const toolUseId = "tool-error-test" as ToolRequestId;
-      stream.streamToolUse(toolUseId, "get_file" as ToolName, {
-        filePath: "test.ts",
+      stream.streamToolUse(toolUseId, "get_files" as ToolName, {
+        files: [{ filePath: "test.ts" }],
       });
       await stream.settle();
 
@@ -1572,7 +1572,7 @@ describe("web search result preservation", () => {
       // Stream a tool_use with missing required field (filePath)
       stream.streamToolUse(
         "tool-malformed" as ToolRequestId,
-        "get_file" as ToolName,
+        "get_files" as ToolName,
         {},
       );
       stream.finishResponse("tool_use");
@@ -1606,7 +1606,7 @@ describe("web search result preservation", () => {
 
       const stream = await mockClient.awaitStream();
       const toolUseId = "tool-malformed" as ToolRequestId;
-      stream.streamToolUse(toolUseId, "get_file" as ToolName, {});
+      stream.streamToolUse(toolUseId, "get_files" as ToolName, {});
       stream.finishResponse("tool_use");
 
       await stream.finalMessage();
@@ -1895,7 +1895,7 @@ File context here
         content_block: {
           type: "tool_use",
           id: "tool-1" as ToolRequestId,
-          name: "get_file" as ToolName,
+          name: "get_files" as ToolName,
           input: {},
           caller: { type: "direct" as const },
         },
@@ -1980,8 +1980,8 @@ File context here
       stream.streamText("I'll use the tool.");
       stream.streamToolUse(
         "tool-req-1" as ToolRequestId,
-        "get_file" as ToolName,
-        { filePath: "test.ts" },
+        "get_files" as ToolName,
+        { files: [{ filePath: "test.ts" }] },
       );
       stream.finishResponse("tool_use");
       await stream.finalMessage();
@@ -2026,7 +2026,7 @@ File context here
       );
       expect(clonedState.messages[1].content[1]).toHaveProperty(
         "name",
-        "get_file",
+        "get_files",
       );
       expect(clonedState.messages[2].role).toBe("user");
       expect(clonedState.messages[2].content).toHaveLength(1);
@@ -2240,8 +2240,8 @@ File context here
       agent.continueConversation();
       const stream = await mockClient.awaitStream();
       stream.streamText("Running...");
-      stream.streamToolUse("tool-1" as ToolRequestId, "get_file" as ToolName, {
-        filePath: "x.ts",
+      stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
+        files: [{ filePath: "x.ts" }],
       });
       stream.finishResponse("tool_use");
       await stream.finalMessage();
@@ -2259,7 +2259,7 @@ File context here
               nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
-          structuredResult: { toolName: "get_file" as ToolName },
+          structuredResult: { toolName: "get_files" as ToolName },
         },
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       });
@@ -2298,8 +2298,8 @@ File context here
       stream.streamText("Running.");
       stream.streamToolUse(
         "orphan-1" as ToolRequestId,
-        "get_file" as ToolName,
-        { filePath: "x.ts" },
+        "get_files" as ToolName,
+        { files: [{ filePath: "x.ts" }] },
       );
       stream.finishResponse("tool_use");
       await stream.finalMessage();
@@ -2335,8 +2335,8 @@ File context here
       const stream = await mockClient.awaitStream();
       stream.streamToolUse(
         "orphan-2" as ToolRequestId,
-        "get_file" as ToolName,
-        { filePath: "x.ts" },
+        "get_files" as ToolName,
+        { files: [{ filePath: "x.ts" }] },
       );
       stream.finishResponse("tool_use");
       await stream.finalMessage();

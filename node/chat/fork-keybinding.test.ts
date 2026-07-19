@@ -124,8 +124,8 @@ it("normal mode F on assistant message with tool_use extends to keep tool_result
           status: "ok",
           value: {
             id: "get-file-1" as ToolRequestId,
-            toolName: "get_file" as ToolName,
-            input: { filePath: "./poem.txt" },
+            toolName: "get_files" as ToolName,
+            input: { files: [{ filePath: "./poem.txt" }] },
           },
         },
       ],

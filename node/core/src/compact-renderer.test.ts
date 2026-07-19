@@ -202,13 +202,13 @@ File \`context.md\`
           {
             type: "tool_use",
             id: "tool_1" as ToolRequestId,
-            name: "get_file" as ToolName,
+            name: "get_files" as ToolName,
             request: {
               status: "ok",
               value: {
                 id: "tool_1" as ToolRequestId,
-                toolName: "get_file" as ToolName,
-                input: { filePath: "src/index.ts" },
+                toolName: "get_files" as ToolName,
+                input: { files: [{ filePath: "src/index.ts" }] },
               },
             },
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -218,7 +218,7 @@ File \`context.md\`
     ];
 
     const { markdown: result } = renderThreadToMarkdown(messages);
-    expect(result).toContain("## tool_use: get_file");
+    expect(result).toContain("## tool_use: get_files");
     expect(result).toContain('"filePath": "src/index.ts"');
   });
 
@@ -230,7 +230,7 @@ File \`context.md\`
           {
             type: "tool_use",
             id: "tool_1" as ToolRequestId,
-            name: "get_file" as ToolName,
+            name: "get_files" as ToolName,
             request: {
               status: "error",
               error: "parse error",
@@ -263,7 +263,7 @@ File \`context.md\`
                   nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                 },
               ],
-              structuredResult: { toolName: "get_file" as ToolName },
+              structuredResult: { toolName: "get_files" as ToolName },
             },
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
@@ -389,7 +389,7 @@ File \`context.md\`
     expect(result).not.toContain("more_encrypted_data");
   });
 
-  it("truncates get_file tool results", () => {
+  it("truncates get_files tool results", () => {
     const messages: ProviderMessage[] = [
       {
         role: "assistant",
@@ -397,13 +397,13 @@ File \`context.md\`
           {
             type: "tool_use",
             id: "tool_1" as ToolRequestId,
-            name: "get_file" as ToolName,
+            name: "get_files" as ToolName,
             request: {
               status: "ok",
               value: {
                 id: "tool_1" as ToolRequestId,
-                toolName: "get_file" as ToolName,
-                input: { filePath: "src/index.ts" },
+                toolName: "get_files" as ToolName,
+                input: { files: [{ filePath: "src/index.ts" }] },
               },
             },
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -425,7 +425,7 @@ File \`context.md\`
                   nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                 },
               ],
-              structuredResult: { toolName: "get_file" as ToolName },
+              structuredResult: { toolName: "get_files" as ToolName },
             },
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
@@ -434,14 +434,14 @@ File \`context.md\`
     ];
 
     const { markdown: result } = renderThreadToMarkdown(messages);
-    expect(result).toContain("## tool_use: get_file");
+    expect(result).toContain("## tool_use: get_files");
     expect(result).toContain("[file contents omitted]");
     // Should NOT include the actual file contents
     expect(result).not.toContain("const x = 1");
     expect(result).not.toContain("lots of file content");
   });
 
-  it("truncates get_file error results", () => {
+  it("truncates get_files error results", () => {
     const messages: ProviderMessage[] = [
       {
         role: "assistant",
@@ -449,13 +449,13 @@ File \`context.md\`
           {
             type: "tool_use",
             id: "tool_1" as ToolRequestId,
-            name: "get_file" as ToolName,
+            name: "get_files" as ToolName,
             request: {
               status: "ok",
               value: {
                 id: "tool_1" as ToolRequestId,
-                toolName: "get_file" as ToolName,
-                input: { filePath: "src/index.ts" },
+                toolName: "get_files" as ToolName,
+                input: { files: [{ filePath: "src/index.ts" }] },
               },
             },
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -483,7 +483,7 @@ File \`context.md\`
     expect(result).toContain("File not found: nonexistent.ts");
   });
 
-  it("does not truncate non-get_file tool results", () => {
+  it("does not truncate non-get_files tool results", () => {
     const messages: ProviderMessage[] = [
       {
         role: "assistant",
@@ -519,7 +519,7 @@ File \`context.md\`
                   nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                 },
               ],
-              structuredResult: { toolName: "get_file" as ToolName },
+              structuredResult: { toolName: "get_files" as ToolName },
             },
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },

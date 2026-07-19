@@ -263,7 +263,7 @@ Content
         expect(systemPrompt).toContain("Available Skills");
         expect(systemPrompt).toContain("intro-skill");
         expect(systemPrompt).toContain("Testing introduction generation");
-        expect(systemPrompt).toContain("get_file tool");
+        expect(systemPrompt).toContain("get_files tool");
       },
     );
   });
@@ -447,7 +447,7 @@ Content B
         expect(systemPrompt).toContain("skill-b");
         expect(systemPrompt).toContain("First skill description");
         expect(systemPrompt).toContain("Second skill description");
-        expect(systemPrompt).toContain("get_file tool");
+        expect(systemPrompt).toContain("get_files tool");
 
         // Check that skills are NOT in the first user message
         const firstMessageContent = firstRequest.messages[0].content;

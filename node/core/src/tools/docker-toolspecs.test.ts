@@ -10,7 +10,7 @@ describe("docker_root tool specs", () => {
     const specs = getToolSpecs("docker_root", mockMcpToolManager);
     const names = specs.map((s) => s.name);
 
-    expect(names).toContain("get_file");
+    expect(names).toContain("get_files");
     expect(names).toContain("bash_command");
     expect(names).not.toContain("spawn_subagents");
     expect(names).toContain("edl");
@@ -31,7 +31,7 @@ describe("docker_root tool specs", () => {
 
     expect(names).not.toContain("hover");
     expect(names).not.toContain("find_references");
-    expect(names).toContain("get_file");
+    expect(names).toContain("get_files");
     expect(names).toContain("bash_command");
     expect(names).toContain("yield_to_parent");
   });

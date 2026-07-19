@@ -84,7 +84,7 @@ export function createTool(
   const staticRequest = request as StaticToolRequest;
 
   switch (staticRequest.toolName) {
-    case "get_file": {
+    case "get_files": {
       return GetFile.execute(staticRequest, {
         cwd: context.cwd,
         homeDir: context.homeDir,

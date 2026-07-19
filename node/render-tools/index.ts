@@ -69,7 +69,7 @@ export function renderToolSummary(
   }
 
   switch (toolName) {
-    case "get_file":
+    case "get_files":
       return GetFileRender.renderSummary(request, displayContext);
     case "hover":
       return HoverRender.renderSummary(request, displayContext);
@@ -211,7 +211,7 @@ export function renderToolResultSummary(
   }
 
   switch (toolName) {
-    case "get_file":
+    case "get_files":
       return d`${statusEmoji} ${GetFileRender.renderResultSummary(info, displayContext)} (${tokEst})`;
     case "bash_command":
       return d`${statusEmoji} ${BashCommandRender.renderResultSummary(info)} (${tokEst})`;
@@ -279,7 +279,7 @@ export function renderToolResult(
         toolViewState,
         toolRequestId,
       );
-    case "get_file":
+    case "get_files":
       return undefined;
     default:
       return toolViewState.resultExpanded

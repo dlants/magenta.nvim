@@ -34,12 +34,17 @@ import {
 } from "../utils/pdf-pages.ts";
 import type { Result } from "../utils/result.ts";
 
-export type ToolRequest = GenericToolRequest<"get_file", Input>;
-export type StructuredResult = {
-  toolName: "get_file";
-  lineCount: number;
+export type ToolRequest = GenericToolRequest<"get_files", Input>;
+
+export type PerFileResult = {
   filePath: AbsFilePath;
+  lineCount: number;
   systemReminder: string | undefined;
+};
+
+export type StructuredResult = {
+  toolName: "get_files";
+  files: PerFileResult[];
 };
 
 const HARD_MAX_OUTPUT_CHARACTERS = 40000;
@@ -124,6 +129,323 @@ function processTextContentStandalone(
   return { text, isComplete, hasAbridgedLines };
 }
 
+export type FileRequest = {
+  filePath: UnresolvedFilePath;
+  force?: boolean;
+  pdfPage?: number;
+  startLine?: number;
+  numLines?: number;
+};
+
+type ReadOneFileContext = {
+  cwd: NvimCwd;
+  homeDir: HomeDir;
+  fileIO: FileIO;
+  contextTracker: ContextTracker;
+  onToolApplied: OnToolApplied;
+  isAborted: () => boolean;
+};
+
+type ReadOneFileOutcome =
+  | { aborted: true }
+  | {
+      aborted?: false;
+      blocks: ProviderToolResultContent[];
+      structured: PerFileResult;
+    };
+
+function errorOutcome(
+  absFilePath: AbsFilePath,
+  message: string,
+): ReadOneFileOutcome {
+  return {
+    blocks: [
+      {
+        type: "text",
+        text: message,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ],
+    structured: {
+      filePath: absFilePath,
+      lineCount: 0,
+      systemReminder: undefined,
+    },
+  };
+}
+
+async function readOneFile(
+  fileReq: FileRequest,
+  context: ReadOneFileContext,
+): Promise<ReadOneFileOutcome> {
+  const { isAborted } = context;
+  const filePath = fileReq.filePath;
+  const absFilePath = resolveFilePath(context.cwd, filePath, context.homeDir);
+
+  const hasLineParams =
+    fileReq.startLine !== undefined || fileReq.numLines !== undefined;
+
+  if (
+    context.contextTracker.files[absFilePath] &&
+    !fileReq.force &&
+    fileReq.pdfPage === undefined &&
+    !hasLineParams
+  ) {
+    return {
+      blocks: [
+        {
+          type: "text",
+          text: `This file is already part of the thread context. \
+You already have the most up-to-date information about the contents of this file.`,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ],
+      structured: {
+        filePath: absFilePath,
+        lineCount: 0,
+        systemReminder: undefined,
+      },
+    };
+  }
+
+  const fileTypeInfo = await detectFileTypeViaFileIO(
+    absFilePath,
+    context.fileIO,
+  );
+  if (isAborted()) return { aborted: true };
+
+  if (!fileTypeInfo) {
+    return errorOutcome(absFilePath, `File ${filePath} does not exist.`);
+  }
+
+  if (fileTypeInfo.category === FileCategory.UNSUPPORTED) {
+    return errorOutcome(
+      absFilePath,
+      `Unsupported file type: ${fileTypeInfo.mimeType}. Supported types: text files, images (JPEG, PNG, GIF, WebP), and PDF documents.`,
+    );
+  }
+
+  const statResult = await context.fileIO.stat(absFilePath);
+  if (isAborted()) return { aborted: true };
+  const actualSize = statResult?.size ?? 0;
+  const maxSize =
+    fileTypeInfo.category === FileCategory.TEXT
+      ? Infinity
+      : fileTypeInfo.category === FileCategory.IMAGE
+        ? FILE_SIZE_LIMITS.IMAGE
+        : fileTypeInfo.category === FileCategory.PDF
+          ? FILE_SIZE_LIMITS.PDF
+          : 0;
+
+  if (actualSize > maxSize) {
+    const sizeMB = (actualSize / (1024 * 1024)).toFixed(2);
+    const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(2);
+    return errorOutcome(
+      absFilePath,
+      `File too large: ${sizeMB}MB (max ${maxSizeMB}MB for ${fileTypeInfo.category} files)`,
+    );
+  }
+
+  let result: ProviderToolResultContent[];
+  let lineCount = 0;
+  let systemReminder: string | undefined;
+
+  if (fileTypeInfo.category === FileCategory.TEXT) {
+    const rawContent = await context.fileIO.readFile(absFilePath);
+    if (isAborted()) return { aborted: true };
+
+    if (absFilePath.toLowerCase().endsWith(".md")) {
+      systemReminder = extractSystemReminderBlock(rawContent);
+    }
+
+    const lines = rawContent.split("\n");
+    const totalLines = lines.length;
+    const startLine = fileReq.startLine ?? 1;
+    const startIndex = startLine - 1;
+
+    if (startIndex >= totalLines) {
+      return errorOutcome(
+        absFilePath,
+        `startLine ${startLine} is beyond end of file (${totalLines} lines)`,
+      );
+    }
+
+    const totalChars = lines.reduce((sum, line) => sum + line.length + 1, 0);
+    const isLargeFile =
+      fileReq.numLines === undefined && totalChars > MAX_FILE_CHARACTERS;
+
+    let summaryText: string | undefined;
+    if (isLargeFile && startIndex === 0) {
+      const content = lines.join("\n");
+      const summary = summarizeFile(content, {
+        charBudget: SUMMARY_CONTENT_BUDGET,
+      });
+      summaryText = formatSummary(summary);
+    }
+
+    const processedResult = processTextContentStandalone(
+      lines,
+      startIndex,
+      fileReq.numLines,
+      summaryText,
+    );
+
+    if (
+      processedResult.isComplete &&
+      !processedResult.hasAbridgedLines &&
+      startIndex === 0
+    ) {
+      context.onToolApplied(
+        absFilePath,
+        { type: "get-file", content: lines.join("\n") },
+        fileTypeInfo,
+      );
+    }
+
+    result = [
+      {
+        type: "text",
+        text: processedResult.text,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ];
+    lineCount = processedResult.text.split("\n").length;
+  } else if (fileTypeInfo.category === FileCategory.PDF) {
+    const existingFileInfo = context.contextTracker.files[absFilePath];
+    const agentView = existingFileInfo?.agentView;
+
+    if (fileReq.pdfPage !== undefined) {
+      if (
+        agentView?.type === "pdf" &&
+        agentView.pages.includes(fileReq.pdfPage)
+      ) {
+        return {
+          blocks: [
+            {
+              type: "text",
+              text: `Page ${fileReq.pdfPage} of ${filePath} has already been provided to you in this conversation.`,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            },
+          ],
+          structured: {
+            filePath: absFilePath,
+            lineCount: 0,
+            systemReminder: undefined,
+          },
+        };
+      }
+
+      const pageResult = await extractPDFPage(absFilePath, fileReq.pdfPage);
+      if (isAborted()) return { aborted: true };
+
+      if (pageResult.status === "error") {
+        return errorOutcome(absFilePath, pageResult.error);
+      }
+
+      result = [
+        {
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: "application/pdf",
+            data: Buffer.from(pageResult.value).toString("base64"),
+          },
+          title: `${filePath} - Page ${fileReq.pdfPage}`,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ];
+
+      context.onToolApplied(
+        absFilePath,
+        {
+          type: "get-file-pdf",
+          content: { type: "page", pdfPage: fileReq.pdfPage },
+        },
+        fileTypeInfo,
+      );
+    } else {
+      if (agentView?.type === "pdf" && agentView.summary) {
+        return {
+          blocks: [
+            {
+              type: "text",
+              text: `The summary information for ${filePath} has already been provided to you in this conversation.`,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            },
+          ],
+          structured: {
+            filePath: absFilePath,
+            lineCount: 0,
+            systemReminder: undefined,
+          },
+        };
+      }
+
+      const pageCountResult = await getSummaryAsProviderContent(absFilePath);
+      if (isAborted()) return { aborted: true };
+
+      if (pageCountResult.status === "error") {
+        return errorOutcome(absFilePath, pageCountResult.error);
+      }
+
+      context.onToolApplied(
+        absFilePath,
+        { type: "get-file-pdf", content: { type: "summary" } },
+        fileTypeInfo,
+      );
+
+      result = pageCountResult.value;
+    }
+  } else {
+    const buffer = await context.fileIO.readBinaryFile(absFilePath);
+    if (isAborted()) return { aborted: true };
+
+    const binStatResult = await context.fileIO.stat(absFilePath);
+    if (isAborted()) return { aborted: true };
+
+    const mtime = binStatResult?.mtimeMs ?? Date.now();
+
+    context.onToolApplied(
+      absFilePath,
+      { type: "get-file-binary", mtime },
+      fileTypeInfo,
+    );
+
+    const base64Data = buffer.toString("base64");
+
+    switch (fileTypeInfo.category) {
+      case FileCategory.IMAGE:
+        result = [
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: fileTypeInfo.mimeType as
+                | "image/jpeg"
+                | "image/png"
+                | "image/gif"
+                | "image/webp",
+              data: base64Data,
+            },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          },
+        ];
+        break;
+      default:
+        assertUnreachable(fileTypeInfo.category);
+    }
+  }
+
+  return {
+    blocks: result,
+    structured: {
+      filePath: absFilePath,
+      lineCount,
+      systemReminder,
+    },
+  };
+}
+
 export function execute(
   request: ToolRequest,
   context: {
@@ -145,328 +467,30 @@ export function execute(
 
   const promise = (async (): Promise<ProviderToolResult> => {
     try {
-      const filePath = request.input.filePath;
-      const absFilePath = resolveFilePath(
-        context.cwd,
-        filePath,
-        context.homeDir,
-      );
+      const value: ProviderToolResultContent[] = [];
+      const files: PerFileResult[] = [];
 
-      const hasLineParams =
-        request.input.startLine !== undefined ||
-        request.input.numLines !== undefined;
-
-      if (
-        context.contextTracker.files[absFilePath] &&
-        !request.input.force &&
-        request.input.pdfPage === undefined &&
-        !hasLineParams
-      ) {
-        return {
-          type: "tool_result",
-          id: request.id,
-          result: {
-            status: "ok",
-            value: [
-              {
-                type: "text",
-                text: `This file is already part of the thread context. \
-You already have the most up-to-date information about the contents of this file.`,
-                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              },
-            ],
-            structuredResult: {
-              toolName: "get_file",
-              lineCount: 0,
-              filePath: absFilePath,
-              systemReminder: undefined,
-            },
-          },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        };
-      }
-
-      const fileTypeInfo = await detectFileTypeViaFileIO(
-        absFilePath,
-        context.fileIO,
-      );
-      if (aborted) return abortResult;
-
-      if (!fileTypeInfo) {
-        return {
-          type: "tool_result",
-          id: request.id,
-          result: {
-            status: "error",
-            error: `File ${filePath} does not exist.`,
-          },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        };
-      }
-
-      if (fileTypeInfo.category === FileCategory.UNSUPPORTED) {
-        return {
-          type: "tool_result",
-          id: request.id,
-          result: {
-            status: "error",
-            error: `Unsupported file type: ${fileTypeInfo.mimeType}. Supported types: text files, images (JPEG, PNG, GIF, WebP), and PDF documents.`,
-          },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        };
-      }
-
-      const statResult = await context.fileIO.stat(absFilePath);
-      if (aborted) return abortResult;
-      const actualSize = statResult?.size ?? 0;
-      const maxSize =
-        fileTypeInfo.category === FileCategory.TEXT
-          ? Infinity
-          : fileTypeInfo.category === FileCategory.IMAGE
-            ? FILE_SIZE_LIMITS.IMAGE
-            : fileTypeInfo.category === FileCategory.PDF
-              ? FILE_SIZE_LIMITS.PDF
-              : 0;
-
-      if (actualSize > maxSize) {
-        const sizeMB = (actualSize / (1024 * 1024)).toFixed(2);
-        const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(2);
-        return {
-          type: "tool_result",
-          id: request.id,
-          result: {
-            status: "error",
-            error: `File too large: ${sizeMB}MB (max ${maxSizeMB}MB for ${fileTypeInfo.category} files)`,
-          },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        };
-      }
-
-      let result: ProviderToolResultContent[];
-      let lineCount = 0;
-      let systemReminder: string | undefined;
-
-      if (fileTypeInfo.category === FileCategory.TEXT) {
-        const rawContent = await context.fileIO.readFile(absFilePath);
+      for (const fileReq of request.input.files) {
         if (aborted) return abortResult;
 
-        if (absFilePath.toLowerCase().endsWith(".md")) {
-          systemReminder = extractSystemReminderBlock(rawContent);
-        }
+        const outcome = await readOneFile(fileReq, {
+          cwd: context.cwd,
+          homeDir: context.homeDir,
+          fileIO: context.fileIO,
+          contextTracker: context.contextTracker,
+          onToolApplied: context.onToolApplied,
+          isAborted: () => aborted,
+        });
 
-        const lines = rawContent.split("\n");
-        const totalLines = lines.length;
-        const startLine = request.input.startLine ?? 1;
-        const startIndex = startLine - 1;
+        if (outcome.aborted) return abortResult;
 
-        if (startIndex >= totalLines) {
-          return {
-            type: "tool_result",
-            id: request.id,
-            result: {
-              status: "error",
-              error: `startLine ${startLine} is beyond end of file (${totalLines} lines)`,
-            },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          };
-        }
-
-        const totalChars = lines.reduce(
-          (sum, line) => sum + line.length + 1,
-          0,
-        );
-        const isLargeFile =
-          request.input.numLines === undefined &&
-          totalChars > MAX_FILE_CHARACTERS;
-
-        let summaryText: string | undefined;
-        if (isLargeFile && startIndex === 0) {
-          const content = lines.join("\n");
-          const summary = summarizeFile(content, {
-            charBudget: SUMMARY_CONTENT_BUDGET,
-          });
-          summaryText = formatSummary(summary);
-        }
-
-        const processedResult = processTextContentStandalone(
-          lines,
-          startIndex,
-          request.input.numLines,
-          summaryText,
-        );
-
-        if (
-          processedResult.isComplete &&
-          !processedResult.hasAbridgedLines &&
-          startIndex === 0
-        ) {
-          context.onToolApplied(
-            absFilePath,
-            { type: "get-file", content: lines.join("\n") },
-            fileTypeInfo,
-          );
-        }
-
-        result = [
-          {
-            type: "text",
-            text: processedResult.text,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          },
-        ];
-        lineCount = processedResult.text.split("\n").length;
-      } else if (fileTypeInfo.category === FileCategory.PDF) {
-        const existingFileInfo = context.contextTracker.files[absFilePath];
-        const agentView = existingFileInfo?.agentView;
-
-        if (request.input.pdfPage !== undefined) {
-          if (
-            agentView?.type === "pdf" &&
-            agentView.pages.includes(request.input.pdfPage)
-          ) {
-            return {
-              type: "tool_result",
-              id: request.id,
-              result: {
-                status: "ok",
-                value: [
-                  {
-                    type: "text",
-                    text: `Page ${request.input.pdfPage} of ${filePath} has already been provided to you in this conversation.`,
-                    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-                  },
-                ],
-                structuredResult: {
-                  toolName: "get_file",
-                  lineCount: 0,
-                  filePath: absFilePath,
-                  systemReminder: undefined,
-                },
-              },
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            };
-          }
-
-          const pageResult = await extractPDFPage(
-            absFilePath,
-            request.input.pdfPage,
-          );
-          if (aborted) return abortResult;
-
-          if (pageResult.status === "error") {
-            return {
-              type: "tool_result",
-              id: request.id,
-              result: { status: "error", error: pageResult.error },
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            };
-          }
-
-          result = [
-            {
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data: Buffer.from(pageResult.value).toString("base64"),
-              },
-              title: `${filePath} - Page ${request.input.pdfPage}`,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            },
-          ];
-
-          context.onToolApplied(
-            absFilePath,
-            {
-              type: "get-file-pdf",
-              content: { type: "page", pdfPage: request.input.pdfPage },
-            },
-            fileTypeInfo,
-          );
-        } else {
-          if (agentView?.type === "pdf" && agentView.summary) {
-            return {
-              type: "tool_result",
-              id: request.id,
-              result: {
-                status: "ok",
-                value: [
-                  {
-                    type: "text",
-                    text: `The summary information for ${filePath} has already been provided to you in this conversation.`,
-                    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-                  },
-                ],
-                structuredResult: {
-                  toolName: "get_file",
-                  lineCount: 0,
-                  filePath: absFilePath,
-                  systemReminder: undefined,
-                },
-              },
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            };
-          }
-
-          const pageCountResult =
-            await getSummaryAsProviderContent(absFilePath);
-          if (aborted) return abortResult;
-
-          if (pageCountResult.status === "error") {
-            return {
-              type: "tool_result",
-              id: request.id,
-              result: { status: "error", error: pageCountResult.error },
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            };
-          }
-
-          context.onToolApplied(
-            absFilePath,
-            { type: "get-file-pdf", content: { type: "summary" } },
-            fileTypeInfo,
-          );
-
-          result = pageCountResult.value;
-        }
-      } else {
-        const buffer = await context.fileIO.readBinaryFile(absFilePath);
-        if (aborted) return abortResult;
-
-        const statResult = await context.fileIO.stat(absFilePath);
-        if (aborted) return abortResult;
-
-        const mtime = statResult?.mtimeMs ?? Date.now();
-
-        context.onToolApplied(
-          absFilePath,
-          { type: "get-file-binary", mtime },
-          fileTypeInfo,
-        );
-
-        const base64Data = buffer.toString("base64");
-
-        switch (fileTypeInfo.category) {
-          case FileCategory.IMAGE:
-            result = [
-              {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: fileTypeInfo.mimeType as
-                    | "image/jpeg"
-                    | "image/png"
-                    | "image/gif"
-                    | "image/webp",
-                  data: base64Data,
-                },
-                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              },
-            ];
-            break;
-          default:
-            assertUnreachable(fileTypeInfo.category);
-        }
+        value.push({
+          type: "text",
+          text: `=== ${fileReq.filePath} ===`,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        });
+        value.push(...outcome.blocks);
+        files.push(outcome.structured);
       }
 
       return {
@@ -474,12 +498,10 @@ You already have the most up-to-date information about the contents of this file
         id: request.id,
         result: {
           status: "ok",
-          value: result,
+          value,
           structuredResult: {
-            toolName: "get_file",
-            lineCount,
-            filePath: absFilePath,
-            systemReminder,
+            toolName: "get_files",
+            files,
           },
         },
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -507,16 +529,19 @@ You already have the most up-to-date information about the contents of this file
 }
 
 export const spec: ProviderToolSpec = {
-  name: "get_file" as ToolName,
-  description: `Get the full contents of a given file. The file will be added to the thread context.
-If a file is part of your context, avoid using get_file on it again, since you will get notified about any future changes about the file.
+  name: "get_files" as ToolName,
+  description: `Get the contents of one or more files. Text files will be added to the thread context.
+Provide a \`files\` array; each entry reads one file with its own options. Reading several files in a single call avoids round trips.
+If a file is part of your context, avoid reading it again, since you will get notified about any future changes about the file.
 
 Supports:
 - Text files (source code, markdown, JSON, XML, etc.) - added to context for tracking changes
 - Images (JPEG, PNG, GIF, WebP) - returned as base64 encoded content
 - PDF documents - returned as base64 encoded content
 
-Output is hard-capped at 40,000 characters (~10k tokens). This cap cannot be bypassed by force or numLines.
+Each file's content is preceded by a \`=== <path> ===\` header. A problem reading one file (missing/unsupported/too large) yields an error note for that file only and does not fail the others.
+
+Output is hard-capped at 40,000 characters (~10k tokens) per file. This cap cannot be bypassed by force or numLines.
 For files that exceed the cap:
 - When no startLine/numLines is given, a high-signal summary is returned.
 - Use startLine and numLines to page through specific ranges. If your numLines is too large, output is truncated and a continuation hint with the next startLine is provided.
@@ -526,63 +551,69 @@ File size limits: 1MB for text files, 10MB for images, 32MB for PDFs.`,
   input_schema: {
     type: "object",
     properties: {
-      filePath: {
-        type: "string",
-        description: `The path of the file. Prefer absolute paths (e.g. "/Users/name/project/src/index.ts"). Relative paths are resolved from the project root.`,
-      },
-      force: {
-        type: "boolean",
-        description:
-          "If true, get the full file contents even if the file is already part of the context.",
-      },
-      pdfPage: {
-        type: "number",
-        description: `\
+      files: {
+        type: "array",
+        description: "The files to read. Provide at least one entry.",
+        items: {
+          type: "object",
+          properties: {
+            filePath: {
+              type: "string",
+              description: `The path of the file. Prefer absolute paths (e.g. "/Users/name/project/src/index.ts"). Relative paths are resolved from the project root.`,
+            },
+            force: {
+              type: "boolean",
+              description:
+                "If true, get the full file contents even if the file is already part of the context.",
+            },
+            pdfPage: {
+              type: "number",
+              description: `\
 For PDF files, you can use this 1-indexed parameter to fetch the given page of the file.
 Omitting this parameter for pdf files returns just the summary of the pdf.`,
-      },
-      startLine: {
-        type: "number",
-        description: `1-indexed line number to start reading from. If omitted, starts from line 1.`,
-      },
-      numLines: {
-        type: "number",
-        description: `Number of lines to return. If omitted, returns as many lines as fit within the token limit.`,
+            },
+            startLine: {
+              type: "number",
+              description: `1-indexed line number to start reading from. If omitted, starts from line 1.`,
+            },
+            numLines: {
+              type: "number",
+              description: `Number of lines to return. If omitted, returns as many lines as fit within the token limit.`,
+            },
+          },
+          required: ["filePath"],
+        },
       },
     },
-    required: ["filePath"],
+    required: ["files"],
   },
 };
 
 export type Input = {
-  filePath: UnresolvedFilePath;
-  force?: boolean;
-  pdfPage?: number;
-  startLine?: number;
-  numLines?: number;
+  files: FileRequest[];
 };
 
-export function validateInput(input: {
+function validateFileRequest(input: {
   [key: string]: unknown;
-}): Result<Input> {
+}): Result<FileRequest> {
   if (typeof input.filePath !== "string") {
     return {
       status: "error",
-      error: "expected req.input.filePath to be a string",
+      error: "expected file.filePath to be a string",
     };
   }
 
   if (input.force !== undefined && typeof input.force !== "boolean") {
     return {
       status: "error",
-      error: "expected req.input.force to be a boolean",
+      error: "expected file.force to be a boolean",
     };
   }
 
   if (input.pdfPage !== undefined && typeof input.pdfPage !== "number") {
     return {
       status: "error",
-      error: "expected req.input.pdfPage to be a number",
+      error: "expected file.pdfPage to be a number",
     };
   }
 
@@ -593,14 +624,14 @@ export function validateInput(input: {
     return {
       status: "error",
       error:
-        "expected req.input.pdfPage to be a positive integer (1-indexed page number)",
+        "expected file.pdfPage to be a positive integer (1-indexed page number)",
     };
   }
 
   if (input.startLine !== undefined && typeof input.startLine !== "number") {
     return {
       status: "error",
-      error: "expected req.input.startLine to be a number",
+      error: "expected file.startLine to be a number",
     };
   }
 
@@ -611,14 +642,14 @@ export function validateInput(input: {
     return {
       status: "error",
       error:
-        "expected req.input.startLine to be a positive integer (1-indexed line number)",
+        "expected file.startLine to be a positive integer (1-indexed line number)",
     };
   }
 
   if (input.numLines !== undefined && typeof input.numLines !== "number") {
     return {
       status: "error",
-      error: "expected req.input.numLines to be a number",
+      error: "expected file.numLines to be a number",
     };
   }
 
@@ -628,8 +659,45 @@ export function validateInput(input: {
   ) {
     return {
       status: "error",
-      error: "expected req.input.numLines to be a positive integer",
+      error: "expected file.numLines to be a positive integer",
     };
+  }
+
+  return {
+    status: "ok",
+    value: input as FileRequest,
+  };
+}
+
+export function validateInput(input: {
+  [key: string]: unknown;
+}): Result<Input> {
+  if (!Array.isArray(input.files)) {
+    return {
+      status: "error",
+      error: "expected req.input.files to be an array",
+    };
+  }
+
+  if (input.files.length === 0) {
+    return {
+      status: "error",
+      error: "expected req.input.files to have at least one entry",
+    };
+  }
+
+  for (const file of input.files) {
+    if (typeof file !== "object" || file === null) {
+      return {
+        status: "error",
+        error: "expected each entry of req.input.files to be an object",
+      };
+    }
+
+    const fileResult = validateFileRequest(file as { [key: string]: unknown });
+    if (fileResult.status === "error") {
+      return fileResult;
+    }
   }
 
   return {

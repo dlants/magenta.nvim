@@ -218,7 +218,7 @@ describe.runIf(FULL_CAPABILITIES)("Docker Environment", () => {
       const toolNames = specs.map((s) => s.name);
 
       // Should include file, shell, and thread tools
-      expect(toolNames).toContain("get_file");
+      expect(toolNames).toContain("get_files");
       expect(toolNames).toContain("edl");
       expect(toolNames).toContain("bash_command");
       expect(toolNames).toContain("spawn_subagents");
@@ -240,7 +240,7 @@ describe.runIf(FULL_CAPABILITIES)("Docker Environment", () => {
       );
       const toolNames = specs.map((s) => s.name);
 
-      expect(toolNames).toContain("get_file");
+      expect(toolNames).toContain("get_files");
       expect(toolNames).toContain("bash_command");
       expect(toolNames).toContain("yield_to_parent");
       expect(toolNames).not.toContain("hover");
@@ -262,9 +262,9 @@ describe.runIf(FULL_CAPABILITIES)("Docker Environment", () => {
 
         const request: GetFile.ToolRequest = {
           id: "test-get-file" as ToolRequestId,
-          toolName: "get_file",
+          toolName: "get_files",
           input: {
-            filePath: "/tmp/test-read.txt" as UnresolvedFilePath,
+            files: [{ filePath: "/tmp/test-read.txt" as UnresolvedFilePath }],
           },
         };
 

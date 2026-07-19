@@ -78,13 +78,18 @@ describe("chunkFile", () => {
   });
 
   it("groups a scope-opening line with its body into one chunk", () => {
-    const content = ["function foo() {", "  const x = 1;", "  return x;", "}"].join(
-      "\n",
-    );
+    const content = [
+      "function foo() {",
+      "  const x = 1;",
+      "  return x;",
+      "}",
+    ].join("\n");
     const chunks = chunkFile(content);
     // The header + body fold into a single chunk (under the char threshold),
     // then the closing brace is its own chunk.
-    expect(chunks[0].text).toBe("function foo() {\n  const x = 1;\n  return x;");
+    expect(chunks[0].text).toBe(
+      "function foo() {\n  const x = 1;\n  return x;",
+    );
     expect(chunks[0].line).toBe(1);
     expect(chunks[0].endLine).toBe(3);
     expect(chunks[1].text).toBe("}");

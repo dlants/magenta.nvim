@@ -28,9 +28,13 @@ it("render the getFile tool.", async () => {
           status: "ok",
           value: {
             id: "request_id" as ToolRequestId,
-            toolName: "get_file" as ToolName,
+            toolName: "get_files" as ToolName,
             input: {
-              filePath: "./poem.txt" as UnresolvedFilePath,
+              files: [
+                {
+                  filePath: "./poem.txt" as UnresolvedFilePath,
+                },
+              ],
             },
           },
         },
@@ -56,9 +60,13 @@ it("should expand get_file tool input on <CR>", async () => {
           status: "ok",
           value: {
             id: "request_id" as ToolRequestId,
-            toolName: "get_file" as ToolName,
+            toolName: "get_files" as ToolName,
             input: {
-              filePath: "./poem.txt" as UnresolvedFilePath,
+              files: [
+                {
+                  filePath: "./poem.txt" as UnresolvedFilePath,
+                },
+              ],
             },
           },
         },
@@ -66,7 +74,7 @@ it("should expand get_file tool input on <CR>", async () => {
     });
 
     // Press = on the summary to expand input details
-    await driver.triggerDisplayBufferKeyOnContent(`👀 \`poem.txt\``, "=");
+    await driver.triggerDisplayBufferKeyOnContent(`\`poem.txt\``, "=");
 
     // Verify the JSON input is now visible (not file content, since get_file has no result detail)
     await driver.assertDisplayBufferContains('"filePath": "./poem.txt"');
@@ -95,9 +103,13 @@ it("getFile adds file to context after reading", async () => {
           status: "ok",
           value: {
             id: "request_id" as ToolRequestId,
-            toolName: "get_file" as ToolName,
+            toolName: "get_files" as ToolName,
             input: {
-              filePath: "./poem.txt" as UnresolvedFilePath,
+              files: [
+                {
+                  filePath: "./poem.txt" as UnresolvedFilePath,
+                },
+              ],
             },
           },
         },
@@ -168,9 +180,13 @@ it("getFile reads unloaded buffer", async () => {
           status: "ok",
           value: {
             id: "request_id" as ToolRequestId,
-            toolName: "get_file" as ToolName,
+            toolName: "get_files" as ToolName,
             input: {
-              filePath: "./poem.txt" as UnresolvedFilePath,
+              files: [
+                {
+                  filePath: "./poem.txt" as UnresolvedFilePath,
+                },
+              ],
             },
           },
         },
@@ -205,7 +221,8 @@ it("getFile reads unloaded buffer", async () => {
 
     const toolResultContent = toolResult.content as ContentBlockParam[];
     const textContent = toolResultContent.find(
-      (item: ContentBlockParam) => item.type === "text",
+      (item: ContentBlockParam) =>
+        item.type === "text" && !item.text.startsWith("==="),
     ) as TextBlockParam;
     expect(textContent).toBeDefined();
 
@@ -245,16 +262,20 @@ it("should add images to context manager", async () => {
           status: "ok",
           value: {
             id: "img_request" as ToolRequestId,
-            toolName: "get_file" as ToolName,
+            toolName: "get_files" as ToolName,
             input: {
-              filePath: "test.jpg" as UnresolvedFilePath,
+              files: [
+                {
+                  filePath: "test.jpg" as UnresolvedFilePath,
+                },
+              ],
             },
           },
         },
       ],
     });
 
-    await driver.assertDisplayBufferContains("✅ `test.jpg`");
+    await driver.assertDisplayBufferContains("`test.jpg`");
 
     // Handle the auto-respond message
     const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
@@ -299,16 +320,20 @@ it("should add PDFs to context manager", async () => {
           status: "ok",
           value: {
             id: "pdf_request" as ToolRequestId,
-            toolName: "get_file" as ToolName,
+            toolName: "get_files" as ToolName,
             input: {
-              filePath: "sample2.pdf" as UnresolvedFilePath,
+              files: [
+                {
+                  filePath: "sample2.pdf" as UnresolvedFilePath,
+                },
+              ],
             },
           },
         },
       ],
     });
 
-    await driver.assertDisplayBufferContains("✅ `sample2.pdf`");
+    await driver.assertDisplayBufferContains("`sample2.pdf`");
 
     // Handle the auto-respond message
     const toolResultRequest = await driver.mockAnthropic.awaitPendingStream();
@@ -348,9 +373,13 @@ it("should continue to add text files to context normally", async () => {
           status: "ok",
           value: {
             id: "text_request" as ToolRequestId,
-            toolName: "get_file" as ToolName,
+            toolName: "get_files" as ToolName,
             input: {
-              filePath: "poem.txt" as UnresolvedFilePath,
+              files: [
+                {
+                  filePath: "poem.txt" as UnresolvedFilePath,
+                },
+              ],
             },
           },
         },
@@ -391,9 +420,13 @@ it("should handle mixed content types in a single conversation", async () => {
           status: "ok",
           value: {
             id: "text_request" as ToolRequestId,
-            toolName: "get_file" as ToolName,
+            toolName: "get_files" as ToolName,
             input: {
-              filePath: "poem.txt" as UnresolvedFilePath,
+              files: [
+                {
+                  filePath: "poem.txt" as UnresolvedFilePath,
+                },
+              ],
             },
           },
         },
@@ -423,16 +456,20 @@ it("should handle mixed content types in a single conversation", async () => {
           status: "ok",
           value: {
             id: "img_request" as ToolRequestId,
-            toolName: "get_file" as ToolName,
+            toolName: "get_files" as ToolName,
             input: {
-              filePath: "test.jpg" as UnresolvedFilePath,
+              files: [
+                {
+                  filePath: "test.jpg" as UnresolvedFilePath,
+                },
+              ],
             },
           },
         },
       ],
     });
 
-    await driver.assertDisplayBufferContains("✅ `test.jpg`");
+    await driver.assertDisplayBufferContains("`test.jpg`");
 
     // Handle second auto-respond message
     const toolResultRequest2 = await driver.mockAnthropic.awaitPendingStream();
@@ -457,16 +494,20 @@ it("should handle mixed content types in a single conversation", async () => {
           status: "ok",
           value: {
             id: "pdf_request" as ToolRequestId,
-            toolName: "get_file" as ToolName,
+            toolName: "get_files" as ToolName,
             input: {
-              filePath: "sample2.pdf" as UnresolvedFilePath,
+              files: [
+                {
+                  filePath: "sample2.pdf" as UnresolvedFilePath,
+                },
+              ],
             },
           },
         },
       ],
     });
 
-    await driver.assertDisplayBufferContains("✅ `sample2.pdf`");
+    await driver.assertDisplayBufferContains("`sample2.pdf`");
 
     // Handle final auto-respond message
     const toolResultRequest3 = await driver.mockAnthropic.awaitPendingStream();

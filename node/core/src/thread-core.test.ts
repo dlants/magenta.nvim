@@ -211,7 +211,7 @@ describe("ThreadCore.handleProviderStopped", () => {
       content_block: {
         type: "tool_use",
         id: toolUseId,
-        name: "get_file" as ToolName,
+        name: "get_files" as ToolName,
         input: {},
         caller: { type: "direct" as const },
       },
@@ -376,8 +376,8 @@ describe("ThreadCore.abort appends user abort message", () => {
     const toolUseId = "tool-abort-1" as ToolRequestId;
 
     // Stream a tool_use block and finish with tool_use stop reason
-    stream.streamToolUse(toolUseId, "get_file" as ToolName, {
-      filePath: "/tmp/test.txt",
+    stream.streamToolUse(toolUseId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/test.txt" }],
     });
     stream.finishResponse("tool_use");
 

@@ -590,7 +590,7 @@ From now on, whenever any of these files are updated by the user, you will get a
         charBudget: CONTEXT_FILE_SUMMARY_BUDGET,
       });
       const summaryText = formatSummary(summary);
-      const notice = `[File too large for full context (${currentFileContent.length} chars). Showing summary. Use the get_file tool with startLine/numLines to read specific ranges.]`;
+      const notice = `[File too large for full context (${currentFileContent.length} chars). Showing summary. Use the get_files tool with startLine/numLines to read specific ranges.]`;
 
       if (commit) {
         fileInfo.agentView = { type: "summary" };

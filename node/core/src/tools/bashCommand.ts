@@ -37,7 +37,7 @@ The command will time out after 1 min.
 You should not run commands that require user input, such as \`git commit\` without \`-m\` or \`ssh\`.
 You should not run commands that do not halt, such as \`docker compose up\` without \`-d\`, \`tail -f\` or \`watch\`.
 
-Long output will be abbreviated (first 10 + last 20 lines). Full output is saved to a log file that can be read with get_file. You do not need to use head/tail/grep to limit output - just run the command directly.
+Long output will be abbreviated (first 10 + last 20 lines). Full output is saved to a log file that can be read with get_files. You do not need to use head/tail/grep to limit output - just run the command directly.
 You will get the stdout and stderr of the command, as well as the exit code, so you do not need to do stream redirects like "2>&1".
 `;
 

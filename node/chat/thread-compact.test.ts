@@ -1423,8 +1423,8 @@ it("compaction drops active reminders (transient reads and context-file blocks)"
             status: "ok",
             value: {
               id: "tool_1" as ToolRequestId,
-              toolName: "get_file" as ToolName,
-              input: { filePath: "./transient.md" },
+              toolName: "get_files" as ToolName,
+              input: { files: [{ filePath: "./transient.md" }] },
             },
           },
         ],

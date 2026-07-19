@@ -13,7 +13,7 @@ type ToolInfoMap = Map<ToolRequestId, ToolName>;
  * Render a thread's full log stream to markdown for a human browsing the
  * archive. Unlike `renderThreadToMarkdown` (compaction), this renders
  * liberally: thinking blocks, system reminders/info, context updates, and full
- * tool results (including `get_file` contents) are kept. Non-message log
+ * tool results (including `get_files` contents) are kept. Non-message log
  * entries (compaction/title/fork/thread_start/restart) are emitted inline so
  * the transcript reflects the actual sequence of events.
  */

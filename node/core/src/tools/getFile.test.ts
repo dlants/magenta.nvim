@@ -29,7 +29,7 @@ describe("GetFileTool unit tests", () => {
   });
 
   function createTool(
-    input: Partial<GetFile.Input> & { filePath: UnresolvedFilePath },
+    input: Partial<GetFile.FileRequest> & { filePath: UnresolvedFilePath },
     opts: {
       contextFiles?: Record<string, unknown>;
     } = {},
@@ -42,8 +42,8 @@ describe("GetFileTool unit tests", () => {
     const invocation = GetFile.execute(
       {
         id: "tool_1" as ToolRequestId,
-        toolName: "get_file" as const,
-        input: input as GetFile.Input,
+        toolName: "get_files" as const,
+        input: { files: [input as GetFile.FileRequest] },
       },
       {
         cwd: tmpDir as NvimCwd,
@@ -89,7 +89,7 @@ describe("GetFileTool unit tests", () => {
 
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text).toContain("already part of the thread context");
     }
@@ -121,7 +121,7 @@ describe("GetFileTool unit tests", () => {
 
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text).toContain("Moonlight whispers");
     }
@@ -144,9 +144,11 @@ describe("GetFileTool unit tests", () => {
 
     const result = await getResult(invocation);
 
-    expect(result.result.status).toBe("error");
-    if (result.result.status === "error") {
-      expect(result.result.error).toContain("File too large");
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[1] as { type: "text"; text: string })
+        .text;
+      expect(text).toContain("File too large");
     }
   });
 
@@ -167,7 +169,7 @@ describe("GetFileTool unit tests", () => {
 
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       // Should contain summary info (file summary header)
       expect(text).toContain("File summary:");
@@ -194,7 +196,7 @@ describe("GetFileTool unit tests", () => {
 
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text).toContain("chars omitted");
     }
@@ -216,7 +218,7 @@ describe("GetFileTool unit tests", () => {
 
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text).toContain("[Lines 2-3 of");
       expect(text).toContain("line2");
@@ -240,7 +242,7 @@ describe("GetFileTool unit tests", () => {
 
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text).toContain("[Lines 3-");
       expect(text).toContain("line3");
@@ -279,7 +281,7 @@ describe("GetFileTool unit tests", () => {
 
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       // Should NOT return "already in context" — should return actual lines
       expect(text).not.toContain("already part of the thread context");
@@ -322,7 +324,7 @@ describe("GetFileTool unit tests", () => {
 
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text).toContain("beta");
       expect(text).toContain("gamma");
@@ -341,11 +343,11 @@ describe("GetFileTool unit tests", () => {
 
     const result = await getResult(invocation);
 
-    expect(result.result.status).toBe("error");
-    if (result.result.status === "error") {
-      expect(result.result.error).toContain(
-        "startLine 100 is beyond end of file",
-      );
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[1] as { type: "text"; text: string })
+        .text;
+      expect(text).toContain("startLine 100 is beyond end of file");
     }
   });
 
@@ -364,7 +366,7 @@ describe("GetFileTool unit tests", () => {
 
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text).toContain("chars omitted");
     }
@@ -377,9 +379,11 @@ describe("GetFileTool unit tests", () => {
 
     const result = await getResult(invocation);
 
-    expect(result.result.status).toBe("error");
-    if (result.result.status === "error") {
-      expect(result.result.error).toContain("does not exist");
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[1] as { type: "text"; text: string })
+        .text;
+      expect(text).toContain("does not exist");
     }
   });
 
@@ -424,7 +428,7 @@ describe("GetFileTool unit tests", () => {
     const result = await getResult(invocation);
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text).toContain("PDF Document:");
       expect(text).toContain("multipage.pdf");
@@ -454,7 +458,7 @@ describe("GetFileTool unit tests", () => {
     const result = await getResult(invocation);
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const doc = result.result.value[0] as {
+      const doc = result.result.value[1] as {
         type: "document";
         source: { type: string; media_type: string; data: string };
         title: string;
@@ -481,10 +485,12 @@ describe("GetFileTool unit tests", () => {
     });
 
     const result = await getResult(invocation);
-    expect(result.result.status).toBe("error");
-    if (result.result.status === "error") {
-      expect(result.result.error).toContain("Page index 5 is out of range");
-      expect(result.result.error).toContain("Document has 1 pages");
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[1] as { type: "text"; text: string })
+        .text;
+      expect(text).toContain("Page index 5 is out of range");
+      expect(text).toContain("Document has 1 pages");
     }
   });
 
@@ -504,7 +510,7 @@ describe("GetFileTool unit tests", () => {
     const result = await getResult(invocation);
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const img = result.result.value[0] as {
+      const img = result.result.value[1] as {
         type: "image";
         source: { type: string; media_type: string; data: string };
       };
@@ -532,9 +538,11 @@ describe("GetFileTool unit tests", () => {
     });
 
     const result = await getResult(invocation);
-    expect(result.result.status).toBe("error");
-    if (result.result.status === "error") {
-      expect(result.result.error).toContain("Unsupported file type");
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const text = (result.result.value[1] as { type: "text"; text: string })
+        .text;
+      expect(text).toContain("Unsupported file type");
     }
   });
 
@@ -571,7 +579,7 @@ describe("GetFileTool unit tests", () => {
     const result = await getResult(invocation);
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text).toContain("File summary:");
       expect(text).toContain("interface User");
@@ -596,7 +604,7 @@ describe("GetFileTool unit tests", () => {
     const result = await getResult(invocation);
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text.length).toBeLessThanOrEqual(40_000 + 500);
       expect(text).toMatch(/Output truncated at \d+ char hard cap/);
@@ -633,7 +641,7 @@ describe("GetFileTool unit tests", () => {
     const result = await getResult(invocation);
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text.length).toBeLessThanOrEqual(40_000 + 500);
       expect(text).toContain("[File summary:");
@@ -652,7 +660,7 @@ describe("GetFileTool unit tests", () => {
     const result = await getResult(invocation);
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text).toBe(content);
       expect(text).not.toContain("[File summary:");
@@ -675,9 +683,13 @@ describe("GetFileTool unit tests", () => {
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
       expect(result.result.structuredResult).toMatchObject({
-        toolName: "get_file",
-        filePath: filePath as AbsFilePath,
-        systemReminder: "always do the thing",
+        toolName: "get_files",
+        files: [
+          {
+            filePath: filePath as AbsFilePath,
+            systemReminder: "always do the thing",
+          },
+        ],
       });
     }
   });
@@ -694,8 +706,8 @@ describe("GetFileTool unit tests", () => {
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
       expect(result.result.structuredResult).toMatchObject({
-        toolName: "get_file",
-        systemReminder: undefined,
+        toolName: "get_files",
+        files: [{ systemReminder: undefined }],
       });
     }
   });
@@ -716,8 +728,8 @@ describe("GetFileTool unit tests", () => {
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
       expect(result.result.structuredResult).toMatchObject({
-        toolName: "get_file",
-        systemReminder: undefined,
+        toolName: "get_files",
+        files: [{ systemReminder: undefined }],
       });
     }
   });
@@ -736,9 +748,115 @@ describe("GetFileTool unit tests", () => {
     const result = await getResult(invocation);
     expect(result.result.status).toBe("ok");
     if (result.result.status === "ok") {
-      const text = (result.result.value[0] as { type: "text"; text: string })
+      const text = (result.result.value[1] as { type: "text"; text: string })
         .text;
       expect(text).toContain("File summary:");
+    }
+  });
+
+  function createToolFiles(
+    files: (Partial<GetFile.FileRequest> & { filePath: UnresolvedFilePath })[],
+    opts: { contextFiles?: Record<string, unknown> } = {},
+  ) {
+    const onToolApplied = vi.fn<OnToolApplied>();
+    const mockContextTracker = {
+      files: opts.contextFiles ?? {},
+    } as unknown as ContextTracker;
+
+    const invocation = GetFile.execute(
+      {
+        id: "tool_1" as ToolRequestId,
+        toolName: "get_files" as const,
+        input: { files: files as GetFile.FileRequest[] },
+      },
+      {
+        cwd: tmpDir as NvimCwd,
+        homeDir: "/tmp/fake-home" as HomeDir,
+        fileIO: new FsFileIO(),
+        contextTracker: mockContextTracker,
+        onToolApplied,
+      },
+    );
+
+    return { invocation, onToolApplied };
+  }
+
+  it("reads two text files, each under its own header, and applies both", async () => {
+    await fs.writeFile(path.join(tmpDir, "a.txt"), "aaa content", "utf-8");
+    await fs.writeFile(path.join(tmpDir, "b.txt"), "bbb content", "utf-8");
+
+    const { invocation, onToolApplied } = createToolFiles([
+      { filePath: "a.txt" as UnresolvedFilePath },
+      { filePath: "b.txt" as UnresolvedFilePath },
+    ]);
+
+    const result = await getResult(invocation);
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const texts = result.result.value.map(
+        (v) => (v as { type: "text"; text: string }).text,
+      );
+      expect(texts).toEqual([
+        "=== a.txt ===",
+        "aaa content",
+        "=== b.txt ===",
+        "bbb content",
+      ]);
+      expect(result.result.structuredResult).toMatchObject({
+        toolName: "get_files",
+        files: [{}, {}],
+      });
+    }
+    expect(onToolApplied).toHaveBeenCalledTimes(2);
+  });
+
+  it("isolates a missing file without failing the good one", async () => {
+    await fs.writeFile(path.join(tmpDir, "good.txt"), "good content", "utf-8");
+
+    const { invocation, onToolApplied } = createToolFiles([
+      { filePath: "missing.txt" as UnresolvedFilePath },
+      { filePath: "good.txt" as UnresolvedFilePath },
+    ]);
+
+    const result = await getResult(invocation);
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      const texts = result.result.value.map(
+        (v) => (v as { type: "text"; text: string }).text,
+      );
+      expect(texts[1]).toContain("does not exist");
+      expect(texts[3]).toContain("good content");
+    }
+    expect(onToolApplied).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces system reminders from every markdown file in the batch", async () => {
+    await fs.writeFile(
+      path.join(tmpDir, "one.md"),
+      "# One\n\n<system_reminder>\nfirst rule\n</system_reminder>\n",
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(tmpDir, "two.md"),
+      "# Two\n\n<system_reminder>\nsecond rule\n</system_reminder>\n",
+      "utf-8",
+    );
+
+    const { invocation } = createToolFiles([
+      { filePath: "one.md" as UnresolvedFilePath },
+      { filePath: "two.md" as UnresolvedFilePath },
+    ]);
+
+    const result = await getResult(invocation);
+    expect(result.result.status).toBe("ok");
+    if (result.result.status === "ok") {
+      expect(result.result.structuredResult).toMatchObject({
+        toolName: "get_files",
+        files: [
+          { systemReminder: "first rule" },
+          { systemReminder: "second rule" },
+        ],
+      });
     }
   });
 });

@@ -10,7 +10,7 @@ Treat each sub-agent as a coworker joining a project — they have no context on
 
 **Do not use sub-agents for things you can do directly.** Sub-agents are for performing ambiguous tasks:
 
-- If you need to read a file, use `get_file` — don't spawn an explore agent to read it for you.
+- If you need to read a file, use `get_files` — don't spawn an explore agent to read it for you.
 - If you need to make an exact edit, use the `edl` tool — don't spawn a fast-edit agent for one change.
 - If you need to run a command, use `bash_command` — don't spawn an agent to run it.
 
@@ -18,7 +18,7 @@ Treat each sub-agent as a coworker joining a project — they have no context on
 
 `agentType` selects the agent personality and system prompt:
 
-- **explore** — only when you don't already know where to look. Each explore agent should answer one specific question about the code. It will respond with file paths, line ranges, and descriptions of what's there (never exact code). If you already know the file or location, use get_file directly instead of spawning an explore agent. Never use an explore agent to read or summarize a file's full contents.
+- **explore** — only when you don't already know where to look. Each explore agent should answer one specific question about the code. It will respond with file paths, line ranges, and descriptions of what's there (never exact code). If you already know the file or location, use get_files directly instead of spawning an explore agent. Never use an explore agent to read or summarize a file's full contents.
 - **fast-edit** — for quick and predictable edit tasks that don't require the full model capabilities, like straightforward refactors.
 - **default** — for everything else.
 
@@ -36,7 +36,7 @@ Treat each sub-agent as a coworker joining a project — they have no context on
 - Before spawning explore agents, state "I need to answer these questions:" and write a high-level list of all the things you need to find out. Then spawn one explore agent per question.
 
 WRONG: spawning explore to "read file X and tell me what's in it", "summarize the contents of directory Y", "what does file Z export?"
-WRONG: spawning explore when you already know the file path — just use get_file directly
+WRONG: spawning explore when you already know the file path — just use get_files directly
 RIGHT: spawning explore to "where is FooInterface defined and used?", "which files handle authentication?", "find where errors are caught in the request pipeline"
 
 <example>

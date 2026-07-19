@@ -37,7 +37,7 @@ export interface MCPToolManager {
 }
 
 export type StaticToolMap = {
-  get_file: { input: GetFile.Input };
+  get_files: { input: GetFile.Input };
   hover: { input: Hover.Input };
   find_references: { input: FindReferences.Input };
   bash_command: { input: BashCommand.Input };
@@ -66,7 +66,7 @@ export type Msg = {
 };
 
 const TOOL_SPEC_MAP: Partial<Record<StaticToolName, ProviderToolSpec>> = {
-  get_file: GetFile.spec,
+  get_files: GetFile.spec,
 
   hover: Hover.spec,
   find_references: FindReferences.spec,

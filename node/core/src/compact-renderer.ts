@@ -16,7 +16,7 @@ export type RenderResult = {
 
 /** Render a thread's messages to a markdown string suitable for compaction.
  *
- * Filters out thinking blocks, system reminders, and file contents from get_file
+ * Filters out thinking blocks, system reminders, and file contents from get_files
  * results. Summarizes binary content. Preserves tool use details and text output.
  */
 export function renderThreadToMarkdown(
@@ -211,8 +211,8 @@ function renderToolResult(
 ): string {
   const toolName = toolInfoMap.get(block.id);
 
-  // For get_file results, just indicate success/failure without the full content
-  if (toolName === "get_file") {
+  // For get_files results, just indicate success/failure without the full content
+  if (toolName === "get_files") {
     if (block.result.status === "ok") {
       return `## tool_result\n[file contents omitted]\n`;
     }

@@ -10,7 +10,7 @@ describe("getToolSpecs capability filtering", () => {
     const names = specs.map((s) => s.name);
     expect(names).toContain("hover");
     expect(names).toContain("bash_command");
-    expect(names).toContain("get_file");
+    expect(names).toContain("get_files");
   });
 
   it("excludes lsp tools when lsp capability is missing", () => {
@@ -20,7 +20,7 @@ describe("getToolSpecs capability filtering", () => {
     expect(names).not.toContain("hover");
     expect(names).not.toContain("find_references");
     expect(names).toContain("bash_command");
-    expect(names).toContain("get_file");
+    expect(names).toContain("get_files");
     expect(names).toContain("edl");
   });
 
@@ -28,7 +28,7 @@ describe("getToolSpecs capability filtering", () => {
     const caps: Set<ToolCapability> = new Set(["file-io"]);
     const specs = getToolSpecs("root", noopMcpToolManager, caps);
     const names = specs.map((s) => s.name);
-    expect(names).toContain("get_file");
+    expect(names).toContain("get_files");
     expect(names).toContain("edl");
     expect(names).not.toContain("bash_command");
     expect(names).not.toContain("spawn_subagents");
@@ -59,7 +59,7 @@ describe("getToolSpecs capability filtering", () => {
     const caps: Set<ToolCapability> = new Set(["file-io", "shell"]);
     const specs = getToolSpecs("subagent", noopMcpToolManager, caps);
     const names = specs.map((s) => s.name);
-    expect(names).toContain("get_file");
+    expect(names).toContain("get_files");
     expect(names).toContain("bash_command");
     expect(names).toContain("edl");
     expect(names).not.toContain("hover");

@@ -1161,8 +1161,8 @@ Always check for proper error handling and type safety.
               status: "ok",
               value: {
                 id: "get-file-1" as ToolRequestId,
-                toolName: "get_file" as ToolName,
-                input: { filePath: "poem.txt" },
+                toolName: "get_files" as ToolName,
+                input: { files: [{ filePath: "poem.txt" }] },
               },
             },
           ],
