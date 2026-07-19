@@ -7,7 +7,6 @@ export const STATIC_TOOL_NAMES = [
   "spawn_subagents",
   "yield_to_parent",
   "edl",
-  "docs",
   "run_script",
   "nvim_lua",
   "scratchpad",
@@ -22,7 +21,6 @@ export const CHAT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "bash_command",
   "spawn_subagents",
   "edl",
-  "docs",
   "run_script",
   "nvim_lua",
   "scratchpad",
@@ -40,7 +38,6 @@ export const SUBAGENT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "bash_command",
   "yield_to_parent",
   "edl",
-  "docs",
   "scratchpad",
 ];
 
@@ -67,7 +64,6 @@ export const TOOL_REQUIRED_CAPABILITIES: Record<
   spawn_subagents: new Set(["threads"]),
   thread_title: new Set(),
   yield_to_parent: new Set(),
-  docs: new Set(),
   run_script: new Set(["scripts"]),
   nvim_lua: new Set(["nvim"]),
   scratchpad: new Set(),

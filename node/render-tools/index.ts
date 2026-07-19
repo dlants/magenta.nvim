@@ -21,7 +21,6 @@ import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import { formatTokens } from "../utils/tokens.ts";
 import * as BashCommandRender from "./bashCommand.ts";
-import * as DocsRender from "./docs.ts";
 import * as EdlRender from "./edl.ts";
 import * as FindReferencesRender from "./findReferences.ts";
 import * as GetFileRender from "./getFile.ts";
@@ -85,8 +84,6 @@ export function renderToolSummary(
       return SpawnSubagentsRender.renderSummary(request, displayContext);
     case "yield_to_parent":
       return YieldToParentRender.renderSummary(request, displayContext);
-    case "docs":
-      return DocsRender.renderSummary(request, displayContext);
     case "run_script": {
       const input = request.input as RunScript.Input;
       return d`🚀 run_script: ${input.scriptName}`;
@@ -223,8 +220,6 @@ export function renderToolResultSummary(
       return d`${statusEmoji} ${SpawnSubagentsRender.renderResultSummary(info)} (${tokEst})`;
     case "yield_to_parent":
       return d`${statusEmoji} ${YieldToParentRender.renderResultSummary(info)} (${tokEst})`;
-    case "docs":
-      return d`${statusEmoji} ${DocsRender.renderResultSummary(info)} (${tokEst})`;
     case "thread_title":
       return d`${statusEmoji} ${ThreadTitleRender.renderResultSummary(info)}`;
     case "edl":
@@ -267,13 +262,6 @@ export function renderToolResult(
       );
     case "edl":
       return EdlRender.renderResult(
-        info,
-        context,
-        toolViewState,
-        toolRequestId,
-      );
-    case "docs":
-      return DocsRender.renderResult(
         info,
         context,
         toolViewState,

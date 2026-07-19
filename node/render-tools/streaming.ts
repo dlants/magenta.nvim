@@ -41,7 +41,6 @@ export function renderStreamdedTool(
     case "find_references":
     case "thread_title":
     case "yield_to_parent":
-    case "docs":
     case "run_script":
     case "nvim_lua":
       break;

@@ -1,5 +1,4 @@
 import * as BashCommand from "./bashCommand.ts";
-import * as Docs from "./docs.ts";
 import * as Edl from "./edl.ts";
 import * as FindReferences from "./findReferences.ts";
 import * as GetFile from "./getFile.ts";
@@ -42,8 +41,6 @@ export function validateInput(
       return YieldToParent.validateInput(input);
     case "edl":
       return Edl.validateInput(input);
-    case "docs":
-      return Docs.validateInput(input);
     case "run_script":
       return RunScript.validateInput(input);
     case "nvim_lua":

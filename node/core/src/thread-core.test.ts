@@ -110,9 +110,6 @@ function createThreadCoreWithMock(
       getState: async () => undefined,
     } as unknown as ThreadCoreContext["gitClient"],
     lspClient: {} as unknown as ThreadCoreContext["lspClient"],
-    helpTagsProvider: {
-      listTagFiles: async () => [],
-    } as unknown as ThreadCoreContext["helpTagsProvider"],
     availableCapabilities: new Set(),
     environmentConfig: { type: "local" },
     maxConcurrentSubagents: 1,

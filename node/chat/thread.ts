@@ -322,7 +322,6 @@ export class Thread {
             ? { initialGitState: context.initialGitState }
             : {}),
           lspClient: env.lspClient,
-          helpTagsProvider: env.helpTagsProvider,
           ...(env.luaExecutor !== undefined
             ? { luaExecutor: env.luaExecutor }
             : {}),
@@ -555,7 +554,6 @@ export class Thread {
         shell: environment.shell,
         gitClient: environment.gitClient,
         lspClient: environment.lspClient,
-        helpTagsProvider: environment.helpTagsProvider,
         ...(environment.luaExecutor !== undefined
           ? { luaExecutor: environment.luaExecutor }
           : {}),

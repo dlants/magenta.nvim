@@ -1,7 +1,6 @@
 import type {
   FileIO,
   GitClient,
-  HelpTagsProvider,
   LspClient,
   LuaExecutor,
   ThreadId,
@@ -22,7 +21,6 @@ export interface Environment {
   gitClient: GitClient;
   sandboxViolationHandler?: SandboxViolationHandler | undefined;
   lspClient: LspClient;
-  helpTagsProvider: HelpTagsProvider;
   luaExecutor?: LuaExecutor | undefined;
   cwd: NvimCwd;
   homeDir: HomeDir;
@@ -37,9 +35,7 @@ import { DockerShell } from "./capabilities/docker-shell.ts";
 import { DockerGitClient, LocalGitClient } from "./capabilities/git-client.ts";
 import type { Lsp } from "./capabilities/lsp.ts";
 import { NvimLspClient } from "./capabilities/lsp-client-adapter.ts";
-import { NoopHelpTagsProvider } from "./capabilities/noop-help-tags-provider.ts";
 import { NoopLspClient } from "./capabilities/noop-lsp-client.ts";
-import { NvimHelpTagsProvider } from "./capabilities/nvim-help-tags-provider.ts";
 import { NvimLuaExecutor } from "./capabilities/nvim-lua-executor.ts";
 import { SandboxFileIO } from "./capabilities/sandbox-file-io.ts";
 import { SandboxShell } from "./capabilities/sandbox-shell.ts";
@@ -85,7 +81,6 @@ export function createLocalEnvironment({
 
   const lspClient = new NvimLspClient(lsp, nvim, cwd, homeDir);
   const luaExecutor = new NvimLuaExecutor(nvim);
-  const helpTagsProvider = new NvimHelpTagsProvider(nvim);
 
   return {
     fileIO: sandboxFileIO,
@@ -93,7 +88,6 @@ export function createLocalEnvironment({
     gitClient: new LocalGitClient(cwd),
     sandboxViolationHandler: violationHandler,
     lspClient,
-    helpTagsProvider,
     luaExecutor,
     cwd,
     homeDir,
@@ -135,7 +129,6 @@ export async function createDockerEnvironment({
   const fileIO = new DockerFileIO({ container });
   const shell = new DockerShell({ container, cwd: resolvedCwd, threadId });
   const lspClient = new NoopLspClient();
-  const helpTagsProvider = new NoopHelpTagsProvider();
 
   return {
     fileIO,
@@ -143,7 +136,6 @@ export async function createDockerEnvironment({
     gitClient: new DockerGitClient(container, resolvedCwd),
     sandboxViolationHandler: undefined,
     lspClient,
-    helpTagsProvider,
     cwd: resolvedCwd as NvimCwd,
     homeDir: resolvedHome as HomeDir,
     availableCapabilities: new Set(["file-io", "shell", "threads"]),

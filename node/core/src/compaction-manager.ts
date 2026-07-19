@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ContextTracker } from "./capabilities/context-tracker.ts";
-import type { HelpTagsProvider } from "./capabilities/help-tags-provider.ts";
 import type { LspClient } from "./capabilities/lsp-client.ts";
 import type { Shell } from "./capabilities/shell.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
@@ -101,7 +100,6 @@ export interface CompactionManagerContext {
   cwd: NvimCwd;
   homeDir: HomeDir;
   lspClient: LspClient;
-  helpTagsProvider: HelpTagsProvider;
   availableCapabilities: Set<ToolCapability>;
   contextManager: ContextManager;
   shell: Shell;
@@ -385,7 +383,6 @@ export class CompactionManager extends Emitter<CompactionEvents> {
             fileTypeInfo,
           );
         },
-        helpTagsProvider: this.context.helpTagsProvider,
         edlRegisters: this.edlRegisters,
         scratchpad: this.scratchpad,
         fileIO: this.fileIO,

@@ -9,7 +9,6 @@ import type {
 import type { ToolRequest, ToolRequestId } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import * as BashCommand from "./bashCommand.ts";
-import * as Docs from "./docs.ts";
 import * as Edl from "./edl.ts";
 import * as FindReferences from "./findReferences.ts";
 import * as GetFile from "./getFile.ts";
@@ -45,7 +44,6 @@ export type StaticToolMap = {
   spawn_subagents: { input: SpawnSubagents.Input };
   yield_to_parent: { input: YieldToParent.Input };
   edl: { input: Edl.Input };
-  docs: { input: Docs.Input };
   run_script: { input: RunScript.Input };
   nvim_lua: { input: NvimLua.Input };
   scratchpad: { input: Scratchpad.Input };
@@ -136,8 +134,6 @@ export function getToolSpecs(
   for (const toolName of filteredToolNames) {
     if (toolName === "spawn_subagents") {
       specs.push(SpawnSubagents.getSpec(agents ?? {}, subagentConfig?.tier));
-    } else if (toolName === "docs") {
-      specs.push(Docs.getSpec());
     } else if (toolName === "yield_to_parent") {
       specs.push(YieldToParent.getSpec(yieldSchema));
     } else if (toolName === "run_script") {

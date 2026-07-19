@@ -3,7 +3,6 @@ import { type AgentsMap, extractSystemReminderBlock } from "./agents/agents.ts";
 import type { ContextTracker } from "./capabilities/context-tracker.ts";
 import type { FileIO } from "./capabilities/file-io.ts";
 import type { GitClient, GitState } from "./capabilities/git-client.ts";
-import type { HelpTagsProvider } from "./capabilities/help-tags-provider.ts";
 import type { LspClient } from "./capabilities/lsp-client.ts";
 import type { LuaExecutor } from "./capabilities/lua-executor.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
@@ -147,7 +146,6 @@ export interface ThreadCoreContext {
   gitClient: GitClient;
   initialGitState?: GitState | undefined;
   lspClient: LspClient;
-  helpTagsProvider: HelpTagsProvider;
   luaExecutor?: LuaExecutor | undefined;
   availableCapabilities: Set<ToolCapability>;
   environmentConfig: EnvironmentConfig;
@@ -806,7 +804,6 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
             });
           }
         },
-        helpTagsProvider: this.context.helpTagsProvider,
         edlRegisters: this.state.edlRegisters,
         scratchpad: this.state.scratchpad,
         fileIO: this.context.fileIO,
@@ -1501,7 +1498,6 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       cwd: this.context.cwd,
       homeDir: this.context.homeDir,
       lspClient: this.context.lspClient,
-      helpTagsProvider: this.context.helpTagsProvider,
       availableCapabilities: this.context.availableCapabilities,
       contextManager: this.contextManager,
       shell: this.context.shell,

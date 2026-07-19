@@ -102,7 +102,7 @@ export const spec: ProviderToolSpec = {
   name: "nvim_lua" as ToolName,
   description: `Execute a chunk of Lua code in the host neovim instance and get the result back.
 The code is run via nvim_exec_lua. Whatever the chunk \`return\`s is sent back to you (JSON-formatted when possible).
-Use this to inspect or manipulate the live editor state.`,
+Use this to inspect or manipulate the live editor state, or examine neovim/plugin docs (e.g. vim.fn.getcompletion(query, "help") or vim.api.nvim_get_runtime_file).`,
   input_schema: {
     type: "object",
     properties: {

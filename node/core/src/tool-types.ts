@@ -13,7 +13,6 @@ export type ToolRequest = {
 
 import type { ProviderToolResult } from "./providers/provider-types.ts";
 import type * as BashCommand from "./tools/bashCommand.ts";
-import type * as Docs from "./tools/docs.ts";
 import type * as Edl from "./tools/edl.ts";
 import type * as FindReferences from "./tools/findReferences.ts";
 import type * as GetFile from "./tools/getFile.ts";
@@ -42,7 +41,6 @@ export type ToolStructuredResult =
   | FindReferences.StructuredResult
   | ThreadTitle.StructuredResult
   | YieldToParent.StructuredResult
-  | Docs.StructuredResult
   | RunScript.StructuredResult
   | GenericStructuredResult;
 

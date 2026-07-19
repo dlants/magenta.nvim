@@ -26,7 +26,6 @@ export {
   type GitState,
   parseGitState,
 } from "./capabilities/git-client.ts";
-export type { HelpTagsProvider } from "./capabilities/help-tags-provider.ts";
 export type {
   LspClient,
   LspDefinitionResponse,
@@ -235,7 +234,6 @@ export type {
 } from "./tool-types.ts";
 export * as BashCommand from "./tools/bashCommand.ts";
 export { type CreateToolContext, createTool } from "./tools/create-tool.ts";
-export * as Docs from "./tools/docs.ts";
 export * as Edl from "./tools/edl.ts";
 export * as FindReferences from "./tools/findReferences.ts";
 export { formatToolSpec, formatToolSpecs } from "./tools/format-tool-spec.ts";

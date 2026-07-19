@@ -4,7 +4,6 @@ import type {
   OnToolApplied,
 } from "../capabilities/context-tracker.ts";
 import type { FileIO } from "../capabilities/file-io.ts";
-import type { HelpTagsProvider } from "../capabilities/help-tags-provider.ts";
 import type { LspClient } from "../capabilities/lsp-client.ts";
 import type { LuaExecutor } from "../capabilities/lua-executor.ts";
 import type { ScriptRunner } from "../capabilities/script-runner.ts";
@@ -17,7 +16,6 @@ import type { ToolInvocation, ToolRequest } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import * as BashCommand from "./bashCommand.ts";
-import * as Docs from "./docs.ts";
 import * as Edl from "./edl.ts";
 import * as FindReferences from "./findReferences.ts";
 import * as GetFile from "./getFile.ts";
@@ -45,7 +43,6 @@ export type CreateToolContext = {
   maxConcurrentFastSubagents: number;
   contextTracker: ContextTracker;
   onToolApplied: OnToolApplied;
-  helpTagsProvider: HelpTagsProvider;
   edlRegisters: EdlRegisters;
   scratchpad: Scratchpad.Scratchpad;
   fileIO: FileIO;
@@ -168,13 +165,6 @@ export function createTool(
     case "scratchpad": {
       return Scratchpad.execute(staticRequest, {
         scratchpad: context.scratchpad,
-      });
-    }
-
-    case "docs": {
-      return Docs.execute(staticRequest, {
-        fileIO: context.fileIO,
-        helpTagsProvider: context.helpTagsProvider,
       });
     }
 
