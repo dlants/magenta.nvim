@@ -52,6 +52,15 @@ Verify Docker setup:~
 ==============================================================================
 CONFIGURATION                                        *magenta-docker-config*
 
+The `docker`/`docker_unsupervised` environment options are only exposed to the
+agent when the project configures a Dockerfile via the `dockerfile` option
+(settable in your setup config or in project-level `.magenta/options.json`):~
+>lua
+    require('magenta').setup({ dockerfile = "docker/Dockerfile" })
+<
+When `dockerfile` is unset, sub-agents can only run on the host and the
+`environment` field is omitted from the spawn_subagents tool schema entirely.
+
 Docker sub-agents are configured inline when spawning, not in a separate
 config file. Required fields:~
 

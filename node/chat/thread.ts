@@ -330,6 +330,9 @@ export class Thread {
           maxConcurrentSubagents: context.options.maxConcurrentSubagents || 3,
           maxConcurrentFastSubagents:
             context.options.maxConcurrentFastSubagents || 8,
+          ...(context.options.dockerfile
+            ? { subagentDockerfile: context.options.dockerfile }
+            : {}),
           ...(context.yieldSchema ? { yieldSchema: context.yieldSchema } : {}),
           getAgents: () =>
             loadAgents({
@@ -562,6 +565,9 @@ export class Thread {
         maxConcurrentSubagents: getOptions().maxConcurrentSubagents || 3,
         maxConcurrentFastSubagents:
           getOptions().maxConcurrentFastSubagents || 8,
+        ...(getOptions().dockerfile
+          ? { subagentDockerfile: getOptions().dockerfile }
+          : {}),
         getAgents: () =>
           loadAgents({
             cwd: environment.cwd,

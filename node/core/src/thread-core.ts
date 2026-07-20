@@ -149,6 +149,7 @@ export interface ThreadCoreContext {
   luaExecutor?: LuaExecutor | undefined;
   availableCapabilities: Set<ToolCapability>;
   environmentConfig: EnvironmentConfig;
+  subagentDockerfile?: string;
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
   getAgents: () => AgentsMap;
@@ -559,6 +560,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       this.context.subagentConfig,
       this.context.yieldSchema,
       this.context.getScriptRunner?.()?.getScriptCatalog(),
+      this.context.subagentDockerfile,
     );
   }
 

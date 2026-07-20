@@ -747,10 +747,50 @@ function truncatePrompt(prompt: string, maxLen: number = 80): string {
     : singleLine;
 }
 
+const DOCKER_AGENT_PROPERTIES = {
+  environment: {
+    type: "string",
+    enum: ["host", "docker", "docker_unsupervised"],
+    description:
+      "Where the sub-agent runs. 'host' (default) runs locally on the host machine, 'docker'/'docker_unsupervised' runs in an isolated container. Requires 'dockerfile' and 'workspacePath' fields.",
+  },
+  directory: {
+    type: "string",
+    description:
+      "Host directory to spawn the docker container from. Defaults to '.' (current working directory). The directory must contain a Dockerfile (at the path specified by 'dockerfile'). For host environments, sets the working directory for the sub-agent.",
+  },
+  dockerfile: {
+    type: "string",
+    description:
+      "Path to the Dockerfile, relative to directory. Required for docker/docker_unsupervised environments.",
+  },
+  workspacePath: {
+    type: "string",
+    description:
+      "Working directory for the agent inside the container. Required for docker/docker_unsupervised environments.",
+  },
+};
+
+function formatEnvironmentDescription(dockerfile: string): string {
+  return `
+## Environment
+
+\`environment\` selects where the sub-agent runs (orthogonal to agentType):
+
+- **host** (default) — runs locally on the host machine. Use \`directory\` to set the working directory for the sub-agent.
+- **docker** / **docker_unsupervised** — run a sub-agent in an isolated Docker container with full shell access. This project configures a Dockerfile at \`${dockerfile}\`; pass it as the \`dockerfile\` field (along with \`workspacePath\`). The container is built from a host directory (default: current working directory). When the agent yields, file changes are automatically rsynced back to the host directory.
+
+**Important**: \`contextFiles\` and \`sharedContextFiles\` do NOT work for docker/docker_unsupervised environments because the container has a separate filesystem. Instead, include relevant information directly in the prompt, or commit files to a branch so the docker agent can access them via git.
+`;
+}
+
 export function getSpec(
   agents: AgentsMap,
   currentTier?: AgentTier,
+  subagentDockerfile?: string,
 ): ProviderToolSpec {
+  const dockerConfigured =
+    typeof subagentDockerfile === "string" && subagentDockerfile.length > 0;
   const agentNames = Object.keys(agents);
   let filteredAgentNames: string[];
 
@@ -774,7 +814,13 @@ export function getSpec(
   const allAgentTypes = filteredAgentNames;
 
   const agentsDescription = formatAgentsIntroduction(agents);
-  const description = SPAWN_SUBAGENTS_BASE_DESCRIPTION + agentsDescription;
+  const environmentDescription = dockerConfigured
+    ? formatEnvironmentDescription(subagentDockerfile as string)
+    : "";
+  const description =
+    SPAWN_SUBAGENTS_BASE_DESCRIPTION +
+    environmentDescription +
+    agentsDescription;
 
   return {
     name: "spawn_subagents" as ToolName,
@@ -817,27 +863,7 @@ export function getSpec(
                 description:
                   "Agent type for this sub-agent. Selects the agent personality/system-prompt. Use 'subagent' for general tasks, or a custom agent name.",
               },
-              environment: {
-                type: "string",
-                enum: ["host", "docker", "docker_unsupervised"],
-                description:
-                  "Where the sub-agent runs. 'host' (default) runs locally on the host machine, 'docker'/'docker_unsupervised' runs in an isolated container. Requires 'dockerfile' and 'workspacePath' fields.",
-              },
-              directory: {
-                type: "string",
-                description:
-                  "Host directory to spawn the docker container from. Defaults to '.' (current working directory). The directory must contain a Dockerfile (at the path specified by 'dockerfile'). For host environments, sets the working directory for the sub-agent.",
-              },
-              dockerfile: {
-                type: "string",
-                description:
-                  "Path to the Dockerfile, relative to directory. Required for docker/docker_unsupervised environments.",
-              },
-              workspacePath: {
-                type: "string",
-                description:
-                  "Working directory for the agent inside the container. Required for docker/docker_unsupervised environments.",
-              },
+              ...(dockerConfigured ? DOCKER_AGENT_PROPERTIES : {}),
             },
           },
           minItems: 1,

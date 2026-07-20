@@ -1604,8 +1604,21 @@ describe("getSpec", () => {
     expect(agentTypeEnum).toContain("my-agent");
   });
 
-  it("includes environment property with correct enum", () => {
+  it("omits environment property when no dockerfile is configured", () => {
     const spec = SpawnSubagents.getSpec({});
+    const schema = spec.input_schema as {
+      properties: {
+        agents: {
+          items: { properties: Record<string, unknown> };
+        };
+      };
+    };
+    expect(schema.properties.agents.items.properties).not.toHaveProperty(
+      "environment",
+    );
+  });
+  it("includes environment property with correct enum when a dockerfile is configured", () => {
+    const spec = SpawnSubagents.getSpec({}, undefined, "docker/Dockerfile");
     const schema = spec.input_schema as {
       properties: {
         agents: {
@@ -1615,6 +1628,7 @@ describe("getSpec", () => {
     };
     const envEnum = schema.properties.agents.items.properties.environment.enum;
     expect(envEnum).toEqual(["host", "docker", "docker_unsupervised"]);
+    expect(spec.description).toContain("docker/Dockerfile");
   });
 
   it("includes top-level sharedPrompt and sharedContextFiles properties", () => {

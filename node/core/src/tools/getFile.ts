@@ -536,24 +536,7 @@ export function execute(
 
 export const spec: ProviderToolSpec = {
   name: "get_files" as ToolName,
-  description: `Get the contents of one or more files. Text files will be added to the thread context.
-Provide a \`files\` array; each entry reads one file with its own options. Reading several files in a single call avoids round trips.
-If a file is part of your context, avoid reading it again, since you will get notified about any future changes about the file.
-
-Supports:
-- Text files (source code, markdown, JSON, XML, etc.) - added to context for tracking changes
-- Images (JPEG, PNG, GIF, WebP) - returned as base64 encoded content
-- PDF documents - returned as base64 encoded content
-
-Each file's content is preceded by a \`=== <path> ===\` header. A problem reading one file (missing/unsupported/too large) yields an error note for that file only and does not fail the others.
-
-Output is hard-capped at 40,000 characters (~10k tokens) per file. This cap cannot be bypassed by force or numLines.
-For files that exceed the cap:
-- When no startLine/numLines is given, a high-signal summary is returned.
-- Use startLine and numLines to page through specific ranges. If your numLines is too large, output is truncated and a continuation hint with the next startLine is provided.
-Very long lines (>2000 chars) will be abridged.
-
-File size limits: 1MB for text files, 10MB for images, 32MB for PDFs.`,
+  description: `Get the contents of one or more files.`,
   input_schema: {
     type: "object",
     properties: {
@@ -570,7 +553,7 @@ File size limits: 1MB for text files, 10MB for images, 32MB for PDFs.`,
             force: {
               type: "boolean",
               description:
-                "If true, get the full file contents even if the file is already part of the context.",
+                "If true, get the full file contents even if the file is already part of the context. There's a 40KB cap that will trigger a file summary to be returned instead.",
             },
             pdfPage: {
               type: "number",

@@ -242,6 +242,7 @@ export type MagentaOptions = {
   agentsPaths: string[];
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
+  dockerfile?: string;
   autoCompactThreshold: number;
   autoCompactPrompt: string;
   mcpServers: { [serverName: ServerName]: MCPServerConfig };
@@ -1194,6 +1195,13 @@ export function parseOptions(
     ) {
       options.maxConcurrentSubagents = inputOptionsObj.maxConcurrentSubagents;
     }
+    if (
+      "dockerfile" in inputOptionsObj &&
+      typeof inputOptionsObj.dockerfile === "string" &&
+      inputOptionsObj.dockerfile.length > 0
+    ) {
+      options.dockerfile = inputOptionsObj.dockerfile;
+    }
 
     // Parse max concurrent fast subagents
     if (
@@ -1375,6 +1383,13 @@ export function parseProjectOptions(
     inputOptionsObj.maxConcurrentSubagents > 0
   ) {
     options.maxConcurrentSubagents = inputOptionsObj.maxConcurrentSubagents;
+  }
+  if (
+    "dockerfile" in inputOptionsObj &&
+    typeof inputOptionsObj.dockerfile === "string" &&
+    inputOptionsObj.dockerfile.length > 0
+  ) {
+    options.dockerfile = inputOptionsObj.dockerfile;
   }
 
   // Parse max concurrent fast subagents
@@ -1569,6 +1584,9 @@ export function mergeOptions(
 
   if (projectSettings.maxConcurrentSubagents !== undefined) {
     merged.maxConcurrentSubagents = projectSettings.maxConcurrentSubagents;
+  }
+  if (projectSettings.dockerfile !== undefined) {
+    merged.dockerfile = projectSettings.dockerfile;
   }
 
   if (projectSettings.maxConcurrentFastSubagents !== undefined) {

@@ -86,6 +86,7 @@ export function getToolSpecs(
   subagentConfig?: SubagentConfig,
   yieldSchema?: JSONSchemaType,
   scriptCatalog?: ScriptCatalogEntry[],
+  subagentDockerfile?: string,
 ): ProviderToolSpec[] {
   let staticToolNames: StaticToolName[] = [];
   switch (threadType) {
@@ -133,7 +134,13 @@ export function getToolSpecs(
   const specs: ProviderToolSpec[] = [];
   for (const toolName of filteredToolNames) {
     if (toolName === "spawn_subagents") {
-      specs.push(SpawnSubagents.getSpec(agents ?? {}, subagentConfig?.tier));
+      specs.push(
+        SpawnSubagents.getSpec(
+          agents ?? {},
+          subagentConfig?.tier,
+          subagentDockerfile,
+        ),
+      );
     } else if (toolName === "yield_to_parent") {
       specs.push(YieldToParent.getSpec(yieldSchema));
     } else if (toolName === "run_script") {
