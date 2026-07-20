@@ -287,10 +287,12 @@ Use this to offload enumeration, counting, and object-permanence style tracking 
 
 Submit a \`script\` of one command per line:
 - \`append <key> <value...>\` — append a key/value pair at the end. The value is the rest of the line, OR a heredoc for multi-line values:
-    append <key> <<END
-    line one
-    line two
-    END
+
+append <key> <<END
+line one
+line two
+END
+
   Appending an existing key is an error (keys are unique).
 - \`delete <key> [<key> ...]\` — remove the listed keys (missing keys are ignored).
 - \`get <key>\` — include the value for a key in the result.
