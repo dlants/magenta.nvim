@@ -282,6 +282,53 @@ describe("node/tools/bashCommand.test.ts", () => {
     });
   });
 
+  it("shows the timer in both collapsed and expanded progress views", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      driver.mockSandbox.setState({
+        status: "unsupported",
+        reason: "disabled",
+      });
+      await driver.inputMagentaText(`Run this command: sleep 30`);
+      await driver.send();
+
+      const request = await driver.mockAnthropic.awaitPendingStream();
+      const toolRequestId = "test-progress-timer" as ToolRequestId;
+
+      request.respond({
+        stopReason: "tool_use",
+        text: "I'll run that command for you.",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: toolRequestId,
+              toolName: "bash_command" as ToolName,
+              input: {
+                command: "sleep 30",
+              },
+            },
+          },
+        ],
+      });
+
+      await driver.triggerDisplayBufferKeyOnContent("> YES", "<CR>");
+
+      // Collapsed progress view shows the timer
+      await driver.assertDisplayBufferContains("s / 300s)");
+
+      // Expand the progress view and verify the timer is still shown
+      await driver.triggerDisplayBufferKeyOnContent("s / 300s)", "=");
+      await driver.assertDisplayBufferContains("s / 300s)");
+
+      // Abort the command to clean up
+      await driver.triggerDisplayBufferKeyOnContent("⚡ `sleep 30`", "t");
+      await driver.assertDisplayBufferContains(
+        "❌ Request was aborted by the user.",
+      );
+    });
+  });
+
   it("ensures a command is executed only once", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();

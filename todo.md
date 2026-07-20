@@ -8,7 +8,6 @@
 - openai agent
 - 8j in display buffer (relative column numbers should still work, even with wrapped override)
 
-- @next to send the message when the agent next stops
 - bashCommand should show timer when expanded
 - archive should be a separate buffer, so it can participate in the jump list properly
 

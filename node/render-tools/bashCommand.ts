@@ -62,22 +62,23 @@ export function renderProgress(
   context: RenderContext,
   expanded: boolean,
 ): VDOMNode | undefined {
+  const timing =
+    progress.startTime !== undefined
+      ? d`(${String(Math.floor((Date.now() - progress.startTime) / 1000))}s / 300s) `
+      : undefined;
+
   if (!expanded) {
     const formattedOutput = formatOutputPreview(
       progress.liveOutput,
       context.getDisplayWidth,
     );
-    const timing =
-      progress.startTime !== undefined
-        ? d`(${String(Math.floor((Date.now() - progress.startTime) / 1000))}s / 300s) `
-        : undefined;
     if (formattedOutput) {
       return d`${timing ?? d``}${withCode(d`${formattedOutput}`)}`;
     }
     return timing;
   }
 
-  return renderOutputDetail(progress.liveOutput, undefined, context);
+  return d`${timing ?? d``}${renderOutputDetail(progress.liveOutput, undefined, context)}`;
 }
 
 export function renderResultSummary(info: CompletedToolInfo): VDOMNode {
