@@ -1270,7 +1270,7 @@ describe("ThreadCore non-retryable error resubmit flow", () => {
     // this lands in pendingMessages rather than being sent immediately.
     await core.handleSendMessageRequest(
       [{ type: "user", text: "also check the logs" }],
-      true,
+      "async",
     );
     expect(core.state.pendingMessages).toHaveLength(1);
 

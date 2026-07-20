@@ -1652,6 +1652,72 @@ it("handles @async messages and sends them on end turn", async () => {
   });
 });
 
+it("queues @next messages until the agent next stops", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("Read a file for me");
+    await driver.send();
+
+    const request1 = await driver.mockAnthropic.awaitPendingStream();
+
+    // Queue a @next message while the request is in flight
+    await driver.inputMagentaText("@next Then summarize it");
+    await driver.send();
+
+    const thread = driver.magenta.chat.getActiveThread();
+    expect(thread.core.state.pendingNextMessages).toHaveLength(1);
+    expect(thread.core.state.pendingNextMessages[0].text).toBe(
+      "Then summarize it",
+    );
+    expect(thread.core.state.pendingMessages).toHaveLength(0);
+    await driver.assertDisplayBufferContains("⏭️ queued (next stop):");
+
+    // Agent uses a tool - the turn continues mid-stream after it completes.
+    request1.respond({
+      stopReason: "tool_use",
+      text: "I'll read the file.",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "tool-1" as ToolRequestId,
+            toolName: "get_files" as ToolName,
+            input: { files: [{ filePath: "poem.txt" as UnresolvedFilePath }] },
+          },
+        },
+      ],
+    });
+
+    await driver.assertDisplayBufferContains("✅ ");
+
+    // The tool batch completed and the turn auto-continues. The @next message
+    // must NOT have been injected into this continuation.
+    const request2 = await driver.mockAnthropic.awaitPendingStream();
+    const hasNextText = (req: typeof request2) =>
+      req.messages.some((m) =>
+        typeof m.content === "string"
+          ? m.content.includes("Then summarize it")
+          : m.content.some(
+              (c) => c.type === "text" && c.text.includes("Then summarize it"),
+            ),
+      );
+    expect(hasNextText(request2)).toBe(false);
+    expect(thread.core.state.pendingNextMessages).toHaveLength(1);
+
+    // Now the agent fully stops.
+    request2.respond({
+      stopReason: "end_turn",
+      text: "Here is the file.",
+      toolRequests: [],
+    });
+
+    // The @next message is now sent as a new turn.
+    const request3 = await driver.mockAnthropic.awaitPendingStream();
+    expect(hasNextText(request3)).toBe(true);
+    expect(thread.core.state.pendingNextMessages).toHaveLength(0);
+  });
+});
+
 it("should process custom commands in messages", async () => {
   await withDriver(
     {

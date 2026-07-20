@@ -181,6 +181,8 @@ export type ThreadCoreAction =
   | { type: "set-teardown-message"; message: string }
   | { type: "push-pending-messages"; messages: InputMessage[] }
   | { type: "drain-pending-messages" }
+  | { type: "push-pending-next-messages"; messages: InputMessage[] }
+  | { type: "drain-pending-next-messages" }
   | { type: "push-compaction-record"; record: CompactionRecord }
   | { type: "reset-after-compaction" }
   | { type: "mark-bash-output-abbreviated" }
@@ -202,6 +204,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     systemPrompt: SystemPrompt;
     systemInfo: SystemInfo;
     pendingMessages: InputMessage[];
+    pendingNextMessages: InputMessage[];
     mode: ThreadMode;
     edlRegisters: EdlRegisters;
     scratchpad: Scratchpad.Scratchpad;
@@ -269,6 +272,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       systemPrompt: context.systemPrompt,
       systemInfo: context.systemInfo,
       pendingMessages: [],
+      pendingNextMessages: [],
       mode: { type: "normal" },
       edlRegisters: initialState?.edlRegisters ?? {
         registers: new Map(),
@@ -512,6 +516,12 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         break;
       case "drain-pending-messages":
         this.state.pendingMessages = [];
+        break;
+      case "push-pending-next-messages":
+        this.state.pendingNextMessages.push(...action.messages);
+        break;
+      case "drain-pending-next-messages":
+        this.state.pendingNextMessages = [];
         break;
       case "push-compaction-record":
         this.state.compactionHistory.push(action.record);
@@ -870,11 +880,15 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     // Roll back to the pre-submit snapshot's user text for every thread
     // type, not just user-facing ones: subagent/compact threads need the
     // same text to auto-resubmit with (see maybeAutoResubmitAfterError).
-    const pendingText = this.state.pendingMessages
+    const pendingText = [
+      ...this.state.pendingMessages,
+      ...this.state.pendingNextMessages,
+    ]
       .filter((m) => m.type === "user")
       .map((m) => m.text)
       .join("\n");
     this.update({ type: "drain-pending-messages" });
+    this.update({ type: "drain-pending-next-messages" });
 
     const messages = this.getProviderMessages();
     const lastMessage = messages[messages.length - 1];
@@ -1006,12 +1020,16 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
   }
 
   private recoverPendingMessagesOnAbort(): void {
-    const pendingText = this.state.pendingMessages
+    const pendingText = [
+      ...this.state.pendingMessages,
+      ...this.state.pendingNextMessages,
+    ]
       .filter((m) => m.type === "user")
       .map((m) => m.text)
       .join("\n");
 
     this.update({ type: "drain-pending-messages" });
+    this.update({ type: "drain-pending-next-messages" });
 
     const isUserFacing =
       this.state.threadType === "root" ||
@@ -1101,7 +1119,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
 
   async handleSendMessageRequest(
     messages: InputMessage[],
-    isAsync?: boolean,
+    queue?: "async" | "next",
   ): Promise<void> {
     if (this.state.threadType === "compact") {
       this.sendRawMessage(messages);
@@ -1113,9 +1131,15 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       agentStatus.type === "streaming" || this.state.mode.type === "tool_use";
 
     if (isBusy) {
-      if (isAsync) {
+      if (queue === "async") {
         this.update(
           { type: "push-pending-messages", messages },
+          { silent: true },
+        );
+        return;
+      } else if (queue === "next") {
+        this.update(
+          { type: "push-pending-next-messages", messages },
           { silent: true },
         );
         return;
@@ -1225,10 +1249,15 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     } else if (
       agentStatus.type === "stopped" &&
       agentStatus.stopReason === "end_turn" &&
-      this.state.pendingMessages.length
+      (this.state.pendingMessages.length ||
+        this.state.pendingNextMessages.length)
     ) {
-      const pendingMessages = this.state.pendingMessages;
+      const pendingMessages = [
+        ...this.state.pendingMessages,
+        ...this.state.pendingNextMessages,
+      ];
       this.update({ type: "drain-pending-messages" }, { silent: true });
+      this.update({ type: "drain-pending-next-messages" }, { silent: true });
       this.sendMessage(pendingMessages).catch(
         this.handleSendMessageError.bind(this),
       );

@@ -1150,10 +1150,18 @@ ${lines.join("\n")}
       return;
     }
 
-    // @async: strip prefix and set flag
+    // @async / @next: strip prefix and set queue flag.
+    // @async injects into the current turn at the earliest opportunity;
+    // @next waits until the agent next stops.
     // Note: @async @compact is not supported. Use @compact @async instead.
     const isAsync = text.trim().startsWith("@async");
-    const cleanText = isAsync ? text.replace(/^\s*@async\s*/, "") : text;
+    const isNext = text.trim().startsWith("@next");
+    const queue = isAsync ? "async" : isNext ? "next" : undefined;
+    const cleanText = isAsync
+      ? text.replace(/^\s*@async\s*/, "")
+      : isNext
+        ? text.replace(/^\s*@next\s*/, "")
+        : text;
 
     const { messages, reminders } = await this.processCommands(
       cleanText,
@@ -1166,7 +1174,7 @@ ${lines.join("\n")}
       msg: {
         type: "send-message",
         messages,
-        ...(isAsync ? { async: true } : {}),
+        ...(queue ? { queue } : {}),
         ...(reminders.length ? { reminders } : {}),
       },
     });

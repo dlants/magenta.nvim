@@ -61,7 +61,7 @@ export type Msg =
   | {
       type: "send-message";
       messages: InputMessage[];
-      async?: boolean;
+      queue?: "async" | "next";
       reminders?: string[];
     }
   | {
@@ -753,7 +753,7 @@ export class Thread {
           }
         }
         this.core
-          .handleSendMessageRequest(msg.messages, msg.async)
+          .handleSendMessageRequest(msg.messages, msg.queue)
           .catch((e: Error) => this.context.nvim.logger.error(e));
         return;
 
@@ -927,7 +927,10 @@ export class Thread {
         return;
 
       case "tool-progress":
-        if (this.core.state.pendingMessages.length === 0) {
+        if (
+          this.core.state.pendingMessages.length === 0 &&
+          this.core.state.pendingNextMessages.length === 0
+        ) {
           this.state.pendingMessagesExpanded = {};
         }
         return;

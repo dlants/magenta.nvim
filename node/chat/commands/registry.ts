@@ -103,9 +103,11 @@ export class CommandRegistry {
     const reminders = new Set<string>();
     let processedText = text;
 
-    // Handle @async specially - strip it from the beginning
+    // Handle @async / @next specially - strip them from the beginning
     if (processedText.trim().startsWith("@async")) {
       processedText = processedText.replace(/^\s*@async\s*/, "");
+    } else if (processedText.trim().startsWith("@next")) {
+      processedText = processedText.replace(/^\s*@next\s*/, "");
     }
 
     // Find all command matches in the text

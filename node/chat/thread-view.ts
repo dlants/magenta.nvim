@@ -336,6 +336,7 @@ function renderPendingMessage(
   index: number,
   thread: Thread,
   dispatch: Dispatch<Msg>,
+  label = "# ✉️ queued:\n",
 ): VDOMNode {
   const expanded = thread.state.pendingMessagesExpanded[index] || false;
   const lines = text.split("\n");
@@ -365,7 +366,7 @@ function renderPendingMessage(
   }
 
   return withExtmark(
-    d`${withExtmark(d`# ✉️ queued:\n`, {
+    d`${withExtmark(d`${label}`, {
       hl_group: "@markup.heading.1.markdown",
     })}${body}${toggle}`,
     { hl_group: "CursorLine", hl_eol: true },
@@ -451,10 +452,23 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     thread,
     dispatch,
   );
+  const pendingCount = thread.core.state.pendingMessages.length;
   const pendingMessagesView =
-    thread.core.state.pendingMessages.length > 0
+    pendingCount > 0
       ? d`\n${thread.core.state.pendingMessages.map((m, index) =>
           renderPendingMessage(m.text, index, thread, dispatch),
+        )}`
+      : d``;
+  const pendingNextMessagesView =
+    thread.core.state.pendingNextMessages.length > 0
+      ? d`\n${thread.core.state.pendingNextMessages.map((m, index) =>
+          renderPendingMessage(
+            m.text,
+            pendingCount + index,
+            thread,
+            dispatch,
+            "# ⏭️ queued (next stop):\n",
+          ),
         )}`
       : d``;
 
@@ -651,7 +665,7 @@ ${failedSubmitView}\
 ${streamingBlockView}\
 ${contextManagerView}\
 ${sandboxView}\
-${pendingMessagesView}\
+${pendingMessagesView}${pendingNextMessagesView}\
 ${trailingForkedToView}\
 ${editedFilesView}
 ${statusView}`;

@@ -147,6 +147,17 @@ describe("CommandRegistry", () => {
     expect(result.additionalContent).toEqual([]);
   });
 
+  it("should handle @next by stripping it", async () => {
+    const registry = new CommandRegistry();
+    const context = createMockContext();
+
+    const result = await registry.processMessage("@next do something", context);
+
+    // @next should be stripped from the beginning
+    expect(result.processedText).toBe("do something");
+    expect(result.additionalContent).toEqual([]);
+  });
+
   it("should handle overlapping commands correctly", async () => {
     const registry = new CommandRegistry();
     const context = createMockContext();

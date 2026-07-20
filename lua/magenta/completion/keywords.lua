@@ -17,6 +17,7 @@ local BUILTIN_KEYWORDS = {
   { label = '@implementplan', kind = kinds.Keyword, documentation = 'Instruct the agent to implement the current plan' },
   { label = '@fork',        kind = kinds.Keyword, documentation = 'Fork the thread' },
   { label = '@async',       kind = kinds.Keyword, documentation = 'Process message asynchronously without interrupting current operation' },
+  { label = '@next',       kind = kinds.Keyword, documentation = 'Queue message to send when the agent next stops' },
   { label = '@file:',       kind = kinds.Keyword, documentation = 'Add file to context (supports fuzzy path completion)' },
   { label = '@staged:',     kind = kinds.Keyword, documentation = 'Add staged file to context (supports file completion)' },
   { label = '@diff:',       kind = kinds.Keyword, documentation = 'Add unstaged/untracked file to context (supports file completion)' },
