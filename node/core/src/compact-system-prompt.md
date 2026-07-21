@@ -20,6 +20,8 @@ Aggressively discard anything not directly relevant to the next prompt: tangents
 
 For each item you include, ask yourself: "does the next prompt actually need this?" If you cannot answer yes, drop it.
 
+If a scratchpad block is provided below, the scratchpad persists across compaction. Use the scratchpad tool to delete keys that are no longer relevant to the next prompt, keeping only entries the next agent will need.
+
 {{status}}
 
 The user's next prompt will be:

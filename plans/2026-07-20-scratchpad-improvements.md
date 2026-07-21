@@ -79,6 +79,8 @@ Invariants:
 ## compaction survival
 
 - Goal: keys present before compaction are still present after, the compact agent can edit the scratchpad, and the prompt instructs pruning.
+
+**Status: DONE.** `CompactionManagerContext` gained a required `initialScratchpad`; the constructor seeds `this.scratchpad = Scratchpad.cloneScratchpad(context.initialScratchpad)`. `startCompaction()` passes `Scratchpad.cloneScratchpad(this.state.scratchpad)`. `COMPACT_STATIC_TOOL_NAMES` now includes `scratchpad`. The `complete` `CompactionResult` (compaction-controller.ts) gained `scratchpad: Scratchpad.Scratchpad`, populated in `reduceChunkComplete`. `handleCompactionResult` forwards it to `handleCompactComplete`, which reseeds `this.state.scratchpad = scratchpad` right after the `reset-after-compaction` update (only on success; error path leaves the live scratchpad untouched). `sendChunkToAgent` appends a `<scratchpad>` context block (keys + prune nudge) only when non-empty; `compact-system-prompt.md` gained a matching instruction line. Tests: allowlist test in thread-core.test.ts; existing archive test updated for the new 4th arg. The pre-existing unrelated `agents.test.ts > builtin agents` failure and biome getFile.ts errors remain (untouched by this stage).
 - Tests:
   - Unit: `CompactionManager` seeded with a scratchpad containing keys exposes them to the compact tool context and returns the (possibly pruned) scratchpad in its `complete` result.
   - `COMPACT_STATIC_TOOL_NAMES`/`getToolSpecs("compact")` includes `scratchpad`.

@@ -29,6 +29,7 @@ import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import * as Scratchpad from "./tools/scratchpad.ts";
+import { COMPACT_STATIC_TOOL_NAMES } from "./tools/tool-registry.ts";
 import { pollUntil } from "./utils/async.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
 
@@ -1684,9 +1685,12 @@ describe("ThreadCore conversation archive", () => {
             summary: string,
             nextPrompt: string | undefined,
             steps: unknown[],
+            scratchpad: Scratchpad.Scratchpad,
           ) => Promise<void>;
         }
-      ).handleCompactComplete("SUMMARY TEXT", undefined, [{}, {}]);
+      ).handleCompactComplete("SUMMARY TEXT", undefined, [{}, {}], {
+        entries: [],
+      });
 
       const contStream = await pollUntil(() => {
         if (mockClient.streams.length < 2) throw new Error("waiting");
@@ -1811,6 +1815,9 @@ describe("ThreadCore scratchpad state", () => {
   });
   it("adds no scratchpad reminder when the scratchpad is empty", () => {
     expect(Scratchpad.scratchpadReminder({ entries: [] })).toBeUndefined();
+  });
+  it("includes the scratchpad tool in the compaction tool allowlist", () => {
+    expect(COMPACT_STATIC_TOOL_NAMES).toContain("scratchpad");
   });
   it("clone deep-copies scratchpad and edlRegisters with isolation", async () => {
     const parentId = uniqueThreadId("sp-parent");

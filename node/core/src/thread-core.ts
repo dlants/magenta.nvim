@@ -1539,6 +1539,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
       getProvider: this.context.getProvider,
       requestRender: () => this.emit("update"),
+      initialScratchpad: Scratchpad.cloneScratchpad(this.state.scratchpad),
     });
     manager.on("transition", (_prev, next) => {
       if (next.type === "complete") {
@@ -1572,6 +1573,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         result.summary,
         result.nextPrompt,
         result.steps,
+        result.scratchpad,
       ).catch((e: Error) => {
         this.context.logger.error(
           `Failed during compact-complete: ${e.message}`,
@@ -1589,6 +1591,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     summary: string,
     nextPrompt: string | undefined,
     steps: CompactionStep[],
+    scratchpad: Scratchpad.Scratchpad,
   ): Promise<void> {
     this.update({
       type: "push-compaction-record",
@@ -1613,6 +1616,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     this.threadLogger.resetCursor();
 
     this.update({ type: "reset-after-compaction" });
+    this.state.scratchpad = scratchpad;
 
     const summaryText = `<conversation-summary>\n${summary}\n</conversation-summary>`;
     this.agent.appendUserMessage([

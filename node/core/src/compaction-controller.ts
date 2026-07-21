@@ -1,4 +1,5 @@
 import type { ProviderMessage } from "./providers/provider-types.ts";
+import type * as Scratchpad from "./tools/scratchpad.ts";
 
 export type CompactionStep = {
   chunkIndex: number;
@@ -17,6 +18,7 @@ export type CompactionResult =
       summary: string;
       steps: CompactionStep[];
       nextPrompt: string | undefined;
+      scratchpad: Scratchpad.Scratchpad;
     }
   | { type: "error"; steps: CompactionStep[] };
 
