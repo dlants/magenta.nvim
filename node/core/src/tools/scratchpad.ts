@@ -24,6 +24,14 @@ export function cloneScratchpad(scratchpad: Scratchpad): Scratchpad {
   return { entries: scratchpad.entries.map((e) => ({ ...e })) };
 }
 
+/** The system-reminder line nudging the agent to prune stale scratchpad keys,
+ * or undefined when the scratchpad is empty. */
+export function scratchpadReminder(scratchpad: Scratchpad): string | undefined {
+  if (scratchpad.entries.length === 0) return undefined;
+  const keys = scratchpad.entries.map((e) => e.key).join(", ");
+  return `Scratchpad keys: [${keys}]. Delete keys you no longer need with the scratchpad tool.`;
+}
+
 type Command =
   | { type: "append"; key: string; value: string }
   | { type: "delete"; keys: string[] }

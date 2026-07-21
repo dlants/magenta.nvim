@@ -28,6 +28,7 @@ import {
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
+import * as Scratchpad from "./tools/scratchpad.ts";
 import { pollUntil } from "./utils/async.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
 
@@ -1797,24 +1798,19 @@ describe("ThreadCore scratchpad state", () => {
     expect(core.state.scratchpad.entries).toEqual([]);
   });
 
-  it("lists scratchpad keys in active reminders when non-empty", () => {
-    const { core } = createThreadCoreWithMock();
-    core.state.scratchpad.entries.push({ key: "a", value: "1" });
-    core.state.scratchpad.entries.push({ key: "b", value: "2" });
-    const reminders = (
-      core as unknown as { getActiveReminders(): string[] }
-    ).getActiveReminders();
-    const line = reminders.find((r) => r.includes("Scratchpad keys"));
+  it("lists scratchpad keys in the reminder when non-empty", () => {
+    const line = Scratchpad.scratchpadReminder({
+      entries: [
+        { key: "a", value: "1" },
+        { key: "b", value: "2" },
+      ],
+    });
     expect(line).toBeDefined();
     expect(line).toContain("[a, b]");
     expect(line).toContain("Delete keys you no longer need");
   });
   it("adds no scratchpad reminder when the scratchpad is empty", () => {
-    const { core } = createThreadCoreWithMock();
-    const reminders = (
-      core as unknown as { getActiveReminders(): string[] }
-    ).getActiveReminders();
-    expect(reminders.some((r) => r.includes("Scratchpad keys"))).toBe(false);
+    expect(Scratchpad.scratchpadReminder({ entries: [] })).toBeUndefined();
   });
   it("clone deep-copies scratchpad and edlRegisters with isolation", async () => {
     const parentId = uniqueThreadId("sp-parent");
