@@ -1366,6 +1366,12 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       const reminder = extractSystemReminderBlock(fileInfo.agentView.content);
       if (reminder) reminders.add(reminder);
     }
+    if (this.state.scratchpad.entries.length > 0) {
+      const keys = this.state.scratchpad.entries.map((e) => e.key).join(", ");
+      reminders.add(
+        `Scratchpad keys: [${keys}]. Delete keys you no longer need with the scratchpad tool.`,
+      );
+    }
     return [...reminders];
   }
 

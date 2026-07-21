@@ -68,6 +68,8 @@ Invariants:
 ## scratchpad reminder
 
 - Goal: subsequent system reminders list current scratchpad keys and nudge deletion when the scratchpad is non-empty.
+
+**Status: DONE.** `getActiveReminders()` in `thread-core.ts` now appends, when `this.state.scratchpad.entries.length > 0`, a line: `Scratchpad keys: [<keys>]. Delete keys you no longer need with the scratchpad tool.` It flows through the existing `extraReminders` path; empty scratchpad adds nothing. Tests added in `thread-core.test.ts` ("lists scratchpad keys in active reminders when non-empty" and "adds no scratchpad reminder when the scratchpad is empty"), calling the private `getActiveReminders` via a cast. No change to `system-reminders.ts`. Note: two pre-existing failures unrelated to this stage were left untouched — biome lint errors in `node/render-tools/getFile.ts`, and a failing `agents.test.ts > builtin agents` prompt-content assertion (both present on the clean Stage 1 HEAD).
 - Tests:
   - With a populated scratchpad, `getActiveReminders()` includes a line containing the keys and the delete nudge.
   - With an empty scratchpad, no scratchpad-key line is present.
