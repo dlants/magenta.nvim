@@ -85,3 +85,5 @@ Invariants:
   - Unit: `CompactionManager` seeded with a scratchpad containing keys exposes them to the compact tool context and returns the (possibly pruned) scratchpad in its `complete` result.
   - `COMPACT_STATIC_TOOL_NAMES`/`getToolSpecs("compact")` includes `scratchpad`.
   - Integration (thread-core compaction test): a thread with scratchpad keys before compaction retains them (minus any the compact agent deletes) on the fresh thread after compaction; a compaction error leaves the original scratchpad intact.
+
+**Review follow-up (DONE).** Added an end-to-end unit test `persists a populated result scratchpad after compaction reset` in `thread-core.test.ts`: it calls the private `handleCompactComplete` with a populated result scratchpad and asserts `core.state.scratchpad.entries` reflects it after the `reset-after-compaction` clear (verifying the ordering-sensitive reseed at thread-core.ts:1618). The manager-level seeding/passthrough nit is covered transitively by this end-to-end path.

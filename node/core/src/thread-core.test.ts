@@ -1816,6 +1816,51 @@ describe("ThreadCore scratchpad state", () => {
   it("adds no scratchpad reminder when the scratchpad is empty", () => {
     expect(Scratchpad.scratchpadReminder({ entries: [] })).toBeUndefined();
   });
+  it("persists a populated result scratchpad after compaction reset", async () => {
+    const threadId = uniqueThreadId("sp-compact-survive");
+    const { core, mockClient } = createThreadCoreWithMock(undefined, threadId);
+    try {
+      await core.sendMessage([{ type: "user", text: "first turn" }]);
+      const stream = await mockClient.awaitStream();
+      stream.streamText("done");
+      stream.finishResponse("end_turn");
+
+      await pollUntil(() => {
+        if (core.agent.getState().status.type !== "stopped")
+          throw new Error("waiting");
+        return true;
+      });
+      await core.awaitArchiveFlush();
+
+      core.state.scratchpad.entries.push({ key: "stale", value: "old" });
+
+      const compactPromise = (
+        core as unknown as {
+          handleCompactComplete: (
+            summary: string,
+            nextPrompt: string | undefined,
+            steps: unknown[],
+            scratchpad: Scratchpad.Scratchpad,
+          ) => Promise<void>;
+        }
+      ).handleCompactComplete("SUMMARY TEXT", undefined, [{}], {
+        entries: [{ key: "a", value: "1" }],
+      });
+
+      const contStream = await pollUntil(() => {
+        if (mockClient.streams.length < 2) throw new Error("waiting");
+        return mockClient.streams[1];
+      });
+      contStream.streamText("resumed");
+      contStream.finishResponse("end_turn");
+      await compactPromise;
+
+      expect(core.state.scratchpad.entries).toEqual([{ key: "a", value: "1" }]);
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
   it("includes the scratchpad tool in the compaction tool allowlist", () => {
     expect(COMPACT_STATIC_TOOL_NAMES).toContain("scratchpad");
   });
