@@ -45,6 +45,26 @@ describe("scratchpad runScript", () => {
     expect(out).toBe("a = hello\nThe scratchpad is now [a, b]");
   });
 
+  it("get returns multiple values in one command", () => {
+    const s = emptyScratchpad();
+    run(s, "append a 1\nappend b 2");
+    const out = run(s, "get a b");
+    expect(out).toBe("a = 1\nb = 2\nThe scratchpad is now [a, b]");
+  });
+
+  it("get with no key is a parse error", () => {
+    const s = emptyScratchpad();
+    const result = runScript("get", s);
+    expect(result.status).toBe("error");
+  });
+
+  it("get with an unknown key is an eval error", () => {
+    const s = emptyScratchpad();
+    run(s, "append a 1");
+    const result = runScript("get a missing", s);
+    expect(result.status).toBe("error");
+  });
+
   it("stores a multi-line heredoc value verbatim", () => {
     const s = emptyScratchpad();
     run(s, "append poem <<END\nline one\n  line two\nline three\nEND");

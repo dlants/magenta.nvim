@@ -27,7 +27,7 @@ export function cloneScratchpad(scratchpad: Scratchpad): Scratchpad {
 type Command =
   | { type: "append"; key: string; value: string }
   | { type: "delete"; keys: string[] }
-  | { type: "get"; key: string }
+  | { type: "get"; keys: string[] }
   | { type: "move_after"; key: string; anchorKey: string }
   | { type: "move_to_front"; key: string }
   | { type: "clear" };
@@ -97,11 +97,11 @@ export function parseScript(script: string): Result<Command[]> {
         break;
       }
       case "get": {
-        const key = tokens[1];
-        if (!key || tokens.length > 2) {
-          return parseError(`line ${lineNo}: get requires exactly one key`);
+        const keys = tokens.slice(1);
+        if (keys.length === 0) {
+          return parseError(`line ${lineNo}: get requires at least one key`);
         }
-        commands.push({ type: "get", key });
+        commands.push({ type: "get", keys });
         break;
       }
       case "move_after": {
@@ -162,11 +162,13 @@ export function evaluate(
         break;
       }
       case "get": {
-        const entry = entries.find((e) => e.key === command.key);
-        if (!entry) {
-          return evalError(`key "${command.key}" not found`);
+        for (const key of command.keys) {
+          const entry = entries.find((e) => e.key === key);
+          if (!entry) {
+            return evalError(`key "${key}" not found`);
+          }
+          getOutputs.push({ key: entry.key, value: entry.value });
         }
-        getOutputs.push({ key: entry.key, value: entry.value });
         break;
       }
       case "move_after": {
@@ -281,32 +283,32 @@ export function execute(
 
 export const spec: ProviderToolSpec = {
   name: "scratchpad" as ToolName,
-  description: `A persistent, ordered key/value scratchpad for externalized bookkeeping.
-
-Use this to offload enumeration, counting, and object-permanence style tracking rather than holding such state in your reasoning. State persists across calls within a thread.
+  description: `Use this for listing, counting and remembering things / keepign them on top of your context window.
 
 Submit a \`script\` of one command per line:
-- \`append <key> <value...>\` — append a key/value pair at the end. The value is the rest of the line, OR a heredoc for multi-line values:
+\`append <key> value text to the end of the line\`
+
+Use a heredoc for multi-line values:
 
 append <key> <<END
 line one
 line two
 END
 
-  Appending an existing key is an error (keys are unique).
-- \`delete <key> [<key> ...]\` — remove the listed keys (missing keys are ignored).
-- \`get <key>\` — include the value for a key in the result.
-- \`move_after <key> [<anchorKey>]\` — move <key> immediately after <anchorKey>, or to the front of the list if no anchor is given.
-- \`clear\` — empty the scratchpad.
+Appending an existing key is an error (keys are unique).
 
-After every script the result echoes the ordered keys only (never all values), e.g. \`The scratchpad is now [a, b, c]\`, plus any \`get\`-ed values. A parse or validation error leaves the scratchpad unchanged.`,
+\`delete <key> [<key> ...]\` — remove the listed keys (missing keys are ignored).
+\`get <key> [<key> ...]\` — prints the values of the listed keys.
+\`move_after <key> [<anchorKey>]\` — move <key> immediately after <anchorKey>, or to the front of the list if no anchor is given.
+\`clear\` — empty the scratchpad
+
+Every result echoes the ordered keys, e.g. \`The scratchpad is now [a, b, c]\`, plus any \`get\`-ed values.`,
   input_schema: {
     type: "object",
     properties: {
       script: {
         type: "string",
-        description:
-          "A scratchpad script: one command per line (append/delete/get/move_after/clear).",
+        description: "The scratchpad script",
       },
     },
     required: ["script"],
