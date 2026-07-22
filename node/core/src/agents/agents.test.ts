@@ -454,7 +454,7 @@ describe("builtin agents", () => {
 
     expect(result.default).toBeDefined();
     expect(result.default.tier).toBe("thread");
-    expect(result.default.systemPrompt).toContain("# Role and Context");
+    expect(result.default.systemPrompt).toContain("# Be Concise");
     expect(result.default.systemReminder).toBeDefined();
 
     expect(result.subagent).toBeDefined();

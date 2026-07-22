@@ -177,8 +177,8 @@ RIGHT: where is X is handled?
 
 exports[`followup user message text is visible after tool-use cycle > followup-message-after-tool-use 1`] = `
 "# [ Untitled ]
-⚙️ [System Prompt ~2k tok]
-🔧 [Tool Definitions (9) ~6k tok]
+⚙️ [System Prompt ~992 tok]
+🔧 [Tool Definitions (8) ~4k tok]
 
 # user:
 📋 [System Reminder]
@@ -186,8 +186,8 @@ exports[`followup user message text is visible after tool-use cycle > followup-m
 Read a file for me
 # assistant:
 I'll read the file for you.
-👀 \`poem.txt\`
-✅ \`poem.txt\` (~48 tok)
+👀 read 1 file
+✅ \`poem.txt\` (~35 tok)
 [input: 1000, output: 5000]
 📋 [System Reminder]
 I've read the file. It contains a poem about moonlight.
@@ -204,8 +204,8 @@ Stopped (end_turn)  [input: 1000, output: 5000] "
 
 exports[`followup user message text is visible with context updates > followup-with-context-updates 1`] = `
 "# [ Untitled ]
-⚙️ [System Prompt ~2k tok]
-🔧 [Tool Definitions (9) ~6k tok]
+⚙️ [System Prompt ~992 tok]
+🔧 [Tool Definitions (8) ~4k tok]
 
 # user:
 Context Updates:
@@ -797,8 +797,8 @@ Do not acknowledge this reminder or mention it to the user.
 
 exports[`renders successive tool uses with single assistant header and inline metadata > successive-tool-uses-display 1`] = `
 "# [ Untitled ]
-⚙️ [System Prompt ~2k tok]
-🔧 [Tool Definitions (9) ~6k tok]
+⚙️ [System Prompt ~992 tok]
+🔧 [Tool Definitions (8) ~4k tok]
 
 # user:
 📋 [System Reminder]
@@ -806,13 +806,13 @@ exports[`renders successive tool uses with single assistant header and inline me
 Read two files for me
 # assistant:
 I'll read the first file.
-👀 \`poem.txt\`
-✅ \`poem.txt\` (~48 tok)
+👀 read 1 file
+✅ \`poem.txt\` (~35 tok)
 [input: 1000, output: 5000]
 📋 [System Reminder]
 💭 [Thinking]
-👀 \`poem2.txt\`
-✅ \`poem2.txt\` (~48 tok)
+👀 read 1 file
+✅ \`poem2.txt\` (~35 tok)
 [input: 1000, output: 5000]
 📋 [System Reminder]
 I've read both files for you.
