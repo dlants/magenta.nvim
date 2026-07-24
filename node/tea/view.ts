@@ -168,19 +168,27 @@ export async function mountView<P>({
 
 export function d(
   template: TemplateStringsArray,
-  ...values: (VDOMNode[] | VDOMNode | string)[]
+  ...values: (VDOMNode[] | VDOMNode | string | undefined | null)[]
 ): VDOMNode {
   const children: VDOMNode[] = [];
   if (template[0].length) {
     children.push({ type: "string", content: template[0] });
   }
   for (let i = 0; i < values.length; i++) {
-    if (typeof values[i] === "string") {
-      children.push({ type: "string", content: values[i] as string });
-    } else if (Array.isArray(values[i])) {
-      children.push({ type: "array", children: values[i] as VDOMNode[] });
+    const value = values[i];
+    // guard against undefined/null slipping in from untyped or partially
+    // initialized state - rendering them would crash the whole render pass
+    if (value == null) {
+      // skip
+    } else if (typeof value === "string") {
+      children.push({ type: "string", content: value });
+    } else if (Array.isArray(value)) {
+      children.push({
+        type: "array",
+        children: value.filter((child) => child != null),
+      });
     } else {
-      children.push(values[i] as VDOMNode);
+      children.push(value);
     }
     if (template[i + 1].length > 0) {
       children.push({ type: "string", content: template[i + 1] });

@@ -89,6 +89,9 @@ export function createApp<Model>({
     } else {
       if (!renderDefer) {
         renderDefer = new Defer();
+        // waitForRender is only used by tests; nobody may be awaiting this
+        // promise, and an unhandled rejection would kill the node process.
+        renderDefer.promise.catch(() => {});
       }
 
       if (root) {
@@ -129,11 +132,21 @@ export function createApp<Model>({
               try {
                 nvim.logger.info("Attempting to recover by re-mounting view");
                 await mountPoint.buffer.clearAllExtmarks();
-                await mountPoint.buffer.setLines({
-                  start: 0 as Row0Indexed,
-                  end: -1 as Row0Indexed,
-                  lines: [],
-                });
+                const wasModifiable =
+                  await mountPoint.buffer.getOption("modifiable");
+                await mountPoint.buffer.setOption("modifiable", true);
+                try {
+                  await mountPoint.buffer.setLines({
+                    start: 0 as Row0Indexed,
+                    end: -1 as Row0Indexed,
+                    lines: [],
+                  });
+                } finally {
+                  await mountPoint.buffer.setOption(
+                    "modifiable",
+                    wasModifiable,
+                  );
+                }
                 root = await mountView({
                   view: App,
                   mount: mountPoint,
@@ -151,6 +164,8 @@ export function createApp<Model>({
                   renderDefer.reject(err as Error);
                   renderDefer = undefined;
                 }
+                renderPromise = undefined;
+                pendingRender = false;
                 return;
               }
             } else {
@@ -158,6 +173,8 @@ export function createApp<Model>({
                 renderDefer.reject(err as Error);
                 renderDefer = undefined;
               }
+              renderPromise = undefined;
+              pendingRender = false;
               return;
             }
           }
