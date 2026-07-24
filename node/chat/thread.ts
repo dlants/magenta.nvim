@@ -130,7 +130,7 @@ export type Msg =
     }
   | {
       type: "open-edit-file";
-      filePath: UnresolvedFilePath;
+      filePath: UnresolvedFilePath | AbsFilePath;
     }
   | {
       type: "toggle-edited-file-expanded";

@@ -313,12 +313,16 @@ function editedFilesSummaryView(
   return d`\n${withExtmark(d`Files edited this turn:\n`, { hl_group: "@comment" })}${editedFiles.map(
     ({ path: filePath, snapshot }) => {
       const display = displayPath(cwd, filePath, homeDir);
+      const created = snapshot === "";
+      const label = created ? "created" : "modified";
       const expanded = thread.state.editedFilesExpanded[filePath];
       const marker = expanded ? "▼" : "▶";
-      const row = withBindings(d`  ${marker} ${display}\n`, {
+      const row = withBindings(d`  ${marker} ${label} ${display}\n`, {
         "=": () => dispatch({ type: "toggle-edited-file-expanded", filePath }),
         "<CR>": () =>
-          dispatch({ type: "open-edit-file-diff", filePath, snapshot }),
+          created
+            ? dispatch({ type: "open-edit-file", filePath })
+            : dispatch({ type: "open-edit-file-diff", filePath, snapshot }),
       });
       const body = expanded
         ? withExtmark(d`${expanded.patch}\n`, { hl_group: "@comment" })

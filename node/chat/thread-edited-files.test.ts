@@ -49,16 +49,16 @@ test("summary shows edited file, opens on <CR>, and resets on next turn", async 
       await driver.assertDisplayBufferContains("Files edited this turn:");
 
       // `=` expands an inline unified diff of the snapshot vs current content.
-      await driver.triggerDisplayBufferKeyOnContent("▶ a.txt", "=");
+      await driver.triggerDisplayBufferKeyOnContent("▶ modified a.txt", "=");
       await driver.assertDisplayBufferContains("-hello");
       await driver.assertDisplayBufferContains("+bye");
 
       // `=` again collapses it.
-      await driver.triggerDisplayBufferKeyOnContent("▼ a.txt", "=");
+      await driver.triggerDisplayBufferKeyOnContent("▼ modified a.txt", "=");
       await driver.assertDisplayBufferDoesNotContain("+bye");
 
       // `<CR>` opens the snapshot-vs-live diffsplit.
-      await driver.triggerDisplayBufferKeyOnContent("▶ a.txt", "<CR>");
+      await driver.triggerDisplayBufferKeyOnContent("▶ modified a.txt", "<CR>");
 
       // The scratch snapshot buffer opens alongside the live file, both in diff
       // mode, and the scratch buffer holds the pre-edit snapshot content.
@@ -121,6 +121,53 @@ test("summary shows edited file, opens on <CR>, and resets on next turn", async 
   );
 });
 
+test("created file shows 'created' and opens directly on <CR>", async () => {
+  await withDriver({}, async (driver, dirs) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("create c");
+    await driver.send();
+
+    const cPath = path.join(dirs.tmpDir, "c.txt");
+
+    const stream = await driver.mockAnthropic.awaitPendingStream();
+    stream.respond({
+      stopReason: "tool_use",
+      text: "creating c",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "t1" as ToolRequestId,
+            toolName: "edl" as ToolName,
+            input: {
+              script: `newfile \`${cPath}\`\ninsert_after "fresh"`,
+            },
+          },
+        },
+      ],
+    });
+
+    const followup = await driver.mockAnthropic.awaitPendingStream();
+    followup.respond({
+      stopReason: "end_turn",
+      text: "done",
+      toolRequests: [],
+    });
+
+    await driver.assertDisplayBufferContains("Files edited this turn:");
+    await driver.assertDisplayBufferContains("▶ created c.txt");
+
+    // `<CR>` opens the file directly (no snapshot diff buffer).
+    await driver.triggerDisplayBufferKeyOnContent("▶ created c.txt", "<CR>");
+
+    const fileWindow = await driver.findWindow(async (w) => {
+      const name = await (await w.buffer()).getName();
+      return name.endsWith("c.txt");
+    });
+    expect(await fileWindow.getOption("diff")).toBe(false);
+  });
+});
+
 test("expand diff reads current content from an open buffer, not disk", async () => {
   await withDriver(
     {
@@ -178,7 +225,7 @@ test("expand diff reads current content from an open buffer, not disk", async ()
 
       // The inline diff must reflect the live buffer content, not the on-disk
       // ("bye") content.
-      await driver.triggerDisplayBufferKeyOnContent("▶ a.txt", "=");
+      await driver.triggerDisplayBufferKeyOnContent("▶ modified a.txt", "=");
       await driver.assertDisplayBufferContains("-hello");
       await driver.assertDisplayBufferContains("+buffered");
     },
