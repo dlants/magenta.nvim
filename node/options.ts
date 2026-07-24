@@ -31,7 +31,7 @@ const DEFAULT_MODELS: Record<
   anthropic: {
     model: "claude-sonnet-5",
     fastModel: "claude-haiku-4-5",
-    thinkingModel: "claude-opus-4-8",
+    thinkingModel: "claude-opus-5",
   },
   openai: {
     model: "gpt-4.1",
@@ -47,7 +47,7 @@ const DEFAULT_MODELS: Record<
   copilot: {
     model: "claude-sonnet-5",
     fastModel: "claude-haiku-4-5",
-    thinkingModel: "claude-opus-4-8",
+    thinkingModel: "claude-opus-5",
   },
   mock: {
     model: "mock",
