@@ -277,6 +277,43 @@ M.set_paste_handlers = function(bufnr, channel_id)
   })
 end
 
+--- Jump the cursor to the next/previous message header in the display buffer.
+--- `filter` is "any" for user+assistant headers, or "user" for user headers only.
+local function jump_to_header(direction, filter)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local cursor_row = vim.api.nvim_win_get_cursor(0)[1]
+  local function is_header(line)
+    return line == "# user:" or (filter == "any" and line == "# assistant:")
+  end
+  local target = nil
+  if direction == "next" then
+    for row = cursor_row + 1, #lines do
+      if is_header(lines[row]) then
+        target = row
+        break
+      end
+    end
+  else
+    for row = cursor_row - 1, 1, -1 do
+      if is_header(lines[row]) then
+        target = row
+        break
+      end
+    end
+  end
+  if target then
+    vim.api.nvim_win_set_cursor(0, { target, 0 })
+  end
+end
+
+local message_jump_keymaps = {
+  ["]m"] = function() jump_to_header("next", "any") end,
+  ["[m"] = function() jump_to_header("prev", "any") end,
+  ["]u"] = function() jump_to_header("next", "user") end,
+  ["[u"] = function() jump_to_header("prev", "user") end,
+}
+
 M.set_display_buffer_keymaps = function(bufnr)
   display_bufnrs[bufnr] = true
   set_wrapped_line_mode(bufnr)
@@ -298,6 +335,15 @@ M.set_display_buffer_keymaps = function(bufnr)
       display_bufnrs[bufnr] = nil
     end,
   })
+
+  for key, action in pairs(message_jump_keymaps) do
+    vim.keymap.set(
+      { "n", "v" },
+      key,
+      action,
+      { buffer = bufnr, noremap = true, silent = true }
+    )
+  end
 
   for mode, values in pairs(Options.options.displayKeymaps) do
     for key, action in pairs(values) do
