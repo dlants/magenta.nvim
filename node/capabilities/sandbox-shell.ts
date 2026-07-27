@@ -354,6 +354,22 @@ export class SandboxShell implements Shell {
       postCount = store.getTotalCount();
     }
 
+    // bwrap can fail during namespace/mount setup (e.g. a denyRead bind target
+    // that doesn't exist). The user command never ran, so there are no
+    // violations to report — treat it as a sandbox failure and ask the user
+    // rather than surfacing a bogus command failure.
+    if (result.exitCode !== 0 && postCount === preCount) {
+      const stderr = result.output
+        .filter((l) => l.stream === "stderr")
+        .map((l) => l.text)
+        .join("\n");
+      if (/^bwrap: /m.test(stderr)) {
+        return this.violationHandler.promptForApproval(command, () =>
+          this.spawnCommand(command, opts),
+        );
+      }
+    }
+
     if (postCount > preCount && result.exitCode !== 0) {
       const newViolations = store.getViolations(postCount - preCount);
       const stderr = result.output

@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import type {
   SandboxAskCallback,
@@ -88,6 +89,15 @@ export function mergeApprovedDomains(
   return merged;
 }
 
+// bwrap implements denyRead by bind-mounting an empty file/dir over each path,
+// which is a hard error if the path doesn't exist — the whole sandbox then fails
+// to start (e.g. no ~/.zshrc in a container). macOS seatbelt rules are purely
+// path-pattern based, so this filtering is Linux-only.
+function filterExisting(paths: string[]): string[] {
+  if (process.platform !== "linux") return paths;
+  return paths.filter((p) => fs.existsSync(p));
+}
+
 function dedup(arr: string[]): string[] {
   return [...new Set(arr)];
 }
@@ -103,7 +113,9 @@ export function resolveConfigPaths(
         resolvePaths(config.filesystem.allowWrite, cwd, homeDir),
       ),
       denyWrite: dedup(resolvePaths(config.filesystem.denyWrite, cwd, homeDir)),
-      denyRead: dedup(resolvePaths(config.filesystem.denyRead, cwd, homeDir)),
+      denyRead: filterExisting(
+        dedup(resolvePaths(config.filesystem.denyRead, cwd, homeDir)),
+      ),
       allowRead: dedup(resolvePaths(config.filesystem.allowRead, cwd, homeDir)),
     },
     network: {
