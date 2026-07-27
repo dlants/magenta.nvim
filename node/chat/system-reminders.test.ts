@@ -372,6 +372,49 @@ test("auto-respond combines subsequent and bash reminders into a single system_r
   });
 });
 
+test("a message containing only context updates and reminders gets no user header", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    await driver.magenta.command("context-files ./poem.txt");
+    await driver.inputMagentaText("Use a tool");
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    // Low output tokens, so the auto-respond turn carries no system reminder
+    // and the message is composed solely of a tool result + context update.
+    request.respond({
+      stopReason: "tool_use",
+      text: "I'll use get_file",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "tool_1" as ToolRequestId,
+            toolName: "get_files" as ToolName,
+            input: { files: [{ filePath: "./poem.txt" }] },
+          },
+        },
+      ],
+      usage: { inputTokens: 100, outputTokens: 100 },
+    });
+
+    await fs.writeFile(path.join(driver.magenta.cwd, "poem.txt"), "changed\n");
+
+    const autoRespondRequest = await driver.mockAnthropic.awaitPendingStream();
+    autoRespondRequest.respond({
+      stopReason: "end_turn",
+      text: "Done",
+      toolRequests: [],
+    });
+
+    await driver.assertDisplayBufferContains("Done");
+    const displayText = await driver.getDisplayBufferText();
+    const userHeaders = displayText.match(/^# user:$/gm) ?? [];
+    expect(userHeaders.length).toBe(1);
+  });
+});
+
 test("multiple user messages each get their own system reminder", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
