@@ -1,20 +1,15 @@
-import { d, type VDOMNode, withBindings } from "../tea/view.ts";
-import {
-  type DisplayContext,
-  type ToolRequest,
+import type {
+  CompletedToolInfo,
+  DisplayContext,
+  ToolRequest,
+  ToolRequestId,
 } from "@magenta/core";
-import type { CompletedToolInfo } from "@magenta/core";
-import {
-  type AbsFilePath,
-  displayPath,
-  resolveFilePath,
-  type UnresolvedFilePath,
-} from "../utils/files.ts";
-import { formatTokens } from "../utils/tokens.ts";
 import type * as GetFile from "../../node/core/src/tools/getFile.ts";
-import type { RenderContext } from "./index.ts";
 import type { ToolViewState } from "../chat/thread.ts";
-import type { ToolRequestId } from "@magenta/core";
+import { d, type VDOMNode, withBindings } from "../tea/view.ts";
+import { displayPath, resolveFilePath } from "../utils/files.ts";
+import { formatTokens } from "../utils/tokens.ts";
+import type { RenderContext } from "./index.ts";
 
 type FileRequest = GetFile.FileRequest;
 type Input = GetFile.Input;
@@ -77,7 +72,7 @@ function computeFileInfos(
   }
 
   const input = info.request.input as Input;
-  const structured = (result as any).structuredResult as
+  const structured = result.structuredResult as
     | GetFile.StructuredResult
     | undefined;
 
@@ -86,7 +81,7 @@ function computeFileInfos(
   }
 
   const headerIndices = result.value.reduce<number[]>(
-    (acc, block: any, blockIdx: number) => {
+    (acc, block, blockIdx) => {
       if (block.type === "text" && block.text.startsWith("=== ")) {
         acc.push(blockIdx);
       }
@@ -103,7 +98,7 @@ function computeFileInfos(
     const contentEnd = headerIndices[idx + 1] ?? result.value.length;
     const contentText = result.value
       .slice(contentStart, contentEnd)
-      .map((block: any) => (block.type === "text" ? block.text : ""))
+      .map((block) => (block.type === "text" ? block.text : ""))
       .join("\n");
 
     return { fileDisplay, isError: file.isError, contentText };
