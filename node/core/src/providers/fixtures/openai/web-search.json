@@ -1,0 +1,577 @@
+{
+  "turns": [
+    {
+      "request": {
+        "model": "gpt-5.4",
+        "instructions": "You are a terse assistant. Answer in as few words as possible.",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "Who won the 2026 Super Bowl? Search."
+              }
+            ]
+          }
+        ],
+        "stream": true,
+        "store": false,
+        "tools": [
+          {
+            "type": "web_search"
+          }
+        ]
+      },
+      "events": [
+        {
+          "type": "response.created",
+          "response": {
+            "id": "resp_0136790c3380b577016a6f7bb140608199acaea90f31e23169",
+            "object": "response",
+            "created_at": 1785691057,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "66339d35-e982-4b93-8840-1abe98e96dfe",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [
+              {
+                "type": "web_search",
+                "return_token_budget": "default",
+                "search_content_types": [
+                  "text"
+                ],
+                "search_context_size": "medium",
+                "user_location": {
+                  "type": "approximate",
+                  "city": null,
+                  "country": "US",
+                  "region": null,
+                  "timezone": null
+                }
+              }
+            ],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 0
+        },
+        {
+          "type": "response.in_progress",
+          "response": {
+            "id": "resp_0136790c3380b577016a6f7bb140608199acaea90f31e23169",
+            "object": "response",
+            "created_at": 1785691057,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "66339d35-e982-4b93-8840-1abe98e96dfe",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [
+              {
+                "type": "web_search",
+                "return_token_budget": "default",
+                "search_content_types": [
+                  "text"
+                ],
+                "search_context_size": "medium",
+                "user_location": {
+                  "type": "approximate",
+                  "city": null,
+                  "country": "US",
+                  "region": null,
+                  "timezone": null
+                }
+              }
+            ],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 1
+        },
+        {
+          "type": "response.output_item.added",
+          "item": {
+            "id": "ws_0136790c3380b577016a6f7bb201d081999d96975dd782f6ee",
+            "type": "web_search_call",
+            "status": "in_progress"
+          },
+          "output_index": 0,
+          "sequence_number": 2
+        },
+        {
+          "type": "response.web_search_call.in_progress",
+          "item_id": "ws_0136790c3380b577016a6f7bb201d081999d96975dd782f6ee",
+          "output_index": 0,
+          "sequence_number": 3
+        },
+        {
+          "type": "response.web_search_call.searching",
+          "item_id": "ws_0136790c3380b577016a6f7bb201d081999d96975dd782f6ee",
+          "output_index": 0,
+          "sequence_number": 4
+        },
+        {
+          "type": "response.web_search_call.completed",
+          "item_id": "ws_0136790c3380b577016a6f7bb201d081999d96975dd782f6ee",
+          "output_index": 0,
+          "sequence_number": 5
+        },
+        {
+          "type": "response.output_item.done",
+          "item": {
+            "id": "ws_0136790c3380b577016a6f7bb201d081999d96975dd782f6ee",
+            "type": "web_search_call",
+            "status": "completed",
+            "action": {
+              "type": "search",
+              "queries": [
+                "2026 Super Bowl winner site:nfl.com OR site:superbowl.com OR site:espn.com"
+              ],
+              "query": "2026 Super Bowl winner site:nfl.com OR site:superbowl.com OR site:espn.com"
+            }
+          },
+          "output_index": 0,
+          "sequence_number": 6
+        },
+        {
+          "type": "response.output_item.added",
+          "item": {
+            "id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+            "type": "message",
+            "status": "in_progress",
+            "content": [],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 1,
+          "sequence_number": 7
+        },
+        {
+          "type": "response.content_part.added",
+          "content_index": 0,
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "output_index": 1,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": ""
+          },
+          "sequence_number": 8
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "The Seattle Seahawks won Super Bowl LX on February ",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "4sIQFateS6Nrs",
+          "output_index": 1,
+          "sequence_number": 9
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "8, 2026, beating the New",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "f4MrZNyj",
+          "output_index": 1,
+          "sequence_number": 10
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": " England Patriots 29–",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "k4HyoWx081Q",
+          "output_index": 1,
+          "sequence_number": 11
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "13.\n\nSources:\n- NFL",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "jKGafT4dUMYUL",
+          "output_index": 1,
+          "sequence_number": 12
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": ".com: https://",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "tP",
+          "output_index": 1,
+          "sequence_number": 13
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "www.nfl",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "46TZjr8yS",
+          "output_index": 1,
+          "sequence_number": 14
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": ".com/news/seahawks",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "CbM6zD2IWxR49Q",
+          "output_index": 1,
+          "sequence_number": 15
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "-rb-kenn",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "NrhUJgPD",
+          "output_index": 1,
+          "sequence_number": 16
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "eth-walker",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "Nn0Nwu",
+          "output_index": 1,
+          "sequence_number": 17
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "-iii-named",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "WwzYYl",
+          "output_index": 1,
+          "sequence_number": 18
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "-super-bowl-l",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "z6I",
+          "output_index": 1,
+          "sequence_number": 19
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "x-mvp",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "YiYSwwg8oHz",
+          "output_index": 1,
+          "sequence_number": 20
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "\n- NFL.com",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "CcD19H",
+          "output_index": 1,
+          "sequence_number": 21
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": " Super Bowl page",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "",
+          "output_index": 1,
+          "sequence_number": 22
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": ": https://www",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "69E",
+          "output_index": 1,
+          "sequence_number": 23
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": ".nfl.com/s",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "xKx41O",
+          "output_index": 1,
+          "sequence_number": 24
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "uper-bowl",
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "obfuscation": "7STPfmy",
+          "output_index": 1,
+          "sequence_number": 25
+        },
+        {
+          "type": "response.output_text.done",
+          "content_index": 0,
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "logprobs": [],
+          "output_index": 1,
+          "sequence_number": 26,
+          "text": "The Seattle Seahawks won Super Bowl LX on February 8, 2026, beating the New England Patriots 29–13.\n\nSources:\n- NFL.com: https://www.nfl.com/news/seahawks-rb-kenneth-walker-iii-named-super-bowl-lx-mvp\n- NFL.com Super Bowl page: https://www.nfl.com/super-bowl"
+        },
+        {
+          "type": "response.content_part.done",
+          "content_index": 0,
+          "item_id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+          "output_index": 1,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": "The Seattle Seahawks won Super Bowl LX on February 8, 2026, beating the New England Patriots 29–13.\n\nSources:\n- NFL.com: https://www.nfl.com/news/seahawks-rb-kenneth-walker-iii-named-super-bowl-lx-mvp\n- NFL.com Super Bowl page: https://www.nfl.com/super-bowl"
+          },
+          "sequence_number": 27
+        },
+        {
+          "type": "response.output_item.done",
+          "item": {
+            "id": "msg_0136790c3380b577016a6f7bb498f88199bc4642a83efcf6db",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "The Seattle Seahawks won Super Bowl LX on February 8, 2026, beating the New England Patriots 29–13.\n\nSources:\n- NFL.com: https://www.nfl.com/news/seahawks-rb-kenneth-walker-iii-named-super-bowl-lx-mvp\n- NFL.com Super Bowl page: https://www.nfl.com/super-bowl"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 1,
+          "sequence_number": 28
+        },
+        {
+          "type": "response.completed",
+          "response": {
+            "id": "resp_0136790c3380b577016a6f7bb140608199acaea90f31e23169",
+            "object": "response",
+            "created_at": 1785691057,
+            "status": "completed",
+            "background": false,
+            "completed_at": 1785691061,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "66339d35-e982-4b93-8840-1abe98e96dfe",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 1
+              }
+            },
+            "tools": [
+              {
+                "type": "web_search",
+                "return_token_budget": "default",
+                "search_content_types": [
+                  "text"
+                ],
+                "search_context_size": "medium",
+                "user_location": {
+                  "type": "approximate",
+                  "city": null,
+                  "country": "US",
+                  "region": null,
+                  "timezone": null
+                }
+              }
+            ],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 6888,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 2688
+              },
+              "output_tokens": 143,
+              "output_tokens_details": {
+                "reasoning_tokens": 61
+              },
+              "total_tokens": 7031
+            },
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 29
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "turns": [
+    {
+      "request": {
+        "model": "gpt-5.4",
+        "instructions": "You are a terse assistant. Answer in as few words as possible.",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "Write a 500 word essay about clouds."
+              }
+            ]
+          }
+        ],
+        "stream": true,
+        "store": false,
+        "max_output_tokens": 32
+      },
+      "events": [
+        {
+          "type": "http_error",
+          "status": 400,
+          "body": "{\"detail\":\"Unsupported parameter: max_output_tokens\"}"
+        }
+      ]
+    }
+  ]
+}

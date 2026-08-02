@@ -1,0 +1,444 @@
+{
+  "turns": [
+    {
+      "request": {
+        "model": "gpt-5.4",
+        "instructions": "You are a terse assistant. Answer in as few words as possible.",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "What does this document say?"
+              },
+              {
+                "type": "input_file",
+                "filename": "hello.pdf",
+                "file_data": "data:application/pdf;base64,JVBERi0xLjcKJYGBgYEKCjYgMCBvYmoKPDwKL0ZpbHRlciAvRmxhdGVEZWNvZGUKL0xlbmd0aCAxMjUKPj4Kc3RyZWFtCnicHYqxCgIxEET7/YrUgrjZbGYTEAsxYmEj7A+InOJxFor4/ZeTad68mTftnTgs+Txocxqm3/B93q5r41q0sJUaIge/k2jwM8X/NS4ud/2ibVYUZGEcEGGoSMJmOJpAu63WO6RvDYpsYqlTNEVCkbYLPpKvqDldaAbGRx6fCmVuZHN0cmVhbQplbmRvYmoKCjcgMCBvYmoKPDwKL0ZpbHRlciAvRmxhdGVEZWNvZGUKL1R5cGUgL09ialN0bQovTiA1Ci9GaXJzdCAyNgovTGVuZ3RoIDM2MQo+PgpzdHJlYW0KeJzVUk1Lw0AQve+vmKMeZCebNB9SCm2TKEhRWkFRPKTJUiJlV5KN1H/vTJJaehDPHh67M/Nm9+3O8wBBQRCAD1EMAUx8BROIPA+mUyEfvz40yIdip1sh7+qqhVfiIKzhTcil7YwDT8xm4sRdFq7Y250YmsBj8pHx0NiqK3UD0zzLc8QIEcOAECKqlNYlISEoiqmmYtoTomAE5SIf0Z9TLR8QRkMP13vuZOzPaCVuyJx04AbxEP/cy3dlwxnqLz3JTMiVrdLCabhIrxWqEGNUHl3o+y+X9B2NLpz9v4/r9dfW/PrCsznzeHnIjWYP9FOWa93arilp7MzLLVV4c6v3n9rVZXEVYRKTzihOyGOjMeTz/fZdlz2Vw+zgbjaONQwJzq10VRcLeyD3IfsVETwCeXBujHXsyt6PxpEajsLRo2eSWZCQm27r+pCTnpCLotW91JNOEmFKW9VmB/KpNnPT1scEn/gNF3bF1gplbmRzdHJlYW0KZW5kb2JqCgo4IDAgb2JqCjw8Ci9TaXplIDkKL1Jvb3QgMiAwIFIKL0luZm8gMyAwIFIKL0ZpbHRlciAvRmxhdGVEZWNvZGUKL1R5cGUgL1hSZWYKL0xlbmd0aCA0MQovVyBbIDEgMiAyIF0KL0luZGV4IFsgMCA5IF0KPj4Kc3RyZWFtCnicFcSxEQAgDAOxt8MdLfv3rMQ6CVYhoNtsSEpOlZY4IN7PFwZiQQPGCmVuZHN0cmVhbQplbmRvYmoKCnN0YXJ0eHJlZgo2NzcKJSVFT0Y="
+              }
+            ]
+          }
+        ],
+        "stream": true,
+        "store": false
+      },
+      "events": [
+        {
+          "type": "response.created",
+          "response": {
+            "id": "resp_089ca802ef6dfeec016a6f836975fc8198a5506d5495bab3d2",
+            "object": "response",
+            "created_at": 1785693033,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "31892960-4e1a-442f-8512-d5375f91dc6c",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 0
+        },
+        {
+          "type": "response.in_progress",
+          "response": {
+            "id": "resp_089ca802ef6dfeec016a6f836975fc8198a5506d5495bab3d2",
+            "object": "response",
+            "created_at": 1785693033,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "31892960-4e1a-442f-8512-d5375f91dc6c",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 1
+        },
+        {
+          "type": "response.output_item.added",
+          "item": {
+            "id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+            "type": "message",
+            "status": "in_progress",
+            "content": [],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 0,
+          "sequence_number": 2
+        },
+        {
+          "type": "response.content_part.added",
+          "content_index": 0,
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "output_index": 0,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": ""
+          },
+          "sequence_number": 3
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "It",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "MijKhS7SZmNDNb",
+          "output_index": 0,
+          "sequence_number": 4
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": " says",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "x1uWLNd5ADR",
+          "output_index": 0,
+          "sequence_number": 5
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": ":",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "favRXsu300WNpKh",
+          "output_index": 0,
+          "sequence_number": 6
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": " “",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "Dp4jjCqJmKVnpT",
+          "output_index": 0,
+          "sequence_number": 7
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "The",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "6cjWQWXR0Wiva",
+          "output_index": 0,
+          "sequence_number": 8
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": " magic",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "IWaE5RuMpG",
+          "output_index": 0,
+          "sequence_number": 9
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": " word",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "jyyff41M9id",
+          "output_index": 0,
+          "sequence_number": 10
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": " is",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "2elKONfFXIu1E",
+          "output_index": 0,
+          "sequence_number": 11
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": " band",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "7kyvL3tkag2",
+          "output_index": 0,
+          "sequence_number": 12
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "ers",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "gLd2YX5xxpVdK",
+          "output_index": 0,
+          "sequence_number": 13
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "n",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "62pkMl3gXQYhU1K",
+          "output_index": 0,
+          "sequence_number": 14
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "atch",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "6kMeYApEShvw",
+          "output_index": 0,
+          "sequence_number": 15
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": ".”",
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "obfuscation": "gItk3pcwOG1i0h",
+          "output_index": 0,
+          "sequence_number": 16
+        },
+        {
+          "type": "response.output_text.done",
+          "content_index": 0,
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "logprobs": [],
+          "output_index": 0,
+          "sequence_number": 17,
+          "text": "It says: “The magic word is bandersnatch.”"
+        },
+        {
+          "type": "response.content_part.done",
+          "content_index": 0,
+          "item_id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+          "output_index": 0,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": "It says: “The magic word is bandersnatch.”"
+          },
+          "sequence_number": 18
+        },
+        {
+          "type": "response.output_item.done",
+          "item": {
+            "id": "msg_089ca802ef6dfeec016a6f836a175881989611a7d80f2da229",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "It says: “The magic word is bandersnatch.”"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 0,
+          "sequence_number": 19
+        },
+        {
+          "type": "response.completed",
+          "response": {
+            "id": "resp_089ca802ef6dfeec016a6f836975fc8198a5506d5495bab3d2",
+            "object": "response",
+            "created_at": 1785693033,
+            "status": "completed",
+            "background": false,
+            "completed_at": 1785693034,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "31892960-4e1a-442f-8512-d5375f91dc6c",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 56,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 17,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 73
+            },
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 20
+        }
+      ]
+    }
+  ]
+}

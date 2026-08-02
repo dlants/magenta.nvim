@@ -1,0 +1,736 @@
+{
+  "turns": [
+    {
+      "request": {
+        "model": "gpt-5.4",
+        "instructions": "You are a terse assistant. Answer in as few words as possible.",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "What is 2 + 2?"
+              }
+            ]
+          },
+          {
+            "id": "rs_00601be03ed69856016a6f8338456c8198ae35c4990036d77b",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqb4M4QO68AOr_fIJP8MeoSwluxb2D7Q4ji24AUs4_fTilLUekGoT8860BCv9tbg4VE6cSQkSOgTNqklWCh3VMy0YD8QJJ4QeofUbo-F5P752f3ISc2_g_UyUDnrL5HpA7a0zLXhJlj8_JsK0FfZSIYqUenetnGsmVNiTkuFZYrly5MqGUk0e_tDp7KOPtRSgjPNJoHN8TcLGQ97aAbG8wqwmGwcB-4lRQhpvRIX0ck9li7kCtFnvntLhetk1yM8C0prcI9muDRtm9vOdn0qLvZTqh7ug-f69FTFRscUxYrxr3U4dV2PlhhT_bdc9jrpW_CXFjrXA542mtLR3JxWRWtDQm0er0r6oDR_tlTX5cj6TwmAhrYrVxt7nkLnnLz68SGjFr7dyp4ApAO2m_GLG7CG0v0dg_DxGMEwN95zbAfMI9GAw9XxqQkO0EDosYp1wZKImYRsbC2M3FYknhjcfODino-6Y9zHqJFJrjPznInZmigT3iws7L3uUuRSFixlYfoMFoYzUFM3Ky_s6f89lWIIEbnIaObVI2P7rtUGqW2Ui6E00USc8iDmDpQf60_UPzbY-8Eu3Ht-TakLaGPg_49C7IgCFEpuo3aD_usdDjEnMA0_DcbLCKefUX6mrMnWQPbrq_DcaJool4Xf8jaS3_BPZjsETzi9db6xcuRyf7DPSAs7JrxEF014CPi7Is0LiD8Sz74IpzcBDqAepNziNI1gWFSf18PhZzaarduZIDEprh3ZXY433e1IWM8KoJBzjSLxT6Yz6_dKT5biPuGpaob1PSY1kObWo2j7mhjxWHg3QESA7A07DQGFWU5FIP6K8YR9umb1aCDtQgysKt8sOmuAwTovmDsbrIRuUisQv14KjxCSmBhM_Y1n3totd3KoUAgSdojD1MSPhoBie2ebB6vQ5dfE4nwtJ3ruS_hJOtXtz-WsQYa-HNrMSrV6OuF2TF-EsG",
+            "summary": []
+          },
+          {
+            "id": "msg_00601be03ed69856016a6f8338ac74819895326d49f796727b",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "4"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "And 3 + 3?"
+              }
+            ]
+          }
+        ],
+        "stream": true,
+        "store": false,
+        "reasoning": {
+          "effort": "low",
+          "summary": "auto"
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
+      },
+      "events": [
+        {
+          "type": "response.created",
+          "response": {
+            "id": "resp_00601be03ed69856016a6f83377db48198a7be49af0bdaf6d5",
+            "object": "response",
+            "created_at": 1785692983,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "8cf3f572-47f4-4f23-8979-4b472eddf2af",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "low",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 0
+        },
+        {
+          "type": "response.in_progress",
+          "response": {
+            "id": "resp_00601be03ed69856016a6f83377db48198a7be49af0bdaf6d5",
+            "object": "response",
+            "created_at": 1785692983,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "8cf3f572-47f4-4f23-8979-4b472eddf2af",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "low",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 1
+        },
+        {
+          "type": "response.output_item.added",
+          "item": {
+            "id": "rs_00601be03ed69856016a6f8338456c8198ae35c4990036d77b",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqb4M4YvJfVSvF3vFdYU731shzkkFYz8qlayf1CVRfkRj9OB4dooApJYm5p-uJ7tF5Ykmsq3GxcMdE4pHaVioJTfXaUOi-mMsQolvs1n0cJJ83ya3o6ygXr2Ry40ni8LMhdbwfjUtFj7vPalra5jTIvHRFkG08GwWng4zcj7kB9jZTZHU1ejZmLQDRgDLubuoA3wVhbSeAWYKdhi3RG-GbmOvY9VcNCV9ZjAe4ru6IM0nOMspFJVuc0HKWL1Ksz2nTvoLZqH8S_8NTCIgZq0K3cG2GlvjYKBOpKvcT-eqd3lXSy_fbO2qn49TqUYFI6e4iQ7X9-DZJyD2Q8_h2hGIUmh6mI5rdSRbwLobmTvUav2QshXKcVPugIucKtSNcYOg878_AN-p02wdmPiCLi8ATpRzViBREnMigoXgJVuAmgAWfkqYLv4atw12u1U0ZnV05bxinS1rgntl-6661QnhFrYMigKioE8M2SYuqpAuX2_9FFIbAyA_MOqxPSOh4neAZ26Rhs-uiGzjLoMZLcVfykshMShVRSZ7zRd0I0wB2nJhj5zvIC9trPX9QUZdw0QFKRc-KtL-Jwe92qNKInmYhNmWCgpQI2Ml3Eqz2vOV26CgXBhxfPWgSh3Uh-FyL6bUo85w9EtkPRaRJlHxpJ-QG7Y4VT3wzUovsT7yy1UeQLYVKFLVJDfvcHKWIo8P3eWikQYDMIVhqvXoXvYOc7eWa137watgUtDrLA38_teT8fiwuM_oRXNVfcGtn5TwW59NWkouenhjRkSOdmZdCQ1DHhckNaHXuOAyFNcze74vFr1B-W5HwLo8CwitPqodxWE9MLA5-C0QdmPnw9CnLxBpWSl6tMXzmkfkEbKMJ3PFU0g28P6h5VQ9kwqTR_OF2EUaXTdIoN86TOm60xdMlgfAL0Y_8QQ==",
+            "summary": []
+          },
+          "output_index": 0,
+          "sequence_number": 2
+        },
+        {
+          "type": "response.output_item.done",
+          "item": {
+            "id": "rs_00601be03ed69856016a6f8338456c8198ae35c4990036d77b",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqb4M4QO68AOr_fIJP8MeoSwluxb2D7Q4ji24AUs4_fTilLUekGoT8860BCv9tbg4VE6cSQkSOgTNqklWCh3VMy0YD8QJJ4QeofUbo-F5P752f3ISc2_g_UyUDnrL5HpA7a0zLXhJlj8_JsK0FfZSIYqUenetnGsmVNiTkuFZYrly5MqGUk0e_tDp7KOPtRSgjPNJoHN8TcLGQ97aAbG8wqwmGwcB-4lRQhpvRIX0ck9li7kCtFnvntLhetk1yM8C0prcI9muDRtm9vOdn0qLvZTqh7ug-f69FTFRscUxYrxr3U4dV2PlhhT_bdc9jrpW_CXFjrXA542mtLR3JxWRWtDQm0er0r6oDR_tlTX5cj6TwmAhrYrVxt7nkLnnLz68SGjFr7dyp4ApAO2m_GLG7CG0v0dg_DxGMEwN95zbAfMI9GAw9XxqQkO0EDosYp1wZKImYRsbC2M3FYknhjcfODino-6Y9zHqJFJrjPznInZmigT3iws7L3uUuRSFixlYfoMFoYzUFM3Ky_s6f89lWIIEbnIaObVI2P7rtUGqW2Ui6E00USc8iDmDpQf60_UPzbY-8Eu3Ht-TakLaGPg_49C7IgCFEpuo3aD_usdDjEnMA0_DcbLCKefUX6mrMnWQPbrq_DcaJool4Xf8jaS3_BPZjsETzi9db6xcuRyf7DPSAs7JrxEF014CPi7Is0LiD8Sz74IpzcBDqAepNziNI1gWFSf18PhZzaarduZIDEprh3ZXY433e1IWM8KoJBzjSLxT6Yz6_dKT5biPuGpaob1PSY1kObWo2j7mhjxWHg3QESA7A07DQGFWU5FIP6K8YR9umb1aCDtQgysKt8sOmuAwTovmDsbrIRuUisQv14KjxCSmBhM_Y1n3totd3KoUAgSdojD1MSPhoBie2ebB6vQ5dfE4nwtJ3ruS_hJOtXtz-WsQYa-HNrMSrV6OuF2TF-EsG",
+            "summary": []
+          },
+          "output_index": 0,
+          "sequence_number": 3
+        },
+        {
+          "type": "response.output_item.added",
+          "item": {
+            "id": "msg_00601be03ed69856016a6f8338ac74819895326d49f796727b",
+            "type": "message",
+            "status": "in_progress",
+            "content": [],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 1,
+          "sequence_number": 4
+        },
+        {
+          "type": "response.content_part.added",
+          "content_index": 0,
+          "item_id": "msg_00601be03ed69856016a6f8338ac74819895326d49f796727b",
+          "output_index": 1,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": ""
+          },
+          "sequence_number": 5
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "4",
+          "item_id": "msg_00601be03ed69856016a6f8338ac74819895326d49f796727b",
+          "logprobs": [],
+          "obfuscation": "V2CidpM9hDpMwH8",
+          "output_index": 1,
+          "sequence_number": 6
+        },
+        {
+          "type": "response.output_text.done",
+          "content_index": 0,
+          "item_id": "msg_00601be03ed69856016a6f8338ac74819895326d49f796727b",
+          "logprobs": [],
+          "output_index": 1,
+          "sequence_number": 7,
+          "text": "4"
+        },
+        {
+          "type": "response.content_part.done",
+          "content_index": 0,
+          "item_id": "msg_00601be03ed69856016a6f8338ac74819895326d49f796727b",
+          "output_index": 1,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": "4"
+          },
+          "sequence_number": 8
+        },
+        {
+          "type": "response.output_item.done",
+          "item": {
+            "id": "msg_00601be03ed69856016a6f8338ac74819895326d49f796727b",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "4"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 1,
+          "sequence_number": 9
+        },
+        {
+          "type": "response.completed",
+          "response": {
+            "id": "resp_00601be03ed69856016a6f83377db48198a7be49af0bdaf6d5",
+            "object": "response",
+            "created_at": 1785692983,
+            "status": "completed",
+            "background": false,
+            "completed_at": 1785692984,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "8cf3f572-47f4-4f23-8979-4b472eddf2af",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "low",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 32,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 15,
+              "output_tokens_details": {
+                "reasoning_tokens": 8
+              },
+              "total_tokens": 47
+            },
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 10
+        }
+      ]
+    },
+    {
+      "request": {
+        "model": "gpt-5.4",
+        "instructions": "You are a terse assistant. Answer in as few words as possible.",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "What is 2 + 2?"
+              }
+            ]
+          },
+          {
+            "id": "rs_00601be03ed69856016a6f8338456c8198ae35c4990036d77b",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqb4M4QO68AOr_fIJP8MeoSwluxb2D7Q4ji24AUs4_fTilLUekGoT8860BCv9tbg4VE6cSQkSOgTNqklWCh3VMy0YD8QJJ4QeofUbo-F5P752f3ISc2_g_UyUDnrL5HpA7a0zLXhJlj8_JsK0FfZSIYqUenetnGsmVNiTkuFZYrly5MqGUk0e_tDp7KOPtRSgjPNJoHN8TcLGQ97aAbG8wqwmGwcB-4lRQhpvRIX0ck9li7kCtFnvntLhetk1yM8C0prcI9muDRtm9vOdn0qLvZTqh7ug-f69FTFRscUxYrxr3U4dV2PlhhT_bdc9jrpW_CXFjrXA542mtLR3JxWRWtDQm0er0r6oDR_tlTX5cj6TwmAhrYrVxt7nkLnnLz68SGjFr7dyp4ApAO2m_GLG7CG0v0dg_DxGMEwN95zbAfMI9GAw9XxqQkO0EDosYp1wZKImYRsbC2M3FYknhjcfODino-6Y9zHqJFJrjPznInZmigT3iws7L3uUuRSFixlYfoMFoYzUFM3Ky_s6f89lWIIEbnIaObVI2P7rtUGqW2Ui6E00USc8iDmDpQf60_UPzbY-8Eu3Ht-TakLaGPg_49C7IgCFEpuo3aD_usdDjEnMA0_DcbLCKefUX6mrMnWQPbrq_DcaJool4Xf8jaS3_BPZjsETzi9db6xcuRyf7DPSAs7JrxEF014CPi7Is0LiD8Sz74IpzcBDqAepNziNI1gWFSf18PhZzaarduZIDEprh3ZXY433e1IWM8KoJBzjSLxT6Yz6_dKT5biPuGpaob1PSY1kObWo2j7mhjxWHg3QESA7A07DQGFWU5FIP6K8YR9umb1aCDtQgysKt8sOmuAwTovmDsbrIRuUisQv14KjxCSmBhM_Y1n3totd3KoUAgSdojD1MSPhoBie2ebB6vQ5dfE4nwtJ3ruS_hJOtXtz-WsQYa-HNrMSrV6OuF2TF-EsG",
+            "summary": []
+          },
+          {
+            "id": "msg_00601be03ed69856016a6f8338ac74819895326d49f796727b",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "4"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "And 3 + 3?"
+              }
+            ]
+          }
+        ],
+        "stream": true,
+        "store": false,
+        "reasoning": {
+          "effort": "low",
+          "summary": "auto"
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
+      },
+      "events": [
+        {
+          "type": "response.created",
+          "response": {
+            "id": "resp_00601be03ed69856016a6f8338f9008198b93962b775935315",
+            "object": "response",
+            "created_at": 1785692985,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "374881a6-551a-45a5-a4bc-7a8cb2080bef",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "low",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 0
+        },
+        {
+          "type": "response.in_progress",
+          "response": {
+            "id": "resp_00601be03ed69856016a6f8338f9008198b93962b775935315",
+            "object": "response",
+            "created_at": 1785692985,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "374881a6-551a-45a5-a4bc-7a8cb2080bef",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "low",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 1
+        },
+        {
+          "type": "response.output_item.added",
+          "item": {
+            "id": "msg_00601be03ed69856016a6f833997808198b7fa21a45e42ed4a",
+            "type": "message",
+            "status": "in_progress",
+            "content": [],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 0,
+          "sequence_number": 2
+        },
+        {
+          "type": "response.content_part.added",
+          "content_index": 0,
+          "item_id": "msg_00601be03ed69856016a6f833997808198b7fa21a45e42ed4a",
+          "output_index": 0,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": ""
+          },
+          "sequence_number": 3
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "6",
+          "item_id": "msg_00601be03ed69856016a6f833997808198b7fa21a45e42ed4a",
+          "logprobs": [],
+          "obfuscation": "M5SuotwZKcEnX96",
+          "output_index": 0,
+          "sequence_number": 4
+        },
+        {
+          "type": "response.output_text.done",
+          "content_index": 0,
+          "item_id": "msg_00601be03ed69856016a6f833997808198b7fa21a45e42ed4a",
+          "logprobs": [],
+          "output_index": 0,
+          "sequence_number": 5,
+          "text": "6"
+        },
+        {
+          "type": "response.content_part.done",
+          "content_index": 0,
+          "item_id": "msg_00601be03ed69856016a6f833997808198b7fa21a45e42ed4a",
+          "output_index": 0,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": "6"
+          },
+          "sequence_number": 6
+        },
+        {
+          "type": "response.output_item.done",
+          "item": {
+            "id": "msg_00601be03ed69856016a6f833997808198b7fa21a45e42ed4a",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "6"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 0,
+          "sequence_number": 7
+        },
+        {
+          "type": "response.completed",
+          "response": {
+            "id": "resp_00601be03ed69856016a6f8338f9008198b93962b775935315",
+            "object": "response",
+            "created_at": 1785692985,
+            "status": "completed",
+            "background": false,
+            "completed_at": 1785692985,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "374881a6-551a-45a5-a4bc-7a8cb2080bef",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "low",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 50,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 5,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 55
+            },
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 8
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,977 @@
+{
+  "turns": [
+    {
+      "request": {
+        "model": "gpt-5.4",
+        "instructions": "You are a terse assistant. Answer in as few words as possible.",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "Should I bring an umbrella in Paris today?"
+              }
+            ]
+          },
+          {
+            "id": "fc_0965e295d228f228016a6f7baf28d0819a8d74f79e0b5e6f1c",
+            "type": "function_call",
+            "status": "completed",
+            "arguments": "{\"city\":\"Paris\"}",
+            "call_id": "call_7myWT0zf3TNeDE8xxGC7oolR",
+            "name": "get_weather"
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "call_7myWT0zf3TNeDE8xxGC7oolR",
+            "output": "18C, light rain"
+          }
+        ],
+        "stream": true,
+        "store": false,
+        "tools": [
+          {
+            "type": "function",
+            "name": "get_weather",
+            "description": "Get the current weather for a city.",
+            "strict": false,
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ],
+        "reasoning": {
+          "effort": "medium",
+          "summary": "auto"
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
+      },
+      "events": [
+        {
+          "type": "response.created",
+          "response": {
+            "id": "resp_0965e295d228f228016a6f7bada790819a82ea813c26f2995d",
+            "object": "response",
+            "created_at": 1785691053,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "b573c667-5254-448e-8c82-c340b5e1c620",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "medium",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [
+              {
+                "type": "function",
+                "description": "Get the current weather for a city.",
+                "name": "get_weather",
+                "output_schema": null,
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "city"
+                  ],
+                  "additionalProperties": false
+                },
+                "strict": false
+              }
+            ],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 0
+        },
+        {
+          "type": "response.in_progress",
+          "response": {
+            "id": "resp_0965e295d228f228016a6f7bada790819a82ea813c26f2995d",
+            "object": "response",
+            "created_at": 1785691053,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "b573c667-5254-448e-8c82-c340b5e1c620",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "medium",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [
+              {
+                "type": "function",
+                "description": "Get the current weather for a city.",
+                "name": "get_weather",
+                "output_schema": null,
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "city"
+                  ],
+                  "additionalProperties": false
+                },
+                "strict": false
+              }
+            ],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 1
+        },
+        {
+          "type": "response.output_item.added",
+          "item": {
+            "id": "rs_0965e295d228f228016a6f7bae4b30819aabafaec277ea59f9",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqb3uuJUWU3Lrw23O9BEzTteSs1_v84Sj9dbQAHQk3OHAaNeLdWCEoY4Qh0Zxgqf3rxL3rhL809n99oUkmwITwOjBS2Hmsyh48L5k24kMZNuoXb6Zn3ZQ_EKoE6H7hQz8kqvhhdV3T4ylxRSDcMNCRUQ7ZVp-5Go5egWzuj3BjnWs0bqTHq9Uj1icgqKKT0OGvVXKNGW9be3-Q3kHGrAxc9xX3vXO9FhXN-KTpwltytYO86WLiZQH5zyets6X5M0mqzjxkMnGNHMYnMezrd6SCEuGd7VePvxcrR7_7cmb7GCXyevQVRQKP5ZY16LzZou_mw-a2PzsaSKLZpGezaM3oeIpVjslfaKTlTd4oh1rgp7iZ04NVM_xhqcADEy-eblWz9RBUv8pYSoU5CKvLTTNXvCMYsdgq5BwukUT2N7FD7dtJ1JB_L7tY88mm0WjXJ3SX6RYDdA2Y78XI3xF4IKCmTPvCOM0oFzKvexS14bXRXJnC6qPah9vyweCOEfjruv6X5724YNTz1foVrbN2S2cvvd9XQztLsHM7KoQ1K3RrdQ-1Ruu7Fj5vRrwNeMKCtJ8L1l19P_TxtHTJafiYhWfBtRZTvkRW6lcGCEz3KUh_IjQdcVkfz3vrfeeUq3bv5S_ZfV-cT75Dgj3W-lVzvOllbywFaD-q8vo8SmHiqB1ISYh4w87Qg1_9HDgilHYlBj6rBgmhVjsVMBU6MTCGz-0r0kxLIVUpdLqwxzUhUeSQ6dPUkUH-bTTip29X9BfxMkyKQy4rIENcUFvITgonq2BWrd8w3bG1_dyh8TZcAfKF6e7KelWzb4jUEqp6hN_YJEJw0tL1oZz1vihOXoQ-a-cA4rzjK23thVRNTnkOD5bQ_a9Fmv4QtY-ZE2RLeIHXaLwy3PElsadprlYue0gu4JeWp8qs6g==",
+            "summary": []
+          },
+          "output_index": 0,
+          "sequence_number": 2
+        },
+        {
+          "type": "response.reasoning_summary_part.added",
+          "item_id": "rs_0965e295d228f228016a6f7bae4b30819aabafaec277ea59f9",
+          "output_index": 0,
+          "part": {
+            "type": "summary_text",
+            "text": ""
+          },
+          "sequence_number": 3,
+          "summary_index": 0
+        },
+        {
+          "type": "response.reasoning_summary_text.delta",
+          "delta": "**Planning to use weather tool**",
+          "item_id": "rs_0965e295d228f228016a6f7bae4b30819aabafaec277ea59f9",
+          "obfuscation": "",
+          "output_index": 0,
+          "sequence_number": 4,
+          "summary_index": 0
+        },
+        {
+          "type": "response.reasoning_summary_text.done",
+          "item_id": "rs_0965e295d228f228016a6f7bae4b30819aabafaec277ea59f9",
+          "output_index": 0,
+          "sequence_number": 5,
+          "summary_index": 0,
+          "text": "**Planning to use weather tool**"
+        },
+        {
+          "type": "response.reasoning_summary_part.done",
+          "item_id": "rs_0965e295d228f228016a6f7bae4b30819aabafaec277ea59f9",
+          "output_index": 0,
+          "part": {
+            "type": "summary_text",
+            "text": "**Planning to use weather tool**"
+          },
+          "sequence_number": 6,
+          "summary_index": 0
+        },
+        {
+          "type": "response.output_item.done",
+          "item": {
+            "id": "rs_0965e295d228f228016a6f7bae4b30819aabafaec277ea59f9",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqb3uvsszb1a63W3cZNSldIYGtjnSTpKQpARctjNWGCN0dQFrFspPY9-kDCwXIfpvbXB3ATfcLeOhBoKyHrJGchr9_XJHTShVoKTPusHR91epMVUhLo9POWTvno9b6zgCkqT25Bq6Zt8TqfrlXj2SurF8472YRK98oD1Z8W4f9j2gI-xfUKZghj3KhzGuwZ36ub5t441w-8G3X3rygw0gYLzysU2h9gp8YoBi5zIyC6z_qR1m_4R8rvTPYSnirJgQRyNbul-rWW29qylSwbyjil9Q4IUbT2Cv-fIt-NrBK4vDhWYc3k67ndpNymWjNKU3CLvDHh4qNHdCCmvFY_wrsMFEwOiolGlMFXyHIWfqGFcX_UOmBVmuMNGHhLiWulsXTSbkc-TxQ9Hsbwc45TxTPNcCBSvJAluC7-YsWFFdUW5W9ZHvjVLreLGAuWrhWshqLgj3WbyXTfkvx-INmrCRd978DlVRaY8aUFFobPnc4y7l0e4l_WR1XAFy9ab33DG9O8fA-CDYkQBfVxapIQyr_SgVsaJn65EFLpeH4hArChmQfKbbWJpk-tvQrj0ZVezW1-nZLg8nB52Ov79nYTaRxCb9mbocyDvCMkODSI1WtrNJCeW9jGQ0A4yxKoQ8Lu1311l73ds8vpx3eDjCSHXeB35t4sIEWmGWoZnDFGyAPpLNf6JpP-115RSq1fFJUHfvkFpj0c83t-F3Wrr0SXN3n_omRgMtPzsj1zSuNQHNv4HUYQhK-nbLPUs-dn4XLY2-4RqN_aeT53tysnf7whqIv3at62PIroo1MD8FAaOp9aXrh8phmQz6LM1ZiDMQl6dkBe839r5s2QiY361MP8WhkttAf6kZQbEHD3ca_P33e2XrP95UnQ1abjp_WBmsDPR_2EpfPZj5umPQ12-wk9lVpNyAA3WmpxWm8_S-gSXCoERER0oPaw8yqFoMTm8DYSTcCGqDHE4nOsf7oKj-HSDtMQVLxUQ==",
+            "summary": [
+              {
+                "type": "summary_text",
+                "text": "**Planning to use weather tool**"
+              }
+            ]
+          },
+          "output_index": 0,
+          "sequence_number": 7
+        },
+        {
+          "type": "response.output_item.added",
+          "item": {
+            "id": "fc_0965e295d228f228016a6f7baf28d0819a8d74f79e0b5e6f1c",
+            "type": "function_call",
+            "status": "in_progress",
+            "arguments": "",
+            "call_id": "call_7myWT0zf3TNeDE8xxGC7oolR",
+            "name": "get_weather"
+          },
+          "output_index": 1,
+          "sequence_number": 8
+        },
+        {
+          "type": "response.function_call_arguments.delta",
+          "delta": "{\"",
+          "item_id": "fc_0965e295d228f228016a6f7baf28d0819a8d74f79e0b5e6f1c",
+          "obfuscation": "EULj1lNeBN6XgX",
+          "output_index": 1,
+          "sequence_number": 9
+        },
+        {
+          "type": "response.function_call_arguments.delta",
+          "delta": "city",
+          "item_id": "fc_0965e295d228f228016a6f7baf28d0819a8d74f79e0b5e6f1c",
+          "obfuscation": "Qbke0t4MazNV",
+          "output_index": 1,
+          "sequence_number": 10
+        },
+        {
+          "type": "response.function_call_arguments.delta",
+          "delta": "\":\"",
+          "item_id": "fc_0965e295d228f228016a6f7baf28d0819a8d74f79e0b5e6f1c",
+          "obfuscation": "bl6sF715i71De",
+          "output_index": 1,
+          "sequence_number": 11
+        },
+        {
+          "type": "response.function_call_arguments.delta",
+          "delta": "Paris",
+          "item_id": "fc_0965e295d228f228016a6f7baf28d0819a8d74f79e0b5e6f1c",
+          "obfuscation": "4UylVzBn2ZG",
+          "output_index": 1,
+          "sequence_number": 12
+        },
+        {
+          "type": "response.function_call_arguments.delta",
+          "delta": "\"}",
+          "item_id": "fc_0965e295d228f228016a6f7baf28d0819a8d74f79e0b5e6f1c",
+          "obfuscation": "WXpUiluDfSFvDG",
+          "output_index": 1,
+          "sequence_number": 13
+        },
+        {
+          "type": "response.function_call_arguments.done",
+          "arguments": "{\"city\":\"Paris\"}",
+          "item_id": "fc_0965e295d228f228016a6f7baf28d0819a8d74f79e0b5e6f1c",
+          "output_index": 1,
+          "sequence_number": 14
+        },
+        {
+          "type": "response.output_item.done",
+          "item": {
+            "id": "fc_0965e295d228f228016a6f7baf28d0819a8d74f79e0b5e6f1c",
+            "type": "function_call",
+            "status": "completed",
+            "arguments": "{\"city\":\"Paris\"}",
+            "call_id": "call_7myWT0zf3TNeDE8xxGC7oolR",
+            "name": "get_weather"
+          },
+          "output_index": 1,
+          "sequence_number": 15
+        },
+        {
+          "type": "response.completed",
+          "response": {
+            "id": "resp_0965e295d228f228016a6f7bada790819a82ea813c26f2995d",
+            "object": "response",
+            "created_at": 1785691053,
+            "status": "completed",
+            "background": false,
+            "completed_at": 1785691055,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "b573c667-5254-448e-8c82-c340b5e1c620",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "medium",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [
+              {
+                "type": "function",
+                "description": "Get the current weather for a city.",
+                "name": "get_weather",
+                "output_schema": null,
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "city"
+                  ],
+                  "additionalProperties": false
+                },
+                "strict": false
+              }
+            ],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 71,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 34,
+              "output_tokens_details": {
+                "reasoning_tokens": 14
+              },
+              "total_tokens": 105
+            },
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 16
+        }
+      ]
+    },
+    {
+      "request": {
+        "model": "gpt-5.4",
+        "instructions": "You are a terse assistant. Answer in as few words as possible.",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "Should I bring an umbrella in Paris today?"
+              }
+            ]
+          },
+          {
+            "id": "fc_0965e295d228f228016a6f7baf28d0819a8d74f79e0b5e6f1c",
+            "type": "function_call",
+            "status": "completed",
+            "arguments": "{\"city\":\"Paris\"}",
+            "call_id": "call_7myWT0zf3TNeDE8xxGC7oolR",
+            "name": "get_weather"
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "call_7myWT0zf3TNeDE8xxGC7oolR",
+            "output": "18C, light rain"
+          }
+        ],
+        "stream": true,
+        "store": false,
+        "tools": [
+          {
+            "type": "function",
+            "name": "get_weather",
+            "description": "Get the current weather for a city.",
+            "strict": false,
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ],
+        "reasoning": {
+          "effort": "medium",
+          "summary": "auto"
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
+      },
+      "events": [
+        {
+          "type": "response.created",
+          "response": {
+            "id": "resp_0965e295d228f228016a6f7baf6efc819aa4620140649a4d4a",
+            "object": "response",
+            "created_at": 1785691055,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "88f823e5-a880-4801-a0a3-501059aae036",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "medium",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [
+              {
+                "type": "function",
+                "description": "Get the current weather for a city.",
+                "name": "get_weather",
+                "output_schema": null,
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "city"
+                  ],
+                  "additionalProperties": false
+                },
+                "strict": false
+              }
+            ],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 0
+        },
+        {
+          "type": "response.in_progress",
+          "response": {
+            "id": "resp_0965e295d228f228016a6f7baf6efc819aa4620140649a4d4a",
+            "object": "response",
+            "created_at": 1785691055,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "88f823e5-a880-4801-a0a3-501059aae036",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "medium",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [
+              {
+                "type": "function",
+                "description": "Get the current weather for a city.",
+                "name": "get_weather",
+                "output_schema": null,
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "city"
+                  ],
+                  "additionalProperties": false
+                },
+                "strict": false
+              }
+            ],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 1
+        },
+        {
+          "type": "response.output_item.added",
+          "item": {
+            "id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+            "type": "message",
+            "status": "in_progress",
+            "content": [],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 0,
+          "sequence_number": 2
+        },
+        {
+          "type": "response.content_part.added",
+          "content_index": 0,
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "output_index": 0,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": ""
+          },
+          "sequence_number": 3
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "Yes",
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "logprobs": [],
+          "obfuscation": "3QvFipynsf58N",
+          "output_index": 0,
+          "sequence_number": 4
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": ".",
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "logprobs": [],
+          "obfuscation": "iQDDyY9D63Ys1FL",
+          "output_index": 0,
+          "sequence_number": 5
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": " Light",
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "logprobs": [],
+          "obfuscation": "7B7YG3WF2C",
+          "output_index": 0,
+          "sequence_number": 6
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": " rain",
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "logprobs": [],
+          "obfuscation": "SxY6AxCavnq",
+          "output_index": 0,
+          "sequence_number": 7
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": ",",
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "logprobs": [],
+          "obfuscation": "sisMpmtzDrAWtFU",
+          "output_index": 0,
+          "sequence_number": 8
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": " ",
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "logprobs": [],
+          "obfuscation": "8BTxnaEhOjsbVMM",
+          "output_index": 0,
+          "sequence_number": 9
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "18",
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "logprobs": [],
+          "obfuscation": "nGlMLogcbmPXgB",
+          "output_index": 0,
+          "sequence_number": 10
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "°C",
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "logprobs": [],
+          "obfuscation": "TwRq4SXxaklKQN",
+          "output_index": 0,
+          "sequence_number": 11
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": ".",
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "logprobs": [],
+          "obfuscation": "O11W7aYZE5yHO1g",
+          "output_index": 0,
+          "sequence_number": 12
+        },
+        {
+          "type": "response.output_text.done",
+          "content_index": 0,
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "logprobs": [],
+          "output_index": 0,
+          "sequence_number": 13,
+          "text": "Yes. Light rain, 18°C."
+        },
+        {
+          "type": "response.content_part.done",
+          "content_index": 0,
+          "item_id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+          "output_index": 0,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": "Yes. Light rain, 18°C."
+          },
+          "sequence_number": 14
+        },
+        {
+          "type": "response.output_item.done",
+          "item": {
+            "id": "msg_0965e295d228f228016a6f7bb01e44819aa32f8d51c191708e",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Yes. Light rain, 18°C."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 0,
+          "sequence_number": 15
+        },
+        {
+          "type": "response.completed",
+          "response": {
+            "id": "resp_0965e295d228f228016a6f7baf6efc819aa4620140649a4d4a",
+            "object": "response",
+            "created_at": 1785691055,
+            "status": "completed",
+            "background": false,
+            "completed_at": 1785691056,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "88f823e5-a880-4801-a0a3-501059aae036",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "medium",
+              "mode": "standard",
+              "summary": "detailed"
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [
+              {
+                "type": "function",
+                "description": "Get the current weather for a city.",
+                "name": "get_weather",
+                "output_schema": null,
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "city"
+                  ],
+                  "additionalProperties": false
+                },
+                "strict": false
+              }
+            ],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 105,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 13,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 118
+            },
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 16
+        }
+      ]
+    }
+  ]
+}

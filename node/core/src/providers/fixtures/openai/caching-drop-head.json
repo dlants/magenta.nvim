@@ -1,0 +1,711 @@
+{
+  "turns": [
+    {
+      "request": {
+        "model": "gpt-5.4",
+        "instructions": "You are a terse assistant. Answer in as few words as possible.",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "Section drop-head-gfwoti.0: reference material about widget 0. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 0 was manufactured in the year 2000 at plant 0.\n\nSection drop-head-gfwoti.1: reference material about widget 1. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 1 was manufactured in the year 2001 at plant 1.\n\nSection drop-head-gfwoti.2: reference material about widget 2. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 2 was manufactured in the year 2002 at plant 2.\n\nSection drop-head-gfwoti.3: reference material about widget 3. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 3 was manufactured in the year 2003 at plant 3.\n\nSection drop-head-gfwoti.4: reference material about widget 4. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 4 was manufactured in the year 2004 at plant 4.\n\nSection drop-head-gfwoti.5: reference material about widget 5. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 5 was manufactured in the year 2005 at plant 5.\n\nSection drop-head-gfwoti.6: reference material about widget 6. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 6 was manufactured in the year 2006 at plant 6.\n\nSection drop-head-gfwoti.7: reference material about widget 7. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 7 was manufactured in the year 2007 at plant 0.\n\nSection drop-head-gfwoti.8: reference material about widget 8. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 8 was manufactured in the year 2008 at plant 1.\n\nSection drop-head-gfwoti.9: reference material about widget 9. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 9 was manufactured in the year 2009 at plant 2.\n\nSection drop-head-gfwoti.10: reference material about widget 10. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 10 was manufactured in the year 2010 at plant 3.\n\nSection drop-head-gfwoti.11: reference material about widget 11. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 11 was manufactured in the year 2011 at plant 4.\n\nSection drop-head-gfwoti.12: reference material about widget 12. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 12 was manufactured in the year 2012 at plant 5.\n\nSection drop-head-gfwoti.13: reference material about widget 13. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 13 was manufactured in the year 2013 at plant 6.\n\nSection drop-head-gfwoti.14: reference material about widget 14. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 14 was manufactured in the year 2014 at plant 0.\n\nSection drop-head-gfwoti.15: reference material about widget 15. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 15 was manufactured in the year 2015 at plant 1.\n\nSection drop-head-gfwoti.16: reference material about widget 16. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 16 was manufactured in the year 2016 at plant 2.\n\nSection drop-head-gfwoti.17: reference material about widget 17. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 17 was manufactured in the year 2017 at plant 3.\n\nSection drop-head-gfwoti.18: reference material about widget 18. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 18 was manufactured in the year 2018 at plant 4.\n\nSection drop-head-gfwoti.19: reference material about widget 19. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 19 was manufactured in the year 2019 at plant 5.\n\nSection drop-head-gfwoti.20: reference material about widget 20. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 20 was manufactured in the year 2020 at plant 6.\n\nSection drop-head-gfwoti.21: reference material about widget 21. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 21 was manufactured in the year 2021 at plant 0.\n\nSection drop-head-gfwoti.22: reference material about widget 22. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 22 was manufactured in the year 2022 at plant 1.\n\nSection drop-head-gfwoti.23: reference material about widget 23. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 23 was manufactured in the year 2023 at plant 2.\n\nSection drop-head-gfwoti.24: reference material about widget 24. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 24 was manufactured in the year 2024 at plant 3.\n\nSection drop-head-gfwoti.25: reference material about widget 25. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 25 was manufactured in the year 2025 at plant 4.\n\nSection drop-head-gfwoti.26: reference material about widget 26. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 26 was manufactured in the year 2026 at plant 5.\n\nSection drop-head-gfwoti.27: reference material about widget 27. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 27 was manufactured in the year 2027 at plant 6.\n\nSection drop-head-gfwoti.28: reference material about widget 28. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 28 was manufactured in the year 2028 at plant 0.\n\nSection drop-head-gfwoti.29: reference material about widget 29. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 29 was manufactured in the year 2029 at plant 1.\n\nSection drop-head-gfwoti.30: reference material about widget 30. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 30 was manufactured in the year 2030 at plant 2.\n\nSection drop-head-gfwoti.31: reference material about widget 31. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 31 was manufactured in the year 2031 at plant 3.\n\nSection drop-head-gfwoti.32: reference material about widget 32. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 32 was manufactured in the year 2032 at plant 4.\n\nSection drop-head-gfwoti.33: reference material about widget 33. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 33 was manufactured in the year 2033 at plant 5.\n\nSection drop-head-gfwoti.34: reference material about widget 34. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 34 was manufactured in the year 2034 at plant 6.\n\nSection drop-head-gfwoti.35: reference material about widget 35. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 35 was manufactured in the year 2035 at plant 0.\n\nSection drop-head-gfwoti.36: reference material about widget 36. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 36 was manufactured in the year 2036 at plant 1.\n\nSection drop-head-gfwoti.37: reference material about widget 37. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 37 was manufactured in the year 2037 at plant 2.\n\nSection drop-head-gfwoti.38: reference material about widget 38. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 38 was manufactured in the year 2038 at plant 3.\n\nSection drop-head-gfwoti.39: reference material about widget 39. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 39 was manufactured in the year 2039 at plant 4."
+              }
+            ]
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "Section drop-head-gfwoti-mid.0: reference material about widget 0. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 0 was manufactured in the year 2000 at plant 0.\n\nSection drop-head-gfwoti-mid.1: reference material about widget 1. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 1 was manufactured in the year 2001 at plant 1.\n\nSection drop-head-gfwoti-mid.2: reference material about widget 2. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 2 was manufactured in the year 2002 at plant 2.\n\nSection drop-head-gfwoti-mid.3: reference material about widget 3. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 3 was manufactured in the year 2003 at plant 3.\n\nSection drop-head-gfwoti-mid.4: reference material about widget 4. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 4 was manufactured in the year 2004 at plant 4.\n\nSection drop-head-gfwoti-mid.5: reference material about widget 5. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 5 was manufactured in the year 2005 at plant 5.\n\nSection drop-head-gfwoti-mid.6: reference material about widget 6. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 6 was manufactured in the year 2006 at plant 6.\n\nSection drop-head-gfwoti-mid.7: reference material about widget 7. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 7 was manufactured in the year 2007 at plant 0.\n\nSection drop-head-gfwoti-mid.8: reference material about widget 8. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 8 was manufactured in the year 2008 at plant 1.\n\nSection drop-head-gfwoti-mid.9: reference material about widget 9. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 9 was manufactured in the year 2009 at plant 2.\n\nSection drop-head-gfwoti-mid.10: reference material about widget 10. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 10 was manufactured in the year 2010 at plant 3.\n\nSection drop-head-gfwoti-mid.11: reference material about widget 11. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 11 was manufactured in the year 2011 at plant 4.\n\nSection drop-head-gfwoti-mid.12: reference material about widget 12. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 12 was manufactured in the year 2012 at plant 5.\n\nSection drop-head-gfwoti-mid.13: reference material about widget 13. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 13 was manufactured in the year 2013 at plant 6.\n\nSection drop-head-gfwoti-mid.14: reference material about widget 14. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 14 was manufactured in the year 2014 at plant 0.\n\nSection drop-head-gfwoti-mid.15: reference material about widget 15. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 15 was manufactured in the year 2015 at plant 1.\n\nSection drop-head-gfwoti-mid.16: reference material about widget 16. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 16 was manufactured in the year 2016 at plant 2.\n\nSection drop-head-gfwoti-mid.17: reference material about widget 17. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 17 was manufactured in the year 2017 at plant 3.\n\nSection drop-head-gfwoti-mid.18: reference material about widget 18. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 18 was manufactured in the year 2018 at plant 4.\n\nSection drop-head-gfwoti-mid.19: reference material about widget 19. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 19 was manufactured in the year 2019 at plant 5."
+              }
+            ]
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "Ready?"
+              }
+            ]
+          }
+        ],
+        "stream": true,
+        "store": false,
+        "prompt_cache_key": "magenta-capture-caching-drop-head"
+      },
+      "events": [
+        {
+          "type": "response.created",
+          "response": {
+            "id": "resp_094c439048c01670016a6f7d71c754819abef523c757eb192e",
+            "object": "response",
+            "created_at": 1785691505,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "f91970f4-a2af-4f01-b67f-d839092e6bce",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 0
+        },
+        {
+          "type": "response.in_progress",
+          "response": {
+            "id": "resp_094c439048c01670016a6f7d71c754819abef523c757eb192e",
+            "object": "response",
+            "created_at": 1785691505,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "f91970f4-a2af-4f01-b67f-d839092e6bce",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 1
+        },
+        {
+          "type": "response.output_item.added",
+          "item": {
+            "id": "msg_094c439048c01670016a6f7d7282a8819a8f6fd3204c09a05f",
+            "type": "message",
+            "status": "in_progress",
+            "content": [],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 0,
+          "sequence_number": 2
+        },
+        {
+          "type": "response.content_part.added",
+          "content_index": 0,
+          "item_id": "msg_094c439048c01670016a6f7d7282a8819a8f6fd3204c09a05f",
+          "output_index": 0,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": ""
+          },
+          "sequence_number": 3
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "Yes",
+          "item_id": "msg_094c439048c01670016a6f7d7282a8819a8f6fd3204c09a05f",
+          "logprobs": [],
+          "obfuscation": "dWbnkosH6dLtC",
+          "output_index": 0,
+          "sequence_number": 4
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": ".",
+          "item_id": "msg_094c439048c01670016a6f7d7282a8819a8f6fd3204c09a05f",
+          "logprobs": [],
+          "obfuscation": "CmOb7nltQOVGxSp",
+          "output_index": 0,
+          "sequence_number": 5
+        },
+        {
+          "type": "response.output_text.done",
+          "content_index": 0,
+          "item_id": "msg_094c439048c01670016a6f7d7282a8819a8f6fd3204c09a05f",
+          "logprobs": [],
+          "output_index": 0,
+          "sequence_number": 6,
+          "text": "Yes."
+        },
+        {
+          "type": "response.content_part.done",
+          "content_index": 0,
+          "item_id": "msg_094c439048c01670016a6f7d7282a8819a8f6fd3204c09a05f",
+          "output_index": 0,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": "Yes."
+          },
+          "sequence_number": 7
+        },
+        {
+          "type": "response.output_item.done",
+          "item": {
+            "id": "msg_094c439048c01670016a6f7d7282a8819a8f6fd3204c09a05f",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Yes."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 0,
+          "sequence_number": 8
+        },
+        {
+          "type": "response.completed",
+          "response": {
+            "id": "resp_094c439048c01670016a6f7d71c754819abef523c757eb192e",
+            "object": "response",
+            "created_at": 1785691505,
+            "status": "completed",
+            "background": false,
+            "completed_at": 1785691506,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "f91970f4-a2af-4f01-b67f-d839092e6bce",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 4554,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 6,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 4560
+            },
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 9
+        }
+      ]
+    },
+    {
+      "request": {
+        "model": "gpt-5.4",
+        "instructions": "You are a terse assistant. Answer in as few words as possible.",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "Section drop-head-gfwoti-mid.0: reference material about widget 0. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 0 was manufactured in the year 2000 at plant 0.\n\nSection drop-head-gfwoti-mid.1: reference material about widget 1. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 1 was manufactured in the year 2001 at plant 1.\n\nSection drop-head-gfwoti-mid.2: reference material about widget 2. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 2 was manufactured in the year 2002 at plant 2.\n\nSection drop-head-gfwoti-mid.3: reference material about widget 3. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 3 was manufactured in the year 2003 at plant 3.\n\nSection drop-head-gfwoti-mid.4: reference material about widget 4. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 4 was manufactured in the year 2004 at plant 4.\n\nSection drop-head-gfwoti-mid.5: reference material about widget 5. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 5 was manufactured in the year 2005 at plant 5.\n\nSection drop-head-gfwoti-mid.6: reference material about widget 6. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 6 was manufactured in the year 2006 at plant 6.\n\nSection drop-head-gfwoti-mid.7: reference material about widget 7. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 7 was manufactured in the year 2007 at plant 0.\n\nSection drop-head-gfwoti-mid.8: reference material about widget 8. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 8 was manufactured in the year 2008 at plant 1.\n\nSection drop-head-gfwoti-mid.9: reference material about widget 9. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 9 was manufactured in the year 2009 at plant 2.\n\nSection drop-head-gfwoti-mid.10: reference material about widget 10. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 10 was manufactured in the year 2010 at plant 3.\n\nSection drop-head-gfwoti-mid.11: reference material about widget 11. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 11 was manufactured in the year 2011 at plant 4.\n\nSection drop-head-gfwoti-mid.12: reference material about widget 12. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 12 was manufactured in the year 2012 at plant 5.\n\nSection drop-head-gfwoti-mid.13: reference material about widget 13. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 13 was manufactured in the year 2013 at plant 6.\n\nSection drop-head-gfwoti-mid.14: reference material about widget 14. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 14 was manufactured in the year 2014 at plant 0.\n\nSection drop-head-gfwoti-mid.15: reference material about widget 15. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 15 was manufactured in the year 2015 at plant 1.\n\nSection drop-head-gfwoti-mid.16: reference material about widget 16. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 16 was manufactured in the year 2016 at plant 2.\n\nSection drop-head-gfwoti-mid.17: reference material about widget 17. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 17 was manufactured in the year 2017 at plant 3.\n\nSection drop-head-gfwoti-mid.18: reference material about widget 18. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 18 was manufactured in the year 2018 at plant 4.\n\nSection drop-head-gfwoti-mid.19: reference material about widget 19. It has a serial number, a color, a mass, and a maintenance schedule. None of these details matter to the question, they exist only to make the prompt prefix long enough to be eligible for prompt caching. Widget 19 was manufactured in the year 2019 at plant 5."
+              }
+            ]
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "Ready?"
+              }
+            ]
+          },
+          {
+            "id": "msg_094c439048c01670016a6f7d7282a8819a8f6fd3204c09a05f",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Yes."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "And now?"
+              }
+            ]
+          }
+        ],
+        "stream": true,
+        "store": false,
+        "prompt_cache_key": "magenta-capture-caching-drop-head"
+      },
+      "events": [
+        {
+          "type": "response.created",
+          "response": {
+            "id": "resp_094c439048c01670016a6f7d72d650819a8511bdb02d6b2ba8",
+            "object": "response",
+            "created_at": 1785691506,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "21479c8b-2827-41ac-a187-370e444fbc39",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 0
+        },
+        {
+          "type": "response.in_progress",
+          "response": {
+            "id": "resp_094c439048c01670016a6f7d72d650819a8511bdb02d6b2ba8",
+            "object": "response",
+            "created_at": 1785691506,
+            "status": "in_progress",
+            "background": false,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "21479c8b-2827-41ac-a187-370e444fbc39",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 1
+        },
+        {
+          "type": "response.output_item.added",
+          "item": {
+            "id": "msg_094c439048c01670016a6f7d737574819abefc3fcc0d839e5a",
+            "type": "message",
+            "status": "in_progress",
+            "content": [],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 0,
+          "sequence_number": 2
+        },
+        {
+          "type": "response.content_part.added",
+          "content_index": 0,
+          "item_id": "msg_094c439048c01670016a6f7d737574819abefc3fcc0d839e5a",
+          "output_index": 0,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": ""
+          },
+          "sequence_number": 3
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": "Yes",
+          "item_id": "msg_094c439048c01670016a6f7d737574819abefc3fcc0d839e5a",
+          "logprobs": [],
+          "obfuscation": "zmlhpc1VdJjg0",
+          "output_index": 0,
+          "sequence_number": 4
+        },
+        {
+          "type": "response.output_text.delta",
+          "content_index": 0,
+          "delta": ".",
+          "item_id": "msg_094c439048c01670016a6f7d737574819abefc3fcc0d839e5a",
+          "logprobs": [],
+          "obfuscation": "bIiN20XXh54XfKV",
+          "output_index": 0,
+          "sequence_number": 5
+        },
+        {
+          "type": "response.output_text.done",
+          "content_index": 0,
+          "item_id": "msg_094c439048c01670016a6f7d737574819abefc3fcc0d839e5a",
+          "logprobs": [],
+          "output_index": 0,
+          "sequence_number": 6,
+          "text": "Yes."
+        },
+        {
+          "type": "response.content_part.done",
+          "content_index": 0,
+          "item_id": "msg_094c439048c01670016a6f7d737574819abefc3fcc0d839e5a",
+          "output_index": 0,
+          "part": {
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": [],
+            "text": "Yes."
+          },
+          "sequence_number": 7
+        },
+        {
+          "type": "response.output_item.done",
+          "item": {
+            "id": "msg_094c439048c01670016a6f7d737574819abefc3fcc0d839e5a",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Yes."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          },
+          "output_index": 0,
+          "sequence_number": 8
+        },
+        {
+          "type": "response.completed",
+          "response": {
+            "id": "resp_094c439048c01670016a6f7d72d650819a8511bdb02d6b2ba8",
+            "object": "response",
+            "created_at": 1785691506,
+            "status": "completed",
+            "background": false,
+            "completed_at": 1785691507,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": "You are a terse assistant. Answer in as few words as possible.",
+            "max_output_tokens": null,
+            "max_tool_calls": null,
+            "model": "gpt-5.4",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": "21479c8b-2827-41ac-a187-370e444fbc39",
+            "prompt_cache_retention": "24h",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "none",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": "user-PSrNP3YsMUMJKpUurGyolmsy",
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 0.98,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 1565,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 6,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 1571
+            },
+            "user": null,
+            "metadata": {}
+          },
+          "sequence_number": 9
+        }
+      ]
+    }
+  ]
+}
