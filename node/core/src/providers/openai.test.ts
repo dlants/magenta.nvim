@@ -2,12 +2,19 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type OpenAI from "openai";
-import { describe, expect, it } from "vitest";
-import type { ToolName } from "../tool-types.ts";
+import { APIError } from "openai";
+import { describe, expect, it, vi } from "vitest";
+import type {
+  ToolName,
+  ToolRequestId,
+  ToolStructuredResult,
+} from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
+import { RETRY_DELAYS } from "./anthropic-agent.ts";
 import {
   MockOpenAIClient,
   type MockResponseStream,
+  mockResponse,
 } from "./mock-openai-client.ts";
 import {
   convertResponseOutputToProviderContent,
@@ -15,6 +22,7 @@ import {
   isReasoningModel,
   makeOpenAICompatible,
   mapResponseStreamEvent,
+  OpenAIProvider,
   sanitizeSchemaForOpenAI,
   supportsWebSearch,
 } from "./openai.ts";
@@ -23,6 +31,7 @@ import {
   type ProviderMessage,
   type ProviderMessageContent,
   type ProviderStreamEvent,
+  type ProviderToolResultContent,
   type ProviderToolSpec,
 } from "./provider-types.ts";
 
@@ -133,7 +142,10 @@ describe("createStreamParameters", () => {
   });
 
   it("only sends reasoning config to reasoning models", () => {
-    const reasoning = { effort: "high" as const, summary: "detailed" };
+    const reasoning = {
+      effort: "high" as const,
+      summary: "detailed" as const,
+    };
     expect(
       createStreamParameters({
         model: "gpt-5.4",
@@ -280,7 +292,7 @@ describe("round-tripping server-generated content", () => {
     const thinking = content.find((c) => c.type === "thinking");
     expect(thinking).toMatchObject({
       signature: "ENCRYPTED",
-      providerMetadata: { openai: { itemId: "rs_1" } },
+      providerMetadata: { provider: "openai", itemId: "rs_1" },
     });
 
     const params = createStreamParameters({
@@ -487,6 +499,294 @@ describe("mock fidelity against captured fixtures", () => {
       types.push(event.type);
     }
     expect(types).not.toContain("response.completed");
+  });
+});
+
+describe("tool results", () => {
+  const toolResult = (value: ProviderToolResultContent[]): ProviderMessage => ({
+    role: "user",
+    content: [
+      {
+        type: "tool_result",
+        id: "call_1" as ToolRequestId,
+        result: {
+          status: "ok",
+          value,
+          structuredResult: {
+            status: "ok",
+            value: "",
+          } as unknown as ToolStructuredResult,
+        },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ],
+  });
+
+  it("sends a text result as the function_call_output", () => {
+    const params = createStreamParameters({
+      model: "gpt-5.4",
+      messages: [
+        toolResult([
+          {
+            type: "text",
+            text: "file contents",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          },
+        ]),
+      ],
+      tools: [],
+    });
+    expect(params.input).toEqual([
+      {
+        type: "function_call_output",
+        call_id: "call_1",
+        output: "file contents",
+      },
+    ]);
+  });
+
+  it("sends an image-only result as a trailing user message with a non-empty output", () => {
+    const params = createStreamParameters({
+      model: "gpt-5.4",
+      messages: [
+        toolResult([
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: "image/png",
+              data: "AAAA",
+            },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          },
+        ]),
+      ],
+      tools: [],
+    });
+    const input = params.input as OpenAI.Responses.ResponseInput;
+    expect(input[0]).toMatchObject({
+      type: "function_call_output",
+      output: "Attachment follows:",
+    });
+    expect(input[1]).toMatchObject({
+      type: "message",
+      role: "user",
+      content: [
+        { type: "input_image", image_url: "data:image/png;base64,AAAA" },
+      ],
+    });
+  });
+
+  it("sends an error result as the function_call_output", () => {
+    const params = createStreamParameters({
+      model: "gpt-5.4",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              id: "call_1" as ToolRequestId,
+              result: { status: "error", error: "boom" },
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            },
+          ],
+        },
+      ],
+      tools: [],
+    });
+    expect(params.input).toEqual([
+      { type: "function_call_output", call_id: "call_1", output: "boom" },
+    ]);
+  });
+});
+
+describe("reasoning item coalescing", () => {
+  it("folds thinking blocks sharing an item id into one ordered reasoning item", () => {
+    const thinkingBlock = (text: string): ProviderMessageContent => ({
+      type: "thinking",
+      thinking: text,
+      signature: "ENCRYPTED",
+      providerMetadata: { provider: "openai", itemId: "rs_1" },
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    });
+    const params = createStreamParameters({
+      model: "gpt-5.4",
+      messages: [
+        assistantMessage([
+          thinkingBlock("first"),
+          thinkingBlock("second"),
+          thinkingBlock("third"),
+        ]),
+      ],
+      tools: [],
+    });
+    const input = params.input as OpenAI.Responses.ResponseInput;
+    expect(input).toHaveLength(1);
+    expect(input[0]).toMatchObject({
+      type: "reasoning",
+      id: "rs_1",
+      encrypted_content: "ENCRYPTED",
+      summary: [
+        { type: "summary_text", text: "first" },
+        { type: "summary_text", text: "second" },
+        { type: "summary_text", text: "third" },
+      ],
+    });
+  });
+});
+
+describe("forceToolUse", () => {
+  const spec = tool("get_files");
+  const noopLogger = {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+  };
+
+  function setup(): {
+    provider: OpenAIProvider;
+    client: MockOpenAIClient;
+  } {
+    process.env.MAGENTA_TEST_OPENAI_KEY = "test-key";
+    const provider = new OpenAIProvider(noopLogger, validateInput, {
+      apiKeyEnvVar: "MAGENTA_TEST_OPENAI_KEY",
+    });
+    const client = new MockOpenAIClient();
+    provider.client = client as unknown as OpenAI;
+    return { provider, client };
+  }
+
+  const functionCall = (
+    name: string,
+    args: string,
+  ): OpenAI.Responses.ResponseOutputItem => ({
+    type: "function_call",
+    id: "fc_1",
+    call_id: "call_1",
+    name,
+    arguments: args,
+    status: "completed",
+  });
+
+  const run = (provider: OpenAIProvider) =>
+    provider.forceToolUse({
+      model: "gpt-5.4",
+      input: [],
+      spec,
+    });
+
+  it("parses the function call and reports usage", async () => {
+    const { provider, client } = setup();
+    client.nonStreamingQueue.push(
+      mockResponse(
+        [
+          functionCall(
+            "get_files",
+            JSON.stringify({ files: [{ filePath: "a" }] }),
+          ),
+        ],
+        {
+          inputTokens: 10,
+          outputTokens: 2,
+          cacheHits: 5,
+        },
+      ),
+    );
+    const result = await run(provider).promise;
+    expect(client.nonStreamingRequests[0].stream).toBe(false);
+    expect(result.stopReason).toBe("tool_use");
+    expect(result.usage).toEqual({
+      inputTokens: 10,
+      outputTokens: 2,
+      cacheHits: 5,
+    });
+    expect(result.toolRequest.status).toBe("ok");
+  });
+
+  it("errors when the response has no function call", async () => {
+    const { provider, client } = setup();
+    client.nonStreamingQueue.push(mockResponse([]));
+    const result = await run(provider).promise;
+    expect(result.toolRequest.status).toBe("error");
+    expect(result.toolRequest).toMatchObject({
+      error: expect.stringContaining("get_files") as unknown as string,
+    });
+  });
+
+  it("errors when the call names a different tool", async () => {
+    const { provider, client } = setup();
+    client.nonStreamingQueue.push(
+      mockResponse([functionCall("bash_command", "{}")]),
+    );
+    const result = await run(provider).promise;
+    expect(result.toolRequest).toMatchObject({
+      status: "error",
+      error: expect.stringContaining("expected tool name") as unknown as string,
+    });
+  });
+
+  it("errors on malformed argument JSON", async () => {
+    const { provider, client } = setup();
+    client.nonStreamingQueue.push(
+      mockResponse([functionCall("get_files", "{not json")]),
+    );
+    const result = await run(provider).promise;
+    expect(result.toolRequest).toMatchObject({
+      status: "error",
+      rawRequest: "{not json",
+    });
+  });
+
+  it("retries a retryable error and succeeds", async () => {
+    vi.useFakeTimers();
+    try {
+      const { provider, client } = setup();
+      client.nonStreamingQueue.push(
+        new APIError(429, undefined, "rate limited", undefined),
+        mockResponse([
+          functionCall(
+            "get_files",
+            JSON.stringify({ files: [{ filePath: "a" }] }),
+          ),
+        ]),
+      );
+      const request = run(provider);
+      await vi.advanceTimersByTimeAsync(RETRY_DELAYS[0] + 10);
+      const result = await request.promise;
+      expect(result.stopReason).toBe("tool_use");
+      expect(client.nonStreamingRequests).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry a non-retryable error", async () => {
+    const { provider, client } = setup();
+    client.nonStreamingQueue.push(
+      new APIError(400, undefined, "bad request", undefined),
+    );
+    await expect(run(provider).promise).rejects.toThrow("bad request");
+    expect(client.nonStreamingRequests).toHaveLength(1);
+  });
+
+  it("surfaces the original error when aborted during the retry delay", async () => {
+    vi.useFakeTimers();
+    try {
+      const { provider, client } = setup();
+      client.nonStreamingQueue.push(
+        new APIError(429, undefined, "rate limited", undefined),
+      );
+      const request = run(provider);
+      const settled = expect(request.promise).rejects.toThrow("rate limited");
+      await vi.advanceTimersByTimeAsync(1);
+      request.abort();
+      await settled;
+      expect(client.nonStreamingRequests).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

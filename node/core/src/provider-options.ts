@@ -13,6 +13,10 @@ export type ProviderName =
   | "mock";
 
 export type ThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max";
+/** The reasoning-effort levels the OpenAI Responses API accepts; "max" is
+ * thinking-only and has no reasoning analogue. */
+export type ReasoningEffort = Exclude<ThinkingEffort, "max">;
+export type ReasoningSummary = "auto" | "concise" | "detailed";
 
 export type ProviderProfile = {
   name: string;

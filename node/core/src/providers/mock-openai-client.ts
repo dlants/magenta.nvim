@@ -5,6 +5,14 @@ import type { StopReason, Usage } from "./provider-types.ts";
 
 type ResponseStreamEvent = OpenAI.Responses.ResponseStreamEvent;
 type ResponseOutputItem = OpenAI.Responses.ResponseOutputItem;
+type ResponseInputItem = OpenAI.Responses.ResponseInputItem;
+
+/** Every event the SDK defines, minus the field `pushEvent` stamps itself. */
+type EventInit = ResponseStreamEvent extends infer E
+  ? E extends ResponseStreamEvent
+    ? Omit<E, "sequence_number">
+    : never
+  : never;
 
 /** A mock Responses stream that tests drive imperatively.
  *
@@ -58,15 +66,18 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
     return this.params.input as OpenAI.Responses.ResponseInput;
   }
 
-  get instructions(): string | null | undefined {
-    return this.params.instructions;
+  get instructions(): string | undefined {
+    return this.params.instructions ?? undefined;
   }
 
   /** Items of the request's `input` with the given `type`, for assertions on
    * what the provider echoed back. */
-  inputItemsOfType(type: string): Record<string, unknown>[] {
-    return (this.input as unknown as Record<string, unknown>[]).filter(
-      (item) => item.type === type,
+  inputItemsOfType<T extends ResponseInputItem["type"]>(
+    type: T,
+  ): Extract<ResponseInputItem, { type: T }>[] {
+    return this.input.filter(
+      (item): item is Extract<ResponseInputItem, { type: T }> =>
+        item.type === type,
     );
   }
 
@@ -86,7 +97,7 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
     }
   }
 
-  private pushEvent(event: Partial<ResponseStreamEvent>): void {
+  private pushEvent(event: EventInit): void {
     this._pushedEventCount++;
     const withSequence = {
       ...event,
@@ -104,7 +115,7 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
     }
   }
 
-  emitEvent(event: Partial<ResponseStreamEvent>): void {
+  emitEvent(event: EventInit): void {
     this.pushEvent(event);
   }
 
@@ -118,13 +129,13 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
       type: "response.output_item.added",
       output_index: outputIndex,
       item: { ...item, status: "in_progress" } as ResponseOutputItem,
-    } as Partial<ResponseStreamEvent>);
+    });
     body(outputIndex);
     this.pushEvent({
       type: "response.output_item.done",
       output_index: outputIndex,
       item,
-    } as Partial<ResponseStreamEvent>);
+    });
     this.outputItems.push(item);
     return outputIndex;
   }
@@ -153,14 +164,15 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
         item_id: itemId,
         content_index: 0,
         part: { type: "output_text", text: "", annotations: [] },
-      } as Partial<ResponseStreamEvent>);
+      });
       this.pushEvent({
         type: "response.output_text.delta",
         output_index: outputIndex,
         item_id: itemId,
         content_index: 0,
         delta: text,
-      } as Partial<ResponseStreamEvent>);
+        logprobs: [],
+      });
       for (const annotation of annotations) {
         this.pushEvent({
           type: "response.output_text.annotation.added",
@@ -169,7 +181,7 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
           content_index: 0,
           annotation_index: 0,
           annotation,
-        } as Partial<ResponseStreamEvent>);
+        });
       }
       this.pushEvent({
         type: "response.output_text.done",
@@ -177,14 +189,15 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
         item_id: itemId,
         content_index: 0,
         text,
-      } as Partial<ResponseStreamEvent>);
+        logprobs: [],
+      });
       this.pushEvent({
         type: "response.content_part.done",
         output_index: outputIndex,
         item_id: itemId,
         content_index: 0,
         part: { type: "output_text", text, annotations },
-      } as Partial<ResponseStreamEvent>);
+      });
     });
   }
 
@@ -219,13 +232,13 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
         output_index: outputIndex,
         item_id: itemId,
         delta: args,
-      } as Partial<ResponseStreamEvent>);
+      });
       this.pushEvent({
         type: "response.function_call_arguments.done",
         output_index: outputIndex,
         item_id: itemId,
         arguments: args,
-      } as Partial<ResponseStreamEvent>);
+      });
     });
   }
 
@@ -248,11 +261,16 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
         arguments: "",
         status: "in_progress",
       },
-    } as Partial<ResponseStreamEvent>);
+    });
     this.continueToolCallPartial(chunks);
   }
 
   continueToolCallPartial(chunks: string[]): void {
+    if (this._partialToolItemId === undefined) {
+      throw new Error(
+        "continueToolCallPartial called before streamToolCallPartial",
+      );
+    }
     if (this._partialToolIndex === undefined) {
       throw new Error(
         "continueToolCallPartial called before streamToolCallPartial",
@@ -264,7 +282,7 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
         output_index: this._partialToolIndex,
         item_id: this._partialToolItemId,
         delta: chunk,
-      } as Partial<ResponseStreamEvent>);
+      });
     }
   }
 
@@ -290,28 +308,28 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
           item_id: itemId,
           summary_index: summaryIndex,
           part: { type: "summary_text", text: "" },
-        } as Partial<ResponseStreamEvent>);
+        });
         this.pushEvent({
           type: "response.reasoning_summary_text.delta",
           output_index: outputIndex,
           item_id: itemId,
           summary_index: summaryIndex,
           delta: text,
-        } as Partial<ResponseStreamEvent>);
+        });
         this.pushEvent({
           type: "response.reasoning_summary_text.done",
           output_index: outputIndex,
           item_id: itemId,
           summary_index: summaryIndex,
           text,
-        } as Partial<ResponseStreamEvent>);
+        });
         this.pushEvent({
           type: "response.reasoning_summary_part.done",
           output_index: outputIndex,
           item_id: itemId,
           summary_index: summaryIndex,
           part: { type: "summary_text", text },
-        } as Partial<ResponseStreamEvent>);
+        });
       });
     });
   }
@@ -337,29 +355,32 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
       type: "response.output_item.added",
       output_index: outputIndex,
       item: { type: "web_search_call", id: itemId, status: "in_progress" },
-    } as Partial<ResponseStreamEvent>);
-    for (const type of [
+    });
+    const searchProgress = [
       "response.web_search_call.in_progress",
       "response.web_search_call.searching",
       "response.web_search_call.completed",
-    ]) {
+    ] as const;
+    for (const type of searchProgress) {
       this.pushEvent({
         type,
         output_index: outputIndex,
         item_id: itemId,
-      } as Partial<ResponseStreamEvent>);
+      });
     }
-    const item = {
+    // The installed SDK omits `action` from ResponseFunctionWebSearch even
+    // though the API sends it; see `webSearchQuery` in openai.ts.
+    const item: ResponseOutputItem = {
       type: "web_search_call",
       id: itemId,
       status: "completed",
-      action: { type: "search", query, queries: [query] },
-    } as unknown as ResponseOutputItem;
+      action: { type: "search", query },
+    } as ResponseOutputItem & { action: { type: "search"; query: string } };
     this.pushEvent({
       type: "response.output_item.done",
       output_index: outputIndex,
       item,
-    } as Partial<ResponseStreamEvent>);
+    });
     this.outputItems.push(item);
     return outputIndex;
   }
@@ -371,20 +392,8 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
     this._resolved = true;
     this.pushEvent({
       type: "response.completed",
-      response: {
-        id: "resp_mock",
-        object: "response",
-        status: "completed",
-        output: this.outputItems,
-        usage: {
-          input_tokens: usage.inputTokens,
-          input_tokens_details: { cached_tokens: usage.cacheHits ?? 0 },
-          output_tokens: usage.outputTokens,
-          output_tokens_details: { reasoning_tokens: 0 },
-          total_tokens: usage.inputTokens + usage.outputTokens,
-        },
-      },
-    } as Partial<ResponseStreamEvent>);
+      response: mockResponse(this.outputItems, usage),
+    });
     this.close();
   }
 
@@ -415,16 +424,12 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
  * function_call_output with the same call_id — the Responses analogue of
  * Anthropic's tool_use/tool_result pairing. */
 function validateToolCallPairing(input: OpenAI.Responses.ResponseInput): void {
-  const items = input as unknown as {
-    type?: string;
-    call_id?: string;
-  }[];
   const outputs = new Set(
-    items
+    input
       .filter((item) => item.type === "function_call_output")
       .map((item) => item.call_id),
   );
-  for (const item of items) {
+  for (const item of input) {
     if (item.type === "function_call" && !outputs.has(item.call_id)) {
       throw new Error(
         `MockOpenAIClient: missing function_call_output for call_id "${item.call_id}".`,
@@ -433,19 +438,80 @@ function validateToolCallPairing(input: OpenAI.Responses.ResponseInput): void {
   }
 }
 
-export class MockOpenAIClient {
-  public streams: MockResponseStream[] = [];
-
-  responses = {
-    create: (
-      params: OpenAI.Responses.ResponseCreateParamsStreaming,
-    ): Promise<MockResponseStream> => {
-      validateToolCallPairing(params.input as OpenAI.Responses.ResponseInput);
-      const stream = new MockResponseStream(params);
-      this.streams.push(stream);
-      return Promise.resolve(stream);
+/** A minimal completed non-streaming Response, for the `forceToolUse` path. */
+export function mockResponse(
+  output: ResponseOutputItem[],
+  usage: Usage = { inputTokens: 100, outputTokens: 10 },
+): OpenAI.Responses.Response {
+  return {
+    id: "resp_mock",
+    object: "response",
+    created_at: 0,
+    model: "mock-model",
+    status: "completed",
+    error: null,
+    incomplete_details: null,
+    instructions: null,
+    metadata: null,
+    output,
+    parallel_tool_calls: true,
+    temperature: null,
+    tool_choice: "auto",
+    tools: [],
+    top_p: null,
+    output_text: "",
+    usage: {
+      input_tokens: usage.inputTokens,
+      input_tokens_details: { cached_tokens: usage.cacheHits ?? 0 },
+      output_tokens: usage.outputTokens,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: usage.inputTokens + usage.outputTokens,
     },
   };
+}
+
+/** Mirrors the SDK's overloaded `responses.create`: streaming params yield a
+ * stream, non-streaming params a completed Response. */
+class MockResponses {
+  constructor(private client: MockOpenAIClient) {}
+
+  create(
+    params: OpenAI.Responses.ResponseCreateParamsStreaming,
+  ): Promise<MockResponseStream>;
+  create(
+    params: OpenAI.Responses.ResponseCreateParamsNonStreaming,
+  ): Promise<OpenAI.Responses.Response>;
+  create(
+    params: OpenAI.Responses.ResponseCreateParams,
+  ): Promise<MockResponseStream | OpenAI.Responses.Response> {
+    validateToolCallPairing((params.input ?? []) as ResponseInputItem[]);
+    if (params.stream !== true) {
+      this.client.nonStreamingRequests.push(params);
+      const next = this.client.nonStreamingQueue.shift();
+      if (!next) {
+        return Promise.reject(
+          new Error("MockOpenAIClient: nonStreamingQueue is empty"),
+        );
+      }
+      return next instanceof Error
+        ? Promise.reject(next)
+        : Promise.resolve(next);
+    }
+    const stream = new MockResponseStream(params);
+    this.client.streams.push(stream);
+    return Promise.resolve(stream);
+  }
+}
+
+export class MockOpenAIClient {
+  public streams: MockResponseStream[] = [];
+  /** Requests made against the non-streaming endpoint (`forceToolUse`). */
+  public nonStreamingRequests: OpenAI.Responses.ResponseCreateParamsNonStreaming[] =
+    [];
+  /** Consumed in order by non-streaming `create` calls; an Error is thrown. */
+  public nonStreamingQueue: (OpenAI.Responses.Response | Error)[] = [];
+
+  responses = new MockResponses(this);
 
   get lastStream(): MockResponseStream | undefined {
     return this.streams[this.streams.length - 1];

@@ -5,6 +5,11 @@ import type {
 } from "openai/lib/jsonschema.mjs";
 import type { Logger } from "../logger.ts";
 import type {
+  ReasoningEffort,
+  ReasoningSummary,
+  ThinkingEffort,
+} from "../provider-options.ts";
+import type {
   ToolName,
   ToolRequest,
   ToolRequestId,
@@ -21,8 +26,11 @@ import {
   type Provider,
   type ProviderMessage,
   type ProviderMessageContent,
+  type ProviderMetadata,
+  type ProviderServerToolUseBlockStart,
   type ProviderStreamEvent,
   type ProviderToolSpec,
+  type ProviderToolUseBlockStart,
   type ProviderToolUseRequest,
   type ProviderToolUseResponse,
   type ProviderWebSearchCitation,
@@ -171,9 +179,11 @@ function toOpenAITool(spec: ProviderToolSpec): OpenAI.Responses.Tool {
 type ReasoningItem = OpenAI.Responses.ResponseReasoningItem;
 
 function itemIdOf(content: {
-  providerMetadata?: { openai?: { itemId?: string | undefined } } | undefined;
+  providerMetadata?: ProviderMetadata | undefined;
 }): string | undefined {
-  return content.providerMetadata?.openai?.itemId;
+  return content.providerMetadata?.provider === "openai"
+    ? content.providerMetadata.itemId
+    : undefined;
 }
 
 export function convertProviderMessagesToInput(
@@ -415,11 +425,27 @@ export type CreateStreamParametersOptions = {
   includeWebSearch?: boolean | undefined;
   reasoning?:
     | {
-        effort?: "low" | "medium" | "high" | "xhigh" | undefined;
-        summary?: string | undefined;
+        effort?: ReasoningEffort | undefined;
+        summary?: ReasoningSummary | undefined;
       }
     | undefined;
 };
+
+function toOpenAIReasoningEffort(
+  effort: ReasoningEffort,
+): OpenAI.ReasoningEffort {
+  switch (effort) {
+    case "low":
+    case "medium":
+    case "high":
+      return effort;
+    case "xhigh":
+      // The API accepts "xhigh" for gpt-5.x; the SDK's union lags it.
+      return "xhigh" as OpenAI.ReasoningEffort;
+    default:
+      return assertUnreachable(effort);
+  }
+}
 
 export function createStreamParameters({
   model,
@@ -455,12 +481,10 @@ export function createStreamParameters({
     if (reasoning) {
       const config: OpenAI.Reasoning = {};
       if (reasoning.effort) {
-        config.effort = reasoning.effort as OpenAI.ReasoningEffort;
+        config.effort = toOpenAIReasoningEffort(reasoning.effort);
       }
       if (reasoning.summary) {
-        config.summary = reasoning.summary as NonNullable<
-          OpenAI.Reasoning["summary"]
-        >;
+        config.summary = reasoning.summary;
       }
       if (Object.keys(config).length > 0) {
         params.reasoning = config;
@@ -475,8 +499,42 @@ export function createStreamParameters({
 // Responses stream events -> ProviderStreamEvent
 // ---------------------------------------------------------------------------
 
+/** The installed SDK (5.23.2) omits `action` from `ResponseFunctionWebSearch`
+ * and types stream annotations as `unknown`, though the API sends both. These
+ * two helpers are the only places those payloads are narrowed. */
+type WebSearchAction =
+  | OpenAI.Responses.ResponseFunctionWebSearch.Search
+  | OpenAI.Responses.ResponseFunctionWebSearch.OpenPage
+  | OpenAI.Responses.ResponseFunctionWebSearch.Find;
+
+function webSearchQuery(
+  item: OpenAI.Responses.ResponseFunctionWebSearch,
+): string | undefined {
+  const { action } = item as { action?: WebSearchAction };
+  return action?.type === "search" ? action.query : undefined;
+}
+
+function urlCitationOf(
+  annotation: unknown,
+): OpenAI.Responses.ResponseOutputText.URLCitation | undefined {
+  const candidate = annotation as
+    | Partial<OpenAI.Responses.ResponseOutputText.URLCitation>
+    | null
+    | undefined;
+  if (candidate?.type !== "url_citation") return undefined;
+  if (
+    typeof candidate.url !== "string" ||
+    typeof candidate.title !== "string"
+  ) {
+    return undefined;
+  }
+  return candidate as OpenAI.Responses.ResponseOutputText.URLCitation;
+}
+
 function withItemId(itemId: string | undefined) {
-  return itemId ? { providerMetadata: { openai: { itemId } } } : {};
+  return itemId
+    ? { providerMetadata: { provider: "openai", itemId } as ProviderMetadata }
+    : {};
 }
 
 /** Translate one native Responses event into zero or more provider stream
@@ -508,7 +566,7 @@ export function mapResponseStreamEvent(
                 id: event.item.call_id,
                 name: event.item.name,
                 input: {},
-              } as never,
+              } satisfies ProviderToolUseBlockStart,
               ...withItemId(event.item.id),
             },
           ];
@@ -522,7 +580,7 @@ export function mapResponseStreamEvent(
                 id: event.item.id,
                 name: "web_search",
                 input: {},
-              } as never,
+              } satisfies ProviderServerToolUseBlockStart,
               ...withItemId(event.item.id),
             },
           ];
@@ -580,12 +638,8 @@ export function mapResponseStreamEvent(
       ];
 
     case "response.output_text.annotation.added": {
-      const annotation = event.annotation as {
-        type?: string;
-        url?: string;
-        title?: string;
-      };
-      if (annotation?.type !== "url_citation") return [];
+      const annotation = urlCitationOf(event.annotation);
+      if (!annotation) return [];
       return [
         {
           type: "content_block_delta",
@@ -596,10 +650,10 @@ export function mapResponseStreamEvent(
               type: "web_search_result_location",
               cited_text: "",
               encrypted_index: "",
-              title: annotation.title ?? "",
-              url: annotation.url ?? "",
+              title: annotation.title,
+              url: annotation.url,
             },
-          } as never,
+          },
         },
       ];
     }
@@ -616,19 +670,21 @@ export function mapResponseStreamEvent(
             delta: {
               type: "signature_delta",
               signature: event.item.encrypted_content,
-            } as never,
+            },
           });
         }
       } else if (event.item.type === "web_search_call") {
-        const action = (event.item as { action?: { query?: string } }).action;
-        events.push({
-          type: "content_block_delta",
-          index: event.output_index,
-          delta: {
-            type: "input_json_delta",
-            partial_json: JSON.stringify({ query: action?.query ?? "" }),
-          },
-        });
+        const query = webSearchQuery(event.item);
+        if (query !== undefined) {
+          events.push({
+            type: "content_block_delta",
+            index: event.output_index,
+            delta: {
+              type: "input_json_delta",
+              partial_json: JSON.stringify({ query }),
+            },
+          });
+        }
       }
       events.push({ type: "content_block_stop", index: event.output_index });
       return events;
@@ -684,7 +740,7 @@ export function convertResponseOutputToProviderContent(
             type: "text",
             text: part.text,
             ...(citations.length ? { citations } : {}),
-            providerMetadata: { openai: { itemId: item.id } },
+            providerMetadata: { provider: "openai", itemId: item.id },
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           });
         }
@@ -694,8 +750,10 @@ export function convertResponseOutputToProviderContent(
         content.push({
           type: "thinking",
           thinking: item.summary.map((s) => s.text).join("\n\n"),
-          signature: item.encrypted_content ?? "",
-          providerMetadata: { openai: { itemId: item.id } },
+          ...(item.encrypted_content
+            ? { signature: item.encrypted_content }
+            : {}),
+          providerMetadata: { provider: "openai", itemId: item.id },
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         });
         break;
@@ -712,15 +770,19 @@ export function convertResponseOutputToProviderContent(
       }
 
       case "web_search_call": {
-        const action = (item as { action?: { query?: string } }).action;
-        content.push({
-          type: "server_tool_use",
-          id: item.id,
-          name: "web_search",
-          input: { query: action?.query ?? "" },
-          providerMetadata: { openai: { itemId: item.id } },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        });
+        // Only `search` actions carry a query; `open_page` / `find` have no
+        // representation in ProviderServerToolUseContent, so they are dropped.
+        const query = webSearchQuery(item);
+        if (query !== undefined) {
+          content.push({
+            type: "server_tool_use",
+            id: item.id,
+            name: "web_search",
+            input: { query },
+            providerMetadata: { provider: "openai", itemId: item.id },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          });
+        }
         break;
       }
 
@@ -813,7 +875,7 @@ export class OpenAIProvider implements Provider {
       enabled: boolean;
       budgetTokens?: number;
       displayThinking?: boolean;
-      effort?: "low" | "medium" | "high" | "xhigh" | "max";
+      effort?: ThinkingEffort;
     };
   }): ProviderToolUseRequest {
     const { model, input, spec, systemPrompt, contextAgent } = options;

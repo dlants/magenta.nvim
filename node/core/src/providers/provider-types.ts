@@ -68,7 +68,9 @@ export type ProviderTextContent = {
 export type ProviderThinkingContent = {
   type: "thinking";
   thinking: string;
-  signature: string;
+  /** Anthropic's thinking signature, or OpenAI's `encrypted_content`. Absent
+   * when the provider did not supply one. */
+  signature?: string | undefined;
   providerMetadata?: ProviderMetadata | undefined;
   nativeMessageIdx: NativeMessageIdx;
 };
@@ -209,13 +211,33 @@ export interface Provider {
   createAgent(options: AgentOptions): Agent;
 }
 
-export type ProviderMetadata = {
-  openai?: {
-    itemId?: string | undefined;
-  };
-};
+/** Presence of this value implies a usable provider-native item id; there is
+ * no encoding for "present but empty". */
+export type ProviderMetadata = { provider: "openai"; itemId: string };
 
-export type ProviderBlockStartEvent = Anthropic.RawContentBlockStartEvent & {
+/** OpenAI's function calls carry no Anthropic `caller`, so they cannot be
+ * expressed as `Anthropic.ToolUseBlock`. The start event's block is therefore
+ * a provider-agnostic union rather than the Anthropic one alone. */
+export type ProviderToolUseBlockStart = {
+  type: "tool_use";
+  id: string;
+  name: string;
+  input: unknown;
+};
+export type ProviderServerToolUseBlockStart = {
+  type: "server_tool_use";
+  id: string;
+  name: "web_search";
+  input: unknown;
+};
+export type ProviderContentBlockStart =
+  | Anthropic.RawContentBlockStartEvent["content_block"]
+  | ProviderToolUseBlockStart
+  | ProviderServerToolUseBlockStart;
+export type ProviderBlockStartEvent = {
+  type: "content_block_start";
+  index: number;
+  content_block: ProviderContentBlockStart;
   providerMetadata?: ProviderMetadata;
 };
 

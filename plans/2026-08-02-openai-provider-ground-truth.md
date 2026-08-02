@@ -183,6 +183,57 @@ The fixtures are **reference material, not test inputs**. They tell us the order
 - The mock validates that every echoed `function_call` has a matching
   `function_call_output`, the analogue of `validateToolUseConstraint`.
 
+### Code review follow-up (Stage 2 revision)
+
+Type representation:
+
+- `ProviderStreamEvent` is no longer purely Anthropic-shaped. `ProviderBlockStartEvent` is
+  now a standalone type whose `content_block` is the union
+  `ProviderContentBlockStart = Anthropic.RawContentBlockStartEvent["content_block"] |
+  ProviderToolUseBlockStart | ProviderServerToolUseBlockStart`. The OpenAI variants exist
+  because Anthropic's `ToolUseBlock` requires a `caller` field with no OpenAI analogue —
+  that was the sole reason for the old `as never` casts, all four of which are gone
+  (the citation and signature deltas turned out to typecheck fine unaided).
+- `ProviderMetadata` is now `{ provider: "openai"; itemId: string }` — presence implies a
+  usable id, so the three-way "absent" encoding is gone.
+- `ProviderThinkingContent.signature` is now optional; `""` no longer means "absent".
+  `anthropic.ts` coerces with `?? ""` at its own SDK boundary.
+- `ReasoningEffort` / `ReasoningSummary` are shared types in `provider-options.ts`
+  (`ReasoningEffort = Exclude<ThinkingEffort, "max">`). `toOpenAIReasoningEffort` maps them
+  with a total switch; the one remaining cast is `"xhigh"`, which the API accepts for
+  gpt-5.x but the SDK's union does not yet list.
+- The installed SDK (5.23.2) types `ResponseFunctionWebSearch` **without** `action` and
+  stream annotations as `unknown`, so the review's "narrow on the SDK union" is not
+  available. Instead both payloads are narrowed in exactly two documented helpers,
+  `webSearchQuery` and `urlCitationOf`, which return `undefined` rather than `""` when the
+  shape is not what we expect. Non-`search` web-search actions are dropped, since
+  `ProviderServerToolUseContent` cannot represent them.
+- `parseToolRequest`'s `as ToolRequest` cast is retained: `ValidateInput` returns
+  `Result<Record<string, unknown>>`, so recovering the toolName/input correlation means
+  changing a signature shared with the Anthropic path (`anthropic.ts` does the identical
+  cast). Deliberately out of scope for this stage.
+
+Mock:
+
+- `responses.create` is now an overloaded method on a `MockResponses` helper class:
+  streaming params return a `MockResponseStream`, non-streaming params consume
+  `nonStreamingQueue` (a `Response | Error` queue) and record into `nonStreamingRequests`,
+  so `forceToolUse` can be driven against the same mock. `mockResponse()` builds a
+  complete non-streaming `Response` and is reused by `finishResponse`.
+- `pushEvent` / `emitEvent` now take a full `ResponseStreamEvent` minus the
+  `sequence_number` the mock stamps, so events can no longer be emitted incomplete; all
+  `as Partial<ResponseStreamEvent>` and the `as unknown as` double-casts are gone except a
+  single documented one for the `action` field the SDK omits.
+- `instructions` normalizes `null` to `undefined`; `inputItemsOfType` is generic over the
+  SDK's input-item union.
+
+Tests (32 total, up from 21): `forceToolUse` now covers success + usage, no `function_call`,
+wrong tool name, malformed argument JSON, retry-then-succeed, non-retryable error, and abort
+during the retry delay. The `tool_result` branch covers a text result, an image-only result
+(non-empty `output` plus the trailing user message) and an error result. Reasoning
+coalescing has a dedicated test for several thinking blocks sharing one item id folding into
+one ordered `reasoning` item.
+
 ## Stage 3 — `OpenAIAgent`
 
 Built alongside Stage 2 — the mock and the agent are useless separately, and the point of the mock is to enable a thorough agent test: drive a turn, inspect what the agent accumulated, then inspect the *next* request it generates from that accumulated state.
