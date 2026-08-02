@@ -120,7 +120,7 @@ The A/B scenarios settled the question the user raised. Echo fidelity is *not* b
 The fixtures are ground truth for event *order and shape*, consumed by hand when writing the mock and the agent — they are not replayed as test inputs (see Stage 2).
 
 
-## Stage 2 — Translation layer + `MockOpenAIClient`
+## Stage 2 — Translation layer + `MockOpenAIClient` — **done**
 
 The fixtures are **reference material, not test inputs**. They tell us the order and shape of the events the backend actually emits (how reasoning summary parts are indexed, how parallel tool calls arrive, what an aborted stream looks like). The tests are hand-written against the mock, in the same style as `mock-anthropic-client.ts`: a test observes the parameters of each request the provider sends and pushes native SDK events back through a real SDK stream.
 
@@ -137,7 +137,51 @@ The fixtures are **reference material, not test inputs**. They tell us the order
   - Serialization determinism: serializing the same history twice is byte-identical, appending a message changes only the tail, tool order is independent of registration order.
   - Round-trip: mock events → provider stream events → stored `ProviderMessage[]` → `createStreamParameters` carries `encrypted_content`, `web_search_call` items and annotations through unmodified.
   - A history missing its reasoning items still serializes and does not throw.
-- Gate: `npx tsgo -b`, `npx vitest run node/core/`, `npx biome check .`.
+- Gate: `npx tsgo -b`, `npx vitest run node/core/`, `npx biome check .`. All green.
+
+### What landed
+
+- `node/core/src/providers/openai.ts` — `OpenAIProvider` (`createStreamParameters`,
+  `forceToolUse`, `createAgent` throws), the ported schema helpers
+  (`makeOpenAICompatible`, `sanitizeSchemaForOpenAI`, `isReasoningModel`,
+  `supportsWebSearch`), plus the translation layer:
+  `convertProviderMessagesToInput`, `mapResponseStreamEvent`,
+  `convertResponseOutputToProviderContent`, `usageFromResponse`.
+- `node/core/src/providers/mock-openai-client.ts` — `MockOpenAIClient` /
+  `MockResponseStream`, driving a real SDK `Stream` off a `ReadableStream`.
+- `node/core/src/providers/openai.test.ts` — 21 tests.
+
+### Decisions / deviations
+
+- **`providerMetadata` added to content types.** `ProviderMetadata` existed only on
+  `ProviderBlockStartEvent`, so item ids had nowhere to live in history. Added an
+  optional `providerMetadata` to `ProviderTextContent`, `ProviderThinkingContent`,
+  `ProviderRedactedThinkingContent` and `ProviderServerToolUseContent`. Additive and
+  optional, so the Anthropic path is untouched.
+- **Reasoning is modelled as one `thinking` block per reasoning item**, with
+  `signature` carrying `encrypted_content`. Summary parts accumulate into that single
+  block (separated by a blank line) rather than opening one block per
+  `summary_index`, matching `reasoning-multi-summary.json`. `encrypted_content` only
+  exists on `output_item.done`, so it arrives as a trailing `signature_delta`. No
+  `redacted_thinking` block is produced; an empty summary is simply a thinking block
+  with empty text and a signature.
+- **Graceful degradation instead of throwing.** Assistant text with no item id
+  serializes as an easy message; a thinking block with no item id is dropped (the
+  backend tolerates missing reasoning items). Nothing throws on missing metadata.
+- **Tools are sorted by name** in `createStreamParameters` and built with a fixed key
+  order, since a mere tool reorder is a total cache miss.
+- **`forceToolUse` uses the non-streaming Responses endpoint** with
+  `tool_choice: {type: "function", name}`, and reuses `getRetryDelay` /
+  `MAX_RETRY_DURATION` from `anthropic-agent.ts` with an OpenAI-specific
+  `isRetryableOpenAIError` (429/500/502/503/529).
+- **Fixture use is a shape check only**, as planned: four tests compare the mock's
+  native event-type sequence against `text`, `tool-call`, `web-search`,
+  `reasoning-summary` and `reasoning-multi-summary` fixtures (delta runs collapsed,
+  since the mock emits one delta per block).
+- Web search is opt-in per request (`includeWebSearch`) and additionally gated on
+  `supportsWebSearch(model)`.
+- The mock validates that every echoed `function_call` has a matching
+  `function_call_output`, the analogue of `validateToolUseConstraint`.
 
 ## Stage 3 — `OpenAIAgent`
 

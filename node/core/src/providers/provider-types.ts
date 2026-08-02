@@ -61,6 +61,7 @@ export type ProviderTextContent = {
   type: "text";
   text: string;
   citations?: ProviderWebSearchCitation[] | undefined;
+  providerMetadata?: ProviderMetadata | undefined;
   nativeMessageIdx: NativeMessageIdx;
 };
 
@@ -68,12 +69,14 @@ export type ProviderThinkingContent = {
   type: "thinking";
   thinking: string;
   signature: string;
+  providerMetadata?: ProviderMetadata | undefined;
   nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderRedactedThinkingContent = {
   type: "redacted_thinking";
   data: string;
+  providerMetadata?: ProviderMetadata | undefined;
   nativeMessageIdx: NativeMessageIdx;
 };
 
@@ -137,6 +140,7 @@ export type ProviderServerToolUseContent = {
   input: {
     query: string;
   };
+  providerMetadata?: ProviderMetadata | undefined;
   nativeMessageIdx: NativeMessageIdx;
 };
 
