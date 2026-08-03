@@ -234,7 +234,7 @@ during the retry delay. The `tool_result` branch covers a text result, an image-
 coalescing has a dedicated test for several thinking blocks sharing one item id folding into
 one ordered `reasoning` item.
 
-## Stage 3 — `OpenAIAgent`
+## Stage 3 — `OpenAIAgent` — **done**
 
 Built alongside Stage 2 — the mock and the agent are useless separately, and the point of the mock is to enable a thorough agent test: drive a turn, inspect what the agent accumulated, then inspect the *next* request it generates from that accumulated state.
 
@@ -248,7 +248,53 @@ Built alongside Stage 2 — the mock and the agent are useless separately, and t
   - A web search surfaces as a distinct block with its query; the following message's annotations are preserved and the `web_search_call` item appears in the next request.
   - `abortMidstream()` — no terminal event, no `usage` — leaves the agent in a consistent stopped state with partial text retained and usage absent rather than zeroed. This is the one place the OpenAI stream differs structurally from Anthropic's.
   - `clone()` returns a stopped deep copy with history intact and no in-flight block.
-- Gate: `npx tsgo -b`, `npx vitest run node/core/`, `npx biome check .`.
+- Gate: `npx tsgo -b`, `npx vitest run node/core/`, `npx biome check .`. All green
+  (700 core tests). The full root suite (`npx vitest run`) has one pre-existing
+  flaky failure/timeout in the neovim-dependent tests; the suites implicated by
+  the run pass in isolation, and nothing in the root project references the
+  OpenAI provider yet (that is Stage 4).
+
+### What landed
+
+- `node/core/src/providers/openai-agent.ts` — `OpenAIAgent`, plus the structural
+  `OpenAIStreamingClient` type (the slice of the SDK the agent uses) and
+  `OpenAIAgentOptions`.
+- `node/core/src/providers/openai.ts` — `createAgent` now returns an `OpenAIAgent`;
+  `OpenAIProviderOptions` gained `includeWebSearch`.
+- `node/core/src/providers/openai-agent.test.ts` — 12 tests: text turn +
+  didUpdate/stopped/usage, live streaming block, tool call + follow-up echoing
+  `function_call` and `function_call_output`, parallel tool calls, multi-part
+  reasoning folding into one block and round-tripping `encrypted_content`,
+  empty-summary reasoning, web search + annotations + `web_search_call` echo,
+  mid-stream abort (partial text kept, no usage), abort dropping an undispatched
+  tool call, `clone()` deep copy + dangling-tool-call cleanup, and truncation.
+
+### Decisions / deviations
+
+- **`ProviderMessage[]` is the agent's only state.** Unlike `AnthropicAgent` (which
+  keeps native messages plus a cached provider projection), the OpenAI request body
+  is derived from provider messages on every turn, so there is nothing to cache.
+  `nativeMessageIdx` is the index of the owning message, restamped after every
+  mutation.
+- **The final assistant message is built from completed `output_item.done` items**
+  via `convertResponseOutputToProviderContent`, not from the accumulated live
+  blocks. The live blocks exist only to back `getStreamingBlock()` — and to recover
+  the partial text of an aborted turn, which has no `done` item.
+- **A stream that ends without a terminal event is treated as an abort**, matching
+  the observed cancellation behaviour, and the resulting message keeps partial text
+  with `usage` left undefined rather than zeroed.
+- **`toolResult` accumulates into the trailing user message** instead of pushing one
+  user message per result, so parallel tool calls work. It also searches back for
+  the assistant message rather than requiring it to be last (the Anthropic version
+  would throw on the second parallel result).
+- **`dropDanglingToolUses`** is applied on abort, `clone` and `truncateMessages`: the
+  backend rejects a `function_call` with no matching `function_call_output`, and
+  `MockOpenAIClient` enforces the same pairing.
+- **Retry reuses `getRetryDelay` / `MAX_RETRY_DURATION` / `isRetryableOpenAIError`.**
+  Auth refresh-on-401 is deliberately not wired here; it belongs to Stage 4 along
+  with `OpenAIAuth`.
+- A 1s ticker mirrors `AnthropicAgent`'s heartbeat so time-based status renders
+  during dead air.
 
 ## Stage 4 — Wiring and cleanup
 

@@ -19,6 +19,11 @@ import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Result } from "../utils/result.ts";
 import { getRetryDelay, MAX_RETRY_DURATION } from "./anthropic-agent.ts";
 import {
+  OpenAIAgent,
+  type OpenAIAgentOptions,
+  type OpenAIStreamingClient,
+} from "./openai-agent.ts";
+import {
   type Agent,
   type AgentInput,
   type AgentOptions,
@@ -841,17 +846,20 @@ export function isRetryableOpenAIError(error: Error): boolean {
 export type OpenAIProviderOptions = {
   baseUrl?: string | undefined;
   apiKeyEnvVar?: string | undefined;
+  includeWebSearch?: boolean | undefined;
 };
 
 export class OpenAIProvider implements Provider {
   /** Public so tests can substitute a mock client, as the Anthropic tests do. */
   public client: OpenAI;
+  private includeWebSearch: boolean;
 
   constructor(
     protected logger: Logger,
     protected validateInput: ValidateInput,
     options?: OpenAIProviderOptions,
   ) {
+    this.includeWebSearch = options?.includeWebSearch ?? false;
     this.client = new OpenAI({
       apiKey: process.env[options?.apiKeyEnvVar || "OPENAI_API_KEY"],
       baseURL: options?.baseUrl || process.env.OPENAI_BASE_URL,
@@ -989,8 +997,13 @@ export class OpenAIProvider implements Provider {
     };
   }
 
-  createAgent(_options: AgentOptions): Agent {
-    throw new Error("OpenAIAgent is not implemented yet");
+  createAgent(options: AgentOptions): Agent {
+    return new OpenAIAgent(options, this.client as OpenAIStreamingClient, {
+      includeWebSearch: this.includeWebSearch,
+      logger: this.logger,
+      validateInput: this.validateInput,
+      reasoning: options.reasoning as OpenAIAgentOptions["reasoning"],
+    });
   }
 }
 
