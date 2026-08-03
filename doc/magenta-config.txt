@@ -41,8 +41,9 @@ Each profile specifies:
     the main thread on a fast model while delegating hard reasoning to a
     stronger model. Defaults to `model` when unset.
   - `authType`: (optional) "key" (default), "max" for Anthropic OAuth,
-    or "keychain" to load a Claude Code Console API key from the macOS
-    Keychain (see |magenta-claude-keychain|)
+    "keychain" to load a Claude Code Console API key from the macOS
+    Keychain (see |magenta-claude-keychain|), or "chatgpt" for OpenAI
+    ChatGPT subscription auth (see |magenta-openai-chatgpt|)
   - `apiKeyEnvVar`: environment variable containing the API key
   - `baseUrl`: (optional) custom API endpoint
   - `tokenRefreshCommand`: (optional, Bedrock-only) shell command to run

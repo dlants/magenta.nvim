@@ -6,7 +6,8 @@ import type { ValidateInput } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { AnthropicProvider } from "./anthropic.ts";
 import { BedrockProvider } from "./bedrock.ts";
-// import { OpenAIProvider } from "./openai.ts";
+import { CodexAuth } from "./codex-auth.ts";
+import { OpenAIProvider } from "./openai.ts";
 import type { Provider } from "./provider-types.ts";
 
 // import { OllamaProvider } from "./ollama.ts";
@@ -38,7 +39,8 @@ export function getProvider(
           {
             baseUrl: profile.baseUrl,
             apiKeyEnvVar: profile.apiKeyEnvVar,
-            authType: profile.authType,
+            authType:
+              profile.authType === "chatgpt" ? undefined : profile.authType,
           },
         );
         break;
@@ -48,8 +50,23 @@ export function getProvider(
           tokenRefreshCommand: profile.tokenRefreshCommand,
         });
         break;
-      case "openai":
-        throw new Error("Not implemented");
+      case "openai": {
+        // ChatGPT-subscription auth is opt-in and unofficial; the default
+        // remains a platform API key.
+        const authType = profile.authType === "chatgpt" ? "chatgpt" : "key";
+        provider = new OpenAIProvider(
+          logger,
+          validateInput,
+          {
+            baseUrl: profile.baseUrl,
+            apiKeyEnvVar: profile.apiKeyEnvVar,
+            authType,
+          },
+          authType === "chatgpt" ? new CodexAuth() : undefined,
+          authUI,
+        );
+        break;
+      }
       case "ollama":
         throw new Error("Not implemented");
       case "copilot":

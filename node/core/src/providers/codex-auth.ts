@@ -56,7 +56,7 @@ export type LoginOptions = {
   /** Streamed verbatim as the CLI prints it — including the auth URL. We do not
    *  parse it, so a codex CLI change can't silently break the flow. */
   onOutput?: (chunk: string) => void;
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
 };
 
 export type CodexAuthDeps = {

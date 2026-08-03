@@ -126,14 +126,51 @@ Requires: You must have signed into Claude Code using the "Anthropic
 Console Account (API usage billing)" option at least once on this machine.
 
 ==============================================================================
+OPENAI                                                       *magenta-openai*
+
+The OpenAI provider speaks the Responses API. With an API key:
+>lua
+    {
+      name = "openai",
+      provider = "openai",
+      model = "gpt-5.4",
+      apiKeyEnvVar = "OPENAI_API_KEY"
+    }
+<
+                                                     *magenta-openai-chatgpt*
+CHATGPT SUBSCRIPTION AUTHENTICATION ~
+
+Instead of an API key you can use a ChatGPT Plus/Pro subscription. This is
+an unofficial integration and is opt-in via `authType = "chatgpt"`:
+>lua
+    {
+      name = "chatgpt",
+      provider = "openai",
+      model = "gpt-5.4",
+      authType = "chatgpt"
+      -- No apiKeyEnvVar needed
+    }
+<
+How it works:~
+  - Magenta does not run the OAuth flow itself. It reads the credentials
+    the `codex` CLI writes to `$CODEX_HOME/auth.json` (default `~/.codex`),
+    and refreshes them non-interactively as they near expiry.
+  - Run `codex login` once first. If the CLI is not logged in, magenta will
+    run `codex login` for you and stream its output as notifications.
+  - Requests go to `https://chatgpt.com/backend-api/codex`.
+  - The codex CLI must be configured to store credentials in a file, not
+    the OS keyring (`cli_auth_credentials_store = "file"` in
+    `$CODEX_HOME/config.toml`).
+
+Model support is an entitlement matter and changes over time. Codex-family
+models (`*-codex`) and plain `gpt-5` / `gpt-5.1` are rejected for
+ChatGPT-account auth; `gpt-5.4`, `gpt-5.4-mini` and `gpt-5.5` work on a Plus
+plan. Set `model` explicitly on the profile.
+
+==============================================================================
 DEPRECATED PROVIDERS                            *magenta-deprecated-providers*
-                                                             *magenta-openai*
-                                                           *magenta-bedrock*
                                                             *magenta-ollama*
                                                            *magenta-copilot*
-
-The following providers were removed in Jan 2026: OpenAI, AWS Bedrock,
-Ollama, and GitHub Copilot. The Anthropic provider is the only supported
-provider. Contributions to re-add providers are welcome.
-
+Ollama and GitHub Copilot were removed in Jan 2026. Contributions to re-add
+providers are welcome.
 vim:tw=78:ts=8:noet:ft=help:norl::ts=8:noet:ft=help:norl:

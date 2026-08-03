@@ -31,6 +31,16 @@ export class NvimAuthUI implements AuthUI {
     return code.trim();
   }
 
+  showLoginProgress(chunk: string): void {
+    const text = chunk.trim();
+    if (!text) return;
+    this.nvim
+      .call("nvim_exec_lua", [`vim.notify((...), vim.log.levels.INFO)`, [text]])
+      .catch((err: unknown) => {
+        this.nvim.logger.error(`Failed to show login progress: ${err}`);
+      });
+  }
+
   showError(message: string): void {
     this.nvim
       .call("nvim_exec_lua", [

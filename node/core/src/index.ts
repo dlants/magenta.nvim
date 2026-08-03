@@ -112,6 +112,7 @@ export { parse } from "./edl/parser.ts";
 export type { FileMutationSummary } from "./edl/types.ts";
 export { Emitter, type EventMap } from "./emitter.ts";
 export type { Logger } from "./logger.ts";
+export type { OpenAIAuth } from "./openai-auth.ts";
 export type { AbsFilePath, Cwd } from "./paths.ts";
 export type {
   ProviderName,
@@ -130,10 +131,12 @@ export {
 } from "./providers/anthropic-agent.ts";
 export type { BedrockProviderOptions } from "./providers/bedrock.ts";
 export { BedrockProvider } from "./providers/bedrock.ts";
+export { CodexAuth, CodexAuthError } from "./providers/codex-auth.ts";
 export {
   MockAnthropicClient,
   MockStream,
 } from "./providers/mock-anthropic-client.ts";
+export { OpenAIProvider } from "./providers/openai.ts";
 export { getProvider, setMockProvider } from "./providers/provider.ts";
 export type {
   Agent,

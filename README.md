@@ -103,6 +103,8 @@ I haven't actually used other neovim AI plugins in a while, so take this with a 
 - Introduced explore subagent, blocking subagents for better token economy and exploration speed.
 - I decided to drop next edit prediciton and inline edits. I think I'm going to pivot this in a slightly different direction - for more power around unsupervised agent mode and managing teams of agents.
 
+- OpenAI provider restored, on the Responses API. Supports API-key auth and, via `authType = "chatgpt"`, an unofficial ChatGPT subscription mode that reuses the credentials from `codex login`. See `:help magenta-openai`.
+
 ## Jan 2026
 
 - Major provider refactor: messages now stored in native format, eliminating lossy round-trip conversions and improving cache reliability

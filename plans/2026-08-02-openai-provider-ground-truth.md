@@ -335,7 +335,7 @@ Tests (new `openai-agent-retry.test.ts`, 8 tests, plus 5 added to
 `MockOpenAIClient.awaitStreamAt(index)` was added because `lastStream` returns the
 failed attempt on the retry path.
 
-## Stage 4 — Wiring and cleanup
+## Stage 4 — Wiring and cleanup — **done**
 
 - Goal: `getProvider` constructs `OpenAIProvider` for `"openai"` (cached per `profile.name`); delete the commented-out `node/providers/openai.ts` and `node/providers/openai.test.ts`; update `doc/magenta-providers.txt` and `README.md`, which currently state OpenAI was removed.
 - Also lands the parts of Stage A that were deferred for want of a consumer:
@@ -349,6 +349,65 @@ failed attempt on the retry path.
   - A 401 from the backend triggers exactly one refresh-and-retry before surfacing an error.
   - A profile configured with a codex-family model surfaces the backend's rejection as an actionable error naming the models that do work.
 - Gate: `npx tsgo -b`, full `npx vitest run`, `npx biome check .`.
+
+### What landed
+
+- `node/core/src/openai-auth.ts` — the `OpenAIAuth` interface: the slice of
+  `CodexAuth` the provider needs (`isAuthenticated`, `getCredentials`,
+  `refreshCredentials`, `login`). `CodexAuth` satisfies it structurally, so
+  there is no adapter class and tests can stub it without a filesystem.
+- `node/core/src/providers/openai.ts` — `OpenAIProviderOptions.authType`
+  (`"key" | "chatgpt"`), a `createChatGPTFetch` wrapper that installs the
+  `authorization` / `chatgpt-account-id` headers and reacts to a 401 with
+  exactly one `refreshCredentials()` retry, `ensureLoggedIn` (runs
+  `codex login` through the `AuthUI` when not authenticated), the
+  `CODEX_BASE_URL` default, and `assertChatGPTModelSupported`, called from
+  both `createAgent` and `forceToolUse`.
+- `node/core/src/providers/provider.ts` — the `"openai"` case constructs
+  `OpenAIProvider`, cached per `profile.name` as the other providers are;
+  `new CodexAuth()` is passed only for `authType === "chatgpt"`.
+- `node/core/src/auth-ui.ts` / `node/auth/auth-ui.ts` — `AuthUI` gained
+  `showLoginProgress(chunk)`; `NvimAuthUI` streams it to `vim.notify`.
+- Profile plumbing: `authType` gained `"chatgpt"` in `provider-options.ts`,
+  `node/options.ts` (type + validation + warning message).
+- Deleted `node/providers/openai.ts` and `node/providers/openai.test.ts`.
+- Docs: `doc/magenta-providers.txt` gained a `*magenta-openai*` /
+  `*magenta-openai-chatgpt*` section (the deprecated-providers section now
+  lists only ollama and copilot); `doc/magenta-config.txt` documents the new
+  `authType`; `README.md` notes the restored provider.
+- `node/core/src/providers/openai-wiring.test.ts` — 4 tests: a ThreadCore turn
+  end to end through `MockOpenAIClient` including a tool call executed by the
+  tool manager (`yield_to_parent`), per-profile provider caching (two names →
+  two instances, same name → same instance), a 401 producing exactly one
+  refresh and one retry carrying the rotated token, and a codex-family model
+  rejected with a message naming the working models.
+
+### Decisions / deviations
+
+- **No dedicated TEA login view.** The plan left its placement undecided, and
+  `codex login` is per-profile with no thread or chat to hang off. Instead
+  login output is streamed through the existing `AuthUI` abstraction
+  (`showLoginProgress` → `vim.notify`), and cancellation comes from aborting
+  the request that triggered the login — its `AbortSignal` is forwarded to
+  `CodexAuth.login()`. This reuses the mechanism the Anthropic max flow
+  already uses rather than introducing a second, parallel one.
+- **`getProvider`'s signature is unchanged.** `CodexAuth` lives in core and
+  needs no neovim wiring, so the provider constructs it itself rather than
+  adding a sixth parameter threaded from the root. Tests inject a stub through
+  the constructor.
+- **Refresh-on-401 does not go through `auth-refresh.ts`.** That module wraps a
+  *shell command* refresh (the Bedrock path). `CodexAuth` already coalesces
+  concurrent refreshes and rotates its own tokens, so the retry is a plain
+  one-shot in the fetch wrapper — which is also what makes "exactly one retry"
+  straightforward to assert.
+- **`authType: "chatgpt"` is filtered out before reaching `AnthropicProvider`**,
+  whose own `authType` union is unchanged.
+- `CodexAuthError` and `CodexAuth` are re-exported from `@magenta/core` so the
+  root can surface actionable auth errors later if needed.
+- Gate: `npx tsgo -b`, `npx biome check .`, `npx vitest run node/core/` (717
+  tests) all green. The full `npx vitest run` has the same pre-existing flaky
+  nvim-socket failure noted in Stage 3 (`node/tools/bashCommand.test.ts`);
+  it passes in isolation.
 
 # Notes / Open Questions
 

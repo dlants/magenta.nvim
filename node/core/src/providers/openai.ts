@@ -3,7 +3,9 @@ import type {
   JSONSchemaObject,
   JSONSchemaType,
 } from "openai/lib/jsonschema.mjs";
+import type { AuthUI } from "../auth-ui.ts";
 import type { Logger } from "../logger.ts";
+import type { OpenAIAuth } from "../openai-auth.ts";
 import type {
   ReasoningEffort,
   ReasoningSummary,
@@ -839,10 +841,30 @@ export function isRetryableOpenAIError(error: Error): boolean {
   );
 }
 
+/** ChatGPT-subscription tokens are only accepted by the codex backend. */
+export const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
+
+/** Every codex-family model is rejected for ChatGPT-account auth, and so are
+ * plain `gpt-5` / `gpt-5.1`. Caught up front so the user gets an actionable
+ * message instead of an opaque 400. */
+const CHATGPT_REJECTED_MODELS = /(-codex|^gpt-5$|^gpt-5\.1$)/i;
+const CHATGPT_KNOWN_GOOD_MODELS = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.5"];
+
+export function assertChatGPTModelSupported(model: string): void {
+  if (CHATGPT_REJECTED_MODELS.test(model)) {
+    throw new Error(
+      `Model "${model}" is not available with ChatGPT subscription auth. ` +
+        `Known-working models: ${CHATGPT_KNOWN_GOOD_MODELS.join(", ")}. ` +
+        `Set \`model\` on the profile to one of these.`,
+    );
+  }
+}
+
 export type OpenAIProviderOptions = {
   baseUrl?: string | undefined;
   apiKeyEnvVar?: string | undefined;
   includeWebSearch?: boolean | undefined;
+  authType?: "key" | "chatgpt" | undefined;
 };
 
 export class OpenAIProvider implements Provider {
@@ -850,15 +872,88 @@ export class OpenAIProvider implements Provider {
   public client: OpenAI;
   private includeWebSearch: boolean;
 
+  private authType: "key" | "chatgpt";
+
   constructor(
     protected logger: Logger,
     protected validateInput: ValidateInput,
     options?: OpenAIProviderOptions,
+    private auth?: OpenAIAuth | undefined,
+    private authUI?: AuthUI | undefined,
   ) {
     this.includeWebSearch = options?.includeWebSearch ?? false;
-    this.client = new OpenAI({
-      apiKey: process.env[options?.apiKeyEnvVar || "OPENAI_API_KEY"],
-      baseURL: options?.baseUrl || process.env.OPENAI_BASE_URL,
+    this.authType = options?.authType ?? "key";
+
+    if (this.authType === "chatgpt") {
+      if (!this.auth) {
+        throw new Error(
+          "authType 'chatgpt' requires ChatGPT subscription credentials. Run `codex login`.",
+        );
+      }
+      this.client = new OpenAI({
+        // The codex backend authenticates via the Authorization header our
+        // fetch wrapper installs; the SDK still insists on a non-empty key.
+        apiKey: "dummy-key-for-chatgpt-auth",
+        baseURL: options?.baseUrl || CODEX_BASE_URL,
+        fetch: this.createChatGPTFetch(this.auth),
+      });
+    } else {
+      this.client = new OpenAI({
+        apiKey: process.env[options?.apiKeyEnvVar || "OPENAI_API_KEY"],
+        baseURL: options?.baseUrl || process.env.OPENAI_BASE_URL,
+      });
+    }
+  }
+
+  /** Installs the bearer token and account id, and reacts to a 401 with
+   * exactly one refresh-and-retry before surfacing the failure. */
+  private createChatGPTFetch(auth: OpenAIAuth) {
+    const withCredentials = async (
+      input: string | URL | Request,
+      init: RequestInit | undefined,
+      credentials: { accessToken: string; accountId: string },
+    ) =>
+      fetch(input, {
+        ...init,
+        headers: {
+          ...(init?.headers || {}),
+          authorization: `Bearer ${credentials.accessToken}`,
+          "chatgpt-account-id": credentials.accountId,
+        },
+      });
+
+    return async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      await this.ensureLoggedIn(auth, init?.signal ?? undefined);
+      const response = await withCredentials(
+        input,
+        init,
+        await auth.getCredentials(),
+      );
+      if (response.status !== 401) return response;
+
+      this.logger.info("ChatGPT credentials rejected; refreshing once");
+      return withCredentials(input, init, await auth.refreshCredentials());
+    };
+  }
+
+  private async ensureLoggedIn(
+    auth: OpenAIAuth,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
+    if (await auth.isAuthenticated()) return;
+    if (!this.authUI) {
+      throw new Error(
+        "Not logged in to ChatGPT. Run `codex login` in a terminal.",
+      );
+    }
+    // `codex login` is interactive and open-ended, so it is cancelled by
+    // aborting the request that triggered it rather than by its own UI.
+    await auth.login({
+      onOutput: (chunk) => this.authUI?.showLoginProgress(chunk),
+      signal,
     });
   }
 
@@ -883,6 +978,9 @@ export class OpenAIProvider implements Provider {
     };
   }): ProviderToolUseRequest {
     const { model, input, spec, systemPrompt, contextAgent } = options;
+    if (this.authType === "chatgpt") {
+      assertChatGPTModelSupported(model);
+    }
     let aborted = false;
     let retryAbortController: AbortController | undefined;
     const abortController = new AbortController();
@@ -994,6 +1092,9 @@ export class OpenAIProvider implements Provider {
   }
 
   createAgent(options: AgentOptions): Agent {
+    if (this.authType === "chatgpt") {
+      assertChatGPTModelSupported(options.model);
+    }
     return new OpenAIAgent(options, this.client, {
       includeWebSearch: this.includeWebSearch,
       logger: this.logger,
