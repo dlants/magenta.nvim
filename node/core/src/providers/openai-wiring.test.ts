@@ -10,9 +10,9 @@ import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
 import type { MCPToolManager } from "../tools/mcp/manager.ts";
 import { pollUntil } from "../utils/async.ts";
-import { MockOpenAIClient } from "./mock-openai-client.ts";
+import { MockOpenAIClient, mockResponse } from "./mock-openai-client.ts";
 import { OpenAIProvider } from "./openai.ts";
-import { getProvider } from "./provider.ts";
+import { anthropicAuthType, getProvider } from "./provider.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 import type { SystemPrompt } from "./system-prompt.ts";
 
@@ -145,20 +145,37 @@ describe("OpenAI provider wiring", () => {
     expect(a).toBe(aAgain);
   });
 
+  it("does not pass openai-only authTypes through to the anthropic provider", () => {
+    expect(anthropicAuthType("chatgpt")).toBeUndefined();
+    expect(anthropicAuthType("max")).toBe("max");
+    expect(anthropicAuthType(undefined)).toBeUndefined();
+  });
+
   describe("chatgpt auth", () => {
-    const stubAuth = (): OpenAIAuth & {
+    const stubAuth = (
+      authenticated = true,
+    ): OpenAIAuth & {
       refreshCalls: number;
+      loginCalls: { onOutput?: (chunk: string) => void }[];
     } => {
       const auth = {
         refreshCalls: 0,
-        isAuthenticated: () => Promise.resolve(true),
+        loginCalls: [] as { onOutput?: (chunk: string) => void }[],
+        isAuthenticated: () => Promise.resolve(authenticated),
         getCredentials: () =>
           Promise.resolve({ accessToken: "tok-1", accountId: "acct" }),
         refreshCredentials: () => {
           auth.refreshCalls++;
           return Promise.resolve({ accessToken: "tok-2", accountId: "acct" });
         },
-        login: () => Promise.resolve(),
+        login: (options?: {
+          onOutput?: (chunk: string) => void;
+          signal?: AbortSignal | undefined;
+        }) => {
+          auth.loginCalls.push(options ?? {});
+          options?.onOutput?.("open https://auth.example");
+          return Promise.resolve();
+        },
       };
       return auth;
     };
@@ -167,23 +184,20 @@ describe("OpenAI provider wiring", () => {
       vi.restoreAllMocks();
     });
 
-    it("refreshes and retries exactly once on a 401", async () => {
-      const auth = stubAuth();
-      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify({ error: { message: "expired" } }), {
-          status: 401,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+    const mockToolResponse = () =>
+      mockResponse([
+        {
+          type: "function_call",
+          id: "fc_1",
+          call_id: "call_1",
+          name: "thread_title",
+          arguments: JSON.stringify({ title: "hi" }),
+          status: "completed",
+        },
+      ]);
 
-      const provider = new OpenAIProvider(
-        noopLogger,
-        validateInput,
-        { authType: "chatgpt" },
-        auth,
-      );
-
-      const request = provider.forceToolUse({
+    const titleRequest = (provider: OpenAIProvider) =>
+      provider.forceToolUse({
         model: "gpt-5.4",
         input: [
           {
@@ -199,6 +213,22 @@ describe("OpenAI provider wiring", () => {
         } as never,
       });
 
+    it("refreshes and retries exactly once on a 401", async () => {
+      const auth = stubAuth();
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ error: { message: "expired" } }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const provider = new OpenAIProvider(noopLogger, validateInput, {
+        authType: "chatgpt",
+        auth,
+      });
+
+      const request = titleRequest(provider);
+
       await expect(request.promise).rejects.toThrow();
       expect(auth.refreshCalls).toBe(1);
       expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -212,13 +242,80 @@ describe("OpenAI provider wiring", () => {
       expect(headers["chatgpt-account-id"]).toBe("acct");
     });
 
-    it("rejects codex-family models with an actionable error", () => {
-      const provider = new OpenAIProvider(
-        noopLogger,
-        validateInput,
-        { authType: "chatgpt" },
-        stubAuth(),
+    it("sends credentials on the first request and does not refresh on success", async () => {
+      const auth = stubAuth();
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(mockToolResponse()), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
       );
+      const provider = new OpenAIProvider(noopLogger, validateInput, {
+        authType: "chatgpt",
+        auth,
+      });
+
+      await titleRequest(provider).promise;
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(auth.refreshCalls).toBe(0);
+      const [, init] = fetchMock.mock.calls[0];
+      const headers = (init as RequestInit).headers as Record<string, string>;
+      expect(headers.authorization).toBe("Bearer tok-1");
+      expect(headers["chatgpt-account-id"]).toBe("acct");
+    });
+
+    it("runs codex login through the auth UI when not authenticated", async () => {
+      const auth = stubAuth(false);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(mockToolResponse()), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      const progress: string[] = [];
+      const authUI = {
+        showOAuthFlow: () => Promise.resolve(""),
+        showError: () => {},
+        showLoginProgress: (chunk: string) => progress.push(chunk),
+      };
+      const provider = new OpenAIProvider(noopLogger, validateInput, {
+        authType: "chatgpt",
+        auth,
+        authUI,
+      });
+
+      await titleRequest(provider).promise;
+
+      expect(auth.loginCalls.length).toBe(1);
+      expect(progress).toEqual(["open https://auth.example"]);
+    });
+
+    it("throws an actionable error when not authenticated and there is no auth UI", async () => {
+      const auth = stubAuth(false);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+      const provider = new OpenAIProvider(noopLogger, validateInput, {
+        authType: "chatgpt",
+        auth,
+      });
+
+      // The SDK wraps a fetch-layer throw in an APIConnectionError, so the
+      // actionable message only survives on the cause.
+      const error = await titleRequest(provider).promise.then(
+        () => undefined,
+        (e: Error) => e,
+      );
+      expect((error?.cause as Error | undefined)?.message).toMatch(
+        /codex login/,
+      );
+      expect(auth.loginCalls.length).toBe(0);
+    });
+
+    it("rejects codex-family models with an actionable error", () => {
+      const provider = new OpenAIProvider(noopLogger, validateInput, {
+        authType: "chatgpt",
+        auth: stubAuth(),
+      });
 
       expect(() =>
         provider.createAgent({

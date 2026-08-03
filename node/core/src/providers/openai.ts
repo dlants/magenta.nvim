@@ -20,6 +20,7 @@ import type {
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Result } from "../utils/result.ts";
 import { getRetryDelay, MAX_RETRY_DURATION } from "./anthropic-agent.ts";
+import type { CodexCredentials } from "./codex-auth.ts";
 import { OpenAIAgent } from "./openai-agent.ts";
 import {
   type Agent,
@@ -848,7 +849,11 @@ export const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
  * plain `gpt-5` / `gpt-5.1`. Caught up front so the user gets an actionable
  * message instead of an opaque 400. */
 const CHATGPT_REJECTED_MODELS = /(-codex|^gpt-5$|^gpt-5\.1$)/i;
-const CHATGPT_KNOWN_GOOD_MODELS = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.5"];
+const CHATGPT_KNOWN_GOOD_MODELS = [
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.5",
+] as const;
 
 export function assertChatGPTModelSupported(model: string): void {
   if (CHATGPT_REJECTED_MODELS.test(model)) {
@@ -860,42 +865,37 @@ export function assertChatGPTModelSupported(model: string): void {
   }
 }
 
+/** Auth mode and its dependencies, encoded together so that a ChatGPT-auth
+ * provider cannot be constructed without credentials. */
 export type OpenAIProviderOptions = {
   baseUrl?: string | undefined;
-  apiKeyEnvVar?: string | undefined;
   includeWebSearch?: boolean | undefined;
-  authType?: "key" | "chatgpt" | undefined;
-};
+} & (
+  | { authType?: "key" | undefined; apiKeyEnvVar?: string | undefined }
+  | { authType: "chatgpt"; auth: OpenAIAuth; authUI?: AuthUI | undefined }
+);
 
 export class OpenAIProvider implements Provider {
   /** Public so tests can substitute a mock client, as the Anthropic tests do. */
   public client: OpenAI;
   private includeWebSearch: boolean;
-
   private authType: "key" | "chatgpt";
 
   constructor(
     protected logger: Logger,
     protected validateInput: ValidateInput,
     options?: OpenAIProviderOptions,
-    private auth?: OpenAIAuth | undefined,
-    private authUI?: AuthUI | undefined,
   ) {
     this.includeWebSearch = options?.includeWebSearch ?? false;
     this.authType = options?.authType ?? "key";
 
-    if (this.authType === "chatgpt") {
-      if (!this.auth) {
-        throw new Error(
-          "authType 'chatgpt' requires ChatGPT subscription credentials. Run `codex login`.",
-        );
-      }
+    if (options?.authType === "chatgpt") {
       this.client = new OpenAI({
-        // The codex backend authenticates via the Authorization header our
-        // fetch wrapper installs; the SDK still insists on a non-empty key.
+        // The codex backend authenticates via headers; the SDK still requires
+        // some api key to be set.
         apiKey: "dummy-key-for-chatgpt-auth",
-        baseURL: options?.baseUrl || CODEX_BASE_URL,
-        fetch: this.createChatGPTFetch(this.auth),
+        baseURL: options.baseUrl || CODEX_BASE_URL,
+        fetch: this.createChatGPTFetch(options.auth, options.authUI),
       });
     } else {
       this.client = new OpenAI({
@@ -907,11 +907,11 @@ export class OpenAIProvider implements Provider {
 
   /** Installs the bearer token and account id, and reacts to a 401 with
    * exactly one refresh-and-retry before surfacing the failure. */
-  private createChatGPTFetch(auth: OpenAIAuth) {
+  private createChatGPTFetch(auth: OpenAIAuth, authUI: AuthUI | undefined) {
     const withCredentials = async (
       input: string | URL | Request,
       init: RequestInit | undefined,
-      credentials: { accessToken: string; accountId: string },
+      credentials: CodexCredentials,
     ) =>
       fetch(input, {
         ...init,
@@ -926,7 +926,7 @@ export class OpenAIProvider implements Provider {
       input: string | URL | Request,
       init?: RequestInit,
     ): Promise<Response> => {
-      await this.ensureLoggedIn(auth, init?.signal ?? undefined);
+      await this.ensureLoggedIn(auth, authUI, init?.signal ?? undefined);
       const response = await withCredentials(
         input,
         init,
@@ -941,10 +941,11 @@ export class OpenAIProvider implements Provider {
 
   private async ensureLoggedIn(
     auth: OpenAIAuth,
+    authUI: AuthUI | undefined,
     signal: AbortSignal | undefined,
   ): Promise<void> {
     if (await auth.isAuthenticated()) return;
-    if (!this.authUI) {
+    if (!authUI) {
       throw new Error(
         "Not logged in to ChatGPT. Run `codex login` in a terminal.",
       );
@@ -952,7 +953,7 @@ export class OpenAIProvider implements Provider {
     // `codex login` is interactive and open-ended, so it is cancelled by
     // aborting the request that triggered it rather than by its own UI.
     await auth.login({
-      onOutput: (chunk) => this.authUI?.showLoginProgress(chunk),
+      onOutput: (chunk) => authUI.showLoginProgress(chunk),
       signal,
     });
   }

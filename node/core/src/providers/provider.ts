@@ -15,6 +15,14 @@ import type { Provider } from "./provider-types.ts";
 
 export * from "./provider-types.ts";
 
+/** `Profile.authType` is a flat union across providers, so the anthropic-only
+ * values have to be separated from the openai-only ones here. */
+export function anthropicAuthType(
+  authType: ProviderProfile["authType"],
+): "key" | "max" | "keychain" | undefined {
+  return authType === "chatgpt" ? undefined : authType;
+}
+
 const clients: { [key: string]: Provider } = {};
 
 // lazy load so we have a chance to init context before constructing the class
@@ -39,8 +47,7 @@ export function getProvider(
           {
             baseUrl: profile.baseUrl,
             apiKeyEnvVar: profile.apiKeyEnvVar,
-            authType:
-              profile.authType === "chatgpt" ? undefined : profile.authType,
+            authType: anthropicAuthType(profile.authType),
           },
         );
         break;
@@ -53,17 +60,20 @@ export function getProvider(
       case "openai": {
         // ChatGPT-subscription auth is opt-in and unofficial; the default
         // remains a platform API key.
-        const authType = profile.authType === "chatgpt" ? "chatgpt" : "key";
         provider = new OpenAIProvider(
           logger,
           validateInput,
-          {
-            baseUrl: profile.baseUrl,
-            apiKeyEnvVar: profile.apiKeyEnvVar,
-            authType,
-          },
-          authType === "chatgpt" ? new CodexAuth() : undefined,
-          authUI,
+          profile.authType === "chatgpt"
+            ? {
+                baseUrl: profile.baseUrl,
+                authType: "chatgpt",
+                auth: new CodexAuth(),
+                authUI,
+              }
+            : {
+                baseUrl: profile.baseUrl,
+                apiKeyEnvVar: profile.apiKeyEnvVar,
+              },
         );
         break;
       }

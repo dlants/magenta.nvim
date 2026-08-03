@@ -19,11 +19,17 @@ export type CodexTokens = {
 
 export type CodexCredentials = { accessToken: string; accountId: string };
 
-type CodexAuthFile = {
+/** The on-disk shape, which may carry an explicit null. */
+type RawCodexAuthFile = {
   auth_mode?: string;
   OPENAI_API_KEY?: string | null;
   tokens?: CodexTokens;
   last_refresh?: string;
+};
+
+/** The normalized shape used internally — no nulls. */
+type CodexAuthFile = Omit<RawCodexAuthFile, "OPENAI_API_KEY"> & {
+  OPENAI_API_KEY?: string;
 };
 
 // The Codex CLI's public OAuth client id. A refresh is only honored for the
@@ -206,7 +212,8 @@ export class CodexAuth {
     } catch {
       throw await this.missingCredentialsError();
     }
-    return JSON.parse(raw) as CodexAuthFile;
+    const { OPENAI_API_KEY, ...rest } = JSON.parse(raw) as RawCodexAuthFile;
+    return OPENAI_API_KEY == null ? rest : { ...rest, OPENAI_API_KEY };
   }
 
   /** Distinguishes "never logged in" from "logged in, but the CLI is

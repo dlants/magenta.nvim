@@ -409,6 +409,52 @@ failed attempt on the retry path.
   nvim-socket failure noted in Stage 3 (`node/tools/bashCommand.test.ts`);
   it passes in isolation.
 
+### Code review follow-up (Stage 4 revision)
+
+Type representation:
+
+- `OpenAIProviderOptions` is now a discriminated union on `authType`, so the
+  ChatGPT variant carries its `auth: OpenAIAuth` (and optional `authUI`) and the
+  key variant carries `apiKeyEnvVar`. `OpenAIProvider`'s constructor lost its
+  separate `auth` / `authUI` parameters along with the runtime
+  "chatgpt requires credentials" throw — the invalid state is no longer
+  representable. `createChatGPTFetch` / `ensureLoggedIn` take `auth` and `authUI`
+  as parameters, so the optional chain that papered over the narrowing loss in
+  the `showLoginProgress` callback is gone.
+- `withCredentials` uses the exported `CodexCredentials` type instead of an
+  inline restatement, and `CHATGPT_KNOWN_GOOD_MODELS` is `as const`.
+- `readAuthFile` normalizes the on-disk `OPENAI_API_KEY: string | null` to
+  `undefined`: `RawCodexAuthFile` models the file, `CodexAuthFile` is the
+  normalized internal shape.
+- **`Profile` was not split into a per-provider discriminated union.** The
+  parser builds `Profile` incrementally from an untyped table and 20+ call sites
+  construct profile literals, so discriminating the type would have been a large,
+  risky refactor for a validation problem. Instead the *parser* now validates
+  `authType` against the provider (anthropic: key/max/keychain, openai:
+  key/chatgpt, otherwise key) and warns on an illegal combination, so
+  misconfiguration surfaces there. `getProvider` no longer silently collapses
+  openai auth types; the one remaining narrowing is the exported, tested
+  `anthropicAuthType()` helper.
+
+Tests (`openai-wiring.test.ts`, 8 total):
+
+- the happy path of `createChatGPTFetch` — a 200 response is returned as-is, the
+  first request carries `Bearer tok-1` and `chatgpt-account-id`, and
+  `refreshCredentials` is not called;
+- `ensureLoggedIn` both branches — not authenticated with an `authUI` runs
+  `auth.login()` and pipes `onOutput` to `showLoginProgress`; not authenticated
+  without one throws the "Run `codex login`" error (asserted on `error.cause`,
+  since the SDK wraps a fetch-layer throw in an `APIConnectionError`);
+- `anthropicAuthType` maps `"chatgpt"` to `undefined` and passes anthropic
+  values through.
+
+The reviewer's suggested constructor-invariant test is obsolete: the throw it
+covered no longer exists, since the union makes that construction a type error.
+
+A profile-parsing test for the new `authType` validation was not added — the
+existing `options.test.ts` covers no `authType` at all, and the branch is
+straightforward per-provider list membership.
+
 # Notes / Open Questions
 
 - Whether to also support platform API keys against `api.openai.com`. The dialects differ (`max_output_tokens`, model names), so this likely wants an explicit backend mode flag rather than pretending the endpoints are the same. Chat Completions (for GLM/OpenRouter/Fireworks) remains out of scope.

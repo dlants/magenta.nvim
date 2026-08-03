@@ -326,17 +326,17 @@ function parseProfiles(
       }
 
       if ("authType" in p) {
-        if (
-          typeof p.authType === "string" &&
-          (p.authType === "key" ||
-            p.authType === "max" ||
-            p.authType === "keychain" ||
-            p.authType === "chatgpt")
-        ) {
-          out.authType = p.authType;
+        const legal =
+          provider === "anthropic"
+            ? ["key", "max", "keychain"]
+            : provider === "openai"
+              ? ["key", "chatgpt"]
+              : ["key"];
+        if (typeof p.authType === "string" && legal.includes(p.authType)) {
+          out.authType = p.authType as NonNullable<Profile["authType"]>;
         } else {
           logger.warn(
-            `Invalid authType in profile ${p.name}, must be "key", "max", "keychain", or "chatgpt"`,
+            `Invalid authType ${JSON.stringify(p.authType)} in profile ${p.name} for provider ${provider}, must be one of ${legal.map((a) => `"${a}"`).join(", ")}`,
           );
         }
       }
