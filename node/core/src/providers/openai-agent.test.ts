@@ -400,6 +400,69 @@ describe("OpenAIAgent abort", () => {
   });
 });
 
+describe("OpenAIAgent invariant guards", () => {
+  it("toolResult rejects a non-tool_use stopped state", async () => {
+    const { client, agent } = setup();
+    const stopped = stoppedPromise(agent);
+    const stream = await startTurn(client, agent);
+    stream.streamText("just text");
+    await stream.settle();
+    stream.finishResponse();
+    await stopped;
+
+    expect(() =>
+      agent.toolResult("call_1" as ToolRequestId, okToolResult("x")),
+    ).toThrow(/expected status stopped with stopReason tool_use/);
+  });
+
+  it("toolResult rejects an unknown tool_use id", async () => {
+    const { client, agent } = setup();
+    const stopped = stoppedPromise(agent);
+    const stream = await startTurn(client, agent);
+    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    await stream.settle();
+    stream.finishResponse();
+    await stopped;
+
+    expect(() =>
+      agent.toolResult("call_missing" as ToolRequestId, {
+        ...okToolResult("x"),
+        id: "call_missing" as ToolRequestId,
+      }),
+    ).toThrow(/no tool_use block with id call_missing/);
+  });
+
+  it("abortToolUse rejects a non-tool_use stopped state", async () => {
+    const { client, agent } = setup();
+    const stopped = stoppedPromise(agent);
+    const stream = await startTurn(client, agent);
+    stream.streamText("just text");
+    await stream.settle();
+    stream.finishResponse();
+    await stopped;
+
+    expect(() => agent.abortToolUse()).toThrow(/Cannot abort tool use/);
+  });
+
+  it("abortToolUse flips a pending tool_use to aborted", async () => {
+    const { client, agent } = setup();
+    const stopped = stoppedPromise(agent);
+    const stream = await startTurn(client, agent);
+    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    await stream.settle();
+    stream.finishResponse();
+    await stopped;
+
+    const aborted = stoppedPromise(agent);
+    agent.abortToolUse();
+    expect((await aborted).stopReason).toBe("aborted");
+    expect(agent.getState().status).toEqual({
+      type: "stopped",
+      stopReason: "aborted",
+    });
+  });
+});
+
 describe("OpenAIAgent clone", () => {
   it("returns a stopped deep copy with history intact", async () => {
     const { client, agent } = setup();
@@ -463,5 +526,32 @@ describe("OpenAIAgent truncation", () => {
       type: "stopped",
       stopReason: "end_turn",
     });
+  });
+
+  it("drops a tool_use severed from its tool_result", async () => {
+    const { client, agent } = setup();
+    const stopped = stoppedPromise(agent);
+    const stream = await startTurn(client, agent);
+    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    await stream.settle();
+    stream.finishResponse();
+    await stopped;
+
+    const assistantIdx = agent.getNativeMessageIdx();
+    agent.toolResult("call_1" as ToolRequestId, okToolResult("contents"));
+
+    // Truncating back to the assistant message severs the tool_use from its
+    // result; the backend rejects such a request, so it must be dropped.
+    agent.truncateMessages(assistantIdx);
+    const messages = agent.getState().messages;
+    expect(
+      messages.some((m) => m.content.some((c) => c.type === "tool_use")),
+    ).toBe(false);
+
+    agent.appendUserMessage([userText("carry on")]);
+    agent.continueConversation();
+    const followup = await client.awaitStream();
+    expect(followup.inputItemsOfType("function_call")).toHaveLength(0);
+    followup.finishResponse();
   });
 });

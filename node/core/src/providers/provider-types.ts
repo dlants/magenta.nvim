@@ -14,7 +14,11 @@ export const PROVIDER_NAMES = [
 ] as const;
 export type { ProviderName } from "../provider-options.ts";
 
-import type { ProviderName } from "../provider-options.ts";
+import type {
+  ProviderName,
+  ReasoningEffort,
+  ReasoningSummary,
+} from "../provider-options.ts";
 
 export type ProviderSetting = {
   provider: ProviderName;
@@ -406,8 +410,8 @@ export interface AgentOptions {
     effort?: "low" | "medium" | "high" | "xhigh" | "max";
   };
   reasoning?: {
-    effort?: "low" | "medium" | "high" | "xhigh";
-    summary?: string;
+    effort?: ReasoningEffort;
+    summary?: ReasoningSummary;
   };
   skipPostFlightTokenCount?: boolean;
 }

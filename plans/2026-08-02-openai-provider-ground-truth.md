@@ -296,6 +296,45 @@ Built alongside Stage 2 — the mock and the agent are useless separately, and t
 - A 1s ticker mirrors `AnthropicAgent`'s heartbeat so time-based status renders
   during dead air.
 
+### Code review follow-up (Stage 3 revision)
+
+Type representation:
+
+- `AgentOptions.reasoning` is now declared in terms of the shared
+  `ReasoningEffort` / `ReasoningSummary` types (`provider-options.ts`), so
+  `createAgent` passes `options.reasoning` through with no cast.
+- `this.client as OpenAIStreamingClient` is gone — the SDK client satisfies the
+  structural type directly, so the cast was hiding nothing.
+- The `start-streaming` action now carries its `startTime`, removing the
+  `(this.status as { startTime: Date })` cast in `continueConversation`.
+- `deriveStopReason` takes the SDK's `incomplete_details.reason` literal union
+  instead of `string`.
+- `OpenAIStreamingBlock`'s `server_tool_use` variant lost its never-written
+  `query` field.
+- `commitAssistantMessage(mode: "normal" | "aborted")` replaces the optional
+  boolean flag object.
+
+Tests (new `openai-agent-retry.test.ts`, 8 tests, plus 5 added to
+`openai-agent.test.ts` — 17 there now):
+
+- retry: a retryable error opens a second stream and `reset-attempt` discards the
+  half-accumulated text so the committed message holds only the retried turn;
+  a non-retryable error goes straight to `{type:"error"}` with no second stream;
+  `abort()` during the backoff sleep lands in `stream-aborted`.
+- in-stream failures: `response.failed` with an error message, `response.failed`
+  with a null error (the "response.failed" fallback), and the `error` stream event.
+- `response.incomplete`: `max_output_tokens` → `max_tokens` (and `toolResult` is
+  still accepted in that state), `content_filter` → `content`. Required a new
+  `MockResponseStream.finishIncomplete(reason)` helper.
+- guards: `toolResult` throws on a non-tool_use stopped state and on an unknown
+  tool_use id; `abortToolUse` throws outside stopped/tool_use and otherwise flips
+  to aborted and emits `stopped`.
+- truncation that severs a `tool_use` from its `tool_result` drops the dangling
+  call, so the next request carries no unanswered `function_call`.
+
+`MockOpenAIClient.awaitStreamAt(index)` was added because `lastStream` returns the
+failed attempt on the retry path.
+
 ## Stage 4 — Wiring and cleanup
 
 - Goal: `getProvider` constructs `OpenAIProvider` for `"openai"` (cached per `profile.name`); delete the commented-out `node/providers/openai.ts` and `node/providers/openai.test.ts`; update `doc/magenta-providers.txt` and `README.md`, which currently state OpenAI was removed.

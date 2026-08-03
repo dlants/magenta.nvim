@@ -18,11 +18,7 @@ import type {
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Result } from "../utils/result.ts";
 import { getRetryDelay, MAX_RETRY_DURATION } from "./anthropic-agent.ts";
-import {
-  OpenAIAgent,
-  type OpenAIAgentOptions,
-  type OpenAIStreamingClient,
-} from "./openai-agent.ts";
+import { OpenAIAgent } from "./openai-agent.ts";
 import {
   type Agent,
   type AgentInput,
@@ -998,11 +994,11 @@ export class OpenAIProvider implements Provider {
   }
 
   createAgent(options: AgentOptions): Agent {
-    return new OpenAIAgent(options, this.client as OpenAIStreamingClient, {
+    return new OpenAIAgent(options, this.client, {
       includeWebSearch: this.includeWebSearch,
       logger: this.logger,
       validateInput: this.validateInput,
-      reasoning: options.reasoning as OpenAIAgentOptions["reasoning"],
+      reasoning: options.reasoning,
     });
   }
 }

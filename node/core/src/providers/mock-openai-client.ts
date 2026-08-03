@@ -397,6 +397,25 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
     this.close();
   }
 
+  /** Terminate the turn with `response.incomplete`, e.g. a token-limit stop. */
+  finishIncomplete(
+    reason: NonNullable<
+      NonNullable<OpenAI.Responses.Response["incomplete_details"]>["reason"]
+    >,
+    usage: Usage = { inputTokens: 1000, outputTokens: 500 },
+  ): void {
+    this._resolved = true;
+    this.pushEvent({
+      type: "response.incomplete",
+      response: {
+        ...mockResponse(this.outputItems, usage),
+        status: "incomplete",
+        incomplete_details: { reason },
+      },
+    });
+    this.close();
+  }
+
   respondWithError(error: Error): void {
     this._resolved = true;
     try {
@@ -515,6 +534,16 @@ export class MockOpenAIClient {
 
   get lastStream(): MockResponseStream | undefined {
     return this.streams[this.streams.length - 1];
+  }
+
+  /** The nth stream the agent opens, awaited into existence. Needed for the
+   * retry path, where `lastStream` would otherwise return the failed attempt. */
+  async awaitStreamAt(index: number): Promise<MockResponseStream> {
+    return pollUntil(() => {
+      const stream = this.streams[index];
+      if (stream) return stream;
+      throw new Error(`No stream at index ${index}`);
+    });
   }
 
   async awaitStream(): Promise<MockResponseStream> {

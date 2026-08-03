@@ -29,6 +29,9 @@ import type {
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 
 type ResponseStreamEvent = OpenAI.Responses.ResponseStreamEvent;
+type ResponseIncompleteReason = NonNullable<
+  OpenAI.Responses.Response["incomplete_details"]
+>["reason"];
 
 /** The slice of the SDK client the agent actually uses. Declared structurally
  * so `MockOpenAIClient` satisfies it without pretending to be an `OpenAI`. */
@@ -60,10 +63,10 @@ type OpenAIStreamingBlock =
   | { type: "text"; text: string }
   | { type: "thinking"; thinking: string; signature: string }
   | { type: "tool_use"; id: ToolRequestId; name: ToolName; inputJson: string }
-  | { type: "server_tool_use"; id: string; query: string };
+  | { type: "server_tool_use"; id: string };
 
 type Action =
-  | { type: "start-streaming" }
+  | { type: "start-streaming"; startTime: Date }
   | { type: "reset-attempt" }
   | { type: "stream-event"; event: ResponseStreamEvent }
   | {
@@ -134,7 +137,7 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
         this.aborted = false;
         this.status = {
           type: "streaming",
-          startTime: new Date(),
+          startTime: action.startTime,
           lastEventTime: new Date(),
         };
         this.blocks.clear();
@@ -159,7 +162,7 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
 
       case "stream-completed": {
         this.stream = undefined;
-        this.commitAssistantMessage();
+        this.commitAssistantMessage("normal");
         this.latestUsage = action.usage;
         this.attachStopInfo(action.stopReason, action.usage);
         this.status = { type: "stopped", stopReason: action.stopReason };
@@ -170,7 +173,7 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
 
       case "stream-error":
         this.stream = undefined;
-        this.commitAssistantMessage();
+        this.commitAssistantMessage("normal");
         this.status = { type: "error", error: action.error };
         this.resolveStreamingEnd();
         this.emitAsync("error", action.error);
@@ -180,7 +183,7 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
         // An aborted Responses stream simply stops: no terminal event and no
         // usage, so the stopped state is synthesized from what arrived.
         this.stream = undefined;
-        this.commitAssistantMessage({ abortPendingToolUse: true });
+        this.commitAssistantMessage("aborted");
         this.status = { type: "stopped", stopReason: "aborted" };
         this.resolveStreamingEnd();
         this.emitAsync("stopped", "aborted", undefined);
@@ -248,9 +251,7 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
 
   /** Fold the turn's completed items (plus any partial block left by an abort)
    * into an assistant message. */
-  private commitAssistantMessage(
-    options: { abortPendingToolUse?: boolean } = {},
-  ): void {
+  private commitAssistantMessage(mode: "normal" | "aborted"): void {
     const content: ProviderMessageContent[] =
       convertResponseOutputToProviderContent(
         this.openaiOptions.validateInput,
@@ -278,7 +279,7 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
     if (content.length === 0) return;
 
     this.messages.push({ role: "assistant", content });
-    if (options.abortPendingToolUse) {
+    if (mode === "aborted") {
       // Tool calls interrupted mid-stream are never dispatched, so they would
       // be left without a function_call_output.
       dropDanglingToolUses(this.messages);
@@ -447,9 +448,9 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
   // -------------------------------------------------------------------------
 
   continueConversation(): void {
-    this.update({ type: "start-streaming" });
+    const startTime = new Date();
+    this.update({ type: "start-streaming", startTime });
     this.startTicker();
-    const startTime = (this.status as { startTime: Date }).startTime;
 
     const attempt = async (): Promise<AttemptResult> => {
       const params = createStreamParameters({
@@ -465,7 +466,7 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
         const stream = await this.client.responses.create(params);
         this.stream = stream;
         let usage: Usage | undefined;
-        let incompleteReason: string | undefined;
+        let incompleteReason: ResponseIncompleteReason | undefined;
         for await (const event of stream) {
           this.update({ type: "stream-event", event });
           if (event.type === "response.completed") {
@@ -583,7 +584,9 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
     void runWithRetry();
   }
 
-  private deriveStopReason(incompleteReason: string | undefined): StopReason {
+  private deriveStopReason(
+    incompleteReason: ResponseIncompleteReason | undefined,
+  ): StopReason {
     if (incompleteReason === "max_output_tokens") return "max_tokens";
     if (incompleteReason === "content_filter") return "content";
     if (this.turnItems.some((item) => item.type === "function_call")) {
@@ -630,7 +633,7 @@ function startBlock(
     case "reasoning":
       return { type: "thinking", thinking: "", signature: "" };
     case "web_search_call":
-      return { type: "server_tool_use", id: item.id, query: "" };
+      return { type: "server_tool_use", id: item.id };
     default:
       return undefined;
   }
