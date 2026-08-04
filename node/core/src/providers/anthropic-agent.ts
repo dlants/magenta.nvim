@@ -51,6 +51,7 @@ type AnthropicStreamingBlock =
     };
 
 import type { StopReason, Usage } from "./provider-types.ts";
+import { classifyTextContent } from "./tagged-content.ts";
 
 type MessageStopInfo = {
   stopReason: StopReason;
@@ -1337,38 +1338,8 @@ function convertBlockToProvider(
 ): ProviderMessage["content"][number] {
   switch (block.type) {
     case "text": {
-      // Detect system_reminder blocks (converted to text with <system-reminder> tags)
-      if (block.text.includes("<system-reminder>")) {
-        return {
-          type: "system_reminder",
-          text: block.text,
-          nativeMessageIdx,
-        };
-      }
-      // Detect system_info blocks (converted to text with <system-info> tags)
-      if (block.text.includes("<system-info>")) {
-        return {
-          type: "system_info",
-          text: block.text,
-          nativeMessageIdx,
-        };
-      }
-      // Detect context_update blocks (converted to text with <context_update> tags)
-      if (block.text.includes("<context_update>")) {
-        return {
-          type: "context_update",
-          text: block.text,
-          nativeMessageIdx,
-        };
-      }
-      // Detect fork_notification blocks (converted to text with <fork-notification> tags)
-      if (block.text.includes("<fork-notification>")) {
-        return {
-          type: "fork_notification",
-          text: block.text,
-          nativeMessageIdx,
-        };
-      }
+      const tagged = classifyTextContent(block.text, nativeMessageIdx);
+      if (tagged) return tagged;
       return {
         type: "text",
         text: block.text,

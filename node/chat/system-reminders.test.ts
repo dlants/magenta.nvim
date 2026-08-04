@@ -415,6 +415,23 @@ test("a message containing only context updates and reminders gets no user heade
   });
 });
 
+test("a user message that mentions tag names still renders as user text", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText(
+      "I see <context_update> and <system-reminder> blocks as plain text",
+    );
+    await driver.send();
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    request.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
+    await driver.assertDisplayBufferContains("ok");
+    await driver.assertDisplayBufferContains("# user:");
+    await driver.assertDisplayBufferContains(
+      "I see <context_update> and <system-reminder> blocks as plain text",
+    );
+  });
+});
+
 test("multiple user messages each get their own system reminder", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();

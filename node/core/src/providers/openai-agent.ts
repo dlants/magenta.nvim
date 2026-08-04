@@ -27,6 +27,7 @@ import type {
   Usage,
 } from "./provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
+import { classifyTextContent } from "./tagged-content.ts";
 
 type ResponseStreamEvent = OpenAI.Responses.ResponseStreamEvent;
 type ResponseIncompleteReason = NonNullable<
@@ -349,7 +350,15 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
   }
 
   appendUserMessage(content: AgentInput[]): void {
-    this.messages.push({ role: "user", content: [...content] });
+    // Tagged text has to be re-tagged into its structured content type, exactly
+    // as the anthropic agent does, or the view renders it as raw text.
+    const classified = content.map(
+      (item) =>
+        (item.type === "text"
+          ? classifyTextContent(item.text, item.nativeMessageIdx)
+          : undefined) ?? item,
+    );
+    this.messages.push({ role: "user", content: classified });
     this.restamp();
     this.emitAsync("didUpdate");
   }
