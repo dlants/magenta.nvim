@@ -169,6 +169,29 @@ describe("OpenAIAgent text turns", () => {
     await stream.settle();
     expect(agent.getStreamingBlock()).toEqual({ type: "text", text: "par" });
   });
+
+  it("sends one stable prompt_cache_key for every turn and its clones", async () => {
+    const { client, agent } = setup();
+    const first = await startTurn(client, agent);
+    const key = first.params.prompt_cache_key;
+    expect(typeof key).toBe("string");
+    first.streamText("one");
+    await first.settle();
+    first.finishResponse();
+
+    agent.appendUserMessage([userText("again")]);
+    agent.continueConversation();
+    const second = await client.awaitStream();
+    expect(second.params.prompt_cache_key).toBe(key);
+    second.finishResponse();
+
+    const cloned = agent.clone();
+    cloned.appendUserMessage([userText("clone")]);
+    cloned.continueConversation();
+    const third = await client.awaitStream();
+    expect(third.params.prompt_cache_key).toBe(key);
+    third.finishResponse();
+  });
 });
 
 describe("OpenAIAgent tool calls", () => {

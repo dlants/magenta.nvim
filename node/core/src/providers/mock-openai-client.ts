@@ -500,11 +500,12 @@ export function mockResponse(
     top_p: null,
     output_text: "",
     usage: {
-      input_tokens: usage.inputTokens,
+      input_tokens: usage.inputTokens + (usage.cacheHits ?? 0),
       input_tokens_details: { cached_tokens: usage.cacheHits ?? 0 },
       output_tokens: usage.outputTokens,
       output_tokens_details: { reasoning_tokens: 0 },
-      total_tokens: usage.inputTokens + usage.outputTokens,
+      total_tokens:
+        usage.inputTokens + (usage.cacheHits ?? 0) + usage.outputTokens,
     },
   };
 }

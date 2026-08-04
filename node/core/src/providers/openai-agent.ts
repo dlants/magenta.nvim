@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type OpenAI from "openai";
 import { Emitter } from "../emitter.ts";
 import type { Logger } from "../logger.ts";
@@ -106,6 +107,10 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
   private streamingEndPromise: Promise<void> | undefined;
   private streamingEndResolver: (() => void) | undefined;
   private tickInterval: ReturnType<typeof setInterval> | undefined;
+
+  /** Stable for the life of this agent (and its clones) so every turn of the
+   * conversation routes to the same prompt-cache shard. */
+  private promptCacheKey = randomUUID();
 
   constructor(
     private options: AgentOptions,
@@ -444,6 +449,7 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
       this.client,
       this.openaiOptions,
     );
+    cloned.promptCacheKey = this.promptCacheKey;
     cloned.messages = structuredClone(this.messages);
     dropDanglingToolUses(cloned.messages);
     cloned.restamp();
@@ -469,6 +475,7 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
         systemPrompt: this.options.systemPrompt,
         includeWebSearch: this.openaiOptions.includeWebSearch,
         reasoning: this.openaiOptions.reasoning,
+        promptCacheKey: this.promptCacheKey,
       });
 
       try {

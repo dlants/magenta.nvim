@@ -431,6 +431,7 @@ export type CreateStreamParametersOptions = {
   messages: ProviderMessage[];
   tools: ProviderToolSpec[];
   systemPrompt?: string | undefined;
+  promptCacheKey?: string | undefined;
   includeWebSearch?: boolean | undefined;
   reasoning?:
     | {
@@ -463,6 +464,7 @@ export function createStreamParameters({
   systemPrompt,
   includeWebSearch,
   reasoning,
+  promptCacheKey,
 }: CreateStreamParametersOptions): OpenAI.Responses.ResponseCreateParamsStreaming {
   // Tool order is part of the cached prefix and a reorder is a total miss, so
   // sort by name rather than trusting registration order.
@@ -482,6 +484,13 @@ export function createStreamParameters({
     store: false,
     stream: true,
   };
+
+  // Without a key each request is load-balanced to an arbitrary cache shard, so
+  // hits oscillate between the full prefix and just instructions+tools. A key
+  // that is stable for the life of a conversation keeps its turns on one shard.
+  if (promptCacheKey) {
+    params.prompt_cache_key = promptCacheKey;
+  }
 
   if (isReasoningModel(model)) {
     // Without this the reasoning items come back with a null
@@ -705,11 +714,14 @@ export function mapResponseStreamEvent(
 }
 
 export function usageFromResponse(response: OpenAI.Responses.Response): Usage {
+  // openai reports input_tokens as the total prompt size, with cached_tokens as a
+  // subset of it. Anthropic reports these as disjoint buckets, so subtract the
+  // cached portion to keep Usage consistent across providers.
+  const cached = response.usage?.input_tokens_details?.cached_tokens;
   const usage: Usage = {
-    inputTokens: response.usage?.input_tokens ?? 0,
+    inputTokens: (response.usage?.input_tokens ?? 0) - (cached ?? 0),
     outputTokens: response.usage?.output_tokens ?? 0,
   };
-  const cached = response.usage?.input_tokens_details?.cached_tokens;
   if (cached != null) {
     usage.cacheHits = cached;
   }
