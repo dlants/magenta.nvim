@@ -105,7 +105,60 @@ function assistant(agent: Agent): ProviderMessage {
 }
 
 describe("OpenAIAgent text turns", () => {
-  it("streams text, emits didUpdate, and stops with usage", async () => {
+  it("commits each completed item as it arrives, before the turn ends", async () => {
+    const { client, agent } = setup({ includeWebSearch: true });
+    const stream = await startTurn(client, agent);
+    stream.streamWebSearchCall("denis lantsman");
+    await stream.settle();
+    // Without incremental commits the message only materializes at
+    // response.completed, so the search never renders while it is running.
+    expect(assistant(agent).content).toMatchObject([
+      { type: "server_tool_use", name: "web_search" },
+    ]);
+    stream.streamText("an answer");
+    await stream.settle();
+    expect(assistant(agent).content).toHaveLength(2);
+    expect(agent.getState().messages).toHaveLength(2);
+  });
+
+
+  it("exposes completed blocks alongside the in-flight one mid-stream", async () => {
+    const { client, agent } = setup({ includeWebSearch: true });
+    const stream = await startTurn(client, agent);
+    stream.streamReasoningSummary(["let me look that up"]);
+    stream.streamWebSearchCall("denis lantsman");
+    // A message item that has started but not finished: what the view shows as
+    // the streaming block while the rest of the turn is already committed.
+    stream.emitEvent({
+      type: "response.output_item.added",
+      output_index: 9,
+      item: {
+        type: "message",
+        id: "msg_partial",
+        role: "assistant",
+        status: "in_progress",
+        content: [],
+      },
+    });
+    stream.emitEvent({
+      type: "response.output_text.delta",
+      output_index: 9,
+      item_id: "msg_partial",
+      content_index: 0,
+      delta: "Denis is",
+      logprobs: [],
+    });
+    await stream.settle();
+
+    expect(assistant(agent).content).toMatchObject([
+      { type: "thinking", thinking: "let me look that up" },
+      { type: "server_tool_use", name: "web_search" },
+    ]);
+    expect(agent.getState().streamingBlock).toEqual({
+      type: "text",
+      text: "Denis is",
+    });
+  });  it("streams text, emits didUpdate, and stops with usage", async () => {
     const { client, agent } = setup();
     let updates = 0;
     agent.on("didUpdate", () => updates++);

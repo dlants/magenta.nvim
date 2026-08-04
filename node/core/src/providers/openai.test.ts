@@ -21,6 +21,7 @@ import {
   isReasoningModel,
   makeOpenAICompatible,
   mapResponseStreamEvent,
+  type OpenAIProviderOptions,
   OpenAIProvider,
   sanitizeSchemaForOpenAI,
   supportsWebSearch,
@@ -81,6 +82,33 @@ describe("model capability helpers", () => {
     expect(supportsWebSearch("gpt-4o")).toBe(true);
     expect(supportsWebSearch("gpt-5.4")).toBe(true);
     expect(supportsWebSearch("gpt-3.5-turbo")).toBe(false);
+  });
+});
+
+const noopLogger = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  debug: () => {},
+};
+
+describe("web search defaults", () => {
+  beforeEach(() => {
+    process.env.OPENAI_API_KEY = "test-key";
+  });
+
+  const webSearchEnabled = (options: OpenAIProviderOptions) =>
+    new OpenAIProvider(noopLogger, validateInput, options)[
+      "includeWebSearch"
+    ];
+
+  it("is on for the platform API and off for anything else", () => {
+    expect(webSearchEnabled({})).toBe(true);
+    expect(webSearchEnabled({ baseUrl: "http://localhost:1234/v1" })).toBe(
+      false,
+    );
+    expect(webSearchEnabled({ authType: "bedrock" })).toBe(false);
+    expect(webSearchEnabled({ includeWebSearch: false })).toBe(false);
   });
 });
 
@@ -637,12 +665,6 @@ describe("reasoning item coalescing", () => {
 
 describe("forceToolUse", () => {
   const spec = tool("get_files");
-  const noopLogger = {
-    info: () => {},
-    warn: () => {},
-    error: () => {},
-    debug: () => {},
-  };
 
   beforeEach(() => {
     vi.useFakeTimers();

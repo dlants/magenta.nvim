@@ -915,8 +915,13 @@ export class OpenAIProvider implements Provider {
     protected validateInput: ValidateInput,
     options?: OpenAIProviderOptions,
   ) {
-    this.includeWebSearch = options?.includeWebSearch ?? false;
     this.authType = options?.authType ?? "key";
+    // The server-side tool only exists on the OpenAI platform: a custom
+    // baseUrl points at a compatible-but-different API, and the bedrock
+    // mantle endpoint rejects it.
+    this.includeWebSearch =
+      options?.includeWebSearch ??
+      (!options?.baseUrl && this.authType !== "bedrock");
 
     if (options?.authType === "bedrock") {
       const region = options.env?.AWS_REGION || DEFAULT_BEDROCK_MANTLE_REGION;

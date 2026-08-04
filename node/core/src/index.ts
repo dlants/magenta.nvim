@@ -136,7 +136,15 @@ export {
   MockAnthropicClient,
   MockStream,
 } from "./providers/mock-anthropic-client.ts";
+export {
+  MockOpenAIClient,
+  MockResponseStream,
+} from "./providers/mock-openai-client.ts";
 export { OpenAIProvider } from "./providers/openai.ts";
+export {
+  OpenAIAgent,
+  type OpenAIStreamingClient,
+} from "./providers/openai-agent.ts";
 export { getProvider, setMockProvider } from "./providers/provider.ts";
 export type {
   Agent,

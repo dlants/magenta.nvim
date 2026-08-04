@@ -441,6 +441,8 @@ export async function withDriver(
     doNotOverrideLogger?: boolean;
     setupFiles?: (tmpDir: string) => Promise<void>;
     setupHome?: (homeDir: string) => Promise<void>;
+    /** Swap the thread's agent for the OpenAI one, still fed by a mock client. */
+    agentKind?: "anthropic" | "openai";
     setupExtraDirs?: (baseDir: string) => Promise<void>;
   },
   fn: (driver: NvimDriver, dirs: TestDirs) => Promise<void>,
@@ -510,7 +512,7 @@ end
             delete mockServers[serverName as ServerName];
           }
         }
-      });
+      }, driverOptions.agentKind);
     },
     {
       setupFiles: driverOptions.setupFiles,

@@ -1,5 +1,11 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { type ToolRequest, validateInput } from "@magenta/core";
+import {
+  MockOpenAIClient,
+  OpenAIAgent,
+  type OpenAIStreamingClient,
+  type ToolRequest,
+  validateInput,
+} from "@magenta/core";
 import winston from "winston";
 import { Defer, pollUntil } from "../utils/async.ts";
 import type { Result } from "../utils/result.ts";
@@ -64,8 +70,12 @@ type MockForceToolUseRequest = {
 };
 
 export class MockProvider implements Provider {
+  /** Which provider's agent implementation this mock hands to the thread, so
+   * that view-level tests can exercise either streaming pipeline. */
+  constructor(private agentKind: "anthropic" | "openai" = "anthropic") {}
   public forceToolUseRequests: MockForceToolUseRequest[] = [];
   public mockClient = new MockAnthropicClient();
+  public mockOpenAIClient = new MockOpenAIClient();
   private blockCounter = 0;
 
   getNextBlockId(): string {
@@ -363,6 +373,17 @@ Streams: ${this.mockClient.streams.length}`);
   }
 
   createAgent(options: AgentOptions): Agent {
+    if (this.agentKind === "openai") {
+      return new OpenAIAgent(
+        options,
+        this.mockOpenAIClient as unknown as OpenAIStreamingClient,
+        {
+          includeWebSearch: true,
+          logger: winston.createLogger(),
+          validateInput,
+        },
+      );
+    }
     return new AnthropicAgent(
       options,
       this.mockClient as unknown as Anthropic,
@@ -379,8 +400,9 @@ Streams: ${this.mockClient.streams.length}`);
 
 export async function withMockClient(
   fn: (mock: MockProvider) => Promise<void>,
+  agentKind: "anthropic" | "openai" = "anthropic",
 ) {
-  const mock = new MockProvider();
+  const mock = new MockProvider(agentKind);
   // these should match the defaults in the
   setMockProvider(mock);
   try {

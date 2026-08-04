@@ -35,6 +35,10 @@ export class NvimDriver {
     this.sidebar = new SidebarInteraction(nvim, magenta);
     this.mockSandbox = mockSandbox;
   }
+  /** Only meaningful when the driver was started with `agentKind: "openai"`. */
+  get mockOpenAI() {
+    return this.mockAnthropic.mockOpenAIClient;
+  }
 
   private getActiveKey(): ThreadId | "overview" {
     return this.magenta.chat.state.state === "thread-selected"

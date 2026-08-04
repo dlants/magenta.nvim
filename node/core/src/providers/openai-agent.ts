@@ -98,6 +98,9 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
   private openIndex: number | undefined;
   /** Completed items of the current turn, in arrival order. */
   private turnItems: OpenAI.Responses.ResponseOutputItem[] = [];
+  /** Index in `messages` of the assistant message this turn is accumulating
+   * into, once the first item has completed. */
+  private turnMessageIdx: number | undefined;
 
   private stream:
     | (AsyncIterable<ResponseStreamEvent> & { controller: AbortController })
@@ -147,6 +150,7 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
           lastEventTime: new Date(),
         };
         this.blocks.clear();
+        this.turnMessageIdx = undefined;
         this.openIndex = undefined;
         this.turnItems = [];
         this.streamingEndPromise = new Promise<void>((resolve) => {
@@ -160,6 +164,10 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
         this.blocks.clear();
         this.openIndex = undefined;
         this.turnItems = [];
+        if (this.turnMessageIdx !== undefined) {
+          this.messages.splice(this.turnMessageIdx);
+          this.turnMessageIdx = undefined;
+        }
         break;
 
       case "stream-event":
@@ -243,6 +251,14 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
 
       case "response.output_item.done": {
         this.turnItems.push(event.item);
+        // Committing each item as it completes is what makes the turn render
+        // incrementally; otherwise nothing is visible until the stream ends.
+        this.appendTurnContent(
+          convertResponseOutputToProviderContent(
+            this.openaiOptions.validateInput,
+            [event.item],
+          ),
+        );
         this.blocks.delete(event.output_index);
         if (this.openIndex === event.output_index) {
           this.openIndex = undefined;
@@ -255,15 +271,18 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
     }
   }
 
-  /** Fold the turn's completed items (plus any partial block left by an abort)
-   * into an assistant message. */
+  private appendTurnContent(content: ProviderMessageContent[]): void {
+    if (content.length === 0) return;
+    if (this.turnMessageIdx === undefined) {
+      this.messages.push({ role: "assistant", content });
+      this.turnMessageIdx = this.messages.length - 1;
+    } else {
+      this.messages[this.turnMessageIdx].content.push(...content);
+    }
+    this.restamp();
+  }
+  /** Close out the turn, folding in any partial block left by an abort. */
   private commitAssistantMessage(mode: "normal" | "aborted"): void {
-    const content: ProviderMessageContent[] =
-      convertResponseOutputToProviderContent(
-        this.openaiOptions.validateInput,
-        this.turnItems,
-      );
-
     // An aborted stream leaves the open item without its `done` event, so the
     // partial text is only available from the live block.
     const openBlock =
@@ -271,26 +290,24 @@ export class OpenAIAgent extends Emitter<AgentEvents> implements Agent {
         ? undefined
         : this.blocks.get(this.openIndex);
     if (openBlock?.type === "text" && openBlock.text) {
-      content.push({
-        type: "text",
-        text: openBlock.text,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      });
+      this.appendTurnContent([
+        {
+          type: "text",
+          text: openBlock.text,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ]);
     }
-
     this.blocks.clear();
     this.openIndex = undefined;
     this.turnItems = [];
-
-    if (content.length === 0) return;
-
-    this.messages.push({ role: "assistant", content });
+    this.turnMessageIdx = undefined;
     if (mode === "aborted") {
       // Tool calls interrupted mid-stream are never dispatched, so they would
       // be left without a function_call_output.
       dropDanglingToolUses(this.messages);
+      this.restamp();
     }
-    this.restamp();
   }
 
   private attachStopInfo(stopReason: StopReason, usage: Usage | undefined) {
