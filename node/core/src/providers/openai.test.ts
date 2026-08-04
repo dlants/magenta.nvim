@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type OpenAI from "openai";
 import { APIError } from "openai";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ToolName,
   ToolRequestId,
@@ -14,7 +14,6 @@ import { RETRY_DELAYS } from "./anthropic-agent.ts";
 import {
   MockOpenAIClient,
   type MockResponseStream,
-  mockResponse,
 } from "./mock-openai-client.ts";
 import {
   convertResponseOutputToProviderContent,
@@ -645,6 +644,20 @@ describe("forceToolUse", () => {
     debug: () => {},
   };
 
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Let the SDK's stream reader drain and the request's microtasks settle. */
+  async function tick(times = 6): Promise<void> {
+    for (let i = 0; i < times; i++) {
+      await vi.advanceTimersByTimeAsync(0);
+    }
+  }
+
   function setup(): {
     provider: OpenAIProvider;
     client: MockOpenAIClient;
@@ -679,23 +692,24 @@ describe("forceToolUse", () => {
 
   it("parses the function call and reports usage", async () => {
     const { provider, client } = setup();
-    client.nonStreamingQueue.push(
-      mockResponse(
-        [
-          functionCall(
-            "get_files",
-            JSON.stringify({ files: [{ filePath: "a" }] }),
-          ),
-        ],
-        {
-          inputTokens: 10,
-          outputTokens: 2,
-          cacheHits: 5,
-        },
-      ),
+    const request = run(provider);
+    const stream = await client.awaitStreamAt(0);
+    stream.finishResponseWithOutput(
+      [
+        functionCall(
+          "get_files",
+          JSON.stringify({ files: [{ filePath: "a" }] }),
+        ),
+      ],
+      { inputTokens: 10, outputTokens: 2, cacheHits: 5 },
     );
-    const result = await run(provider).promise;
-    expect(client.nonStreamingRequests[0].stream).toBe(false);
+    const result = await request.promise;
+
+    expect(stream.params.stream).toBe(true);
+    expect(stream.params.tool_choice).toEqual({
+      type: "function",
+      name: "get_files",
+    });
     expect(result.stopReason).toBe("tool_use");
     expect(result.usage).toEqual({
       inputTokens: 10,
@@ -707,8 +721,9 @@ describe("forceToolUse", () => {
 
   it("errors when the response has no function call", async () => {
     const { provider, client } = setup();
-    client.nonStreamingQueue.push(mockResponse([]));
-    const result = await run(provider).promise;
+    const request = run(provider);
+    (await client.awaitStreamAt(0)).finishResponseWithOutput([]);
+    const result = await request.promise;
     expect(result.toolRequest.status).toBe("error");
     expect(result.toolRequest).toMatchObject({
       error: expect.stringContaining("get_files") as unknown as string,
@@ -717,10 +732,11 @@ describe("forceToolUse", () => {
 
   it("errors when the call names a different tool", async () => {
     const { provider, client } = setup();
-    client.nonStreamingQueue.push(
-      mockResponse([functionCall("bash_command", "{}")]),
-    );
-    const result = await run(provider).promise;
+    const request = run(provider);
+    (await client.awaitStreamAt(0)).finishResponseWithOutput([
+      functionCall("bash_command", "{}"),
+    ]);
+    const result = await request.promise;
     expect(result.toolRequest).toMatchObject({
       status: "error",
       error: expect.stringContaining("expected tool name") as unknown as string,
@@ -729,10 +745,11 @@ describe("forceToolUse", () => {
 
   it("errors on malformed argument JSON", async () => {
     const { provider, client } = setup();
-    client.nonStreamingQueue.push(
-      mockResponse([functionCall("get_files", "{not json")]),
-    );
-    const result = await run(provider).promise;
+    const request = run(provider);
+    (await client.awaitStreamAt(0)).finishResponseWithOutput([
+      functionCall("get_files", "{not json"),
+    ]);
+    const result = await request.promise;
     expect(result.toolRequest).toMatchObject({
       status: "error",
       rawRequest: "{not json",
@@ -740,53 +757,46 @@ describe("forceToolUse", () => {
   });
 
   it("retries a retryable error and succeeds", async () => {
-    vi.useFakeTimers();
-    try {
-      const { provider, client } = setup();
-      client.nonStreamingQueue.push(
-        new APIError(429, undefined, "rate limited", undefined),
-        mockResponse([
-          functionCall(
-            "get_files",
-            JSON.stringify({ files: [{ filePath: "a" }] }),
-          ),
-        ]),
-      );
-      const request = run(provider);
-      await vi.advanceTimersByTimeAsync(RETRY_DELAYS[0] + 10);
-      const result = await request.promise;
-      expect(result.stopReason).toBe("tool_use");
-      expect(client.nonStreamingRequests).toHaveLength(2);
-    } finally {
-      vi.useRealTimers();
-    }
+    const { provider, client } = setup();
+    const request = run(provider);
+    const first = await client.awaitStreamAt(0);
+    first.respondWithError(
+      new APIError(429, undefined, "rate limited", undefined),
+    );
+    await tick();
+
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS[0] + 10);
+    const retry = await client.awaitStreamAt(1);
+    retry.finishResponseWithOutput([
+      functionCall("get_files", JSON.stringify({ files: [{ filePath: "a" }] })),
+    ]);
+    const result = await request.promise;
+    expect(result.stopReason).toBe("tool_use");
+    expect(client.streams).toHaveLength(2);
   });
 
   it("does not retry a non-retryable error", async () => {
     const { provider, client } = setup();
-    client.nonStreamingQueue.push(
+    const request = run(provider);
+    const settled = expect(request.promise).rejects.toThrow("bad request");
+    (await client.awaitStreamAt(0)).respondWithError(
       new APIError(400, undefined, "bad request", undefined),
     );
-    await expect(run(provider).promise).rejects.toThrow("bad request");
-    expect(client.nonStreamingRequests).toHaveLength(1);
+    await settled;
+    expect(client.streams).toHaveLength(1);
   });
 
   it("surfaces the original error when aborted during the retry delay", async () => {
-    vi.useFakeTimers();
-    try {
-      const { provider, client } = setup();
-      client.nonStreamingQueue.push(
-        new APIError(429, undefined, "rate limited", undefined),
-      );
-      const request = run(provider);
-      const settled = expect(request.promise).rejects.toThrow("rate limited");
-      await vi.advanceTimersByTimeAsync(1);
-      request.abort();
-      await settled;
-      expect(client.nonStreamingRequests).toHaveLength(1);
-    } finally {
-      vi.useRealTimers();
-    }
+    const { provider, client } = setup();
+    const request = run(provider);
+    const settled = expect(request.promise).rejects.toThrow("rate limited");
+    (await client.awaitStreamAt(0)).respondWithError(
+      new APIError(429, undefined, "rate limited", undefined),
+    );
+    await tick();
+    request.abort();
+    await settled;
+    expect(client.streams).toHaveLength(1);
   });
 });
 

@@ -164,8 +164,10 @@ How it works:~
 
 Model support is an entitlement matter and changes over time. Codex-family
 models (`*-codex`) and plain `gpt-5` / `gpt-5.1` are rejected for
-ChatGPT-account auth; `gpt-5.4`, `gpt-5.4-mini` and `gpt-5.5` work on a Plus
-plan. Set `model` explicitly on the profile.
+ChatGPT-account auth; as of Aug 2026 `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.5`,
+`gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna` work on a Plus plan. Set
+both `model` and `fastModel` explicitly on the profile, since the default
+`fastModel` may not be one the codex backend serves.
 
 ==============================================================================
 DEPRECATED PROVIDERS                            *magenta-deprecated-providers*

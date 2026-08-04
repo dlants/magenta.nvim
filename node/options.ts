@@ -34,8 +34,8 @@ const DEFAULT_MODELS: Record<
     thinkingModel: "claude-opus-5",
   },
   openai: {
-    model: "gpt-4.1",
-    fastModel: "gpt-4o-mini",
+    model: "gpt-5.4",
+    fastModel: "gpt-5.4-mini",
   },
   bedrock: {
     model: "anthropic.claude-3-5-sonnet-20241022-v2:0",

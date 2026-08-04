@@ -385,6 +385,26 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
     return outputIndex;
   }
 
+  /** Terminate with a `response.completed` carrying arbitrary output items,
+   * for shapes the streaming helpers cannot express (e.g. malformed argument
+   * JSON on a function_call). */
+  finishResponseWithOutput(
+    output: ResponseOutputItem[],
+    usage: Usage = { inputTokens: 1000, outputTokens: 500 },
+  ): void {
+    this._resolved = true;
+    // The codex backend's terminal event can carry an empty `output`, so items
+    // are only reliably delivered as output_item.done. Emit both.
+    output.forEach((item, output_index) => {
+      this.pushEvent({ type: "response.output_item.done", output_index, item });
+    });
+    this.pushEvent({
+      type: "response.completed",
+      response: mockResponse(output, usage),
+    });
+    this.close();
+  }
+
   finishResponse(
     _stopReason: StopReason = "end_turn",
     usage: Usage = { inputTokens: 1000, outputTokens: 500 },
@@ -457,7 +477,7 @@ function validateToolCallPairing(input: OpenAI.Responses.ResponseInput): void {
   }
 }
 
-/** A minimal completed non-streaming Response, for the `forceToolUse` path. */
+/** A minimal completed Response, as carried by terminal stream events. */
 export function mockResponse(
   output: ResponseOutputItem[],
   usage: Usage = { inputTokens: 100, outputTokens: 10 },
@@ -489,33 +509,14 @@ export function mockResponse(
   };
 }
 
-/** Mirrors the SDK's overloaded `responses.create`: streaming params yield a
- * stream, non-streaming params a completed Response. */
+/** The codex backend rejects `stream: false`, so every request streams. */
 class MockResponses {
   constructor(private client: MockOpenAIClient) {}
 
   create(
     params: OpenAI.Responses.ResponseCreateParamsStreaming,
-  ): Promise<MockResponseStream>;
-  create(
-    params: OpenAI.Responses.ResponseCreateParamsNonStreaming,
-  ): Promise<OpenAI.Responses.Response>;
-  create(
-    params: OpenAI.Responses.ResponseCreateParams,
-  ): Promise<MockResponseStream | OpenAI.Responses.Response> {
+  ): Promise<MockResponseStream> {
     validateToolCallPairing((params.input ?? []) as ResponseInputItem[]);
-    if (params.stream !== true) {
-      this.client.nonStreamingRequests.push(params);
-      const next = this.client.nonStreamingQueue.shift();
-      if (!next) {
-        return Promise.reject(
-          new Error("MockOpenAIClient: nonStreamingQueue is empty"),
-        );
-      }
-      return next instanceof Error
-        ? Promise.reject(next)
-        : Promise.resolve(next);
-    }
     const stream = new MockResponseStream(params);
     this.client.streams.push(stream);
     return Promise.resolve(stream);
@@ -524,11 +525,6 @@ class MockResponses {
 
 export class MockOpenAIClient {
   public streams: MockResponseStream[] = [];
-  /** Requests made against the non-streaming endpoint (`forceToolUse`). */
-  public nonStreamingRequests: OpenAI.Responses.ResponseCreateParamsNonStreaming[] =
-    [];
-  /** Consumed in order by non-streaming `create` calls; an Error is thrown. */
-  public nonStreamingQueue: (OpenAI.Responses.Response | Error)[] = [];
 
   responses = new MockResponses(this);
 

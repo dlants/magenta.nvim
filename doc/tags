@@ -33,7 +33,6 @@ magenta-agent-worktree	magenta-subagents.txt	/*magenta-agent-worktree*
 magenta-anthropic	magenta-providers.txt	/*magenta-anthropic*
 magenta-attachments	magenta-commands-keymaps.txt	/*magenta-attachments*
 magenta-available-tools	magenta-tools.txt	/*magenta-available-tools*
-magenta-bedrock	magenta-providers.txt	/*magenta-bedrock*
 magenta-bellOnNotify	magenta-config.txt	/*magenta-bellOnNotify*
 magenta-builtin-agents	magenta-subagents.txt	/*magenta-builtin-agents*
 magenta-chimeVolume	magenta-config.txt	/*magenta-chimeVolume*
@@ -85,6 +84,7 @@ magenta-maxConcurrentSubagents	magenta-config.txt	/*magenta-maxConcurrentSubagen
 magenta-mcp	magenta-tools.txt	/*magenta-mcp*
 magenta-ollama	magenta-providers.txt	/*magenta-ollama*
 magenta-openai	magenta-providers.txt	/*magenta-openai*
+magenta-openai-chatgpt	magenta-providers.txt	/*magenta-openai-chatgpt*
 magenta-options	magenta-config.txt	/*magenta-options*
 magenta-permissions	magenta-permissions.txt	/*magenta-permissions*
 magenta-permissions-contents	magenta-permissions.txt	/*magenta-permissions-contents*

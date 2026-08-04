@@ -184,17 +184,28 @@ describe("OpenAI provider wiring", () => {
       vi.restoreAllMocks();
     });
 
-    const mockToolResponse = () =>
-      mockResponse([
-        {
-          type: "function_call",
-          id: "fc_1",
-          call_id: "call_1",
-          name: "thread_title",
-          arguments: JSON.stringify({ title: "hi" }),
-          status: "completed",
-        },
-      ]);
+    /** forceToolUse streams, so a canned success must be an SSE body whose
+     * terminal event carries the completed response. */
+    const sseToolResponse = () => {
+      const event = {
+        type: "response.completed",
+        sequence_number: 0,
+        response: mockResponse([
+          {
+            type: "function_call",
+            id: "fc_1",
+            call_id: "call_1",
+            name: "thread_title",
+            arguments: JSON.stringify({ title: "hi" }),
+            status: "completed",
+          },
+        ]),
+      };
+      return new Response(`data: ${JSON.stringify(event)}\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    };
 
     const titleRequest = (provider: OpenAIProvider) =>
       provider.forceToolUse({
@@ -234,22 +245,16 @@ describe("OpenAI provider wiring", () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
 
       const [, secondInit] = fetchMock.mock.calls[1];
-      const headers = (secondInit as RequestInit).headers as Record<
-        string,
-        string
-      >;
-      expect(headers.authorization).toBe("Bearer tok-2");
-      expect(headers["chatgpt-account-id"]).toBe("acct");
+      const headers = new Headers((secondInit as RequestInit).headers);
+      expect(headers.get("authorization")).toBe("Bearer tok-2");
+      expect(headers.get("chatgpt-account-id")).toBe("acct");
     });
 
     it("sends credentials on the first request and does not refresh on success", async () => {
       const auth = stubAuth();
-      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify(mockToolResponse()), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(sseToolResponse());
       const provider = new OpenAIProvider(noopLogger, validateInput, {
         authType: "chatgpt",
         auth,
@@ -260,19 +265,14 @@ describe("OpenAI provider wiring", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(auth.refreshCalls).toBe(0);
       const [, init] = fetchMock.mock.calls[0];
-      const headers = (init as RequestInit).headers as Record<string, string>;
-      expect(headers.authorization).toBe("Bearer tok-1");
-      expect(headers["chatgpt-account-id"]).toBe("acct");
+      const headers = new Headers((init as RequestInit).headers);
+      expect(headers.get("authorization")).toBe("Bearer tok-1");
+      expect(headers.get("chatgpt-account-id")).toBe("acct");
     });
 
     it("runs codex login through the auth UI when not authenticated", async () => {
       const auth = stubAuth(false);
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify(mockToolResponse()), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(sseToolResponse());
       const progress: string[] = [];
       const authUI = {
         showOAuthFlow: () => Promise.resolve(""),

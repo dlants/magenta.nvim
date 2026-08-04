@@ -845,22 +845,33 @@ export function isRetryableOpenAIError(error: Error): boolean {
 /** ChatGPT-subscription tokens are only accepted by the codex backend. */
 export const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
 
-/** Every codex-family model is rejected for ChatGPT-account auth, and so are
- * plain `gpt-5` / `gpt-5.1`. Caught up front so the user gets an actionable
- * message instead of an opaque 400. */
-const CHATGPT_REJECTED_MODELS = /(-codex|^gpt-5$|^gpt-5\.1$)/i;
+/** The codex backend only serves a subset of the gpt-5.x line: every
+ * codex-family model is rejected for ChatGPT-account auth, as are plain
+ * `gpt-5` through `gpt-5.3` and anything outside the gpt-5.x line (`gpt-4o` and
+ * friends). Caught up front so the user gets an actionable message instead of
+ * an opaque 400. Entitlements shift, so this is a blocklist rather than a
+ * whitelist -- a newer gpt-5.x is assumed to work until the backend says
+ * otherwise. */
+function isChatGPTRejectedModel(model: string): boolean {
+  if (/-codex/i.test(model)) return true;
+  if (/^gpt-5(\.[0-3])?$/i.test(model)) return true;
+  return !/^gpt-5\.\d/i.test(model);
+}
 const CHATGPT_KNOWN_GOOD_MODELS = [
   "gpt-5.4",
   "gpt-5.4-mini",
   "gpt-5.5",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
 ] as const;
 
 export function assertChatGPTModelSupported(model: string): void {
-  if (CHATGPT_REJECTED_MODELS.test(model)) {
+  if (isChatGPTRejectedModel(model)) {
     throw new Error(
       `Model "${model}" is not available with ChatGPT subscription auth. ` +
         `Known-working models: ${CHATGPT_KNOWN_GOOD_MODELS.join(", ")}. ` +
-        `Set \`model\` on the profile to one of these.`,
+        `Set \`model\` / \`fastModel\` on the profile to one of these.`,
     );
   }
 }
@@ -912,15 +923,16 @@ export class OpenAIProvider implements Provider {
       input: string | URL | Request,
       init: RequestInit | undefined,
       credentials: CodexCredentials,
-    ) =>
-      fetch(input, {
-        ...init,
-        headers: {
-          ...(init?.headers || {}),
-          authorization: `Bearer ${credentials.accessToken}`,
-          "chatgpt-account-id": credentials.accountId,
-        },
-      });
+    ) => {
+      // init.headers is a Headers instance, so it must be copied through the
+      // Headers constructor -- spreading it yields an empty object and drops
+      // the SDK's content-type/accept, which the codex backend rejects with
+      // "Unsupported content type".
+      const headers = new Headers(init?.headers);
+      headers.set("authorization", `Bearer ${credentials.accessToken}`);
+      headers.set("chatgpt-account-id", credentials.accountId);
+      return fetch(input, { ...init, headers });
+    };
 
     return async (
       input: string | URL | Request,
@@ -1001,9 +1013,11 @@ export class OpenAIProvider implements Provider {
       systemPrompt,
     });
 
-    const requestParams: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
+    // The codex backend rejects stream: false outright ("Stream must be set to
+    // true"), so even a one-shot forced tool call has to stream and be
+    // reassembled from the terminal response.completed event.
+    const requestParams: OpenAI.Responses.ResponseCreateParamsStreaming = {
       ...streamParams,
-      stream: false,
       tool_choice: { type: "function", name: spec.name },
     };
 
@@ -1012,24 +1026,44 @@ export class OpenAIProvider implements Provider {
       let attempt = 0;
       while (true) {
         try {
-          const response = await this.client.responses.create(requestParams, {
+          const stream = await this.client.responses.create(requestParams, {
             signal: abortController.signal,
           });
+          // The codex backend's terminal response.completed can carry an empty
+          // `output`, so the items are collected from output_item.done and the
+          // terminal event is used only for usage and failure detection.
+          const output: OpenAI.Responses.ResponseOutputItem[] = [];
+          let response: OpenAI.Responses.Response | undefined;
+          for await (const event of stream) {
+            if (event.type === "response.output_item.done") {
+              output.push(event.item);
+            } else if (
+              event.type === "response.completed" ||
+              event.type === "response.incomplete"
+            ) {
+              response = event.response;
+            } else if (event.type === "response.failed") {
+              throw new Error(
+                event.response.error?.message ?? "response.failed",
+              );
+            }
+          }
+          if (!response) {
+            throw new Error("Stream ended without a terminal response event");
+          }
 
           if (aborted) {
             throw new Error("Aborted");
           }
 
-          const call = response.output.find(
-            (item) => item.type === "function_call",
-          );
+          const call = output.find((item) => item.type === "function_call");
 
           let toolRequest: Result<ToolRequest, { rawRequest: unknown }>;
           if (!call) {
             toolRequest = {
               status: "error",
               error: `Expected a function_call response for '${spec.name}'`,
-              rawRequest: response.output,
+              rawRequest: output,
             };
           } else if (call.name !== spec.name) {
             toolRequest = {
