@@ -169,6 +169,41 @@ ChatGPT-account auth; as of Aug 2026 `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.5`,
 both `model` and `fastModel` explicitly on the profile, since the default
 `fastModel` may not be one the codex backend serves.
 
+                                                     *magenta-openai-bedrock*
+BEDROCK (MANTLE) AUTHENTICATION ~
+
+OpenAI's frontier models are also served by Amazon Bedrock through its
+`bedrock-mantle` endpoint, which speaks the Responses API. Opt in with
+`authType = "bedrock"`:
+>lua
+    {
+      name = "gpt-5.6-terra(bedrock)",
+      provider = "openai",
+      model = "openai.gpt-5.6-terra",
+      fastModel = "openai.gpt-5.6-luna",
+      authType = "bedrock",
+      env = {
+        AWS_PROFILE = "my-profile",
+        AWS_REGION = "us-west-2"
+      }
+    }
+<
+How it works:~
+  - Requests are signed with AWS SigV4 using the standard credential chain,
+    so the credentials cached by `aws sso login` work directly and no
+    Bedrock API key is needed.
+  - `env.AWS_PROFILE` selects the profile; `env.AWS_REGION` defaults to
+    `us-west-2`.
+  - The base URL defaults to
+    `https://bedrock-mantle.<region>.api.aws/openai/v1`. Note the `openai/`
+    prefix: the frontier models live on that path, while the openly-licensed
+    models (`openai.gpt-oss-*`) are served from `/v1` instead. Override with
+    `baseUrl` if you need the latter.
+  - Model ids are Bedrock ids, e.g. `openai.gpt-5.4`, `openai.gpt-5.6-terra`.
+  - The calling principal needs `bedrock-mantle:CreateInference`; the
+    `bedrock:InvokeModel` permissions used by the |magenta-bedrock| provider
+    are not sufficient, since mantle is a separate service namespace.
+
 ==============================================================================
 DEPRECATED PROVIDERS                            *magenta-deprecated-providers*
                                                             *magenta-ollama*

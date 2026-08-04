@@ -84,6 +84,7 @@ magenta-maxConcurrentSubagents	magenta-config.txt	/*magenta-maxConcurrentSubagen
 magenta-mcp	magenta-tools.txt	/*magenta-mcp*
 magenta-ollama	magenta-providers.txt	/*magenta-ollama*
 magenta-openai	magenta-providers.txt	/*magenta-openai*
+magenta-openai-bedrock	magenta-providers.txt	/*magenta-openai-bedrock*
 magenta-openai-chatgpt	magenta-providers.txt	/*magenta-openai-chatgpt*
 magenta-options	magenta-config.txt	/*magenta-options*
 magenta-permissions	magenta-permissions.txt	/*magenta-permissions*

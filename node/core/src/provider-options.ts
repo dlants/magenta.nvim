@@ -26,7 +26,7 @@ export type ProviderProfile = {
   thinkingModel: string;
   baseUrl?: string;
   apiKeyEnvVar?: string;
-  authType?: "key" | "max" | "keychain" | "chatgpt";
+  authType?: "key" | "max" | "keychain" | "chatgpt" | "bedrock";
   promptCaching?: boolean;
   env?: Record<string, string>;
   tokenRefreshCommand?: string;

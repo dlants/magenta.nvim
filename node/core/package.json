@@ -5,16 +5,19 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "dependencies": {
+    "@aws-crypto/sha256-js": "^4.0.0",
+    "@aws-sdk/credential-providers": "^3.1043.0",
+    "@modelcontextprotocol/sdk": "^1.15.1",
+    "@smithy/signature-v4": "^3.1.2",
+    "diff": "^8.0.3",
     "file-type": "^21.0.0",
     "mime-types": "^3.0.1",
-    "pdf-lib": "^1.17.1",
-    "@modelcontextprotocol/sdk": "^1.15.1",
     "openai": "^5.12.1",
-    "zod": "^3.25.76",
-    "diff": "^8.0.3"
+    "pdf-lib": "^1.17.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/mime-types": "^3.0.1",
-    "@types/diff": "^8.0.0"
+    "@types/diff": "^8.0.0",
+    "@types/mime-types": "^3.0.1"
   }
 }

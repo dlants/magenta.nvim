@@ -7,7 +7,7 @@ import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { AnthropicProvider } from "./anthropic.ts";
 import { BedrockProvider } from "./bedrock.ts";
 import { CodexAuth } from "./codex-auth.ts";
-import { OpenAIProvider } from "./openai.ts";
+import { OpenAIProvider, type OpenAIProviderOptions } from "./openai.ts";
 import type { Provider } from "./provider-types.ts";
 
 // import { OllamaProvider } from "./ollama.ts";
@@ -20,7 +20,9 @@ export * from "./provider-types.ts";
 export function anthropicAuthType(
   authType: ProviderProfile["authType"],
 ): "key" | "max" | "keychain" | undefined {
-  return authType === "chatgpt" ? undefined : authType;
+  return authType === "chatgpt" || authType === "bedrock"
+    ? undefined
+    : authType;
 }
 
 const clients: { [key: string]: Provider } = {};
@@ -63,17 +65,7 @@ export function getProvider(
         provider = new OpenAIProvider(
           logger,
           validateInput,
-          profile.authType === "chatgpt"
-            ? {
-                baseUrl: profile.baseUrl,
-                authType: "chatgpt",
-                auth: new CodexAuth(),
-                authUI,
-              }
-            : {
-                baseUrl: profile.baseUrl,
-                apiKeyEnvVar: profile.apiKeyEnvVar,
-              },
+          openAIProviderOptions(profile, authUI),
         );
         break;
       }
@@ -90,6 +82,34 @@ export function getProvider(
   }
 
   return clients[clientKey];
+}
+
+/** ChatGPT-subscription auth and Bedrock (mantle) auth are both opt-in; the
+ * default remains a platform API key. */
+function openAIProviderOptions(
+  profile: ProviderProfile,
+  authUI: AuthUI | undefined,
+): OpenAIProviderOptions {
+  switch (profile.authType) {
+    case "chatgpt":
+      return {
+        baseUrl: profile.baseUrl,
+        authType: "chatgpt",
+        auth: new CodexAuth(),
+        authUI,
+      };
+    case "bedrock":
+      return {
+        baseUrl: profile.baseUrl,
+        authType: "bedrock",
+        env: profile.env,
+      };
+    default:
+      return {
+        baseUrl: profile.baseUrl,
+        apiKeyEnvVar: profile.apiKeyEnvVar,
+      };
+  }
 }
 
 let mockProvider: Provider | undefined;

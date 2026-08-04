@@ -20,6 +20,11 @@ import type {
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Result } from "../utils/result.ts";
 import { getRetryDelay, MAX_RETRY_DURATION } from "./anthropic-agent.ts";
+import {
+  bedrockMantleBaseUrl,
+  createSigV4Fetch,
+  DEFAULT_BEDROCK_MANTLE_REGION,
+} from "./bedrock-sigv4.ts";
 import type { CodexCredentials } from "./codex-auth.ts";
 import { OpenAIAgent } from "./openai-agent.ts";
 import {
@@ -884,13 +889,14 @@ export type OpenAIProviderOptions = {
 } & (
   | { authType?: "key" | undefined; apiKeyEnvVar?: string | undefined }
   | { authType: "chatgpt"; auth: OpenAIAuth; authUI?: AuthUI | undefined }
+  | { authType: "bedrock"; env?: Record<string, string> | undefined }
 );
 
 export class OpenAIProvider implements Provider {
   /** Public so tests can substitute a mock client, as the Anthropic tests do. */
   public client: OpenAI;
   private includeWebSearch: boolean;
-  private authType: "key" | "chatgpt";
+  private authType: "key" | "chatgpt" | "bedrock";
 
   constructor(
     protected logger: Logger,
@@ -899,6 +905,18 @@ export class OpenAIProvider implements Provider {
   ) {
     this.includeWebSearch = options?.includeWebSearch ?? false;
     this.authType = options?.authType ?? "key";
+
+    if (options?.authType === "bedrock") {
+      const region = options.env?.AWS_REGION || DEFAULT_BEDROCK_MANTLE_REGION;
+      this.client = new OpenAI({
+        // SigV4 signing supplies the credentials; the SDK still requires an
+        // api key to be set.
+        apiKey: "dummy-key-for-bedrock-auth",
+        baseURL: options.baseUrl || bedrockMantleBaseUrl(region),
+        fetch: createSigV4Fetch(region, options.env?.AWS_PROFILE),
+      });
+      return;
+    }
 
     if (options?.authType === "chatgpt") {
       this.client = new OpenAI({

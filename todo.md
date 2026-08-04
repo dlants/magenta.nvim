@@ -1,5 +1,19 @@
 # top of mind
 
+- openai double-counting tokens: Stopped (end_turn) [input: 72096, output: 69, cache hits: 70144]
+- openai cannot use server-side search
+
+- incorrect openai cache usage? magenta thread id : 019fce07f56a776cba9639c85a0d44a8
+
+```
+👀 read 4 files
+✅ `packages/iso/types.ts` (lines 1-120) (~182 tok)
+✅ `packages/backend/events/queries/get-event-by-attendance-slug.sql` (~158 tok)
+✅ `packages/backend/events/queries/list-events-by-group.sql` (~89 tok)
+✅ `packages/backend/events/queries/get-event-calendars.sql` (~154 tok)
+[input: 75682, output: 355, cache hits: 9728]
+```
+
 - look into hooking up progressive tool discovery / tool search
 - script improvements
   - think about enriching the script API. Iterate on a thread? Query a thread? Human-in-the-loop?

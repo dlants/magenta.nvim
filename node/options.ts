@@ -63,8 +63,9 @@ export type Profile = {
   thinkingModel: string;
   baseUrl?: string;
   apiKeyEnvVar?: string;
-  // "chatgpt" is openai-only: ChatGPT subscription auth via the codex CLI
-  authType?: "key" | "max" | "keychain" | "chatgpt";
+  // "chatgpt" and "bedrock" are openai-only: ChatGPT subscription auth via the
+  // codex CLI, and SigV4-signed access to the bedrock-mantle endpoint
+  authType?: "key" | "max" | "keychain" | "chatgpt" | "bedrock";
   promptCaching?: boolean; // Primarily used by Bedrock provider
   env?: Record<string, string>; // Environment variables to set before provider initialization (e.g., AWS_PROFILE, AWS_REGION)
   tokenRefreshCommand?: string; // Shell command to run when an auth error occurs (e.g., "aws sso login --profile myprofile"); currently Bedrock-only
@@ -330,7 +331,7 @@ function parseProfiles(
           provider === "anthropic"
             ? ["key", "max", "keychain"]
             : provider === "openai"
-              ? ["key", "chatgpt"]
+              ? ["key", "chatgpt", "bedrock"]
               : ["key"];
         if (typeof p.authType === "string" && legal.includes(p.authType)) {
           out.authType = p.authType as NonNullable<Profile["authType"]>;
