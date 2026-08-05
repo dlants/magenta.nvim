@@ -151,6 +151,23 @@ describe("node/chat/archive-view.test.ts", () => {
       const anchorTitle = chat.state.titles[ordered[1]];
       if (anchorTitle?.status !== "titled") throw new Error("no title");
       const expectedDeleted = ordered.slice(1, 4);
+      const unselectedId = ordered[0];
+      const registeredDetails = new Map<
+        ThreadId,
+        NonNullable<
+          ReturnType<
+            typeof driver.magenta.bufferManager.getArchivedThreadBuffers
+          >
+        >
+      >();
+      for (const id of [...expectedDeleted, unselectedId]) {
+        await driver.magenta.selectArchivedThread(id);
+        registeredDetails.set(
+          id,
+          driver.magenta.bufferManager.getArchivedThreadBuffers(id)!,
+        );
+        await driver.magenta.command("threads-navigate-up");
+      }
 
       // Visual selection over 3 rows, anchored at the 2nd row.
       await driver.pressOnDisplayMessageWithSelection(anchorTitle.title, "d", [
@@ -175,6 +192,22 @@ describe("node/chat/archive-view.test.ts", () => {
       // Remaining threads still present.
       expect(chat.state.threadIds).toContain(ordered[0]);
       expect(chat.state.threadIds).toContain(ordered[4]);
+
+      for (const id of expectedDeleted) {
+        const detail = registeredDetails.get(id)!;
+        expect(
+          driver.magenta.bufferManager.getArchivedThreadBuffers(id),
+        ).toBeUndefined();
+        expect(await detail.displayBuffer.isValid()).toBe(false);
+      }
+      const unselectedDetail = registeredDetails.get(unselectedId)!;
+      const retainedUnselected =
+        driver.magenta.bufferManager.getArchivedThreadBuffers(unselectedId);
+      expect(retainedUnselected).toBeDefined();
+      expect(retainedUnselected!.displayBuffer.id).toBe(
+        unselectedDetail.displayBuffer.id,
+      );
+      expect(await unselectedDetail.displayBuffer.isValid()).toBe(true);
 
       for (const id of expectedDeleted) {
         await pollUntil(

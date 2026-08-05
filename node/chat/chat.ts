@@ -211,7 +211,7 @@ export class Chat implements ThreadManager {
       lsp: Lsp;
       sandbox: Sandbox;
       removeThreadBuffers?: (ids: ThreadId[]) => void;
-      removeArchivedThreadBuffers?: (ids: ThreadId[]) => void;
+      removeArchivedThreadBuffers: (ids: ThreadId[]) => void;
     },
   ) {
     this.threadWrappers = {};
@@ -518,7 +518,7 @@ export class Chat implements ThreadManager {
           (id) => id !== msg.id,
         );
         delete this.state.titles[msg.id];
-        this.context.removeArchivedThreadBuffers?.([msg.id]);
+        this.context.removeArchivedThreadBuffers([msg.id]);
         void deleteArchivedThread(msg.id).catch((err: Error) => {
           this.context.nvim.logger.error(
             `Failed to delete archived thread ${msg.id}: ${err.message}`,
@@ -533,7 +533,7 @@ export class Chat implements ThreadManager {
         this.state.threadIds = this.state.threadIds.filter(
           (id) => !idSet.has(id),
         );
-        this.context.removeArchivedThreadBuffers?.(msg.ids);
+        this.context.removeArchivedThreadBuffers(msg.ids);
         for (const id of msg.ids) {
           delete this.state.titles[id];
           void deleteArchivedThread(id).catch((err: Error) => {

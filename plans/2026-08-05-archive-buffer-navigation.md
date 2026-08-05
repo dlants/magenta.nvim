@@ -104,6 +104,11 @@ Decisions and stage boundaries:
 - Programmatic archive selection refreshes before switching the sidebar buffers; native entry into a different registered archive-detail identity refreshes during `BufEnter`. A same-identity display `BufEnter` is the notification caused by the already-refreshed programmatic switch, so it is not redundantly re-read.
 - Archive deletion asks `BufferManager` to unregister and wipe any cached detail buffer immediately, independently of the best-effort asynchronous archive-directory deletion.
 
+### Stage 2 review follow-up (2026-08-05)
+
+- [x] Made archive-detail buffer removal a required `Chat` dependency so both single and batch archive deletion must unregister managed detail buffers.
+- [x] Strengthened visual batch-deletion coverage by registering all selected detail buffers plus an unselected detail, then verifying every selected buffer is unregistered and invalid while the unselected buffer remains registered and valid.
+
 ## Header links and raw-file opening
 
 - Goal: Add `[Archive]` to every initialized live-thread header and add the absolute conversation log path to each plain archive-detail header. Bind the former by dispatching the root archive-opening action through `thread.context.dispatch`, and manually map the latter inside that buffer.
