@@ -20,6 +20,50 @@ export class ExecutionError extends Error {
   }
 }
 
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function heredocPatternRegex(text: string): RegExp {
+  const lines = text.split("\n").map((line) => {
+    const matchesPrefix = line.endsWith("...");
+    const literal = matchesPrefix ? line.slice(0, -3) : line;
+    return `${escapeRegex(literal)}${matchesPrefix ? "[^\\n]*" : ""}`;
+  });
+  return new RegExp(`^${lines.join("\\n")}$`, "gm");
+}
+
+function hasHeredocPrefixMarker(text: string): boolean {
+  return text.split("\n").some((line) => line.endsWith("..."));
+}
+
+function findHeredocMatches(
+  patternText: string,
+  text: string,
+  doc: Document,
+  baseOffset: number,
+): Range[] {
+  const results: Range[] = [];
+  const re = heredocPatternRegex(patternText);
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    const absStart = baseOffset + match.index;
+    const absEnd = absStart + match[0].length;
+    const atLineStart = absStart === 0 || doc.content[absStart - 1] === "\n";
+    const atLineEnd =
+      absEnd === doc.content.length || doc.content[absEnd] === "\n";
+    if (atLineStart && atLineEnd) {
+      const end =
+        absEnd < doc.content.length && doc.content[absEnd] === "\n"
+          ? absEnd + 1
+          : absEnd;
+      results.push({ start: absStart, end, isLineSelection: true });
+    }
+    if (match[0].length === 0) re.lastIndex++;
+  }
+  return results;
+}
+
 function formatPattern(pattern: Pattern): string {
   switch (pattern.type) {
     case "regex":
@@ -197,23 +241,18 @@ export class Executor {
             `Empty literal pattern will match everywhere. Use a non-empty pattern for select/narrow operations.`,
           );
         }
-        const results: Range[] = [];
-        let idx = 0;
-        while ((idx = text.indexOf(pattern.text, idx)) !== -1) {
-          const absStart = baseOffset + idx;
-          const absEnd = absStart + pattern.text.length;
-          const atLineStart =
-            absStart === 0 || doc.content[absStart - 1] === "\n";
-          const atLineEnd =
-            absEnd === doc.content.length || doc.content[absEnd] === "\n";
-          if (atLineStart && atLineEnd) {
-            const end =
-              absEnd < doc.content.length && doc.content[absEnd] === "\n"
-                ? absEnd + 1
-                : absEnd;
-            results.push({ start: absStart, end, isLineSelection: true });
+        const results = findHeredocMatches(pattern.text, text, doc, baseOffset);
+        if (hasHeredocPrefixMarker(pattern.text)) {
+          const fileMatches =
+            baseOffset === 0 && text === doc.content
+              ? results
+              : findHeredocMatches(pattern.text, doc.content, doc, 0);
+          if (fileMatches.length > 1) {
+            throw new ExecutionError(
+              `Heredoc prefix pattern must match exactly one location in the file, got ${fileMatches.length}`,
+              this.trace,
+            );
           }
-          idx += pattern.text.length;
         }
         return results;
       }

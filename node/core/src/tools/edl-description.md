@@ -30,22 +30,45 @@ cut <register_name>      # Cut selection into a named register
 
 **Heredocs operate on full lines**
 
-- **In selections** (`select`, `narrow`, `extend_forward`, etc.) — heredoc will only match the entire line (including whitespace).
-
-For example, if a file contains the string " abc"
+For example, for a file containing
 
 ```
-# none of these will match
+  abc
+  def
+  ghi
+  ghi
+```
+
+```
+# fails (must match entire line)
 select <<END
 b
 END
+
+# fails (must match whitespace)
 select <<END
 abc
 END
 
-# this will match (whole line with indentation only)
+# matches (while line)
 select <<END
   abc
+END
+
+# matches (unique match on prefix)
+select <<END
+  a...
+END
+
+# fails (... only extends to the end of one line, so second line should be def)
+select <<END
+  a...
+  ghi
+END
+
+# fails (not unique)
+select <<END
+  g...
 END
 ```
 
@@ -141,7 +164,7 @@ file `src/app.test.ts`
 select <<END
   describe('authentication', () => {
 END
-# extend forward with a heredoc to match the line exactly. The indentation to match the closing brace for this block.
+# extend forward to match the closing line and indentation exactly.
 extend_forward <<ENDFWD
   });
 ENDFWD

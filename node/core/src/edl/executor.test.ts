@@ -1663,6 +1663,49 @@ describe("line number warnings", () => {
 });
 
 describe("line-oriented heredoc selection", () => {
+  it("covers the documented full-line and prefix examples", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "  abc\n  def\n  ghi\n  ghi\n", "utf-8");
+
+      const select = (pattern: string) =>
+        executor(
+          parse(`file \`${filePath}\`
+select <<END
+${pattern}
+END`),
+        );
+
+      const partialLine = await select("b");
+      expectFileError(partialLine, "test.txt", "no matches");
+
+      const wrongWhitespace = await select("abc");
+      expectFileError(wrongWhitespace, "test.txt", "no matches");
+
+      const exactLine = await select("  abc");
+      expect(exactLine.fileErrors).toHaveLength(0);
+      expect(
+        exactLine.finalSelection?.ranges.map((range) => range.content),
+      ).toEqual(["  abc\n"]);
+
+      const uniquePrefix = await select("  a...");
+      expect(uniquePrefix.fileErrors).toHaveLength(0);
+      expect(
+        uniquePrefix.finalSelection?.ranges.map((range) => range.content),
+      ).toEqual(["  abc\n"]);
+
+      const noncontiguousBlock = await select("  a...\n  ghi");
+      expectFileError(noncontiguousBlock, "test.txt", "no matches");
+
+      const nonuniquePrefix = await select("  g...");
+      expectFileError(
+        nonuniquePrefix,
+        "test.txt",
+        "must match exactly one location in the file, got 2",
+      );
+    });
+  });
+
   it("regex insert_after on last line (no trailing newline) appends to same line", async () => {
     await withTmpDir(async (tmpDir) => {
       const filePath = path.join(tmpDir, "test.txt");
@@ -1732,6 +1775,139 @@ X`;
       const commands = parse(script);
       const result = await executor(commands);
       expectFileError(result, "test.txt", "no matches");
+    });
+  });
+
+  it("heredoc lines ending in ... match line prefixes with exact indentation", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(
+        filePath,
+        "  hello, world\n  goodbye, world\nhello, world\ngoodbye, world\n",
+        "utf-8",
+      );
+
+      const script = `\
+file \`${filePath}\`
+select <<X
+hello, ...
+goodbye, ...
+X
+replace <<Y
+matched
+Y`;
+      const commands = parse(script);
+      await executor(commands);
+      const content = await fs.readFile(filePath, "utf-8");
+      expect(content).toBe("  hello, world\n  goodbye, world\nmatched\n");
+    });
+  });
+
+  it("prefix heredoc lines match a contiguous block", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "abc\nb\n", "utf-8");
+
+      const script = `\
+file \`${filePath}\`
+select <<X
+a...
+b
+X
+replace <<Y
+matched
+Y`;
+      const commands = parse(script);
+      await executor(commands);
+      const content = await fs.readFile(filePath, "utf-8");
+      expect(content).toBe("matched\n");
+    });
+  });
+
+  it("prefix heredoc lines do not consume intervening lines", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "abc\nd\nb\n", "utf-8");
+
+      const script = `\
+file \`${filePath}\`
+select <<X
+a...
+b
+X`;
+      const commands = parse(script);
+      const result = await executor(commands);
+      expectFileError(result, "test.txt", "no matches");
+    });
+  });
+
+  it("checks prefix heredoc uniqueness for the whole block", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(
+        filePath,
+        "start one\nnot the end\nstart two\nend two\n",
+        "utf-8",
+      );
+
+      const script = `\
+file \`${filePath}\`
+select <<X
+start ...
+end ...
+X
+replace <<Y
+matched
+Y`;
+      const commands = parse(script);
+      await executor(commands);
+      const content = await fs.readFile(filePath, "utf-8");
+      expect(content).toBe("start one\nnot the end\nmatched\n");
+    });
+  });
+
+  it("fails when a prefix heredoc block matches multiple locations", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(
+        filePath,
+        "start one\nend one\nstart two\nend two\n",
+        "utf-8",
+      );
+
+      const script = `\
+file \`${filePath}\`
+select <<X
+start ...
+end ...
+X`;
+      const commands = parse(script);
+      const result = await executor(commands);
+      expectFileError(
+        result,
+        "test.txt",
+        "must match exactly one location in the file, got 2",
+      );
+    });
+  });
+
+  it("... only acts as a prefix marker at the end of a heredoc line", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "aXXb\na...b\n", "utf-8");
+
+      const script = `\
+file \`${filePath}\`
+select <<X
+a...b
+X
+replace <<Y
+matched
+Y`;
+      const commands = parse(script);
+      await executor(commands);
+      const content = await fs.readFile(filePath, "utf-8");
+      expect(content).toBe("aXXb\nmatched\n");
     });
   });
 

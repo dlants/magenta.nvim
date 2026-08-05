@@ -96,9 +96,12 @@ Heredoc Syntax~
   pattern text
   DELIM
 
-  Line-oriented patterns. Match complete lines only. The selection includes
-  the trailing newline. Must specify the entire line content including
-  leading whitespace.
+  Line-oriented patterns match contiguous complete lines. By default, each
+  line matches exactly, including leading whitespace. End a pattern line with
+  ... to match any remainder of that line without consuming another line.
+  The marker is only special at the end of a line; a...b matches
+  literally. A heredoc block containing a prefix marker must match exactly one
+  location in the file. The selection includes the trailing newline.
 
   When the text being matched contains a heredoc delimiter (e.g. <<END),
   use a different, unique termination code to avoid conflicts:
@@ -133,9 +136,11 @@ Heredocs behave differently depending on context:
 
 In Selections (heredoc patterns)~
 
-  - Match complete lines only
+  - Match complete lines, including exact leading whitespace
+  - A trailing ... matches any remainder of that line
+  - ... is only special at the end of a heredoc line
+  - Blocks using ... must match exactly one location in the file
   - Include the trailing newline (or extend to EOF for the last line)
-  - You must specify the entire line content with exact whitespace
 
 In Mutations (heredoc text)~
 
@@ -336,8 +341,8 @@ BEST PRACTICES                                       *magenta-edl-practices*
 - Prefer heredoc patterns over regex for selecting whole lines. Heredocs
   are easier to read and less error-prone.
 
-- Use regex when you need to match within a line (wildcards, character
-  classes, partial strings).
+- Use a trailing ... when the line prefix is stable but its suffix is not.
+  Use regex for other within-line matches, character classes, and wildcards.
 
 - Prefer text matching over line numbers. Line numbers are fragile and
   error-prone.
