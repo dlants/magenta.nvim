@@ -155,3 +155,14 @@ Verification:
 - `npx vitest run`: 112 files passed, 2 skipped; 1423 tests passed, 2 skipped, 1 todo.
 - `npx tsgo -b`: passed.
 - `npx biome check .`: passed with one pre-existing informational suggestion in `node/core/src/providers/openai.test.ts`.
+
+### Stage 4 completion (2026-08-05)
+
+- [x] Ran the focused archive, buffer-manager, `BufEnter`, thread-view, and display-open-target tests: 5 files passed; 40 tests passed.
+- [x] Ran `npx tsgo -b`: passed.
+- [x] Ran `npx biome check .`: passed with the existing informational `useLiteralKeys` suggestion in `node/core/src/providers/openai.test.ts`.
+- [x] Ran the full `npx vitest run` suite: 112 files passed, 2 skipped; 1423 tests passed, 2 skipped, 1 todo.
+
+Decision:
+
+- No implementation changes were required during regression verification; all focused and project-wide checks passed.
