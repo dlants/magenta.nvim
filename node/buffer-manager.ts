@@ -47,29 +47,48 @@ type BufferEntry =
       mountedApp: TEA.MountedApp;
     };
 
-export type BufferRole = "display" | "input";
-
-export type ArchiveThreadKey = `archive:${string}`;
-export type BufferKey = ThreadId | "overview" | "archive" | ArchiveThreadKey;
-export type BufferLookupKey = BufferKey | "shared-input";
-
-export type BufferInfo = {
-  key: BufferLookupKey;
-  role: BufferRole;
+export type ThreadBufferKey = { kind: "thread"; threadId: ThreadId };
+export type ArchivedThreadBufferKey = {
+  kind: "archived-thread";
+  threadId: ThreadId;
 };
+export type BufferKey =
+  | ThreadBufferKey
+  | { kind: "overview" }
+  | { kind: "archive" }
+  | ArchivedThreadBufferKey;
 
-export function archiveThreadKey(threadId: ThreadId): ArchiveThreadKey {
-  return `archive:${threadId}`;
+export type BufferInfo =
+  | {
+      key: Extract<BufferKey, { kind: "thread" }>;
+      role: "display" | "input";
+    }
+  | {
+      key: Extract<
+        BufferKey,
+        { kind: "overview" | "archive" | "archived-thread" }
+      >;
+      role: "display";
+    }
+  | { key: { kind: "shared-input" }; role: "input" };
+
+export function threadKey(threadId: ThreadId): ThreadBufferKey {
+  return { kind: "thread", threadId };
 }
 
-export function archivedThreadIdFromKey(key: ArchiveThreadKey): ThreadId {
-  return key.slice("archive:".length) as ThreadId;
+export function archiveThreadKey(threadId: ThreadId): ArchivedThreadBufferKey {
+  return { kind: "archived-thread", threadId };
 }
 
-export function isArchiveThreadKey(
-  key: BufferLookupKey,
-): key is ArchiveThreadKey {
-  return key.startsWith("archive:");
+export function bufferKeysEqual(left: BufferKey, right: BufferKey): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "thread" && right.kind === "thread") {
+    return left.threadId === right.threadId;
+  }
+  if (left.kind === "archived-thread" && right.kind === "archived-thread") {
+    return left.threadId === right.threadId;
+  }
+  return true;
 }
 
 export class BufferManager {
@@ -81,32 +100,37 @@ export class BufferManager {
   /** Reverse lookup: buffer id → { key, role } */
   private bufNrToInfo: Map<BufNr, BufferInfo> = new Map();
 
-  private createThreadApp!: (threadId: ThreadId) => TEA.App<unknown>;
-  private createOverviewApp!: () => TEA.App<unknown>;
-  private createArchiveApp!: () => TEA.App<unknown>;
+  private createThreadApp: (threadId: ThreadId) => TEA.App<unknown>;
+  private createOverviewApp: () => TEA.App<unknown>;
+  private createArchiveApp: () => TEA.App<unknown>;
 
   private constructor(
     private nvim: Nvim,
     overviewEntry: BufferEntry,
     archiveEntry: BufferEntry,
     sharedInputBuffer: NvimBuffer,
+    factories: {
+      createThreadApp: (threadId: ThreadId) => TEA.App<unknown>;
+      createOverviewApp: () => TEA.App<unknown>;
+      createArchiveApp: () => TEA.App<unknown>;
+    },
   ) {
     this.overviewEntry = overviewEntry;
     this.archiveEntry = archiveEntry;
     this.sharedInputBuffer = sharedInputBuffer;
+    this.createThreadApp = factories.createThreadApp;
+    this.createOverviewApp = factories.createOverviewApp;
+    this.createArchiveApp = factories.createArchiveApp;
   }
 
-  setAppFactories(
-    createThreadApp: (threadId: ThreadId) => TEA.App<unknown>,
-    createOverviewApp: () => TEA.App<unknown>,
-    createArchiveApp: () => TEA.App<unknown>,
-  ): void {
-    this.createThreadApp = createThreadApp;
-    this.createOverviewApp = createOverviewApp;
-    this.createArchiveApp = createArchiveApp;
-  }
-
-  static async create(nvim: Nvim): Promise<BufferManager> {
+  static async create(
+    nvim: Nvim,
+    factories: {
+      createThreadApp: (threadId: ThreadId) => TEA.App<unknown>;
+      createOverviewApp: () => TEA.App<unknown>;
+      createArchiveApp: () => TEA.App<unknown>;
+    },
+  ): Promise<BufferManager> {
     const [overviewBuffer, archiveBuffer, inputBuffer] = await Promise.all([
       BufferManager.createDisplayBuffer(nvim, "[Magenta Threads]", false),
       BufferManager.createDisplayBuffer(nvim, "[Magenta Archive]", true),
@@ -127,17 +151,18 @@ export class BufferManager {
       overviewEntry,
       archiveEntry,
       inputBuffer,
+      factories,
     );
     manager.bufNrToInfo.set(overviewBuffer.id, {
-      key: "overview",
+      key: { kind: "overview" },
       role: "display",
     });
     manager.bufNrToInfo.set(archiveBuffer.id, {
-      key: "archive",
+      key: { kind: "archive" },
       role: "display",
     });
     manager.bufNrToInfo.set(inputBuffer.id, {
-      key: "shared-input",
+      key: { kind: "shared-input" },
       role: "input",
     });
     return manager;
@@ -172,8 +197,14 @@ export class BufferManager {
       inputBuffer,
     };
     this.threadEntries.set(threadId, entry);
-    this.bufNrToInfo.set(buffer.id, { key: threadId, role: "display" });
-    this.bufNrToInfo.set(inputBuffer.id, { key: threadId, role: "input" });
+    this.bufNrToInfo.set(buffer.id, {
+      key: threadKey(threadId),
+      role: "display",
+    });
+    this.bufNrToInfo.set(inputBuffer.id, {
+      key: threadKey(threadId),
+      role: "input",
+    });
     return { displayBuffer: buffer, inputBuffer };
   }
 
@@ -372,7 +403,10 @@ export class BufferManager {
       buffer,
       inputBuffer: this.sharedInputBuffer,
     };
-    this.bufNrToInfo.set(buffer.id, { key: "overview", role: "display" });
+    this.bufNrToInfo.set(buffer.id, {
+      key: { kind: "overview" },
+      role: "display",
+    });
   }
 
   /** Recreate the archive-list display after it was externally deleted. */
@@ -392,7 +426,10 @@ export class BufferManager {
       buffer,
       inputBuffer: this.sharedInputBuffer,
     };
-    this.bufNrToInfo.set(buffer.id, { key: "archive", role: "display" });
+    this.bufNrToInfo.set(buffer.id, {
+      key: { kind: "archive" },
+      role: "display",
+    });
   }
 
   /** Recreate the read-only input shared by non-live-thread views. */
@@ -407,7 +444,7 @@ export class BufferManager {
       "[Magenta Overview Input]",
     );
     this.bufNrToInfo.set(this.sharedInputBuffer.id, {
-      key: "shared-input",
+      key: { kind: "shared-input" },
       role: "input",
     });
     this.overviewEntry.inputBuffer = this.sharedInputBuffer;
@@ -425,18 +462,18 @@ export class BufferManager {
   }
 
   getMountedApp(activeKey: BufferKey): TEA.MountedApp | undefined {
-    if (activeKey === "overview") {
+    if (activeKey.kind === "overview") {
       return this.overviewEntry.state === "mounted"
         ? this.overviewEntry.mountedApp
         : undefined;
     }
-    if (activeKey === "archive") {
+    if (activeKey.kind === "archive") {
       return this.archiveEntry.state === "mounted"
         ? this.archiveEntry.mountedApp
         : undefined;
     }
-    if (isArchiveThreadKey(activeKey)) return undefined;
-    const entry = this.threadEntries.get(activeKey);
+    if (activeKey.kind === "archived-thread") return undefined;
+    const entry = this.threadEntries.get(activeKey.threadId);
     return entry?.state === "mounted" ? entry.mountedApp : undefined;
   }
 
@@ -444,22 +481,22 @@ export class BufferManager {
   async ensureActiveIsMounted(
     activeKey: BufferKey,
   ): Promise<{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }> {
-    if (activeKey === "overview") {
+    if (activeKey.kind === "overview") {
       await this.ensureOverviewMounted();
       return this.getOverviewBuffers();
     }
-    if (activeKey === "archive") {
+    if (activeKey.kind === "archive") {
       await this.ensureArchiveMounted();
       return this.getArchiveBuffers();
     }
-    if (isArchiveThreadKey(activeKey)) {
-      return this.registerArchivedThread(archivedThreadIdFromKey(activeKey));
+    if (activeKey.kind === "archived-thread") {
+      return this.registerArchivedThread(activeKey.threadId);
     }
-    if (!this.threadEntries.has(activeKey)) {
-      await this.registerThread(activeKey);
+    if (!this.threadEntries.has(activeKey.threadId)) {
+      await this.registerThread(activeKey.threadId);
     }
-    await this.ensureMounted(activeKey);
-    const entry = this.threadEntries.get(activeKey)!;
+    await this.ensureMounted(activeKey.threadId);
+    const entry = this.threadEntries.get(activeKey.threadId)!;
     return { displayBuffer: entry.buffer, inputBuffer: entry.inputBuffer };
   }
 

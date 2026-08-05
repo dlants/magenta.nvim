@@ -132,6 +132,57 @@ it("archive list has a distinct listed display and shares the overview input", a
   });
 });
 
+it("wiping the active shared input recreates and installs it without changing the archive view", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    driver.magenta.dispatch({
+      type: "chat-msg",
+      msg: { type: "archive-open" },
+    });
+    await driver.awaitChatState({ state: "archive" });
+
+    const { displayWindow, inputWindow } = driver.getVisibleState();
+    const archiveBefore = driver.magenta.bufferManager.getArchiveBuffers();
+    await pollUntil(async () => {
+      if (
+        (await displayWindow.buffer()).id !== archiveBefore.displayBuffer.id
+      ) {
+        throw new Error("archive display not selected");
+      }
+    });
+
+    const liveThreadId = driver.getThreadId(0);
+    const liveInput =
+      driver.magenta.bufferManager.getThreadBuffers(liveThreadId)!.inputBuffer;
+    await driver.nvim.call("nvim_exec2", [
+      `call win_execute(${inputWindow.id}, 'noautocmd buffer! ${liveInput.id}')`,
+      {},
+    ]);
+    await driver.nvim.call("nvim_buf_delete", [
+      archiveBefore.inputBuffer.id,
+      { force: true },
+    ]);
+
+    await pollUntil(async () => {
+      const archiveAfter = driver.magenta.bufferManager.getArchiveBuffers();
+      if (archiveAfter.inputBuffer.id === archiveBefore.inputBuffer.id) {
+        throw new Error("shared input not recreated");
+      }
+      if ((await inputWindow.buffer()).id !== archiveAfter.inputBuffer.id) {
+        throw new Error("recreated shared input not installed");
+      }
+    });
+
+    const archiveAfter = driver.magenta.bufferManager.getArchiveBuffers();
+    await driver.awaitChatState({ state: "archive" });
+    expect(archiveAfter.displayBuffer.id).toBe(archiveBefore.displayBuffer.id);
+    expect((await displayWindow.buffer()).id).toBe(
+      archiveBefore.displayBuffer.id,
+    );
+    expect((await inputWindow.buffer()).id).toBe(archiveAfter.inputBuffer.id);
+  });
+});
+
 it("archived-thread displays are stable, distinct, listed buffers", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
@@ -172,7 +223,17 @@ it("wiping archive UI buffers preserves live threads and archive files", async (
     await driver.magenta.selectArchivedThread(archivedThreadId);
     const detail =
       driver.magenta.bufferManager.getArchivedThreadBuffers(archivedThreadId)!;
-    await driver.command(`bwipeout! ${detail.displayBuffer.id}`);
+    const archiveBeforeDetailWipe =
+      driver.magenta.bufferManager.getArchiveBuffers();
+    const { displayWindow, inputWindow } = driver.getVisibleState();
+    await driver.nvim.call("nvim_exec2", [
+      `call win_execute(${displayWindow.id}, 'noautocmd buffer! ${archiveBeforeDetailWipe.displayBuffer.id}')`,
+      {},
+    ]);
+    await driver.nvim.call("nvim_buf_delete", [
+      detail.displayBuffer.id,
+      { force: true },
+    ]);
     await pollUntil(() => {
       if (
         driver.magenta.bufferManager.getArchivedThreadBuffers(archivedThreadId)
@@ -180,13 +241,27 @@ it("wiping archive UI buffers preserves live threads and archive files", async (
         throw new Error("archive detail still registered");
       }
     });
+    await driver.awaitChatState({ state: "archive" });
+    const activeArchive = driver.magenta.bufferManager.getArchiveBuffers();
+    expect((await displayWindow.buffer()).id).toBe(
+      activeArchive.displayBuffer.id,
+    );
+    expect((await inputWindow.buffer()).id).toBe(activeArchive.inputBuffer.id);
 
     expect(liveThreadId in driver.magenta.chat.threadWrappers).toBe(true);
     expect(await fs.readFile(logPath, "utf8")).toBe("archive data");
 
     const oldArchiveDisplay =
       driver.magenta.bufferManager.getArchiveBuffers().displayBuffer.id;
-    await driver.command(`bwipeout! ${oldArchiveDisplay}`);
+    const overview = driver.magenta.bufferManager.getOverviewBuffers();
+    await driver.nvim.call("nvim_exec2", [
+      `call win_execute(${displayWindow.id}, 'noautocmd buffer! ${overview.displayBuffer.id}')`,
+      {},
+    ]);
+    await driver.nvim.call("nvim_buf_delete", [
+      oldArchiveDisplay,
+      { force: true },
+    ]);
     await pollUntil(() => {
       if (
         driver.magenta.bufferManager.getArchiveBuffers().displayBuffer.id ===
@@ -195,6 +270,14 @@ it("wiping archive UI buffers preserves live threads and archive files", async (
         throw new Error("archive list not recreated");
       }
     });
+    const recreatedArchive = driver.magenta.bufferManager.getArchiveBuffers();
+    await driver.awaitChatState({ state: "archive" });
+    expect((await displayWindow.buffer()).id).toBe(
+      recreatedArchive.displayBuffer.id,
+    );
+    expect((await inputWindow.buffer()).id).toBe(
+      recreatedArchive.inputBuffer.id,
+    );
     expect(liveThreadId in driver.magenta.chat.threadWrappers).toBe(true);
     expect(await fs.readFile(logPath, "utf8")).toBe("archive data");
   });

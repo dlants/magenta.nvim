@@ -475,7 +475,14 @@ describe("node/buf-enter.test.ts", () => {
           }
         });
 
+      const getDisplayWinfixbuf = () =>
+        driver.nvim.call("nvim_get_option_value", [
+          "winfixbuf",
+          { win: displayWindow.id },
+        ]) as Promise<boolean>;
+
       const jumpToBuffer = async (key: "<C-o>" | "<C-i>", target: BufNr) => {
+        expect(await getDisplayWinfixbuf()).toBe(true);
         for (let attempt = 0; attempt < 10; attempt++) {
           if (key === "<C-i>") {
             await driver.nvim.call("nvim_exec_lua", [
@@ -490,6 +497,7 @@ describe("node/buf-enter.test.ts", () => {
               [key],
             ]);
           }
+          expect(await getDisplayWinfixbuf()).toBe(true);
           if ((await displayWindow.buffer()).id === target) return;
         }
         const jumplist = await driver.nvim.call("nvim_exec_lua", [

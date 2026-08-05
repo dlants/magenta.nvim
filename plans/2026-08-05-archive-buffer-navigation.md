@@ -71,6 +71,15 @@ Decisions and stage boundaries:
 - Added an internal `archive-restore` chat message for `BufEnter` restoration without triggering the archive-link's full asynchronous switch. The root archive-row/header selection effect remains Stage 2/3 work.
 - Archived-thread display buffers are intentionally registered but otherwise unpopulated in this stage. Markdown refresh, read-only display options, archive-row selection, and deletion-driven archive-buffer removal remain Stage 2 work.
 
+### Stage 1 review follow-up (2026-08-05)
+
+- [x] Renamed the Lua native-jump helper and locals to camelCase, and extended the real `<C-o>`/`<C-i>` coverage to verify `winfixbuf` is enabled before and restored after every mapped jump attempt.
+- [x] Replaced string/prefix buffer identities with discriminated keys carrying branded `ThreadId` payloads. Reverse lookup is now a disjoint union that permits live-thread display/input, shared input-only, and overview/archive/archive-detail display-only states.
+- [x] Made all TEA app factories required at `BufferManager.create()` time. Startup supplies fully initialized factory closures, so mounting APIs are never exposed on a manager with missing factories.
+- [x] Added shared-input deletion recovery coverage and strengthened active archive/detail wipe coverage to assert Chat state plus both sidebar buffer roles are synchronized after recovery.
+
+Review testing uses `noautocmd` buffer swaps immediately before wiping active identities so Neovim does not close the sidebar split as a side effect of wiping a buffer currently displayed in that split. The application state remains active, so the tests still exercise the active deletion-recovery branches and verify they reinstall the correct registered buffers.
+
 ## Plain archive-detail buffers
 
 - Goal: Populate each registered archived-thread display buffer directly from the archive log, without mounting a TEA app, and refresh its contents on every `BufEnter`. Add a root archived-thread selection action and use it from both archive rows and live-thread views; its handler follows the existing select-thread effect pattern to update state and synchronize the registered buffers. Preserve list loading/deletion behavior and remove a deleted archive's registered buffer through `BufferManager`.
