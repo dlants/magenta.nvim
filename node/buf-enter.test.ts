@@ -1,6 +1,7 @@
+import type { ThreadId } from "@magenta/core";
 import { describe, expect, it } from "vitest";
-import type { BufNr } from "./nvim/buffer.ts";
-import type { WindowId } from "./nvim/window.ts";
+import type { BufNr, Line } from "./nvim/buffer.ts";
+import type { Row0Indexed, WindowId } from "./nvim/window.ts";
 import { withDriver } from "./test/preamble.ts";
 import { pollUntil } from "./utils/async.ts";
 
@@ -380,6 +381,197 @@ describe("node/buf-enter.test.ts", () => {
         displayWindow.id,
       ])) as BufNr;
       expect(displayBufId).toBe(expectedDisplayBufId);
+    });
+  });
+
+  it("syncs archive detail state and shared input when jump navigation enters its buffer", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      const { displayWindow, inputWindow } = driver.getVisibleState();
+      const firstId = `${driver.getThreadId(0)}-archive-1` as ThreadId;
+      const secondId = `${driver.getThreadId(0)}-archive-2` as ThreadId;
+
+      await driver.magenta.selectArchivedThread(firstId);
+      const first =
+        driver.magenta.bufferManager.getArchivedThreadBuffers(firstId)!;
+      await driver.magenta.selectArchivedThread(secondId);
+
+      await displayWindow.setBufferForced(first.displayBuffer);
+      await driver.awaitChatState({
+        state: "archive-thread-selected",
+        id: firstId,
+      });
+      expect((await displayWindow.buffer()).id).toBe(first.displayBuffer.id);
+      expect((await inputWindow.buffer()).id).toBe(first.inputBuffer.id);
+    });
+  });
+
+  it("syncs archive-list state and shared input when jump navigation enters its buffer", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      const { displayWindow, inputWindow } = driver.getVisibleState();
+      const archivedThreadId = `${driver.getThreadId(0)}-archive` as ThreadId;
+      const archive = driver.magenta.bufferManager.getArchiveBuffers();
+
+      await driver.magenta.selectArchivedThread(archivedThreadId);
+      await displayWindow.setBufferForced(archive.displayBuffer);
+      await driver.awaitChatState({ state: "archive" });
+
+      expect((await displayWindow.buffer()).id).toBe(archive.displayBuffer.id);
+      expect((await inputWindow.buffer()).id).toBe(archive.inputBuffer.id);
+    });
+  });
+
+  it("actual ctrl-o and ctrl-i jumps restore every registered view", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      const { displayWindow, inputWindow } = driver.getVisibleState();
+      const liveThreadId = driver.getThreadId(0);
+      const live = driver.magenta.bufferManager.getThreadBuffers(liveThreadId)!;
+      const archivedThreadId = `${liveThreadId}-jump-archive` as ThreadId;
+
+      await driver.nvim.call("nvim_set_current_win", [displayWindow.id]);
+      await driver.nvim.call("nvim_exec2", ["normal! ggG", {}]);
+
+      await driver.magenta.command("threads-overview");
+      const overview = driver.magenta.bufferManager.getOverviewBuffers();
+      await driver.nvim.call("nvim_set_current_win", [displayWindow.id]);
+      await driver.nvim.call("nvim_exec2", ["normal! ggG", {}]);
+
+      driver.magenta.dispatch({
+        type: "chat-msg",
+        msg: { type: "archive-open" },
+      });
+      await driver.awaitChatState({ state: "archive" });
+      const archive = driver.magenta.bufferManager.getArchiveBuffers();
+      await pollUntil(async () => {
+        if ((await displayWindow.buffer()).id !== archive.displayBuffer.id) {
+          throw new Error("archive display not ready");
+        }
+      });
+      await driver.nvim.call("nvim_set_current_win", [displayWindow.id]);
+      await driver.nvim.call("nvim_exec2", ["normal! ggG", {}]);
+
+      await driver.magenta.selectArchivedThread(archivedThreadId);
+      const detail =
+        driver.magenta.bufferManager.getArchivedThreadBuffers(
+          archivedThreadId,
+        )!;
+      await detail.displayBuffer.setLines({
+        start: 0 as Row0Indexed,
+        end: -1 as Row0Indexed,
+        lines: ["one", "two", "three"] as Line[],
+      });
+      await driver.nvim.call("nvim_set_current_win", [displayWindow.id]);
+      await driver.nvim.call("nvim_exec2", ["normal! ggG", {}]);
+
+      const waitForBufEnter = () =>
+        pollUntil(() => {
+          const magenta = driver.magenta as unknown as {
+            handlingBufEnter: boolean;
+          };
+          if (magenta.handlingBufEnter) {
+            throw new Error("BufEnter synchronization still running");
+          }
+        });
+
+      const jumpToBuffer = async (key: "<C-o>" | "<C-i>", target: BufNr) => {
+        for (let attempt = 0; attempt < 10; attempt++) {
+          if (key === "<C-i>") {
+            await driver.nvim.call("nvim_exec_lua", [
+              `local mapping = vim.fn.maparg("<C-i>", "n", false, true)
+               mapping.callback()`,
+              [],
+            ]);
+          } else {
+            await driver.nvim.call("nvim_exec_lua", [
+              `local encoded = vim.api.nvim_replace_termcodes(..., true, false, true)
+               vim.api.nvim_feedkeys(encoded, "mx", false)`,
+              [key],
+            ]);
+          }
+          if ((await displayWindow.buffer()).id === target) return;
+        }
+        const jumplist = await driver.nvim.call("nvim_exec_lua", [
+          "return vim.fn.getjumplist(vim.fn.win_getid())",
+          [],
+        ]);
+        throw new Error(
+          `jump ${key} did not reach buffer ${target}: ${JSON.stringify(jumplist)}`,
+        );
+      };
+
+      await jumpToBuffer("<C-o>", archive.displayBuffer.id);
+
+      await driver.awaitChatState({ state: "archive" });
+      await waitForBufEnter();
+      await pollUntil(async () => {
+        if ((await inputWindow.buffer()).id !== archive.inputBuffer.id) {
+          throw new Error("archive input not synchronized");
+        }
+      });
+
+      await jumpToBuffer("<C-o>", overview.displayBuffer.id);
+
+      await driver.awaitChatState({ state: "thread-overview" });
+      await waitForBufEnter();
+      expect((await displayWindow.buffer()).id).toBe(overview.displayBuffer.id);
+
+      await jumpToBuffer("<C-o>", live.displayBuffer.id);
+
+      await driver.awaitChatState({
+        state: "thread-selected",
+        id: liveThreadId,
+      });
+      await waitForBufEnter();
+      expect((await displayWindow.buffer()).id).toBe(live.displayBuffer.id);
+      expect((await inputWindow.buffer()).id).toBe(live.inputBuffer.id);
+
+      await jumpToBuffer("<C-i>", overview.displayBuffer.id);
+
+      await driver.awaitChatState({ state: "thread-overview" });
+      await waitForBufEnter();
+      await jumpToBuffer("<C-i>", archive.displayBuffer.id);
+
+      await driver.awaitChatState({ state: "archive" });
+      await waitForBufEnter();
+      await jumpToBuffer("<C-i>", detail.displayBuffer.id);
+
+      await driver.awaitChatState({
+        state: "archive-thread-selected",
+        id: archivedThreadId,
+      });
+      await waitForBufEnter();
+      expect((await displayWindow.buffer()).id).toBe(detail.displayBuffer.id);
+      expect((await inputWindow.buffer()).id).toBe(detail.inputBuffer.id);
+    });
+  }, 15000);
+
+  it("the display '-' mapping navigates archive detail to archive list to overview", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      const { displayWindow } = driver.getVisibleState();
+      const liveThreadId = driver.getThreadId(0);
+      const archivedThreadId = `${liveThreadId}-archived` as ThreadId;
+
+      await driver.magenta.selectArchivedThread(archivedThreadId);
+      await driver.nvim.call("nvim_set_current_win", [displayWindow.id]);
+      await driver.nvim.call("nvim_exec2", ["normal -", {}]);
+      await driver.awaitChatState({ state: "archive" });
+      expect(driver.getDisplayBuffer().id).toBe(
+        driver.magenta.bufferManager.getArchiveBuffers().displayBuffer.id,
+      );
+
+      await driver.nvim.call("nvim_exec2", ["normal -", {}]);
+      await driver.awaitChatState({ state: "thread-overview" });
+      expect(driver.getDisplayBuffer().id).toBe(
+        driver.magenta.bufferManager.getOverviewBuffers().displayBuffer.id,
+      );
+
+      await driver.magenta.selectThreadEffect(liveThreadId);
+      await driver.nvim.call("nvim_set_current_win", [displayWindow.id]);
+      await driver.nvim.call("nvim_exec2", ["normal -", {}]);
+      await driver.awaitChatState({ state: "thread-overview" });
     });
   });
 

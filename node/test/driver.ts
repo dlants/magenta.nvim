@@ -1,5 +1,6 @@
 import type { ThreadId } from "@magenta/core";
 import { expect, vi } from "vitest";
+import type { BufferKey } from "../buffer-manager.ts";
 import type { Magenta } from "../magenta.ts";
 import type { BufNr, Line, NvimBuffer } from "../nvim/buffer.ts";
 import { getAllWindows, getCurrentWindow } from "../nvim/nvim.ts";
@@ -40,10 +41,8 @@ export class NvimDriver {
     return this.mockAnthropic.mockOpenAIClient;
   }
 
-  private getActiveKey(): ThreadId | "overview" {
-    return this.magenta.chat.state.state === "thread-selected"
-      ? this.magenta.chat.state.activeThreadId
-      : "overview";
+  private getActiveKey(): BufferKey {
+    return this.magenta.getActiveKey();
   }
 
   async wait(ms: number) {
@@ -299,7 +298,9 @@ export class NvimDriver {
   awaitChatState(
     desiredState:
       | { state: "thread-overview" }
-      | { state: "thread-selected"; id?: ThreadId },
+      | { state: "thread-selected"; id?: ThreadId }
+      | { state: "archive" }
+      | { state: "archive-thread-selected"; id?: ThreadId },
     message?: string,
   ) {
     return pollUntil(() => {
@@ -314,6 +315,17 @@ export class NvimDriver {
         desiredState.state === "thread-selected" &&
         desiredState.id !== undefined &&
         desiredState.id !== state.activeThreadId
+      ) {
+        throw new Error(
+          `Unexpected chat state. Desired: ${JSON.stringify(desiredState)} actual: ${JSON.stringify(state)}`,
+        );
+      }
+
+      if (
+        desiredState.state === "archive-thread-selected" &&
+        state.state === "archive-thread-selected" &&
+        desiredState.id !== undefined &&
+        desiredState.id !== state.archivedThreadId
       ) {
         throw new Error(
           `Unexpected chat state. Desired: ${JSON.stringify(desiredState)} actual: ${JSON.stringify(state)}`,

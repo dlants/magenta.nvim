@@ -49,48 +49,97 @@ type BufferEntry =
 
 export type BufferRole = "display" | "input";
 
+export type ArchiveThreadKey = `archive:${string}`;
+export type BufferKey = ThreadId | "overview" | "archive" | ArchiveThreadKey;
+export type BufferLookupKey = BufferKey | "shared-input";
+
 export type BufferInfo = {
-  key: ThreadId | "overview";
+  key: BufferLookupKey;
   role: BufferRole;
 };
 
+export function archiveThreadKey(threadId: ThreadId): ArchiveThreadKey {
+  return `archive:${threadId}`;
+}
+
+export function archivedThreadIdFromKey(key: ArchiveThreadKey): ThreadId {
+  return key.slice("archive:".length) as ThreadId;
+}
+
+export function isArchiveThreadKey(
+  key: BufferLookupKey,
+): key is ArchiveThreadKey {
+  return key.startsWith("archive:");
+}
+
 export class BufferManager {
   private threadEntries: Map<ThreadId, BufferEntry> = new Map();
+  private archivedThreadBuffers: Map<ThreadId, NvimBuffer> = new Map();
   private overviewEntry: BufferEntry;
+  private archiveEntry: BufferEntry;
+  private sharedInputBuffer: NvimBuffer;
   /** Reverse lookup: buffer id → { key, role } */
   private bufNrToInfo: Map<BufNr, BufferInfo> = new Map();
 
   private createThreadApp!: (threadId: ThreadId) => TEA.App<unknown>;
   private createOverviewApp!: () => TEA.App<unknown>;
+  private createArchiveApp!: () => TEA.App<unknown>;
 
   private constructor(
     private nvim: Nvim,
     overviewEntry: BufferEntry,
+    archiveEntry: BufferEntry,
+    sharedInputBuffer: NvimBuffer,
   ) {
     this.overviewEntry = overviewEntry;
+    this.archiveEntry = archiveEntry;
+    this.sharedInputBuffer = sharedInputBuffer;
   }
 
   setAppFactories(
     createThreadApp: (threadId: ThreadId) => TEA.App<unknown>,
     createOverviewApp: () => TEA.App<unknown>,
+    createArchiveApp: () => TEA.App<unknown>,
   ): void {
     this.createThreadApp = createThreadApp;
     this.createOverviewApp = createOverviewApp;
+    this.createArchiveApp = createArchiveApp;
   }
 
   static async create(nvim: Nvim): Promise<BufferManager> {
-    const [buffer, inputBuffer] = await Promise.all([
+    const [overviewBuffer, archiveBuffer, inputBuffer] = await Promise.all([
       BufferManager.createDisplayBuffer(nvim, "[Magenta Threads]", false),
+      BufferManager.createDisplayBuffer(nvim, "[Magenta Archive]", true),
       BufferManager.createReadOnlyInputBuffer(nvim, "[Magenta Overview Input]"),
     ]);
     const overviewEntry: BufferEntry = {
       state: "registered",
-      buffer,
+      buffer: overviewBuffer,
       inputBuffer,
     };
-    const manager = new BufferManager(nvim, overviewEntry);
-    manager.bufNrToInfo.set(buffer.id, { key: "overview", role: "display" });
-    manager.bufNrToInfo.set(inputBuffer.id, { key: "overview", role: "input" });
+    const archiveEntry: BufferEntry = {
+      state: "registered",
+      buffer: archiveBuffer,
+      inputBuffer,
+    };
+    const manager = new BufferManager(
+      nvim,
+      overviewEntry,
+      archiveEntry,
+      inputBuffer,
+    );
+    manager.bufNrToInfo.set(overviewBuffer.id, {
+      key: "overview",
+      role: "display",
+    });
+    manager.bufNrToInfo.set(archiveBuffer.id, {
+      key: "archive",
+      role: "display",
+    });
+    manager.bufNrToInfo.set(inputBuffer.id, {
+      key: "shared-input",
+      role: "input",
+    });
     return manager;
   }
 
@@ -185,11 +234,85 @@ export class BufferManager {
     };
   }
 
+  async ensureArchiveMounted(): Promise<{
+    buffer: NvimBuffer;
+    mountedApp: TEA.MountedApp;
+  }> {
+    if (this.archiveEntry.state !== "mounted") {
+      const app = this.createArchiveApp();
+      const mountedApp = await app.mount({
+        nvim: this.nvim,
+        buffer: this.archiveEntry.buffer,
+        startPos: pos(0 as Row0Indexed, 0),
+        endPos: pos(-1 as Row0Indexed, -1),
+      });
+      this.archiveEntry = {
+        state: "mounted",
+        buffer: this.archiveEntry.buffer,
+        inputBuffer: this.sharedInputBuffer,
+        app,
+        mountedApp,
+      };
+    }
+
+    return {
+      buffer: this.archiveEntry.buffer,
+      mountedApp: this.archiveEntry.mountedApp,
+    };
+  }
+
   getOverviewBuffers(): { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer } {
     return {
       displayBuffer: this.overviewEntry.buffer,
-      inputBuffer: this.overviewEntry.inputBuffer,
+      inputBuffer: this.sharedInputBuffer,
     };
+  }
+
+  getArchiveBuffers(): { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer } {
+    return {
+      displayBuffer: this.archiveEntry.buffer,
+      inputBuffer: this.sharedInputBuffer,
+    };
+  }
+
+  async registerArchivedThread(
+    threadId: ThreadId,
+  ): Promise<{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }> {
+    const existing = this.archivedThreadBuffers.get(threadId);
+    if (existing) {
+      return { displayBuffer: existing, inputBuffer: this.sharedInputBuffer };
+    }
+
+    const bufferId = threadId.replace(/-/g, "");
+    const buffer = await BufferManager.createDisplayBuffer(
+      this.nvim,
+      `Archived Thread [Magenta Archive ${bufferId}]`,
+      true,
+    );
+    this.archivedThreadBuffers.set(threadId, buffer);
+    this.bufNrToInfo.set(buffer.id, {
+      key: archiveThreadKey(threadId),
+      role: "display",
+    });
+    return { displayBuffer: buffer, inputBuffer: this.sharedInputBuffer };
+  }
+
+  getArchivedThreadBuffers(
+    threadId: ThreadId,
+  ): { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer } | undefined {
+    const buffer = this.archivedThreadBuffers.get(threadId);
+    if (!buffer) return undefined;
+    return { displayBuffer: buffer, inputBuffer: this.sharedInputBuffer };
+  }
+
+  async removeArchivedThread(threadId: ThreadId): Promise<void> {
+    const buffer = this.archivedThreadBuffers.get(threadId);
+    if (!buffer) return;
+    this.archivedThreadBuffers.delete(threadId);
+    this.bufNrToInfo.delete(buffer.id);
+    await buffer.delete({ force: true }).catch(() => {
+      // The buffer may already have been wiped externally.
+    });
   }
 
   getThreadBuffers(
@@ -232,35 +355,66 @@ export class BufferManager {
     );
   }
 
-  /** Recreate the overview buffers after they were externally deleted.
-   * Resets the overview to an unmounted state so the next mount rebinds it. */
+  /** Recreate the overview display after it was externally deleted. */
   async recreateOverview(): Promise<void> {
-    const dead = [this.overviewEntry.buffer, this.overviewEntry.inputBuffer];
-    this.bufNrToInfo.delete(this.overviewEntry.buffer.id);
-    this.bufNrToInfo.delete(this.overviewEntry.inputBuffer.id);
-    // Fully wipe the dead buffers so their (canonical) names are released
-    // before we recreate buffers with the same names.
-    await Promise.all(
-      dead.map((buf) =>
-        buf.delete({ force: true }).catch(() => {
-          // best-effort; the buffer may already be gone
-        }),
-      ),
+    const deadBuffer = this.overviewEntry.buffer;
+    this.bufNrToInfo.delete(deadBuffer.id);
+    await deadBuffer.delete({ force: true }).catch(() => {
+      // The buffer may already have been wiped externally.
+    });
+    const buffer = await BufferManager.createDisplayBuffer(
+      this.nvim,
+      "[Magenta Threads]",
+      false,
     );
-    const [buffer, inputBuffer] = await Promise.all([
-      BufferManager.createDisplayBuffer(this.nvim, "[Magenta Threads]", false),
-      BufferManager.createReadOnlyInputBuffer(
-        this.nvim,
-        "[Magenta Overview Input]",
-      ),
-    ]);
-    this.overviewEntry = { state: "registered", buffer, inputBuffer };
+    this.overviewEntry = {
+      state: "registered",
+      buffer,
+      inputBuffer: this.sharedInputBuffer,
+    };
     this.bufNrToInfo.set(buffer.id, { key: "overview", role: "display" });
-    this.bufNrToInfo.set(inputBuffer.id, { key: "overview", role: "input" });
   }
 
-  /** Look up which thread/overview a buffer belongs to and its role. */
-  /** Look up which thread/overview a buffer belongs to and its role. */
+  /** Recreate the archive-list display after it was externally deleted. */
+  async recreateArchive(): Promise<void> {
+    const deadBuffer = this.archiveEntry.buffer;
+    this.bufNrToInfo.delete(deadBuffer.id);
+    await deadBuffer.delete({ force: true }).catch(() => {
+      // The buffer may already have been wiped externally.
+    });
+    const buffer = await BufferManager.createDisplayBuffer(
+      this.nvim,
+      "[Magenta Archive]",
+      true,
+    );
+    this.archiveEntry = {
+      state: "registered",
+      buffer,
+      inputBuffer: this.sharedInputBuffer,
+    };
+    this.bufNrToInfo.set(buffer.id, { key: "archive", role: "display" });
+  }
+
+  /** Recreate the read-only input shared by non-live-thread views. */
+  async recreateSharedInput(): Promise<void> {
+    const deadBuffer = this.sharedInputBuffer;
+    this.bufNrToInfo.delete(deadBuffer.id);
+    await deadBuffer.delete({ force: true }).catch(() => {
+      // The buffer may already have been wiped externally.
+    });
+    this.sharedInputBuffer = await BufferManager.createReadOnlyInputBuffer(
+      this.nvim,
+      "[Magenta Overview Input]",
+    );
+    this.bufNrToInfo.set(this.sharedInputBuffer.id, {
+      key: "shared-input",
+      role: "input",
+    });
+    this.overviewEntry.inputBuffer = this.sharedInputBuffer;
+    this.archiveEntry.inputBuffer = this.sharedInputBuffer;
+  }
+
+  /** Look up which view a buffer belongs to and its role. */
   lookupBuffer(bufNr: BufNr): BufferInfo | undefined {
     return this.bufNrToInfo.get(bufNr);
   }
@@ -270,25 +424,37 @@ export class BufferManager {
     return this.bufNrToInfo.has(bufNr);
   }
 
-  getMountedApp(activeKey: ThreadId | "overview"): TEA.MountedApp | undefined {
+  getMountedApp(activeKey: BufferKey): TEA.MountedApp | undefined {
     if (activeKey === "overview") {
       return this.overviewEntry.state === "mounted"
         ? this.overviewEntry.mountedApp
         : undefined;
     }
+    if (activeKey === "archive") {
+      return this.archiveEntry.state === "mounted"
+        ? this.archiveEntry.mountedApp
+        : undefined;
+    }
+    if (isArchiveThreadKey(activeKey)) return undefined;
     const entry = this.threadEntries.get(activeKey);
     return entry?.state === "mounted" ? entry.mountedApp : undefined;
   }
 
-  /** Ensure the active view is mounted and return its buffers. */
+  /** Ensure the active view is ready and return its buffers. */
   async ensureActiveIsMounted(
-    activeKey: ThreadId | "overview",
+    activeKey: BufferKey,
   ): Promise<{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }> {
     if (activeKey === "overview") {
       await this.ensureOverviewMounted();
       return this.getOverviewBuffers();
     }
-    // Lazily register thread buffers if not yet registered
+    if (activeKey === "archive") {
+      await this.ensureArchiveMounted();
+      return this.getArchiveBuffers();
+    }
+    if (isArchiveThreadKey(activeKey)) {
+      return this.registerArchivedThread(archivedThreadIdFromKey(activeKey));
+    }
     if (!this.threadEntries.has(activeKey)) {
       await this.registerThread(activeKey);
     }
@@ -330,6 +496,32 @@ export class BufferManager {
     // Sync the view to current state, in case dispatches occurred while this app wasn't visible
     mountedApp.render();
     return this.getOverviewBuffers();
+  }
+
+  async switchToArchive(
+    displayWindow: NvimWindow,
+    inputWindow: NvimWindow,
+  ): Promise<{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }> {
+    const { buffer, mountedApp } = await this.ensureArchiveMounted();
+    await Promise.all([
+      displayWindow.setBufferForced(buffer),
+      inputWindow.setBufferForced(this.sharedInputBuffer),
+    ]);
+    mountedApp.render();
+    return this.getArchiveBuffers();
+  }
+
+  async switchToArchivedThread(
+    threadId: ThreadId,
+    displayWindow: NvimWindow,
+    inputWindow: NvimWindow,
+  ): Promise<{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }> {
+    const buffers = await this.registerArchivedThread(threadId);
+    await Promise.all([
+      displayWindow.setBufferForced(buffers.displayBuffer),
+      inputWindow.setBufferForced(this.sharedInputBuffer),
+    ]);
+    return buffers;
   }
 
   private static async createDisplayBuffer(

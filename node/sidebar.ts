@@ -1,5 +1,4 @@
-import type { ThreadId } from "@magenta/core";
-import type { BufferManager } from "./buffer-manager.ts";
+import type { BufferKey, BufferManager } from "./buffer-manager.ts";
 import { type Line, NvimBuffer } from "./nvim/buffer.ts";
 import { getOption } from "./nvim/nvim.ts";
 import type { Nvim } from "./nvim/nvim-node/index.ts";
@@ -149,7 +148,7 @@ export class Sidebar {
     private getProfile: () => Profile,
     private getTokenCount: () => number,
     public bufferManager: BufferManager,
-    private getActiveKey: () => ThreadId | "overview",
+    private getActiveKey: () => BufferKey,
     private getIsSandboxBypassed: () => boolean,
   ) {
     this.state = {

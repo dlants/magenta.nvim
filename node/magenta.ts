@@ -2,7 +2,14 @@ import * as os from "node:os";
 import type { SandboxAskCallback } from "@anthropic-ai/sandbox-runtime";
 import type { InputMessage, NativeMessageIdx, ThreadId } from "@magenta/core";
 import { probeAndSaveClipboardImage } from "@magenta/core";
-import { type BufferInfo, BufferManager } from "./buffer-manager.ts";
+import {
+  archivedThreadIdFromKey,
+  archiveThreadKey,
+  type BufferInfo,
+  type BufferKey,
+  BufferManager,
+  isArchiveThreadKey,
+} from "./buffer-manager.ts";
 import { Lsp } from "./capabilities/lsp.ts";
 import { StraceUnavailableError } from "./capabilities/strace.ts";
 import { Chat } from "./chat/chat.ts";
@@ -82,6 +89,7 @@ export class Magenta {
   public commandRegistry: CommandRegistry;
   public optionsLoader: DynamicOptionsLoader;
   public activeBuffers: { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer };
+  private suppressDispatchRender = false;
 
   constructor(
     public nvim: Nvim,
@@ -141,16 +149,31 @@ export class Magenta {
         this.chat.update(msg);
         this.scriptManager.update(msg);
 
+        if (
+          msg.type === "chat-msg" &&
+          (msg.msg.type === "archive-open" ||
+            msg.msg.type === "archive-navigate-back")
+        ) {
+          this.syncActiveView().catch((e) => {
+            nvim.logger.error(
+              `Error syncing archive view: ${e instanceof Error ? `${e.message}\n${e.stack}` : JSON.stringify(e)}`,
+            );
+          });
+        }
+
         if (msg.type === "sidebar-msg") {
           this.handleSidebarMsg(msg.msg);
         }
 
-        // Render only the active buffer's mounted app
-        const activeMountedApp = this.bufferManager.getMountedApp(
-          this.getActiveKey(),
-        );
-        if (activeMountedApp) {
-          activeMountedApp.render();
+        // Render only the active buffer's mounted app. Native jump handling
+        // suppresses this because rendering can invalidate the forward jumplist.
+        if (!this.suppressDispatchRender) {
+          const activeMountedApp = this.bufferManager.getMountedApp(
+            this.getActiveKey(),
+          );
+          if (activeMountedApp) {
+            activeMountedApp.render();
+          }
         }
 
         this.sidebar.renderInputHeader().catch((e) => {
@@ -244,9 +267,14 @@ export class Magenta {
           nvim: this.nvim,
           initialModel: this.chat,
           View: () =>
-            this.chat.state.state === "archive"
-              ? this.chat.renderArchive()
-              : d`${this.chat.renderThreadOverview()}${this.scriptManager.view()}`,
+            d`${this.chat.renderThreadOverview()}${this.scriptManager.view()}`,
+          onUnhandledKey,
+        }),
+      () =>
+        TEA.createApp<Chat>({
+          nvim: this.nvim,
+          initialModel: this.chat,
+          View: () => this.chat.renderArchive(),
           onUnhandledKey,
         }),
     );
@@ -279,10 +307,19 @@ export class Magenta {
     return getActiveProfile(this.options.profiles, this.options.activeProfile);
   }
 
-  getActiveKey(): ThreadId | "overview" {
-    return this.chat.state.state === "thread-selected"
-      ? this.chat.state.activeThreadId
-      : "overview";
+  getActiveKey(): BufferKey {
+    switch (this.chat.state.state) {
+      case "thread-selected":
+        return this.chat.state.activeThreadId;
+      case "archive":
+        return "archive";
+      case "archive-thread-selected":
+        return archiveThreadKey(this.chat.state.archivedThreadId);
+      case "thread-overview":
+        return "overview";
+      default:
+        return assertUnreachable(this.chat.state);
+    }
   }
 
   async selectThreadEffect(id: ThreadId): Promise<void> {
@@ -295,6 +332,14 @@ export class Magenta {
       type: "sidebar-msg",
       msg: { type: "set-cursor-to-bottom" },
     });
+  }
+
+  async selectArchivedThread(id: ThreadId): Promise<void> {
+    this.dispatch({
+      type: "chat-msg",
+      msg: { type: "set-active-archive-thread", id },
+    });
+    await this.syncActiveView();
   }
 
   async createAndSwitchToNewThread(): Promise<ThreadId> {
@@ -471,20 +516,43 @@ export class Magenta {
       this.activeBuffers = this.bufferManager.getOverviewBuffers();
       if (this.sidebar.state.state === "visible") {
         const { displayWindow, inputWindow } = this.sidebar.state;
-        await this.bufferManager.switchToOverview(displayWindow, inputWindow);
+        this.activeBuffers = await this.bufferManager.switchToOverview(
+          displayWindow,
+          inputWindow,
+        );
+      }
+    } else if (activeKey === "archive") {
+      this.activeBuffers = this.bufferManager.getArchiveBuffers();
+      if (this.sidebar.state.state === "visible") {
+        const { displayWindow, inputWindow } = this.sidebar.state;
+        this.activeBuffers = await this.bufferManager.switchToArchive(
+          displayWindow,
+          inputWindow,
+        );
+      }
+    } else if (isArchiveThreadKey(activeKey)) {
+      const threadId = archivedThreadIdFromKey(activeKey);
+      this.activeBuffers =
+        await this.bufferManager.registerArchivedThread(threadId);
+      if (this.sidebar.state.state === "visible") {
+        const { displayWindow, inputWindow } = this.sidebar.state;
+        this.activeBuffers = await this.bufferManager.switchToArchivedThread(
+          threadId,
+          displayWindow,
+          inputWindow,
+        );
       }
     } else {
       this.activeBuffers = await this.bufferManager.registerThread(activeKey);
       if (this.sidebar.state.state === "visible") {
         const { displayWindow, inputWindow } = this.sidebar.state;
-        await this.bufferManager.switchToThread(
+        this.activeBuffers = await this.bufferManager.switchToThread(
           activeKey,
           displayWindow,
           inputWindow,
         );
       }
     }
-    // Step 7: update input window title (profile + token count) after switching threads
     await this.sidebar.renderInputHeader();
   }
 
@@ -607,7 +675,10 @@ export class Magenta {
           msg: { type: "threads-navigate-up" },
         });
         await this.syncActiveView();
-        if (this.getActiveKey() !== "overview") {
+        if (
+          this.chat.state.state === "thread-selected" ||
+          this.chat.state.state === "archive-thread-selected"
+        ) {
           this.dispatch({
             type: "sidebar-msg",
             msg: { type: "set-cursor-to-bottom" },
@@ -634,7 +705,7 @@ export class Magenta {
           if (mountedApp) {
             await mountedApp.onKey("t");
           }
-        } else {
+        } else if (activeKey !== "archive" && !isArchiveThreadKey(activeKey)) {
           this.dispatch({
             type: "thread-msg",
             id: activeKey,
@@ -750,18 +821,39 @@ ${lines.join("\n")}
     }
   }
 
-  /** A buffer was deleted (`:bd`/`:bw`). If it backs a thread, remove that
-   * thread and its descendants (no escalation to the root ancestor). If it
-   * backs the overview, recover by recreating the overview buffers. */
+  /** Recover or unregister the view identity associated with a deleted buffer. */
   async onBufDelete(bufNr: BufNr): Promise<void> {
     const bufInfo = this.bufferManager.lookupBuffer(bufNr);
     if (!bufInfo) return;
 
+    if (bufInfo.key === "shared-input") {
+      await this.bufferManager.recreateSharedInput();
+      await this.syncActiveView();
+      return;
+    }
+
     if (bufInfo.key === "overview") {
       const wasActive = this.getActiveKey() === "overview";
       await this.bufferManager.recreateOverview();
-      this.activeBuffers = this.bufferManager.getOverviewBuffers();
-      if (wasActive) {
+      if (wasActive) await this.syncActiveView();
+      return;
+    }
+
+    if (bufInfo.key === "archive") {
+      const wasActive = this.getActiveKey() === "archive";
+      await this.bufferManager.recreateArchive();
+      if (wasActive) await this.syncActiveView();
+      return;
+    }
+
+    if (isArchiveThreadKey(bufInfo.key)) {
+      const threadId = archivedThreadIdFromKey(bufInfo.key);
+      await this.bufferManager.removeArchivedThread(threadId);
+      if (this.getActiveKey() === bufInfo.key) {
+        this.dispatch({
+          type: "chat-msg",
+          msg: { type: "threads-navigate-up" },
+        });
         await this.syncActiveView();
       }
       return;
@@ -808,8 +900,13 @@ ${lines.join("\n")}
       }
     }
 
-    const targetKey = bufInfo.key;
     const currentKey = this.getActiveKey();
+    const targetKey =
+      bufInfo.key === "shared-input"
+        ? currentKey === "archive" || isArchiveThreadKey(currentKey)
+          ? currentKey
+          : "overview"
+        : bufInfo.key;
 
     // If already showing the correct thread in the correct role, nothing to do
     if (isMagentaWindow && targetKey === currentKey) {
@@ -820,16 +917,60 @@ ${lines.join("\n")}
       if (isCorrectRole) return;
     }
 
-    // Select the target thread/overview — syncActiveView sets both windows
-    if (targetKey === "overview") {
-      this.dispatch({
-        type: "chat-msg",
-        msg: { type: "threads-overview" },
-      });
-      await this.syncActiveView();
-    } else {
-      await this.selectThreadEffect(targetKey);
+    // Update state first, then preserve the display window that native jump
+    // navigation just entered so Neovim's forward jumplist remains intact.
+    this.suppressDispatchRender = true;
+    try {
+      if (targetKey === "overview") {
+        this.dispatch({
+          type: "chat-msg",
+          msg: { type: "threads-overview" },
+        });
+      } else if (targetKey === "archive") {
+        this.dispatch({ type: "chat-msg", msg: { type: "archive-restore" } });
+      } else if (isArchiveThreadKey(targetKey)) {
+        this.dispatch({
+          type: "chat-msg",
+          msg: {
+            type: "set-active-archive-thread",
+            id: archivedThreadIdFromKey(targetKey),
+          },
+        });
+      } else {
+        this.dispatch({
+          type: "chat-msg",
+          msg: { type: "set-active-thread", id: targetKey },
+        });
+      }
+    } finally {
+      this.suppressDispatchRender = false;
     }
+
+    if (!isMagentaWindow) {
+      await this.syncActiveView();
+      return;
+    }
+
+    const buffers = await this.bufferManager.ensureActiveIsMounted(
+      this.getActiveKey(),
+    );
+    this.activeBuffers = buffers;
+    const isDisplayWindow = winId === displayWindow.id;
+    const enteredCorrectRole =
+      (isDisplayWindow && bufInfo.role === "display") ||
+      (!isDisplayWindow && bufInfo.role === "input");
+
+    if (enteredCorrectRole && isDisplayWindow) {
+      await inputWindow.setBufferForced(buffers.inputBuffer);
+    } else if (enteredCorrectRole) {
+      await displayWindow.setBufferForced(buffers.displayBuffer);
+    } else {
+      await Promise.all([
+        displayWindow.setBufferForced(buffers.displayBuffer),
+        inputWindow.setBufferForced(buffers.inputBuffer),
+      ]);
+    }
+    await this.sidebar.renderInputHeader();
   }
 
   /** A non-magenta buffer was opened in a magenta window (e.g. via :e or :b).

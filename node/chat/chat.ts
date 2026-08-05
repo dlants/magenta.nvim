@@ -102,6 +102,13 @@ type ThreadWrapper = (
   lastViewedTime: number;
 };
 
+type ArchiveStateFields = {
+  activeThreadId: ThreadId | undefined;
+  threadIds: ThreadId[];
+  loadedCount: number;
+  titles: { [id: ThreadId]: ArchiveTitle };
+};
+
 type ChatState =
   | {
       state: "thread-overview";
@@ -111,13 +118,11 @@ type ChatState =
       state: "thread-selected";
       activeThreadId: ThreadId;
     }
-  | {
-      state: "archive";
-      activeThreadId: ThreadId | undefined;
-      threadIds: ThreadId[];
-      loadedCount: number;
-      titles: { [id: ThreadId]: ArchiveTitle };
-    };
+  | ({ state: "archive" } & ArchiveStateFields)
+  | ({
+      state: "archive-thread-selected";
+      archivedThreadId: ThreadId;
+    } & ArchiveStateFields);
 
 export type Msg =
   | {
@@ -153,6 +158,13 @@ export type Msg =
     }
   | {
       type: "archive-open";
+    }
+  | {
+      type: "archive-restore";
+    }
+  | {
+      type: "set-active-archive-thread";
+      id: ThreadId;
     }
   | {
       type: "archive-listed";
@@ -344,6 +356,18 @@ export class Chat implements ThreadManager {
 
       case "threads-navigate-up":
         this.markActiveThreadViewed();
+        if (this.state.state === "archive-thread-selected") {
+          const { archivedThreadId: _, ...archiveState } = this.state;
+          this.state = { ...archiveState, state: "archive" };
+          return;
+        }
+        if (this.state.state === "archive") {
+          this.state = {
+            state: "thread-overview",
+            activeThreadId: this.state.activeThreadId,
+          };
+          return;
+        }
         // If we're viewing a thread and it has a parent, navigate to parent
         if (
           this.state.state === "thread-selected" &&
@@ -406,6 +430,23 @@ export class Chat implements ThreadManager {
         }
         return;
 
+      case "archive-restore": {
+        if (this.state.state === "archive-thread-selected") {
+          const { archivedThreadId: _, ...archiveState } = this.state;
+          this.state = { ...archiveState, state: "archive" };
+        } else if (this.state.state !== "archive") {
+          this.state = {
+            state: "archive",
+            activeThreadId: this.state.activeThreadId,
+            threadIds: [],
+            loadedCount: ARCHIVE_PAGE_SIZE,
+            titles: {},
+          };
+          void this.loadArchiveList();
+        }
+        return;
+      }
+
       case "archive-open": {
         this.markActiveThreadViewed();
         this.state = {
@@ -419,8 +460,40 @@ export class Chat implements ThreadManager {
         return;
       }
 
+      case "set-active-archive-thread": {
+        const wasInArchive =
+          this.state.state === "archive" ||
+          this.state.state === "archive-thread-selected";
+        let archiveState: ArchiveStateFields;
+        if (
+          this.state.state === "archive" ||
+          this.state.state === "archive-thread-selected"
+        ) {
+          archiveState = this.state;
+        } else {
+          archiveState = {
+            activeThreadId: this.state.activeThreadId,
+            threadIds: [],
+            loadedCount: ARCHIVE_PAGE_SIZE,
+            titles: {},
+          };
+        }
+        this.markActiveThreadViewed();
+        this.state = {
+          ...archiveState,
+          state: "archive-thread-selected",
+          archivedThreadId: msg.id,
+        };
+        if (!wasInArchive) void this.loadArchiveList();
+        return;
+      }
+
       case "archive-listed": {
-        if (this.state.state !== "archive") return;
+        if (
+          this.state.state !== "archive" &&
+          this.state.state !== "archive-thread-selected"
+        )
+          return;
         this.state.threadIds = msg.threadIds;
         this.hydrateArchiveTitles();
         return;
@@ -500,7 +573,11 @@ export class Chat implements ThreadManager {
    * archived threads, dispatching a message per row as its title arrives. Ids
    * whose title is already hydrated are skipped. */
   private hydrateArchiveTitles(): void {
-    if (this.state.state !== "archive") return;
+    if (
+      this.state.state !== "archive" &&
+      this.state.state !== "archive-thread-selected"
+    )
+      return;
     const window = this.state.threadIds.slice(0, this.state.loadedCount);
     for (const id of window) {
       if (id in this.state.titles) continue;

@@ -121,7 +121,6 @@ describe("OpenAIAgent text turns", () => {
     expect(agent.getState().messages).toHaveLength(2);
   });
 
-
   it("exposes completed blocks alongside the in-flight one mid-stream", async () => {
     const { client, agent } = setup({ includeWebSearch: true });
     const stream = await startTurn(client, agent);
@@ -158,7 +157,8 @@ describe("OpenAIAgent text turns", () => {
       type: "text",
       text: "Denis is",
     });
-  });  it("streams text, emits didUpdate, and stops with usage", async () => {
+  });
+  it("streams text, emits didUpdate, and stops with usage", async () => {
     const { client, agent } = setup();
     let updates = 0;
     agent.on("didUpdate", () => updates++);

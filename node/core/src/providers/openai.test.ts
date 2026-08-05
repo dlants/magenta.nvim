@@ -21,8 +21,8 @@ import {
   isReasoningModel,
   makeOpenAICompatible,
   mapResponseStreamEvent,
-  type OpenAIProviderOptions,
   OpenAIProvider,
+  type OpenAIProviderOptions,
   sanitizeSchemaForOpenAI,
   supportsWebSearch,
 } from "./openai.ts";
@@ -98,9 +98,7 @@ describe("web search defaults", () => {
   });
 
   const webSearchEnabled = (options: OpenAIProviderOptions) =>
-    new OpenAIProvider(noopLogger, validateInput, options)[
-      "includeWebSearch"
-    ];
+    new OpenAIProvider(noopLogger, validateInput, options)["includeWebSearch"];
 
   it("is on for the platform API and off for anything else", () => {
     expect(webSearchEnabled({})).toBe(true);
