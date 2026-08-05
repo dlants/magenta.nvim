@@ -5,7 +5,6 @@
   - think about enriching the script API. Iterate on a thread? Query a thread? Human-in-the-loop?
   - set up an auto-compact supervisor on a thread, especially one inside a script
 - edit a previous user message. e on a user message pops it into the input buffer, and resets the thread to that point, so you can change the message and resubmit
-- openai agent
 - 8j in display buffer (relative column numbers should still work, even with wrapped override)
 - fork messages should stay where the fork happened, not travel with the thread
 - archive should be a separate buffer, so it can participate in the jump list properly
