@@ -383,9 +383,16 @@ export const view: View<{
 }> = ({ thread, dispatch }) => {
   const threadType = thread.core.state.threadType;
   const titlePrefix = threadType === "docker_root" ? "🐳 " : "";
+  const archiveLink = withBindings(d`[Archive]`, {
+    "<CR>": () =>
+      thread.context.dispatch({
+        type: "select-archived-thread-effect",
+        id: thread.id,
+      }),
+  });
   const titleView = thread.core.state.title
-    ? d`# ${titlePrefix}${thread.core.state.title}`
-    : d`# ${titlePrefix}[ Untitled ]`;
+    ? d`# ${titlePrefix}${thread.core.state.title} ${archiveLink}`
+    : d`# ${titlePrefix}[ Untitled ] ${archiveLink}`;
 
   const systemPromptView = renderSystemPrompt(
     thread.core.state.systemPrompt,

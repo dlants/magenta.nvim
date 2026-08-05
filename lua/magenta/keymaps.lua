@@ -330,6 +330,22 @@ local message_jump_keymaps = {
   ["[u"] = function() jump_to_header("prev", "user") end,
 }
 
+M.set_archive_buffer_keymap = function(bufnr, channel_id, thread_id, log_path)
+  vim.keymap.set("n", "<CR>", function()
+    if vim.api.nvim_get_current_line() == log_path then
+      vim.rpcnotify(channel_id, "magentaOpenArchivedThreadLog", { threadId = thread_id })
+      return
+    end
+
+    local encoded = vim.api.nvim_replace_termcodes("<CR>", true, false, true)
+    vim.api.nvim_feedkeys(encoded, "nx", false)
+  end, {
+    buffer = bufnr,
+    noremap = true,
+    silent = true,
+  })
+end
+
 M.set_display_buffer_keymaps = function(bufnr)
   display_bufnrs[bufnr] = true
   set_wrapped_line_mode(bufnr)

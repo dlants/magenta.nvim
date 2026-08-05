@@ -149,6 +149,13 @@ export class NvimBuffer {
     ]);
   }
 
+  setArchivedThreadKeymap(threadId: string, logPath: AbsFilePath) {
+    return this.nvim.call("nvim_exec_lua", [
+      `require("magenta.keymaps").set_archive_buffer_keymap(...)`,
+      [this.id, this.nvim.channelId, threadId, logPath],
+    ]);
+  }
+
   setInlineKeymaps(targetBufnr: BufNr) {
     return this.nvim.call("nvim_exec_lua", [
       `require("magenta.keymaps").set_inline_buffer_keymaps(${this.id}, ${targetBufnr})`,

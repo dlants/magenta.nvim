@@ -119,6 +119,19 @@ Decisions and stage boundaries:
   - The archive display remains registered and reachable through sidebar jump navigation after opening the raw file.
   - Existing unhandled `<CR>` target detection and TEA `withBindings` handlers continue to work without intercepting either archive link.
 
+### Stage 3 completion (2026-08-05)
+
+- [x] Added `[Archive]` to initialized live-thread title lines, dispatching `select-archived-thread-effect` through `thread.context.dispatch` so the managed archive detail opens without opening the raw log.
+- [x] Added the exact absolute `threadConversationLogPath(threadId)` value to archive-detail headers on every refresh.
+- [x] Installed a buffer-local archive-detail `<CR>` mapping that opens the raw JSONL through `openFileInNonMagentaWindow()` only when the cursor is on the path line; elsewhere it feeds native non-remapped Enter behavior.
+- [x] Kept the managed archive detail registered and displayed after raw-file opening, with existing TEA `<CR>` bindings and unhandled target detection unchanged.
+- [x] Added integration coverage for the live header link, exact detail path, raw-file opening in a non-Magenta window, retained archive-buffer identity, and native Enter fallback.
+
+Decisions:
+
+- The Lua mapping sends a dedicated `magentaOpenArchivedThreadLog` notification carrying the thread id. Node recomputes the archive path rather than accepting a path from the buffer, then uses the existing non-Magenta-window helper.
+- The mapping is reinstalled after every archive-detail refresh, keeping its captured thread id/path aligned with the freshly rendered header while leaving TEA-mounted display buffers untouched.
+
 ## Regression verification
 
 - Goal: Validate the integrated navigation model and existing archive behavior after the buffer split.

@@ -5,6 +5,7 @@ import {
   probeAndSaveClipboardImage,
   readArchivedThreadLog,
   renderThreadLogToMarkdown,
+  threadConversationLogPath,
 } from "@magenta/core";
 import {
   archiveThreadKey,
@@ -27,7 +28,10 @@ import {
 import { initializeMagentaHighlightGroups } from "./nvim/extmarks.ts";
 import { getCurrentBuffer, getcwd, getpos, notifyErr } from "./nvim/nvim.ts";
 import type { Nvim } from "./nvim/nvim-node/index.ts";
-import { findOrCreateNonMagentaWindow } from "./nvim/openFileInNonMagentaWindow.ts";
+import {
+  findOrCreateNonMagentaWindow,
+  openFileInNonMagentaWindow,
+} from "./nvim/openFileInNonMagentaWindow.ts";
 import {
   NvimWindow,
   type Position1Indexed,
@@ -74,6 +78,7 @@ const MAGENTA_KEY = "magentaKey";
 const MAGENTA_LSP_RESPONSE = "magentaLspResponse";
 const MAGENTA_BUF_ENTER = "magentaBufEnter";
 const MAGENTA_BUF_DELETE = "magentaBufDelete";
+const MAGENTA_OPEN_ARCHIVED_THREAD_LOG = "magentaOpenArchivedThreadLog";
 const MAGENTA_CLIPBOARD_IMAGE_PASTE = "magentaClipboardImagePaste";
 const MAGENTA_CLIPBOARD_TEXT_PASTE = "magentaClipboardTextPaste";
 
@@ -363,13 +368,24 @@ export class Magenta {
   }
 
   private async refreshArchivedThread(id: ThreadId): Promise<void> {
+    const logPath = threadConversationLogPath(id);
     const entries = await readArchivedThreadLog(id);
     const markdown = renderThreadLogToMarkdown(entries);
-    const content = `# Archived thread\n\n${markdown}`;
-    await this.bufferManager.setArchivedThreadContent(
+    const content = `# Archived thread\n${logPath}\n\n${markdown}`;
+    const buffer = await this.bufferManager.setArchivedThreadContent(
       id,
       content.split("\n") as Line[],
     );
+    await buffer.setArchivedThreadKeymap(id, logPath);
+  }
+
+  async openArchivedThreadLog(id: ThreadId): Promise<void> {
+    await openFileInNonMagentaWindow(threadConversationLogPath(id), {
+      nvim: this.nvim,
+      cwd: this.cwd,
+      homeDir: this.homeDir,
+      options: this.options,
+    });
   }
 
   async createAndSwitchToNewThread(): Promise<ThreadId> {
@@ -1170,6 +1186,21 @@ ${lines.join("\n")}
       }
     });
 
+    nvim.onNotification(
+      MAGENTA_OPEN_ARCHIVED_THREAD_LOG,
+      async (args: unknown[]) => {
+        try {
+          const data = (args as { threadId: ThreadId }[])[0];
+          await getMagenta().openArchivedThreadLog(data.threadId);
+        } catch (err) {
+          nvim.logger.error(
+            err instanceof Error
+              ? `Error opening archived thread log: ${err.message}\n${err.stack}`
+              : JSON.stringify(err),
+          );
+        }
+      },
+    );
     nvim.onNotification(MAGENTA_BUF_DELETE, async (args) => {
       try {
         const data = (args as unknown as { bufnr: number }[])[0];

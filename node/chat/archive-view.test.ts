@@ -3,6 +3,8 @@ import type { ThreadId } from "@magenta/core";
 import { threadConversationLogPath, threadMetaPath } from "@magenta/core";
 import { v7 as uuidv7 } from "uuid";
 import { describe, expect, it } from "vitest";
+import { getAllWindows } from "../nvim/nvim.ts";
+import type { Position1Indexed, Row0Indexed } from "../nvim/window.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
 
@@ -21,6 +23,96 @@ async function seedArchivedThread(id: ThreadId, title?: string): Promise<void> {
 }
 
 describe("node/chat/archive-view.test.ts", () => {
+  it("live-thread [Archive] opens its managed archive detail", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      const threadId = driver.getThreadId(0);
+      const logPath = threadConversationLogPath(threadId);
+      const resolvedLogPath = await fs.realpath(logPath);
+
+      await driver.assertDisplayBufferContains("[Archive]");
+      await driver.triggerDisplayBufferKeyOnContent("[Archive]", "<CR>");
+
+      await driver.awaitChatState({
+        state: "archive-thread-selected",
+        id: threadId,
+      });
+      const detail = await pollUntil(() => {
+        const buffers =
+          driver.magenta.bufferManager.getArchivedThreadBuffers(threadId);
+        if (!buffers) throw new Error("archive detail not registered yet");
+        return buffers;
+      });
+      expect(driver.getDisplayBuffer().id).toBe(detail.displayBuffer.id);
+
+      for (const window of await getAllWindows(driver.nvim)) {
+        if (await window.getVar("magenta")) continue;
+        expect(String(await (await window.buffer()).getName())).not.toBe(
+          resolvedLogPath,
+        );
+      }
+    });
+  });
+
+  it("archive detail path opens the raw log while Enter elsewhere stays native", async () => {
+    await withDriver({}, async (driver) => {
+      const id = uuidv7() as ThreadId;
+      await seedArchivedThread(id, "Path mapping thread");
+      const logPath = threadConversationLogPath(id);
+      const resolvedLogPath = await fs.realpath(logPath);
+
+      await driver.showSidebar();
+      await driver.magenta.selectArchivedThread(id);
+      await driver.assertDisplayBufferContains(logPath);
+
+      const detail = driver.magenta.bufferManager.getArchivedThreadBuffers(id)!;
+      const lines = await detail.displayBuffer.getLines({
+        start: 0 as Row0Indexed,
+        end: -1 as Row0Indexed,
+      });
+      expect(lines[1]).toBe(logPath);
+
+      const { displayWindow } = driver.getVisibleState();
+      await driver.nvim.call("nvim_set_current_win", [displayWindow.id]);
+      await displayWindow.setCursor({ row: 2, col: 0 } as Position1Indexed);
+      await driver.nvim.call("nvim_exec_lua", [
+        `local mapping = vim.fn.maparg("<CR>", "n", false, true)
+         mapping.callback()`,
+        [],
+      ]);
+
+      await pollUntil(async () => {
+        for (const window of await getAllWindows(driver.nvim)) {
+          if (await window.getVar("magenta")) continue;
+          if (
+            String(await (await window.buffer()).getName()) === resolvedLogPath
+          )
+            return;
+        }
+        throw new Error("raw archive log not open yet");
+      });
+
+      expect(
+        driver.magenta.bufferManager.getArchivedThreadBuffers(id)!.displayBuffer
+          .id,
+      ).toBe(detail.displayBuffer.id);
+      expect(await detail.displayBuffer.isValid()).toBe(true);
+      expect(driver.getDisplayBuffer().id).toBe(detail.displayBuffer.id);
+
+      await driver.nvim.call("nvim_set_current_win", [displayWindow.id]);
+      await displayWindow.setCursor({ row: 1, col: 0 } as Position1Indexed);
+      await driver.nvim.call("nvim_exec_lua", [
+        `local mapping = vim.fn.maparg("<CR>", "n", false, true)
+         mapping.callback()`,
+        [],
+      ]);
+      await pollUntil(async () => {
+        const cursor = await displayWindow.getCursor();
+        if (cursor.row !== 2) throw new Error("native Enter did not move down");
+      });
+    });
+  });
+
   it("lists archived threads newest-first and hydrates titles", async () => {
     await withDriver({}, async (driver) => {
       const chat = driver.magenta.chat;
