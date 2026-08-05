@@ -330,10 +330,10 @@ local message_jump_keymaps = {
   ["[u"] = function() jump_to_header("prev", "user") end,
 }
 
-M.set_archive_buffer_keymap = function(bufnr, channel_id, thread_id, log_path)
+M.setArchiveBufferKeymap = function(bufnr, channelId, threadId, logPath)
   vim.keymap.set("n", "<CR>", function()
-    if vim.api.nvim_get_current_line() == log_path then
-      vim.rpcnotify(channel_id, "magentaOpenArchivedThreadLog", { threadId = thread_id })
+    if vim.api.nvim_get_current_line() == logPath then
+      vim.rpcnotify(channelId, "magentaOpenArchivedThreadLog", { threadId = threadId })
       return
     end
 

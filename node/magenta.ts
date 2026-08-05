@@ -2,6 +2,7 @@ import * as os from "node:os";
 import type { SandboxAskCallback } from "@anthropic-ai/sandbox-runtime";
 import type { InputMessage, NativeMessageIdx, ThreadId } from "@magenta/core";
 import {
+  isThreadId,
   probeAndSaveClipboardImage,
   readArchivedThreadLog,
   renderThreadLogToMarkdown,
@@ -81,6 +82,18 @@ const MAGENTA_BUF_DELETE = "magentaBufDelete";
 const MAGENTA_OPEN_ARCHIVED_THREAD_LOG = "magentaOpenArchivedThreadLog";
 const MAGENTA_CLIPBOARD_IMAGE_PASTE = "magentaClipboardImagePaste";
 const MAGENTA_CLIPBOARD_TEXT_PASTE = "magentaClipboardTextPaste";
+
+function decodeArchivedThreadLogNotification(args: unknown[]): ThreadId {
+  const payload = args[0];
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("Invalid archived thread log notification payload");
+  }
+  const threadId = "threadId" in payload ? payload.threadId : undefined;
+  if (!isThreadId(threadId)) {
+    throw new Error("Invalid thread id in archived thread log notification");
+  }
+  return threadId;
+}
 
 function formatAsQuote(text: string): string {
   return text
@@ -1190,8 +1203,8 @@ ${lines.join("\n")}
       MAGENTA_OPEN_ARCHIVED_THREAD_LOG,
       async (args: unknown[]) => {
         try {
-          const data = (args as { threadId: ThreadId }[])[0];
-          await getMagenta().openArchivedThreadLog(data.threadId);
+          const threadId = decodeArchivedThreadLogNotification(args);
+          await getMagenta().openArchivedThreadLog(threadId);
         } catch (err) {
           nvim.logger.error(
             err instanceof Error

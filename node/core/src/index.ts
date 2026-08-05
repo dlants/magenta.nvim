@@ -43,12 +43,13 @@ export type {
   DockerSpawnConfig,
   ThreadManager,
 } from "./capabilities/thread-manager.ts";
-export type {
-  MessageIdx,
-  Role,
-  SubagentConfig,
-  ThreadId,
-  ThreadType,
+export {
+  isThreadId,
+  type MessageIdx,
+  type Role,
+  type SubagentConfig,
+  type ThreadId,
+  type ThreadType,
 } from "./chat-types.ts";
 export {
   CHARS_PER_TOKEN,

@@ -1,3 +1,4 @@
+import type { ThreadId } from "@magenta/core";
 import { withTimeout } from "../utils/async.ts";
 import type { AbsFilePath, UnresolvedFilePath } from "../utils/files.ts";
 import type { ExtmarkId, ExtmarkOptions } from "./extmarks.ts";
@@ -149,9 +150,9 @@ export class NvimBuffer {
     ]);
   }
 
-  setArchivedThreadKeymap(threadId: string, logPath: AbsFilePath) {
+  setArchivedThreadKeymap(threadId: ThreadId, logPath: AbsFilePath) {
     return this.nvim.call("nvim_exec_lua", [
-      `require("magenta.keymaps").set_archive_buffer_keymap(...)`,
+      `require("magenta.keymaps").setArchiveBufferKeymap(...)`,
       [this.id, this.nvim.channelId, threadId, logPath],
     ]);
   }

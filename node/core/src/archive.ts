@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { ThreadId, ThreadType } from "./chat-types.ts";
+import { isThreadId, type ThreadId, type ThreadType } from "./chat-types.ts";
 import type { ThreadLogEntry } from "./thread-logger.ts";
 import {
   MAGENTA_TEMP_DIR,
@@ -18,9 +18,6 @@ const THREAD_TYPES: ReadonlySet<ThreadType> = new Set([
 function isThreadType(value: unknown): value is ThreadType {
   return typeof value === "string" && THREAD_TYPES.has(value as ThreadType);
 }
-
-const UUIDV7_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function threadsDir(baseDir: string): string {
   return path.join(baseDir, "threads");
@@ -51,10 +48,7 @@ export async function listArchivedThreadIds(
   } catch {
     return [];
   }
-  return entries
-    .filter((name) => UUIDV7_PATTERN.test(name))
-    .sort()
-    .reverse() as ThreadId[];
+  return entries.filter(isThreadId).sort().reverse();
 }
 
 /**

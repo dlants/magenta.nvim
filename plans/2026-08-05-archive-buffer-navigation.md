@@ -139,3 +139,19 @@ Decisions:
   - Run the focused archive, buffer-manager, BufEnter, thread-view, and display-open-target test files.
   - Run `npx tsgo -b` and `npx biome check .`.
   - Run the full `npx vitest run` suite if the focused checks pass.
+
+### Stage 3 review follow-up (2026-08-05)
+
+- [x] Renamed the archive-detail Lua keymap function and its parameters to camelCase, matching the repository's Lua naming convention.
+- [x] Preserved the branded `ThreadId` type through `NvimBuffer.setArchivedThreadKeymap()` and the TypeScript-to-Lua call boundary.
+- [x] Added shared UUIDv7 `ThreadId` runtime validation and decoded the raw-log notification payload before passing its id to archive path construction.
+
+Decision:
+
+- `isThreadId()` is exported from core and reused by archive directory discovery and the Neovim notification boundary, keeping the UUIDv7 constraint in one place.
+
+Verification:
+
+- `npx vitest run`: 112 files passed, 2 skipped; 1423 tests passed, 2 skipped, 1 todo.
+- `npx tsgo -b`: passed.
+- `npx biome check .`: passed with one pre-existing informational suggestion in `node/core/src/providers/openai.test.ts`.
