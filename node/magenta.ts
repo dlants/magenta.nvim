@@ -44,6 +44,7 @@ import { openTargetUnderCursor } from "./open-target-under-cursor.ts";
 import {
   getActiveProfile,
   type MagentaOptions,
+  type Profile,
   parseOptions,
 } from "./options.ts";
 import { DynamicOptionsLoader } from "./options-loader.ts";
@@ -274,7 +275,7 @@ export class Magenta {
 
     this.sidebar = new Sidebar(
       this.nvim,
-      () => this.getActiveProfile(),
+      () => this.getActiveThreadProfile(),
       () => {
         if (!this.chat.state.activeThreadId) {
           return 0;
@@ -339,6 +340,16 @@ export class Magenta {
 
   get options(): MagentaOptions {
     return this.optionsLoader.getOptions();
+  }
+
+  getActiveThreadProfile(): Profile {
+    if (this.chat.state.activeThreadId) {
+      const wrapper = this.chat.threadWrappers[this.chat.state.activeThreadId];
+      if (wrapper && wrapper.state === "initialized") {
+        return wrapper.thread.context.profile;
+      }
+    }
+    return this.getActiveProfile();
   }
 
   getActiveProfile() {
