@@ -14,9 +14,7 @@ import {
   loadAgents,
   MCPToolManagerImpl,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  readArchivedThreadLog,
   readThreadMeta,
-  renderThreadLogToMarkdown,
   SubagentSupervisor,
   ThreadTitle,
   threadCreatedAt,
@@ -39,7 +37,6 @@ import {
   type EnvironmentConfig,
 } from "../environment.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
-import { openScratchInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.ts";
 import type { MagentaOptions, Profile } from "../options.ts";
 import { getProvider } from "../providers/provider.ts";
 import {
@@ -214,6 +211,7 @@ export class Chat implements ThreadManager {
       lsp: Lsp;
       sandbox: Sandbox;
       removeThreadBuffers?: (ids: ThreadId[]) => void;
+      removeArchivedThreadBuffers?: (ids: ThreadId[]) => void;
     },
   ) {
     this.threadWrappers = {};
@@ -520,6 +518,7 @@ export class Chat implements ThreadManager {
           (id) => id !== msg.id,
         );
         delete this.state.titles[msg.id];
+        this.context.removeArchivedThreadBuffers?.([msg.id]);
         void deleteArchivedThread(msg.id).catch((err: Error) => {
           this.context.nvim.logger.error(
             `Failed to delete archived thread ${msg.id}: ${err.message}`,
@@ -534,6 +533,7 @@ export class Chat implements ThreadManager {
         this.state.threadIds = this.state.threadIds.filter(
           (id) => !idSet.has(id),
         );
+        this.context.removeArchivedThreadBuffers?.(msg.ids);
         for (const id of msg.ids) {
           delete this.state.titles[id];
           void deleteArchivedThread(id).catch((err: Error) => {
@@ -1371,26 +1371,11 @@ ${rows}${loadMore}`;
     const line = d`- ${date}  ${title}`;
 
     return withBindings(line, {
-      "<CR>": () => {
-        void (async () => {
-          try {
-            const entries = await readArchivedThreadLog(threadId);
-            const markdown = renderThreadLogToMarkdown(entries);
-            await openScratchInNonMagentaWindow(
-              markdown.split("\n"),
-              `archived-thread-${threadId}.md`,
-              {
-                nvim: this.context.nvim,
-                options: this.context.getOptions(),
-              },
-            );
-          } catch (error) {
-            this.context.nvim.logger.error(
-              `Error opening archived thread ${threadId}: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-        })();
-      },
+      "<CR>": () =>
+        this.context.dispatch({
+          type: "select-archived-thread-effect",
+          id: threadId,
+        }),
       dd: () =>
         this.myDispatch({ type: "archive-delete-thread", id: threadId }),
       d: (ctx) => {

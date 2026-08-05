@@ -1,4 +1,5 @@
-import type { ThreadId } from "@magenta/core";
+import * as fs from "node:fs/promises";
+import { type ThreadId, threadConversationLogPath } from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import type { BufNr, Line } from "./nvim/buffer.ts";
 import type { Row0Indexed, WindowId } from "./nvim/window.ts";
@@ -457,11 +458,10 @@ describe("node/buf-enter.test.ts", () => {
         driver.magenta.bufferManager.getArchivedThreadBuffers(
           archivedThreadId,
         )!;
-      await detail.displayBuffer.setLines({
-        start: 0 as Row0Indexed,
-        end: -1 as Row0Indexed,
-        lines: ["one", "two", "three"] as Line[],
-      });
+      await driver.magenta.bufferManager.setArchivedThreadContent(
+        archivedThreadId,
+        ["one", "two", "three"] as Line[],
+      );
       await driver.nvim.call("nvim_set_current_win", [displayWindow.id]);
       await driver.nvim.call("nvim_exec2", ["normal! ggG", {}]);
 
@@ -543,6 +543,21 @@ describe("node/buf-enter.test.ts", () => {
 
       await driver.awaitChatState({ state: "archive" });
       await waitForBufEnter();
+      const logPath = threadConversationLogPath(archivedThreadId);
+      await fs.mkdir(logPath.replace(/\/conversation\.jsonl$/, ""), {
+        recursive: true,
+      });
+      await fs.writeFile(
+        logPath,
+        `${JSON.stringify({
+          type: "message",
+          timestamp: "jump-refresh",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "REFRESHED_BY_CTRL_I" }],
+          },
+        })}\n`,
+      );
       await jumpToBuffer("<C-i>", detail.displayBuffer.id);
 
       await driver.awaitChatState({
@@ -552,6 +567,12 @@ describe("node/buf-enter.test.ts", () => {
       await waitForBufEnter();
       expect((await displayWindow.buffer()).id).toBe(detail.displayBuffer.id);
       expect((await inputWindow.buffer()).id).toBe(detail.inputBuffer.id);
+      const detailLines = await detail.displayBuffer.getLines({
+        start: 0 as Row0Indexed,
+        end: -1 as Row0Indexed,
+      });
+      expect(detailLines.join("\n")).toContain("REFRESHED_BY_CTRL_I");
+      expect(await detail.displayBuffer.getOption("modifiable")).toBe(false);
     });
   }, 15000);
 

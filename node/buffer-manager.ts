@@ -320,12 +320,32 @@ export class BufferManager {
       `Archived Thread [Magenta Archive ${bufferId}]`,
       true,
     );
+    await buffer.setOption("filetype", "markdown");
+    await buffer.setOption("modifiable", false);
     this.archivedThreadBuffers.set(threadId, buffer);
     this.bufNrToInfo.set(buffer.id, {
       key: archiveThreadKey(threadId),
       role: "display",
     });
     return { displayBuffer: buffer, inputBuffer: this.sharedInputBuffer };
+  }
+
+  async setArchivedThreadContent(
+    threadId: ThreadId,
+    lines: Line[],
+  ): Promise<NvimBuffer> {
+    const { displayBuffer } = await this.registerArchivedThread(threadId);
+    await displayBuffer.setOption("modifiable", true);
+    try {
+      await displayBuffer.setLines({
+        start: 0 as Row0Indexed,
+        end: -1 as Row0Indexed,
+        lines,
+      });
+    } finally {
+      await displayBuffer.setOption("modifiable", false);
+    }
+    return displayBuffer;
   }
 
   getArchivedThreadBuffers(

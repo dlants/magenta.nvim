@@ -34,6 +34,10 @@ export type RootMsg =
       id: ThreadId;
     }
   | {
+      type: "select-archived-thread-effect";
+      id: ThreadId;
+    }
+  | {
       type: "set-thread-title-effect";
       id: ThreadId;
       title: string;

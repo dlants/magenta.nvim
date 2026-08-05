@@ -1,7 +1,11 @@
 import * as os from "node:os";
 import type { SandboxAskCallback } from "@anthropic-ai/sandbox-runtime";
 import type { InputMessage, NativeMessageIdx, ThreadId } from "@magenta/core";
-import { probeAndSaveClipboardImage } from "@magenta/core";
+import {
+  probeAndSaveClipboardImage,
+  readArchivedThreadLog,
+  renderThreadLogToMarkdown,
+} from "@magenta/core";
 import {
   archiveThreadKey,
   type BufferInfo,
@@ -120,6 +124,14 @@ export class Magenta {
           });
         }
 
+        if (msg.type === "select-archived-thread-effect") {
+          this.selectArchivedThread(msg.id).catch((e) => {
+            nvim.logger.error(
+              `Error selecting archived thread: ${e instanceof Error ? `${e.message}\n${e.stack}` : JSON.stringify(e)}`,
+            );
+          });
+        }
+
         if (msg.type === "set-thread-title-effect") {
           this.bufferManager.setThreadTitle(msg.id, msg.title).catch((e) => {
             nvim.logger.error(
@@ -206,6 +218,15 @@ export class Magenta {
           bufferManager.removeThread(id).catch((e: Error) => {
             this.nvim.logger.error(
               `Error removing buffers for thread ${id}: ${e.message}`,
+            );
+          });
+        }
+      },
+      removeArchivedThreadBuffers: (ids) => {
+        for (const id of ids) {
+          bufferManager.removeArchivedThread(id).catch((e: Error) => {
+            this.nvim.logger.error(
+              `Error removing buffer for archived thread ${id}: ${e.message}`,
             );
           });
         }
@@ -339,6 +360,16 @@ export class Magenta {
       msg: { type: "set-active-archive-thread", id },
     });
     await this.syncActiveView();
+  }
+
+  private async refreshArchivedThread(id: ThreadId): Promise<void> {
+    const entries = await readArchivedThreadLog(id);
+    const markdown = renderThreadLogToMarkdown(entries);
+    const content = `# Archived thread\n\n${markdown}`;
+    await this.bufferManager.setArchivedThreadContent(
+      id,
+      content.split("\n") as Line[],
+    );
   }
 
   async createAndSwitchToNewThread(): Promise<ThreadId> {
@@ -533,6 +564,7 @@ export class Magenta {
       this.activeBuffers = await this.bufferManager.registerArchivedThread(
         activeKey.threadId,
       );
+      await this.refreshArchivedThread(activeKey.threadId);
       if (this.sidebar.state.state === "visible") {
         const { displayWindow, inputWindow } = this.sidebar.state;
         this.activeBuffers = await this.bufferManager.switchToArchivedThread(
@@ -950,9 +982,11 @@ ${lines.join("\n")}
       return;
     }
 
-    const buffers = await this.bufferManager.ensureActiveIsMounted(
-      this.getActiveKey(),
-    );
+    const activeKey = this.getActiveKey();
+    const buffers = await this.bufferManager.ensureActiveIsMounted(activeKey);
+    if (activeKey.kind === "archived-thread") {
+      await this.refreshArchivedThread(activeKey.threadId);
+    }
     this.activeBuffers = buffers;
     const isDisplayWindow = winId === displayWindow.id;
     const enteredCorrectRole =

@@ -3,7 +3,6 @@ import type { ThreadId } from "@magenta/core";
 import { threadConversationLogPath, threadMetaPath } from "@magenta/core";
 import { v7 as uuidv7 } from "uuid";
 import { describe, expect, it } from "vitest";
-import type { Row0Indexed } from "../nvim/window.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
 
@@ -82,6 +81,10 @@ describe("node/chat/archive-view.test.ts", () => {
         { timeout: 3000 },
       );
 
+      await driver.magenta.selectArchivedThread(id);
+      const detail = driver.magenta.bufferManager.getArchivedThreadBuffers(id)!;
+      await driver.magenta.command("threads-navigate-up");
+
       chat.update({
         type: "chat-msg",
         msg: { type: "archive-delete-thread", id },
@@ -89,6 +92,14 @@ describe("node/chat/archive-view.test.ts", () => {
 
       if (chat.state.state !== "archive") throw new Error("unreachable");
       expect(chat.state.threadIds).not.toContain(id);
+      await pollUntil(async () => {
+        if (driver.magenta.bufferManager.getArchivedThreadBuffers(id)) {
+          throw new Error("archive detail still registered");
+        }
+        if (await detail.displayBuffer.isValid()) {
+          throw new Error("archive detail buffer still valid");
+        }
+      });
 
       await pollUntil(
         async () => {
@@ -180,19 +191,17 @@ describe("node/chat/archive-view.test.ts", () => {
     });
   });
 
-  it("<CR> renders the archived thread as markdown in a non-magenta window", async () => {
+  it("<CR> opens a managed read-only archive detail and refreshes it on re-entry", async () => {
     await withDriver({}, async (driver) => {
       const id = uuidv7() as ThreadId;
-      const metaPath = threadMetaPath(id);
-      await fs.mkdir(metaPath.replace(/\/meta\.json$/, ""), {
-        recursive: true,
-      });
-      await fs.writeFile(
-        metaPath,
-        JSON.stringify({ title: "Rendered thread", threadType: "root" }),
-      );
-      const logLines = [
-        JSON.stringify({ type: "thread_start", timestamp: "t0" }),
+      await seedArchivedThread(id, "Rendered thread");
+      const logPath = threadConversationLogPath(id);
+      const initialLog = [
+        JSON.stringify({
+          type: "thread_start",
+          timestamp: "t0",
+          threadType: "root",
+        }),
         JSON.stringify({
           type: "message",
           timestamp: "t1",
@@ -201,44 +210,75 @@ describe("node/chat/archive-view.test.ts", () => {
             content: [{ type: "text", text: "HELLO_FROM_ARCHIVE" }],
           },
         }),
-        JSON.stringify({ type: "title", timestamp: "t2", title: "Rendered" }),
+        JSON.stringify({
+          type: "message",
+          timestamp: "t2",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "INITIAL_ASSISTANT_REPLY" }],
+          },
+        }),
       ];
-      await fs.writeFile(
-        threadConversationLogPath(id),
-        `${logLines.join("\n")}\n`,
-      );
+      await fs.writeFile(logPath, `${initialLog.join("\n")}\n`);
 
       const chat = driver.magenta.chat;
       await driver.showSidebar();
       await driver.magenta.command("threads-overview");
-      await driver.awaitChatState({ state: "thread-overview" });
       await driver.triggerDisplayBufferKeyOnContent("[archive]", "<CR>");
-      await pollUntil(
-        () => {
-          if (chat.state.state !== "archive") throw new Error("not archive");
-          if (!chat.state.threadIds.includes(id)) throw new Error("not listed");
-        },
-        { timeout: 3000 },
-      );
-      await driver.assertDisplayBufferContains("Rendered thread");
+      await pollUntil(() => {
+        if (chat.state.state !== "archive") throw new Error("not archive");
+        if (!chat.state.threadIds.includes(id)) throw new Error("not listed");
+      });
 
       await driver.triggerDisplayBufferKeyOnContent("Rendered thread", "<CR>");
+      await driver.awaitChatState({ state: "archive-thread-selected", id });
+      await driver.assertDisplayBufferContains("# Archived thread");
+      await driver.assertDisplayBufferContains("HELLO_FROM_ARCHIVE");
+      await driver.assertDisplayBufferContains("INITIAL_ASSISTANT_REPLY");
 
-      const window = await driver.findWindow(async (w) => {
-        const isMagenta = await w.getVar("magenta");
-        if (isMagenta) return false;
-        const buffer = await w.buffer();
-        const lines = await buffer.getLines({
-          start: 0 as Row0Indexed,
-          end: -1 as Row0Indexed,
-        });
-        return lines.join("\n").includes("HELLO_FROM_ARCHIVE");
-      });
-      expect(window).toBeTruthy();
+      const detail = driver.magenta.bufferManager.getArchivedThreadBuffers(id)!;
+      expect(driver.getDisplayBuffer().id).toBe(detail.displayBuffer.id);
+      expect(await detail.displayBuffer.getOption("filetype")).toBe("markdown");
+      expect(await detail.displayBuffer.getOption("modifiable")).toBe(false);
+
+      await driver.magenta.command("threads-navigate-up");
+      await fs.appendFile(
+        logPath,
+        `${JSON.stringify({
+          type: "message",
+          timestamp: "t3",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "REFRESHED_REPLY" }],
+          },
+        })}\n`,
+      );
+
+      await driver.magenta.selectArchivedThread(id);
+      await driver.assertDisplayBufferContains("REFRESHED_REPLY");
+      expect(await detail.displayBuffer.getOption("modifiable")).toBe(false);
+
+      await driver.magenta.command("threads-navigate-up");
+      await fs.appendFile(
+        logPath,
+        `${JSON.stringify({
+          type: "message",
+          timestamp: "t4",
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "BUF_ENTER_REFRESH" }],
+          },
+        })}\n`,
+      );
+      const { displayWindow } = driver.getVisibleState();
+      await displayWindow.setBufferForced(detail.displayBuffer);
+      await driver.awaitChatState({ state: "archive-thread-selected", id });
+      await driver.assertDisplayBufferContains("BUF_ENTER_REFRESH");
+      expect(await detail.displayBuffer.getOption("modifiable")).toBe(false);
     });
   });
 
-  it("<CR> on a corrupt log does not crash the archive view", async () => {
+  it("<CR> on a corrupt log opens a usable archive detail", async () => {
     await withDriver({}, async (driver) => {
       const id = uuidv7() as ThreadId;
       const metaPath = threadMetaPath(id);
@@ -270,9 +310,32 @@ describe("node/chat/archive-view.test.ts", () => {
 
       await driver.triggerDisplayBufferKeyOnContent("Corrupt thread", "<CR>");
 
-      // Archive view is still usable.
-      await new Promise((r) => setTimeout(r, 100));
-      expect(chat.state.state).toBe("archive");
+      await driver.awaitChatState({ state: "archive-thread-selected", id });
+      await driver.assertDisplayBufferContains("# Archived thread");
+      let detail = driver.magenta.bufferManager.getArchivedThreadBuffers(id);
+      await pollUntil(() => {
+        detail = driver.magenta.bufferManager.getArchivedThreadBuffers(id);
+        if (!detail) throw new Error("archive detail not registered");
+      });
+      expect(await detail!.displayBuffer.getOption("modifiable")).toBe(false);
+    });
+  });
+
+  it("missing and empty logs produce usable archive details", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      const emptyId = uuidv7() as ThreadId;
+      await seedArchivedThread(emptyId, "Empty archive");
+      const missingId = uuidv7() as ThreadId;
+
+      for (const id of [emptyId, missingId]) {
+        await driver.magenta.selectArchivedThread(id);
+        await driver.assertDisplayBufferContains("# Archived thread");
+        const detail =
+          driver.magenta.bufferManager.getArchivedThreadBuffers(id)!;
+        expect(await detail.displayBuffer.getOption("modifiable")).toBe(false);
+        expect(driver.getDisplayBuffer().id).toBe(detail.displayBuffer.id);
+      }
     });
   });
 

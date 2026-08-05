@@ -89,6 +89,21 @@ Review testing uses `noautocmd` buffer swaps immediately before wiping active id
   - Empty, missing, and partially corrupt logs produce a usable plain detail buffer without crashing or replacing the archive-list buffer.
   - Deleting an archive whose detail buffer was previously opened removes it from disk/list state and unregisters/wipes its display buffer.
 
+### Stage 2 completion (2026-08-05)
+
+- [x] Added a root `select-archived-thread-effect` used by archive rows, with Magenta updating archive-detail state and synchronizing the registered sidebar buffers.
+- [x] Populated managed archive-detail buffers directly from `readArchivedThreadLog()` and `renderThreadLogToMarkdown()` without creating or mutating live `Thread` instances.
+- [x] Configured archive details as read-only markdown scratch buffers and refresh their contents for direct selection, buffer entry, and native jump-list restoration.
+- [x] Preserved usable detail buffers for empty, missing, and partially corrupt logs.
+- [x] Removed cached archive-detail buffers when single or visually selected archive rows are deleted, while retaining existing archive list and disk-deletion behavior.
+- [x] Added integration coverage for archive-row selection, user/assistant rendering, direct and `<C-i>` refresh, read-only options, malformed/missing/empty logs, and deletion cleanup.
+
+Decisions and stage boundaries:
+
+- Stage 2 uses a minimal `# Archived thread` header. The absolute log-path line and its buffer-local `<CR>` mapping remain Stage 3 work.
+- Programmatic archive selection refreshes before switching the sidebar buffers; native entry into a different registered archive-detail identity refreshes during `BufEnter`. A same-identity display `BufEnter` is the notification caused by the already-refreshed programmatic switch, so it is not redundantly re-read.
+- Archive deletion asks `BufferManager` to unregister and wipe any cached detail buffer immediately, independently of the best-effort asynchronous archive-directory deletion.
+
 ## Header links and raw-file opening
 
 - Goal: Add `[Archive]` to every initialized live-thread header and add the absolute conversation log path to each plain archive-detail header. Bind the former by dispatching the root archive-opening action through `thread.context.dispatch`, and manually map the latter inside that buffer.
