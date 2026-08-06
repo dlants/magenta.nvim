@@ -11,9 +11,8 @@
     "@types/node": "^22.10.5",
     "@types/play-sound": "^1.1.2",
     "@types/uuid": "^10.0.0",
-    "@typescript/native-preview": "^7.0.0-dev.20260222.1",
     "nock": "^14.0.5",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "vitest": "^3.2.4"
   },
   "dependencies": {

@@ -95,7 +95,7 @@ I haven't actually used other neovim AI plugins in a while, so take this with a 
 
 ## Feb 2026
 
-- Type-checking now uses `tsgo` (TypeScript native Go compiler from `@typescript/native-preview`) for ~5x faster checks.
+- Type-checking uses TypeScript 7 (`tsc`), the native Go compiler, for ~5x faster checks.
 - Refactored tool architecture: separated tool execution from rendering, extracted shared capabilities (permissions, file I/O, shell) into a `capabilities/` layer. This decouples tools from neovim, moving towards being able to run it via server/client architecture, and dev container support.
 - New sandbox permission system: OS-level sandboxing via `@anthropic-ai/sandbox-runtime` for shell commands, with application-level pre-flight checks for file I/O. Configurable via `sandbox` config (filesystem and network restrictions). Graceful fallback on unsupported platforms.
 - Auto-compaction with chunked incremental summarization and accurate token counting via `countTokens` API.

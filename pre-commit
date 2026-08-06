@@ -35,7 +35,7 @@ async function main() {
   // Run checks in parallel
   console.log("Running checks in parallel...");
   const checks = [
-    { name: "typecheck", command: "npx tsgo -b" },
+    { name: "typecheck", command: "npx tsc -b" },
     { name: "biome", command: "npx biome check --write ." },
   ];
 

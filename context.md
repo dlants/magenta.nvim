@@ -91,9 +91,9 @@ Quick reference:
 
 # Type checks
 
-Use `npx tsgo -b` to run type checking, from the project root. This uses build mode which handles the workspace project references (building `node/core` declarations first, then checking the root project). You do not need to cd into any subdirectory.
+Use `npx tsc -b` to run type checking, from the project root. This uses build mode which handles the workspace project references (building `node/core` declarations first, then checking the root project). You do not need to cd into any subdirectory.
 
-To type-check just the core package: `npx tsgo -p node/core/tsconfig.json --noEmit`
+To type-check just the core package: `npx tsc -p node/core/tsconfig.json --noEmit`
 
 To run just the core tests: `npx vitest run node/core/`
 
