@@ -72,7 +72,7 @@ function findHeredocMatches(
 function formatPattern(pattern: Pattern): string {
   switch (pattern.type) {
     case "regex":
-      return `/${pattern.pattern.source}/${pattern.pattern.flags.replace("g", "")}`;
+      return `/${pattern.pattern.source}/${pattern.pattern.flags.replace(/[gm]/g, "")}`;
     case "literal": {
       const text = pattern.text;
       if (text.length > 60) {

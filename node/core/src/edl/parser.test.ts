@@ -7,7 +7,7 @@ describe("edl parser", () => {
     expect(cmds).toEqual([
       {
         type: "narrow",
-        pattern: { type: "regex", pattern: /hello/g },
+        pattern: { type: "regex", pattern: /hello/gm },
       },
     ]);
   });
@@ -143,31 +143,31 @@ END`);
   it("parses regex with escaped slash", () => {
     const cmds = parse(`narrow /foo\\/bar/`);
     expect(cmds).toEqual([
-      { type: "narrow", pattern: { type: "regex", pattern: /foo\/bar/g } },
+      { type: "narrow", pattern: { type: "regex", pattern: /foo\/bar/gm } },
     ]);
   });
 
   it("parses regex with special characters", () => {
     const cmds = parse(`narrow /\\d+\\.\\d+/`);
     expect(cmds).toEqual([
-      { type: "narrow", pattern: { type: "regex", pattern: /\d+\.\d+/g } },
+      { type: "narrow", pattern: { type: "regex", pattern: /\d+\.\d+/gm } },
     ]);
   });
 
   it("parses regex with flags", () => {
     const cmds = parse(`narrow /hello/i`);
     expect(cmds).toEqual([
-      { type: "narrow", pattern: { type: "regex", pattern: /hello/gi } },
+      { type: "narrow", pattern: { type: "regex", pattern: /hello/gim } },
     ]);
   });
 
   it("parses regex with escaped newline followed by another command", () => {
     const cmds = parse(`narrow /abc\\ndef/\nnarrow /somethingelse/`);
     expect(cmds).toEqual([
-      { type: "narrow", pattern: { type: "regex", pattern: /abc\ndef/g } },
+      { type: "narrow", pattern: { type: "regex", pattern: /abc\ndef/gm } },
       {
         type: "narrow",
-        pattern: { type: "regex", pattern: /somethingelse/g },
+        pattern: { type: "regex", pattern: /somethingelse/gm },
       },
     ]);
   });
@@ -177,14 +177,14 @@ END`);
     expect(cmds).toEqual([
       {
         type: "narrow_multiple",
-        pattern: { type: "regex", pattern: /hello/g },
+        pattern: { type: "regex", pattern: /hello/gm },
       },
     ]);
   });
   it("parses select", () => {
     const cmds = parse(`select /hello/`);
     expect(cmds).toEqual([
-      { type: "select", pattern: { type: "regex", pattern: /hello/g } },
+      { type: "select", pattern: { type: "regex", pattern: /hello/gm } },
     ]);
   });
 
@@ -193,7 +193,7 @@ END`);
     expect(cmds).toEqual([
       {
         type: "select_multiple",
-        pattern: { type: "regex", pattern: /hello/g },
+        pattern: { type: "regex", pattern: /hello/gm },
       },
     ]);
   });

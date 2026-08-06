@@ -2045,3 +2045,88 @@ insert_after "text"`;
     });
   });
 });
+
+describe("regex line anchors", () => {
+  it("^/$ anchor to lines, not the whole document", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(
+        filePath,
+        `\
+local opts = {
+  buffer = prompt_buf,
+  noremap = true,
+}
+`,
+        "utf-8",
+      );
+      const script = `\
+file \`${filePath}\`
+select /^  buffer = prompt_buf,$/
+replace "  buffer = input_buf,"`;
+      const result = await executor(parse(script));
+      expect(result.fileErrors).toEqual([]);
+      expect(await fs.readFile(filePath, "utf-8")).toBe(`\
+local opts = {
+  buffer = input_buf,
+  noremap = true,
+}
+`);
+    });
+  });
+  it("select_multiple with ^$ matches every line", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "end\na\nend\nb\nend\n", "utf-8");
+      const script = `\
+file \`${filePath}\`
+select_multiple /^end$/
+replace "fin"`;
+      const result = await executor(parse(script));
+      expect(result.mutations.get(filePath)?.replacements).toBe(3);
+      expect(await fs.readFile(filePath, "utf-8")).toBe(
+        "fin\na\nfin\nb\nfin\n",
+      );
+    });
+  });
+  it("unanchored regexes are unaffected", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "hello world\ngoodbye world\n", "utf-8");
+      const script = `\
+file \`${filePath}\`
+select_multiple /world/
+replace "planet"`;
+      const result = await executor(parse(script));
+      expect(result.mutations.get(filePath)?.replacements).toBe(2);
+      expect(await fs.readFile(filePath, "utf-8")).toBe(
+        "hello planet\ngoodbye planet\n",
+      );
+    });
+  });
+  it("does not enable dotall: . never matches a newline", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "a\nb\n", "utf-8");
+      const script = `\
+file \`${filePath}\`
+select /a.b/
+replace "x"`;
+      const result = await executor(parse(script));
+      expectFileError(result, "test.txt", "no matches");
+    });
+  });
+  it("error text echoes the authored flags without m", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "hello\n", "utf-8");
+      const script = `\
+file \`${filePath}\`
+select /zzz/i`;
+      const result = await executor(parse(script));
+      const err = expectFileError(result, "test.txt", "no matches");
+      expect(err.error).toContain("/zzz/i");
+      expect(err.error).not.toContain("/zzz/im");
+    });
+  });
+});

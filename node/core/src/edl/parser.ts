@@ -39,7 +39,7 @@ export class ParseError extends Error {}
 export function formatPatternSource(pattern: Pattern): string {
   switch (pattern.type) {
     case "regex":
-      return `/${pattern.pattern.source}/${pattern.pattern.flags.replace("g", "")}`;
+      return `/${pattern.pattern.source}/${pattern.pattern.flags.replace(/[gm]/g, "")}`;
     case "literal":
       return `<<EDL\n${pattern.text}\nEDL`;
     case "line":
@@ -502,7 +502,11 @@ function assertNotPositionalArg(command: string, word: string): void {
 function tokenToPattern(tok: Token): Pattern {
   switch (tok.type) {
     case "regex": {
-      const flags = tok.flags.includes("g") ? tok.flags : `${tok.flags}g`;
+      let flags = tok.flags.includes("g") ? tok.flags : `${tok.flags}g`;
+      // agents write vim/ripgrep-flavored anchors and expect ^/$ to be line anchors
+      if (!flags.includes("m") && !flags.includes("s")) {
+        flags += "m";
+      }
       return { type: "regex", pattern: new RegExp(tok.pattern, flags) };
     }
     case "heredoc":
