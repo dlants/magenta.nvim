@@ -2220,6 +2220,79 @@ X`;
     });
   });
 
+  it("narrow with a leading wildcard still checks file-wide uniqueness", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(
+        filePath,
+        "head\none suffix\nmid\ntwo suffix\ntail\n",
+        "utf-8",
+      );
+      const script = `\
+file \`${filePath}\`
+select <<A
+one suffix
+mid
+A
+narrow <<B
+...suffix
+B`;
+      const result = await executor(parse(script));
+      expectFileError(
+        result,
+        "test.txt",
+        "must match exactly one location in the file, got 2",
+      );
+    });
+  });
+
+  it("an ambiguous bare ... pattern is an error", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(
+        filePath,
+        "start\na\nend\nfiller\nstart\nb\nend\n",
+        "utf-8",
+      );
+      const script = `\
+file \`${filePath}\`
+select <<C
+start
+...
+end
+C`;
+      const result = await executor(parse(script));
+      expectFileError(
+        result,
+        "test.txt",
+        "must match exactly one location in the file, got 2",
+      );
+    });
+  });
+
+  it("replacing through an infix wildcard rewrites the whole line", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(
+        filePath,
+        "intro\nnote: keep me here\noutro\n",
+        "utf-8",
+      );
+      const script = `\
+file \`${filePath}\`
+select <<D
+...keep me...
+D
+replace <<E
+replaced
+E`;
+      const result = await executor(parse(script));
+      expect(result.fileErrors).toEqual([]);
+      const content = await fs.readFile(filePath, "utf-8");
+      expect(content).toBe("intro\nreplaced\noutro\n");
+    });
+  });
+
   it("a mid-line ... is still literal", async () => {
     await withTmpDir(async (tmpDir) => {
       const filePath = path.join(tmpDir, "test.txt");

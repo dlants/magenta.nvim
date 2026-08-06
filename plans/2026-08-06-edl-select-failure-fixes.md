@@ -166,6 +166,12 @@ stays literal. Tests: `leading heredoc wildcards` describe block at the end of `
   - A multi-line heredoc whose middle line is bare `...` spans exactly three lines.
   - A pattern line containing a literal `...` in the middle (`a...b`) is still matched literally.
 
+Review follow-up (addressed): added three tests — a `narrow` whose search text is a sub-range still
+triggers the file-wide uniqueness error (covers the `findHeredocMatches(..., doc.content, ..., 0)`
+re-scan branch), a `start`/bare-`...`/`end` pattern matching two places errors instead of taking the
+first, and a `replace` through an infix-wildcard selection asserts the resulting file content (the
+wildcard-matched remainder of the line is replaced).
+
 ## miss diagnostics
 
 - Goal: a failing `select` explains what nearly matched, and stays quiet when nothing did.
