@@ -532,8 +532,8 @@ export class BufferManager {
 
     const mountedApp = await this.ensureMounted(threadId);
     await Promise.all([
-      displayWindow.setBufferForced(entry.buffer),
-      inputWindow.setBufferForced(entry.inputBuffer),
+      displayWindow.setBuffer(entry.buffer),
+      inputWindow.setBuffer(entry.inputBuffer),
     ]);
     // Sync the view to current state, in case dispatches occurred while this app wasn't visible
     mountedApp.render();
@@ -546,8 +546,8 @@ export class BufferManager {
   ): Promise<{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }> {
     const { buffer, mountedApp } = await this.ensureOverviewMounted();
     await Promise.all([
-      displayWindow.setBufferForced(buffer),
-      inputWindow.setBufferForced(this.overviewEntry.inputBuffer),
+      displayWindow.setBuffer(buffer),
+      inputWindow.setBuffer(this.overviewEntry.inputBuffer),
     ]);
 
     // Sync the view to current state, in case dispatches occurred while this app wasn't visible
@@ -561,8 +561,8 @@ export class BufferManager {
   ): Promise<{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }> {
     const { buffer, mountedApp } = await this.ensureArchiveMounted();
     await Promise.all([
-      displayWindow.setBufferForced(buffer),
-      inputWindow.setBufferForced(this.sharedInputBuffer),
+      displayWindow.setBuffer(buffer),
+      inputWindow.setBuffer(this.sharedInputBuffer),
     ]);
     mountedApp.render();
     return this.getArchiveBuffers();
@@ -575,8 +575,8 @@ export class BufferManager {
   ): Promise<{ displayBuffer: NvimBuffer; inputBuffer: NvimBuffer }> {
     const buffers = await this.registerArchivedThread(threadId);
     await Promise.all([
-      displayWindow.setBufferForced(buffers.displayBuffer),
-      inputWindow.setBufferForced(this.sharedInputBuffer),
+      displayWindow.setBuffer(buffers.displayBuffer),
+      inputWindow.setBuffer(this.sharedInputBuffer),
     ]);
     return buffers;
   }

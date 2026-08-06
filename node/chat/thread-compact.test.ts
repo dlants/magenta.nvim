@@ -864,6 +864,7 @@ it("script-spawned thread honors per-thread autoCompactPrompt override", async (
 
     const threadId = await driver.magenta.chat.spawnScriptThread({
       scriptInvocationId: "inv-prompt-override" as ScriptInvocationId,
+      scriptName: "test-script",
       prompt: "do the work",
       yieldSchema: { type: "object", properties: {} },
       getSandboxRoot: () => undefined,
@@ -923,6 +924,7 @@ it("script-spawned thread without prompt override falls back to the default temp
 
     const threadId = await driver.magenta.chat.spawnScriptThread({
       scriptInvocationId: "inv-no-override" as ScriptInvocationId,
+      scriptName: "test-script",
       prompt: "do the work",
       yieldSchema: { type: "object", properties: {} },
       getSandboxRoot: () => undefined,

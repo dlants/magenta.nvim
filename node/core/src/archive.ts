@@ -55,10 +55,65 @@ export async function listArchivedThreadIds(
  * Read a thread's `meta.json` sidecar. Best-effort: a missing or malformed
  * sidecar resolves to `{}` rather than throwing.
  */
+export type ThreadMeta = {
+  title?: string;
+  threadType?: ThreadType;
+  scriptName?: string;
+  cwd?: string;
+};
+
+export type ArchiveEntry = {
+  id: ThreadId;
+  title?: string;
+  scriptName?: string;
+  cwd?: string;
+};
+
+/** Threads that are worth showing in the archive list. Subagent threads are
+ * archived too (their logs are useful for debugging) but they'd swamp the list,
+ * so only top-level threads and script-spawned threads are listed. */
+function isListable(meta: ThreadMeta): boolean {
+  if (meta.scriptName !== undefined) return true;
+  return meta.threadType === "root" || meta.threadType === "docker_root";
+}
+
+const META_READ_CONCURRENCY = 64;
+
+/**
+ * List the archived threads worth displaying, newest-first, reading each
+ * thread's `meta.json` to classify it. Threads with no sidecar are legacy or
+ * partial writes and are skipped.
+ */
+export async function listArchivedThreads(
+  baseDir: string = MAGENTA_TEMP_DIR,
+): Promise<ArchiveEntry[]> {
+  const ids = await listArchivedThreadIds(baseDir);
+  const entries: ArchiveEntry[] = [];
+  for (let i = 0; i < ids.length; i += META_READ_CONCURRENCY) {
+    const chunk = ids.slice(i, i + META_READ_CONCURRENCY);
+    const metas = await Promise.all(
+      chunk.map((id) => readThreadMeta(id, baseDir)),
+    );
+    for (let j = 0; j < chunk.length; j++) {
+      const meta = metas[j];
+      if (!isListable(meta)) continue;
+      entries.push({
+        id: chunk[j],
+        ...(meta.title !== undefined ? { title: meta.title } : {}),
+        ...(meta.scriptName !== undefined
+          ? { scriptName: meta.scriptName }
+          : {}),
+        ...(meta.cwd !== undefined ? { cwd: meta.cwd } : {}),
+      });
+    }
+  }
+  return entries;
+}
+
 export async function readThreadMeta(
   threadId: ThreadId,
   baseDir: string = MAGENTA_TEMP_DIR,
-): Promise<{ title?: string; threadType?: ThreadType }> {
+): Promise<ThreadMeta> {
   try {
     const contents = await fs.readFile(
       threadMetaPath(threadId, baseDir),
@@ -67,8 +122,11 @@ export async function readThreadMeta(
     const parsed = JSON.parse(contents) as unknown;
     if (typeof parsed !== "object" || parsed === null) return {};
     const record = parsed as Record<string, unknown>;
-    const result: { title?: string; threadType?: ThreadType } = {};
+    const result: ThreadMeta = {};
     if (typeof record.title === "string") result.title = record.title;
+    if (typeof record.scriptName === "string")
+      result.scriptName = record.scriptName;
+    if (typeof record.cwd === "string") result.cwd = record.cwd;
     if (isThreadType(record.threadType)) result.threadType = record.threadType;
     return result;
   } catch {

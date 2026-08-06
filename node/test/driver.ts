@@ -680,22 +680,16 @@ vim.rpcnotify(${this.nvim.channelId}, "magentaKey", "${key}")
     );
   }
 
-  /** Set a window's buffer, bypassing 'winfixbuf'. Magenta windows keep
-   * 'winfixbuf' enabled to block accidental buffer swaps; this simulates the
-   * forced-open scenario (e.g. `:edit!`) that the BufEnter fallback must
-   * still handle. */
+  /** Force a buffer into a window, simulating a user opening a foreign buffer
+   * in a magenta window (e.g. `:edit`) that the BufEnter fallback must handle. */
   async forceWinSetBuf(winId: WindowId, bufId: BufNr): Promise<void> {
-    // `:buffer!` uses the "!" modifier to force past 'winfixbuf' without
-    // toggling the option, avoiding a race with the handler (a separate
-    // process) that also toggles 'winfixbuf' during its restore.
     await this.nvim.call("nvim_set_current_win", [winId]);
     await this.nvim.call("nvim_exec2", [`buffer! ${bufId}`, {}]);
   }
 
   async editFile(filePath: string): Promise<void> {
-    // Magenta windows keep 'winfixbuf' enabled, which blocks `:edit` from
-    // swapping their buffer (E1513). Switch to a non-magenta window first,
-    // mirroring how a user would open a file from an ordinary window.
+    // Switch to a non-magenta window first, mirroring how a user would open a
+    // file from an ordinary window.
     const windows = await getAllWindows(this.nvim);
     for (const window of windows) {
       const isMagenta = await window.getVar("magenta");

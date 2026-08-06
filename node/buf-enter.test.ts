@@ -106,8 +106,7 @@ describe("node/buf-enter.test.ts", () => {
       }
       await driver.assertWindowCount(2);
 
-      // Force a file into the display window (bypassing 'winfixbuf'), simulating
-      // a `:edit!`-style forced open — the only place nvim can put it.
+      // Force a file into the display window — the only place nvim can put it.
       await driver.nvim.call("nvim_exec2", ["badd poem.txt", {}]);
       const poemBufId = (await driver.nvim.call("nvim_exec2", [
         `echo bufnr('poem.txt')`,
@@ -397,7 +396,7 @@ describe("node/buf-enter.test.ts", () => {
         driver.magenta.bufferManager.getArchivedThreadBuffers(firstId)!;
       await driver.magenta.selectArchivedThread(secondId);
 
-      await displayWindow.setBufferForced(first.displayBuffer);
+      await displayWindow.setBuffer(first.displayBuffer);
       await driver.awaitChatState({
         state: "archive-thread-selected",
         id: firstId,
@@ -415,7 +414,7 @@ describe("node/buf-enter.test.ts", () => {
       const archive = driver.magenta.bufferManager.getArchiveBuffers();
 
       await driver.magenta.selectArchivedThread(archivedThreadId);
-      await displayWindow.setBufferForced(archive.displayBuffer);
+      await displayWindow.setBuffer(archive.displayBuffer);
       await driver.awaitChatState({ state: "archive" });
 
       expect((await displayWindow.buffer()).id).toBe(archive.displayBuffer.id);
@@ -475,29 +474,13 @@ describe("node/buf-enter.test.ts", () => {
           }
         });
 
-      const getDisplayWinfixbuf = () =>
-        driver.nvim.call("nvim_get_option_value", [
-          "winfixbuf",
-          { win: displayWindow.id },
-        ]) as Promise<boolean>;
-
       const jumpToBuffer = async (key: "<C-o>" | "<C-i>", target: BufNr) => {
-        expect(await getDisplayWinfixbuf()).toBe(true);
         for (let attempt = 0; attempt < 10; attempt++) {
-          if (key === "<C-i>") {
-            await driver.nvim.call("nvim_exec_lua", [
-              `local mapping = vim.fn.maparg("<C-i>", "n", false, true)
-               mapping.callback()`,
-              [],
-            ]);
-          } else {
-            await driver.nvim.call("nvim_exec_lua", [
-              `local encoded = vim.api.nvim_replace_termcodes(..., true, false, true)
-               vim.api.nvim_feedkeys(encoded, "mx", false)`,
-              [key],
-            ]);
-          }
-          expect(await getDisplayWinfixbuf()).toBe(true);
+          await driver.nvim.call("nvim_exec_lua", [
+            `local encoded = vim.api.nvim_replace_termcodes(..., true, false, true)
+             vim.api.nvim_feedkeys(encoded, "mx", false)`,
+            [key],
+          ]);
           if ((await displayWindow.buffer()).id === target) return;
         }
         const jumplist = await driver.nvim.call("nvim_exec_lua", [

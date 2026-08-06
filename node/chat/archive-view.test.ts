@@ -8,16 +8,20 @@ import type { Position1Indexed, Row0Indexed } from "../nvim/window.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
 
-async function seedArchivedThread(id: ThreadId, title?: string): Promise<void> {
+async function seedArchivedThread(
+  id: ThreadId,
+  title?: string,
+  meta: { threadType?: string; scriptName?: string } = {},
+): Promise<void> {
   const metaPath = threadMetaPath(id);
   await fs.mkdir(metaPath.replace(/\/meta\.json$/, ""), { recursive: true });
   await fs.writeFile(
     metaPath,
-    JSON.stringify(
-      title === undefined
-        ? { threadType: "root" }
-        : { title, threadType: "root" },
-    ),
+    JSON.stringify({
+      ...(title === undefined ? {} : { title }),
+      threadType: "root",
+      ...meta,
+    }),
   );
   await fs.writeFile(threadConversationLogPath(id), "");
 }
@@ -113,7 +117,7 @@ describe("node/chat/archive-view.test.ts", () => {
     });
   });
 
-  it("lists archived threads newest-first and hydrates titles", async () => {
+  it("lists archived threads newest-first with their titles", async () => {
     await withDriver({}, async (driver) => {
       const chat = driver.magenta.chat;
 
@@ -124,24 +128,23 @@ describe("node/chat/archive-view.test.ts", () => {
       await seedArchivedThread(older, "Older thread");
       await seedArchivedThread(newer, "Newer thread");
 
-      chat.update({ type: "chat-msg", msg: { type: "archive-open" } });
+      driver.magenta.dispatch({
+        type: "chat-msg",
+        msg: { type: "archive-open" },
+      });
 
       await pollUntil(
         () => {
           if (chat.state.state !== "archive") throw new Error("not archive");
-          const { threadIds, titles } = chat.state;
+          const { threadIds, entries } = chat.state;
           if (!threadIds.includes(older) || !threadIds.includes(newer)) {
             throw new Error("ids not listed yet");
           }
-          const olderTitle = titles[older];
-          const newerTitle = titles[newer];
           if (
-            olderTitle?.status !== "titled" ||
-            olderTitle.title !== "Older thread" ||
-            newerTitle?.status !== "titled" ||
-            newerTitle.title !== "Newer thread"
+            entries[older]?.title !== "Older thread" ||
+            entries[newer]?.title !== "Newer thread"
           ) {
-            throw new Error("titles not hydrated yet");
+            throw new Error("titles not loaded yet");
           }
         },
         { timeout: 3000 },
@@ -164,7 +167,10 @@ describe("node/chat/archive-view.test.ts", () => {
       const id = uuidv7() as ThreadId;
       await seedArchivedThread(id, "To delete");
 
-      chat.update({ type: "chat-msg", msg: { type: "archive-open" } });
+      driver.magenta.dispatch({
+        type: "chat-msg",
+        msg: { type: "archive-open" },
+      });
       await pollUntil(
         () => {
           if (chat.state.state !== "archive") throw new Error("not archive");
@@ -229,8 +235,8 @@ describe("node/chat/archive-view.test.ts", () => {
             if (!chat.state.threadIds.includes(id)) {
               throw new Error("ids not listed yet");
             }
-            if (chat.state.titles[id] === undefined) {
-              throw new Error("titles not hydrated yet");
+            if (chat.state.entries[id] === undefined) {
+              throw new Error("entries not loaded yet");
             }
           }
         },
@@ -240,8 +246,8 @@ describe("node/chat/archive-view.test.ts", () => {
       if (chat.state.state !== "archive") throw new Error("unreachable");
       // Rows are newest-first; anchor on the 2nd row and select 3 rows.
       const ordered = chat.state.threadIds;
-      const anchorTitle = chat.state.titles[ordered[1]];
-      if (anchorTitle?.status !== "titled") throw new Error("no title");
+      if (chat.state.entries[ordered[1]]?.title === undefined)
+        throw new Error("no title");
       const expectedDeleted = ordered.slice(1, 4);
       const unselectedId = ordered[0];
       const registeredDetails = new Map<
@@ -262,7 +268,8 @@ describe("node/chat/archive-view.test.ts", () => {
       }
 
       // Visual selection over 3 rows, anchored at the 2nd row.
-      await driver.pressOnDisplayMessageWithSelection(anchorTitle.title, "d", [
+      const anchorTitle = chat.state.entries[ordered[1]]?.title as string;
+      await driver.pressOnDisplayMessageWithSelection(anchorTitle, "d", [
         "line1",
         "line2",
         "line3",
@@ -396,7 +403,7 @@ describe("node/chat/archive-view.test.ts", () => {
         })}\n`,
       );
       const { displayWindow } = driver.getVisibleState();
-      await displayWindow.setBufferForced(detail.displayBuffer);
+      await displayWindow.setBuffer(detail.displayBuffer);
       await driver.awaitChatState({ state: "archive-thread-selected", id });
       await driver.assertDisplayBufferContains("BUF_ENTER_REFRESH");
       expect(await detail.displayBuffer.getOption("modifiable")).toBe(false);
@@ -464,80 +471,106 @@ describe("node/chat/archive-view.test.ts", () => {
     });
   });
 
-  it("hydrates untitled threads as untitled", async () => {
+  it("renders threads with no title as untitled", async () => {
     await withDriver({}, async (driver) => {
       const chat = driver.magenta.chat;
       const id = uuidv7() as ThreadId;
       await seedArchivedThread(id);
+      await driver.showSidebar();
 
-      chat.update({ type: "chat-msg", msg: { type: "archive-open" } });
+      driver.magenta.dispatch({
+        type: "chat-msg",
+        msg: { type: "archive-open" },
+      });
       await pollUntil(
         () => {
           if (chat.state.state !== "archive") throw new Error("not archive");
-          if (chat.state.titles[id] === undefined) {
-            throw new Error("not hydrated yet");
+          if (chat.state.entries[id] === undefined) {
+            throw new Error("not listed yet");
+          }
+        },
+        { timeout: 3000 },
+      );
+
+      await driver.assertDisplayBufferContains("(untitled)");
+    });
+  });
+
+  it("hides subagent threads and prefixes script threads with the script name", async () => {
+    await withDriver({}, async (driver) => {
+      const chat = driver.magenta.chat;
+      await driver.showSidebar();
+      const subagentId = uuidv7() as ThreadId;
+      const scriptId = uuidv7() as ThreadId;
+      await seedArchivedThread(subagentId, "Subagent work", {
+        threadType: "subagent",
+      });
+      await seedArchivedThread(scriptId, "Reviews the diff", {
+        threadType: "subagent",
+        scriptName: "code-review",
+      });
+
+      driver.magenta.dispatch({
+        type: "chat-msg",
+        msg: { type: "archive-open" },
+      });
+      await pollUntil(
+        () => {
+          if (chat.state.state !== "archive") throw new Error("not archive");
+          if (!chat.state.threadIds.includes(scriptId)) {
+            throw new Error("script thread not listed yet");
           }
         },
         { timeout: 3000 },
       );
 
       if (chat.state.state !== "archive") throw new Error("unreachable");
-      expect(chat.state.titles[id]).toEqual({ status: "untitled" });
+      expect(chat.state.threadIds).not.toContain(subagentId);
+      await driver.assertDisplayBufferContains(
+        "[code-review] Reviews the diff",
+      );
     });
   });
 
-  it("lazily hydrates a page at a time and load-more reveals the next page", async () => {
+  it("renders a page at a time and load-more reveals the next page", async () => {
     await withDriver({}, async (driver) => {
       const chat = driver.magenta.chat;
 
+      await driver.showSidebar();
       const ids: ThreadId[] = [];
       for (let i = 0; i < 55; i++) {
         const id = uuidv7() as ThreadId;
         ids.push(id);
         await seedArchivedThread(id, `Thread ${i}`);
       }
-      // Newest-first order.
+      // Newest-first order: the highest-numbered threads come first.
       const sorted = [...ids].sort().reverse();
 
-      chat.update({ type: "chat-msg", msg: { type: "archive-open" } });
+      driver.magenta.dispatch({
+        type: "chat-msg",
+        msg: { type: "archive-open" },
+      });
 
       await pollUntil(
         () => {
           if (chat.state.state !== "archive") throw new Error("not archive");
-          for (const id of ids) {
-            if (!chat.state.threadIds.includes(id)) {
-              throw new Error("ids not listed yet");
-            }
-          }
-          // First 50 should hydrate.
-          for (const id of sorted.slice(0, 50)) {
-            if (chat.state.titles[id] === undefined) {
-              throw new Error("first page not hydrated yet");
-            }
+          if (chat.state.threadIds.length < ids.length) {
+            throw new Error("ids not listed yet");
           }
         },
         { timeout: 5000 },
       );
 
       if (chat.state.state !== "archive") throw new Error("unreachable");
-      // Rows beyond the first page must NOT be hydrated yet.
-      for (const id of sorted.slice(50)) {
-        expect(chat.state.titles[id]).toBeUndefined();
-      }
+      expect(chat.state.threadIds.slice(0, 55)).toEqual(sorted);
+      await driver.assertDisplayBufferContains("[load more]");
+      await driver.assertDisplayBufferDoesNotContain("Thread 0");
 
-      chat.update({ type: "chat-msg", msg: { type: "archive-load-more" } });
-
-      await pollUntil(
-        () => {
-          if (chat.state.state !== "archive") throw new Error("not archive");
-          for (const id of sorted.slice(50)) {
-            if (chat.state.titles[id] === undefined) {
-              throw new Error("second page not hydrated yet");
-            }
-          }
-        },
-        { timeout: 10000 },
-      );
+      driver.magenta.dispatch({
+        type: "chat-msg",
+        msg: { type: "archive-load-more" },
+      });
+      await driver.assertDisplayBufferContains("Thread 0");
     });
   }, 30000);
 
@@ -574,7 +607,10 @@ describe("node/chat/archive-view.test.ts", () => {
   it("navigate-back returns to the thread overview", async () => {
     await withDriver({}, async (driver) => {
       const chat = driver.magenta.chat;
-      chat.update({ type: "chat-msg", msg: { type: "archive-open" } });
+      driver.magenta.dispatch({
+        type: "chat-msg",
+        msg: { type: "archive-open" },
+      });
       await pollUntil(
         () => {
           if (chat.state.state !== "archive") throw new Error("not archive");

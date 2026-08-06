@@ -10,7 +10,11 @@ export type UnresolvedFilePath = string & { __unresolved_file_path: true };
 export type HomeDir = AbsFilePath & { __home_dir: true };
 export type DisplayPath = string & { __display_path: true };
 
-export const MAGENTA_TEMP_DIR = "/tmp/magenta" as AbsFilePath;
+/** Root for magenta's scratch state: thread conversation archives and tool
+ * output logs. Overridable via env so test runs don't pollute a developer's
+ * real archive. */
+export const MAGENTA_TEMP_DIR = (process.env.MAGENTA_TEMP_DIR ??
+  "/tmp/magenta") as AbsFilePath;
 
 export function threadConversationLogPath(
   threadId: ThreadId,
@@ -151,6 +155,13 @@ export function relativePath(
 ) {
   const absPath = resolveFilePath(cwd, filePath, homeDir);
   return path.relative(cwd, absPath) as RelFilePath;
+}
+
+/** Abbreviate a home-relative path with `~` for display. */
+export function shortenPath(filePath: string, homeDir: HomeDir): string {
+  return filePath.startsWith(homeDir)
+    ? `~${filePath.slice(homeDir.length)}`
+    : filePath;
 }
 
 export function displayPath(

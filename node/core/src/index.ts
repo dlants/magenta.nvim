@@ -1,9 +1,11 @@
 export type { AgentInfo, AgentsMap } from "./agents/agents.ts";
 export { loadAgents } from "./agents/agents.ts";
 export type { AnthropicAuth, OAuthTokens } from "./anthropic-auth.ts";
+export type { ArchiveEntry, ThreadMeta } from "./archive.ts";
 export {
   deleteArchivedThread,
   listArchivedThreadIds,
+  listArchivedThreads,
   readArchivedThreadLog,
   readThreadMeta,
   threadCreatedAt,
@@ -332,6 +334,7 @@ export {
   detectFileType,
   detectFileTypeViaFileIO,
   displayPath,
+  shortenPath,
   expandTilde,
   extractFileRefPath,
   FILE_SIZE_LIMITS,

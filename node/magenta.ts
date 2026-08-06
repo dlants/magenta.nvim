@@ -5,6 +5,7 @@ import {
   isThreadId,
   probeAndSaveClipboardImage,
   readArchivedThreadLog,
+  readThreadMeta,
   renderThreadLogToMarkdown,
   threadConversationLogPath,
 } from "@magenta/core";
@@ -393,9 +394,13 @@ export class Magenta {
 
   private async refreshArchivedThread(id: ThreadId): Promise<void> {
     const logPath = threadConversationLogPath(id);
-    const entries = await readArchivedThreadLog(id);
+    const [entries, meta] = await Promise.all([
+      readArchivedThreadLog(id),
+      readThreadMeta(id),
+    ]);
     const markdown = renderThreadLogToMarkdown(entries);
-    const content = `# Archived thread\n${logPath}\n\n${markdown}`;
+    const cwdLine = meta.cwd ? `cwd: ${meta.cwd}\n` : "";
+    const content = `# Archived thread\n${logPath}\n${cwdLine}\n${markdown}`;
     const buffer = await this.bufferManager.setArchivedThreadContent(
       id,
       content.split("\n") as Line[],
@@ -1034,13 +1039,13 @@ ${lines.join("\n")}
       (!isDisplayWindow && bufInfo.role === "input");
 
     if (enteredCorrectRole && isDisplayWindow) {
-      await inputWindow.setBufferForced(buffers.inputBuffer);
+      await inputWindow.setBuffer(buffers.inputBuffer);
     } else if (enteredCorrectRole) {
-      await displayWindow.setBufferForced(buffers.displayBuffer);
+      await displayWindow.setBuffer(buffers.displayBuffer);
     } else {
       await Promise.all([
-        displayWindow.setBufferForced(buffers.displayBuffer),
-        inputWindow.setBufferForced(buffers.inputBuffer),
+        displayWindow.setBuffer(buffers.displayBuffer),
+        inputWindow.setBuffer(buffers.inputBuffer),
       ]);
     }
     await this.sidebar.renderInputHeader();
@@ -1064,11 +1069,11 @@ ${lines.join("\n")}
     if (winId === displayWindow.id) {
       const { displayBuffer } =
         await this.bufferManager.ensureActiveIsMounted(activeKey);
-      await displayWindow.setBufferForced(displayBuffer);
+      await displayWindow.setBuffer(displayBuffer);
     } else {
       const { inputBuffer } =
         await this.bufferManager.ensureActiveIsMounted(activeKey);
-      await inputWindow.setBufferForced(inputBuffer);
+      await inputWindow.setBuffer(inputBuffer);
     }
 
     // Move the non-magenta buffer to a non-magenta window

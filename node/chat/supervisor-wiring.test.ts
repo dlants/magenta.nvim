@@ -84,6 +84,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
 
       const overriddenId = await driver.magenta.chat.spawnScriptThread({
         scriptInvocationId: "inv-override" as ScriptInvocationId,
+        scriptName: "test-script",
         prompt: "do work",
         yieldSchema: emptyYieldSchema,
         getSandboxRoot: () => undefined,
@@ -92,6 +93,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
 
       const defaultId = await driver.magenta.chat.spawnScriptThread({
         scriptInvocationId: "inv-default" as ScriptInvocationId,
+        scriptName: "test-script",
         prompt: "do work",
         yieldSchema: emptyYieldSchema,
         getSandboxRoot: () => undefined,

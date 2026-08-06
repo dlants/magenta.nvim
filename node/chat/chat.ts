@@ -8,13 +8,13 @@ import type {
   ThreadType,
 } from "@magenta/core";
 import {
+  type ArchiveEntry,
   AutoCompactSupervisor,
   deleteArchivedThread,
-  listArchivedThreadIds,
+  listArchivedThreads,
   loadAgents,
   MCPToolManagerImpl,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  readThreadMeta,
   SubagentSupervisor,
   ThreadTitle,
   threadCreatedAt,
@@ -55,6 +55,7 @@ import type {
   NvimCwd,
   UnresolvedFilePath,
 } from "../utils/files.ts";
+import { shortenPath } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
 import { formatTokenCount } from "../utils/tokens.ts";
 import type { SandboxRoot } from "./thread.ts";
@@ -72,12 +73,6 @@ const ARCHIVE_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
   minute: "2-digit",
 });
-
-/** Hydration state of an archived thread's title. Absence of a key in the
- * titles map means not-yet-hydrated; these variants describe a hydrated row. */
-type ArchiveTitle =
-  | { status: "untitled" }
-  | { status: "titled"; title: string };
 
 type ThreadWrapper = (
   | {
@@ -103,7 +98,7 @@ type ArchiveStateFields = {
   activeThreadId: ThreadId | undefined;
   threadIds: ThreadId[];
   loadedCount: number;
-  titles: { [id: ThreadId]: ArchiveTitle };
+  entries: { [id: ThreadId]: ArchiveEntry };
 };
 
 type ChatState =
@@ -165,7 +160,7 @@ export type Msg =
     }
   | {
       type: "archive-listed";
-      threadIds: ThreadId[];
+      entries: ArchiveEntry[];
     }
   | {
       type: "archive-navigate-back";
@@ -180,11 +175,6 @@ export type Msg =
   | {
       type: "archive-delete-threads";
       ids: ThreadId[];
-    }
-  | {
-      type: "archive-meta-loaded";
-      id: ThreadId;
-      title: ArchiveTitle;
     };
 
 export type ChatMsg = {
@@ -438,7 +428,7 @@ export class Chat implements ThreadManager {
             activeThreadId: this.state.activeThreadId,
             threadIds: [],
             loadedCount: ARCHIVE_PAGE_SIZE,
-            titles: {},
+            entries: {},
           };
           void this.loadArchiveList();
         }
@@ -452,7 +442,7 @@ export class Chat implements ThreadManager {
           activeThreadId: this.state.activeThreadId,
           threadIds: [],
           loadedCount: ARCHIVE_PAGE_SIZE,
-          titles: {},
+          entries: {},
         };
         void this.loadArchiveList();
         return;
@@ -473,7 +463,7 @@ export class Chat implements ThreadManager {
             activeThreadId: this.state.activeThreadId,
             threadIds: [],
             loadedCount: ARCHIVE_PAGE_SIZE,
-            titles: {},
+            entries: {},
           };
         }
         this.markActiveThreadViewed();
@@ -492,8 +482,11 @@ export class Chat implements ThreadManager {
           this.state.state !== "archive-thread-selected"
         )
           return;
-        this.state.threadIds = msg.threadIds;
-        this.hydrateArchiveTitles();
+        this.state.threadIds = msg.entries.map((entry) => entry.id);
+        this.state.entries = {};
+        for (const entry of msg.entries) {
+          this.state.entries[entry.id] = entry;
+        }
         return;
       }
 
@@ -508,7 +501,6 @@ export class Chat implements ThreadManager {
       case "archive-load-more": {
         if (this.state.state !== "archive") return;
         this.state.loadedCount += ARCHIVE_PAGE_SIZE;
-        this.hydrateArchiveTitles();
         return;
       }
 
@@ -517,7 +509,7 @@ export class Chat implements ThreadManager {
         this.state.threadIds = this.state.threadIds.filter(
           (id) => id !== msg.id,
         );
-        delete this.state.titles[msg.id];
+        delete this.state.entries[msg.id];
         this.context.removeArchivedThreadBuffers([msg.id]);
         void deleteArchivedThread(msg.id).catch((err: Error) => {
           this.context.nvim.logger.error(
@@ -535,7 +527,7 @@ export class Chat implements ThreadManager {
         );
         this.context.removeArchivedThreadBuffers(msg.ids);
         for (const id of msg.ids) {
-          delete this.state.titles[id];
+          delete this.state.entries[id];
           void deleteArchivedThread(id).catch((err: Error) => {
             this.context.nvim.logger.error(
               `Failed to delete archived thread ${id}: ${err.message}`,
@@ -545,58 +537,21 @@ export class Chat implements ThreadManager {
         return;
       }
 
-      case "archive-meta-loaded": {
-        if (this.state.state !== "archive") return;
-        this.state.titles[msg.id] = msg.title;
-        return;
-      }
-
       default:
         assertUnreachable(msg);
     }
   }
 
-  /** Read the archived thread id list off disk and dispatch it back into the
-   * archive state. Cheap: readdir + name parsing, no file contents. */
+  /** Read the listable archived threads off disk and dispatch them into the
+   * archive state. */
   private async loadArchiveList(): Promise<void> {
     try {
-      const threadIds = await listArchivedThreadIds();
-      this.myDispatch({ type: "archive-listed", threadIds });
+      const entries = await listArchivedThreads();
+      this.myDispatch({ type: "archive-listed", entries });
     } catch (err) {
       this.context.nvim.logger.error(
         `Failed to list archived threads: ${(err as Error).message}`,
       );
-    }
-  }
-
-  /** Lazily read `meta.json` sidecars for the currently-visible window of
-   * archived threads, dispatching a message per row as its title arrives. Ids
-   * whose title is already hydrated are skipped. */
-  private hydrateArchiveTitles(): void {
-    if (
-      this.state.state !== "archive" &&
-      this.state.state !== "archive-thread-selected"
-    )
-      return;
-    const window = this.state.threadIds.slice(0, this.state.loadedCount);
-    for (const id of window) {
-      if (id in this.state.titles) continue;
-      void readThreadMeta(id)
-        .then((meta) => {
-          this.myDispatch({
-            type: "archive-meta-loaded",
-            id,
-            title:
-              meta.title === undefined
-                ? { status: "untitled" }
-                : { status: "titled", title: meta.title },
-          });
-        })
-        .catch((err: Error) => {
-          this.context.nvim.logger.error(
-            `Failed to read archived thread meta ${id}: ${err.message}`,
-          );
-        });
     }
   }
 
@@ -672,6 +627,7 @@ export class Chat implements ThreadManager {
     getSandboxRoot,
     yieldSchema,
     scriptInvocationId,
+    scriptName,
     autoCompactThreshold,
     autoCompactPrompt,
   }: {
@@ -689,6 +645,7 @@ export class Chat implements ThreadManager {
     getSandboxRoot?: () => SandboxRoot | undefined;
     yieldSchema?: JSONSchemaType;
     scriptInvocationId?: ScriptInvocationId;
+    scriptName?: string;
     autoCompactThreshold?: number;
     autoCompactPrompt?: string;
   }) {
@@ -783,6 +740,7 @@ export class Chat implements ThreadManager {
       ...(getParentThread ? { getParentThread } : {}),
       ...(getSandboxRoot ? { getSandboxRoot } : {}),
       ...(yieldSchema ? { yieldSchema } : {}),
+      ...(scriptName ? { scriptName } : {}),
     });
 
     bypassRef.get = () => thread.isSandboxBypassed;
@@ -1360,15 +1318,14 @@ ${rows}${loadMore}`;
     if (this.state.state !== "archive") return d``;
 
     const date = ARCHIVE_DATE_FORMAT.format(threadCreatedAt(threadId));
-    const titleEntry = this.state.titles[threadId];
-    const title =
-      titleEntry === undefined
-        ? "…"
-        : titleEntry.status === "untitled"
-          ? "(untitled)"
-          : titleEntry.title;
+    const entry = this.state.entries[threadId];
+    const title = entry?.title ?? "(untitled)";
+    const prefix = entry?.scriptName ? `[${entry.scriptName}] ` : "";
+    const cwd = entry?.cwd
+      ? `  (${shortenPath(entry.cwd, this.context.homeDir)})`
+      : "";
 
-    const line = d`- ${date}  ${title}`;
+    const line = d`- ${date}  ${prefix}${title}${cwd}`;
 
     return withBindings(line, {
       "<CR>": () =>
@@ -1720,6 +1677,7 @@ ${rows}${loadMore}`;
 
   async spawnScriptThread(opts: {
     scriptInvocationId: ScriptInvocationId;
+    scriptName: string;
     prompt: string;
     yieldSchema: JSONSchemaType;
     getSandboxRoot: () => SandboxRoot | undefined;
@@ -1756,6 +1714,7 @@ ${rows}${loadMore}`;
         ? { subagentConfig: { systemReminder: opts.systemReminder } }
         : {}),
       scriptInvocationId: opts.scriptInvocationId,
+      scriptName: opts.scriptName,
       yieldSchema: opts.yieldSchema,
       getSandboxRoot: opts.getSandboxRoot,
       ...(opts.autoCompactThreshold !== undefined

@@ -261,6 +261,7 @@ export class Thread {
       getParentThread?: () => Thread | undefined;
       getSandboxRoot?: () => SandboxRoot | undefined;
       yieldSchema?: JSONSchemaType;
+      scriptName?: string;
       environment: Environment;
       initialFiles?: ContextFiles;
       initialGitState?: GitState | undefined;
@@ -307,6 +308,7 @@ export class Thread {
           cwd: isDocker ? env.cwd : context.cwd,
           homeDir: isDocker ? env.homeDir : context.homeDir,
           threadType,
+          ...(context.scriptName ? { scriptName: context.scriptName } : {}),
           ...(context.subagentConfig
             ? { subagentConfig: context.subagentConfig }
             : {}),

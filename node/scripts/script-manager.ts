@@ -386,6 +386,7 @@ export class ScriptManager {
         this.context.chat
           .spawnScriptThread({
             scriptInvocationId: id,
+            scriptName: invocation.scriptName,
             prompt: msg.prompt,
             yieldSchema: msg.yieldSchema as JSONSchemaType,
             getSandboxRoot: () => this.getSandboxRoot(id),

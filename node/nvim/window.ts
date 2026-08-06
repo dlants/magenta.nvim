@@ -149,18 +149,6 @@ export class NvimWindow {
     await this.nvim.call("nvim_win_set_buf", [this.id, buffer.id]);
   }
 
-  /** Set the window's buffer even when 'winfixbuf' is enabled on this window.
-   * Magenta windows keep 'winfixbuf' on to block accidental buffer swaps (e.g.
-   * :edit, oil), so intentional swaps must temporarily lift it. */
-  async setBufferForced(buffer: NvimBuffer): Promise<void> {
-    await this.setOption("winfixbuf", false);
-    try {
-      await this.nvim.call("nvim_win_set_buf", [this.id, buffer.id]);
-    } finally {
-      await this.setOption("winfixbuf", true);
-    }
-  }
-
   async topLine(): Promise<number> {
     const res = await this.nvim.call("nvim_exec2", [
       `echo line('w0', "${this.id}")`,

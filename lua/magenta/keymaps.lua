@@ -307,21 +307,6 @@ local function jump_to_header(direction, filter)
   end
 end
 
-local function nativeJump(key)
-  local win = vim.api.nvim_get_current_win()
-  local hadWinfixbuf = vim.wo[win].winfixbuf
-  vim.wo[win].winfixbuf = false
-  local ok, err = pcall(function()
-    local encoded = vim.api.nvim_replace_termcodes(key, true, false, true)
-    vim.api.nvim_feedkeys(encoded, "nx", false)
-  end)
-  if vim.api.nvim_win_is_valid(win) then
-    vim.wo[win].winfixbuf = hadWinfixbuf
-  end
-  if not ok then
-    error(err)
-  end
-end
 
 local message_jump_keymaps = {
   ["]m"] = function() jump_to_header("next", "any") end,
@@ -366,17 +351,6 @@ M.set_display_buffer_keymaps = function(bufnr)
     callback = function()
       display_bufnrs[bufnr] = nil
     end,
-  })
-
-  vim.keymap.set("n", "<C-o>", function() nativeJump("<C-o>") end, {
-    buffer = bufnr,
-    noremap = true,
-    silent = true,
-  })
-  vim.keymap.set("n", "<C-i>", function() nativeJump("<C-i>") end, {
-    buffer = bufnr,
-    noremap = true,
-    silent = true,
   })
 
   for key, action in pairs(message_jump_keymaps) do

@@ -19,6 +19,7 @@ export {
   type RelFilePath,
   relativePath,
   resolveFilePath,
+  shortenPath,
   type UnresolvedFilePath,
   unescapeFenceBody,
   validateFileSize,

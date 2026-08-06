@@ -6,7 +6,11 @@ import type { ThreadId } from "./chat-types.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderMessage } from "./providers/provider-types.ts";
 import { ThreadLogger } from "./thread-logger.ts";
-import { threadConversationLogPath, threadMetaPath } from "./utils/files.ts";
+import {
+  MAGENTA_TEMP_DIR,
+  threadConversationLogPath,
+  threadMetaPath,
+} from "./utils/files.ts";
 
 const TEST_BASE_DIR = path.join(os.tmpdir(), "magenta-test-thread-logger");
 
@@ -50,7 +54,7 @@ describe("ThreadLogger", () => {
   it("produces the {baseDir}/threads/{threadId}/conversation.jsonl path", () => {
     const threadId = "abc123" as ThreadId;
     expect(threadConversationLogPath(threadId)).toBe(
-      "/tmp/magenta/threads/abc123/conversation.jsonl",
+      `${MAGENTA_TEMP_DIR}/threads/abc123/conversation.jsonl`,
     );
     expect(threadConversationLogPath(threadId, "/base")).toBe(
       "/base/threads/abc123/conversation.jsonl",

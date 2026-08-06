@@ -49,12 +49,19 @@ export type ThreadLogEntry =
 export type ThreadLoggerOptions = {
   baseDir?: string;
   forkedFrom?: ForkProvenance;
+  /** Name of the magenta script that spawned this thread, if any. */
+  scriptName?: string;
+  /** Working directory the thread ran in. */
+  cwd?: string;
 };
 
 export class ThreadLogger {
   private filePath: string;
   private metaPath: string;
   private threadType: ThreadType;
+  private scriptName: string | undefined;
+  private cwd: string | undefined;
+  private title: string | undefined;
   private metaChain: Promise<void> = Promise.resolve();
   private persistedCount = 0;
   private ready: Promise<void>;
@@ -75,6 +82,8 @@ export class ThreadLogger {
     this.filePath = threadConversationLogPath(threadId, opts.baseDir);
     this.metaPath = threadMetaPath(threadId, opts.baseDir);
     this.threadType = threadType;
+    this.scriptName = opts.scriptName;
+    this.cwd = opts.cwd;
     const dir = path.dirname(this.filePath);
     this.ready = fs.mkdir(dir, { recursive: true }).then(
       () => undefined,
@@ -85,6 +94,10 @@ export class ThreadLogger {
         );
       },
     );
+
+    // Write the sidecar up front so the archive can classify this thread even
+    // if it never gets a title.
+    this.writeMeta();
 
     this.append({
       type: "thread_start",
@@ -162,11 +175,17 @@ export class ThreadLogger {
       timestamp: new Date().toISOString(),
       title,
     });
-    this.writeMeta(title);
+    this.title = title;
+    this.writeMeta();
   }
 
-  private writeMeta(title: string): void {
-    const contents = JSON.stringify({ title, threadType: this.threadType });
+  private writeMeta(): void {
+    const contents = JSON.stringify({
+      ...(this.title !== undefined ? { title: this.title } : {}),
+      threadType: this.threadType,
+      ...(this.scriptName !== undefined ? { scriptName: this.scriptName } : {}),
+      ...(this.cwd !== undefined ? { cwd: this.cwd } : {}),
+    });
     this.metaChain = this.metaChain
       .then(() => this.ready)
       .then(() => fs.writeFile(this.metaPath, contents))

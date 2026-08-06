@@ -158,6 +158,8 @@ export interface ThreadCoreContext {
   yieldSchema?: JSONSchemaType;
   /** Base dir for the conversation archive. Defaults to MAGENTA_TEMP_DIR. */
   conversationLogBaseDir?: string;
+  /** Name of the magenta script that spawned this thread, if any. */
+  scriptName?: string;
 }
 
 /** Minimum output tokens between system reminders during auto-respond loops */
@@ -248,6 +250,10 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         ...(context.conversationLogBaseDir !== undefined
           ? { baseDir: context.conversationLogBaseDir }
           : {}),
+        ...(context.scriptName !== undefined
+          ? { scriptName: context.scriptName }
+          : {}),
+        cwd: context.cwd,
         ...(forkProvenance ? { forkedFrom: forkProvenance } : {}),
       },
     );

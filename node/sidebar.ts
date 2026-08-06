@@ -281,12 +281,10 @@ export class Sidebar {
     // set vars so we can identify this as the magenta display window
     await displayWindow.setVar("magenta", true);
     await displayWindow.setVar("magenta_display_window", true);
-    await displayWindow.setOption("winfixbuf", true);
     await inputWindow.setOption("winbar", this.getInputWindowTitle());
     // set var so we can avoid closing this window when displaying a diff
     await inputWindow.setVar("magenta", true);
     await inputWindow.setOption("winfixheight", true);
-    await inputWindow.setOption("winfixbuf", true);
 
     this.nvim.logger.debug(`sidebar.create setting state`);
     this.state = {

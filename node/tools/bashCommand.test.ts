@@ -8,6 +8,7 @@ import type { Row0Indexed } from "../nvim/window.ts";
 import { MockProvider } from "../providers/mock.ts";
 import { FULL_CAPABILITIES } from "../test/capabilities.ts";
 import { withDriver } from "../test/preamble.ts";
+import { MAGENTA_TEMP_DIR } from "../utils/files.ts";
 
 describe("node/tools/bashCommand.test.ts", () => {
   it("executes a simple echo command without requiring approval (allowlisted)", async () => {
@@ -638,7 +639,8 @@ describe("bash command output logging", () => {
       // But we can verify the log file exists by getting the thread id and constructing the path
       const thread = driver.magenta.chat.getActiveThread();
       const logPath = path.join(
-        "/tmp/magenta/threads",
+        MAGENTA_TEMP_DIR,
+        "threads",
         thread.id,
         "tools",
         toolRequestId,
