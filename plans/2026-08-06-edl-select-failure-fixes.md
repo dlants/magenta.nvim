@@ -172,7 +172,21 @@ re-scan branch), a `start`/bare-`...`/`end` pattern matching two places errors i
 first, and a `replace` through an infix-wildcard selection asserts the resulting file content (the
 wildcard-matched remainder of the line is replaced).
 
-## miss diagnostics
+## miss diagnostics — DONE
+
+Implemented in `executor.ts`: `describeHeredocMiss(patternText, doc)` (single-line prefix
+diagnostic + multi-line divergence diagnostic) and an `Executor.noMatchError(message, pattern, doc)`
+funnel now used by all eight zero-match throw sites. Diagnostics only append to
+`ExecutionError.message`.
+
+Decisions/deviations:
+- Divergence walks k downward and reports the largest k whose prefix matches exactly once; a
+  prefix that matches in multiple places yields silence rather than a guessed location.
+- The prefix diagnostic is skipped when the single-line pattern already carries a trailing wildcard.
+- Diagnostics always scan the whole document, even for narrow/select_next/extend_*, since they are
+  hints rather than selection logic.
+- Tests: the `miss diagnostics` describe block at the end of `executor.test.ts` covers all six
+  listed cases.
 
 - Goal: a failing `select` explains what nearly matched, and stays quiet when nothing did.
 - Tests:

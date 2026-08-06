@@ -2310,3 +2310,97 @@ X`;
     });
   });
 });
+
+describe("miss diagnostics", () => {
+  async function run(content: string, script: (p: string) => string) {
+    let result: Awaited<ReturnType<typeof executor>> | undefined;
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, content, "utf-8");
+      result = await executor(parse(script(filePath)));
+    });
+    return result!;
+  }
+
+  it("suggests `...` when the pattern is a strict line prefix", async () => {
+    const result = await run(
+      "intro\n- Auth is OAuth 2.0 PKCE against auth.example.com\noutro\n",
+      (p) => `file \`${p}\`\nselect <<X\n- Auth is OAuth 2.0 PKCE\nX`,
+    );
+    const error = expectFileError(result, "test.txt", "select: no matches");
+    expect(error.error).toContain("line-prefix at line 2");
+    expect(error.error).toContain(
+      "- Auth is OAuth 2.0 PKCE against auth.example.com",
+    );
+    expect(error.error).toContain("Add `...` to the end");
+  });
+
+  it("stays quiet when the prefix matches two lines", async () => {
+    const result = await run(
+      "prefix one\nprefix two\n",
+      (p) => `file \`${p}\`\nselect <<X\nprefix\nX`,
+    );
+    const error = expectFileError(result, "test.txt", "select: no matches");
+    expect(error.error).not.toContain("line-prefix");
+  });
+
+  it("reports where a multi-line block diverges", async () => {
+    const fileLines = ["a", "b", "c", "d", "actual", "f"];
+    const patternLines = ["a", "b", "c", "d", "expected", "f"];
+    const result = await run(
+      `${fileLines.join("\n")}\n`,
+      (p) => `file \`${p}\`\nselect <<X\n${patternLines.join("\n")}\nX`,
+    );
+    const error = expectFileError(result, "test.txt", "select: no matches");
+    expect(error.error).toContain("Lines 1-4 of the pattern match at line 1");
+    expect(error.error).toContain("Pattern line 5 is:");
+    expect(error.error).toContain("`expected`");
+    expect(error.error).toContain("line 5 of the file is:");
+    expect(error.error).toContain("`actual`");
+    expect(error.error).toContain("extend_forward");
+  });
+
+  it("says so when the first pattern line appears nowhere", async () => {
+    const result = await run(
+      "alpha\nbeta\n",
+      (p) => `file \`${p}\`\nselect <<X\nnope\nalso nope\nX`,
+    );
+    const error = expectFileError(result, "test.txt", "select: no matches");
+    expect(error.error).toContain(
+      "The first line of the pattern does not appear in the file",
+    );
+    expect(error.error).not.toContain("line-prefix");
+    expect(error.error).not.toContain("Lines 1-");
+  });
+
+  it("produces no diagnostic on success", async () => {
+    const result = await run(
+      "alpha\nbeta\n",
+      (p) => `file \`${p}\`\nselect <<X\nalpha\nX`,
+    );
+    expect(result.fileErrors).toEqual([]);
+    expect(JSON.stringify(result)).not.toContain("no exact match");
+  });
+
+  it("applies to narrow and extend_forward too", async () => {
+    const content =
+      "start\n- Auth is OAuth 2.0 PKCE against auth.example.com\nend\n";
+    const narrowResult = await run(
+      content,
+      (p) => `file \`${p}\`\nnarrow <<X\n- Auth is OAuth 2.0 PKCE\nX`,
+    );
+    expect(
+      expectFileError(narrowResult, "test.txt", "narrow: no matches").error,
+    ).toContain("line-prefix at line 2");
+
+    const extendResult = await run(
+      content,
+      (p) =>
+        `file \`${p}\`\nselect <<S\nstart\nS\nextend_forward <<X\n- Auth is OAuth 2.0 PKCE\nX`,
+    );
+    expect(
+      expectFileError(extendResult, "test.txt", "extend_forward: no matches")
+        .error,
+    ).toContain("line-prefix at line 2");
+  });
+});

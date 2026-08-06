@@ -86,6 +86,61 @@ function findHeredocMatches(
   return results;
 }
 
+/** Explains a zero-match heredoc pattern by looking for the nearest thing that does match.
+ * Purely diagnostic: only ever contributes text to an error message, and stays silent
+ * unless it can point at a single unambiguous location. */
+function describeHeredocMiss(
+  patternText: string,
+  doc: Document,
+): string | undefined {
+  const lines = patternText.split("\n");
+  const lineText = (line: number) => doc.getText(doc.lineRange(line));
+  const lineOf = (offset: number) => doc.offsetToPos(offset).line;
+
+  if (lines.length === 1) {
+    if (heredocLineWildcards(lines[0]).trailing) return undefined;
+    const matches = findHeredocMatches(`${lines[0]}...`, doc.content, doc, 0);
+    if (matches.length !== 1) return undefined;
+    const line = lineOf(matches[0].start);
+    return [
+      `no exact match, but the pattern matches as a line-prefix at line ${line}. The full line is:`,
+      `  \`${lineText(line)}\``,
+      "Add `...` to the end of the truncated line(s) to match it.",
+    ].join("\n");
+  }
+
+  for (let k = lines.length - 1; k >= 1; k--) {
+    const matches = findHeredocMatches(
+      lines.slice(0, k).join("\n"),
+      doc.content,
+      doc,
+      0,
+    );
+    if (matches.length === 0) {
+      if (k === 1) {
+        return "no exact match. The first line of the pattern does not appear in the file.";
+      }
+      continue;
+    }
+    if (matches.length > 1) return undefined;
+    const startLine = lineOf(matches[0].start);
+    const divergeLine = startLine + k;
+    const actual =
+      divergeLine <= doc.lineCount
+        ? `but line ${divergeLine} of the file is:\n  \`` +
+          lineText(divergeLine) +
+          "`"
+        : `but the file ends at line ${doc.lineCount}.`;
+    return [
+      `no exact match. Lines 1-${k} of the pattern match at line ${startLine}. Pattern line ${k + 1} is:`,
+      `  \`${lines[k]}\``,
+      actual,
+      "Consider selecting the first line and using extend_forward to reach the end of the block.",
+    ].join("\n");
+  }
+  return undefined;
+}
+
 function formatPattern(pattern: Pattern): string {
   switch (pattern.type) {
     case "regex":
@@ -218,6 +273,23 @@ export class Executor {
       );
     }
     return this.selection[0];
+  }
+
+  /** Builds the error for a zero-match select/narrow, enriched with a diagnostic
+   * when the heredoc pattern nearly matched somewhere unambiguous. */
+  noMatchError(
+    message: string,
+    pattern: Pattern,
+    doc: Document,
+  ): ExecutionError {
+    const diagnostic =
+      pattern.type === "literal"
+        ? describeHeredocMiss(pattern.text, doc)
+        : undefined;
+    return new ExecutionError(
+      diagnostic ? `${message}\n${diagnostic}` : message,
+      this.trace,
+    );
   }
 
   findAllMatches(
@@ -511,9 +583,10 @@ export class Executor {
           this.selection,
         );
         if (matches.length === 0)
-          throw new ExecutionError(
+          throw this.noMatchError(
             `narrow_multiple: no matches for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
+            cmd.pattern,
+            file.doc,
           );
         this.selection = matches;
         this.addTrace("narrow_multiple", this.selection, file.doc);
@@ -528,9 +601,10 @@ export class Executor {
           this.selection,
         );
         if (matches.length === 0)
-          throw new ExecutionError(
+          throw this.noMatchError(
             `narrow: no matches for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
+            cmd.pattern,
+            file.doc,
           );
         if (matches.length > 1)
           throw new ExecutionError(
@@ -551,9 +625,10 @@ export class Executor {
           0,
         );
         if (matches.length === 0)
-          throw new ExecutionError(
+          throw this.noMatchError(
             `select_multiple: no matches for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
+            cmd.pattern,
+            file.doc,
           );
         this.selection = matches;
         this.addTrace("select_multiple", this.selection, file.doc);
@@ -570,9 +645,10 @@ export class Executor {
           0,
         );
         if (matches.length === 0)
-          throw new ExecutionError(
+          throw this.noMatchError(
             `select: no matches for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
+            cmd.pattern,
+            file.doc,
           );
         if (matches.length > 1)
           throw new ExecutionError(
@@ -614,9 +690,10 @@ export class Executor {
           current.end,
         );
         if (matches.length === 0)
-          throw new ExecutionError(
+          throw this.noMatchError(
             `select_next: no matches after selection for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
+            cmd.pattern,
+            file.doc,
           );
         this.selection = [matches[0]];
         this.addTrace("select_next", this.selection, file.doc);
@@ -630,9 +707,10 @@ export class Executor {
         const searchText = file.doc.content.slice(0, current.start);
         const matches = this.findInText(cmd.pattern, searchText, file.doc, 0);
         if (matches.length === 0)
-          throw new ExecutionError(
+          throw this.noMatchError(
             `select_prev: no matches before selection for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
+            cmd.pattern,
+            file.doc,
           );
         this.selection = [matches[matches.length - 1]];
         this.addTrace("select_prev", this.selection, file.doc);
@@ -651,9 +729,10 @@ export class Executor {
           current.end,
         );
         if (matches.length === 0)
-          throw new ExecutionError(
+          throw this.noMatchError(
             `extend_forward: no matches after selection for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
+            cmd.pattern,
+            file.doc,
           );
         this.selection = [
           {
@@ -673,9 +752,10 @@ export class Executor {
         const searchText = file.doc.content.slice(0, current.start);
         const matches = this.findInText(cmd.pattern, searchText, file.doc, 0);
         if (matches.length === 0)
-          throw new ExecutionError(
+          throw this.noMatchError(
             `extend_back: no matches before selection for pattern ${formatPattern(cmd.pattern)}`,
-            this.trace,
+            cmd.pattern,
+            file.doc,
           );
         this.selection = [
           {
