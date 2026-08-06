@@ -92,7 +92,7 @@ function findHeredocMatches(
 function describeHeredocMiss(
   patternText: string,
   doc: Document,
-): string | undefined {
+): { text: string; offset: number } | undefined {
   const lines = patternText.split("\n");
   const lineText = (line: number) => doc.getText(doc.lineRange(line));
   const lineOf = (offset: number) => doc.offsetToPos(offset).line;
@@ -102,11 +102,14 @@ function describeHeredocMiss(
     const matches = findHeredocMatches(`${lines[0]}...`, doc.content, doc, 0);
     if (matches.length !== 1) return undefined;
     const line = lineOf(matches[0].start);
-    return [
-      `no exact match, but the pattern matches as a line-prefix at line ${line}. The full line is:`,
-      `  \`${lineText(line)}\``,
-      "Add `...` to the end of the truncated line(s) to match it.",
-    ].join("\n");
+    return {
+      offset: matches[0].start,
+      text: [
+        `no exact match, but the pattern matches as a line-prefix at line ${line}. The full line is:`,
+        `  \`${lineText(line)}\``,
+        "Add `...` to the end of the truncated line(s) to match it.",
+      ].join("\n"),
+    };
   }
 
   for (let k = lines.length - 1; k >= 1; k--) {
@@ -118,25 +121,35 @@ function describeHeredocMiss(
     );
     if (matches.length === 0) {
       if (k === 1) {
-        return "no exact match. The first line of the pattern does not appear in the file.";
+        return {
+          offset: 0,
+          text: "no exact match. The first line of the pattern does not appear in the file.",
+        };
       }
       continue;
     }
     if (matches.length > 1) return undefined;
     const startLine = lineOf(matches[0].start);
     const divergeLine = startLine + k;
+    // A trailing newline yields a phantom empty final line; don't report it as content.
+    const lastContentLine = doc.content.endsWith("\n")
+      ? doc.lineCount - 1
+      : doc.lineCount;
     const actual =
-      divergeLine <= doc.lineCount
+      divergeLine <= lastContentLine
         ? `but line ${divergeLine} of the file is:\n  \`` +
           lineText(divergeLine) +
           "`"
-        : `but the file ends at line ${doc.lineCount}.`;
-    return [
-      `no exact match. Lines 1-${k} of the pattern match at line ${startLine}. Pattern line ${k + 1} is:`,
-      `  \`${lines[k]}\``,
-      actual,
-      "Consider selecting the first line and using extend_forward to reach the end of the block.",
-    ].join("\n");
+        : `but the file ends at line ${lastContentLine}.`;
+    return {
+      offset: matches[0].start,
+      text: [
+        `no exact match. Lines 1-${k} of the pattern match at line ${startLine}. Pattern line ${k + 1} is:`,
+        `  \`${lines[k]}\``,
+        actual,
+        "Consider selecting the first line and using extend_forward to reach the end of the block.",
+      ].join("\n"),
+    };
   }
   return undefined;
 }
@@ -281,15 +294,22 @@ export class Executor {
     message: string,
     pattern: Pattern,
     doc: Document,
+    withinRanges?: Range[],
   ): ExecutionError {
     const diagnostic =
       pattern.type === "literal"
         ? describeHeredocMiss(pattern.text, doc)
         : undefined;
-    return new ExecutionError(
-      diagnostic ? `${message}\n${diagnostic}` : message,
-      this.trace,
-    );
+    if (!diagnostic) return new ExecutionError(message, this.trace);
+    const outsideSelection =
+      withinRanges &&
+      !withinRanges.some(
+        (r) => diagnostic.offset >= r.start && diagnostic.offset < r.end,
+      );
+    const text = outsideSelection
+      ? `${diagnostic.text}\nNote: this location is outside the current selection.`
+      : diagnostic.text;
+    return new ExecutionError(`${message}\n${text}`, this.trace);
   }
 
   findAllMatches(
@@ -587,6 +607,7 @@ export class Executor {
             `narrow_multiple: no matches for pattern ${formatPattern(cmd.pattern)}`,
             cmd.pattern,
             file.doc,
+            this.selection,
           );
         this.selection = matches;
         this.addTrace("narrow_multiple", this.selection, file.doc);
@@ -605,6 +626,7 @@ export class Executor {
             `narrow: no matches for pattern ${formatPattern(cmd.pattern)}`,
             cmd.pattern,
             file.doc,
+            this.selection,
           );
         if (matches.length > 1)
           throw new ExecutionError(

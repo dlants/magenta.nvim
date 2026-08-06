@@ -188,6 +188,18 @@ Decisions/deviations:
 - Tests: the `miss diagnostics` describe block at the end of `executor.test.ts` covers all six
   listed cases.
 
+Review follow-up (addressed):
+- `describeHeredocMiss` now returns `{ text, offset }`; `noMatchError` takes an optional
+  `withinRanges` (passed by `narrow`/`narrow_multiple`) and appends "Note: this location is outside
+  the current selection." when the diagnostic points outside the narrowed region. Diagnostics still
+  scan the whole document — scoping them to the selection would hide the most useful hint.
+- Past-EOF reporting uses `lastContentLine` (excluding the phantom empty line produced by a trailing
+  newline), so `a\nb\n` vs pattern `a\nb\nc` now reports "the file ends at line 2" instead of
+  quoting an empty line 3.
+- Added tests: past-EOF divergence, multi-line prefix matching in two places (silent), a single-line
+  pattern already ending in `...` (no prefix suggestion), and a `narrow` whose near-match lies
+  outside the current selection (asserts the "outside the current selection" label).
+
 - Goal: a failing `select` explains what nearly matched, and stays quiet when nothing did.
 - Tests:
   - Single-line pattern that is a strict prefix of a real line: error contains the full real line

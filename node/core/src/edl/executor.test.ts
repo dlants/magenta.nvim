@@ -2382,6 +2382,45 @@ describe("miss diagnostics", () => {
     expect(JSON.stringify(result)).not.toContain("no exact match");
   });
 
+  it("reports EOF when the pattern block runs past the end of the file", async () => {
+    const result = await run(
+      "a\nb\n",
+      (p) => `file \`${p}\`\nselect <<X\na\nb\nc\nX`,
+    );
+    const error = expectFileError(result, "test.txt", "select: no matches");
+    expect(error.error).toContain("Lines 1-2 of the pattern match at line 1");
+    expect(error.error).toContain("but the file ends at line 2.");
+  });
+
+  it("stays quiet when a multi-line prefix matches in two places", async () => {
+    const result = await run(
+      "a\nb\nx\na\nb\ny\n",
+      (p) => `file \`${p}\`\nselect <<X\na\nb\nz\nX`,
+    );
+    const error = expectFileError(result, "test.txt", "select: no matches");
+    expect(error.error).not.toContain("Lines 1-");
+  });
+
+  it("emits no prefix suggestion when the pattern already has a trailing wildcard", async () => {
+    const result = await run(
+      "alpha beta\n",
+      (p) => `file \`${p}\`\nselect <<X\nnope...\nX`,
+    );
+    const error = expectFileError(result, "test.txt", "select: no matches");
+    expect(error.error).not.toContain("line-prefix");
+  });
+
+  it("labels a narrow diagnostic that points outside the current selection", async () => {
+    const result = await run(
+      "start\n- Auth is OAuth 2.0 PKCE against auth.example.com\nend\n",
+      (p) =>
+        `file \`${p}\`\nselect <<S\nend\nS\nnarrow <<X\n- Auth is OAuth 2.0 PKCE\nX`,
+    );
+    const error = expectFileError(result, "test.txt", "narrow: no matches");
+    expect(error.error).toContain("line-prefix at line 2");
+    expect(error.error).toContain("outside the current selection");
+  });
+
   it("applies to narrow and extend_forward too", async () => {
     const content =
       "start\n- Auth is OAuth 2.0 PKCE against auth.example.com\nend\n";
