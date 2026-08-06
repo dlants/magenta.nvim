@@ -13,6 +13,9 @@ exports[`runScript > returns error with message and trace on execution failure 1
     "fileErrors": [
       {
         "error": "narrow: no matches for pattern /nonexistent/",
+        "failedCommands": [
+          "narrow /nonexistent/",
+        ],
         "failedMutations": 0,
         "path": "<tmpDir>/test.txt",
         "savedRegisters": [],
@@ -82,6 +85,8 @@ hello
 
 File errors:
   <tmpDir>/test.txt: narrow: no matches for pattern /nonexistent/ (0 mutations not applied)
+    Failed commands (1):
+      narrow /nonexistent/
     Trace:
       file <tmpDir>/test.txt → switched to <tmpDir>/test.txt (2 lines)
       narrow → 1 range, 1 line

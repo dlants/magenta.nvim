@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parse } from "./parser.ts";
+import { formatCommandSource, parse } from "./parser.ts";
 
 describe("edl parser", () => {
   it("parses narrow with regex", () => {
@@ -362,5 +362,34 @@ END
 extra stuff
 END`;
     expect(() => parse(script)).toThrow('"END"');
+  });
+});
+
+describe("formatCommandSource", () => {
+  const roundtrip = (script: string) =>
+    parse(script).map(formatCommandSource).join("\n");
+
+  it("formats file, positional, regex and register commands", () => {
+    const script = [
+      "file `src/a.ts`",
+      "select /foo/",
+      "extend_forward eof",
+      "retain_nth 2",
+      "cut myreg",
+      "insert_after myreg",
+      "delete",
+    ].join("\n");
+    expect(roundtrip(script)).toBe(script);
+  });
+
+  it("formats heredoc and quoted mutation text", () => {
+    const script = [
+      "file `a.ts`",
+      "select <<EDL",
+      "const x = 1;",
+      "EDL",
+      'replace "const y = 2;"',
+    ].join("\n");
+    expect(roundtrip(script)).toBe(script);
   });
 });

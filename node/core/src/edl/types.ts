@@ -34,6 +34,8 @@ export type FileError = {
   path: string;
   error: string;
   failedMutations: number;
+  /** Source text of the command that failed, followed by the commands skipped as a result. */
+  failedCommands: string[];
   trace: TraceEntry[];
   savedRegisters: SavedRegisterInfo[];
 };

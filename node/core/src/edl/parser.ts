@@ -36,6 +36,55 @@ export type MutationText =
 
 export class ParseError extends Error {}
 
+export function formatPatternSource(pattern: Pattern): string {
+  switch (pattern.type) {
+    case "regex":
+      return `/${pattern.pattern.source}/${pattern.pattern.flags.replace("g", "")}`;
+    case "literal":
+      return `<<EDL\n${pattern.text}\nEDL`;
+    case "line":
+      return `${pattern.line}:`;
+    case "lineCol":
+      return `${pattern.line}:${pattern.col}`;
+    case "bof":
+      return "bof";
+    case "eof":
+      return "eof";
+    case "range":
+      return `${formatPatternSource(pattern.from)}-${formatPatternSource(pattern.to)}`;
+  }
+}
+
+function formatMutationTextSource(text: MutationText): string {
+  if ("register" in text) return text.register;
+  return text.isHeredoc
+    ? `<<EDL\n${text.text}\nEDL`
+    : JSON.stringify(text.text);
+}
+
+/** Reconstructs the source text of a parsed command, for error display. */
+export function formatCommandSource(cmd: Command): string {
+  switch (cmd.type) {
+    case "file":
+    case "newfile":
+      return `${cmd.type} \`${cmd.path}\``;
+    case "retain_first":
+    case "retain_last":
+    case "delete":
+      return cmd.type;
+    case "retain_nth":
+      return `retain_nth ${cmd.n}`;
+    case "cut":
+      return `cut ${cmd.register}`;
+    case "replace":
+    case "insert_before":
+    case "insert_after":
+      return `${cmd.type} ${formatMutationTextSource(cmd)}`;
+    default:
+      return `${cmd.type} ${formatPatternSource(cmd.pattern)}`;
+  }
+}
+
 export type Token =
   | { type: "word"; value: string }
   | { type: "regex"; pattern: string; flags: string }

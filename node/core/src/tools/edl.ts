@@ -35,7 +35,12 @@ export type EdlTraceEntry = { command: string; snippet: string };
 
 export type EdlDisplayData = {
   mutations: { path: string; summary: FileMutationSummary }[];
-  fileErrors: { path: string; error: string; failedMutations: number }[];
+  fileErrors: {
+    path: string;
+    error: string;
+    failedMutations: number;
+    failedCommands: string[];
+  }[];
   finalSelectionCount: number | undefined;
   trace: EdlTraceEntry[];
 };
@@ -116,6 +121,7 @@ export function execute(
             path: fe.path,
             error: fe.error,
             failedMutations: fe.failedMutations,
+            failedCommands: fe.failedCommands,
           })),
           finalSelectionCount: result.data.finalSelection
             ? result.data.finalSelection.ranges.length

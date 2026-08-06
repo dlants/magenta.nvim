@@ -120,10 +120,13 @@ export function renderResultSummary(info: CompletedToolInfo): VDOMNode {
       0,
     );
     const filesCount = data.mutations.length;
-    const fileErrorCount = data.fileErrors.length;
+    const failedCommandCount = data.fileErrors.reduce(
+      (acc, fe) => acc + fe.failedCommands.length,
+      0,
+    );
     const errorSuffix =
-      fileErrorCount > 0
-        ? ` (${String(fileErrorCount)} file error${fileErrorCount !== 1 ? "s" : ""})`
+      failedCommandCount > 0
+        ? ` (${String(failedCommandCount)} command${failedCommandCount !== 1 ? "s" : ""} failed)`
         : "";
     const totalLinesAdded = data.mutations.reduce(
       (acc, m) => acc + m.summary.linesAdded,
@@ -154,8 +157,11 @@ function renderTrace(data: Edl.EdlDisplayData): VDOMNode {
     lines.push(withMuted(d`Errors:\n`));
     for (const fe of data.fileErrors) {
       lines.push(
-        d`  ❌ ${withInlineCode(d`${fe.path}`)} ${withError(d`(${String(fe.failedMutations)} mutation${fe.failedMutations !== 1 ? "s" : ""} failed)`)}: ${fe.error}\n`,
+        d`  ❌ ${withInlineCode(d`${fe.path}`)} ${withError(d`(${String(fe.failedCommands.length)} command${fe.failedCommands.length !== 1 ? "s" : ""} failed)`)}: ${fe.error}\n`,
       );
+      for (const cmd of fe.failedCommands) {
+        lines.push(withCode(d`${cmd}\n`));
+      }
     }
   }
 
@@ -228,7 +234,7 @@ export function renderResult(
     );
   }
 
-  for (const { path, error, failedMutations } of data.fileErrors) {
+  for (const { path, error, failedCommands } of data.fileErrors) {
     const absPath = resolveFilePath(
       context.cwd,
       path as UnresolvedFilePath,
@@ -238,7 +244,7 @@ export function renderResult(
 
     rows.push(
       withBindings(
-        d`❌ ${withInlineCode(d`${shownPath}`)} ${withError(d`${String(failedMutations)} mutation${failedMutations !== 1 ? "s" : ""} failed`)}: ${error}\n`,
+        d`❌ ${withInlineCode(d`${shownPath}`)} ${withError(d`${String(failedCommands.length)} command${failedCommands.length !== 1 ? "s" : ""} failed`)}: ${error}\n${failedCommands.map((cmd) => withCode(d`${cmd}\n`))}`,
         {
           "<CR>": () =>
             context.threadDispatch({

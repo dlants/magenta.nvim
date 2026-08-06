@@ -1130,6 +1130,33 @@ replace "WORLD"`;
     });
   });
 
+  it("records the failing command and all commands skipped after it", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const file1 = path.join(tmpDir, "a.txt");
+      const file2 = path.join(tmpDir, "b.txt");
+      await fs.writeFile(file1, "aaa\n", "utf-8");
+      await fs.writeFile(file2, "bbb\n", "utf-8");
+
+      const script = `
+file \`${file1}\`
+select /nonexistent/
+replace "X"
+delete
+file \`${file2}\`
+select /bbb/
+replace "BBB"`;
+      const result = await executor(parse(script));
+
+      const error = expectFileError(result, "a.txt", "no matches");
+      expect(error.failedCommands).toEqual([
+        "select /nonexistent/",
+        'replace "X"',
+        "delete",
+      ]);
+      expect(await fs.readFile(file2, "utf-8")).toBe("BBB\n");
+    });
+  });
+
   it("increments register counter across multiple file errors", async () => {
     await withTmpDir(async (tmpDir) => {
       const file1 = path.join(tmpDir, "a.txt");

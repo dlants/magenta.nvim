@@ -27,6 +27,7 @@ export type FileErrorInfo = {
   path: string;
   error: string;
   failedMutations: number;
+  failedCommands: string[];
   trace: { command: string; snippet: string }[];
   savedRegisters: { name: string; sizeChars: number }[];
 };
@@ -174,6 +175,11 @@ function formatFileErrors(
     lines.push(
       `  ${fe.path}: ${fe.error} (${fe.failedMutations} mutation${fe.failedMutations !== 1 ? "s" : ""} not applied)`,
     );
+    if (fe.failedCommands.length > 0) {
+      lines.push(
+        `    Failed commands (${fe.failedCommands.length}):\n${fe.failedCommands.map((c) => c.replace(/^/gm, "      ")).join("\n")}`,
+      );
+    }
     if (fe.trace.length > 0) {
       lines.push(
         `    Trace:\n${fe.trace.map((t) => `      ${t.command} → ${t.snippet}`).join("\n")}`,
@@ -269,6 +275,7 @@ export async function runScript(
         path: toDisplayPath(fe.path),
         error: fe.error,
         failedMutations: fe.failedMutations,
+        failedCommands: fe.failedCommands,
         trace: fe.trace.map((t) => ({
           command: t.command,
           snippet: t.snippet,

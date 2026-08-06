@@ -1,6 +1,11 @@
 import { type FileIO, FsFileIO } from "../capabilities/file-io.ts";
 import { Document } from "./document.ts";
-import type { Command, MutationText, Pattern } from "./parser.ts";
+import {
+  type Command,
+  formatCommandSource,
+  type MutationText,
+  type Pattern,
+} from "./parser.ts";
 import type {
   FileError,
   FileMutationSummary,
@@ -891,6 +896,9 @@ export class Executor {
               path: errorPath,
               error: e.message,
               failedMutations,
+              failedCommands: commands
+                .slice(i, skipEnd)
+                .map(formatCommandSource),
               trace: [...e.trace],
               savedRegisters,
             });
