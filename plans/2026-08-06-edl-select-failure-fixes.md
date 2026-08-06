@@ -213,7 +213,16 @@ Review follow-up (addressed):
   - `narrow` and `extend_forward` zero-match failures carry the same diagnostic (verifies the
     shared `noMatchError` path, not just `select`).
 
-## documentation
+## documentation — DONE
+
+Implemented: `edl-description.md` gains three examples after the "not unique" case (leading `...`,
+leading+trailing infix `...`, and a bare `...` line spanning any single line). `doc/magenta-edl.txt`
+updated in three places: the heredoc syntax paragraph, the "In Selections" bullet list, and the best
+practices bullet.
+
+Deviation: there are no `node/chat/thread.test.ts` snapshots that embed the EDL tool description —
+the description string only appears in `node/core/src/tools/edl.ts`, so nothing needed regenerating.
+The full suite (800 tests), `tsc -b`, and `biome check` all pass.
 
 - Goal: the agent-facing description teaches the leading `...` form.
 - Tests: none automated. Update `node/core/src/tools/edl-description.md` (the `...` section around

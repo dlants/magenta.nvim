@@ -99,9 +99,12 @@ Heredoc Syntax~
   Line-oriented patterns match contiguous complete lines. By default, each
   line matches exactly, including leading whitespace. End a pattern line with
   ... to match any remainder of that line without consuming another line.
-  The marker is only special at the end of a line; a...b matches
-  literally. A heredoc block containing a prefix marker must match exactly one
-  location in the file. The selection includes the trailing newline.
+  Begin a pattern line with ... to match any prefix of that line, and use
+  both to match a fragment anywhere within the line. A line that is exactly
+  ... matches any single line. The marker is only special at the start or
+  end of a line; a...b matches literally. A heredoc block containing a
+  wildcard marker must match exactly one location in the file. The selection
+  includes the trailing newline.
 
   When the text being matched contains a heredoc delimiter (e.g. <<END),
   use a different, unique termination code to avoid conflicts:
@@ -138,7 +141,9 @@ In Selections (heredoc patterns)~
 
   - Match complete lines, including exact leading whitespace
   - A trailing ... matches any remainder of that line
-  - ... is only special at the end of a heredoc line
+  - A leading ... matches any prefix of that line; both ends together match
+    a fragment anywhere in the line, and a bare ... line matches any line
+  - ... is only special at the start or end of a heredoc line
   - Blocks using ... must match exactly one location in the file
   - Include the trailing newline (or extend to EOF for the last line)
 
@@ -341,7 +346,8 @@ BEST PRACTICES                                       *magenta-edl-practices*
 - Prefer heredoc patterns over regex for selecting whole lines. Heredocs
   are easier to read and less error-prone.
 
-- Use a trailing ... when the line prefix is stable but its suffix is not.
+- Use a trailing ... when the line prefix is stable but its suffix is not,
+  a leading ... when the suffix is stable, or both to match a fragment.
   Use regex for other within-line matches, character classes, and wildcards.
 
 - Prefer text matching over line numbers. Line numbers are fragile and

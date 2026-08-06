@@ -70,6 +70,23 @@ END
 select <<END
   g...
 END
+
+# matches (leading ... matches any prefix of the line)
+select <<END
+...bc
+END
+
+# matches (leading and trailing ... match a fragment anywhere in the line)
+select <<END
+...b...
+END
+
+# a line that is exactly ... matches any single line (here: abc, any line, ghi)
+select <<END
+  abc
+...
+  ghi
+END
 ```
 
 - **In mutations** (`replace`, `insert_before`, `insert_after`) — heredoc text gets a trailing `\n` appended automatically.
