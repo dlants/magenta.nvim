@@ -2116,6 +2116,19 @@ replace "x"`;
       expectFileError(result, "test.txt", "no matches");
     });
   });
+  it("an explicit s flag keeps dotall and does not add m", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "a\nb\n", "utf-8");
+      const script = `\
+file \`${filePath}\`
+select /a.b/s
+replace "x"`;
+      const result = await executor(parse(script));
+      expect(result.fileErrors).toEqual([]);
+      expect(await fs.readFile(filePath, "utf-8")).toBe("x\n");
+    });
+  });
   it("error text echoes the authored flags without m", async () => {
     await withTmpDir(async (tmpDir) => {
       const filePath = path.join(tmpDir, "test.txt");

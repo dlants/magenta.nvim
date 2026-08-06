@@ -144,6 +144,11 @@ in isolation both with and without this change.
   - `/a.b/` does not match across a newline, confirming `s` was not introduced.
   - `formatPattern` output for a failing `/foo/i` still reads `/foo/i`, not `/foo/im`.
 
+Review follow-up (addressed): added coverage for the `s`-flag branch — an executor test where
+`select /a.b/s` matches across a newline (dotall preserved, `m` not appended), plus parser tests
+that `/a.b/s` yields `gs`, that an explicit `/hello/m` is not duplicated, and that the parser-side
+`formatPatternSource` echoes `/hello/i` and `/world/`.
+
 ## leading heredoc wildcard
 
 - Goal: `...fragment...` selects the line containing that fragment mid-line.

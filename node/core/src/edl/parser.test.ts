@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatCommandSource, parse } from "./parser.ts";
+import type { Pattern } from "./parser.ts";
+import { formatCommandSource, formatPatternSource, parse } from "./parser.ts";
 
 describe("edl parser", () => {
   it("parses narrow with regex", () => {
@@ -161,6 +162,27 @@ END`);
     ]);
   });
 
+  it("does not add m to a dotall regex", () => {
+    const cmds = parse(`narrow /a.b/s`);
+    expect(cmds).toEqual([
+      { type: "narrow", pattern: { type: "regex", pattern: /a.b/gs } },
+    ]);
+  });
+  it("does not duplicate an explicit m flag", () => {
+    const cmds = parse(`narrow /hello/m`);
+    expect(cmds).toEqual([
+      { type: "narrow", pattern: { type: "regex", pattern: /hello/gm } },
+    ]);
+  });
+  it("formatPatternSource echoes authored flags without g or m", () => {
+    const cmds = parse(`narrow /hello/i\nnarrow /world/m`);
+    expect(formatPatternSource((cmds[0] as { pattern: Pattern }).pattern)).toBe(
+      "/hello/i",
+    );
+    expect(formatPatternSource((cmds[1] as { pattern: Pattern }).pattern)).toBe(
+      "/world/",
+    );
+  });
   it("parses regex with escaped newline followed by another command", () => {
     const cmds = parse(`narrow /abc\\ndef/\nnarrow /somethingelse/`);
     expect(cmds).toEqual([
