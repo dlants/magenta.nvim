@@ -149,7 +149,12 @@ Review follow-up (addressed): added coverage for the `s`-flag branch — an exec
 that `/a.b/s` yields `gs`, that an explicit `/hello/m` is not duplicated, and that the parser-side
 `formatPatternSource` echoes `/hello/i` and `/world/`.
 
-## leading heredoc wildcard
+## leading heredoc wildcard — DONE
+
+Implemented in `executor.ts` via a shared `heredocLineWildcards(line)` helper used by both
+`heredocPatternRegex` and `hasHeredocPrefixMarker`, so the uniqueness rule covers leading wildcards.
+A bare `...` line is treated as the both-ends case (any single line). `...` in the middle of a line
+stays literal. Tests: `leading heredoc wildcards` describe block at the end of `executor.test.ts`.
 
 - Goal: `...fragment...` selects the line containing that fragment mid-line.
 - Tests:

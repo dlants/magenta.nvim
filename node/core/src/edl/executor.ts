@@ -29,17 +29,34 @@ function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** A heredoc line may carry a `...` wildcard at its start, its end, or both.
+ * A line that is exactly `...` is the degenerate both-ends case: any single line. */
+function heredocLineWildcards(line: string): {
+  leading: boolean;
+  trailing: boolean;
+  literal: string;
+} {
+  if (line === "...") return { leading: true, trailing: true, literal: "" };
+  const leading = line.startsWith("...");
+  const rest = leading ? line.slice(3) : line;
+  const trailing = rest.endsWith("...");
+  return { leading, trailing, literal: trailing ? rest.slice(0, -3) : rest };
+}
+
 function heredocPatternRegex(text: string): RegExp {
   const lines = text.split("\n").map((line) => {
-    const matchesPrefix = line.endsWith("...");
-    const literal = matchesPrefix ? line.slice(0, -3) : line;
-    return `${escapeRegex(literal)}${matchesPrefix ? "[^\\n]*" : ""}`;
+    const { leading, trailing, literal } = heredocLineWildcards(line);
+    const any = "[^\\n]*";
+    return `${leading ? any : ""}${escapeRegex(literal)}${trailing ? any : ""}`;
   });
   return new RegExp(`^${lines.join("\\n")}$`, "gm");
 }
 
 function hasHeredocPrefixMarker(text: string): boolean {
-  return text.split("\n").some((line) => line.endsWith("..."));
+  return text.split("\n").some((line) => {
+    const { leading, trailing } = heredocLineWildcards(line);
+    return leading || trailing;
+  });
 }
 
 function findHeredocMatches(

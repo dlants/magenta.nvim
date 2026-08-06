@@ -2143,3 +2143,97 @@ select /zzz/i`;
     });
   });
 });
+
+describe("leading heredoc wildcards", () => {
+  it("infix wildcard selects the whole containing line", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(
+        filePath,
+        "intro\nnote: the API takes `{ session, id }` here\noutro\n",
+        "utf-8",
+      );
+      const script = `\
+file \`${filePath}\`
+select <<X
+...the API takes \`{ session, id }\`...
+X`;
+      const result = await executor(parse(script));
+      expect(result.fileErrors).toEqual([]);
+      expect(result.finalSelection?.ranges.map((r) => r.content)).toEqual([
+        "note: the API takes `{ session, id }` here\n",
+      ]);
+    });
+  });
+
+  it("leading-only wildcard anchors at the line end", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "foo suffix\nsuffix bar\n", "utf-8");
+      const script = `\
+file \`${filePath}\`
+select <<X
+...suffix
+X`;
+      const result = await executor(parse(script));
+      expect(result.fileErrors).toEqual([]);
+      expect(result.finalSelection?.ranges.map((r) => r.content)).toEqual([
+        "foo suffix\n",
+      ]);
+    });
+  });
+
+  it("an ambiguous leading wildcard is an error", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "one suffix\ntwo suffix\n", "utf-8");
+      const script = `\
+file \`${filePath}\`
+select <<X
+...suffix
+X`;
+      const result = await executor(parse(script));
+      expectFileError(
+        result,
+        "test.txt",
+        "must match exactly one location in the file, got 2",
+      );
+    });
+  });
+
+  it("a bare ... line matches any single line", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "head\nstart\nmiddle\nend\ntail\n", "utf-8");
+      const script = `\
+file \`${filePath}\`
+select <<X
+start
+...
+end
+X`;
+      const result = await executor(parse(script));
+      expect(result.fileErrors).toEqual([]);
+      expect(result.finalSelection?.ranges.map((r) => r.content)).toEqual([
+        "start\nmiddle\nend\n",
+      ]);
+    });
+  });
+
+  it("a mid-line ... is still literal", async () => {
+    await withTmpDir(async (tmpDir) => {
+      const filePath = path.join(tmpDir, "test.txt");
+      await fs.writeFile(filePath, "aXXb\na...b\n", "utf-8");
+      const script = `\
+file \`${filePath}\`
+select <<X
+a...b
+X`;
+      const result = await executor(parse(script));
+      expect(result.fileErrors).toEqual([]);
+      expect(result.finalSelection?.ranges.map((r) => r.content)).toEqual([
+        "a...b\n",
+      ]);
+    });
+  });
+});
