@@ -17,7 +17,7 @@ Key entry points:
 
 # Semantic search (pkb)
 
-This repo has a semantic search index over its code and docs, built with [pkb](https://github.com/dlants/pkb). For exploratory / orientation questions ("where is X handled?", "how does Y work?"), use `pkb search` rather than grepping with `rg`. Reserve `rg` for exact symbol/string lookups.
+This repo has a semantic search index over its code and docs, built with [pkb](https://github.com/dlants/pkb). For exploratory / orientation questions ("where is X handled?", "how does Y work?"), use `pkb search` rather than grepping. Reserve `grep` for exact symbol/string lookups.
 
 ```bash
 pkb search "<natural language query>"   # -k N sets result count (default 5)
@@ -26,7 +26,7 @@ pkb search "<natural language query>"   # -k N sets result count (default 5)
 Each result is a snippet with its file path — treat it as a pointer and open the file to read the real code. The index reflects the last indexed commit on `main`, not your working tree. The `plans/` dir is excluded from the index (see `pkb.toml`).
 
 <system_reminder>
-Prefer `pkb search <query>` to rg for exploratory queries.
+Prefer `pkb search <query>` to grep for exploratory queries.
 </system_reminder>
 
 # Architecture

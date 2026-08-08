@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import type { OutputLine, Shell } from "../capabilities/shell.ts";
 import {
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -12,25 +11,6 @@ import type {
 } from "../tool-types.ts";
 import type { Result } from "../utils/result.ts";
 
-let rgAvailable: boolean | undefined;
-let fdAvailable: boolean | undefined;
-
-export function isRgAvailable(): boolean {
-  if (rgAvailable === undefined) {
-    const result = spawnSync("which", ["rg"], { stdio: "pipe" });
-    rgAvailable = result.status === 0;
-  }
-  return rgAvailable;
-}
-
-export function isFdAvailable(): boolean {
-  if (fdAvailable === undefined) {
-    const result = spawnSync("which", ["fd"], { stdio: "pipe" });
-    fdAvailable = result.status === 0;
-  }
-  return fdAvailable;
-}
-
 const BASE_DESCRIPTION = `Run a command in a bash shell.
 For example, you can run \`ls\`, \`echo 'Hello, World!'\`, or \`git status\`.
 The command will time out after 1 min.
@@ -41,31 +21,8 @@ Long output will be abbreviated (first 10 + last 20 lines). Full output is saved
 You will get the stdout and stderr of the command, as well as the exit code, so you do not need to do stream redirects like "2>&1".
 `;
 
-const RG_DESCRIPTION = `
-For searching file contents, prefer \`rg\` (ripgrep) which is available on this system. Examples:
-- \`rg "pattern"\` - search recursively in current directory
-- \`rg "pattern" path/to/dir\` - search in specific directory
-- \`rg "pattern" path/to/file\` - search in specific file
-- \`echo "text" | rg "pattern"\` - search in piped input
-`;
-
-const FD_DESCRIPTION = `
-For finding files by name, prefer \`fd\` which is available on this system. Note: fd skips hidden files and gitignored files by default. Examples:
-- \`fd "pattern"\` - find files matching pattern recursively
-- \`fd "pattern" path/to/dir\` - find in specific directory
-- \`fd -e ts\` - find files with specific extension
-- \`fd -t f "pattern"\` - find only files (not directories)
-- \`fd -t d "pattern"\` - find only directories
-`;
-
 export function getSpec(): ProviderToolSpec {
-  let description = BASE_DESCRIPTION;
-  if (isRgAvailable()) {
-    description += RG_DESCRIPTION;
-  }
-  if (isFdAvailable()) {
-    description += FD_DESCRIPTION;
-  }
+  const description = BASE_DESCRIPTION;
 
   return {
     name: "bash_command" as ToolName,
@@ -125,33 +82,6 @@ function formatTokens(charCount: number): string {
 
 const TRIM_REMINDER =
   "\nNote: a trailing `| head`/`| tail` was removed from your command. The bash_command tool already trims long output for you, so you don't need to pipe into head or tail.\n";
-
-const RG_REPLACE_WARNING =
-  "This command was NOT run. It looks like you passed a short `-r` flag to `rg`. " +
-  "For ripgrep, `-r` is the short form of `--replace` and it consumes the rest of the flag bundle (and/or the next argument) as a replacement string — e.g. `-rn` means `--replace=n`, not `-r -n`. " +
-  "`-r` does NOT mean recursive; rg recurses by default. " +
-  "If you wanted line numbers use `-n`, for files-with-matches use `-l`. " +
-  "If you genuinely want replacement, use the long `--replace` form instead.";
-
-export function detectRgShortReplaceFlag(command: string): boolean {
-  const segments = command.split(/&&|\|\||[;|\n]/);
-  for (const segment of segments) {
-    const tokens = segment.trim().split(/\s+/).filter(Boolean);
-    let i = 0;
-    while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) {
-      i++;
-    }
-    if (i >= tokens.length) continue;
-    const program = tokens[i].split("/").pop();
-    if (program !== "rg") continue;
-    for (const tok of tokens.slice(i + 1)) {
-      if (/^-[A-Za-z]*r[A-Za-z]*$/.test(tok)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
 
 export function stripTrailingHeadTail(command: string): {
   command: string;
@@ -305,22 +235,6 @@ export function execute(
   const { command: sanitizedCommand, wasTrimmed } = stripTrailingHeadTail(
     request.input.command,
   );
-
-  if (detectRgShortReplaceFlag(sanitizedCommand)) {
-    return {
-      promise: Promise.resolve({
-        type: "tool_result",
-        id: request.id,
-        result: {
-          status: "error",
-          error: RG_REPLACE_WARNING,
-        },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      }),
-      abort: () => {},
-      progress,
-    };
-  }
 
   let aborted = false;
   let tickInterval: ReturnType<typeof setInterval> | undefined;

@@ -25,8 +25,8 @@ If your prompt is essentially asking you to read a file and report on its full c
 Use these tools effectively:
 
 - semantic search (like pkb), if it's available in the project (see context.md).
-- `rg "pattern"` (ripgrep) - Search file contents recursively. Use for finding usages, definitions, or patterns
-- `fd "pattern"` - Find files by name. Use for locating specific files or file types
+- `grep -rn "pattern" .` - Search file contents recursively. Use for finding usages, definitions, or patterns
+- `find . -name "pattern"` - Find files by name. Use for locating specific files or file types
 - `get_files` - Read file contents to understand code structure
 - `hover` - Get type information and definitions for symbols
 - `find_references` - Find all references to a symbol
