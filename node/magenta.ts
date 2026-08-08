@@ -1134,6 +1134,11 @@ ${lines.join("\n")}
       }
       return magenta;
     };
+    // Notifications can arrive between `bridge()` (which registers the autocmds
+    // on the lua side) and the end of this async initialization. Lifecycle
+    // events (buf enter/delete, window closed) are safe to drop in that window;
+    // dropping them beats logging a scary "used before initialization" error.
+    const getMagentaIfReady = (): Magenta | undefined => magenta;
     const lsp = new Lsp(nvim);
     nvim.onNotification(MAGENTA_COMMAND, async (args: unknown[]) => {
       try {
@@ -1150,7 +1155,7 @@ ${lines.join("\n")}
 
     nvim.onNotification(MAGENTA_ON_WINDOW_CLOSED, async () => {
       try {
-        await getMagenta().onWinClosed();
+        await getMagentaIfReady()?.onWinClosed();
       } catch (err) {
         nvim.logger.error(err as Error);
       }
@@ -1202,7 +1207,7 @@ ${lines.join("\n")}
     nvim.onNotification(MAGENTA_BUF_ENTER, async (args) => {
       try {
         const data = (args as unknown as { bufnr: number; winid: number }[])[0];
-        await getMagenta().onBufEnter(
+        await getMagentaIfReady()?.onBufEnter(
           data.bufnr as BufNr,
           data.winid as WindowId,
         );
@@ -1233,7 +1238,7 @@ ${lines.join("\n")}
     nvim.onNotification(MAGENTA_BUF_DELETE, async (args) => {
       try {
         const data = (args as unknown as { bufnr: number }[])[0];
-        await getMagenta().onBufDelete(data.bufnr as BufNr);
+        await getMagentaIfReady()?.onBufDelete(data.bufnr as BufNr);
       } catch (err) {
         nvim.logger.error(
           err instanceof Error

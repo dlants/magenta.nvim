@@ -61,6 +61,15 @@ local function node_job_alive()
   return ok and result[1] == -1
 end
 
+-- True if nvim still knows about this rpc channel. `jobwait` can report the
+-- node job as alive while its rpc channel has already been closed (e.g. the
+-- job id belongs to a newer process than the channel we cached), so liveness
+-- of the job alone is not enough to justify keeping the bridge.
+local function channel_alive(channel_id)
+  local ok, info = pcall(vim.api.nvim_get_chan_info, channel_id)
+  return ok and type(info) == "table" and info.id ~= nil
+end
+
 local function safe_rpcnotify(channel_id, method, ...)
   if not channel_id or M.channel_id ~= channel_id then
     M.teardown_bridge("channel mismatch in safe_rpcnotify (method=" .. tostring(method) .. ")")
@@ -74,7 +83,7 @@ local function safe_rpcnotify(channel_id, method, ...)
     -- and the bridge is otherwise healthy. Only tear down when the node job
     -- has actually exited; otherwise warn and keep the bridge so we don't
     -- kill a working session over a spurious "Invalid channel" error.
-    if node_job_alive() then
+    if node_job_alive() and channel_alive(channel_id) then
       vim.notify(
         "magenta: rpcnotify failed but node job is alive; keeping bridge"
           .. " (method=" .. tostring(method) .. ", err=" .. tostring(err) .. ")",
