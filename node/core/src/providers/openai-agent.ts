@@ -20,6 +20,7 @@ import type {
   Agent,
   AgentInput,
   AgentLog,
+  AgentHooks,
   AgentOptions,
   AgentPhase,
   NativeMessageIdx,
@@ -416,6 +417,11 @@ export class OpenAIAgent implements Agent {
     dropDanglingToolUses(this.messages);
     this.restamp();
     this.notify();
+  }
+
+  bindHooks(hooks: AgentHooks): void {
+    this.options = { ...this.options, ...hooks };
+    this.onBeforeToolResponse = undefined;
   }
 
   clone(): OpenAIAgent {

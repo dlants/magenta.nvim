@@ -151,48 +151,6 @@ export class NvimDriver {
     };
   }
 
-  /**
-   * Intercept the maybeAutoRespond method to pause auto-respond after tool completion.
-   * This allows tests to modify state (e.g., edit buffers) before the auto-respond fires.
-   */
-  interceptAutoRespond() {
-    const thread = this.magenta.chat.getActiveThread();
-    const callDefer = new Defer<void>();
-    const executeDefer = new Defer<
-      ReturnType<typeof thread.core.maybeAutoRespond>
-    >();
-
-    const originalMaybeAutoRespond = thread.core.maybeAutoRespond.bind(
-      thread.core,
-    );
-    const spy = vi
-      .spyOn(thread.core, "maybeAutoRespond")
-      .mockImplementation(() => {
-        callDefer.resolve();
-        // Block until execute() is called - return a default value synchronously
-        let result: ReturnType<typeof thread.core.maybeAutoRespond> = {
-          type: "no-action-needed",
-        };
-        executeDefer.promise.then((r) => {
-          result = r;
-        });
-        return result;
-      });
-
-    return {
-      /** Resolves when maybeAutoRespond is called */
-      promise: callDefer.promise,
-      spy,
-      /** Call this to restore the original method and execute it */
-      execute: () => {
-        spy.mockRestore();
-        const result = originalMaybeAutoRespond();
-        executeDefer.resolve(result);
-        return result;
-      },
-    };
-  }
-
   send() {
     return this.magenta.command("send");
   }

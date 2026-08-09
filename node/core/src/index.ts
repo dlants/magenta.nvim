@@ -153,6 +153,7 @@ export type {
   Agent,
   AgentInput,
   AgentLog,
+  AgentHooks,
   AgentOptions,
   AgentPhase,
   NativeMessageIdx,

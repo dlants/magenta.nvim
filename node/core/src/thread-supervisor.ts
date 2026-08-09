@@ -1,6 +1,6 @@
 import type {
   ProviderMessageContent,
-  StopReason,
+  StreamStopReason,
 } from "./providers/provider-types.ts";
 
 /** Action returned from the `onEndTurnWithoutYield` hook. */
@@ -32,7 +32,7 @@ export type EndTurnContext = {
 
 export type HandoffContext = {
   inputTokenCount: number | undefined;
-  stopReason: StopReason;
+  stopReason: StreamStopReason;
 };
 
 export interface ThreadSupervisor {

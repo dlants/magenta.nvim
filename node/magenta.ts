@@ -297,15 +297,13 @@ export class Magenta {
         if (!wrapper || wrapper.state !== "initialized") {
           return "";
         }
-        const status = wrapper.thread.getProviderStatus();
-        switch (status.type) {
-          case "streaming":
-            return "⏳";
-          case "error":
-            return "✗";
-          case "stopped":
-            return "✓";
+        const phase = wrapper.thread.getProviderStatus();
+        if (phase.type !== "idle") {
+          return "⏳";
         }
+        return wrapper.thread.core.state.lastTurnResult?.type === "failed"
+          ? "✗"
+          : "✓";
       },
       this.bufferManager,
       () => this.getActiveKey(),

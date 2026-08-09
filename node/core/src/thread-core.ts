@@ -37,15 +37,19 @@ import {
 import type {
   Agent,
   AgentInput,
-  AgentStatus,
+  AgentPhase,
   NativeMessageIdx,
   Provider,
   ProviderMessage,
   ProviderMessageContent,
   ProviderToolResult,
   ProviderToolSpec,
+  RequestedTool,
   StopReason,
-  Usage,
+  StreamStopReason,
+  ToolOutcome,
+  ToolResults,
+  TurnResult,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import {
@@ -89,6 +93,26 @@ export type InputMessage =
       type: "system";
       text: string;
     };
+
+/** `system_reminder` blocks are a magenta-side annotation; the provider only
+ * ever sees plain text. */
+function toAgentInput(
+  content: ReadonlyArray<ProviderMessageContent>,
+): AgentInput[] {
+  const out: AgentInput[] = [];
+  for (const c of content) {
+    if (c.type === "text" || c.type === "system_reminder") {
+      out.push({
+        type: "text",
+        text: c.text,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      });
+    } else if (c.type === "image" || c.type === "document") {
+      out.push(c);
+    }
+  }
+  return out;
+}
 
 export type ActiveToolEntry = {
   handle: ToolInvocation;
@@ -217,6 +241,8 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     bashTokensSinceLastReminder: number;
     firstBashReminderPending: boolean;
     failedSubmit: { userMessage: string; errorMessage: string } | undefined;
+    /** How the most recent turn ended. Kept for rendering an idle agent. */
+    lastTurnResult: TurnResult | undefined;
     preSubmitNativeIdx: NativeMessageIdx | undefined;
     activeReminders: Set<string>;
     toolSpecs: ProviderToolSpec[];
@@ -292,6 +318,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       bashTokensSinceLastReminder: 0,
       firstBashReminderPending: true,
       failedSubmit: undefined,
+      lastTurnResult: undefined,
       preSubmitNativeIdx: undefined,
       activeReminders: new Set(),
       toolSpecs: [],
@@ -302,7 +329,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
 
     if (clonedAgent) {
       this.agent = clonedAgent;
-      this.listenToAgent(this.agent);
+      this.bindAgent(this.agent);
     } else {
       this.agent = this.createFreshAgent();
     }
@@ -389,14 +416,6 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     }
   }
 
-  /** Stored listener references so we can unsubscribe when replacing agents */
-  private agentListeners:
-    | {
-        didUpdate: () => void;
-        stopped: (stopReason: StopReason, usage: Usage | undefined) => void;
-        error: (error: Error) => void;
-      }
-    | undefined;
 
   private updateThrottleTimer: ReturnType<typeof setTimeout> | undefined;
   private updatePending = false;
@@ -444,42 +463,14 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     }
   }
 
-  private unlistenAgent(agent: Agent): void {
-    if (this.agentListeners) {
-      agent.off("didUpdate", this.agentListeners.didUpdate);
-      agent.off("stopped", this.agentListeners.stopped);
-      agent.off("error", this.agentListeners.error);
-      this.agentListeners = undefined;
+  /** Flush any throttled update immediately. Used at turn boundaries so the
+   * view reflects the final state before turn-end side effects run. */
+  private flushUpdateNow(): void {
+    if (this.updateThrottleTimer) {
+      clearTimeout(this.updateThrottleTimer);
+      this.updateThrottleTimer = undefined;
     }
-  }
-
-  private listenToAgent(agent: Agent): void {
-    const listeners = {
-      didUpdate: () => {
-        this.scheduleUpdate();
-      },
-      stopped: (stopReason: StopReason, usage: Usage | undefined) => {
-        // Flush any pending throttled update before handling stop
-        if (this.updateThrottleTimer) {
-          clearTimeout(this.updateThrottleTimer);
-          this.updateThrottleTimer = undefined;
-        }
-        this.updatePending = false;
-        this.handleProviderStopped(stopReason, usage);
-      },
-      error: (error: Error) => {
-        if (this.updateThrottleTimer) {
-          clearTimeout(this.updateThrottleTimer);
-          this.updateThrottleTimer = undefined;
-        }
-        this.updatePending = false;
-        this.handleErrorState(error);
-      },
-    };
-    this.agentListeners = listeners;
-    agent.on("didUpdate", listeners.didUpdate);
-    agent.on("stopped", listeners.stopped);
-    agent.on("error", listeners.error);
+    this.updatePending = false;
   }
 
   /** Process a state mutation. Calls onUpdate() unless silent is true.
@@ -584,16 +575,24 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     return this.state.toolSpecs;
   }
 
+  /** Point an agent's collaborators at this thread. */
+  private bindAgent(agent: Agent): void {
+    agent.bindHooks({
+      executeTools: (requests) => this.executeTools(requests),
+      onUpdate: () => this.scheduleUpdate(),
+    });
+    this.usageAccountedCount = agent.log.messages.length;
+    agent.onBeforeToolResponse = (args) => this.buildToolResponseExtras(args);
+  }
+
   private createFreshAgent(): Agent {
-    // Clean up listeners from old agent if replacing
-    if (this.agentListeners && this.agent) {
-      this.unlistenAgent(this.agent);
-    }
     this.refreshToolSpecs();
     const provider = this.context.getProvider(this.context.profile);
     const agent = provider.createAgent({
       model: this.context.profile.model,
       systemPrompt: this.state.systemPrompt,
+      executeTools: (requests) => this.executeTools(requests),
+      onUpdate: () => this.scheduleUpdate(),
       tools: this.getToolSpecs(),
       ...((this.context.profile.provider === "anthropic" ||
         this.context.profile.provider === "bedrock" ||
@@ -626,12 +625,13 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
           reasoning: this.context.profile.reasoning,
         }),
     });
-    this.listenToAgent(agent);
+    agent.onBeforeToolResponse = (args) => this.buildToolResponseExtras(args);
+    this.usageAccountedCount = agent.log.messages.length;
     return agent;
   }
 
-  getProviderStatus(): AgentStatus {
-    return this.agent.getState().status;
+  getProviderStatus(): AgentPhase {
+    return this.agent.phase;
   }
 
   /** For tests: await pending best-effort archive writes. */
@@ -640,7 +640,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
   }
 
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
-    return this.agent.getState().messages ?? [];
+    return this.agent.log.messages;
   }
 
   /** After a non-retryable error, roll back the agent's history to the
@@ -664,7 +664,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
   }
 
   getLastStopTokenCount(): number {
-    const state = this.agent.getState();
+    const state = this.agent.log;
     if (state.inputTokenCount !== undefined) {
       return state.inputTokenCount;
     }
@@ -686,196 +686,281 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     this.update({ type: "set-title", title });
   }
 
-  private handleProviderStopped(
-    stopReason: StopReason,
-    usage: Usage | undefined,
-  ): void {
-    if (usage) {
-      // Only clear auto-resubmit bookkeeping on a genuine completed turn
-      // (usage is populated for real API responses). discardFailedSubmit's
-      // rollback emits a synthetic "stopped"/"end_turn" with no usage, which
-      // must not be mistaken for recovery — otherwise the retry episode's
-      // elapsed-time budget would reset on every single retry attempt.
-      this.resetErrorRetryState();
+  /** The in-flight turn, if any. `runTurn` is the only thing that drives the
+   * agent forward, so this is exactly "is this thread busy". */
+  private currentTurn: Promise<void> | undefined;
+
+  /** Content to lead the next turn's input with. Used by compaction to seed a
+   * fresh agent with the summary before its first request. */
+  private pendingTurnPrefix: AgentInput[] | undefined;
+
+  /** Lead the next turn's input with `content`. Used to inject a marker (fork
+   * notification, compaction summary) that has no turn of its own. */
+  prependToNextTurn(content: AgentInput[]): void {
+    this.pendingTurnPrefix = [...(this.pendingTurnPrefix ?? []), ...content];
+  }
+
+  /** Set between the start of an abort and the resolution of the turn it
+   * unwinds, so the tool executor knows to report `aborted`. */
+  private abortRequested = false;
+
+  /** Why the executor parked the agent. The agent never learns this; it comes
+   * back out here when the turn resolves `suspended`. */
+  private suspendReason:
+    | { type: "yield"; result: string }
+    | { type: "compact"; nextPrompt: string | undefined }
+    | undefined;
+
+  /** Number of messages whose usage has already been folded into the
+   * reminder token counters. */
+  private usageAccountedCount = 0;
+
+  private accountUsage(): void {
+    const messages = this.agent.log.messages;
+    if (this.usageAccountedCount > messages.length) {
+      this.usageAccountedCount = messages.length;
+    }
+    let outputTokens = 0;
+    for (let i = this.usageAccountedCount; i < messages.length; i++) {
+      outputTokens += messages[i].usage?.outputTokens ?? 0;
+    }
+    this.usageAccountedCount = messages.length;
+    if (outputTokens > 0) {
       this.update(
-        { type: "increment-output-tokens", tokens: usage.outputTokens },
+        { type: "increment-output-tokens", tokens: outputTokens },
         { silent: true },
       );
     }
+  }
 
-    if (stopReason === "tool_use") {
-      this.handleProviderStoppedWithToolUse();
+  /** Drive the agent until it stops, then act on why it stopped. */
+  private runTurn(input: AgentInput[]): Promise<void> {
+    const prefix = this.pendingTurnPrefix ?? [];
+    this.pendingTurnPrefix = undefined;
+    const turn = this.agent
+      .runTurn([...prefix, ...input])
+      .then((result) => {
+        this.currentTurn = undefined;
+        this.flushUpdateNow();
+        this.accountUsage();
+        return this.handleTurnResult(result);
+      })
+      .catch(this.handleSendMessageError);
+    this.currentTurn = turn;
+    return turn;
+  }
+
+  private async handleTurnResult(result: TurnResult): Promise<void> {
+    this.state.lastTurnResult = result;
+    switch (result.type) {
+      case "failed":
+        this.handleErrorState(result.error);
+        return;
+      case "aborted":
+        this.finishAbort();
+        return;
+      case "suspended":
+        await this.handleSuspend();
+        return;
+      case "stopped":
+        await this.handleStopped(result.stopReason);
+        return;
+      default:
+        assertUnreachable(result);
+    }
+  }
+
+  private async handleSuspend(): Promise<void> {
+    const reason = this.suspendReason;
+    this.suspendReason = undefined;
+    if (!reason) return;
+    if (reason.type === "compact") {
+      this.startCompaction(reason.nextPrompt);
+      return;
+    }
+    await this.handleYield(reason.result);
+  }
+
+  private async handleStopped(stopReason: StopReason): Promise<void> {
+    this.resetErrorRetryState();
+    this.update({ type: "set-mode", mode: { type: "normal" } });
+
+    const handoff = this.consultHandoffSupervisors(stopReason);
+    if (handoff.type === "compact") {
+      this.startCompaction(handoff.nextPrompt);
       return;
     }
 
     if (stopReason === "max_tokens") {
-      const messages = this.getProviderMessages();
-      const lastMessage = messages[messages.length - 1];
-      const hasToolUse =
-        lastMessage?.role === "assistant" &&
-        lastMessage.content.some((block) => block.type === "tool_use");
-
-      if (hasToolUse) {
-        this.handleProviderStoppedWithToolUse();
-        return;
-      }
-
-      const handoff = this.consultHandoffSupervisors(stopReason);
-      if (handoff.type === "compact") {
-        this.startCompaction(handoff.nextPrompt);
-        return;
-      }
-
-      this.sendMessage([
+      await this.sendMessage([
         {
           type: "system",
           text: "Your previous response was truncated due to the output token limit. Please continue where you left off.",
         },
-      ]).catch(this.handleSendMessageError.bind(this));
+      ]);
       return;
     }
 
-    this.update({ type: "set-mode", mode: { type: "normal" } });
-
-    if (stopReason !== "aborted") {
-      const handoff = this.consultHandoffSupervisors(stopReason);
-      if (handoff.type === "compact") {
-        this.startCompaction(handoff.nextPrompt);
-        return;
-      }
+    if (
+      stopReason === "end_turn" &&
+      (this.state.pendingMessages.length ||
+        this.state.pendingNextMessages.length)
+    ) {
+      const pendingMessages = [
+        ...this.state.pendingMessages,
+        ...this.state.pendingNextMessages,
+      ];
+      this.update({ type: "drain-pending-messages" }, { silent: true });
+      this.update({ type: "drain-pending-next-messages" }, { silent: true });
+      await this.sendMessage(pendingMessages);
+      return;
     }
 
-    const autoRespondResult = this.maybeAutoRespond();
-
-    if (autoRespondResult.type === "no-action-needed") {
-      const action = this.consultEndTurnSupervisors({
-        stopReason,
-        lastAssistantMessage: this.getLastAssistantMessage(),
-      });
-      if (action.type === "send-message") {
-        this.sendMessage([{ type: "system", text: action.text }]).catch(
-          this.handleSendMessageError.bind(this),
-        );
-        return;
-      }
+    const action = this.consultEndTurnSupervisors({
+      stopReason,
+      lastAssistantMessage: this.getLastAssistantMessage(),
+    });
+    if (action.type === "send-message") {
+      await this.sendMessage([{ type: "system", text: action.text }]);
+      return;
     }
 
-    if (autoRespondResult.type !== "did-autorespond") {
-      if (stopReason !== "aborted") {
-        this.emit("playChime");
-        this.emit("turnEnded", { reason: "end_turn" });
-      }
-    }
+    this.emit("playChime");
+    this.emit("turnEnded", { reason: "end_turn" });
   }
 
-  private handleProviderStoppedWithToolUse(): void {
-    const messages = this.getProviderMessages();
-    const lastMessage = messages[messages.length - 1];
+  private createToolContext(): CreateToolContext {
+    return {
+      mcpToolManager: this.context.mcpToolManager,
+      threadId: this.id,
+      logger: this.context.logger,
+      lspClient: this.context.lspClient,
+      cwd: this.context.cwd,
+      homeDir: this.context.homeDir,
+      maxConcurrentSubagents: this.context.maxConcurrentSubagents,
+      maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
+      contextTracker: this.contextManager as ContextTracker,
+      onToolApplied: (absFilePath, tool, fileTypeInfo) => {
+        this.contextManager.toolApplied(absFilePath, tool, fileTypeInfo);
+        if (
+          tool.type === "edl-edit" &&
+          !this.state.editedFilesThisTurn.some((e) => e.path === absFilePath)
+        ) {
+          this.state.editedFilesThisTurn.push({
+            path: absFilePath,
+            snapshot: tool.previousContent,
+          });
+        }
+      },
+      edlRegisters: this.state.edlRegisters,
+      scratchpad: this.state.scratchpad,
+      fileIO: this.context.fileIO,
+      shell: this.context.shell,
+      threadManager: this.context.threadManager,
+      scriptRunner: this.context.getScriptRunner?.(),
+      luaExecutor: this.context.luaExecutor,
+      requestRender: () => this.emit("update"),
+      getAgents: () => this.context.getAgents(),
+    };
+  }
 
-    if (!lastMessage || lastMessage.role !== "assistant") {
-      throw new Error(
-        `Cannot handleProviderStoppedWithToolUse when the last message is not of type assistant`,
-      );
-    }
-
+  /** The agent's `executeTools` collaborator: run every requested tool to
+   * completion, then say whether the conversation proceeds. */
+  private async executeTools(
+    requests: ReadonlyArray<RequestedTool>,
+  ): Promise<ToolOutcome> {
     const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
+    const results = new Map<ToolRequestId, ProviderToolResult["result"]>();
 
-    for (const block of lastMessage.content) {
-      if (block.type !== "tool_use") {
-        continue;
-      }
-
-      if (block.request.status !== "ok") {
-        this.agent.toolResult(block.id, {
-          type: "tool_result",
-          id: block.id,
-          result: {
-            status: "error",
-            error: `Malformed tool_use block: ${block.request.error}`,
-          },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    for (const requested of requests) {
+      if (requested.request.status !== "ok") {
+        results.set(requested.id, {
+          status: "error",
+          error: `Malformed tool_use block: ${requested.request.error}`,
         });
         continue;
       }
-
-      const request = block.request.value;
-
-      const toolContext: CreateToolContext = {
-        mcpToolManager: this.context.mcpToolManager,
-        threadId: this.id,
-        logger: this.context.logger,
-        lspClient: this.context.lspClient,
-        cwd: this.context.cwd,
-        homeDir: this.context.homeDir,
-        maxConcurrentSubagents: this.context.maxConcurrentSubagents,
-        maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
-        contextTracker: this.contextManager as ContextTracker,
-        onToolApplied: (absFilePath, tool, fileTypeInfo) => {
-          this.contextManager.toolApplied(absFilePath, tool, fileTypeInfo);
-          if (
-            tool.type === "edl-edit" &&
-            !this.state.editedFilesThisTurn.some((e) => e.path === absFilePath)
-          ) {
-            this.state.editedFilesThisTurn.push({
-              path: absFilePath,
-              snapshot: tool.previousContent,
-            });
-          }
-        },
-        edlRegisters: this.state.edlRegisters,
-        scratchpad: this.state.scratchpad,
-        fileIO: this.context.fileIO,
-        shell: this.context.shell,
-        threadManager: this.context.threadManager,
-        scriptRunner: this.context.getScriptRunner?.(),
-        luaExecutor: this.context.luaExecutor,
-        requestRender: () => this.emit("update"),
-        getAgents: () => this.context.getAgents(),
-      };
-
-      const invocation = createTool(request, toolContext);
+      const request = requested.request.value;
+      const invocation = createTool(request, this.createToolContext());
       activeTools.set(request.id, {
         handle: invocation,
         progress: "progress" in invocation ? invocation.progress : undefined,
         toolName: request.toolName,
         request,
       });
-
-      void invocation.promise
-        .then((result) => {
-          this.update({
-            type: "set-active-tool-result",
-            id: request.id,
-            result,
-          });
-        })
-        .catch((err: Error) => {
-          this.update({
-            type: "set-active-tool-result",
-            id: request.id,
-            result: {
-              type: "tool_result",
-              id: request.id,
-              result: {
-                status: "error",
-                error: `Tool execution failed: ${err.message}`,
-              },
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            },
-          });
-        })
-        .then(() => {
-          this.maybeAutoRespond();
-        });
     }
 
     this.update({ type: "set-mode", mode: { type: "tool_use", activeTools } });
-
-    const autoRespondResult = this.maybeAutoRespond();
-
-    if (autoRespondResult.type !== "did-autorespond") {
+    if (activeTools.size > 0) {
       this.emit("playChime");
     }
+
+    await Promise.all(
+      [...activeTools].map(([id, entry]) =>
+        entry.handle.promise.then(
+          (result) =>
+            this.update({ type: "set-active-tool-result", id, result }),
+          (err: Error) =>
+            this.update({
+              type: "set-active-tool-result",
+              id,
+              result: {
+                type: "tool_result",
+                id,
+                result: {
+                  status: "error",
+                  error: `Tool execution failed: ${err.message}`,
+                },
+                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              },
+            }),
+        ),
+      ),
+    );
+
+    let yieldResult: string | undefined;
+    for (const [id, entry] of activeTools) {
+      if (entry.toolName === "yield_to_parent") {
+        yieldResult =
+          this.context.yieldSchema !== undefined
+            ? JSON.stringify(entry.request.input)
+            : (entry.request.input as { result: string }).result;
+        results.set(id, {
+          status: "ok",
+          value: [
+            {
+              type: "text",
+              text: "Yield accepted. Your result has been sent to the parent thread.",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            },
+          ],
+          structuredResult: { toolName: "yield_to_parent" as ToolName },
+        });
+        continue;
+      }
+      if (entry.result) {
+        results.set(id, entry.result.result);
+      }
+    }
+
+    this.update({ type: "set-mode", mode: { type: "normal" } });
+
+    if (this.abortRequested) {
+      return { type: "aborted", results };
+    }
+
+    if (yieldResult !== undefined) {
+      this.suspendReason = { type: "yield", result: yieldResult };
+      return { type: "suspend", results };
+    }
+
+    const handoff = this.consultHandoffSupervisors("tool_use");
+    if (handoff.type === "compact") {
+      this.suspendReason = { type: "compact", nextPrompt: handoff.nextPrompt };
+      return { type: "suspend", results };
+    }
+
+    return { type: "continue", results };
   }
 
   private handleErrorState(error: Error): void {
@@ -977,50 +1062,36 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     if (this.state.mode.type === "yielded") {
       return;
     }
-    // Synchronously mark all tool invocations as aborted
+    await this.abortAndWait();
+  }
+
+  /** Cancel whichever of the two things the turn can be waiting on — the
+   * in-flight inference request (the agent's own resource) or the running
+   * tools (ours) — and wait for the turn to unwind. */
+  private async abortAndWait(): Promise<void> {
+    this.resetErrorRetryState();
+    this.abortRequested = true;
+    this.emit("aborting");
+
     if (this.state.mode.type === "tool_use") {
       for (const [, entry] of this.state.mode.activeTools) {
         entry.handle.abort();
       }
     }
-    await this.abortAndWait();
+    this.agent.abort();
+
+    const turn = this.currentTurn;
+    if (turn) {
+      await turn;
+    } else {
+      this.finishAbort();
+    }
   }
 
-  private async abortAndWait(): Promise<void> {
-    this.resetErrorRetryState();
-    this.emit("aborting");
-    await this.agent.abort();
-
-    if (this.state.mode.type === "tool_use") {
-      for (const [toolId, entry] of this.state.mode.activeTools) {
-        entry.handle.abort();
-        if (!entry.result) {
-          this.agent.toolResult(toolId, {
-            type: "tool_result",
-            id: toolId,
-            result: {
-              status: "error",
-              error: "Request was aborted by the user.",
-            },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          });
-        }
-      }
-
-      this.agent.abortToolUse();
-    }
-
-    this.agent.appendUserMessage([
-      {
-        type: "text",
-        text: "[The user aborted the previous request.]",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
+  private finishAbort(): void {
+    this.abortRequested = false;
     this.emit("update");
-
     this.recoverPendingMessagesOnAbort();
-
     this.update({ type: "set-mode", mode: { type: "normal" } });
     this.emit("turnEnded", { reason: "aborted" });
   }
@@ -1083,25 +1154,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     const isFirstMessage = this.getProviderMessages().length === 0;
     const contentToSend: AgentInput[] = [...contextContent];
 
-    for (const c of content) {
-      if (c.type === "text") {
-        contentToSend.push({
-          type: "text",
-          text: c.text,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        });
-      } else if (c.type === "image") {
-        contentToSend.push(c);
-      } else if (c.type === "document") {
-        contentToSend.push(c);
-      } else if (c.type === "system_reminder") {
-        contentToSend.push({
-          type: "text",
-          text: c.text,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        });
-      }
-    }
+    contentToSend.push(...toAgentInput(content));
 
     if (isFirstMessage) {
       contentToSend.push({
@@ -1118,9 +1171,8 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       },
       { silent: true },
     );
-    this.agent.appendUserMessage(contentToSend);
     this.emit("update");
-    this.agent.continueConversation();
+    void this.runTurn(contentToSend);
   }
 
   async handleSendMessageRequest(
@@ -1132,9 +1184,8 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       return;
     }
 
-    const agentStatus = this.agent.getState().status;
     const isBusy =
-      agentStatus.type === "streaming" || this.state.mode.type === "tool_use";
+      this.currentTurn !== undefined || this.state.mode.type === "tool_use";
 
     if (isBusy) {
       if (queue === "async") {
@@ -1170,112 +1221,11 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     }
   }
 
-  maybeAutoRespond():
-    | { type: "did-autorespond" }
-    | { type: "waiting-for-tool-input" }
-    | { type: "yielded-to-parent" }
-    | { type: "no-action-needed" } {
-    const mode = this.state.mode;
-    const agentStatus = this.agent.getState().status;
-
-    if (this.state.mode.type === "yielded") {
-      return { type: "yielded-to-parent" };
-    }
-    if (
-      agentStatus.type === "stopped" &&
-      agentStatus.stopReason === "aborted"
-    ) {
-      return { type: "no-action-needed" };
-    }
-
-    if (mode.type === "compacting") {
-      return { type: "no-action-needed" };
-    }
-
-    if (mode.type === "tool_use") {
-      const completedTools: Array<{
-        id: ToolRequestId;
-        result: ProviderToolResult;
-      }> = [];
-      let yieldResult: string | undefined;
-      for (const [toolId, entry] of mode.activeTools) {
-        if (entry.toolName === "yield_to_parent") {
-          yieldResult =
-            this.context.yieldSchema !== undefined
-              ? JSON.stringify(entry.request.input)
-              : (entry.request.input as { result: string }).result;
-          completedTools.push({
-            id: toolId,
-            result: {
-              type: "tool_result",
-              id: toolId,
-              result: {
-                status: "ok",
-                value: [
-                  {
-                    type: "text",
-                    text: "Yield accepted. Your result has been sent to the parent thread.",
-                    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-                  },
-                ],
-                structuredResult: {
-                  toolName: "yield_to_parent" as ToolName,
-                },
-              },
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            },
-          });
-          continue;
-        }
-
-        if (!entry.result) {
-          return { type: "waiting-for-tool-input" };
-        }
-
-        completedTools.push({
-          id: toolId,
-          result: entry.result,
-        });
-      }
-
-      if (yieldResult !== undefined) {
-        this.submitToolResultsAndStop(completedTools, yieldResult).catch(
-          this.handleSendMessageError.bind(this),
-        );
-        return { type: "yielded-to-parent" };
-      }
-
-      const pendingMessages = this.state.pendingMessages;
-      this.update({ type: "drain-pending-messages" }, { silent: true });
-
-      this.sendToolResultsAndContinue(completedTools, pendingMessages).catch(
-        this.handleSendMessageError.bind(this),
-      );
-      return { type: "did-autorespond" };
-    } else if (
-      agentStatus.type === "stopped" &&
-      agentStatus.stopReason === "end_turn" &&
-      (this.state.pendingMessages.length ||
-        this.state.pendingNextMessages.length)
-    ) {
-      const pendingMessages = [
-        ...this.state.pendingMessages,
-        ...this.state.pendingNextMessages,
-      ];
-      this.update({ type: "drain-pending-messages" }, { silent: true });
-      this.update({ type: "drain-pending-next-messages" }, { silent: true });
-      this.sendMessage(pendingMessages).catch(
-        this.handleSendMessageError.bind(this),
-      );
-      return { type: "did-autorespond" };
-    }
-    return { type: "no-action-needed" };
-  }
 
   private getLastAssistantMessage():
     | ReadonlyArray<ProviderMessageContent>
     | undefined {
-    const messages = this.agent.getState().messages;
+    const messages = this.agent.log.messages;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "assistant") {
         return messages[i].content;
@@ -1284,15 +1234,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     return undefined;
   }
 
-  private async submitToolResultsAndStop(
-    toolResults: Array<{ id: ToolRequestId; result: ProviderToolResult }>,
-    yieldResult: string,
-  ): Promise<void> {
-    for (const { id, result } of toolResults) {
-      this.agent.toolResult(id, result);
-    }
-    this.update({ type: "set-mode", mode: { type: "normal" } });
-
+  private async handleYield(yieldResult: string): Promise<void> {
     const action = await this.consultYieldSupervisors(yieldResult);
     switch (action.type) {
       case "accept": {
@@ -1377,14 +1319,17 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     return [...reminders];
   }
 
-  private async sendToolResultsAndContinue(
-    toolResults: Array<{ id: ToolRequestId; result: ProviderToolResult }>,
-    pendingMessages: InputMessage[],
-  ): Promise<void> {
-    for (const { id, result } of toolResults) {
-      this.agent.toolResult(id, result);
-      if (result.result.status === "ok") {
-        const structured = result.result.structuredResult;
+  /** The agent's `onBeforeToolResponse` hook: extra content to ride along
+   * with the request that carries the tool results. */
+  private async buildToolResponseExtras(args: {
+    stopReason: StreamStopReason;
+    results: ToolResults;
+  }): Promise<AgentInput[]> {
+    this.accountUsage();
+
+    for (const result of args.results.values()) {
+      if (result.status === "ok") {
+        const structured = result.structuredResult;
         if (
           structured.toolName === "bash_command" &&
           "wasAbbreviated" in structured &&
@@ -1408,11 +1353,9 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       }
     }
 
-    this.update({ type: "set-mode", mode: { type: "normal" } });
-
+    const pendingMessages = this.state.pendingMessages;
     if (pendingMessages.length > 0) {
-      await this.sendMessage(pendingMessages);
-      return;
+      this.update({ type: "drain-pending-messages" }, { silent: true });
     }
 
     const {
@@ -1422,6 +1365,18 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     } = await this.getAndPrepareContextUpdates();
 
     const contentToSend: AgentInput[] = [...contextContent];
+
+    if (pendingMessages.length > 0) {
+      const { content } = this.prepareUserContent(pendingMessages);
+      contentToSend.push(...toAgentInput(content));
+      if (contextUpdates) {
+        this.emit("contextUpdatesSent", contextUpdates);
+      }
+      if (gitUpdate) {
+        this.emit("gitContextUpdateSent", gitUpdate);
+      }
+      return contentToSend;
+    }
 
     const reminderKinds: ReminderKind[] = [];
     const subsequentReminderFires =
@@ -1464,16 +1419,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       this.emit("gitContextUpdateSent", gitUpdate);
     }
 
-    const handoff = this.consultHandoffSupervisors("tool_use");
-    if (handoff.type === "compact") {
-      this.startCompaction(handoff.nextPrompt);
-      return;
-    }
-
-    if (contentToSend.length > 0) {
-      this.agent.appendUserMessage(contentToSend);
-    }
-    this.agent.continueConversation();
+    return contentToSend;
   }
 
   private handleSendMessageError = (error: Error): void => {
@@ -1524,8 +1470,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
 
     if (contentToSend.length === 0) return;
 
-    this.agent.appendUserMessage(contentToSend);
-    this.agent.continueConversation();
+    void this.runTurn(contentToSend);
   }
 
   startCompaction(nextPrompt?: string): void {
@@ -1625,13 +1570,13 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     this.state.scratchpad = scratchpad;
 
     const summaryText = `<conversation-summary>\n${summary}\n</conversation-summary>`;
-    this.agent.appendUserMessage([
+    this.pendingTurnPrefix = [
       {
         type: "text",
         text: summaryText,
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
-    ]);
+    ];
 
     if (nextPrompt) {
       await this.sendMessage([{ type: "user", text: nextPrompt }]);
@@ -1664,8 +1609,10 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     return { type: "send-message", text: texts.join("\n\n") };
   }
 
-  private consultHandoffSupervisors(stopReason: StopReason): HandoffAction {
-    const inputTokenCount = this.agent.getState().inputTokenCount;
+  private consultHandoffSupervisors(
+    stopReason: StreamStopReason,
+  ): HandoffAction {
+    const inputTokenCount = this.agent.log.inputTokenCount;
     const prompts: string[] = [];
     let shouldCompact = false;
     for (const sup of this.supervisors) {
@@ -1734,10 +1681,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
 
     this.unlistenContextManager();
     this.contextManager.destroy();
-
-    if (this.agent) {
-      this.unlistenAgent(this.agent);
-    }
 
     this.removeAllListeners();
   }

@@ -421,12 +421,23 @@ export interface Agent {
   /** Truncate messages to keep only messages 0..messageIdx (inclusive). */
   truncateMessages(messageIdx: NativeMessageIdx): void;
 
-  /** Create a deep copy of this agent, carrying over `executeTools` and any
-   * installed `onBeforeToolResponse`. Can be called in any phase; the clone is
-   * `idle`, with incomplete blocks and unanswered tool_use cleaned up.
+  /** Create a deep copy of this agent. Can be called in any phase; the clone
+   * is `idle`, with incomplete blocks and unanswered tool_use cleaned up.
+   * The clone keeps the source's hooks; a new owner calls `bindHooks`.
    */
   clone(): Agent;
+
+  /** Point the agent's collaborators at a new owner, dropping any
+   * `onBeforeToolResponse` installed by the previous one. */
+  bindHooks(hooks: AgentHooks): void;
 }
+
+/** The collaborators an agent is bound to. Supplied at construction, and
+ * re-supplied by `clone` when ownership moves to a different object. */
+export type AgentHooks = {
+  executeTools: ToolExecutor;
+  onUpdate: () => void;
+};
 
 export interface AgentOptions {
   model: string;

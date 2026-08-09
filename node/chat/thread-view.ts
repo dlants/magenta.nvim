@@ -24,7 +24,8 @@ import {
   renderGitUpdate,
 } from "../context/context-manager.ts";
 import type {
-  AgentStatus,
+  AgentPhase,
+  TurnResult,
   ProviderMessage,
   ProviderMessageContent,
   ProviderToolResult,
@@ -84,9 +85,10 @@ const getAnimationFrame = (sendDate: Date): string => {
  * Composes agent status with thread mode for complete display
  */
 export const renderStatus = (
-  agentStatus: AgentStatus,
+  agentPhase: AgentPhase,
   mode: ThreadMode,
   latestUsage: Usage | undefined,
+  lastTurnResult: TurnResult | undefined,
 ): VDOMNode => {
   const yieldedResponse = mode.type === "yielded" ? mode.response : undefined;
   // First check mode for thread-specific states
@@ -100,45 +102,65 @@ export const renderStatus = (
     return d`📦 Compacting thread... (chunk ${String(mode.chunkIndex + 1)} / ${String(mode.totalChunks)})`;
   }
 
-  // Then render based on agent status
-  switch (agentStatus.type) {
+  // Then render based on the phase the turn is passing through
+  switch (agentPhase.type) {
+    case "running_tools":
+      return d`Executing tools...`;
+    case "aborting":
+      return d`Aborting...`;
     case "streaming": {
-      if (agentStatus.retryStatus) {
+      if (agentPhase.retry) {
         const secsLeft = Math.max(
           1,
           Math.ceil(
-            (agentStatus.retryStatus.nextRetryAt.getTime() - Date.now()) / 1000,
+            (agentPhase.retry.nextRetryAt.getTime() - Date.now()) / 1000,
           ),
         );
-        const reason = shortErrorMessage(agentStatus.retryStatus.error);
-        return d`⏳ Retrying in ${String(secsLeft)}s (attempt ${String(agentStatus.retryStatus.attempt)}) — ${reason}`;
+        const reason = shortErrorMessage(agentPhase.retry.error);
+        return d`⏳ Retrying in ${String(secsLeft)}s (attempt ${String(agentPhase.retry.attempt)}) — ${reason}`;
       }
-      const waitedMs = Date.now() - agentStatus.lastEventTime.getTime();
+      const waitedMs = Date.now() - agentPhase.lastEventTime.getTime();
       if (waitedMs > 3000) {
         const waitedSecs = Math.floor(waitedMs / 1000);
-        return d`Streaming response ${getAnimationFrame(agentStatus.startTime)} (waiting ${String(waitedSecs)}s)`;
+        return d`Streaming response ${getAnimationFrame(agentPhase.startedAt)} (waiting ${String(waitedSecs)}s)`;
       }
-      return d`Streaming response ${getAnimationFrame(agentStatus.startTime)}`;
+      return d`Streaming response ${getAnimationFrame(agentPhase.startedAt)}`;
     }
-    case "stopped":
-      return renderStopReason(agentStatus.stopReason, latestUsage);
-    case "error":
-      return d`Error ${agentStatus.error.message}${
-        agentStatus.error.stack ? `\n${agentStatus.error.stack}` : ""
-      }`;
+    case "idle":
+      return renderTurnResult(lastTurnResult, latestUsage);
     default:
-      assertUnreachable(agentStatus);
+      assertUnreachable(agentPhase);
   }
 };
+
+function renderTurnResult(
+  result: TurnResult | undefined,
+  usage: Usage | undefined,
+): VDOMNode {
+  if (!result) {
+    return renderStopReason("end_turn", usage);
+  }
+  switch (result.type) {
+    case "stopped":
+      return renderStopReason(result.stopReason, usage);
+    case "aborted":
+      return d`[ABORTED] ${usage ? d` ${renderUsage(usage)}` : d``} `;
+    case "suspended":
+      return renderStopReason("end_turn", usage);
+    case "failed":
+      return d`Error ${result.error.message}${
+        result.error.stack ? `\n${result.error.stack}` : ""
+      }`;
+    default:
+      return assertUnreachable(result);
+  }
+}
 
 function renderStopReason(
   stopReason: StopReason,
   usage: Usage | undefined,
 ): VDOMNode {
   const usageView = usage ? d` ${renderUsage(usage)}` : d``;
-  if (stopReason === "aborted") {
-    return d`[ABORTED] ${usageView} `;
-  }
   return d`Stopped (${stopReason}) ${usageView} `;
 }
 
@@ -158,12 +180,12 @@ function renderUsage(usage: Usage): VDOMNode {
  * Helper function to determine if context manager view should be shown
  */
 const shouldShowContextFiles = (
-  agentStatus: AgentStatus,
+  agentPhase: AgentPhase,
   mode: ThreadMode,
   contextManager: ContextManager,
 ): boolean => {
   return (
-    agentStatus.type !== "streaming" &&
+    agentPhase.type === "idle" &&
     mode.type === "normal" &&
     Object.keys(contextManager.files).length > 0
   );
@@ -408,12 +430,11 @@ export const view: View<{
   );
 
   const messages = thread.getProviderMessages();
-  const agentStatus = thread.agent.getState().status;
+  const agentPhase = thread.agent.phase;
   const mode = thread.core.state.mode;
 
   // Show logo when empty and not busy
-  const isIdle =
-    agentStatus.type === "stopped" && agentStatus.stopReason === "end_turn";
+  const isIdle = agentPhase.type === "idle";
   if (
     messages.length === 0 &&
     isIdle &&
@@ -435,11 +456,16 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
 })}`;
   }
 
-  const latestUsage = thread.agent.getState().latestUsage;
-  const statusView = renderStatus(agentStatus, mode, latestUsage);
+  const latestUsage = thread.agent.log.latestUsage;
+  const statusView = renderStatus(
+    agentPhase,
+    mode,
+    latestUsage,
+    thread.core.state.lastTurnResult,
+  );
 
   const contextManagerView = shouldShowContextFiles(
-    agentStatus,
+    agentPhase,
     mode,
     thread.contextManager,
   )
@@ -647,7 +673,7 @@ ${contentView}`;
   });
 
   const streamingBlockView =
-    agentStatus.type === "streaming"
+    agentPhase.type === "streaming"
       ? d`\n${renderStreamingBlock(thread)}\n`
       : d``;
 
@@ -1126,8 +1152,8 @@ export function findToolResult(
 }
 
 function renderStreamingBlock(thread: Thread): string | VDOMNode {
-  const state = thread.agent.getState();
-  const block = state.streamingBlock;
+  const phase = thread.agent.phase;
+  const block = phase.type === "streaming" ? phase.block : undefined;
   if (!block) return d``;
 
   switch (block.type) {

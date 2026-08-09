@@ -31,7 +31,7 @@ import type { Row0Indexed } from "../nvim/window.ts";
 import type { MagentaOptions, Profile } from "../options.ts";
 import {
   type Agent,
-  type AgentStatus,
+  type AgentPhase,
   getProvider,
   type ProviderMessage,
 } from "../providers/provider.ts";
@@ -709,7 +709,7 @@ export class Thread {
     await this.core.destroy();
   }
 
-  getProviderStatus(): AgentStatus {
+  getProviderStatus(): AgentPhase {
     return this.core.getProviderStatus();
   }
 

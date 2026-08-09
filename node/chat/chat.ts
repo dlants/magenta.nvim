@@ -1405,7 +1405,7 @@ ${rows}${loadMore}`;
     });
 
     const markerIdx = thread.core.getProviderMessages().length;
-    thread.agent.appendUserMessage([
+    thread.core.prependToNextTurn([
       {
         type: "text",
         text: "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
@@ -1534,7 +1534,8 @@ ${rows}${loadMore}`;
       case "initialized": {
         const thread = threadWrapper.thread;
         const mode = thread.core.state.mode;
-        const agentStatus = thread.agent.getState().status;
+        const agentPhase = thread.agent.phase;
+        const lastTurnResult = thread.core.state.lastTurnResult;
 
         const summary = {
           title: thread.core.state.title,
@@ -1564,30 +1565,37 @@ ${rows}${loadMore}`;
               };
             }
 
-            // Then check agent status
-            switch (agentStatus.type) {
-              case "error":
-                return {
-                  type: "error" as const,
-                  message: agentStatus.error.message,
-                };
-
-              case "stopped":
-                return {
-                  type: "stopped" as const,
-                  reason: agentStatus.stopReason,
-                };
-
+            // Then check where the agent is
+            switch (agentPhase.type) {
               case "streaming":
                 return {
                   type: "running" as const,
                   activity: "streaming response",
                 };
-
+              case "running_tools":
+                return {
+                  type: "running" as const,
+                  activity: "executing tools",
+                };
+              case "aborting":
+                return { type: "running" as const, activity: "aborting" };
+              case "idle":
+                if (lastTurnResult?.type === "failed") {
+                  return {
+                    type: "error" as const,
+                    message: lastTurnResult.error.message,
+                  };
+                }
+                return {
+                  type: "stopped" as const,
+                  reason:
+                    lastTurnResult?.type === "stopped"
+                      ? lastTurnResult.stopReason
+                      : (lastTurnResult?.type ?? "end_turn"),
+                };
               default:
-                return assertUnreachable(agentStatus);
-            }
-          })(),
+                return assertUnreachable(agentPhase);
+            }          })(),
         };
 
         return summary;

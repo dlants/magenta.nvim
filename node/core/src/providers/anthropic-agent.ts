@@ -24,6 +24,7 @@ import type {
   Agent,
   AgentInput,
   AgentLog,
+  AgentHooks,
   AgentOptions,
   AgentPhase,
   NativeMessageIdx,
@@ -862,6 +863,11 @@ export class AnthropicAgent implements Agent {
 
     target.content = trimmed;
     return messageIdx;
+  }
+
+  bindHooks(hooks: AgentHooks): void {
+    this.options = { ...this.options, ...hooks };
+    this.onBeforeToolResponse = undefined;
   }
 
   clone(): AnthropicAgent {

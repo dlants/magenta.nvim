@@ -25,10 +25,14 @@ import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
   Agent,
+  AgentInput,
   Provider,
   ProviderMessage,
   ProviderToolResult,
-  StopReason,
+  RequestedTool,
+  ToolOutcome,
+  ToolResults,
+  TurnResult,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type {
@@ -70,7 +74,6 @@ export type CompactionState =
       totalChunks: number;
       agent: Agent;
       activeTools: Map<ToolRequestId, ActiveToolEntry>;
-      toolResults: Map<ToolRequestId, ProviderToolResult>;
     }
   | { type: "complete"; result: CompactionResult }
   | { type: "error"; steps: CompactionStep[] };
@@ -81,13 +84,9 @@ export type CompactionAction =
       messages: ReadonlyArray<ProviderMessage>;
       nextPrompt?: string | undefined;
     }
-  | { type: "agent-stopped"; stopReason: StopReason }
-  | { type: "agent-error"; error: Error }
-  | {
-      type: "tool-complete";
-      id: ToolRequestId;
-      result: ProviderToolResult;
-    };
+  | { type: "turn-ended"; result: TurnResult }
+  | { type: "tools-started"; activeTools: Map<ToolRequestId, ActiveToolEntry> }
+  | { type: "tools-finished" };
 
 export type CompactionEvents = {
   transition: [prev: CompactionState, next: CompactionState];
@@ -178,64 +177,37 @@ export class CompactionManager extends Emitter<CompactionEvents> {
         };
       }
 
-      case "agent-error": {
-        this.context.logger.error(
-          `Compact agent error: ${action.error.message}`,
-        );
-        return { type: "error", steps: this.steps };
-      }
-
-      case "agent-stopped": {
-        if (action.stopReason === "tool_use") {
-          if (state.type !== "processing-chunk") {
-            return state;
-          }
-          const { activeTools, malformedResults } = this.buildToolEntries(
-            state.agent,
+      case "turn-ended": {
+        if (state.type !== "processing-chunk") return state;
+        const { result } = action;
+        if (result.type === "failed") {
+          this.context.logger.error(
+            `Compact agent error: ${result.error.message}`,
           );
-          for (const r of malformedResults) {
-            state.agent.toolResult(r.id, r);
-          }
-          return {
-            type: "waiting-for-tools",
-            chunkIndex: state.chunkIndex,
-            totalChunks: state.totalChunks,
-            agent: state.agent,
-            activeTools,
-            toolResults: new Map(),
-          };
+          return { type: "error", steps: this.steps };
         }
-
-        if (action.stopReason === "end_turn") {
-          if (state.type !== "processing-chunk") {
-            return state;
-          }
+        if (result.type === "stopped" && result.stopReason === "end_turn") {
           return this.reduceChunkComplete(state);
         }
-
         this.context.logger.warn(
-          `Compact agent stopped with unexpected reason: ${action.stopReason}`,
+          `Compact agent turn ended unexpectedly: ${result.type}`,
         );
         return { type: "error", steps: this.steps };
       }
 
-      case "tool-complete": {
+      case "tools-started": {
+        if (state.type !== "processing-chunk") return state;
+        return {
+          type: "waiting-for-tools",
+          chunkIndex: state.chunkIndex,
+          totalChunks: state.totalChunks,
+          agent: state.agent,
+          activeTools: action.activeTools,
+        };
+      }
+
+      case "tools-finished": {
         if (state.type !== "waiting-for-tools") return state;
-        state.toolResults.set(action.id, action.result);
-
-        // Check if all tools are done
-        for (const [, entry] of state.activeTools) {
-          if (!state.toolResults.has(entry.request.id)) return state;
-        }
-
-        // All tools done — feed results back and continue
-        for (const [toolId, entry] of state.activeTools) {
-          const result = state.toolResults.get(entry.request.id);
-          if (result) {
-            state.agent.toolResult(toolId, result);
-          }
-        }
-
         return {
           type: "processing-chunk",
           chunkIndex: state.chunkIndex,
@@ -257,7 +229,7 @@ export class CompactionManager extends Emitter<CompactionEvents> {
     this.steps.push({
       chunkIndex: state.chunkIndex,
       totalChunks: state.totalChunks,
-      messages: [...state.agent.getState().messages],
+      messages: [...state.agent.log.messages],
     });
 
     const nextChunkIndex = state.chunkIndex + 1;
@@ -297,19 +269,15 @@ export class CompactionManager extends Emitter<CompactionEvents> {
     next: CompactionState,
     action: CompactionAction,
   ): void {
-    if (next.type === "processing-chunk") {
-      if (action.type === "tool-complete") {
-        // All tools finished — resume the conversation
-        next.agent.continueConversation();
-      } else {
-        // Entering a new chunk (from start or chunk-complete) — send it
-        this.sendChunkToAgent(
-          next.agent,
-          this.chunks,
-          next.chunkIndex,
-          this.nextPrompt,
-        );
-      }
+    // The agent drives itself through tool rounds, so only a genuinely new
+    // chunk needs a prompt.
+    if (next.type === "processing-chunk" && action.type !== "tools-finished") {
+      this.sendChunkToAgent(
+        next.agent,
+        this.chunks,
+        next.chunkIndex,
+        this.nextPrompt,
+      );
     }
   }
 
@@ -325,49 +293,28 @@ export class CompactionManager extends Emitter<CompactionEvents> {
         this.context.availableCapabilities,
       ),
       skipPostFlightTokenCount: true,
-    });
-    agent.on("stopped", (stopReason) => {
-      this.send({ type: "agent-stopped", stopReason });
-    });
-    agent.on("error", (error) => {
-      this.send({ type: "agent-error", error });
+      executeTools: (requests) => this.executeTools(requests),
+      onUpdate: () => this.context.requestRender(),
     });
     return agent;
   }
 
-  private buildToolEntries(agent: Agent): {
-    activeTools: Map<ToolRequestId, ActiveToolEntry>;
-    malformedResults: ProviderToolResult[];
-  } {
-    const messages = agent.getState().messages;
-    const lastMessage = messages[messages.length - 1];
+  private async executeTools(
+    requests: ReadonlyArray<RequestedTool>,
+  ): Promise<ToolOutcome> {
     const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
-    const malformedResults: ProviderToolResult[] = [];
+    const results: Map<ToolRequestId, ProviderToolResult["result"]> = new Map();
 
-    if (!lastMessage || lastMessage.role !== "assistant") {
-      this.context.logger.error(
-        "Compact agent tool_use but no assistant message",
-      );
-      return { activeTools, malformedResults };
-    }
-
-    for (const block of lastMessage.content) {
-      if (block.type !== "tool_use") continue;
-
-      if (block.request.status !== "ok") {
-        malformedResults.push({
-          type: "tool_result",
-          id: block.id,
-          result: {
-            status: "error",
-            error: `Malformed tool_use block: ${block.request.error}`,
-          },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    for (const requested of requests) {
+      if (requested.request.status !== "ok") {
+        results.set(requested.id, {
+          status: "error",
+          error: `Malformed tool_use block: ${requested.request.error}`,
         });
         continue;
       }
 
-      const request = block.request.value;
+      const request = requested.request.value;
       const toolContext: CreateToolContext = {
         mcpToolManager: this.context.mcpToolManager,
         threadId: this.context.threadId,
@@ -402,28 +349,26 @@ export class CompactionManager extends Emitter<CompactionEvents> {
         request,
       });
 
-      void invocation.promise
-        .then((result) => {
-          this.send({ type: "tool-complete", id: request.id, result });
-        })
-        .catch((err: Error) => {
-          this.send({
-            type: "tool-complete",
-            id: request.id,
-            result: {
-              type: "tool_result",
-              id: request.id,
-              result: {
-                status: "error",
-                error: `Tool execution failed: ${err.message}`,
-              },
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            },
-          });
-        });
     }
 
-    return { activeTools, malformedResults };
+    this.send({ type: "tools-started", activeTools });
+
+    await Promise.all(
+      [...activeTools].map(([id, entry]) =>
+        entry.handle.promise.then(
+          (result) => results.set(id, result.result),
+          (err: Error) =>
+            results.set(id, {
+              status: "error",
+              error: `Tool execution failed: ${err.message}`,
+            }),
+        ),
+      ),
+    );
+
+    this.send({ type: "tools-finished" });
+
+    return { type: "continue", results };
   }
 
   private sendChunkToAgent(
@@ -490,7 +435,7 @@ Write your summary to the \`/summary.md\` file using the edl tool. Do NOT place 
 Do not acknowledge this reminder or mention it to the user.
 </system-reminder>`;
 
-    agent.appendUserMessage([
+    const input: AgentInput[] = [
       {
         type: "text",
         text: prompt,
@@ -515,7 +460,9 @@ Do not acknowledge this reminder or mention it to the user.
         text: reminder,
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
-    ]);
-    agent.continueConversation();
+    ];
+    void agent.runTurn(input).then((result) => {
+      this.send({ type: "turn-ended", result });
+    });
   }
 }

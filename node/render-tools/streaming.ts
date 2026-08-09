@@ -1,9 +1,9 @@
 import {
-  type AgentStreamingBlock,
   assertUnreachable,
   extractPartialJsonStringValue,
   SpawnSubagents,
   type StaticToolName,
+  type StreamingBlock,
   splitScriptByFile,
 } from "@magenta/core";
 import { d, type VDOMNode, withCode } from "../tea/view.ts";
@@ -28,7 +28,7 @@ function abridgeStreamedText(text: string): string {
 }
 
 export function renderStreamdedTool(
-  streamingBlock: Extract<AgentStreamingBlock, { type: "tool_use" }>,
+  streamingBlock: Extract<StreamingBlock, { type: "tool_use" }>,
 ): string | VDOMNode {
   if (streamingBlock.name.startsWith("mcp_")) {
     return d`Invoking mcp tool ${streamingBlock.name}`;
