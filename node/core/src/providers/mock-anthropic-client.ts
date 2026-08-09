@@ -5,7 +5,11 @@ import { validateInput } from "../tools/helpers.ts";
 import { pollUntil } from "../utils/async.ts";
 import type { Result } from "../utils/result.ts";
 import { convertAnthropicMessagesToProvider } from "./anthropic-conversion.ts";
-import type { ProviderMessage, StopReason, Usage } from "./provider-types.ts";
+import type {
+  ProviderMessage,
+  StreamStopReason,
+  Usage,
+} from "./provider-types.ts";
 
 /** A mock stream that tests can control to simulate Anthropic API responses.
  *  Drives a real MessageStream via a ReadableStream so all event accumulation,
@@ -337,7 +341,7 @@ export class MockStream {
   }
 
   finishResponse(
-    stopReason: StopReason,
+    stopReason: StreamStopReason,
     usage: Usage = { inputTokens: 1000, outputTokens: 5000 },
   ): void {
     this._resolved = true;
@@ -387,7 +391,7 @@ export class MockStream {
       { id: ToolRequestId; toolName: ToolName; input: unknown },
       { rawRequest: unknown }
     >[];
-    stopReason: StopReason;
+    stopReason: StreamStopReason;
     usage?: Usage;
   }): void {
     if (this.aborted) {
