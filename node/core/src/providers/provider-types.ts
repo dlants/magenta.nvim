@@ -28,16 +28,22 @@ export type ProviderSetting = {
   promptCaching?: boolean;
 };
 
+/** What the provider said when it ended a response. `tool_use` is deliberately
+ * absent: it is consumed by the agent's turn loop and never surfaces as a turn
+ * outcome. So is `aborted`, which was never the provider's word to begin with —
+ * see `TurnResult`. */
 export type StopReason =
   | "end_turn"
-  | "tool_use"
   | "max_tokens"
   | "pause_turn"
   | "content"
   | "refusal"
-  | "aborted"
   | "model_context_window_exceeded"
   | "stop_sequence";
+
+/** What a single provider stream can terminate with. Internal to the agent's
+ * loop, plus the per-message record in `ProviderMessage.stopReason`. */
+export type StreamStopReason = StopReason | "tool_use";
 
 export type Usage = {
   inputTokens: number;
@@ -49,7 +55,9 @@ export type Usage = {
 export type ProviderMessage = {
   role: "user" | "assistant";
   content: Array<ProviderMessageContent>;
-  stopReason?: StopReason;
+  /** Absent when the message was never finished — an aborted assistant turn
+   * has no provider-reported stop reason. */
+  stopReason?: StreamStopReason;
   usage?: Usage;
 };
 
@@ -258,14 +266,14 @@ export interface ProviderStreamRequest {
   abort(): void;
   aborted: boolean;
   promise: Promise<{
-    stopReason: StopReason;
+    stopReason: StreamStopReason;
     usage: Usage;
   }>;
 }
 
 export type ProviderToolUseResponse = {
   toolRequest: Result<ToolRequest, { rawRequest: unknown }>;
-  stopReason: StopReason;
+  stopReason: StreamStopReason;
   usage: Usage;
 };
 
@@ -285,20 +293,6 @@ export type RetryStatus = {
   error: Error;
 };
 
-export type AgentStatus =
-  | {
-      type: "streaming";
-      startTime: Date;
-      /** Timestamp of the most recent sign of life from the server during the
-       * current turn: set when each attempt's request is sent, and advanced on
-       * every received stream event. Used to show a "waiting" timer during dead
-       * air (no events for >3s). */
-      lastEventTime: Date;
-      retryStatus?: RetryStatus;
-    }
-  | { type: "stopped"; stopReason: StopReason }
-  | { type: "error"; error: Error };
-
 /** Branded type for native message index within an Agent.
  * This is opaque to external code - only the Agent knows how to use it.
  */
@@ -310,7 +304,7 @@ export type NativeMessageIdx = number & { __nativeMessageIdx: true };
  * agent's `cachedProviderMessages`, so the input value is discarded. */
 export const PLACEHOLDER_NATIVE_MESSAGE_IDX = -1 as NativeMessageIdx;
 
-export type AgentStreamingBlock =
+export type StreamingBlock =
   | { type: "text"; text: string }
   | { type: "thinking"; thinking: string; signature: string }
   | {
@@ -320,81 +314,116 @@ export type AgentStreamingBlock =
       inputJson: string;
     };
 
-export interface AgentState {
-  status: AgentStatus;
-  messages: ReadonlyArray<ProviderMessage>;
-  streamingBlock?: AgentStreamingBlock | undefined;
-  latestUsage?: Usage | undefined;
-  inputTokenCount?: number | undefined;
-}
-
 export type AgentInput =
   | ProviderTextContent
   | ProviderImageContent
   | ProviderDocumentContent;
 
-/** Messages dispatched from Agent to Thread */
-export type AgentMsg =
-  | { type: "agent-content-updated" }
-  | { type: "agent-stopped"; stopReason: StopReason; usage?: Usage }
-  | { type: "agent-error"; error: Error };
+export type RequestedTool = {
+  id: ToolManager.ToolRequestId;
+  /** err when the model emitted unparseable input for this call */
+  request: Result<ToolRequest, { rawRequest: unknown }>;
+};
 
-export type AgentEvents = {
-  didUpdate: [];
-  stopped: [stopReason: StopReason, usage: Usage | undefined];
-  error: [error: Error];
+/** The states a turn passes through. Progress, not outcome: how a turn ended
+ * is delivered exactly once, by the promise `runTurn` returns. */
+export type AgentPhase =
+  | { type: "idle" }
+  | {
+      type: "streaming";
+      startedAt: Date;
+      /** Timestamp of the most recent sign of life from the server during the
+       * current turn: set when each attempt's request is sent, and advanced on
+       * every received stream event. Used to show a "waiting" timer during dead
+       * air (no events for >3s). */
+      lastEventTime: Date;
+      block: StreamingBlock | undefined;
+      retry: RetryStatus | undefined;
+    }
+  | {
+      type: "running_tools";
+      requested: ReadonlyArray<RequestedTool>;
+      /** the turn was cut short by the output token limit mid-tool-use */
+      truncated: boolean;
+    }
+  | { type: "aborting" };
+
+/** How a turn ended. Delivered once, by the promise. */
+export type TurnResult =
+  | { type: "stopped"; stopReason: StopReason }
+  /** the executor returned suspend; history is coherent and resumable */
+  | { type: "suspended" }
+  | { type: "aborted" }
+  | { type: "failed"; error: Error; retryable: boolean };
+
+export type ToolResults = ReadonlyMap<
+  ToolManager.ToolRequestId,
+  ProviderToolResult["result"]
+>;
+
+export type ToolOutcome =
+  | { type: "continue"; results: ToolResults }
+  /** record the results, then park the agent */
+  | { type: "suspend"; results: ToolResults }
+  /** the caller aborted its tool handles; unwind the turn */
+  | { type: "aborted"; results: ToolResults };
+
+/** "Please run these for me." Must settle; a rejection is converted into
+ * error results for every requested id. No abort signal is passed in: the
+ * caller owns the tool invocations, so on abort it cancels them itself and
+ * settles with `{type: "aborted"}` carrying whatever results it has. */
+export type ToolExecutor = (
+  requests: ReadonlyArray<RequestedTool>,
+) => Promise<ToolOutcome>;
+
+/** Append-only render view of the conversation. Distinct from `phase`, which
+ * is the machine. */
+export type AgentLog = {
+  readonly messages: ReadonlyArray<ProviderMessage>;
+  readonly latestUsage: Usage | undefined;
+  readonly inputTokenCount: number | undefined;
 };
 
 export interface Agent {
-  on<K extends keyof AgentEvents>(
-    event: K,
-    listener: (...args: AgentEvents[K]) => void,
-  ): void;
-  off<K extends keyof AgentEvents>(
-    event: K,
-    listener: (...args: AgentEvents[K]) => void,
-  ): void;
+  readonly phase: AgentPhase;
+  readonly log: AgentLog;
 
-  getState(): AgentState;
+  /** Optional interception point, installed by whoever owns the agent.
+   * Called before the continuation request that carries tool results; the
+   * returned content is appended to that request. Purely additive, and not
+   * re-fired when that request is retried. */
+  onBeforeToolResponse?:
+    | ((args: {
+        stopReason: StreamStopReason;
+        results: ToolResults;
+      }) => Promise<AgentInput[]>)
+    | undefined;
 
-  getStreamingBlock(): AgentStreamingBlock | undefined;
+  /** Run until stop. Resolves once, with why it stopped. Does not reject for
+   * provider errors — those are `failed` results. Rejects only on misuse: a
+   * turn is already in flight. */
+  runTurn(input: AgentInput[]): Promise<TurnResult>;
+
+  /** Cancels the in-flight inference request (and any retry backoff) and
+   * unwinds the loop: fills results for any unanswered tool_use and appends
+   * the abort marker. The in-flight `runTurn` resolves with
+   * `{type: "aborted"}` — that promise is the join point, so this returns void
+   * rather than offering a second one to await. A no-op when idle, and also
+   * when in `running_tools`: there the caller aborts its own tool handles and
+   * the executor reports it via `{type: "aborted"}`. */
+  abort(): void;
 
   /** Get the current native message index. Use this to capture a position
    * that can later be passed to truncateMessages.
    */
   getNativeMessageIdx(): NativeMessageIdx;
 
-  appendUserMessage(content: AgentInput[]): void;
-
-  toolResult(
-    toolUseId: ToolManager.ToolRequestId,
-    result: ProviderToolResult,
-  ): void;
-
-  continueConversation(): void;
-
-  /** Abort the current operation.
-   * Returns a promise that resolves when the abort is complete.
-   * - If streaming: resolves when the stream is terminated
-   * - If not streaming: resolves immediately
-   */
-  abort(): Promise<void>;
-
-  /** Transition from stopped/tool_use to stopped/aborted.
-   * Call this after providing all tool results during an abort.
-   * @throws Error if not in stopped/tool_use state
-   */
-  abortToolUse(): void;
-
-  /** Truncate messages to keep only messages 0..messageIdx (inclusive).
-   * Sets status to stopped with end_turn.
-   */
+  /** Truncate messages to keep only messages 0..messageIdx (inclusive). */
   truncateMessages(messageIdx: NativeMessageIdx): void;
 
-  /** Create a deep copy of this agent.
-   * Can be called in any state (stopped, streaming, tool_use).
-   * The cloned agent will always be in stopped/end_turn state.
-   * Incomplete blocks and pending tool_use are cleaned up in the clone.
+  /** Create a deep copy of this agent, carrying over `executeTools` and any
+   * installed `onBeforeToolResponse`. Can be called in any phase; the clone is
+   * `idle`, with incomplete blocks and unanswered tool_use cleaned up.
    */
   clone(): Agent;
 }
@@ -403,6 +432,10 @@ export interface AgentOptions {
   model: string;
   systemPrompt: string;
   tools: ProviderToolSpec[];
+  executeTools: ToolExecutor;
+  /** "Something visible moved, re-render." No payload: read `phase` / `log`.
+   * Called at streaming rates; the owner is responsible for throttling. */
+  onUpdate: () => void;
   thinking?: {
     enabled: boolean;
     budgetTokens?: number;

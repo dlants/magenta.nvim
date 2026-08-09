@@ -1,12 +1,12 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { validateInput } from "../tools/helpers.ts";
+import { stripTrailingThinkingBlocks } from "./anthropic-cache.ts";
+import { convertAnthropicMessagesToProvider } from "./anthropic-conversion.ts";
 import {
-  convertAnthropicMessagesToProvider,
   getContextWindowForModel,
   getMaxTokensForModel,
-  stripTrailingThinkingBlocks,
-} from "./anthropic-agent.ts";
+} from "./anthropic-models.ts";
 
 describe("getMaxTokensForModel", () => {
   it("should handle standard claude model strings", () => {

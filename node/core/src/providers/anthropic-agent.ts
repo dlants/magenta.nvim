@@ -1,22 +1,39 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { AnthropicError, APIError } from "@anthropic-ai/sdk";
 import type { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream.mjs";
-import { Emitter } from "../emitter.ts";
 import type { Logger } from "../logger.ts";
 import type { ToolName, ToolRequestId, ValidateInput } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
+import {
+  stripTrailingThinkingBlocks,
+  withCacheControl,
+} from "./anthropic-cache.ts";
+import {
+  convertAnthropicMessagesToProvider,
+  type MessageStopInfo,
+} from "./anthropic-conversion.ts";
+import {
+  CLAUDE_CODE_SPOOF_PROMPT,
+  effortToBudgetTokens,
+  getMaxTokensForModel,
+  resolveOutputConfig,
+  supportsAdaptiveThinking,
+} from "./anthropic-models.ts";
 import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
 import type {
   Agent,
-  AgentEvents,
   AgentInput,
+  AgentLog,
   AgentOptions,
-  AgentState,
-  AgentStatus,
-  AgentStreamingBlock,
+  AgentPhase,
   NativeMessageIdx,
   ProviderMessage,
   ProviderToolResult,
+  RequestedTool,
+  StreamStopReason,
+  ToolOutcome,
+  ToolResults,
+  TurnResult,
 } from "./provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 
@@ -50,17 +67,19 @@ type AnthropicStreamingBlock =
       content: Anthropic.WebSearchToolResultBlockContent;
     };
 
-import type { StopReason, Usage } from "./provider-types.ts";
-import { classifyTextContent } from "./tagged-content.ts";
+import type { Usage } from "./provider-types.ts";
 
-type MessageStopInfo = {
-  stopReason: StopReason;
-  usage: Usage;
-};
+/** Appended to the conversation when a turn is cut short by the user, so the
+ * model sees why the transcript stops where it does. */
+export const ABORT_MARKER_TEXT = "[The user aborted the previous request.]";
+/** Result recorded for any tool_use the executor never answered because the
+ * turn was aborted first. */
+export const ABORT_TOOL_RESULT_TEXT =
+  "Request was aborted by the user before tool execution completed.";
 
-/** Actions that trigger state transitions in the agent */
+/** Actions that mutate the accumulating assistant message as the stream
+ * arrives. Turn outcomes are not actions — they are returned by `runTurn`. */
 type Action =
-  | { type: "start-streaming" }
   | { type: "reset-attempt" }
   | {
       type: "block-started";
@@ -73,9 +92,7 @@ type Action =
       delta: Anthropic.Messages.ContentBlockDeltaEvent["delta"];
     }
   | { type: "block-finished"; index: number }
-  | { type: "stream-completed"; response: Anthropic.Message }
-  | { type: "stream-error"; error: Error }
-  | { type: "stream-aborted" };
+  | { type: "stream-completed"; response: Anthropic.Message };
 
 export const RETRY_DELAYS = [1000, 5000, 10000, 30000];
 export const MAX_RETRY_DURATION = 300_000;
@@ -165,16 +182,18 @@ export function getRetryDelay(attempt: number): number {
     : RETRY_DELAYS[RETRY_DELAYS.length - 1];
 }
 
-export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
+export class AnthropicAgent implements Agent {
+  phase: AgentPhase = { type: "idle" };
+  onBeforeToolResponse?: Agent["onBeforeToolResponse"];
+
   private messages: Anthropic.MessageParam[] = [];
   private currentRequest: MessageStream | undefined;
   private params: Omit<Anthropic.Messages.MessageStreamParams, "messages">;
   private currentAnthropicBlock: AnthropicStreamingBlock | undefined;
-  private status: AgentStatus = { type: "stopped", stopReason: "end_turn" };
   private latestUsage: Usage | undefined;
   /** Stop info for each assistant message, keyed by message index */
   private messageStopInfo: Map<number, MessageStopInfo> = new Map();
-  /** Cached provider messages to avoid expensive conversion on every getState() */
+  /** Cached provider messages to avoid expensive conversion on every read */
   private cachedProviderMessages: ProviderMessage[] = [];
   /** Current block index during streaming, -1 when not streaming a block */
   private currentBlockIndex: number = -1;
@@ -182,12 +201,14 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
   private currentAssistantMessage: Anthropic.MessageParam | undefined;
   /** Stored for cloning */
   private anthropicOptions: AnthropicAgentOptions;
-  /** Promise that resolves when streaming stops, and its resolver */
   /** Token count for the full conversation, updated after each streaming completion */
   private inputTokenCount: number | undefined;
-  private streamingEndPromise: Promise<void> | undefined;
-  private streamingEndResolver: (() => void) | undefined;
   private retryAbortController: AbortController | undefined;
+  /** True between the start and the settling of a `runTurn` call. */
+  private turnInFlight = false;
+  /** Set by `abort()`; checked at every boundary in the turn loop so that an
+   * abort landing between two awaits still unwinds exactly once. */
+  private abortRequested = false;
   /** Heartbeat that forces a re-render ~1/sec while a turn is in flight, so
    * time-based status (waiting timer, retry countdown) updates during dead air. */
   private tickInterval: ReturnType<typeof setInterval> | undefined;
@@ -197,18 +218,20 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
     private client: Anthropic,
     anthropicOptions: AnthropicAgentOptions,
   ) {
-    super();
     this.anthropicOptions = anthropicOptions;
     this.params = this.createNativeStreamParameters(anthropicOptions);
   }
 
-  private emitAsync<K extends keyof AgentEvents>(
-    event: K,
-    ...args: AgentEvents[K]
-  ): void {
-    queueMicrotask(() => {
-      this.emit(event, ...args);
-    });
+  get log(): AgentLog {
+    return {
+      messages: this.cachedProviderMessages,
+      latestUsage: this.latestUsage,
+      inputTokenCount: this.inputTokenCount,
+    };
+  }
+
+  private notify(): void {
+    queueMicrotask(() => this.options.onUpdate());
   }
 
   private update(action: Action): void {
@@ -216,25 +239,11 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
       (action.type === "block-started" ||
         action.type === "block-delta" ||
         action.type === "block-finished") &&
-      this.status.type === "streaming"
+      this.phase.type === "streaming"
     ) {
-      this.status.lastEventTime = new Date();
+      this.phase.lastEventTime = new Date();
     }
     switch (action.type) {
-      case "start-streaming":
-        this.status = {
-          type: "streaming",
-          startTime: new Date(),
-          lastEventTime: new Date(),
-        };
-        this.currentBlockIndex = -1;
-        this.currentAssistantMessage = undefined;
-        this.streamingEndPromise = new Promise((resolve) => {
-          this.streamingEndResolver = resolve;
-        });
-
-        break;
-
       case "reset-attempt": {
         // A previous streaming attempt may have errored mid-block, leaving a
         // partially-accumulated assistant message in this.messages and an open
@@ -355,63 +364,30 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
         this.messageStopInfo.set(messageIndex, { stopReason, usage });
 
         this.currentAssistantMessage = undefined;
-        this.status = { type: "stopped", stopReason };
-        this.resolveStreamingEnd();
-        this.countTokensPostFlight();
-        this.emitAsync("stopped", stopReason, usage);
         break;
       }
-
-      case "stream-error": {
-        this.currentRequest = undefined;
-        this.cleanup({ type: "error", error: action.error });
-        this.currentAssistantMessage = undefined;
-        this.status = { type: "error", error: action.error };
-        this.resolveStreamingEnd();
-        this.countTokensPostFlight();
-        this.emitAsync("error", action.error);
-        break;
-      }
-
-      case "stream-aborted":
-        this.currentRequest = undefined;
-        this.cleanup({ type: "aborted" });
-        this.currentAssistantMessage = undefined;
-        this.status = { type: "stopped", stopReason: "aborted" };
-        this.resolveStreamingEnd();
-        this.countTokensPostFlight();
-        this.emitAsync("stopped", "aborted", undefined);
-        break;
 
       default:
         assertUnreachable(action);
     }
 
-    this.emitAsync("didUpdate");
+    this.syncStreamingBlock();
+    this.notify();
   }
 
-  getState(): AgentState {
-    return {
-      status: this.status,
-      messages: this.cachedProviderMessages,
-      streamingBlock: this.getStreamingBlock(),
-      latestUsage: this.latestUsage,
-      inputTokenCount: this.inputTokenCount,
-    };
-  }
-
-  getStreamingBlock(): AgentStreamingBlock | undefined {
-    if (!this.currentAnthropicBlock) {
-      return undefined;
-    }
-    // Only expose types that AgentStreamingBlock supports
-    switch (this.currentAnthropicBlock.type) {
+  /** Mirror the in-progress native block onto `phase`, which is the only way
+   * callers observe it. */
+  private syncStreamingBlock(): void {
+    if (this.phase.type !== "streaming") return;
+    const block = this.currentAnthropicBlock;
+    switch (block?.type) {
       case "text":
       case "thinking":
       case "tool_use":
-        return this.currentAnthropicBlock;
+        this.phase.block = block;
+        break;
       default:
-        return undefined;
+        this.phase.block = undefined;
     }
   }
 
@@ -424,88 +400,30 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
     return (this.messages.length - 1) as NativeMessageIdx;
   }
 
-  appendUserMessage(content: AgentInput[]): void {
-    const nativeContent = this.convertInputToNative(content);
+  abort(): void {
+    if (!this.turnInFlight) return;
+    this.abortRequested = true;
+    // Cancel a pending retry wait and/or the in-flight request. When neither
+    // exists — e.g. we are in `running_tools` — the flag alone is enough: the
+    // executor reports the abort through its outcome and the loop unwinds at
+    // the next boundary.
+    this.retryAbortController?.abort();
+    this.currentRequest?.abort();
+  }
+
+  private appendUserMessage(content: AgentInput[]): void {
+    if (content.length === 0) return;
     this.messages.push({
       role: "user",
-      content: nativeContent,
+      content: this.convertInputToNative(content),
     });
     this.updateCachedProviderMessages();
-  }
-
-  toolResult(toolUseId: ToolRequestId, result: ProviderToolResult): void {
-    if (
-      this.status.type !== "stopped" ||
-      (this.status.stopReason !== "tool_use" &&
-        this.status.stopReason !== "max_tokens")
-    ) {
-      throw new Error(
-        `Cannot provide tool result: expected status stopped with stopReason tool_use, but got ${JSON.stringify(this.status)}`,
-      );
-    }
-
-    const lastMessage = this.messages[this.messages.length - 1];
-    if (!lastMessage || lastMessage.role !== "assistant") {
-      throw new Error(
-        `Cannot provide tool result: expected last message to be from assistant, but got ${lastMessage?.role ?? "no message"}`,
-      );
-    }
-
-    const assistantContent = lastMessage.content;
-    if (typeof assistantContent === "string") {
-      throw new Error(
-        `Cannot provide tool result: assistant message has string content instead of blocks`,
-      );
-    }
-
-    const hasMatchingToolUse = assistantContent.some(
-      (block) => block.type === "tool_use" && block.id === toolUseId,
-    );
-    if (!hasMatchingToolUse) {
-      throw new Error(
-        `Cannot provide tool result: no tool_use block with id ${toolUseId} found in assistant message`,
-      );
-    }
-
-    const nativeContent = this.convertToolResultToNative(toolUseId, result);
-
-    // Tool results go in a user message
-    this.messages.push({
-      role: "user",
-      content: nativeContent,
-    });
-    this.updateCachedProviderMessages();
-  }
-
-  abort(): Promise<void> {
-    // Cancel any pending retry wait
-    if (this.retryAbortController) {
-      this.retryAbortController.abort();
-    }
-    if (this.currentRequest) {
-      this.currentRequest.abort();
-      return this.streamingEndPromise || Promise.resolve();
-    }
-    return this.streamingEndPromise || Promise.resolve();
-  }
-
-  abortToolUse(): void {
-    if (
-      this.status.type !== "stopped" ||
-      this.status.stopReason !== "tool_use"
-    ) {
-      throw new Error(
-        `Cannot abortToolUse: expected status stopped with stopReason tool_use, but got ${JSON.stringify(this.status)}`,
-      );
-    }
-    this.status = { type: "stopped", stopReason: "aborted" };
-    this.emitAsync("stopped", "aborted", undefined);
   }
 
   private startTicker(): void {
     // Clear any existing ticker first so we can never overlap two intervals.
     this.stopTicker();
-    this.tickInterval = setInterval(() => this.emit("didUpdate"), 1000);
+    this.tickInterval = setInterval(() => this.options.onUpdate(), 1000);
   }
 
   private stopTicker(): void {
@@ -515,19 +433,160 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
     }
   }
 
-  private resolveStreamingEnd(): void {
-    this.stopTicker();
-    if (this.streamingEndResolver) {
-      this.streamingEndResolver();
-      this.streamingEndResolver = undefined;
-      this.streamingEndPromise = undefined;
+  async runTurn(input: AgentInput[]): Promise<TurnResult> {
+    if (this.turnInFlight) {
+      throw new Error("runTurn called while a turn is already in flight");
+    }
+    this.turnInFlight = true;
+    this.abortRequested = false;
+    this.appendUserMessage(input);
+    this.startTicker();
+    try {
+      return await this.runLoop();
+    } finally {
+      this.turnInFlight = false;
+      this.abortRequested = false;
+      this.currentRequest = undefined;
+      this.phase = { type: "idle" };
+      this.stopTicker();
+      this.notify();
     }
   }
 
-  continueConversation(): void {
-    this.update({ type: "start-streaming" });
-    this.startTicker();
-    const startTime = (this.status as { startTime: Date }).startTime;
+  /** Alternates between inference and tool execution until something ends the
+   * turn. This is the only thing that drives the agent forward. */
+  private async runLoop(): Promise<TurnResult> {
+    while (true) {
+      if (this.abortRequested) return this.finishAbort();
+
+      const outcome = await this.streamOneResponse();
+      this.countTokensPostFlight();
+
+      if (outcome.type === "aborted") return this.finishAbort();
+      if (outcome.type === "error") {
+        this.cleanup({ type: "error", error: outcome.error });
+        this.currentAssistantMessage = undefined;
+        return {
+          type: "failed",
+          error: outcome.error,
+          retryable: isRetryableError(outcome.error),
+        };
+      }
+
+      const requested = this.collectRequestedTools();
+      if (requested.length === 0) {
+        // Without tool_use blocks the provider's reason is the turn's reason.
+        return {
+          type: "stopped",
+          stopReason:
+            outcome.stopReason === "tool_use" ? "end_turn" : outcome.stopReason,
+        };
+      }
+
+      if (this.abortRequested) return this.finishAbort();
+
+      this.phase = {
+        type: "running_tools",
+        requested,
+        truncated: outcome.stopReason === "max_tokens",
+      };
+      this.options.onUpdate();
+
+      let toolOutcome: ToolOutcome;
+      try {
+        toolOutcome = await this.options.executeTools(requested);
+      } catch (error) {
+        // A rejecting executor is still a turn that must leave every tool_use
+        // answered, so fall through with no results and let the fill do it.
+        this.anthropicOptions.logger.error(
+          `executeTools rejected: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        toolOutcome = { type: "continue", results: new Map() };
+      }
+
+      this.appendToolResults(requested, toolOutcome.results);
+
+      if (toolOutcome.type === "aborted") {
+        this.abortRequested = true;
+        return this.finishAbort();
+      }
+      if (toolOutcome.type === "suspend") return { type: "suspended" };
+      if (this.abortRequested) return this.finishAbort();
+
+      const extra = await this.onBeforeToolResponse?.({
+        stopReason: outcome.stopReason,
+        results: toolOutcome.results,
+      });
+      if (extra?.length) this.appendUserMessage(extra);
+    }
+  }
+
+  /** Every requested tool gets exactly one result block. Ids the executor
+   * omitted are answered here rather than trusted to the executor. */
+  private appendToolResults(
+    requested: ReadonlyArray<RequestedTool>,
+    results: ToolResults,
+  ): void {
+    for (const { id } of requested) {
+      const result = results.get(id) ?? {
+        status: "error" as const,
+        error: ABORT_TOOL_RESULT_TEXT,
+      };
+      // Anthropic wants one user message per tool result.
+      this.messages.push({
+        role: "user",
+        content: this.convertToolResultToNative(id, result),
+      });
+    }
+    this.updateCachedProviderMessages();
+  }
+
+  /** The tool_use blocks of the assistant message we just finished streaming. */
+  private collectRequestedTools(): RequestedTool[] {
+    const last =
+      this.cachedProviderMessages[this.cachedProviderMessages.length - 1];
+    if (!last || last.role !== "assistant") return [];
+    return last.content
+      .filter((block) => block.type === "tool_use")
+      .map((block) => ({ id: block.id, request: block.request }));
+  }
+
+  /** The single terminal abort transition: leave the history well-formed and
+   * mark why it stops here. */
+  private finishAbort(): TurnResult {
+    this.phase = { type: "aborting" };
+    this.options.onUpdate();
+    this.currentRequest = undefined;
+    this.cleanup({ type: "aborted" });
+    this.currentAssistantMessage = undefined;
+    this.appendUserMessage([
+      {
+        type: "text",
+        text: ABORT_MARKER_TEXT,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ]);
+    return { type: "aborted" };
+  }
+
+  /** One provider response, including the retry/backoff budget. Retries stay
+   * inside the `streaming` phase and are never observable as a transition. */
+  private async streamOneResponse(): Promise<
+    | { type: "completed"; stopReason: StreamStopReason }
+    | { type: "aborted" }
+    | { type: "error"; error: Error }
+  > {
+    const startTime = new Date();
+    this.currentBlockIndex = -1;
+    this.currentAssistantMessage = undefined;
+    this.phase = {
+      type: "streaming",
+      startedAt: startTime,
+      lastEventTime: new Date(),
+      block: undefined,
+      retry: undefined,
+    };
+    this.options.onUpdate();
 
     const attemptStream = (): Promise<
       | { type: "completed"; response: Anthropic.Message }
@@ -578,100 +637,99 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
         });
     };
 
-    const runWithRetry = async () => {
-      let attempt = 0;
-      while (true) {
-        // Clear retryStatus when starting a new attempt
-        this.status = {
-          type: "streaming",
-          startTime,
-          lastEventTime: new Date(),
-        };
-        if (attempt > 0) {
-          this.update({ type: "reset-attempt" });
-          this.emit("didUpdate");
-        }
-
-        const result = await attemptStream();
-
-        if (result.type === "completed") {
-          this.update({ type: "stream-completed", response: result.response });
-          return;
-        }
-        if (result.type === "aborted") {
-          this.update({ type: "stream-aborted" });
-          return;
-        }
-
-        // result.type === "error"
-        // Auth-error path: try to refresh credentials and retry immediately,
-        // independent of the 429/529 retry budget. The 30s guard inside
-        // refreshAuth prevents tight loops.
-        const refreshAuth = this.anthropicOptions.refreshAuth;
-        if (refreshAuth && isAuthError(result.error)) {
-          try {
-            await refreshAuth();
-            continue;
-          } catch (refreshErr) {
-            const refreshMessage =
-              refreshErr instanceof Error
-                ? refreshErr.message
-                : String(refreshErr);
-            const combined = new Error(
-              `Auth refresh failed: ${refreshMessage}. Original error: ${result.error.message}`,
-            );
-            this.update({ type: "stream-error", error: combined });
-            return;
-          }
-        }
-
-        const elapsed = Date.now() - startTime.getTime();
-        if (!isRetryableError(result.error) || elapsed >= MAX_RETRY_DURATION) {
-          this.update({ type: "stream-error", error: result.error });
-          return;
-        }
-
-        const delay = getRetryDelay(attempt);
-        const nextRetryAt = new Date(Date.now() + delay);
-        this.status = {
-          type: "streaming",
-          startTime,
-          lastEventTime: new Date(),
-          retryStatus: {
-            attempt: attempt + 1,
-            nextRetryAt,
-            error: result.error,
-          },
-        };
-        this.emit("didUpdate");
-
-        // Wait for the delay, but allow abort to cancel
-        this.retryAbortController = new AbortController();
-        const abortSignal = this.retryAbortController.signal;
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const timer = setTimeout(resolve, delay);
-            abortSignal.addEventListener(
-              "abort",
-              () => {
-                clearTimeout(timer);
-                reject(new DOMException("Aborted", "AbortError"));
-              },
-              { once: true },
-            );
-          });
-        } catch {
-          // Abort during retry wait
-          this.retryAbortController = undefined;
-          this.update({ type: "stream-aborted" });
-          return;
-        }
-        this.retryAbortController = undefined;
-        attempt++;
+    let attempt = 0;
+    while (true) {
+      // Clear retry status when starting a new attempt
+      this.phase = {
+        type: "streaming",
+        startedAt: startTime,
+        lastEventTime: new Date(),
+        block: undefined,
+        retry: undefined,
+      };
+      if (attempt > 0) {
+        this.update({ type: "reset-attempt" });
+        this.options.onUpdate();
       }
-    };
 
-    runWithRetry();
+      const result = await attemptStream();
+      this.currentRequest = undefined;
+
+      if (result.type === "completed") {
+        this.update({ type: "stream-completed", response: result.response });
+        return {
+          type: "completed",
+          stopReason: result.response.stop_reason || "end_turn",
+        };
+      }
+      if (result.type === "aborted") {
+        return { type: "aborted" };
+      }
+
+      // result.type === "error"
+      // Auth-error path: try to refresh credentials and retry immediately,
+      // independent of the 429/529 retry budget. The 30s guard inside
+      // refreshAuth prevents tight loops.
+      const refreshAuth = this.anthropicOptions.refreshAuth;
+      if (refreshAuth && isAuthError(result.error)) {
+        try {
+          await refreshAuth();
+          continue;
+        } catch (refreshErr) {
+          const refreshMessage =
+            refreshErr instanceof Error
+              ? refreshErr.message
+              : String(refreshErr);
+          return {
+            type: "error",
+            error: new Error(
+              `Auth refresh failed: ${refreshMessage}. Original error: ${result.error.message}`,
+            ),
+          };
+        }
+      }
+
+      const elapsed = Date.now() - startTime.getTime();
+      if (!isRetryableError(result.error) || elapsed >= MAX_RETRY_DURATION) {
+        return { type: "error", error: result.error };
+      }
+
+      const delay = getRetryDelay(attempt);
+      this.phase = {
+        type: "streaming",
+        startedAt: startTime,
+        lastEventTime: new Date(),
+        block: undefined,
+        retry: {
+          attempt: attempt + 1,
+          nextRetryAt: new Date(Date.now() + delay),
+          error: result.error,
+        },
+      };
+      this.options.onUpdate();
+
+      // Wait for the delay, but allow abort to cancel
+      this.retryAbortController = new AbortController();
+      const abortSignal = this.retryAbortController.signal;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, delay);
+          abortSignal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              reject(new DOMException("Aborted", "AbortError"));
+            },
+            { once: true },
+          );
+        });
+      } catch {
+        this.retryAbortController = undefined;
+        return { type: "aborted" };
+      }
+      this.retryAbortController = undefined;
+      attempt++;
+    }
   }
 
   private countTokensPostFlight(): void {
@@ -695,7 +753,7 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
       .countTokens(countParams)
       .then((result) => {
         this.inputTokenCount = result.input_tokens;
-        this.emitAsync("didUpdate");
+        this.notify();
       })
       .catch((error: unknown) => {
         this.anthropicOptions.logger.warn(
@@ -717,9 +775,7 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
       }
     }
 
-    this.status = { type: "stopped", stopReason: "end_turn" };
     this.updateCachedProviderMessages();
-    this.emitAsync("stopped", "end_turn", undefined);
   }
 
   /** Decide where to cut the messages array for a truncate at `messageIdx`.
@@ -831,8 +887,7 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
       ]),
     );
 
-    // Cloned agent is always in stopped/end_turn state
-    cloned.status = { type: "stopped", stopReason: "end_turn" };
+    cloned.onBeforeToolResponse = this.onBeforeToolResponse;
 
     // Copy latestUsage and inputTokenCount if present
     if (this.latestUsage) {
@@ -897,6 +952,9 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
     }
   }
 
+  /** Leave the message array in a shape the provider will accept after a turn
+   * ended without the model finishing: drop incomplete blocks and answer every
+   * tool_use that the executor never got to. */
   private cleanup(
     reason: { type: "aborted" } | { type: "error"; error: Error },
   ): void {
@@ -907,51 +965,50 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
       return;
     }
 
-    const lastMessageContent = lastMessage.content;
-    if (
-      typeof lastMessageContent !== "string" &&
-      lastMessageContent.length > 0
-    ) {
-      const lastBlock = lastMessageContent[lastMessageContent.length - 1];
-
-      if ((lastBlock as { type: string }).type === "server_tool_use") {
-        lastMessageContent.pop();
-      } else if (lastBlock.type === "tool_use") {
-        const errorMessage =
-          reason.type === "aborted"
-            ? "Request was aborted by the user before tool execution completed."
-            : `Stream error occurred: ${reason.error.message}`;
-
-        this.messages.push({
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: lastBlock.id,
-              content: errorMessage,
-              is_error: true,
-            },
-          ],
-        });
-        this.updateCachedProviderMessages();
-        return;
-      }
-
-      // Filter out empty/incomplete blocks that can result from aborting mid-stream.
-      // Anthropic rejects empty text blocks with 400 "text content blocks must be non-empty".
-      lastMessage.content = lastMessageContent.filter((block) => {
-        if (block.type === "text" && !block.text) return false;
-        if (block.type === "thinking" && !block.thinking) return false;
-        return true;
-      });
+    const content = lastMessage.content;
+    if (typeof content === "string") {
+      if (!content) this.messages.pop();
+      this.updateCachedProviderMessages();
+      return;
     }
 
-    if (
-      (typeof lastMessage.content === "string" && !lastMessage.content) ||
-      (typeof lastMessage.content !== "string" &&
-        lastMessage.content.length === 0)
-    ) {
+    // Anthropic rejects empty text blocks, and a server_tool_use without its
+    // result block, both of which aborting mid-stream can leave behind.
+    lastMessage.content = content.filter((block, idx) => {
+      if ((block as { type: string }).type === "server_tool_use") {
+        const next = content[idx + 1];
+        return (
+          !!next && (next as { type: string }).type === "web_search_tool_result"
+        );
+      }
+      if (block.type === "text" && !block.text) return false;
+      if (block.type === "thinking" && !block.thinking) return false;
+      return true;
+    });
+
+    if (lastMessage.content.length === 0) {
       this.messages.pop();
+      this.updateCachedProviderMessages();
+      return;
+    }
+
+    const unanswered = lastMessage.content.filter(
+      (block) => block.type === "tool_use",
+    );
+    if (unanswered.length > 0) {
+      const errorMessage =
+        reason.type === "aborted"
+          ? ABORT_TOOL_RESULT_TEXT
+          : `Stream error occurred: ${reason.error.message}`;
+      this.messages.push({
+        role: "user",
+        content: unanswered.map((block) => ({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: errorMessage,
+          is_error: true,
+        })),
+      });
     }
 
     this.updateCachedProviderMessages();
@@ -1227,14 +1284,14 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
 
   private convertToolResultToNative(
     toolUseId: ToolRequestId,
-    result: ProviderToolResult,
+    result: ProviderToolResult["result"],
   ): Anthropic.Messages.ContentBlockParam[] {
-    if (result.result.status === "ok") {
+    if (result.status === "ok") {
       const contents: Array<
         Anthropic.Messages.TextBlockParam | Anthropic.Messages.ImageBlockParam
       > = [];
 
-      for (const content of result.result.value) {
+      for (const content of result.value) {
         switch (content.type) {
           case "text":
             contents.push({ type: "text", text: content.text });
@@ -1261,7 +1318,7 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
       ];
 
       // Add document blocks separately
-      for (const content of result.result.value) {
+      for (const content of result.value) {
         if (content.type === "document") {
           blocks.push({
             type: "document",
@@ -1277,7 +1334,7 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
         {
           type: "tool_result",
           tool_use_id: toolUseId,
-          content: result.result.error,
+          content: result.error,
           is_error: true,
         },
       ];
@@ -1290,477 +1347,6 @@ export class AnthropicAgent extends Emitter<AgentEvents> implements Agent {
       this.messages,
       this.messageStopInfo,
     );
-    this.emitAsync("didUpdate");
+    this.notify();
   }
 }
-
-/** Convert Anthropic messages to ProviderMessages. Exported for use in tests. */
-export function convertAnthropicMessagesToProvider(
-  validateInput: ValidateInput,
-  messages: Anthropic.MessageParam[],
-  messageStopInfo?: Map<number, MessageStopInfo>,
-): ProviderMessage[] {
-  return messages.map((msg, msgIndex): ProviderMessage => {
-    const stopInfo = messageStopInfo?.get(msgIndex);
-    const nativeMessageIdx = msgIndex as NativeMessageIdx;
-    const content =
-      typeof msg.content === "string"
-        ? [
-            {
-              type: "text" as const,
-              text: msg.content,
-              nativeMessageIdx,
-            },
-          ]
-        : msg.content.map((block) =>
-            convertBlockToProvider(validateInput, block, nativeMessageIdx),
-          );
-
-    const result: ProviderMessage = {
-      role: msg.role === "system" ? "user" : msg.role,
-      content,
-    };
-
-    // Attach stop info to assistant messages
-    if (stopInfo && msg.role === "assistant") {
-      result.stopReason = stopInfo.stopReason;
-      result.usage = stopInfo.usage;
-    }
-
-    return result;
-  });
-}
-
-function convertBlockToProvider(
-  validateInput: ValidateInput,
-  block: Anthropic.Messages.ContentBlockParam,
-  nativeMessageIdx: NativeMessageIdx,
-): ProviderMessage["content"][number] {
-  switch (block.type) {
-    case "text": {
-      const tagged = classifyTextContent(block.text, nativeMessageIdx);
-      if (tagged) return tagged;
-      return {
-        type: "text",
-        text: block.text,
-        nativeMessageIdx,
-        citations: block.citations
-          ? block.citations
-              .filter(
-                (
-                  c,
-                ): c is Extract<
-                  (typeof block.citations)[number],
-                  { url: string }
-                > => "url" in c,
-              )
-              .map((c) => ({
-                type: "web_search_citation" as const,
-                cited_text: c.cited_text,
-                encrypted_index: c.encrypted_index,
-                title: c.title || "",
-                url: c.url,
-              }))
-          : undefined,
-      };
-    }
-
-    case "image":
-      return {
-        type: "image",
-        source: block.source as {
-          type: "base64";
-          media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
-          data: string;
-        },
-        nativeMessageIdx,
-      };
-
-    case "document":
-      return {
-        type: "document",
-        source: block.source as {
-          type: "base64";
-          media_type: "application/pdf";
-          data: string;
-        },
-        title: block.title ?? null,
-        nativeMessageIdx,
-      };
-
-    case "tool_use": {
-      const inputResult = validateInput(
-        block.name as ToolName,
-        block.input as Record<string, unknown>,
-      );
-      return {
-        type: "tool_use",
-        id: block.id as ToolRequestId,
-        name: block.name as ToolName,
-        request:
-          inputResult.status === "ok"
-            ? {
-                status: "ok" as const,
-                value: {
-                  id: block.id as ToolRequestId,
-                  toolName: block.name as ToolName,
-                  input: inputResult.value,
-                },
-              }
-            : { ...inputResult, rawRequest: block.input },
-        nativeMessageIdx,
-      };
-    }
-
-    case "tool_result": {
-      let contents: ProviderToolResult["result"];
-
-      if (typeof block.content === "string") {
-        contents = block.is_error
-          ? { status: "error", error: block.content }
-          : {
-              status: "ok",
-              value: [
-                {
-                  type: "text",
-                  text: block.content,
-                  nativeMessageIdx,
-                },
-              ],
-              structuredResult: {
-                toolName: "unknown" as ToolName,
-              },
-            };
-      } else if (block.is_error) {
-        const textBlock = block.content?.find((c) => c.type === "text") as
-          | { type: "text"; text: string }
-          | undefined;
-        contents = {
-          status: "error",
-          error: textBlock?.text || "Unknown error",
-        };
-      } else {
-        const blockContent = block.content || [];
-        contents = {
-          status: "ok",
-          value: blockContent
-            .filter(
-              (
-                c,
-              ): c is
-                | Anthropic.Messages.TextBlockParam
-                | Anthropic.Messages.ImageBlockParam =>
-                c.type === "text" || c.type === "image",
-            )
-            .map((c) => {
-              if (c.type === "text") {
-                return {
-                  type: "text" as const,
-                  text: c.text,
-                  nativeMessageIdx,
-                };
-              } else {
-                return {
-                  type: "image" as const,
-                  source: c.source as {
-                    type: "base64";
-                    media_type:
-                      | "image/jpeg"
-                      | "image/png"
-                      | "image/gif"
-                      | "image/webp";
-                    data: string;
-                  },
-                  nativeMessageIdx,
-                };
-              }
-            }),
-          structuredResult: {
-            toolName: "unknown" as ToolName,
-          },
-        };
-      }
-
-      return {
-        type: "tool_result",
-        id: block.tool_use_id as ToolRequestId,
-        result: contents,
-        nativeMessageIdx,
-      };
-    }
-
-    case "thinking":
-      return {
-        type: "thinking",
-        thinking: block.thinking,
-        signature: block.signature,
-        nativeMessageIdx,
-      };
-
-    case "redacted_thinking":
-      return {
-        type: "redacted_thinking",
-        data: block.data,
-        nativeMessageIdx,
-      };
-
-    default:
-      // Handle server_tool_use, web_search_tool_result etc.
-      if ((block as { type: string }).type === "server_tool_use") {
-        const serverBlock = block as {
-          type: "server_tool_use";
-          id: string;
-          name: string;
-          input: { query: string };
-        };
-        return {
-          type: "server_tool_use",
-          id: serverBlock.id,
-          name: "web_search",
-          input: serverBlock.input,
-          nativeMessageIdx,
-        };
-      }
-      if ((block as { type: string }).type === "web_search_tool_result") {
-        const resultBlock = block as {
-          type: "web_search_tool_result";
-          tool_use_id: string;
-          content: Anthropic.WebSearchToolResultBlockContent;
-        };
-        return {
-          type: "web_search_tool_result",
-          tool_use_id: resultBlock.tool_use_id,
-          content: resultBlock.content,
-          nativeMessageIdx,
-        };
-      }
-      // Fallback for unknown types
-      return {
-        type: "text",
-        text: `[Unknown block type: ${(block as { type: string }).type}]`,
-        nativeMessageIdx,
-      };
-  }
-}
-
-/** We only ever need to place a cache header on the last block, since anthropic now can compute the longest reusable
- * prefix.
- * https://www.anthropic.com/news/token-saving-updates
- */
-/** The Anthropic API rejects assistant messages whose final block is a
- * `thinking` (or `redacted_thinking`) block. This happens when a stream is
- * interrupted (abort/error) after a thinking block but before any text or
- * tool_use block, and the message is later re-sent (e.g. on manual retry).
- * Strip trailing thinking blocks, dropping any assistant message that becomes
- * empty as a result. */
-export function stripTrailingThinkingBlocks(
-  messages: Anthropic.MessageParam[],
-): Anthropic.MessageParam[] {
-  const result: Anthropic.MessageParam[] = [];
-  for (const message of messages) {
-    if (message.role !== "assistant" || typeof message.content === "string") {
-      result.push(message);
-      continue;
-    }
-
-    let end = message.content.length;
-    while (
-      end > 0 &&
-      (message.content[end - 1].type === "thinking" ||
-        message.content[end - 1].type === "redacted_thinking")
-    ) {
-      end--;
-    }
-
-    if (end === message.content.length) {
-      result.push(message);
-    } else if (end > 0) {
-      result.push({ ...message, content: message.content.slice(0, end) });
-    }
-    // end === 0: assistant message had only thinking blocks; drop it entirely.
-  }
-  return result;
-}
-
-export function withCacheControl(
-  messages: Anthropic.MessageParam[],
-): Anthropic.MessageParam[] {
-  // Find the last eligible block by searching backwards through messages
-  for (
-    let messageIndex = messages.length - 1;
-    messageIndex >= 0;
-    messageIndex--
-  ) {
-    const message = messages[messageIndex];
-    if (typeof message.content === "string") {
-      continue;
-    }
-
-    for (
-      let blockIndex = message.content.length - 1;
-      blockIndex >= 0;
-      blockIndex--
-    ) {
-      const block = message.content[blockIndex];
-
-      // Check if this block is eligible for caching
-      if (
-        block &&
-        typeof block !== "string" &&
-        block.type !== "thinking" &&
-        block.type !== "redacted_thinking" &&
-        !(block.type === "text" && !block.text)
-      ) {
-        const result = [...messages];
-        // Create new array with updated message containing the cache_control block
-        const newContent = [...message.content];
-        newContent[blockIndex] = {
-          ...block,
-          cache_control: { type: "ephemeral" },
-        };
-
-        result[messageIndex] = {
-          ...message,
-          content: newContent,
-        };
-        return result;
-      }
-    }
-  }
-
-  return messages;
-}
-
-/** Resolve `output_config` for adaptive-thinking models. Emits a single warn
- * and returns undefined when the current model does not support adaptive
- * thinking but the caller requested an effort level. */
-export function resolveOutputConfig(
-  model: string,
-  thinking:
-    | {
-        enabled: boolean;
-        budgetTokens?: number;
-        displayThinking?: boolean;
-        effort?: "low" | "medium" | "high" | "xhigh" | "max";
-      }
-    | undefined,
-  logger: Logger,
-  isBedrock = false,
-): Anthropic.Messages.OutputConfig | undefined {
-  if (!thinking?.effort) return undefined;
-  if (!supportsAdaptiveThinking(model, isBedrock)) {
-    logger.warn(
-      `thinking.effort is only supported on adaptive-thinking models (Opus 4.7+, Sonnet 4.6+); ignoring effort=${thinking.effort} on model ${model}`,
-    );
-    return undefined;
-  }
-  return { effort: thinking.effort };
-}
-
-// Map a high-level effort level to a concrete budget_tokens value for the
-// legacy thinking.type=enabled path (used on AWS Bedrock, which doesn't
-// support adaptive thinking or output_config).
-export function effortToBudgetTokens(
-  effort: "low" | "medium" | "high" | "xhigh" | "max" | undefined,
-): number {
-  switch (effort) {
-    case "low":
-      return 2048;
-    case "medium":
-      return 8192;
-    case "high":
-      return 16000;
-    case "xhigh":
-      return 24000;
-    case "max":
-      return 32000;
-    default:
-      return 1024;
-  }
-}
-
-// Opus 4.7+ and Sonnet 4.6+ (and any later major version, e.g. opus-5,
-// sonnet-6, ...) require adaptive thinking instead of budget_tokens.
-// The isBedrock parameter is retained for older Bedrock-hosted models that
-// still need the legacy path, but Opus 4.7+ on Bedrock now requires adaptive.
-function supportsAdaptiveThinking(model: string, _isBedrock = false): boolean {
-  const normalized = normalizeModelName(model);
-  if (normalized.match(/^claude-opus-4-([7-9]|\d{2,})/)) return true;
-  if (normalized.match(/^claude-opus-([5-9]|\d{2,})(-|$)/)) return true;
-  if (normalized.match(/^claude-sonnet-4-([6-9]|\d{2,})/)) return true;
-  if (normalized.match(/^claude-sonnet-([5-9]|\d{2,})(-|$)/)) return true;
-  return false;
-}
-
-function normalizeModelName(model: string): string {
-  const match = model.match(/claude-[a-z0-9.-]+/);
-  return match ? match[0] : model;
-}
-export function getContextWindowForModel(model: string): number {
-  model = normalizeModelName(model);
-  // Claude 3+ models all have 200K context windows
-  if (model.match(/^claude-(opus-4|sonnet-4|haiku-4|3|4)/)) {
-    return 200_000;
-  }
-
-  // Legacy Claude 2.x models - 100K context window
-  if (model.match(/^claude-2\./)) {
-    return 100_000;
-  }
-
-  // Default for unknown models - conservative 200K
-  return 200_000;
-}
-export function getMaxTokensForModel(model: string): number {
-  model = normalizeModelName(model);
-  // Opus 5+, Sonnet 5+ (and any later major version) - use high limits
-  if (
-    model.match(/^claude-opus-([5-9]|\d{2,})(-|$)/) ||
-    model.match(/^claude-sonnet-([5-9]|\d{2,})(-|$)/)
-  ) {
-    return 64000;
-  }
-
-  // Claude 4.5 models (Opus, Sonnet, Haiku) - use high limits
-  if (
-    model.match(/^claude-(opus-4-5|opus-4-6|opus-4-7|sonnet-4-5|haiku-4-5)/)
-  ) {
-    return 32000;
-  }
-
-  // Claude 4 models - use high limits
-  if (model.match(/^claude-(opus-4|sonnet-4|4-opus|4-sonnet)/)) {
-    return 32000;
-  }
-
-  // Claude 3.7 Sonnet - supports up to 128k with beta header
-  if (model.match(/^claude-3-7-sonnet/)) {
-    return 32000; // Conservative default, can be increased to 128k with beta header
-  }
-
-  // Claude 3.5 Sonnet - 8k limit
-  if (model.match(/^claude-3-5-sonnet/)) {
-    return 8192;
-  }
-
-  // Claude 3.5 Haiku - 8k limit (same as Sonnet)
-  if (model.match(/^claude-3-5-haiku/)) {
-    return 8192;
-  }
-
-  // Legacy Claude 3 models (Opus, Sonnet, Haiku) - 4k limit
-  if (model.match(/^claude-3-(opus|sonnet|haiku)/)) {
-    return 4096;
-  }
-
-  // Legacy Claude 2.x models - 4k limit
-  if (model.match(/^claude-2\./)) {
-    return 4096;
-  }
-
-  // Default for unknown models - conservative 4k limit
-  return 4096;
-}
-
-export const CLAUDE_CODE_SPOOF_PROMPT =
-  "You are Claude Code, Anthropic's official CLI for Claude.";

@@ -13,14 +13,16 @@ import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { extendError, type Result } from "../utils/result.ts";
 import {
   AnthropicAgent,
-  CLAUDE_CODE_SPOOF_PROMPT,
-  getMaxTokensForModel,
   getRetryDelay,
   isRetryableError,
   MAX_RETRY_DURATION,
-  resolveOutputConfig,
-  withCacheControl,
 } from "./anthropic-agent.ts";
+import { withCacheControl } from "./anthropic-cache.ts";
+import {
+  CLAUDE_CODE_SPOOF_PROMPT,
+  getMaxTokensForModel,
+  resolveOutputConfig,
+} from "./anthropic-models.ts";
 import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
 import type {
   Agent,

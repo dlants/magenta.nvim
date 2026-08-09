@@ -4,7 +4,7 @@ import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
 import { pollUntil } from "../utils/async.ts";
 import type { Result } from "../utils/result.ts";
-import { convertAnthropicMessagesToProvider } from "./anthropic-agent.ts";
+import { convertAnthropicMessagesToProvider } from "./anthropic-conversion.ts";
 import type { ProviderMessage, StopReason, Usage } from "./provider-types.ts";
 
 /** A mock stream that tests can control to simulate Anthropic API responses.

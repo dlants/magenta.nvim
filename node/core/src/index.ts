@@ -124,14 +124,14 @@ export type {
 } from "./provider-options.ts";
 export { AnthropicProvider } from "./providers/anthropic.ts";
 export type { AnthropicAgentOptions } from "./providers/anthropic-agent.ts";
+export { AnthropicAgent } from "./providers/anthropic-agent.ts";
+export { withCacheControl } from "./providers/anthropic-cache.ts";
+export { convertAnthropicMessagesToProvider } from "./providers/anthropic-conversion.ts";
 export {
-  AnthropicAgent,
   CLAUDE_CODE_SPOOF_PROMPT,
-  convertAnthropicMessagesToProvider,
   getContextWindowForModel,
   getMaxTokensForModel,
-  withCacheControl,
-} from "./providers/anthropic-agent.ts";
+} from "./providers/anthropic-models.ts";
 export type { BedrockProviderOptions } from "./providers/bedrock.ts";
 export { BedrockProvider } from "./providers/bedrock.ts";
 export { CodexAuth, CodexAuthError } from "./providers/codex-auth.ts";
@@ -152,11 +152,9 @@ export { getProvider, setMockProvider } from "./providers/provider.ts";
 export type {
   Agent,
   AgentInput,
-  AgentMsg,
+  AgentLog,
   AgentOptions,
-  AgentState,
-  AgentStatus,
-  AgentStreamingBlock,
+  AgentPhase,
   NativeMessageIdx,
   Provider,
   ProviderBlockDeltaEvent,
@@ -184,8 +182,15 @@ export type {
   ProviderToolUseResponse,
   ProviderWebSearchCitation,
   ProviderWebSearchToolResult,
+  RequestedTool,
   RetryStatus,
   StopReason,
+  StreamingBlock,
+  StreamStopReason,
+  ToolExecutor,
+  ToolOutcome,
+  ToolResults,
+  TurnResult,
   Usage,
 } from "./providers/provider-types.ts";
 export {

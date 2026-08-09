@@ -1034,7 +1034,7 @@ export class OpenAIProvider implements Provider {
     const abortController = new AbortController();
 
     const messages: ProviderMessage[] = [
-      ...(contextAgent ? contextAgent.getState().messages : []),
+      ...(contextAgent ? contextAgent.log.messages : []),
       {
         role: "user",
         content: input,
