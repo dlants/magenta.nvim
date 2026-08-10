@@ -25,7 +25,7 @@ import type {
   ProviderStreamRequest,
   ProviderToolSpec,
   ProviderToolUseRequest,
-  StopReason,
+  StreamStopReason,
   Usage,
 } from "./provider-types.ts";
 
@@ -63,7 +63,7 @@ type MockForceToolUseRequest = {
   contextAgent?: Agent | undefined;
   defer: Defer<{
     toolRequest: Result<ToolRequest, { rawRequest: unknown }>;
-    stopReason: StopReason;
+    stopReason: StreamStopReason;
     usage: Usage;
   }>;
   aborted: boolean;
@@ -358,7 +358,7 @@ Streams: ${this.mockClient.streams.length}`);
     stopReason,
   }: {
     toolRequest: Result<ToolRequest, { rawRequest: unknown }>;
-    stopReason: StopReason;
+    stopReason: StreamStopReason;
   }) {
     const lastRequest = await this.awaitPendingForceToolUseRequest();
 

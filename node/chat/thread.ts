@@ -429,27 +429,20 @@ export class Thread {
   }
 
   /** Walks the agent's provider messages and rebuilds the tool result map.
-   * Preserves any pre-existing structuredResult for surviving tool result IDs,
+   * Re-attaches each result's structuredResult from `core.structuredToolResults`,
    * since the provider strips structuredResult when serializing to native form
    * but the rich view rendering relies on it. */
   rebuildToolResultMap(): void {
     const next = new Map<ToolRequestId, ProviderToolResult>();
-    const prev = this.state.toolResultMap;
     for (const message of this.core.getProviderMessages()) {
       if (message.role !== "user") continue;
       for (const content of message.content) {
         if (content.type === "tool_result") {
-          const cached = prev.get(content.id);
-          if (
-            cached?.result.status === "ok" &&
-            content.result.status === "ok"
-          ) {
+          const structured = this.core.structuredToolResults.get(content.id);
+          if (structured && content.result.status === "ok") {
             next.set(content.id, {
               ...content,
-              result: {
-                ...content.result,
-                structuredResult: cached.result.structuredResult,
-              },
+              result: { ...content.result, structuredResult: structured },
             });
           } else {
             next.set(content.id, content);
@@ -607,31 +600,7 @@ export class Thread {
     thread.sandboxBypassed = sourceThread.isSandboxBypassed;
     bypassRef.get = () => thread.isSandboxBypassed;
 
-    const survivingToolResults = sourceThread.state.toolResultMap;
-    const newMap = new Map<ToolRequestId, ProviderToolResult>();
-    for (const message of core.getProviderMessages()) {
-      if (message.role !== "user") continue;
-      for (const content of message.content) {
-        if (content.type === "tool_result") {
-          const cached = survivingToolResults.get(content.id);
-          if (
-            cached?.result.status === "ok" &&
-            content.result.status === "ok"
-          ) {
-            newMap.set(content.id, {
-              ...content,
-              result: {
-                ...content.result,
-                structuredResult: cached.result.structuredResult,
-              },
-            });
-          } else {
-            newMap.set(content.id, content);
-          }
-        }
-      }
-    }
-    thread.state.toolResultMap = newMap;
+    thread.rebuildToolResultMap();
 
     for (const [idxStr, viewState] of Object.entries(
       sourceThread.state.messageViewState,

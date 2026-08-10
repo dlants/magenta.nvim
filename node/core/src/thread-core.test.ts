@@ -586,7 +586,7 @@ describe("AutoCompactSupervisor integration", () => {
     // inputTokenCount is populated post-flight, so it lags one turn. Drive a
     // second turn; the handoff at its end sees the over-threshold count.
     await pollUntil(() => {
-      if (core.agent.getState().inputTokenCount === 200) return true;
+      if (core.agent.log.inputTokenCount === 200) return true;
       throw new Error("waiting for token count");
     });
 
@@ -621,8 +621,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.finishResponse("end_turn", { inputTokens: 50, outputTokens: 5 });
 
     await pollUntil(() => {
-      if (core.agent.getState().status.type !== "stopped")
-        throw new Error("waiting");
+      if (core.agent.phase.type !== "idle") throw new Error("waiting");
       return true;
     });
 
@@ -650,7 +649,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.streamText("done");
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.agent.getState().inputTokenCount === 200) return true;
+      if (core.agent.log.inputTokenCount === 200) return true;
       throw new Error("waiting for token count");
     });
 
@@ -688,7 +687,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.streamText("done");
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.agent.getState().inputTokenCount === 200) return true;
+      if (core.agent.log.inputTokenCount === 200) return true;
       throw new Error("waiting for token count");
     });
 
@@ -1230,14 +1229,14 @@ describe("ThreadCore non-retryable error resubmit flow", () => {
     stream.respondWithError(new Error("subagent provider failure"));
 
     await pollUntil(() => {
-      if (core.agent.getState().status.type === "error") return true;
+      if (core.state.lastTurnResult?.type === "failed") return true;
       throw new Error("waiting for error state");
     });
 
     expect(events).toHaveLength(0);
     expect(core.state.failedSubmit).toBeUndefined();
     expect(core.getProviderMessages().length).toBe(1);
-    expect(core.agent.getState().status.type).toBe("error");
+    expect(core.state.lastTurnResult?.type).toBe("failed");
   });
 
   it("captures preSubmitNativeIdx before appending the user message", async () => {
@@ -1279,7 +1278,7 @@ describe("ThreadCore non-retryable error resubmit flow", () => {
     stream.respondWithError(new Error("provider failure"));
 
     await pollUntil(() => {
-      if (core.agent.getState().status.type === "error") return true;
+      if (core.state.lastTurnResult?.type === "failed") return true;
       throw new Error("waiting for error state");
     });
 
@@ -1297,7 +1296,7 @@ describe("ThreadCore non-retryable error resubmit flow", () => {
     stream.respondWithError(new Error("provider failure"));
 
     await pollUntil(() => {
-      if (core.agent.getState().status.type === "error") return true;
+      if (core.state.lastTurnResult?.type === "failed") return true;
       throw new Error("waiting for error state");
     });
 
@@ -1317,7 +1316,7 @@ describe("ThreadCore non-retryable error resubmit flow", () => {
     stream.respondWithError(new Error("provider failure"));
 
     await pollUntil(() => {
-      if (core.agent.getState().status.type === "error") return true;
+      if (core.state.lastTurnResult?.type === "failed") return true;
       throw new Error("waiting for error state");
     });
 
@@ -1345,7 +1344,7 @@ describe("ThreadCore non-retryable error resubmit flow", () => {
     firstStream.respondWithError(new Error("provider failure"));
 
     await pollUntil(() => {
-      if (core.agent.getState().status.type === "error") return true;
+      if (core.state.lastTurnResult?.type === "failed") return true;
       throw new Error("waiting for error state");
     });
 
@@ -1406,7 +1405,7 @@ describe("ThreadCore auto-resubmit for non-user-facing threads (Stage 2)", () =>
     firstStream.respondWithError(new Error("terminated"));
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(core.agent.getState().status.type).toBe("error");
+    expect(core.state.lastTurnResult?.type).toBe("failed");
     expect(setupResubmitEvents).toHaveLength(0);
     expect(core.state.failedSubmit).toBeUndefined();
 
@@ -1426,7 +1425,7 @@ describe("ThreadCore auto-resubmit for non-user-facing threads (Stage 2)", () =>
     });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(core.agent.getState().status.type).toBe("stopped");
+    expect(core.state.lastTurnResult?.type).toBe("stopped");
     const userMessages = core
       .getProviderMessages()
       .filter((m) => m.role === "user");
@@ -1444,13 +1443,13 @@ describe("ThreadCore auto-resubmit for non-user-facing threads (Stage 2)", () =>
     stream.respondWithError(new Error("subagent provider failure"));
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(core.agent.getState().status.type).toBe("error");
+    expect(core.state.lastTurnResult?.type).toBe("failed");
 
     // Advance well past every retry delay; no retry should ever be scheduled.
     await vi.advanceTimersByTimeAsync(60_000);
 
     expect(mockClient.streams).toHaveLength(1);
-    expect(core.agent.getState().status.type).toBe("error");
+    expect(core.state.lastTurnResult?.type).toBe("failed");
     expect(core.state.failedSubmit).toBeUndefined();
   });
 
@@ -1471,7 +1470,7 @@ describe("ThreadCore auto-resubmit for non-user-facing threads (Stage 2)", () =>
 
     bypassAgentRetryAndFail();
     await vi.advanceTimersByTimeAsync(0);
-    expect(core.agent.getState().status.type).toBe("error");
+    expect(core.state.lastTurnResult?.type).toBe("failed");
 
     let streamCountBefore = mockClient.streams.length;
     for (let i = 0; i < 20; i++) {
@@ -1488,13 +1487,13 @@ describe("ThreadCore auto-resubmit for non-user-facing threads (Stage 2)", () =>
       await vi.advanceTimersByTimeAsync(0);
     }
 
-    expect(core.agent.getState().status.type).toBe("error");
+    expect(core.state.lastTurnResult?.type).toBe("failed");
     const finalStreamCount = mockClient.streams.length;
 
     // No further retry should ever be scheduled.
     await vi.advanceTimersByTimeAsync(60_000);
     expect(mockClient.streams).toHaveLength(finalStreamCount);
-    expect(core.agent.getState().status.type).toBe("error");
+    expect(core.state.lastTurnResult?.type).toBe("failed");
   });
 
   it("aborting a subagent cancels a pending auto-resubmit timer", async () => {
@@ -1511,7 +1510,7 @@ describe("ThreadCore auto-resubmit for non-user-facing threads (Stage 2)", () =>
     stream.respondWithError(new Error("terminated"));
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(core.agent.getState().status.type).toBe("error");
+    expect(core.state.lastTurnResult?.type).toBe("failed");
     expect(mockClient.streams).toHaveLength(1);
 
     // Abort before the scheduled retry (1000ms) fires.
@@ -1594,8 +1593,7 @@ describe("ThreadCore conversation archive", () => {
       nextStream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (core.agent.getState().status.type !== "stopped")
-          throw new Error("waiting");
+        if (core.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -1645,8 +1643,7 @@ describe("ThreadCore conversation archive", () => {
 
       nextStream.finishResponse("end_turn");
       await pollUntil(() => {
-        if (core.agent.getState().status.type !== "stopped")
-          throw new Error("waiting");
+        if (core.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -1673,8 +1670,7 @@ describe("ThreadCore conversation archive", () => {
       stream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (core.agent.getState().status.type !== "stopped")
-          throw new Error("waiting");
+        if (core.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -1699,6 +1695,10 @@ describe("ThreadCore conversation archive", () => {
       contStream.streamText("resumed");
       contStream.finishResponse("end_turn");
       await compactPromise;
+      await pollUntil(() => {
+        if (core.agent.phase.type !== "idle") throw new Error("waiting");
+        return true;
+      });
       await core.awaitArchiveFlush();
 
       const entries = await readArchive(threadId);
@@ -1734,8 +1734,7 @@ describe("ThreadCore conversation archive", () => {
       stream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (parent.agent.getState().status.type !== "stopped")
-          throw new Error("waiting");
+        if (parent.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
 
@@ -1757,8 +1756,7 @@ describe("ThreadCore conversation archive", () => {
       childStream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (child!.agent.getState().status.type !== "stopped")
-          throw new Error("waiting");
+        if (child!.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await child.awaitArchiveFlush();
@@ -1826,8 +1824,7 @@ describe("ThreadCore scratchpad state", () => {
       stream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (core.agent.getState().status.type !== "stopped")
-          throw new Error("waiting");
+        if (core.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -1880,8 +1877,7 @@ describe("ThreadCore scratchpad state", () => {
       stream.streamText("parent response");
       stream.finishResponse("end_turn");
       await pollUntil(() => {
-        if (parent.agent.getState().status.type !== "stopped")
-          throw new Error("waiting");
+        if (parent.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
 

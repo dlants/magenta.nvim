@@ -74,6 +74,7 @@ import type {
   ToolName,
   ToolRequest,
   ToolRequestId,
+  ToolStructuredResult,
 } from "./tool-types.ts";
 import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
@@ -357,7 +358,7 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       initialFiles,
       initialGitState: sourceCore.gitTracker.getAgentView(),
     };
-    return new ThreadCore(
+    const cloned = new ThreadCore(
       newId,
       contextWithFiles,
       agent,
@@ -373,6 +374,10 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         },
       },
     );
+    for (const [id, structured] of sourceCore.structuredToolResults) {
+      cloned.structuredToolResults.set(id, structured);
+    }
+    return cloned;
   }
 
   private contextManagerListeners:
@@ -415,7 +420,6 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       this.contextManagerListeners = undefined;
     }
   }
-
 
   private updateThrottleTimer: ReturnType<typeof setTimeout> | undefined;
   private updatePending = false;
@@ -489,6 +493,12 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
         this.state.mode = action.mode;
         break;
       case "set-active-tool-result":
+        if (action.result.result.status === "ok") {
+          this.structuredToolResults.set(
+            action.id,
+            action.result.result.structuredResult,
+          );
+        }
         if (this.state.mode.type === "tool_use") {
           const entry = this.state.mode.activeTools.get(action.id);
           if (entry) {
@@ -639,6 +649,14 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
     await this.threadLogger.flushed();
   }
 
+  /** Structured tool results by request id, kept for the lifetime of the
+   * thread. The provider strips `structuredResult` when serializing a tool
+   * result to native form, so the rich renderers need this side channel. */
+  readonly structuredToolResults = new Map<
+    ToolRequestId,
+    ToolStructuredResult
+  >();
+
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
     return this.agent.log.messages;
   }
@@ -696,6 +714,11 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
 
   /** Lead the next turn's input with `content`. Used to inject a marker (fork
    * notification, compaction summary) that has no turn of its own. */
+  /** Content queued by `prependToNextTurn`, not yet handed to the agent. */
+  get pendingTurnContent(): ReadonlyArray<AgentInput> {
+    return this.pendingTurnPrefix ?? [];
+  }
+
   prependToNextTurn(content: AgentInput[]): void {
     this.pendingTurnPrefix = [...(this.pendingTurnPrefix ?? []), ...content];
   }
@@ -1220,7 +1243,6 @@ export class ThreadCore extends Emitter<ThreadCoreEvents> {
       setTimeout(() => this.emit("scrollToLastMessage"), 100);
     }
   }
-
 
   private getLastAssistantMessage():
     | ReadonlyArray<ProviderMessageContent>

@@ -3,6 +3,17 @@ import { expect, it } from "vitest";
 import { getCurrentWindow } from "../nvim/nvim.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
+import type { Thread } from "./thread.ts";
+
+/** The fork marker is queued for the fork's first turn rather than appended to
+ * the cloned history at fork time. */
+function expectForkNotificationQueued(thread: Thread): void {
+  expect(
+    thread.core.pendingTurnContent.some(
+      (c) => c.type === "text" && c.text.includes("<fork-notification>"),
+    ),
+  ).toBe(true);
+}
 
 it("normal mode F on a previous assistant message creates a fork ending there", async () => {
   await withDriver({}, async (driver) => {
@@ -43,13 +54,13 @@ it("normal mode F on a previous assistant message creates a fork ending there", 
     const newThread = driver.magenta.chat.getActiveThread();
     expect(newThread.id).not.toBe(originalThreadId);
 
-    // The new thread should have native messages [user, assistant] plus the
-    // appended fork-notification user message.
-    const native = newThread.agent
-      .getState()
-      .messages.filter((m) => m.role !== "user" || m.content.length > 0);
-    expect(native).toHaveLength(3);
-    expect(native[native.length - 1].role).toBe("user");
+    // The new thread should have native messages [user, assistant]. The
+    // fork-notification rides along with the fork's first turn.
+    const native = newThread.agent.log.messages.filter(
+      (m) => m.role !== "user" || m.content.length > 0,
+    );
+    expect(native).toHaveLength(2);
+    expectForkNotificationQueued(newThread);
 
     // Input buffer should be empty
     const inputBuffer = driver.getInputBuffer();
@@ -100,10 +111,9 @@ it("normal mode F on a user message keeps that user message", async () => {
     });
 
     const newThread = driver.magenta.chat.getActiveThread();
-    const messages = newThread.agent.getState().messages;
-    expect(messages).toHaveLength(4);
-    const last = messages[messages.length - 1];
-    expect(last.role).toBe("user");
+    const messages = newThread.agent.log.messages;
+    expect(messages).toHaveLength(3);
+    expectForkNotificationQueued(newThread);
   });
 });
 
@@ -153,7 +163,7 @@ it("normal mode F on assistant message with tool_use extends to keep tool_result
     });
 
     const newThread = driver.magenta.chat.getActiveThread();
-    const messages = newThread.agent.getState().messages;
+    const messages = newThread.agent.log.messages;
 
     // Per the truncate algorithm, when forking at the assistant tool_use
     // message, we extend forward through the run of consecutive user
@@ -209,10 +219,10 @@ it("F on first user message keeps just that message and resets input", async () 
     });
 
     const newThread = driver.magenta.chat.getActiveThread();
-    const messages = newThread.agent.getState().messages;
-    expect(messages).toHaveLength(2);
+    const messages = newThread.agent.log.messages;
+    expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe("user");
-    expect(messages[messages.length - 1].role).toBe("user");
+    expectForkNotificationQueued(newThread);
 
     const inputBuffer = driver.getInputBuffer();
     const lines = await inputBuffer.getLines({

@@ -907,7 +907,7 @@ export type OpenAIProviderOptions = {
 export class OpenAIProvider implements Provider {
   /** Public so tests can substitute a mock client, as the Anthropic tests do. */
   public client: OpenAI;
-  private includeWebSearch: boolean;
+  readonly includeWebSearch: boolean;
   private authType: "key" | "chatgpt" | "bedrock";
 
   constructor(

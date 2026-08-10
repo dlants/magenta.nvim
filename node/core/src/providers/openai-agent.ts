@@ -18,9 +18,9 @@ import {
 } from "./openai.ts";
 import type {
   Agent,
+  AgentHooks,
   AgentInput,
   AgentLog,
-  AgentHooks,
   AgentOptions,
   AgentPhase,
   NativeMessageIdx,

@@ -8,8 +8,11 @@ import { MockOpenAIClient } from "./mock-openai-client.ts";
 import { OpenAIAgent, type OpenAIStreamingClient } from "./openai-agent.ts";
 import {
   type AgentInput,
+  type AgentPhase,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
+  type ProviderMessage,
   type ProviderToolSpec,
+  type TurnResult,
 } from "./provider-types.ts";
 
 const noopLogger: Logger = {
@@ -56,14 +59,35 @@ const expectedTypes = [
   "image",
 ];
 
-function anthropicContent() {
+const noExecutor = () => {
+  throw new Error("executeTools should not be called: no tools are configured");
+};
+
+/** Snapshot of what a single opening request produced, taken while the turn is
+ * still in flight so the user message is visible before any cleanup. */
+type TurnSnapshot = {
+  messages: ProviderMessage[];
+  phaseDuringTurn: AgentPhase["type"];
+  phaseAfterTurn: AgentPhase["type"];
+  turnResult: TurnResult;
+  executorCalls: number;
+};
+
+async function anthropicContent(): Promise<TurnSnapshot> {
+  const client = new MockAnthropicClient();
+  let executorCalls = 0;
   const agent = new AnthropicAgent(
     {
       ...sharedOptions,
       model: "claude-sonnet-4-20250514",
       skipPostFlightTokenCount: true,
+      executeTools: () => {
+        executorCalls++;
+        return noExecutor();
+      },
+      onUpdate: () => {},
     },
-    new MockAnthropicClient() as unknown as Anthropic,
+    client as unknown as Anthropic,
     {
       authType: "key",
       includeWebSearch: false,
@@ -72,24 +96,60 @@ function anthropicContent() {
       validateInput,
     },
   );
-  agent.appendUserMessage(input);
-  return agent.getState().messages;
+  const turn = agent.runTurn(input);
+  const stream = await client.awaitStream();
+  const phaseDuringTurn = agent.phase.type;
+  const messages = snapshot(agent.log.messages);
+  stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
+  const turnResult = await turn;
+  return {
+    messages,
+    phaseDuringTurn,
+    phaseAfterTurn: agent.phase.type,
+    turnResult,
+    executorCalls,
+  };
 }
 
-function openaiContent() {
+async function openaiContent(): Promise<TurnSnapshot> {
+  const client = new MockOpenAIClient();
+  let executorCalls = 0;
   const agent = new OpenAIAgent(
-    { ...sharedOptions, model: "gpt-5.4" },
-    new MockOpenAIClient() as unknown as OpenAIStreamingClient,
+    {
+      ...sharedOptions,
+      model: "gpt-5.4",
+      executeTools: () => {
+        executorCalls++;
+        return noExecutor();
+      },
+      onUpdate: () => {},
+    },
+    client as unknown as OpenAIStreamingClient,
     { includeWebSearch: false, logger: noopLogger, validateInput },
   );
-  agent.appendUserMessage(input);
-  return agent.getState().messages;
+  const turn = agent.runTurn(input);
+  const stream = await client.awaitStream();
+  const phaseDuringTurn = agent.phase.type;
+  const messages = snapshot(agent.log.messages);
+  stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
+  const turnResult = await turn;
+  return {
+    messages,
+    phaseDuringTurn,
+    phaseAfterTurn: agent.phase.type,
+    turnResult,
+    executorCalls,
+  };
+}
+
+function snapshot(messages: ReadonlyArray<ProviderMessage>): ProviderMessage[] {
+  return messages.map((m) => ({ ...m, content: [...m.content] }));
 }
 
 describe("agent parity for tagged user input", () => {
-  it("produces identical provider content across anthropic and openai agents", () => {
-    const anthropic = anthropicContent();
-    const openai = openaiContent();
+  it("produces identical provider content across anthropic and openai agents", async () => {
+    const anthropic = (await anthropicContent()).messages;
+    const openai = (await openaiContent()).messages;
 
     expect(anthropic).toHaveLength(1);
     expect(openai).toHaveLength(1);
@@ -98,8 +158,26 @@ describe("agent parity for tagged user input", () => {
     expect(openai[0].content).toEqual(anthropic[0].content);
   });
 
-  it("re-tags each structured item with its discriminated type", () => {
-    for (const messages of [anthropicContent(), openaiContent()]) {
+  it("passes through the same phases and executor calls", async () => {
+    const anthropic = await anthropicContent();
+    const openai = await openaiContent();
+
+    for (const snap of [anthropic, openai]) {
+      expect(snap.phaseDuringTurn).toBe("streaming");
+      expect(snap.phaseAfterTurn).toBe("idle");
+      expect(snap.turnResult).toEqual({
+        type: "stopped",
+        stopReason: "end_turn",
+      });
+      expect(snap.executorCalls).toBe(0);
+    }
+  });
+
+  it("re-tags each structured item with its discriminated type", async () => {
+    for (const { messages } of [
+      await anthropicContent(),
+      await openaiContent(),
+    ]) {
       expect(messages[0].content.map((c) => c.type)).toEqual(expectedTypes);
     }
   });

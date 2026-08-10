@@ -27,6 +27,8 @@ const defaultOptions = {
   systemPrompt: "test",
   tools: [] as ProviderToolSpec[],
   skipPostFlightTokenCount: true,
+  executeTools: () => Promise.reject(new Error("unexpected tool execution")),
+  onUpdate: () => {},
 };
 
 function createAgent(
@@ -56,18 +58,14 @@ function makeTokenExpiredError(): Error {
   return err;
 }
 
-function trackEvents(agent: AnthropicAgent) {
-  const events: {
-    stopped: Array<{ stopReason: string }>;
-    errors: Error[];
-  } = { stopped: [], errors: [] };
-  agent.on("stopped", (stopReason) => {
-    events.stopped.push({ stopReason });
-  });
-  agent.on("error", (error) => {
-    events.errors.push(error);
-  });
-  return events;
+function start(agent: AnthropicAgent) {
+  return agent.runTurn([
+    {
+      type: "text",
+      text: "hello",
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    },
+  ]);
 }
 
 describe("AnthropicAgent auth refresh", () => {
@@ -83,16 +81,8 @@ describe("AnthropicAgent auth refresh", () => {
     const mockClient = new MockAnthropicClient();
     const refreshAuth = vi.fn().mockResolvedValue(undefined);
     const agent = createAgent(mockClient, refreshAuth);
-    const events = trackEvents(agent);
 
-    agent.appendUserMessage([
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    agent.continueConversation();
+    const turn = start(agent);
 
     let stream = await mockClient.awaitStream();
     stream.respondWithError(makeTokenExpiredError());
@@ -104,12 +94,9 @@ describe("AnthropicAgent auth refresh", () => {
       toolRequests: [],
       stopReason: "end_turn",
     });
-    await vi.advanceTimersByTimeAsync(0);
 
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
     expect(refreshAuth).toHaveBeenCalledTimes(1);
-    expect(events.stopped.length).toBe(1);
-    expect(events.stopped[0].stopReason).toBe("end_turn");
-    expect(events.errors.length).toBe(0);
   });
 
   it("surfaces a combined error when refresh fails", async () => {
@@ -118,26 +105,18 @@ describe("AnthropicAgent auth refresh", () => {
       .fn()
       .mockRejectedValue(new Error("aws sso login failed: bad config"));
     const agent = createAgent(mockClient, refreshAuth);
-    const events = trackEvents(agent);
 
-    agent.appendUserMessage([
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    agent.continueConversation();
+    const turn = start(agent);
 
     const stream = await mockClient.awaitStream();
     stream.respondWithError(makeTokenExpiredError());
-    await vi.advanceTimersByTimeAsync(0);
 
+    const result = await turn;
     expect(refreshAuth).toHaveBeenCalledTimes(1);
-    expect(events.errors.length).toBe(1);
-    expect(events.errors[0].message).toContain("Auth refresh failed");
-    expect(events.errors[0].message).toContain("bad config");
-    expect(events.errors[0].message).toContain("Token is expired");
+    if (result.type !== "failed") throw new Error("expected failed");
+    expect(result.error.message).toContain("Auth refresh failed");
+    expect(result.error.message).toContain("bad config");
+    expect(result.error.message).toContain("Token is expired");
   });
 
   it("30s window prevents a second refresh after a repeated auth error", async () => {
@@ -151,16 +130,8 @@ describe("AnthropicAgent auth refresh", () => {
       runCommand,
     );
     const agent = createAgent(mockClient, refreshAuth);
-    const events = trackEvents(agent);
 
-    agent.appendUserMessage([
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    agent.continueConversation();
+    const turn = start(agent);
 
     let stream = await mockClient.awaitStream();
     stream.respondWithError(makeTokenExpiredError());
@@ -168,11 +139,11 @@ describe("AnthropicAgent auth refresh", () => {
 
     stream = await mockClient.awaitStream();
     stream.respondWithError(makeTokenExpiredError());
-    await vi.advanceTimersByTimeAsync(0);
 
+    const result = await turn;
     expect(runCommand).toHaveBeenCalledTimes(1);
-    expect(events.errors.length).toBe(1);
-    expect(events.errors[0].message).toContain("Auth refresh failed");
-    expect(events.errors[0].message).toContain("not retrying");
+    if (result.type !== "failed") throw new Error("expected failed");
+    expect(result.error.message).toContain("Auth refresh failed");
+    expect(result.error.message).toContain("not retrying");
   });
 });

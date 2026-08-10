@@ -124,7 +124,10 @@ export type {
 } from "./provider-options.ts";
 export { AnthropicProvider } from "./providers/anthropic.ts";
 export type { AnthropicAgentOptions } from "./providers/anthropic-agent.ts";
-export { AnthropicAgent } from "./providers/anthropic-agent.ts";
+export {
+  ABORT_MARKER_TEXT,
+  AnthropicAgent,
+} from "./providers/anthropic-agent.ts";
 export { withCacheControl } from "./providers/anthropic-cache.ts";
 export { convertAnthropicMessagesToProvider } from "./providers/anthropic-conversion.ts";
 export {
@@ -151,9 +154,9 @@ export {
 export { getProvider, setMockProvider } from "./providers/provider.ts";
 export type {
   Agent,
+  AgentHooks,
   AgentInput,
   AgentLog,
-  AgentHooks,
   AgentOptions,
   AgentPhase,
   NativeMessageIdx,

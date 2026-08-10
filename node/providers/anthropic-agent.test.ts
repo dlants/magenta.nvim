@@ -3,23 +3,33 @@ import type { ToolName, ToolRequestId } from "@magenta/core";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX, validateInput } from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import winston from "winston";
-import { delay } from "../utils/async.ts";
+import { delay, pollUntil } from "../utils/async.ts";
 import {
+  ABORT_MARKER_TEXT,
   AnthropicAgent,
   type AnthropicAgentOptions,
 } from "./anthropic-agent.ts";
 import { MockAnthropicClient } from "./mock-anthropic-client.ts";
 import type {
   AgentInput,
-  AgentMsg,
   NativeMessageIdx,
-  ProviderToolResult,
   ProviderToolSpec,
+  RequestedTool,
+  StreamingBlock,
+  ToolExecutor,
+  ToolResults,
 } from "./provider-types.ts";
 
-type TrackedMessages = {
-  messages: AgentMsg[];
-};
+/** Counts `onUpdate` notifications, which is all the agent emits now. */
+type Tracked = { updates: number };
+
+function trackUpdates(): Tracked {
+  return { updates: 0 };
+}
+
+/** Default executor: no test reaches it unless it streams a tool_use. */
+const rejectingExecutor: ToolExecutor = () =>
+  Promise.reject(new Error("unexpected tool execution"));
 
 function createAgent(
   mockClient: MockAnthropicClient | Anthropic,
@@ -31,39 +41,65 @@ function createAgent(
       effort?: "low" | "medium" | "high" | "xhigh" | "max";
     };
   },
-  tracked?: TrackedMessages,
+  tracked?: Tracked,
 ): AnthropicAgent {
-  const agent = new AnthropicAgent(
-    { ...defaultOptions, ...options },
+  return new AnthropicAgent(
+    {
+      ...defaultOptions,
+      ...options,
+      ...(tracked && {
+        onUpdate: () => {
+          tracked.updates++;
+        },
+      }),
+    },
     mockClient as unknown as Anthropic,
     defaultAnthropicOptions,
   );
-  if (tracked) {
-    agent.on("didUpdate", () => {
-      tracked.messages.push({ type: "agent-content-updated" });
-    });
-    agent.on("stopped", (stopReason, usage) => {
-      tracked.messages.push({
-        type: "agent-stopped",
-        stopReason,
-        ...(usage && { usage }),
-      });
-    });
-    agent.on("error", (error) => {
-      tracked.messages.push({ type: "agent-error", error });
-    });
-  }
-  return agent;
 }
 
-function trackMessages(): TrackedMessages {
-  return { messages: [] };
+/** The in-progress block is only observable through `phase`. */
+/** Wait for the agent to open a *new* stream, past the ones already seen. */
+function awaitNextStream(mockClient: MockAnthropicClient, seen: number) {
+  return pollUntil(() => {
+    const stream = mockClient.streams[seen];
+    if (!stream) throw new Error("No new stream yet");
+    return stream;
+  });
+}
+
+function streamingBlock(agent: AnthropicAgent): StreamingBlock | undefined {
+  return agent.phase.type === "streaming" ? agent.phase.block : undefined;
+}
+
+function okResults(
+  requests: ReadonlyArray<RequestedTool>,
+  text = "Tool output",
+): ToolResults {
+  return new Map(
+    requests.map((r) => [
+      r.id,
+      {
+        status: "ok" as const,
+        value: [
+          {
+            type: "text" as const,
+            text,
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          },
+        ],
+        structuredResult: { toolName: "get_files" as ToolName },
+      },
+    ]),
+  );
 }
 
 const defaultOptions = {
   model: "claude-sonnet-4-20250514",
   systemPrompt: "You are a helpful assistant.",
   tools: [] as ProviderToolSpec[],
+  executeTools: rejectingExecutor,
+  onUpdate: () => {},
 };
 
 const defaultAnthropicOptions: AnthropicAgentOptions = {
@@ -82,15 +118,13 @@ describe("thinking.effort", () => {
       thinking: { enabled: true, effort: "max" },
     });
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hi",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -102,6 +136,7 @@ describe("thinking.effort", () => {
 
     stream.finishResponse("end_turn");
     await stream.finalMessage();
+    await turn;
   });
 
   it("drops effort and warns on non-adaptive-thinking models", async () => {
@@ -119,20 +154,20 @@ describe("thinking.effort", () => {
         systemPrompt: "You are a helpful assistant.",
         tools: [] as ProviderToolSpec[],
         thinking: { enabled: true, effort: "max" },
+        executeTools: rejectingExecutor,
+        onUpdate: () => {},
       },
       mockClient as unknown as Anthropic,
       { ...defaultAnthropicOptions, logger },
     );
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hi",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -143,29 +178,28 @@ describe("thinking.effort", () => {
 
     stream.finishResponse("end_turn");
     await stream.finalMessage();
+    await turn;
   });
 });
 
-describe("appendUserMessage", () => {
+describe("user input", () => {
   it("does not add assistant message until first content block completes", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
     // Before any content blocks, should only have user message
-    expect(agent.getState().messages).toHaveLength(1);
-    expect(agent.getState().messages[0].role).toBe("user");
+    expect(agent.log.messages).toHaveLength(1);
+    expect(agent.log.messages[0].role).toBe("user");
 
     // Start a text block
     const blockIndex = stream.nextBlockIndex();
@@ -177,7 +211,7 @@ describe("appendUserMessage", () => {
     await stream.settle();
 
     // Still only user message - assistant message not added yet
-    expect(agent.getState().messages).toHaveLength(1);
+    expect(agent.log.messages).toHaveLength(1);
 
     // Add some text delta
     stream.emitEvent({
@@ -188,7 +222,7 @@ describe("appendUserMessage", () => {
     await stream.settle();
 
     // Still only user message
-    expect(agent.getState().messages).toHaveLength(1);
+    expect(agent.log.messages).toHaveLength(1);
 
     // Complete the block
     stream.emitEvent({
@@ -198,17 +232,18 @@ describe("appendUserMessage", () => {
     await stream.settle();
 
     // Now assistant message should be added
-    expect(agent.getState().messages).toHaveLength(2);
-    expect(agent.getState().messages[1].role).toBe("assistant");
-    expect(agent.getState().messages[1].content).toHaveLength(1);
+    expect(agent.log.messages).toHaveLength(2);
+    expect(agent.log.messages[1].role).toBe("assistant");
+    expect(agent.log.messages[1].content).toHaveLength(1);
 
     stream.finishResponse("end_turn");
     await stream.finalMessage();
+    await turn;
   });
 
-  it("appends text message and dispatches content-updated async", async () => {
-    const mockClient = {} as Anthropic;
-    const tracked = trackMessages();
+  it("appends text input and notifies asynchronously", async () => {
+    const mockClient = new MockAnthropicClient();
+    const tracked = trackUpdates();
     const agent = createAgent(mockClient, undefined, tracked);
 
     const content: AgentInput[] = [
@@ -218,12 +253,9 @@ describe("appendUserMessage", () => {
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ];
-    agent.appendUserMessage(content);
+    const turn = agent.runTurn(content);
 
-    // Message should not have been dispatched synchronously
-    expect(tracked.messages).toHaveLength(0);
-
-    const state = agent.getState();
+    const state = agent.log;
     expect(state.messages).toHaveLength(1);
     expect(state.messages[0].role).toBe("user");
     expect(state.messages[0].content).toHaveLength(1);
@@ -232,17 +264,19 @@ describe("appendUserMessage", () => {
       text: "Hello, world!",
     });
 
-    // Message dispatched asynchronously
     await delay(0);
-    expect(tracked.messages).toHaveLength(1);
-    expect(tracked.messages[0].type).toBe("agent-content-updated");
+    expect(tracked.updates).toBeGreaterThan(0);
+
+    const stream = await mockClient.awaitStream();
+    stream.finishResponse("end_turn");
+    await turn;
   });
 
-  it("appends image message correctly", () => {
-    const mockClient = {} as Anthropic;
+  it("appends image input correctly", async () => {
+    const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const content: AgentInput[] = [
+    const turn = agent.runTurn([
       {
         type: "image",
         source: {
@@ -252,11 +286,9 @@ describe("appendUserMessage", () => {
         },
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
-    ];
-    agent.appendUserMessage(content);
+    ]);
 
-    const state = agent.getState();
-    expect(state.messages[0].content[0]).toMatchObject({
+    expect(agent.log.messages[0].content[0]).toMatchObject({
       type: "image",
       source: {
         type: "base64",
@@ -264,13 +296,17 @@ describe("appendUserMessage", () => {
         data: "base64data",
       },
     });
+
+    const stream = await mockClient.awaitStream();
+    stream.finishResponse("end_turn");
+    await turn;
   });
 
-  it("appends document message correctly", () => {
-    const mockClient = {} as Anthropic;
+  it("appends document input correctly", async () => {
+    const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    const content: AgentInput[] = [
+    const turn = agent.runTurn([
       {
         type: "document",
         source: {
@@ -281,11 +317,9 @@ describe("appendUserMessage", () => {
         title: "My Document",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
-    ];
-    agent.appendUserMessage(content);
+    ]);
 
-    const state = agent.getState();
-    expect(state.messages[0].content[0]).toMatchObject({
+    expect(agent.log.messages[0].content[0]).toMatchObject({
       type: "document",
       source: {
         type: "base64",
@@ -294,53 +328,35 @@ describe("appendUserMessage", () => {
       },
       title: "My Document",
     });
+
+    const stream = await mockClient.awaitStream();
+    stream.finishResponse("end_turn");
+    await turn;
   });
 });
 
-describe("toolResult", () => {
-  it("throws when not in stopped state with tool_use reason", () => {
-    const mockClient = {} as Anthropic;
-    const agent = createAgent(mockClient);
-
-    const toolUseId = "tool-123" as ToolRequestId;
-    const result: ProviderToolResult = {
-      type: "tool_result",
-      id: toolUseId,
-      result: {
-        status: "ok",
-        value: [
-          {
-            type: "text",
-            text: "Tool output",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          },
-        ],
-        structuredResult: { toolName: "get_files" as ToolName },
-      },
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    };
-
-    expect(() => agent.toolResult(toolUseId, result)).toThrow(
-      "Cannot provide tool result: expected status stopped",
-    );
-  });
-
-  it("appends tool result when in correct state", async () => {
+describe("tool execution", () => {
+  it("appends the executor's results and continues the turn", async () => {
     const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
-
     const toolUseId = "tool-123" as ToolRequestId;
+    let seen: ReadonlyArray<RequestedTool> = [];
+    const agent = createAgent(mockClient, {
+      executeTools: (requests) => {
+        seen = requests;
+        return Promise.resolve({
+          type: "continue" as const,
+          results: okResults(requests),
+        });
+      },
+    });
 
-    // Send a message to trigger streaming, then respond with tool_use
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(toolUseId, "get_files" as ToolName, {
@@ -348,45 +364,28 @@ describe("toolResult", () => {
     });
     stream.finishResponse("tool_use");
 
-    // Wait for the stream to complete
-    await stream.finalMessage();
-    // Give time for the promise handler to run
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const stream2 = await awaitNextStream(mockClient, 1);
+    expect(seen.map((r) => r.id)).toEqual([toolUseId]);
 
-    const result: ProviderToolResult = {
-      type: "tool_result",
-      id: toolUseId,
-      result: {
-        status: "ok",
-        value: [
-          {
-            type: "text",
-            text: "Tool output",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          },
-        ],
-        structuredResult: { toolName: "get_files" as ToolName },
-      },
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    };
-
-    agent.toolResult(toolUseId, result);
-
-    const state = agent.getState();
+    const state = agent.log;
     expect(state.messages).toHaveLength(3);
     expect(state.messages[2].role).toBe("user");
+    expect(state.messages[2].content[0].type).toBe("tool_result");
 
-    const toolResult = state.messages[2].content[0];
-    expect(toolResult.type).toBe("tool_result");
+    stream2.streamText("Done.");
+    stream2.finishResponse("end_turn");
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
   });
-});
 
-describe("continueConversation", () => {
-  it("succeeds when last message is from user", () => {
+  it("fills an error result for any id the executor omits", async () => {
     const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const toolUseId = "tool-omitted" as ToolRequestId;
+    const agent = createAgent(mockClient, {
+      executeTools: () =>
+        Promise.resolve({ type: "suspend" as const, results: new Map() }),
+    });
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
@@ -394,118 +393,162 @@ describe("continueConversation", () => {
       },
     ]);
 
-    // Should not throw
-    expect(() => agent.continueConversation()).not.toThrow();
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(toolUseId, "get_files" as ToolName, {
+      files: [{ filePath: "test.ts" }],
+    });
+    stream.finishResponse("tool_use");
+
+    expect(await turn).toEqual({ type: "suspended" });
+
+    const toolResult = agent.log.messages[2].content[0];
+    expect(toolResult).toMatchObject({
+      type: "tool_result",
+      id: toolUseId,
+      result: { status: "error" },
+    });
+  });
+
+  it("fills error results when the executor rejects", async () => {
+    const mockClient = new MockAnthropicClient();
+    const toolUseId = "tool-reject" as ToolRequestId;
+    const agent = createAgent(mockClient, {
+      executeTools: () => Promise.reject(new Error("executor blew up")),
+    });
+
+    const turn = agent.runTurn([
+      {
+        type: "text",
+        text: "Hello",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ]);
+
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(toolUseId, "get_files" as ToolName, {
+      files: [{ filePath: "test.ts" }],
+    });
+    stream.finishResponse("tool_use");
+
+    const stream2 = await awaitNextStream(mockClient, 1);
+    expect(agent.log.messages[2].content[0]).toMatchObject({
+      type: "tool_result",
+      id: toolUseId,
+      result: { status: "error" },
+    });
+
+    stream2.finishResponse("end_turn");
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
   });
 });
 
-describe("dispatch messages", () => {
-  it("dispatches messages when stream updates state", async () => {
+describe("runTurn", () => {
+  it("rejects when a turn is already in flight", async () => {
     const mockClient = new MockAnthropicClient();
-    const tracked = trackMessages();
+    const agent = createAgent(mockClient);
+
+    const turn = agent.runTurn([
+      {
+        type: "text",
+        text: "Hello",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ]);
+    const stream = await mockClient.awaitStream();
+
+    await expect(
+      agent.runTurn([
+        {
+          type: "text",
+          text: "Again",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ]),
+    ).rejects.toThrow("already in flight");
+
+    // State is unperturbed: the second input was never appended.
+    expect(agent.log.messages).toHaveLength(1);
+
+    stream.finishResponse("end_turn");
+    await turn;
+  });
+});
+
+describe("onUpdate", () => {
+  it("notifies while the stream updates state", async () => {
+    const mockClient = new MockAnthropicClient();
+    const tracked = trackUpdates();
     const agent = createAgent(mockClient, undefined, tracked);
 
-    // appendUserMessage dispatches content-updated async
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Test",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    expect(tracked.messages).toHaveLength(0);
     await delay(0);
-    expect(tracked.messages).toHaveLength(1);
-
-    // continueConversation triggers streaming which dispatches messages
-    agent.continueConversation();
-    await delay(0);
+    expect(tracked.updates).toBeGreaterThan(0);
 
     const stream = await mockClient.awaitStream();
+    const beforeStreaming = tracked.updates;
     stream.streamText("Hello");
     await delay(0);
-    // Should have content-updated messages from streaming
-    expect(
-      tracked.messages.filter((m) => m.type === "agent-content-updated").length,
-    ).toBeGreaterThan(1);
+    expect(tracked.updates).toBeGreaterThan(beforeStreaming);
+
+    const beforeStop = tracked.updates;
     stream.finishResponse("end_turn");
-
-    await stream.finalMessage();
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
     await delay(0);
-
-    // Should have agent-stopped message
-    expect(tracked.messages.some((m) => m.type === "agent-stopped")).toBe(true);
+    expect(tracked.updates).toBeGreaterThan(beforeStop);
   });
 });
 
 describe("abort", () => {
-  it("does nothing when no active request", async () => {
+  it("does nothing when no turn is in flight", async () => {
     const mockClient = {} as Anthropic;
-    const tracked = trackMessages();
+    const tracked = trackUpdates();
     const agent = createAgent(mockClient, undefined, tracked);
 
-    await agent.abort();
+    agent.abort();
     await delay(0);
 
-    expect(tracked.messages).toHaveLength(0);
-    expect(agent.getState().status).toEqual({
-      type: "stopped",
-      stopReason: "end_turn",
-    });
+    expect(tracked.updates).toBe(0);
+    expect(agent.phase).toEqual({ type: "idle" });
   });
 
-  it("sets stopped status with aborted reason when stream is active", async () => {
+  it("resolves the turn as aborted when the stream is active", async () => {
     const mockClient = new MockAnthropicClient();
-    const tracked = trackMessages();
-    const agent = createAgent(mockClient, undefined, tracked);
+    const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
-
-    // Start streaming some text
     stream.streamText("Partial response");
 
-    // Abort the request
-    await agent.abort();
+    agent.abort();
 
-    // Wait for the catch block to execute
-    await delay(0);
-
-    const state = agent.getState();
-    expect(state.status).toEqual({
-      type: "stopped",
-      stopReason: "aborted",
-    });
-
-    expect(
-      tracked.messages.some(
-        (m) => m.type === "agent-stopped" && m.stopReason === "aborted",
-      ),
-    ).toBe(true);
+    expect(await turn).toEqual({ type: "aborted" });
+    expect(agent.phase).toEqual({ type: "idle" });
   });
 
   it("adds tool_result with abort message when aborting during tool_use", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -516,15 +559,19 @@ describe("abort", () => {
     });
 
     // Abort while tool_use is the last block
-    await agent.abort();
+    agent.abort();
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const state = agent.getState();
+    const state = agent.log;
 
-    // Should have: user message, assistant with tool_use, user with tool_result
-    expect(state.messages).toHaveLength(3);
+    // user message, assistant with tool_use, user with tool_result, abort marker
+    expect(state.messages).toHaveLength(4);
     expect(state.messages[2].role).toBe("user");
+    expect(state.messages[3].content[0]).toMatchObject({
+      type: "text",
+      text: ABORT_MARKER_TEXT,
+    });
 
     const toolResult = state.messages[2].content[0];
     expect(toolResult.type).toBe("tool_result");
@@ -535,21 +582,20 @@ describe("abort", () => {
         expect(toolResult.result.error).toContain("aborted");
       }
     }
+    await turn;
   });
 
   it("removes server_tool_use block when aborting during web search", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Search for info",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -562,17 +608,18 @@ describe("abort", () => {
     });
 
     // Abort while waiting for web search results
-    await agent.abort();
+    agent.abort();
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const state = agent.getState();
+    const state = agent.log;
 
-    // Should have: user message, assistant with just text (server_tool_use removed)
-    expect(state.messages).toHaveLength(2);
+    // user message, assistant with just text (server_tool_use removed), abort marker
+    expect(state.messages).toHaveLength(3);
     expect(state.messages[1].role).toBe("assistant");
     expect(state.messages[1].content).toHaveLength(1);
     expect(state.messages[1].content[0].type).toBe("text");
+    await turn;
   });
 });
 
@@ -581,15 +628,13 @@ describe("abort with empty blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -608,12 +653,14 @@ describe("abort with empty blocks", () => {
     });
 
     // Abort
-    await agent.abort();
-    await delay(0);
+    await stream.settle();
+    agent.abort();
+    expect(await turn).toEqual({ type: "aborted" });
 
-    const state = agent.getState();
-    // The empty text block should be filtered out, leaving only the user message
-    expect(state.messages).toHaveLength(1);
+    const state = agent.log;
+    // The empty text block is filtered out, leaving the user message and the
+    // abort marker
+    expect(state.messages).toHaveLength(2);
     expect(state.messages[0].role).toBe("user");
   });
 
@@ -621,15 +668,13 @@ describe("abort with empty blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -646,12 +691,13 @@ describe("abort with empty blocks", () => {
       index: blockIndex,
     });
 
-    await agent.abort();
-    await delay(0);
+    await stream.settle();
+    agent.abort();
+    expect(await turn).toEqual({ type: "aborted" });
 
-    const state = agent.getState();
+    const state = agent.log;
     // The empty thinking block should be filtered out
-    expect(state.messages).toHaveLength(1);
+    expect(state.messages).toHaveLength(2);
     expect(state.messages[0].role).toBe("user");
   });
 
@@ -659,15 +705,13 @@ describe("abort with empty blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -686,12 +730,13 @@ describe("abort with empty blocks", () => {
       index: blockIndex,
     });
 
-    await agent.abort();
-    await delay(0);
+    await stream.settle();
+    agent.abort();
+    expect(await turn).toEqual({ type: "aborted" });
 
-    const state = agent.getState();
+    const state = agent.log;
     // Should keep the thinking block but remove the empty text block
-    expect(state.messages).toHaveLength(2);
+    expect(state.messages).toHaveLength(3);
     expect(state.messages[1].role).toBe("assistant");
     expect(state.messages[1].content).toHaveLength(1);
     expect(state.messages[1].content[0].type).toBe("thinking");
@@ -703,15 +748,13 @@ describe("thinking blocks", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -726,9 +769,9 @@ describe("thinking blocks", () => {
     await stream.settle();
 
     // Check streaming block is exposed
-    let streamingBlock = agent.getStreamingBlock();
-    expect(streamingBlock).toBeDefined();
-    expect(streamingBlock?.type).toBe("thinking");
+    let block = streamingBlock(agent);
+    expect(block).toBeDefined();
+    expect(block?.type).toBe("thinking");
 
     // Add thinking content
     stream.emitEvent({
@@ -738,11 +781,11 @@ describe("thinking blocks", () => {
     });
     await stream.settle();
 
-    streamingBlock = agent.getStreamingBlock();
-    expect(streamingBlock?.type).toBe("thinking");
-    if (streamingBlock?.type === "thinking") {
-      expect(streamingBlock.thinking).toBe("Let me think about this...");
-      expect(streamingBlock.signature).toBe("");
+    block = streamingBlock(agent);
+    expect(block?.type).toBe("thinking");
+    if (block?.type === "thinking") {
+      expect(block.thinking).toBe("Let me think about this...");
+      expect(block.signature).toBe("");
     }
 
     // Add signature
@@ -756,10 +799,10 @@ describe("thinking blocks", () => {
     });
     await stream.settle();
 
-    streamingBlock = agent.getStreamingBlock();
-    if (streamingBlock?.type === "thinking") {
-      expect(streamingBlock.thinking).toBe("Let me think about this...");
-      expect(streamingBlock.signature).toBe("EqQBCgIYAhIM1gbcDa9GJwZA2b3h");
+    block = streamingBlock(agent);
+    if (block?.type === "thinking") {
+      expect(block.thinking).toBe("Let me think about this...");
+      expect(block.signature).toBe("EqQBCgIYAhIM1gbcDa9GJwZA2b3h");
     }
 
     // Stop the block
@@ -769,10 +812,10 @@ describe("thinking blocks", () => {
     });
     await stream.settle();
 
-    expect(agent.getStreamingBlock()).toBeUndefined();
+    expect(streamingBlock(agent)).toBeUndefined();
 
     // Check that the streamed content was captured in the message
-    const state = agent.getState();
+    const state = agent.log;
     expect(state.messages).toHaveLength(2);
     const assistantContent = state.messages[1].content;
     expect(assistantContent[0].type).toBe("thinking");
@@ -784,22 +827,21 @@ describe("thinking blocks", () => {
     }
 
     // Abort to clean up (since we manually streamed, finishResponse would replace content)
-    await agent.abort();
+    agent.abort();
+    await turn;
   });
 
   it("accumulates signature across multiple deltas", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -842,10 +884,10 @@ describe("thinking blocks", () => {
       } as Anthropic.Messages.ContentBlockDeltaEvent["delta"],
     });
 
-    const streamingBlock = agent.getStreamingBlock();
-    if (streamingBlock?.type === "thinking") {
-      expect(streamingBlock.thinking).toBe("Part 1 Part 2");
-      expect(streamingBlock.signature).toBe("ABCDEF");
+    const block = streamingBlock(agent);
+    if (block?.type === "thinking") {
+      expect(block.thinking).toBe("Part 1 Part 2");
+      expect(block.signature).toBe("ABCDEF");
     }
 
     stream.emitEvent({
@@ -855,21 +897,20 @@ describe("thinking blocks", () => {
 
     stream.finishResponse("end_turn");
     await stream.finalMessage();
+    await turn;
   });
 
   it("uses streamThinking helper with signature", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
     stream.streamThinking("Deep thoughts here", "signature123");
@@ -879,7 +920,7 @@ describe("thinking blocks", () => {
     await stream.finalMessage();
     await delay(0);
 
-    const state = agent.getState();
+    const state = agent.log;
     expect(state.messages).toHaveLength(2);
 
     const assistantContent = state.messages[1].content;
@@ -892,6 +933,7 @@ describe("thinking blocks", () => {
     }
 
     expect(assistantContent[1].type).toBe("text");
+    await turn;
   });
 });
 
@@ -900,15 +942,13 @@ describe("streaming block", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -922,9 +962,9 @@ describe("streaming block", () => {
     await stream.settle();
 
     // Check streaming block is exposed
-    let streamingBlock = agent.getStreamingBlock();
-    expect(streamingBlock).toBeDefined();
-    expect(streamingBlock?.type).toBe("text");
+    let block = streamingBlock(agent);
+    expect(block).toBeDefined();
+    expect(block?.type).toBe("text");
 
     // Add some text
     stream.emitEvent({
@@ -934,10 +974,10 @@ describe("streaming block", () => {
     });
     await stream.settle();
 
-    streamingBlock = agent.getStreamingBlock();
-    expect(streamingBlock?.type).toBe("text");
-    if (streamingBlock?.type === "text") {
-      expect(streamingBlock.text).toBe("Hello world");
+    block = streamingBlock(agent);
+    expect(block?.type).toBe("text");
+    if (block?.type === "text") {
+      expect(block.text).toBe("Hello world");
     }
 
     // Stop the block
@@ -948,26 +988,31 @@ describe("streaming block", () => {
     await stream.settle();
 
     // Streaming block should be cleared
-    expect(agent.getStreamingBlock()).toBeUndefined();
+    expect(streamingBlock(agent)).toBeUndefined();
 
     // Clean up
     stream.finishResponse("end_turn");
     await stream.finalMessage();
+    await turn;
   });
 
   it("exposes tool_use streaming block during streaming", async () => {
     const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const agent = createAgent(mockClient, {
+      executeTools: (requests) =>
+        Promise.resolve({
+          type: "suspend" as const,
+          results: okResults(requests),
+        }),
+    });
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -988,8 +1033,8 @@ describe("streaming block", () => {
     });
     await stream.settle();
 
-    let streamingBlock = agent.getStreamingBlock();
-    expect(streamingBlock?.type).toBe("tool_use");
+    let block = streamingBlock(agent);
+    expect(block?.type).toBe("tool_use");
 
     // Add input JSON
     stream.emitEvent({
@@ -1005,9 +1050,9 @@ describe("streaming block", () => {
     });
     await stream.settle();
 
-    streamingBlock = agent.getStreamingBlock();
-    if (streamingBlock?.type === "tool_use") {
-      expect(streamingBlock.inputJson).toBe('{"filePath":"test.ts"}');
+    block = streamingBlock(agent);
+    if (block?.type === "tool_use") {
+      expect(block.inputJson).toBe('{"filePath":"test.ts"}');
     }
 
     // Stop the block
@@ -1017,25 +1062,24 @@ describe("streaming block", () => {
     });
     await stream.settle();
 
-    expect(agent.getStreamingBlock()).toBeUndefined();
+    expect(streamingBlock(agent)).toBeUndefined();
 
     stream.finishResponse("tool_use");
     await stream.finalMessage();
+    await turn;
   });
 
   it("returns undefined for server_tool_use blocks", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Search",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -1054,7 +1098,7 @@ describe("streaming block", () => {
     });
 
     // server_tool_use should not be exposed via getStreamingBlock
-    expect(agent.getStreamingBlock()).toBeUndefined();
+    expect(streamingBlock(agent)).toBeUndefined();
 
     stream.emitEvent({
       type: "content_block_stop",
@@ -1063,42 +1107,36 @@ describe("streaming block", () => {
 
     stream.finishResponse("end_turn");
     await stream.finalMessage();
+    await turn;
   });
 
   it("dispatches content-updated messages during streaming", async () => {
     const mockClient = new MockAnthropicClient();
-    const tracked = trackMessages();
+    const tracked = trackUpdates();
     const agent = createAgent(mockClient, undefined, tracked);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
-    // Count messages after initial events
+    // Count updates after initial events
     await delay(0);
-    const initialCount = tracked.messages.length;
+    const initialCount = tracked.updates;
 
     stream.streamText("Hello world");
     await delay(0);
 
-    // Should have dispatched content-updated messages for streaming
-    expect(tracked.messages.length).toBeGreaterThan(initialCount);
-    expect(
-      tracked.messages
-        .slice(initialCount)
-        .some((m) => m.type === "agent-content-updated"),
-    ).toBe(true);
+    // Streaming should have produced further update notifications
+    expect(tracked.updates).toBeGreaterThan(initialCount);
 
     stream.finishResponse("end_turn");
-    await stream.finalMessage();
+    await turn;
   });
 });
 
@@ -1107,15 +1145,13 @@ describe("web search result preservation", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Search for Claude Shannon",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -1158,7 +1194,7 @@ describe("web search result preservation", () => {
     await stream.finalMessage();
     await delay(0);
 
-    const state = agent.getState();
+    const state = agent.log;
     expect(state.messages).toHaveLength(2);
 
     const assistantContent = state.messages[1].content;
@@ -1183,21 +1219,20 @@ describe("web search result preservation", () => {
 
     // text block
     expect(assistantContent[2].type).toBe("text");
+    await turn;
   });
 
   it("preserves web_search_tool_result in native messages for next turn", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
+    const turn = agent.runTurn([
       {
         type: "text",
         text: "Search for info",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     const stream = await mockClient.awaitStream();
 
@@ -1221,15 +1256,13 @@ describe("web search result preservation", () => {
     await delay(0);
 
     // Append a follow-up user message
-    agent.appendUserMessage([
+    const turn2 = agent.runTurn([
       {
         type: "text",
         text: "Tell me more",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    await delay(0);
-    agent.continueConversation();
 
     // Check that the native messages sent to the API contain the web search result
     const stream2 = await mockClient.awaitStream();
@@ -1254,6 +1287,8 @@ describe("web search result preservation", () => {
     stream2.streamText("More details.");
     stream2.finishResponse("end_turn");
     await stream2.finalMessage();
+    await turn2;
+    await turn;
   });
 
   describe("error handling with cleanup", () => {
@@ -1261,15 +1296,13 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
 
@@ -1283,9 +1316,8 @@ describe("web search result preservation", () => {
       // Simulate a stream error
       stream.respondWithError(new Error("Connection lost"));
 
-      await delay(10);
-
-      const state = agent.getState();
+      const result = await turn;
+      const state = agent.log;
 
       // Should have: user message, assistant with tool_use, user with tool_result
       expect(state.messages).toHaveLength(3);
@@ -1301,22 +1333,20 @@ describe("web search result preservation", () => {
         }
       }
 
-      expect(state.status.type).toBe("error");
+      expect(result.type).toBe("failed");
     });
 
     it("removes server_tool_use block when stream errors during web search", async () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Search for info",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
 
@@ -1332,9 +1362,8 @@ describe("web search result preservation", () => {
       // Simulate a stream error
       stream.respondWithError(new Error("API timeout"));
 
-      await delay(10);
-
-      const state = agent.getState();
+      const result = await turn;
+      const state = agent.log;
 
       // Should have: user message, assistant with just text (server_tool_use removed)
       expect(state.messages).toHaveLength(2);
@@ -1342,7 +1371,7 @@ describe("web search result preservation", () => {
       expect(state.messages[1].content).toHaveLength(1);
       expect(state.messages[1].content[0].type).toBe("text");
 
-      expect(state.status.type).toBe("error");
+      expect(result.type).toBe("failed");
     });
   });
 
@@ -1351,15 +1380,13 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
       stream.streamText("Hello there!");
@@ -1373,13 +1400,14 @@ describe("web search result preservation", () => {
       await stream.finalMessage();
       await delay(0);
 
-      const state = agent.getState();
+      const state = agent.log;
       expect(state.latestUsage).toEqual({
         inputTokens: 100,
         outputTokens: 50,
         cacheHits: 10,
         cacheMisses: 5,
       });
+      await turn;
     });
 
     it("preserves latestUsage when subsequent request is aborted", async () => {
@@ -1387,15 +1415,13 @@ describe("web search result preservation", () => {
       const agent = createAgent(mockClient);
 
       // First request - successful
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
 
       const stream1 = await mockClient.awaitStream();
       stream1.streamText("Hello there!");
@@ -1408,36 +1434,34 @@ describe("web search result preservation", () => {
       await delay(0);
 
       // Verify initial usage
-      expect(agent.getState().latestUsage).toEqual({
+      expect(agent.log.latestUsage).toEqual({
         inputTokens: 100,
         outputTokens: 50,
       });
 
       // Second request - will be aborted
-      agent.appendUserMessage([
+      const turn2 = agent.runTurn([
         {
           type: "text",
           text: "Follow up",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
 
       const stream2 = await mockClient.awaitStream();
       stream2.streamText("Starting to respond...");
 
       // Abort the second request
-      await agent.abort();
-      await delay(0);
+      agent.abort();
+      expect(await turn2).toEqual({ type: "aborted" });
 
       // latestUsage should still reflect the first successful request
-      const state = agent.getState();
-      expect(state.status).toEqual({ type: "stopped", stopReason: "aborted" });
+      const state = agent.log;
       expect(state.latestUsage).toEqual({
         inputTokens: 100,
         outputTokens: 50,
       });
+      await turn;
     });
 
     it("preserves latestUsage when subsequent request errors", async () => {
@@ -1445,15 +1469,13 @@ describe("web search result preservation", () => {
       const agent = createAgent(mockClient);
 
       // First request - successful
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
 
       const stream1 = await mockClient.awaitStream();
       stream1.streamText("Hello there!");
@@ -1467,22 +1489,20 @@ describe("web search result preservation", () => {
       await delay(0);
 
       // Verify initial usage
-      expect(agent.getState().latestUsage).toEqual({
+      expect(agent.log.latestUsage).toEqual({
         inputTokens: 200,
         outputTokens: 75,
         cacheHits: 20,
       });
 
       // Second request - will error
-      agent.appendUserMessage([
+      const turn2 = agent.runTurn([
         {
           type: "text",
           text: "Follow up",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
 
       const stream2 = await mockClient.awaitStream();
       stream2.streamText("Starting to respond...");
@@ -1490,16 +1510,17 @@ describe("web search result preservation", () => {
 
       // Simulate an error
       stream2.respondWithError(new Error("Connection lost"));
-      await delay(10);
+      const result = await turn2;
 
       // latestUsage should still reflect the first successful request
-      const state = agent.getState();
-      expect(state.status.type).toBe("error");
+      const state = agent.log;
+      expect(result.type).toBe("failed");
       expect(state.latestUsage).toEqual({
         inputTokens: 200,
         outputTokens: 75,
         cacheHits: 20,
       });
+      await turn;
     });
 
     it("updates latestUsage only on successful responses", async () => {
@@ -1507,35 +1528,31 @@ describe("web search result preservation", () => {
       const agent = createAgent(mockClient);
 
       // Initially undefined
-      expect(agent.getState().latestUsage).toBeUndefined();
+      expect(agent.log.latestUsage).toBeUndefined();
 
       // First request - abort (should not set latestUsage)
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "First",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
       const stream1 = await mockClient.awaitStream();
       stream1.streamText("Partial...");
-      await agent.abort();
-      await delay(0);
+      agent.abort();
+      expect(await turn).toEqual({ type: "aborted" });
 
-      expect(agent.getState().latestUsage).toBeUndefined();
+      expect(agent.log.latestUsage).toBeUndefined();
 
       // Second request - successful (should set latestUsage)
-      agent.appendUserMessage([
+      const turn2 = agent.runTurn([
         {
           type: "text",
           text: "Second",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
       const stream2 = await mockClient.awaitStream();
       stream2.streamText("Complete response");
       stream2.finishResponse("end_turn", {
@@ -1546,27 +1563,32 @@ describe("web search result preservation", () => {
       await stream2.finalMessage();
       await delay(0);
 
-      expect(agent.getState().latestUsage).toEqual({
+      expect(agent.log.latestUsage).toEqual({
         inputTokens: 150,
         outputTokens: 60,
       });
+      await turn2;
     });
   });
 
   describe("malformed tool_use handling", () => {
     it("produces error request for tool_use with invalid input", async () => {
       const mockClient = new MockAnthropicClient();
-      const agent = createAgent(mockClient);
+      const agent = createAgent(mockClient, {
+        executeTools: (requests) =>
+          Promise.resolve({
+            type: "suspend" as const,
+            results: okResults(requests),
+          }),
+      });
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
       // Stream a tool_use with missing required field (filePath)
@@ -1576,12 +1598,9 @@ describe("web search result preservation", () => {
         {},
       );
       stream.finishResponse("tool_use");
+      expect(await turn).toEqual({ type: "suspended" });
 
-      await stream.finalMessage();
-      await delay(0);
-
-      const state = agent.getState();
-      expect(state.messages).toHaveLength(2);
+      const state = agent.log;
       const assistantContent = state.messages[1].content;
       const toolUseBlock = assistantContent.find((b) => b.type === "tool_use");
       expect(toolUseBlock).toBeDefined();
@@ -1590,57 +1609,54 @@ describe("web search result preservation", () => {
       }
     });
 
-    it("accepts error tool_result for malformed tool_use block", async () => {
+    it("accepts an error tool_result for a malformed tool_use block", async () => {
       const mockClient = new MockAnthropicClient();
-      const agent = createAgent(mockClient);
+      const toolUseId = "tool-malformed" as ToolRequestId;
+      const agent = createAgent(mockClient, {
+        executeTools: () =>
+          Promise.resolve({
+            type: "continue" as const,
+            results: new Map([
+              [
+                toolUseId,
+                {
+                  status: "error" as const,
+                  error: "Malformed tool_use block: missing filePath",
+                },
+              ],
+            ]),
+          }),
+      });
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
-      const toolUseId = "tool-malformed" as ToolRequestId;
       stream.streamToolUse(toolUseId, "get_files" as ToolName, {});
       stream.finishResponse("tool_use");
 
-      await stream.finalMessage();
-      await delay(0);
-
-      // Send error tool_result for the malformed block
-      agent.toolResult(toolUseId, {
-        type: "tool_result",
-        id: toolUseId,
-        result: {
-          status: "error",
-          error: "Malformed tool_use block: missing filePath",
-        },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      });
-
-      const state = agent.getState();
+      // The conversation continues with the error result in place
+      const stream2 = await awaitNextStream(mockClient, 1);
+      const state = agent.log;
       expect(state.messages).toHaveLength(3);
       expect(state.messages[2].role).toBe("user");
       expect(state.messages[2].content[0].type).toBe("tool_result");
 
-      // Should be able to continue the conversation
-      agent.continueConversation();
-      const stream2 = await mockClient.awaitStream();
       stream2.streamText("OK, I'll fix that.");
       stream2.finishResponse("end_turn");
-      await stream2.finalMessage();
-      await delay(0);
+      expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
 
-      expect(agent.getState().messages).toHaveLength(4);
+      expect(agent.log.messages).toHaveLength(4);
     });
   });
+
   describe("context_update detection", () => {
-    it("converts text blocks with <context_update> tags to context_update type", () => {
+    it("converts text blocks with <context_update> tags to context_update type", async () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
@@ -1650,7 +1666,7 @@ File \`test.ts\`
 const x = 1;
 </context_update>`;
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: contextUpdateText,
@@ -1658,19 +1674,23 @@ const x = 1;
         },
       ]);
 
-      const state = agent.getState();
+      const state = agent.log;
       expect(state.messages).toHaveLength(1);
       expect(state.messages[0].content[0].type).toBe("context_update");
       if (state.messages[0].content[0].type === "context_update") {
         expect(state.messages[0].content[0].text).toBe(contextUpdateText);
       }
+
+      const stream = await mockClient.awaitStream();
+      stream.finishResponse("end_turn");
+      await turn;
     });
 
-    it("does not convert regular text to context_update type", () => {
-      const mockClient = {} as Anthropic;
+    it("does not convert regular text to context_update type", async () => {
+      const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello, this is regular text",
@@ -1678,11 +1698,15 @@ const x = 1;
         },
       ]);
 
-      const state = agent.getState();
+      const state = agent.log;
       expect(state.messages[0].content[0].type).toBe("text");
+
+      const stream = await mockClient.awaitStream();
+      stream.finishResponse("end_turn");
+      await turn;
     });
 
-    it("converts context_update in multi-content messages correctly", () => {
+    it("converts context_update in multi-content messages correctly", async () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
@@ -1690,7 +1714,7 @@ const x = 1;
 File context here
 </context_update>`;
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: contextUpdateText,
@@ -1703,29 +1727,32 @@ File context here
         },
       ]);
 
-      const state = agent.getState();
+      const state = agent.log;
       expect(state.messages).toHaveLength(1);
       expect(state.messages[0].content).toHaveLength(2);
       expect(state.messages[0].content[0].type).toBe("context_update");
       expect(state.messages[0].content[1].type).toBe("text");
+
+      const stream = await mockClient.awaitStream();
+      stream.finishResponse("end_turn");
+      await turn;
     });
   });
 
   describe("clone", () => {
     it("creates a deep copy of the agent with all messages", async () => {
       const mockClient = new MockAnthropicClient();
-      const tracked = trackMessages();
+      const tracked = trackUpdates();
       const agent = createAgent(mockClient, undefined, tracked);
 
       // Build up some conversation history
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
       stream.streamText("Hi there!");
@@ -1733,14 +1760,13 @@ File context here
       await stream.finalMessage();
       await delay(0);
 
-      agent.appendUserMessage([
+      const turn2 = agent.runTurn([
         {
           type: "text",
           text: "How are you?",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      agent.continueConversation();
 
       const stream2 = await mockClient.awaitStream();
       stream2.streamText("I'm doing well!");
@@ -1749,31 +1775,17 @@ File context here
       await delay(0);
 
       // Clone the agent
-      const clonedTracked = trackMessages();
       const cloned = agent.clone();
-      cloned.on("didUpdate", () => {
-        clonedTracked.messages.push({ type: "agent-content-updated" });
-      });
-      cloned.on("stopped", (stopReason, usage) => {
-        clonedTracked.messages.push({
-          type: "agent-stopped",
-          stopReason,
-          ...(usage && { usage }),
-        });
-      });
-      cloned.on("error", (error) => {
-        clonedTracked.messages.push({ type: "agent-error", error });
-      });
 
       // Verify cloned agent has same messages
-      expect(cloned.getState().messages).toHaveLength(4);
-      expect(cloned.getState().messages[0].role).toBe("user");
-      expect(cloned.getState().messages[1].role).toBe("assistant");
-      expect(cloned.getState().messages[2].role).toBe("user");
-      expect(cloned.getState().messages[3].role).toBe("assistant");
+      expect(cloned.log.messages).toHaveLength(4);
+      expect(cloned.log.messages[0].role).toBe("user");
+      expect(cloned.log.messages[1].role).toBe("assistant");
+      expect(cloned.log.messages[2].role).toBe("user");
+      expect(cloned.log.messages[3].role).toBe("assistant");
 
       // Verify content is copied
-      const clonedState = cloned.getState();
+      const clonedState = cloned.log;
       expect(clonedState.messages[0].content[0]).toMatchObject({
         type: "text",
         text: "Hello",
@@ -1782,20 +1794,21 @@ File context here
         type: "text",
         text: "Hi there!",
       });
+      await turn;
+      await turn2;
     });
 
     it("creates independent copy - changes to original don't affect clone", async () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
       stream.streamText("Hi!");
@@ -1807,35 +1820,38 @@ File context here
       const cloned = agent.clone();
 
       // Add more messages to original
-      agent.appendUserMessage([
+      const turn2 = agent.runTurn([
         {
           type: "text",
           text: "Another message",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
+      await mockClient.awaitStream();
 
       // Clone should not be affected
-      expect(agent.getState().messages).toHaveLength(3);
-      expect(cloned.getState().messages).toHaveLength(2);
+      expect(agent.log.messages).toHaveLength(3);
+      expect(cloned.log.messages).toHaveLength(2);
+
+      agent.abort();
+      await turn2;
+      await turn;
     });
 
     it("clone while streaming with only a partial text block drops the empty assistant message", async () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
-      expect(agent.getState().status.type).toBe("streaming");
+      expect(agent.phase.type).toBe("streaming");
 
       // Start a text block but don't finish it — stays in currentAnthropicBlock
       const index = stream.nextBlockIndex();
@@ -1852,34 +1868,37 @@ File context here
 
       // Clone — currentAssistantMessage hasn't been created yet (no block-finished)
       const cloned = agent.clone();
-      const clonedState = cloned.getState();
+      const clonedState = cloned.log;
 
       // Only the user message should be present (no assistant message)
       expect(clonedState.messages).toHaveLength(1);
       expect(clonedState.messages[0].role).toBe("user");
-      expect(clonedState.status).toEqual({
-        type: "stopped",
-        stopReason: "end_turn",
-      });
+      expect(cloned.phase).toEqual({ type: "idle" });
 
       // Clean up source
       stream.emitEvent({ type: "content_block_stop", index });
       stream.finishResponse("end_turn");
       await stream.finalMessage();
+      await turn;
     });
 
     it("clone while streaming with finalized text and in-progress tool_use keeps the text", async () => {
       const mockClient = new MockAnthropicClient();
-      const agent = createAgent(mockClient);
+      const agent = createAgent(mockClient, {
+        executeTools: (requests) =>
+          Promise.resolve({
+            type: "suspend" as const,
+            results: okResults(requests),
+          }),
+      });
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
 
@@ -1904,7 +1923,7 @@ File context here
 
       // Clone while tool_use is in-progress (in currentAnthropicBlock)
       const cloned = agent.clone();
-      const clonedState = cloned.getState();
+      const clonedState = cloned.log;
 
       // Should have user + assistant with just the finalized text
       expect(clonedState.messages[1].content).toHaveLength(1);
@@ -1913,29 +1932,26 @@ File context here
         "text",
         "Complete text",
       );
-      expect(clonedState.status).toEqual({
-        type: "stopped",
-        stopReason: "end_turn",
-      });
+      expect(cloned.phase).toEqual({ type: "idle" });
 
       // Clean up source
       stream.emitEvent({ type: "content_block_stop", index: toolIndex });
       stream.finishResponse("end_turn");
       await stream.finalMessage();
+      await turn;
     });
 
     it("clone while streaming with finalized server_tool_use drops it", async () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Search for something",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
 
@@ -1944,37 +1960,46 @@ File context here
         query: "test query",
       });
 
-      expect(agent.getState().status.type).toBe("streaming");
+      expect(agent.phase.type).toBe("streaming");
 
       // Clone — server_tool_use should be dropped, leaving empty assistant → removed
       const cloned = agent.clone();
-      const clonedState = cloned.getState();
+      const clonedState = cloned.log;
 
       expect(clonedState.messages).toHaveLength(1);
       expect(clonedState.messages[0].role).toBe("user");
-      expect(clonedState.status).toEqual({
-        type: "stopped",
-        stopReason: "end_turn",
-      });
+      expect(cloned.phase).toEqual({ type: "idle" });
 
       // Clean up source
       stream.finishResponse("end_turn");
       await stream.finalMessage();
+      await turn;
     });
 
-    it("clone while stopped on tool_use adds error tool_results", async () => {
+    it("clone while awaiting tool results adds error tool_results", async () => {
       const mockClient = new MockAnthropicClient();
-      const tracked = trackMessages();
-      const agent = createAgent(mockClient, undefined, tracked);
+      let onCalled!: () => void;
+      const toolsCalled = new Promise<void>((resolve) => {
+        onCalled = resolve;
+      });
+      let releaseTools!: () => void;
+      const agent = createAgent(mockClient, {
+        executeTools: (requests) => {
+          onCalled();
+          return new Promise((resolve) => {
+            releaseTools = () =>
+              resolve({ type: "suspend", results: okResults(requests) });
+          });
+        },
+      });
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Use a tool",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
       stream.streamText("I'll use the tool.");
@@ -1984,31 +2009,17 @@ File context here
         { files: [{ filePath: "test.ts" }] },
       );
       stream.finishResponse("tool_use");
-      await stream.finalMessage();
-      await delay(0);
 
-      expect(agent.getState().status).toEqual({
-        type: "stopped",
-        stopReason: "tool_use",
+      // The executor is stalled, so the agent stays in running_tools
+      await toolsCalled;
+      expect(agent.phase).toMatchObject({
+        type: "running_tools",
+        requested: [{ id: "tool-req-1" }],
       });
 
-      // Clone while stopped on tool_use
-      const clonedTracked = trackMessages();
+      // Clone while the tool results are still outstanding
       const cloned = agent.clone();
-      cloned.on("didUpdate", () => {
-        clonedTracked.messages.push({ type: "agent-content-updated" });
-      });
-      cloned.on("stopped", (stopReason, usage) => {
-        clonedTracked.messages.push({
-          type: "agent-stopped",
-          stopReason,
-          ...(usage && { usage }),
-        });
-      });
-      cloned.on("error", (error) => {
-        clonedTracked.messages.push({ type: "agent-error", error });
-      });
-      const clonedState = cloned.getState();
+      const clonedState = cloned.log;
 
       // Should have: user, assistant (text + tool_use), user (error tool_result)
       expect(clonedState.messages).toHaveLength(3);
@@ -2039,32 +2050,28 @@ File context here
         },
         nativeMessageIdx: 2 as NativeMessageIdx,
       });
-      expect(clonedState.status).toEqual({
-        type: "stopped",
-        stopReason: "end_turn",
-      });
+      expect(cloned.phase).toEqual({ type: "idle" });
 
       // Source agent should be unchanged
-      expect(agent.getState().status).toEqual({
-        type: "stopped",
-        stopReason: "tool_use",
-      });
-      expect(agent.getState().messages).toHaveLength(2);
+      expect(agent.phase.type).toBe("running_tools");
+      expect(agent.log.messages).toHaveLength(2);
+
+      releaseTools();
+      expect(await turn).toEqual({ type: "suspended" });
     });
 
     it("source agent continues streaming unaffected after clone", async () => {
       const mockClient = new MockAnthropicClient();
-      const tracked = trackMessages();
+      const tracked = trackUpdates();
       const agent = createAgent(mockClient, undefined, tracked);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
       stream.streamText("First part");
@@ -2080,11 +2087,8 @@ File context here
       await delay(0);
 
       // Source should have the complete response
-      const sourceState = agent.getState();
-      expect(sourceState.status).toEqual({
-        type: "stopped",
-        stopReason: "end_turn",
-      });
+      const sourceState = agent.log;
+      expect(agent.phase).toEqual({ type: "idle" });
       expect(sourceState.messages).toHaveLength(2);
       expect(sourceState.messages[1].content).toHaveLength(2);
       expect(sourceState.messages[1].content[0]).toHaveProperty(
@@ -2097,27 +2101,27 @@ File context here
       );
 
       // Clone should only have the snapshot from before
-      const clonedState = cloned.getState();
+      const clonedState = cloned.log;
       expect(clonedState.messages).toHaveLength(2);
       expect(clonedState.messages[1].content).toHaveLength(1);
       expect(clonedState.messages[1].content[0]).toHaveProperty(
         "text",
         "First part",
       );
+      await turn;
     });
 
     it("preserves stop info for messages", async () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
       stream.streamText("Hi!");
@@ -2129,26 +2133,23 @@ File context here
       const cloned = agent.clone();
 
       // Verify stop reason is preserved
-      const clonedState = cloned.getState();
+      const clonedState = cloned.log;
       expect(clonedState.messages[1].stopReason).toBe("end_turn");
-      expect(clonedState.status).toEqual({
-        type: "stopped",
-        stopReason: "end_turn",
-      });
+      expect(cloned.phase).toEqual({ type: "idle" });
+      await turn;
     });
 
     it("cloned agent can append messages independently", async () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Hello",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      agent.continueConversation();
 
       const stream = await mockClient.awaitStream();
       stream.streamText("Hi!");
@@ -2159,25 +2160,29 @@ File context here
       // Clone the agent
       const cloned = agent.clone();
 
-      // Append message to cloned agent (without streaming)
-      cloned.appendUserMessage([
+      // Start a turn on the clone; the input is appended immediately
+      const clonedTurn = cloned.runTurn([
         {
           type: "text",
           text: "From clone",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
+      await mockClient.awaitStream();
 
       // Cloned agent has the new message
-      expect(cloned.getState().messages).toHaveLength(3);
-      expect(cloned.getState().messages[2].content[0]).toMatchObject({
+      expect(cloned.log.messages).toHaveLength(3);
+      expect(cloned.log.messages[2].content[0]).toMatchObject({
         type: "text",
         text: "From clone",
       });
 
       // Original is unchanged
-      expect(agent.getState().messages).toHaveLength(2);
+      expect(agent.log.messages).toHaveLength(2);
+
+      cloned.abort();
+      await clonedTurn;
+      await turn;
     });
   });
 
@@ -2186,114 +2191,102 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Q1",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
       let stream = await mockClient.awaitStream();
       stream.streamText("A1");
       stream.finishResponse("end_turn");
-      await stream.finalMessage();
+      await turn;
 
-      agent.appendUserMessage([
+      const turn2 = agent.runTurn([
         {
           type: "text",
           text: "Q2",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
       stream = await mockClient.awaitStream();
       stream.streamText("A2");
       stream.finishResponse("end_turn");
-      await stream.finalMessage();
+      await turn2;
 
       // messages: [user Q1, assistant A1, user Q2, assistant A2]
       const messageIdx = 1 as never;
       agent.truncateMessages(messageIdx);
 
-      expect(agent.getState().messages).toHaveLength(2);
-      expect(agent.getState().status).toEqual({
-        type: "stopped",
-        stopReason: "end_turn",
-      });
+      expect(agent.log.messages).toHaveLength(2);
+      expect(agent.phase).toEqual({ type: "idle" });
     });
 
     it("truncates at assistant tool_use message and extends to keep tool_result", async () => {
       const mockClient = new MockAnthropicClient();
-      const agent = createAgent(mockClient);
+      const agent = createAgent(mockClient, {
+        executeTools: (requests) =>
+          Promise.resolve({
+            type: "continue" as const,
+            results: okResults(requests, "file contents"),
+          }),
+      });
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Run tool",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
       const stream = await mockClient.awaitStream();
       stream.streamText("Running...");
       stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
         files: [{ filePath: "x.ts" }],
       });
       stream.finishResponse("tool_use");
-      await stream.finalMessage();
-      await new Promise((resolve) => setTimeout(resolve, 0));
 
-      agent.toolResult("tool-1" as ToolRequestId, {
-        type: "tool_result",
-        id: "tool-1" as ToolRequestId,
-        result: {
-          status: "ok",
-          value: [
-            {
-              type: "text",
-              text: "file contents",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            },
-          ],
-          structuredResult: { toolName: "get_files" as ToolName },
-        },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      });
-
-      agent.continueConversation();
-      const followup = await mockClient.awaitStream();
+      const followup = await awaitNextStream(mockClient, 1);
       followup.streamText("Done.");
       followup.finishResponse("end_turn");
-      await followup.finalMessage();
+      expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
 
       // messages: [user Run, assistant w/tool_use, user tool_result, assistant Done]
-      expect(agent.getState().messages).toHaveLength(4);
+      expect(agent.log.messages).toHaveLength(4);
 
       // Truncate at the assistant message that contains tool_use (idx=1).
       // Should extend to keep idx=2 (tool_result) too.
       agent.truncateMessages(1 as never);
-      expect(agent.getState().messages).toHaveLength(3);
-      expect(agent.getState().messages[1].role).toBe("assistant");
-      expect(agent.getState().messages[2].role).toBe("user");
+      expect(agent.log.messages).toHaveLength(3);
+      expect(agent.log.messages[1].role).toBe("assistant");
+      expect(agent.log.messages[2].role).toBe("user");
     });
 
     it("drops orphan tool_use blocks when no matching tool_result follows", async () => {
       const mockClient = new MockAnthropicClient();
-      const agent = createAgent(mockClient);
+      let onCalled!: () => void;
+      const toolsCalled = new Promise<void>((resolve) => {
+        onCalled = resolve;
+      });
+      let releaseTools!: () => void;
+      const agent = createAgent(mockClient, {
+        executeTools: () => {
+          onCalled();
+          return new Promise((resolve) => {
+            releaseTools = () =>
+              resolve({ type: "aborted", results: new Map() });
+          });
+        },
+      });
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Run tool",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
       const stream = await mockClient.awaitStream();
       stream.streamText("Running.");
       stream.streamToolUse(
@@ -2302,13 +2295,13 @@ File context here
         { files: [{ filePath: "x.ts" }] },
       );
       stream.finishResponse("tool_use");
-      await stream.finalMessage();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      // The executor is stalled, so no tool_result exists yet
+      await toolsCalled;
 
-      // No tool_result has been provided yet — truncate at the assistant idx
+      // Truncate at the assistant idx while the tool_use is unanswered
       agent.truncateMessages(1 as never);
 
-      const messages = agent.getState().messages;
+      const messages = agent.log.messages;
       // Assistant message should still exist with text but no tool_use
       expect(messages).toHaveLength(2);
       expect(messages[1].role).toBe("assistant");
@@ -2317,21 +2310,35 @@ File context here
       if (Array.isArray(content)) {
         expect(content.some((c) => c.type === "tool_use")).toBe(false);
       }
+
+      releaseTools();
+      expect(await turn).toEqual({ type: "aborted" });
     });
 
     it("drops the entire assistant message if it only contained an orphan tool_use", async () => {
       const mockClient = new MockAnthropicClient();
-      const agent = createAgent(mockClient);
+      let onCalled!: () => void;
+      const toolsCalled = new Promise<void>((resolve) => {
+        onCalled = resolve;
+      });
+      let releaseTools!: () => void;
+      const agent = createAgent(mockClient, {
+        executeTools: () => {
+          onCalled();
+          return new Promise((resolve) => {
+            releaseTools = () =>
+              resolve({ type: "aborted", results: new Map() });
+          });
+        },
+      });
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Run tool",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
       const stream = await mockClient.awaitStream();
       stream.streamToolUse(
         "orphan-2" as ToolRequestId,
@@ -2339,54 +2346,53 @@ File context here
         { files: [{ filePath: "x.ts" }] },
       );
       stream.finishResponse("tool_use");
-      await stream.finalMessage();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      // The executor is stalled, so no tool_result exists yet
+      await toolsCalled;
 
       // messages: [user, assistant w/only tool_use]
       agent.truncateMessages(1 as never);
 
       // Assistant message should be dropped entirely
-      const messages = agent.getState().messages;
+      const messages = agent.log.messages;
       expect(messages).toHaveLength(1);
       expect(messages[0].role).toBe("user");
+
+      releaseTools();
+      expect(await turn).toEqual({ type: "aborted" });
     });
 
     it("clears messageStopInfo entries after the cut", async () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient);
 
-      agent.appendUserMessage([
+      const turn = agent.runTurn([
         {
           type: "text",
           text: "Q1",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
       let stream = await mockClient.awaitStream();
       stream.streamText("A1");
       stream.finishResponse("end_turn");
-      await stream.finalMessage();
+      await turn;
 
-      agent.appendUserMessage([
+      const turn2 = agent.runTurn([
         {
           type: "text",
           text: "Q2",
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      await delay(0);
-      agent.continueConversation();
       stream = await mockClient.awaitStream();
       stream.streamText("A2");
       stream.finishResponse("end_turn");
-      await stream.finalMessage();
+      await turn2;
 
       // Cut at index 1
       agent.truncateMessages(1 as never);
 
-      const messagesAfter = agent.getState().messages;
+      const messagesAfter = agent.log.messages;
       // Only the first assistant should still have stop info
       expect(messagesAfter[1].stopReason).toBe("end_turn");
     });

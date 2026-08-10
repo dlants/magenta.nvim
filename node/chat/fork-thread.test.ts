@@ -199,8 +199,9 @@ it("source agent is unaffected by clone", async () => {
 
     const sourceThreadId = driver.magenta.chat.state.activeThreadId!;
     const sourceThread = driver.magenta.chat.getActiveThread();
-    const messagesBefore = sourceThread.agent.getState().messages.length;
-    const statusBefore = sourceThread.agent.getState().status;
+    const messagesBefore = sourceThread.agent.log.messages.length;
+    const statusBefore = sourceThread.agent.phase;
+    const turnResultBefore = sourceThread.core.state.lastTurnResult;
 
     const idx = sourceThread.agent.getNativeMessageIdx();
     await driver.magenta.forkAtMessageAndSwitch(
@@ -208,14 +209,12 @@ it("source agent is unaffected by clone", async () => {
       (idx - 1) as NativeMessageIdx,
     );
 
-    const messagesAfter = sourceThread.agent.getState().messages.length;
-    const statusAfter = sourceThread.agent.getState().status;
+    const messagesAfter = sourceThread.agent.log.messages.length;
+    const statusAfter = sourceThread.agent.phase;
 
     expect(messagesAfter).toBe(messagesBefore);
     expect(statusAfter.type).toBe(statusBefore.type);
-    if (statusAfter.type === "stopped" && statusBefore.type === "stopped") {
-      expect(statusAfter.stopReason).toBe(statusBefore.stopReason);
-    }
+    expect(sourceThread.core.state.lastTurnResult).toEqual(turnResultBefore);
   });
 });
 
@@ -239,6 +238,15 @@ it("fork appends an id-free fork_notification and records forkedFrom", async () 
     const idx = sourceThread.agent.getNativeMessageIdx();
 
     await driver.magenta.forkAtMessageAndSwitch(sourceThreadId, idx);
+    // The fork notification rides along with the fork's first turn.
+    await driver.inputMagentaText("continue");
+    await driver.send();
+    (await driver.mockAnthropic.awaitPendingStream()).respond({
+      stopReason: "end_turn",
+      text: "sure",
+      toolRequests: [],
+    });
+    await driver.assertDisplayBufferContains("sure");
 
     const forkThread = driver.magenta.chat.getActiveThread();
     const messages = forkThread.getProviderMessages();
@@ -282,6 +290,15 @@ it("child shows 'forked from' and <CR> navigates to parent", async () => {
     const idx = sourceThread.agent.getNativeMessageIdx();
 
     await driver.magenta.forkAtMessageAndSwitch(sourceThreadId, idx);
+    // The fork notification rides along with the fork's first turn.
+    await driver.inputMagentaText("continue");
+    await driver.send();
+    (await driver.mockAnthropic.awaitPendingStream()).respond({
+      stopReason: "end_turn",
+      text: "sure",
+      toolRequests: [],
+    });
+    await driver.assertDisplayBufferContains("sure");
 
     await driver.assertDisplayBufferContains("forked from");
 

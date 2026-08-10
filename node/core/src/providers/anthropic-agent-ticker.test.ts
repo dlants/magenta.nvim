@@ -17,11 +17,17 @@ const noopLogger: Logger = {
   debug: () => {},
 };
 
+let onUpdate = () => {};
+const noopExecuteTools = () =>
+  Promise.reject(new Error("unexpected tool execution"));
+
 const defaultOptions = {
   model: "claude-sonnet-4-20250514",
   systemPrompt: "test",
   tools: [] as ProviderToolSpec[],
   skipPostFlightTokenCount: true,
+  executeTools: noopExecuteTools,
+  onUpdate: () => onUpdate(),
 };
 
 const defaultAnthropicOptions: AnthropicAgentOptions = {
@@ -40,15 +46,14 @@ function createAgent(mockClient: MockAnthropicClient) {
   );
 }
 
-function appendAndStart(agent: AnthropicAgent) {
-  agent.appendUserMessage([
+function start(agent: AnthropicAgent) {
+  return agent.runTurn([
     {
       type: "text",
       text: "hello",
       nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     },
   ]);
-  agent.continueConversation();
 }
 
 describe("AnthropicAgent streaming ticker", () => {
@@ -60,15 +65,15 @@ describe("AnthropicAgent streaming ticker", () => {
     vi.useRealTimers();
   });
 
-  it("emits didUpdate ~1/sec while waiting and stops after the turn settles", async () => {
+  it("emits updates ~1/sec while waiting and stops after the turn settles", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
     let didUpdate = 0;
-    agent.on("didUpdate", () => {
+    onUpdate = () => {
       didUpdate++;
-    });
+    };
 
-    appendAndStart(agent);
+    const turn = start(agent);
     const stream = await mockClient.awaitStream();
 
     // Dead air: no stream events, only the heartbeat should fire.
@@ -78,6 +83,7 @@ describe("AnthropicAgent streaming ticker", () => {
 
     // Complete the turn.
     stream.respond({ text: "done", toolRequests: [], stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
     await vi.advanceTimersByTimeAsync(0);
 
     // Ticker must be cleared: no further emissions after the turn settles.
@@ -90,15 +96,16 @@ describe("AnthropicAgent streaming ticker", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
     let didUpdate = 0;
-    agent.on("didUpdate", () => {
+    onUpdate = () => {
       didUpdate++;
-    });
+    };
 
-    appendAndStart(agent);
+    const turn = start(agent);
     await mockClient.awaitStream();
 
     await vi.advanceTimersByTimeAsync(2000);
-    await agent.abort();
+    agent.abort();
+    expect(await turn).toEqual({ type: "aborted" });
     await vi.advanceTimersByTimeAsync(0);
 
     const afterAbort = didUpdate;
@@ -110,17 +117,17 @@ describe("AnthropicAgent streaming ticker", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    appendAndStart(agent);
+    const turn = start(agent);
     const stream = await mockClient.awaitStream();
 
-    const initial = agent.getState().status;
+    const initial = agent.phase;
     expect(initial.type).toBe("streaming");
     if (initial.type !== "streaming") return;
     const startEventTime = initial.lastEventTime.getTime();
 
     // Dead air: lastEventTime should not advance.
     await vi.advanceTimersByTimeAsync(2000);
-    const duringWait = agent.getState().status;
+    const duringWait = agent.phase;
     if (duringWait.type !== "streaming") throw new Error("expected streaming");
     expect(duringWait.lastEventTime.getTime()).toBe(startEventTime);
 
@@ -132,8 +139,11 @@ describe("AnthropicAgent streaming ticker", () => {
     });
     await stream.settle();
 
-    const afterEvent = agent.getState().status;
+    const afterEvent = agent.phase;
     if (afterEvent.type !== "streaming") throw new Error("expected streaming");
     expect(afterEvent.lastEventTime.getTime()).toBeGreaterThan(startEventTime);
+
+    stream.finishResponse("end_turn");
+    await turn;
   });
 });

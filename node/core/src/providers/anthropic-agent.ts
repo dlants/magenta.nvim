@@ -22,9 +22,9 @@ import {
 import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
 import type {
   Agent,
+  AgentHooks,
   AgentInput,
   AgentLog,
-  AgentHooks,
   AgentOptions,
   AgentPhase,
   NativeMessageIdx,

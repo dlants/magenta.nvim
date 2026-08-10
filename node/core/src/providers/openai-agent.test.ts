@@ -1,11 +1,8 @@
 import type OpenAI from "openai";
 import { describe, expect, it } from "vitest";
-import type {
-  ToolName,
-  ToolRequestId,
-  ToolStructuredResult,
-} from "../tool-types.ts";
+import type { ToolName, ToolStructuredResult } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
+import { ABORT_TOOL_RESULT_TEXT } from "./anthropic-agent.ts";
 import {
   MockOpenAIClient,
   type MockResponseStream,
@@ -13,12 +10,15 @@ import {
 import { OpenAIAgent, type OpenAIStreamingClient } from "./openai-agent.ts";
 import {
   type Agent,
+  type NativeMessageIdx,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ProviderMessage,
   type ProviderToolResult,
   type ProviderToolSpec,
-  type StopReason,
-  type Usage,
+  type RequestedTool,
+  type ToolExecutor,
+  type ToolResults,
+  type TurnResult,
 } from "./provider-types.ts";
 
 const noopLogger = {
@@ -37,32 +37,6 @@ const spec: ProviderToolSpec = {
   } as ProviderToolSpec["input_schema"],
 };
 
-function setup(options: { includeWebSearch?: boolean } = {}) {
-  const client = new MockOpenAIClient();
-  const agent = new OpenAIAgent(
-    {
-      model: "gpt-5.4",
-      systemPrompt: "be helpful",
-      tools: [spec],
-    },
-    client as unknown as OpenAIStreamingClient,
-    {
-      includeWebSearch: options.includeWebSearch ?? false,
-      logger: noopLogger,
-      validateInput,
-    },
-  );
-  return { client, agent };
-}
-
-function stoppedPromise(
-  agent: Agent,
-): Promise<{ stopReason: StopReason; usage: Usage | undefined }> {
-  return new Promise((resolve) => {
-    agent.on("stopped", (stopReason, usage) => resolve({ stopReason, usage }));
-  });
-}
-
 function userText(text: string) {
   return {
     type: "text" as const,
@@ -71,43 +45,106 @@ function userText(text: string) {
   };
 }
 
+function okResult(text: string): ProviderToolResult["result"] {
+  return {
+    status: "ok",
+    value: [userText(text)],
+    structuredResult: {
+      status: "ok",
+      value: "",
+    } as unknown as ToolStructuredResult,
+  };
+}
+
+/** The stand-in ThreadCore: answers every request and lets the turn continue. */
+function okResults(
+  requests: ReadonlyArray<RequestedTool>,
+  text = "tool output",
+): ToolResults {
+  return new Map(requests.map((request) => [request.id, okResult(text)]));
+}
+
+function setup(
+  options: { includeWebSearch?: boolean; executeTools?: ToolExecutor } = {},
+) {
+  const client = new MockOpenAIClient();
+  const calls: RequestedTool[][] = [];
+  const state = { updates: 0 };
+  const executeTools: ToolExecutor = (requests) => {
+    calls.push([...requests]);
+    return (
+      options.executeTools ??
+      ((reqs: ReadonlyArray<RequestedTool>) =>
+        Promise.resolve({
+          type: "continue" as const,
+          results: okResults(reqs),
+        }))
+    )(requests);
+  };
+  const agent = new OpenAIAgent(
+    {
+      model: "gpt-5.4",
+      systemPrompt: "be helpful",
+      tools: [spec],
+      executeTools,
+      onUpdate: () => {
+        state.updates++;
+      },
+    },
+    client as unknown as OpenAIStreamingClient,
+    {
+      includeWebSearch: options.includeWebSearch ?? false,
+      logger: noopLogger,
+      validateInput,
+    },
+  );
+  return { client, agent, calls, state };
+}
+
+/** `runTurn` opens its stream synchronously, so the turn promise and the
+ * stream that serves it are both available immediately. */
 async function startTurn(
   client: MockOpenAIClient,
   agent: Agent,
   text = "hello",
-): Promise<MockResponseStream> {
-  agent.appendUserMessage([userText(text)]);
-  agent.continueConversation();
-  return client.awaitStream();
-}
-
-function okToolResult(text: string): ProviderToolResult {
-  return {
-    type: "tool_result",
-    id: "call_1" as ToolRequestId,
-    result: {
-      status: "ok",
-      value: [userText(text)],
-      structuredResult: {
-        status: "ok",
-        value: "",
-      } as unknown as ToolStructuredResult,
-    },
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  };
+): Promise<{ turn: Promise<TurnResult>; stream: MockResponseStream }> {
+  const turn = agent.runTurn([userText(text)]);
+  const stream = await client.awaitStream();
+  return { turn, stream };
 }
 
 function assistant(agent: Agent): ProviderMessage {
-  const messages = agent.getState().messages;
+  const messages = agent.log.messages;
   const last = messages[messages.length - 1];
   expect(last.role).toBe("assistant");
   return last;
 }
 
+/** The last assistant message, which an aborted turn leaves behind its own
+ * user-role abort marker. */
+function lastAssistant(agent: Agent): ProviderMessage {
+  const messages = agent.log.messages;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") return messages[i];
+  }
+  throw new Error("no assistant message");
+}
+
+function streamingBlock(agent: Agent) {
+  const phase = agent.phase;
+  return phase.type === "streaming" ? phase.block : undefined;
+}
+
+function toolUseBlocks(agent: Agent) {
+  return agent.log.messages.flatMap((message) =>
+    message.content.filter((content) => content.type === "tool_use"),
+  );
+}
+
 describe("OpenAIAgent text turns", () => {
   it("commits each completed item as it arrives, before the turn ends", async () => {
     const { client, agent } = setup({ includeWebSearch: true });
-    const stream = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamWebSearchCall("denis lantsman");
     await stream.settle();
     // Without incremental commits the message only materializes at
@@ -118,12 +155,15 @@ describe("OpenAIAgent text turns", () => {
     stream.streamText("an answer");
     await stream.settle();
     expect(assistant(agent).content).toHaveLength(2);
-    expect(agent.getState().messages).toHaveLength(2);
+    expect(agent.log.messages).toHaveLength(2);
+
+    stream.finishResponse();
+    await turn;
   });
 
   it("exposes completed blocks alongside the in-flight one mid-stream", async () => {
     const { client, agent } = setup({ includeWebSearch: true });
-    const stream = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamReasoningSummary(["let me look that up"]);
     stream.streamWebSearchCall("denis lantsman");
     // A message item that has started but not finished: what the view shows as
@@ -153,18 +193,19 @@ describe("OpenAIAgent text turns", () => {
       { type: "thinking", thinking: "let me look that up" },
       { type: "server_tool_use", name: "web_search" },
     ]);
-    expect(agent.getState().streamingBlock).toEqual({
+    expect(streamingBlock(agent)).toEqual({
       type: "text",
       text: "Denis is",
     });
-  });
-  it("streams text, emits didUpdate, and stops with usage", async () => {
-    const { client, agent } = setup();
-    let updates = 0;
-    agent.on("didUpdate", () => updates++);
-    const stopped = stoppedPromise(agent);
 
-    const stream = await startTurn(client, agent);
+    stream.finishResponse();
+    await turn;
+  });
+
+  it("streams text, calls onUpdate, and resolves the turn with usage recorded", async () => {
+    const { client, agent, state } = setup();
+
+    const { turn, stream } = await startTurn(client, agent);
     expect(stream.instructions).toBe("be helpful");
 
     stream.streamText("hi there");
@@ -175,14 +216,13 @@ describe("OpenAIAgent text turns", () => {
       cacheHits: 64,
     });
 
-    const result = await stopped;
-    expect(result.stopReason).toBe("end_turn");
-    expect(result.usage).toEqual({
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(agent.log.latestUsage).toEqual({
       inputTokens: 100,
       outputTokens: 5,
       cacheHits: 64,
     });
-    expect(updates).toBeGreaterThan(0);
+    expect(state.updates).toBeGreaterThan(0);
 
     const message = assistant(agent);
     expect(message.content[0]).toMatchObject({
@@ -190,16 +230,12 @@ describe("OpenAIAgent text turns", () => {
       text: "hi there",
     });
     expect(message.stopReason).toBe("end_turn");
-    expect(agent.getState().status).toEqual({
-      type: "stopped",
-      stopReason: "end_turn",
-    });
-    expect(agent.getStreamingBlock()).toBeUndefined();
+    expect(agent.phase).toEqual({ type: "idle" });
   });
 
   it("exposes the partially accumulated text as the streaming block", async () => {
     const { client, agent } = setup();
-    const stream = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent);
     stream.emitEvent({
       type: "response.output_item.added",
       output_index: 0,
@@ -220,38 +256,45 @@ describe("OpenAIAgent text turns", () => {
       logprobs: [],
     });
     await stream.settle();
-    expect(agent.getStreamingBlock()).toEqual({ type: "text", text: "par" });
+    expect(streamingBlock(agent)).toEqual({ type: "text", text: "par" });
+
+    stream.finishResponse();
+    await turn;
   });
 
   it("sends one stable prompt_cache_key for every turn and its clones", async () => {
     const { client, agent } = setup();
     const first = await startTurn(client, agent);
-    const key = first.params.prompt_cache_key;
+    const key = first.stream.params.prompt_cache_key;
     expect(typeof key).toBe("string");
-    first.streamText("one");
-    await first.settle();
-    first.finishResponse();
+    first.stream.streamText("one");
+    await first.stream.settle();
+    first.stream.finishResponse();
+    await first.turn;
 
-    agent.appendUserMessage([userText("again")]);
-    agent.continueConversation();
-    const second = await client.awaitStream();
-    expect(second.params.prompt_cache_key).toBe(key);
-    second.finishResponse();
+    const second = await startTurn(client, agent, "again");
+    expect(second.stream.params.prompt_cache_key).toBe(key);
+    second.stream.finishResponse();
+    await second.turn;
 
     const cloned = agent.clone();
-    cloned.appendUserMessage([userText("clone")]);
-    cloned.continueConversation();
-    const third = await client.awaitStream();
-    expect(third.params.prompt_cache_key).toBe(key);
-    third.finishResponse();
+    const third = await startTurn(client, cloned, "clone");
+    expect(third.stream.params.prompt_cache_key).toBe(key);
+    third.stream.finishResponse();
+    await third.turn;
   });
 });
 
 describe("OpenAIAgent tool calls", () => {
   it("surfaces a tool_use block and echoes the call plus its output", async () => {
-    const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
+    const { client, agent, calls } = setup({
+      executeTools: (requests) =>
+        Promise.resolve({
+          type: "continue",
+          results: okResults(requests, "file contents"),
+        }),
+    });
+    const { turn, stream } = await startTurn(client, agent);
 
     stream.streamToolCall("call_1", "get_files", {
       files: [{ filePath: "a.ts" }],
@@ -259,9 +302,13 @@ describe("OpenAIAgent tool calls", () => {
     await stream.settle();
     stream.finishResponse();
 
-    expect((await stopped).stopReason).toBe("tool_use");
+    const followup = await client.awaitStreamAt(1);
 
-    const toolUse = assistant(agent).content[0];
+    expect(agent.log.messages[1].stopReason).toBe("tool_use");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].map((request) => request.id)).toEqual(["call_1"]);
+
+    const toolUse = toolUseBlocks(agent)[0];
     expect(toolUse).toMatchObject({ type: "tool_use", id: "call_1" });
     if (toolUse.type !== "tool_use" || toolUse.request.status !== "ok") {
       throw new Error("expected a valid tool_use request");
@@ -269,10 +316,6 @@ describe("OpenAIAgent tool calls", () => {
     expect(toolUse.request.value.input).toEqual({
       files: [{ filePath: "a.ts" }],
     });
-
-    agent.toolResult("call_1" as ToolRequestId, okToolResult("file contents"));
-    agent.continueConversation();
-    const followup = await client.awaitStream();
 
     expect(followup.inputItemsOfType("function_call")).toHaveLength(1);
     const outputs = followup.inputItemsOfType("function_call_output");
@@ -282,41 +325,55 @@ describe("OpenAIAgent tool calls", () => {
       output: "file contents",
     });
     followup.finishResponse();
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
   });
 
   it("keys parallel tool calls on output_index", async () => {
-    const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
+    const { client, agent, calls } = setup();
+    const { turn, stream } = await startTurn(client, agent);
 
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     stream.streamToolCall("call_2", "get_files", { filePath: "b.ts" });
     await stream.settle();
     stream.finishResponse();
 
-    expect((await stopped).stopReason).toBe("tool_use");
-    const toolUses = assistant(agent).content.filter(
-      (c) => c.type === "tool_use",
-    );
-    expect(toolUses.map((t) => t.id)).toEqual(["call_1", "call_2"]);
-
-    agent.toolResult("call_1" as ToolRequestId, okToolResult("a"));
-    agent.toolResult("call_2" as ToolRequestId, {
-      ...okToolResult("b"),
-      id: "call_2" as ToolRequestId,
-    });
-    agent.continueConversation();
-    const followup = await client.awaitStream();
+    const followup = await client.awaitStreamAt(1);
+    expect(agent.log.messages[1].stopReason).toBe("tool_use");
+    expect(toolUseBlocks(agent).map((t) => t.id)).toEqual(["call_1", "call_2"]);
+    expect(calls[0].map((request) => request.id)).toEqual(["call_1", "call_2"]);
     expect(followup.inputItemsOfType("function_call_output")).toHaveLength(2);
     followup.finishResponse();
+    await turn;
+  });
+
+  it("records the results and parks the agent when the executor suspends", async () => {
+    const { client, agent } = setup({
+      executeTools: (requests) =>
+        Promise.resolve({
+          type: "suspend",
+          results: okResults(requests, "yielded"),
+        }),
+    });
+    const { turn, stream } = await startTurn(client, agent);
+    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    await stream.settle();
+    stream.finishResponse();
+
+    expect(await turn).toEqual({ type: "suspended" });
+    // No continuation request: the turn ends where the executor said it does.
+    expect(client.streams).toHaveLength(1);
+    const results = agent.log.messages.flatMap((message) =>
+      message.content.filter((content) => content.type === "tool_result"),
+    );
+    expect(results.map((result) => result.id)).toEqual(["call_1"]);
+    expect(agent.phase).toEqual({ type: "idle" });
   });
 });
 
 describe("OpenAIAgent reasoning", () => {
   it("folds many summary parts into one thinking block", async () => {
     const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent);
 
     stream.streamReasoningSummary(["first", "second", "third"], {
       itemId: "rs_1",
@@ -325,7 +382,7 @@ describe("OpenAIAgent reasoning", () => {
     stream.streamText("done");
     await stream.settle();
     stream.finishResponse();
-    await stopped;
+    await turn;
 
     const thinking = assistant(agent).content.filter(
       (c) => c.type === "thinking",
@@ -337,48 +394,44 @@ describe("OpenAIAgent reasoning", () => {
       providerMetadata: { provider: "openai", itemId: "rs_1" },
     });
 
-    agent.appendUserMessage([userText("more")]);
-    agent.continueConversation();
-    const followup = await client.awaitStream();
-    const reasoning = followup.inputItemsOfType("reasoning");
+    const next = await startTurn(client, agent, "more");
+    const reasoning = next.stream.inputItemsOfType("reasoning");
     expect(reasoning).toHaveLength(1);
     expect(reasoning[0].encrypted_content).toBe("enc-1");
-    followup.finishResponse();
+    next.stream.finishResponse();
+    await next.turn;
   });
 
   it("round-trips an empty-summary reasoning item", async () => {
     const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent);
 
     stream.streamEmptyReasoning("enc-empty", "rs_empty");
     stream.streamText("ok");
     await stream.settle();
     stream.finishResponse();
-    await stopped;
+    await turn;
 
     const thinking = assistant(agent).content.find(
       (c) => c.type === "thinking",
     );
     expect(thinking).toMatchObject({ thinking: "", signature: "enc-empty" });
 
-    agent.appendUserMessage([userText("again")]);
-    agent.continueConversation();
-    const followup = await client.awaitStream();
-    expect(followup.inputItemsOfType("reasoning")[0]).toMatchObject({
+    const next = await startTurn(client, agent, "again");
+    expect(next.stream.inputItemsOfType("reasoning")[0]).toMatchObject({
       id: "rs_empty",
       encrypted_content: "enc-empty",
       summary: [],
     });
-    followup.finishResponse();
+    next.stream.finishResponse();
+    await next.turn;
   });
 });
 
 describe("OpenAIAgent web search", () => {
   it("keeps the search call and its annotations across turns", async () => {
     const { client, agent } = setup({ includeWebSearch: true });
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent);
 
     const annotation: OpenAI.Responses.ResponseOutputText.URLCitation = {
       type: "url_citation",
@@ -391,7 +444,7 @@ describe("OpenAIAgent web search", () => {
     stream.streamAnnotatedText("per the docs", [annotation]);
     await stream.settle();
     stream.finishResponse();
-    await stopped;
+    await turn;
 
     const content = assistant(agent).content;
     expect(content[0]).toMatchObject({
@@ -405,21 +458,19 @@ describe("OpenAIAgent web search", () => {
       url: "https://example.com",
     });
 
-    agent.appendUserMessage([userText("thanks")]);
-    agent.continueConversation();
-    const followup = await client.awaitStream();
-    expect(followup.inputItemsOfType("web_search_call")[0]).toMatchObject({
+    const next = await startTurn(client, agent, "thanks");
+    expect(next.stream.inputItemsOfType("web_search_call")[0]).toMatchObject({
       id: "ws_1",
     });
-    followup.finishResponse();
+    next.stream.finishResponse();
+    await next.turn;
   });
 });
 
 describe("OpenAIAgent abort", () => {
-  it("synthesizes a stopped state when the stream just ends", async () => {
+  it("unwinds the turn when the stream just ends", async () => {
     const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent);
 
     stream.emitEvent({
       type: "response.output_item.added",
@@ -442,192 +493,212 @@ describe("OpenAIAgent abort", () => {
     });
     await stream.settle();
 
-    const done = agent.abort();
+    agent.abort();
     stream.abortMidstream();
-    await done;
 
-    const result = await stopped;
-    expect(result.stopReason).toBe("aborted");
-    expect(result.usage).toBeUndefined();
-    expect(agent.getState().latestUsage).toBeUndefined();
-    expect(assistant(agent).content[0]).toMatchObject({
+    expect(await turn).toEqual({ type: "aborted" });
+    expect(agent.log.latestUsage).toBeUndefined();
+    expect(lastAssistant(agent).content[0]).toMatchObject({
       type: "text",
       text: "partial answer",
     });
-    expect(agent.getStreamingBlock()).toBeUndefined();
+    expect(agent.phase).toEqual({ type: "idle" });
   });
 
   it("drops a tool call that was never dispatched", async () => {
-    const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
+    const { client, agent, calls } = setup();
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
 
-    const done = agent.abort();
+    agent.abort();
     stream.abortMidstream();
-    await done;
-    expect((await stopped).stopReason).toBe("aborted");
+    expect(await turn).toEqual({ type: "aborted" });
 
-    const messages = agent.getState().messages;
-    expect(
-      messages.some((m) => m.content.some((c) => c.type === "tool_use")),
-    ).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(toolUseBlocks(agent)).toHaveLength(0);
+  });
+
+  it("unwinds when the executor reports that it aborted its tools", async () => {
+    const { client, agent } = setup({
+      executeTools: () =>
+        Promise.resolve({ type: "aborted", results: new Map() }),
+    });
+    const { turn, stream } = await startTurn(client, agent);
+    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    await stream.settle();
+    stream.finishResponse();
+
+    expect(await turn).toEqual({ type: "aborted" });
+    expect(client.streams).toHaveLength(1);
+    // An aborted tool_use is still answered, so the history stays well-formed.
+    expect(toolUseBlocks(agent)).toHaveLength(1);
+    const results = agent.log.messages.flatMap((message) =>
+      message.content.filter((content) => content.type === "tool_result"),
+    );
+    expect(results).toHaveLength(1);
+    expect(results[0].result).toEqual({
+      status: "error",
+      error: ABORT_TOOL_RESULT_TEXT,
+    });
   });
 });
 
 describe("OpenAIAgent invariant guards", () => {
-  it("toolResult rejects a non-tool_use stopped state", async () => {
-    const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
-    stream.streamText("just text");
-    await stream.settle();
-    stream.finishResponse();
-    await stopped;
-
-    expect(() =>
-      agent.toolResult("call_1" as ToolRequestId, okToolResult("x")),
-    ).toThrow(/expected status stopped with stopReason tool_use/);
-  });
-
-  it("toolResult rejects an unknown tool_use id", async () => {
-    const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
-    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
-    await stream.settle();
-    stream.finishResponse();
-    await stopped;
-
-    expect(() =>
-      agent.toolResult("call_missing" as ToolRequestId, {
-        ...okToolResult("x"),
-        id: "call_missing" as ToolRequestId,
-      }),
-    ).toThrow(/no tool_use block with id call_missing/);
-  });
-
-  it("abortToolUse rejects a non-tool_use stopped state", async () => {
-    const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
-    stream.streamText("just text");
-    await stream.settle();
-    stream.finishResponse();
-    await stopped;
-
-    expect(() => agent.abortToolUse()).toThrow(/Cannot abort tool use/);
-  });
-
-  it("abortToolUse flips a pending tool_use to aborted", async () => {
-    const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
-    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
-    await stream.settle();
-    stream.finishResponse();
-    await stopped;
-
-    const aborted = stoppedPromise(agent);
-    agent.abortToolUse();
-    expect((await aborted).stopReason).toBe("aborted");
-    expect(agent.getState().status).toEqual({
-      type: "stopped",
-      stopReason: "aborted",
+  it("answers an id the executor omitted", async () => {
+    const { client, agent } = setup({
+      executeTools: () =>
+        Promise.resolve({ type: "continue", results: new Map() }),
     });
+    const { turn, stream } = await startTurn(client, agent);
+    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    await stream.settle();
+    stream.finishResponse();
+
+    const followup = await client.awaitStreamAt(1);
+    const outputs = followup.inputItemsOfType("function_call_output");
+    expect(outputs).toHaveLength(1);
+    expect(outputs[0]).toMatchObject({
+      call_id: "call_1",
+      output: ABORT_TOOL_RESULT_TEXT,
+    });
+    followup.finishResponse();
+    await turn;
+  });
+
+  it("answers every id when the executor rejects", async () => {
+    const { client, agent } = setup({
+      executeTools: () => Promise.reject(new Error("executor blew up")),
+    });
+    const { turn, stream } = await startTurn(client, agent);
+    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    await stream.settle();
+    stream.finishResponse();
+
+    const followup = await client.awaitStreamAt(1);
+    expect(followup.inputItemsOfType("function_call_output")).toMatchObject([
+      { call_id: "call_1", output: ABORT_TOOL_RESULT_TEXT },
+    ]);
+    followup.finishResponse();
+    await turn;
+  });
+
+  it("rejects a second runTurn while one is in flight", async () => {
+    const { client, agent } = setup();
+    const { turn, stream } = await startTurn(client, agent);
+
+    await expect(agent.runTurn([userText("again")])).rejects.toThrow(
+      /already in flight/,
+    );
+    // The rejected call must not have perturbed the history.
+    expect(agent.log.messages).toHaveLength(1);
+
+    stream.streamText("hi");
+    await stream.settle();
+    stream.finishResponse();
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
   });
 });
 
 describe("OpenAIAgent clone", () => {
-  it("returns a stopped deep copy with history intact", async () => {
+  it("returns an idle deep copy with history intact", async () => {
     const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamText("original");
     await stream.settle();
     stream.finishResponse();
-    await stopped;
+    await turn;
 
     const cloned = agent.clone();
-    expect(cloned.getState().status).toEqual({
-      type: "stopped",
-      stopReason: "end_turn",
-    });
-    expect(cloned.getStreamingBlock()).toBeUndefined();
-    expect(cloned.getState().messages).toHaveLength(2);
-    expect(cloned.getState().messages[1].content[0]).toMatchObject({
+    expect(cloned.phase).toEqual({ type: "idle" });
+    expect(cloned.log.messages).toHaveLength(2);
+    expect(cloned.log.messages[1].content[0]).toMatchObject({
       type: "text",
       text: "original",
     });
 
-    cloned.appendUserMessage([userText("only in the clone")]);
-    expect(agent.getState().messages).toHaveLength(2);
+    const clonedTurn = await startTurn(client, cloned, "only in the clone");
+    expect(agent.log.messages).toHaveLength(2);
+    expect(cloned.log.messages).toHaveLength(3);
+    clonedTurn.stream.finishResponse();
+    await clonedTurn.turn;
   });
 
   it("drops an unanswered tool call in the clone", async () => {
-    const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
+    // Cloning mid-tool-execution is the one moment a tool_use has no result
+    // yet, which is exactly when a fork can happen.
+    let midToolClone: Agent | undefined;
+    const { client, agent } = setup({
+      executeTools: (requests) => {
+        midToolClone = agent.clone();
+        return Promise.resolve({
+          type: "continue",
+          results: okResults(requests),
+        });
+      },
+    });
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
-    await stopped;
 
-    const cloned = agent.clone();
+    const followup = await client.awaitStreamAt(1);
+    followup.finishResponse();
+    await turn;
+
+    expect(midToolClone).toBeDefined();
     expect(
-      cloned
-        .getState()
-        .messages.some((m) => m.content.some((c) => c.type === "tool_use")),
+      midToolClone!.log.messages.some((m) =>
+        m.content.some((c) => c.type === "tool_use"),
+      ),
     ).toBe(false);
   });
 });
 
 describe("OpenAIAgent truncation", () => {
-  it("keeps messages up to the given index and stops", async () => {
+  it("keeps messages up to the given index", async () => {
     const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
-    stream.streamText("first");
-    await stream.settle();
-    stream.finishResponse();
-    await stopped;
+    const first = await startTurn(client, agent);
+    first.stream.streamText("first");
+    await first.stream.settle();
+    first.stream.finishResponse();
+    await first.turn;
 
     const idx = agent.getNativeMessageIdx();
-    agent.appendUserMessage([userText("second")]);
-    agent.truncateMessages(idx);
+    const second = await startTurn(client, agent, "second");
+    second.stream.streamText("second answer");
+    await second.stream.settle();
+    second.stream.finishResponse();
+    await second.turn;
+    expect(agent.log.messages).toHaveLength(4);
 
-    expect(agent.getState().messages).toHaveLength(2);
-    expect(agent.getState().status).toEqual({
-      type: "stopped",
-      stopReason: "end_turn",
-    });
+    agent.truncateMessages(idx);
+    expect(agent.log.messages).toHaveLength(2);
+    expect(agent.phase).toEqual({ type: "idle" });
   });
 
   it("drops a tool_use severed from its tool_result", async () => {
     const { client, agent } = setup();
-    const stopped = stoppedPromise(agent);
-    const stream = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
-    await stopped;
+    const followup = await client.awaitStreamAt(1);
+    followup.finishResponse();
+    await turn;
 
-    const assistantIdx = agent.getNativeMessageIdx();
-    agent.toolResult("call_1" as ToolRequestId, okToolResult("contents"));
+    const assistantIdx = agent.log.messages.findIndex((message) =>
+      message.content.some((content) => content.type === "tool_use"),
+    ) as NativeMessageIdx;
 
     // Truncating back to the assistant message severs the tool_use from its
     // result; the backend rejects such a request, so it must be dropped.
     agent.truncateMessages(assistantIdx);
-    const messages = agent.getState().messages;
-    expect(
-      messages.some((m) => m.content.some((c) => c.type === "tool_use")),
-    ).toBe(false);
+    expect(toolUseBlocks(agent)).toHaveLength(0);
 
-    agent.appendUserMessage([userText("carry on")]);
-    agent.continueConversation();
-    const followup = await client.awaitStream();
-    expect(followup.inputItemsOfType("function_call")).toHaveLength(0);
-    followup.finishResponse();
+    const next = await startTurn(client, agent, "carry on");
+    expect(next.stream.inputItemsOfType("function_call")).toHaveLength(0);
+    next.stream.finishResponse();
+    await next.turn;
   });
 });

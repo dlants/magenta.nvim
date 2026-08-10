@@ -102,7 +102,7 @@ describe("OpenAI provider wiring", () => {
       "yield_to_parent" as ToolName,
       { result: "all done" },
     );
-    stream.finishResponse("tool_use");
+    stream.finishResponse();
 
     await pollUntil(() => {
       if (core.state.mode.type === "yielded") return true;
@@ -322,6 +322,9 @@ describe("OpenAI provider wiring", () => {
           model: "gpt-5.1-codex",
           systemPrompt: "hi",
           tools: [],
+          executeTools: () =>
+            Promise.resolve({ type: "continue", results: new Map() }),
+          onUpdate: () => {},
         }),
       ).toThrow(/gpt-5\.4/);
     });

@@ -34,7 +34,7 @@ it("forks a thread while streaming without aborting source", async () => {
     // Per the plan, fork no longer aborts the source. Confirm the streaming
     // request is still live and the source agent is still streaming.
     expect(streamingRequest.aborted).toBe(false);
-    expect(originalThread.agent.getState().status.type).toBe("streaming");
+    expect(originalThread.agent.phase.type).toBe("streaming");
 
     // Wait for the new thread to become active
     await pollUntil(() => {
@@ -139,7 +139,7 @@ it("forks a thread while waiting for tool use without aborting source", async ()
     // Per the plan, fork no longer aborts the source. The original thread
     // is still in tool_use mode awaiting approval.
     expect(originalThread.core.state.mode.type).toBe("tool_use");
-    expect(originalThread.agent.getState().status).toEqual({
+    expect(originalThread.agent.phase).toEqual({
       type: "stopped",
       stopReason: "tool_use",
     });

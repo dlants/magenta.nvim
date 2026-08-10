@@ -272,13 +272,14 @@ it("compact flow without continuation: @compact with no next prompt", async () =
 
     await pollUntil(
       () => {
-        const agentStatus = thread.agent.getState().status;
-        if (agentStatus.type !== "stopped")
-          throw new Error(`expected stopped but got ${agentStatus.type}`);
-        if (agentStatus.stopReason !== "end_turn")
-          throw new Error(
-            `expected end_turn but got ${agentStatus.stopReason}`,
-          );
+        const agentPhase = thread.agent.phase;
+        if (agentPhase.type !== "idle")
+          throw new Error(`expected idle but got ${agentPhase.type}`);
+        const turnResult = thread.core.state.lastTurnResult;
+        if (turnResult?.type !== "stopped")
+          throw new Error(`expected stopped but got ${turnResult?.type}`);
+        if (turnResult.stopReason !== "end_turn")
+          throw new Error(`expected end_turn but got ${turnResult.stopReason}`);
       },
       { timeout: 2000, message: "thread should stop after compaction" },
     );
@@ -383,37 +384,23 @@ it("compact flow does not process @file commands in subagent or summary", async 
 
     const afterCompactMessages = afterCompactStream.getProviderMessages();
 
-    // Should have two user messages:
-    // 1. The raw summary (appendUserMessage)
-    // 2. The nextPrompt processed through sendMessage (@file expanded)
+    // The summary and the nextPrompt now ride in a single opening turn, so
+    // they land in one user message: the raw summary block first (no command
+    // processing), then the nextPrompt's blocks (@file expanded).
     const userMessages = afterCompactMessages.filter((m) => m.role === "user");
-    expect(userMessages).toHaveLength(2);
-
-    // First user message: raw summary (no command processing)
-    const summaryContentTypes = userMessages[0].content.map((c) => c.type);
-    expect(summaryContentTypes).toEqual(["text"]);
+    expect(userMessages).toHaveLength(1);
+    const blocks = userMessages[0].content;
+    expect(blocks[0].type).toBe("text");
     const summaryText = (
-      userMessages[0].content[0] as Extract<
-        (typeof userMessages)[0]["content"][0],
-        { type: "text" }
-      >
+      blocks[0] as Extract<(typeof blocks)[0], { type: "text" }>
     ).text;
     expect(summaryText).toContain("<conversation-summary>");
     expect(summaryText).toContain("@file:poem.txt");
-
-    // Second user message: nextPrompt processed through sendMessage
-    // Should have context update from @file expansion + text + system_reminder
-    const promptContentTypes = userMessages[1].content.map((c) => c.type);
-    expect(promptContentTypes).toContain("text");
-
-    const promptText = userMessages[1].content
+    const promptText = blocks
+      .slice(1)
       .filter(
-        (
-          c,
-        ): c is Extract<
-          (typeof userMessages)[1]["content"][0],
-          { type: "text" }
-        > => c.type === "text",
+        (c): c is Extract<(typeof blocks)[0], { type: "text" }> =>
+          c.type === "text",
       )
       .map((c) => c.text)
       .join("\n");
@@ -581,8 +568,8 @@ it("auto-compact threshold from options wires into the thread's supervisor", asy
 
       await pollUntil(
         () => {
-          const state = originalThread.agent.getState();
-          if (state.status.type !== "stopped")
+          const state = originalThread.agent.log;
+          if (originalThread.agent.phase.type !== "idle")
             throw new Error("waiting for stop");
           if (
             state.inputTokenCount === undefined ||
@@ -651,8 +638,8 @@ it("auto-compact triggers on handoff when inputTokenCount breaches the superviso
     // populate inputTokenCount.
     await pollUntil(
       () => {
-        const state = originalThread.agent.getState();
-        if (state.status.type !== "stopped")
+        const state = originalThread.agent.log;
+        if (originalThread.agent.phase.type !== "idle")
           throw new Error("waiting for stop");
         if (
           state.inputTokenCount === undefined ||
@@ -1211,9 +1198,8 @@ it("auto-compact does not trigger on compact threads", async () => {
     // Wait for token count to propagate
     await pollUntil(
       () => {
-        const tokenCount = driver.magenta.chat
-          .getActiveThread()
-          .agent.getState().inputTokenCount;
+        const tokenCount =
+          driver.magenta.chat.getActiveThread().agent.log.inputTokenCount;
         if (tokenCount === undefined || tokenCount < 160_000) {
           throw new Error(`expected high token count but got ${tokenCount}`);
         }

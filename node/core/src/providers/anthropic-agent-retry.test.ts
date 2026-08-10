@@ -24,6 +24,8 @@ const defaultOptions = {
   systemPrompt: "test",
   tools: [] as ProviderToolSpec[],
   skipPostFlightTokenCount: true,
+  executeTools: () => Promise.reject(new Error("unexpected tool execution")),
+  onUpdate: () => {},
 };
 
 const defaultAnthropicOptions: AnthropicAgentOptions = {
@@ -69,25 +71,14 @@ function make400Error(): APIError {
   );
 }
 
-/** Collect events from an agent into arrays */
-function trackEvents(agent: AnthropicAgent) {
-  const events: {
-    stopped: Array<{ stopReason: string }>;
-    errors: Error[];
-    didUpdate: number;
-  } = { stopped: [], errors: [], didUpdate: 0 };
-
-  agent.on("stopped", (stopReason) => {
-    events.stopped.push({ stopReason });
-  });
-  agent.on("error", (error) => {
-    events.errors.push(error);
-  });
-  agent.on("didUpdate", () => {
-    events.didUpdate++;
-  });
-
-  return events;
+function start(agent: AnthropicAgent) {
+  return agent.runTurn([
+    {
+      type: "text",
+      text: "hello",
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    },
+  ]);
 }
 
 describe("isRetryableError", () => {
@@ -165,16 +156,8 @@ describe("AnthropicAgent retry logic", () => {
   it("non-retryable errors pass through immediately", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
-    const events = trackEvents(agent);
 
-    agent.appendUserMessage([
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    agent.continueConversation();
+    const turn = start(agent);
 
     const stream = await mockClient.awaitStream();
     stream.respondWithError(make400Error());
@@ -182,25 +165,17 @@ describe("AnthropicAgent retry logic", () => {
     // Let microtasks flush
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(events.errors.length).toBe(1);
-    expect(events.errors[0]).toBeInstanceOf(APIError);
-    expect((events.errors[0] as APIError).status).toBe(400);
-    expect(events.stopped.length).toBe(0);
+    const result = await turn;
+    if (result.type !== "failed") throw new Error("expected failed");
+    expect(result.error).toBeInstanceOf(APIError);
+    expect((result.error as APIError).status).toBe(400);
   });
 
   it("retries on 529 with correct delays and succeeds", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
-    const events = trackEvents(agent);
 
-    agent.appendUserMessage([
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    agent.continueConversation();
+    const turn = start(agent);
 
     // First attempt: fail with 529
     let stream = await mockClient.awaitStream();
@@ -208,11 +183,11 @@ describe("AnthropicAgent retry logic", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     // Should be in retry state
-    const status1 = agent.getState().status;
+    const status1 = agent.phase;
     expect(status1.type).toBe("streaming");
     if (status1.type === "streaming") {
-      expect(status1.retryStatus).toBeDefined();
-      expect(status1.retryStatus!.attempt).toBe(1);
+      expect(status1.retry).toBeDefined();
+      expect(status1.retry!.attempt).toBe(1);
     }
 
     // Advance past first retry delay (1000ms)
@@ -223,11 +198,11 @@ describe("AnthropicAgent retry logic", () => {
     stream.respondWithError(make529Error());
     await vi.advanceTimersByTimeAsync(0);
 
-    const status2 = agent.getState().status;
+    const status2 = agent.phase;
     expect(status2.type).toBe("streaming");
     if (status2.type === "streaming") {
-      expect(status2.retryStatus).toBeDefined();
-      expect(status2.retryStatus!.attempt).toBe(2);
+      expect(status2.retry).toBeDefined();
+      expect(status2.retry!.attempt).toBe(2);
     }
 
     // Advance past second retry delay (5000ms)
@@ -242,24 +217,14 @@ describe("AnthropicAgent retry logic", () => {
     });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(events.stopped.length).toBe(1);
-    expect(events.stopped[0].stopReason).toBe("end_turn");
-    expect(events.errors.length).toBe(0);
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
   });
 
   it("retries on transient SSE JSON parse errors", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
-    const events = trackEvents(agent);
 
-    agent.appendUserMessage([
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    agent.continueConversation();
+    const turn = start(agent);
 
     // First attempt: SDK surfaces a malformed SSE frame as an AnthropicError
     let stream = await mockClient.awaitStream();
@@ -270,10 +235,10 @@ describe("AnthropicAgent retry logic", () => {
     );
     await vi.advanceTimersByTimeAsync(0);
 
-    const status = agent.getState().status;
+    const status = agent.phase;
     expect(status.type).toBe("streaming");
     if (status.type === "streaming") {
-      expect(status.retryStatus).toBeDefined();
+      expect(status.retry).toBeDefined();
     }
 
     // Advance past retry delay, then succeed
@@ -282,33 +247,24 @@ describe("AnthropicAgent retry logic", () => {
     stream.respond({ text: "done", toolRequests: [], stopReason: "end_turn" });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(events.stopped.length).toBe(1);
-    expect(events.errors.length).toBe(0);
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
   });
 
   it("retries on 429", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
-    const events = trackEvents(agent);
 
-    agent.appendUserMessage([
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    agent.continueConversation();
+    const turn = start(agent);
 
     // First attempt: fail with 429
     let stream = await mockClient.awaitStream();
     stream.respondWithError(make429Error());
     await vi.advanceTimersByTimeAsync(0);
 
-    const status = agent.getState().status;
+    const status = agent.phase;
     expect(status.type).toBe("streaming");
     if (status.type === "streaming") {
-      expect(status.retryStatus).toBeDefined();
+      expect(status.retry).toBeDefined();
     }
 
     // Advance past retry delay
@@ -319,23 +275,14 @@ describe("AnthropicAgent retry logic", () => {
     stream.respond({ text: "done", toolRequests: [], stopReason: "end_turn" });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(events.stopped.length).toBe(1);
-    expect(events.errors.length).toBe(0);
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
   });
 
   it("gives up after max duration", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
-    const events = trackEvents(agent);
 
-    agent.appendUserMessage([
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    agent.continueConversation();
+    const turn = start(agent);
 
     // Simulate time passing beyond MAX_RETRY_DURATION (300s)
     // Fast-forward through multiple retries
@@ -371,8 +318,8 @@ describe("AnthropicAgent retry logic", () => {
     }
 
     // Should have given up by now
-    expect(events.errors.length).toBe(1);
-    expect(events.stopped.length).toBe(0);
+    const result = await turn;
+    expect(result.type).toBe("failed");
   });
 
   it("recovers when a retryable error interrupts a stream mid-block", async () => {
@@ -382,16 +329,8 @@ describe("AnthropicAgent retry logic", () => {
     // block and threw "content_block_start ... while block N is still open".
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
-    const events = trackEvents(agent);
 
-    agent.appendUserMessage([
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    agent.continueConversation();
+    const turn = start(agent);
 
     // First attempt: open block 0, then error mid-block with a retryable status
     let stream = await mockClient.awaitStream();
@@ -404,10 +343,10 @@ describe("AnthropicAgent retry logic", () => {
     stream.respondWithError(make529Error());
     await vi.advanceTimersByTimeAsync(0);
 
-    const status = agent.getState().status;
+    const status = agent.phase;
     expect(status.type).toBe("streaming");
     if (status.type === "streaming") {
-      expect(status.retryStatus).toBeDefined();
+      expect(status.retry).toBeDefined();
     }
 
     // Second attempt: fresh stream reopens block 0 and succeeds
@@ -416,24 +355,14 @@ describe("AnthropicAgent retry logic", () => {
     stream.respond({ text: "done", toolRequests: [], stopReason: "end_turn" });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(events.errors.length).toBe(0);
-    expect(events.stopped.length).toBe(1);
-    expect(events.stopped[0].stopReason).toBe("end_turn");
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
   });
 
   it("abort during retry wait cancels immediately", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
-    const events = trackEvents(agent);
 
-    agent.appendUserMessage([
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    agent.continueConversation();
+    const turn = start(agent);
 
     // First attempt: fail with 529
     const stream = await mockClient.awaitStream();
@@ -441,57 +370,48 @@ describe("AnthropicAgent retry logic", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     // Should be in retry wait state
-    const status = agent.getState().status;
+    const status = agent.phase;
     expect(status.type).toBe("streaming");
     if (status.type === "streaming") {
-      expect(status.retryStatus).toBeDefined();
+      expect(status.retry).toBeDefined();
     }
 
     // Abort during the retry wait
-    await agent.abort();
+    agent.abort();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(events.stopped.length).toBe(1);
-    expect(events.stopped[0].stopReason).toBe("aborted");
-    expect(events.errors.length).toBe(0);
+    expect(await turn).toEqual({ type: "aborted" });
   });
 
-  it("status shows retryStatus during wait and clears on retry attempt", async () => {
+  it("status shows retry during wait and clears on retry attempt", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
-    agent.appendUserMessage([
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    agent.continueConversation();
+    const turn = start(agent);
 
     // First attempt: fail with 529
     let stream = await mockClient.awaitStream();
     stream.respondWithError(make529Error());
     await vi.advanceTimersByTimeAsync(0);
 
-    // During wait: retryStatus should be set
-    const statusDuringWait = agent.getState().status;
+    // During wait: retry should be set
+    const statusDuringWait = agent.phase;
     expect(statusDuringWait.type).toBe("streaming");
     if (statusDuringWait.type === "streaming") {
-      expect(statusDuringWait.retryStatus).toBeDefined();
-      expect(statusDuringWait.retryStatus!.attempt).toBe(1);
-      expect(statusDuringWait.retryStatus!.nextRetryAt).toBeInstanceOf(Date);
-      expect(statusDuringWait.retryStatus!.error).toBeInstanceOf(APIError);
+      expect(statusDuringWait.retry).toBeDefined();
+      expect(statusDuringWait.retry!.attempt).toBe(1);
+      expect(statusDuringWait.retry!.nextRetryAt).toBeInstanceOf(Date);
+      expect(statusDuringWait.retry!.error).toBeInstanceOf(APIError);
     }
 
     // Advance past retry delay
     await vi.advanceTimersByTimeAsync(1000);
 
-    // During retry attempt: retryStatus should be cleared
-    const statusDuringRetry = agent.getState().status;
+    // During retry attempt: retry should be cleared
+    const statusDuringRetry = agent.phase;
     expect(statusDuringRetry.type).toBe("streaming");
     if (statusDuringRetry.type === "streaming") {
-      expect(statusDuringRetry.retryStatus).toBeUndefined();
+      expect(statusDuringRetry.retry).toBeUndefined();
     }
 
     // Succeed on second attempt
@@ -499,6 +419,7 @@ describe("AnthropicAgent retry logic", () => {
     stream.respond({ text: "ok", toolRequests: [], stopReason: "end_turn" });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(agent.getState().status.type).toBe("stopped");
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(agent.phase.type).toBe("idle");
   });
 });
