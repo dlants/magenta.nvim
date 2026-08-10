@@ -139,10 +139,7 @@ it("forks a thread while waiting for tool use without aborting source", async ()
     // Per the plan, fork no longer aborts the source. The original thread
     // is still in tool_use mode awaiting approval.
     expect(originalThread.core.state.mode.type).toBe("tool_use");
-    expect(originalThread.agent.phase).toEqual({
-      type: "stopped",
-      stopReason: "tool_use",
-    });
+    expect(originalThread.agent.phase.type).toBe("running_tools");
   });
 });
 

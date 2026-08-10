@@ -164,7 +164,11 @@ Do not acknowledge this reminder or mention it to the user.
         "id": "slow-bash-command",
         "nativeMessageIdx": 2,
         "result": {
-          "error": "Request was aborted by the user.",
+          "error": "Request was aborted by the user.
+
+Output before termination:
+terminated by signal SIGTERM (<timing>ms)
+",
           "status": "error",
         },
         "type": "tool_result",
@@ -265,11 +269,6 @@ Do not acknowledge this reminder or mention it to the user.
         "text": "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
         "type": "text",
       },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
       {
         "text": "Actually, tell me about 5+5",
         "type": "text",
@@ -372,11 +371,6 @@ Do not acknowledge this reminder or mention it to the user.
         "text": "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
         "type": "text",
       },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
       {
         "text": "Do something else instead",
         "type": "text",

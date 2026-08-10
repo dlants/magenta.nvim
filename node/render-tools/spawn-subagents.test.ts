@@ -1385,7 +1385,11 @@ describe("node/render-tools/spawn-subagents.test.ts", () => {
 
         // The parent should show the aborted state
         await driver.assertDisplayBufferContains("[ABORTED]");
-        await driver.assertDisplayBufferContains("❌ Request was aborted");
+        // The tool now reports its own abort reason: ThreadCore waits for the
+        // handle to settle rather than synthesizing a generic result.
+        await driver.assertDisplayBufferContains(
+          "❌ Sub-agent execution was aborted",
+        );
       });
     });
   });

@@ -470,11 +470,6 @@ Do not acknowledge this reminder or mention it to the user.
         "text": "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
         "type": "text",
       },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
       {
         "text": "Tell me about Italy",
         "type": "text",
@@ -566,18 +561,13 @@ Do not acknowledge this reminder or mention it to the user.
         "text": "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
         "type": "fork_notification",
       },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
       {
-        "nativeMessageIdx": 3,
+        "nativeMessageIdx": 2,
         "text": "Tell me about Italy",
         "type": "text",
       },
       {
-        "nativeMessageIdx": 3,
+        "nativeMessageIdx": 2,
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
@@ -602,7 +592,7 @@ Do not acknowledge this reminder or mention it to the user.
   {
     "content": [
       {
-        "nativeMessageIdx": 4,
+        "nativeMessageIdx": 3,
         "text": "Italy's capital is Rome. It's known for its rich history, art, and cuisine.",
         "type": "text",
       },

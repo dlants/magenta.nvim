@@ -426,7 +426,11 @@ export function execute(
     })),
   };
 
-  const abortController = { aborted: false };
+  const abortController = {
+    aborted: false,
+    /** Woken by `abort()` so waiters unblock without a yield. */
+    listeners: new Set<() => void>(),
+  };
 
   const spawnEntry = async (
     element: SpawnSubagentsProgress["elements"][0],
@@ -555,16 +559,21 @@ export function execute(
     }
     const threadId = element.state.threadId;
     await new Promise<void>((resolve) => {
+      const done = () => {
+        abortController.listeners.delete(check);
+        resolve();
+      };
       const check = () => {
         if (abortController.aborted) {
-          resolve();
+          done();
           return;
         }
         const result = context.threadManager.getThreadResult(threadId);
         if (result.status === "done") {
-          resolve();
+          done();
         }
       };
+      abortController.listeners.add(check);
       context.threadManager.onThreadYielded(threadId, check);
       // Check immediately in case the thread already yielded
       check();
@@ -641,6 +650,9 @@ export function execute(
     promise,
     abort: () => {
       abortController.aborted = true;
+      for (const listener of [...abortController.listeners]) {
+        listener();
+      }
     },
     progress,
   };
