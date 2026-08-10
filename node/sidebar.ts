@@ -147,6 +147,7 @@ export class Sidebar {
     private nvim: Nvim,
     private getProfile: () => Profile,
     private getTokenCount: () => number,
+    private getStatusIcon: () => string,
     public bufferManager: BufferManager,
     private getActiveKey: () => BufferKey,
     private getIsSandboxBypassed: () => boolean,
@@ -174,7 +175,9 @@ export class Sidebar {
       ? " %#ErrorMsg# SANDBOX OFF %#Normal#"
       : "";
 
-    return `${baseTitle} [${formatTokenCount(tokenCount)}]${bypassIndicator}`;
+    const statusIcon = this.getStatusIcon();
+    const status = statusIcon ? `${statusIcon} ` : "";
+    return `${baseTitle} ${status}[${formatTokenCount(tokenCount)}]${bypassIndicator}`;
   }
 
   async onWinClosed() {

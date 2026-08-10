@@ -287,7 +287,8 @@ describe("node/sidebar.test.ts", () => {
 
       const { inputWindow } = driver.getVisibleState();
       const initialWinbar = await inputWindow.getOption("winbar");
-      expect(initialWinbar).toContain("Magenta Input (mock) [~");
+      expect(initialWinbar).toContain("Magenta Input (mock)");
+      expect(initialWinbar).toMatch(/\[~\d+ tok\]/);
 
       // Generate a large message that will definitely increase the token count
       const largeMessage = "Hello, this is a test message. ".repeat(500);

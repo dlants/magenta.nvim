@@ -288,6 +288,22 @@ export class Magenta {
         }
         return wrapper.thread.getLastStopTokenCount();
       },
+      () => {
+        if (!this.chat.state.activeThreadId) {
+          return "";
+        }
+        const wrapper =
+          this.chat.threadWrappers[this.chat.state.activeThreadId];
+        if (!wrapper || wrapper.state !== "initialized") {
+          return "";
+        }
+        if (wrapper.thread.getProviderStatus().type !== "idle") {
+          return "⏳";
+        }
+        return wrapper.thread.core.state.lastTurnResult?.type === "failed"
+          ? "✗"
+          : "✓";
+      },
       this.bufferManager,
       () => this.getActiveKey(),
       () => this.chat.isSandboxBypassed(this.chat.state.activeThreadId),
