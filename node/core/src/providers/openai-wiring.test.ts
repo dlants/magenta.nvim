@@ -81,9 +81,18 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
     maxConcurrentFastSubagents: 8,
     getAgents: () => ({}),
     getProvider: () => provider,
-    conversationLogBaseDir: path.join(os.tmpdir(), "magenta-test-archive"),
   };
-  return { core: new Thread("openai-thread" as ThreadId, context), client };
+  return {
+    core: new Thread(
+      "openai-thread" as ThreadId,
+      context,
+      { type: "fresh" },
+      {
+        baseDir: path.join(os.tmpdir(), "magenta-test-archive"),
+      },
+    ),
+    client,
+  };
 }
 
 describe("OpenAI provider wiring", () => {
@@ -93,7 +102,10 @@ describe("OpenAI provider wiring", () => {
 
   it("runs a Agent turn end to end, including a tool call", async () => {
     const { core, client } = createTestAgent();
-    core.sendMessage([{ type: "user", text: "do the task" }]);
+    // A titled thread doesn't fire the title request, which would otherwise be
+    // the most recent stream when the turn's own request is awaited below.
+    core.setTitle("test thread");
+    void core.send([{ type: "user", text: "do the task" }]);
 
     const stream = await client.awaitStream();
     expect(stream.instructions).toBeTruthy();

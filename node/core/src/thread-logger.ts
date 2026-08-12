@@ -75,7 +75,6 @@ export class ThreadLogger {
     threadId: ThreadId,
     threadType: ThreadType,
     private getMessages: () => ReadonlyArray<ProviderMessage>,
-    private getMessageCount: () => number,
     private logger: Logger,
     opts: ThreadLoggerOptions = {},
   ) {
@@ -117,23 +116,18 @@ export class ThreadLogger {
   }
 
   /**
-   * Flush completed messages during a turn. The final message may still be
-   * streaming, so it is withheld until `onTurnEnded`.
+   * Persist whatever is newly stable. A pure cursor-differ: it is driven by
+   * the thread's `onUpdate` and asks nothing of it but whether the thread is
+   * at rest, since the final message is still streaming until then and must
+   * be withheld.
    */
-  onUpdate(): void {
-    const stableCount = Math.max(0, this.getMessageCount() - 1);
+  record(atRest: boolean): void {
+    const messages = this.getMessages();
+    const stableCount = atRest
+      ? messages.length
+      : Math.max(0, messages.length - 1);
     if (stableCount > this.persistedCount) {
-      const messages = this.getMessages();
       this.flush(messages, stableCount);
-    }
-  }
-
-  /** Flush all messages once the turn has fully settled. */
-  onTurnEnded(): void {
-    const totalCount = this.getMessageCount();
-    if (totalCount > this.persistedCount) {
-      const messages = this.getMessages();
-      this.flush(messages, totalCount);
     }
   }
 

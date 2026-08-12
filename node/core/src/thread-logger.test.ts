@@ -65,14 +65,9 @@ describe("ThreadLogger", () => {
     const threadId = freshThreadId();
     const { logger } = makeLogger();
     const messages: ProviderMessage[] = [];
-    const tl = new ThreadLogger(
-      threadId,
-      "root",
-      () => messages,
-      () => messages.length,
-      logger,
-      { baseDir: TEST_BASE_DIR },
-    );
+    const tl = new ThreadLogger(threadId, "root", () => messages, logger, {
+      baseDir: TEST_BASE_DIR,
+    });
 
     tl.recordTitle("Hello");
     tl.recordTitle("Hello 2");
@@ -96,20 +91,15 @@ describe("ThreadLogger", () => {
     expect(titles.map((t) => t.title)).toEqual(["Hello", "Hello 2"]);
   });
 
-  it("withholds the streaming message on update and persists all on turn end, idempotently", async () => {
+  it("withholds the streaming message until at rest, then persists all, idempotently", async () => {
     const threadId = freshThreadId();
     const { logger } = makeLogger();
     const messages: ProviderMessage[] = [msg("a"), msg("b"), msg("c")];
-    const tl = new ThreadLogger(
-      threadId,
-      "root",
-      () => messages,
-      () => messages.length,
-      logger,
-      { baseDir: TEST_BASE_DIR },
-    );
+    const tl = new ThreadLogger(threadId, "root", () => messages, logger, {
+      baseDir: TEST_BASE_DIR,
+    });
 
-    tl.onUpdate();
+    tl.record(false);
     await tl.flushed();
 
     async function messageTexts(): Promise<string[]> {
@@ -133,21 +123,21 @@ describe("ThreadLogger", () => {
         .map((l) => l.message?.content?.[0]?.text ?? "");
     }
 
-    // onUpdate withholds the final (still-streaming) message: only a, b land.
+    // record(false) withholds the final (still-streaming) message: only a, b land.
     expect(await messageTexts()).toEqual(["a", "b"]);
 
-    // Repeated onUpdate is idempotent by cursor: no duplicates.
-    tl.onUpdate();
+    // Repeated record(false) is idempotent by cursor: no duplicates.
+    tl.record(false);
     await tl.flushed();
     expect(await messageTexts()).toEqual(["a", "b"]);
 
-    // onTurnEnded persists the withheld final message with no duplicates.
-    tl.onTurnEnded();
+    // record(true) persists the withheld final message with no duplicates.
+    tl.record(true);
     await tl.flushed();
     expect(await messageTexts()).toEqual(["a", "b", "c"]);
 
-    // Repeated onTurnEnded stays idempotent.
-    tl.onTurnEnded();
+    // Repeated record(true) stays idempotent.
+    tl.record(true);
     await tl.flushed();
     expect(await messageTexts()).toEqual(["a", "b", "c"]);
   });
@@ -156,14 +146,9 @@ describe("ThreadLogger", () => {
     const threadId = freshThreadId();
     const { logger, errors } = makeLogger();
     const messages: ProviderMessage[] = [];
-    const tl = new ThreadLogger(
-      threadId,
-      "root",
-      () => messages,
-      () => messages.length,
-      logger,
-      { baseDir: TEST_BASE_DIR },
-    );
+    const tl = new ThreadLogger(threadId, "root", () => messages, logger, {
+      baseDir: TEST_BASE_DIR,
+    });
     await tl.flushed();
 
     // Replace the thread dir with a file so the meta.json write fails.
@@ -185,14 +170,9 @@ describe("ThreadLogger", () => {
     const threadId = freshThreadId();
     const { logger, errors } = makeLogger();
     const messages: ProviderMessage[] = [];
-    const tl = new ThreadLogger(
-      threadId,
-      "root",
-      () => messages,
-      () => messages.length,
-      logger,
-      { baseDir: TEST_BASE_DIR },
-    );
+    const tl = new ThreadLogger(threadId, "root", () => messages, logger, {
+      baseDir: TEST_BASE_DIR,
+    });
     await tl.flushed();
 
     // Replace the thread dir with a file so subsequent appends fail.
@@ -204,7 +184,7 @@ describe("ThreadLogger", () => {
     await fs.writeFile(dir, "not a dir");
 
     messages.push(msg("a"));
-    expect(() => tl.onTurnEnded()).not.toThrow();
+    expect(() => tl.record(true)).not.toThrow();
     await tl.flushed();
     expect(errors.length).toBeGreaterThan(0);
 

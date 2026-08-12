@@ -791,7 +791,7 @@ describe("foreach-style parallel agents", () => {
         // Manually recover the errored subagent (this simulates the
         // auto-resubmit mechanism that a later stage will add).
         childWrapper.thread.core.discardFailedSubmit();
-        await childWrapper.thread.core.sendMessage([
+        void childWrapper.thread.core.send([
           { type: "user", text: "error_task" },
         ]);
 

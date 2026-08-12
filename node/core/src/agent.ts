@@ -53,7 +53,7 @@ import {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
-import type { YieldValue } from "./thread-api.ts";
+import type { SendResult, YieldValue } from "./thread-api.ts";
 import {
   type EndTurnAction,
   type EndTurnContext,
@@ -76,6 +76,7 @@ import * as Scratchpad from "./tools/scratchpad.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
+import { Defer } from "./utils/async.ts";
 import type { AbsFilePath, HomeDir, NvimCwd } from "./utils/files.ts";
 
 export type InputMessage =
@@ -174,10 +175,6 @@ export interface AgentContext {
   getProvider: (profile: ProviderProfile) => Provider;
   initialFiles?: Files;
   yieldSchema?: JSONSchemaType;
-  /** Base dir for the conversation archive. Defaults to MAGENTA_TEMP_DIR. */
-  conversationLogBaseDir?: string;
-  /** Name of the magenta script that spawned this thread, if any. */
-  scriptName?: string;
 }
 
 /** Minimum output tokens between system reminders during auto-respond loops */
@@ -278,7 +275,6 @@ export interface AgentDeps {
   gitTracker: GitTracker;
   structuredToolResults: Map<ToolRequestId, ToolStructuredResult>;
   getSupervisors: () => ThreadSupervisor[];
-  requestCompaction: (nextPrompt?: string) => void;
   /** Whether this agent drives a brand-new runner or one cloned from another
    * thread's history. */
   runnerInit:
@@ -291,6 +287,23 @@ export interface AgentDeps {
         truncateTo: NativeMessageIdx;
       };
 }
+
+/** Where a submission ends up. `compact` is not a `SendResult`: the agent has
+ * stopped, but the submission is not over — the owning `Thread` runs the
+ * handoff and keeps the caller's promise pending across it. */
+export type SubmitOptions = {
+  /** Skip context updates, reminders and failed-submit bookkeeping: the caller
+   * has composed the exact content (the compact thread). */
+  raw?: boolean;
+  /** Called once the request has actually been handed to the provider, for
+   * effects that need the new message to exist. Stage 5 moves the one
+   * remaining such effect — the scroll — to the actor that called `send`. */
+  onIssued?: () => void;
+};
+
+export type AgentSendOutcome =
+  | SendResult
+  | { type: "compact"; nextPrompt: string | undefined };
 
 export class Agent extends Emitter<AgentEvents> {
   public state: ThreadState;
@@ -689,7 +702,7 @@ export class Agent extends Emitter<AgentEvents> {
     this.suspendReason = undefined;
     if (!reason) return;
     if (reason.type === "compact") {
-      this.deps.requestCompaction(reason.nextPrompt);
+      this.settle({ type: "compact", nextPrompt: reason.nextPrompt });
       return;
     }
     await this.handleYield(reason.result);
@@ -713,12 +726,14 @@ export class Agent extends Emitter<AgentEvents> {
     }
     const compaction = requestedCompaction(request);
     if (compaction) {
-      this.deps.requestCompaction(compaction.nextPrompt);
+      // The submission is not over: the owning Thread runs the handoff and
+      // continues it on the replacement agent.
+      this.settle({ type: "compact", nextPrompt: compaction.nextPrompt });
       return;
     }
 
     if (stopReason === "max_tokens") {
-      await this.sendMessage([
+      await this.submit([
         {
           type: "system",
           text: "Your previous response was truncated due to the output token limit. Please continue where you left off.",
@@ -738,7 +753,7 @@ export class Agent extends Emitter<AgentEvents> {
       ];
       this.update({ type: "drain-pending-messages" }, { silent: true });
       this.update({ type: "drain-pending-next-messages" }, { silent: true });
-      await this.sendMessage(pendingMessages);
+      await this.submit(pendingMessages);
       return;
     }
 
@@ -747,12 +762,13 @@ export class Agent extends Emitter<AgentEvents> {
       lastAssistantMessage: this.getLastAssistantMessage(),
     });
     if (action.type === "send-message") {
-      await this.sendMessage([{ type: "system", text: action.text }]);
+      await this.submit([{ type: "system", text: action.text }]);
       return;
     }
 
     this.emit("playChime");
     this.emit("turnEnded", { reason: "end_turn" });
+    this.settle({ type: "completed" });
   }
 
   private createToolContext(): CreateToolContext {
@@ -966,6 +982,15 @@ export class Agent extends Emitter<AgentEvents> {
     }
     this.context.logger.error(error);
     this.emit("turnEnded", { reason: "error" });
+    // A scheduled auto-resubmit means the submission is still going; only a
+    // submission that has come to rest in an error state settles.
+    if (this.errorRetry?.timer === undefined) {
+      this.settle({
+        type: "failed",
+        error,
+        resubmit: isUserFacing && userMessage ? userMessage : undefined,
+      });
+    }
   }
 
   /** For subagent/compact threads (no human to manually resubmit), retry a
@@ -1001,7 +1026,7 @@ export class Agent extends Emitter<AgentEvents> {
           this.errorRetry.timer = undefined;
         }
         this.discardFailedSubmit();
-        this.sendMessage([{ type: "user", text: userMessage }]).catch(
+        this.submit([{ type: "user", text: userMessage }]).catch(
           this.handleSendMessageError.bind(this),
         );
       }, delay),
@@ -1045,6 +1070,7 @@ export class Agent extends Emitter<AgentEvents> {
     this.recoverPendingMessagesOnAbort();
     this.update({ type: "set-mode", mode: { type: "normal" } });
     this.emit("turnEnded", { reason: "aborted" });
+    this.settle({ type: "aborted" });
   }
 
   private recoverPendingMessagesOnAbort(): void {
@@ -1067,11 +1093,66 @@ export class Agent extends Emitter<AgentEvents> {
     }
   }
 
-  async sendMessage(inputMessages?: InputMessage[]): Promise<void> {
+  /** The submission currently in flight, settled at the moment the agent comes
+   * to rest. Internal continuations — auto-respond, supervisor nudges, the
+   * max_tokens continue-prompt, a rejected yield — deliberately leave it
+   * pending, so exactly one outcome is delivered per `send`. */
+  private submission: Defer<AgentSendOutcome> | undefined;
+
+  /** Issue a submission and resolve once the agent comes to rest.
+   *
+   * `raw` skips context updates, reminders and the failed-submit bookkeeping:
+   * it is how the compact thread talks to the provider, where the caller has
+   * already composed the exact content. */
+  send(
+    inputMessages?: InputMessage[],
+    opts: SubmitOptions = {},
+  ): Promise<AgentSendOutcome> {
     if (this.state.mode.type === "yielded" && this.state.mode.tornDown) {
-      throw new Error(
-        "This thread's container has been torn down. No further messages can be sent.",
+      return Promise.reject(
+        new Error(
+          "This thread's container has been torn down. No further messages can be sent.",
+        ),
       );
+    }
+    const deferred = new Defer<AgentSendOutcome>();
+    this.submission = deferred;
+    this.submit(inputMessages, opts).catch((error: Error) => {
+      this.handleSendMessageError(error);
+      this.settle({ type: "failed", error, resubmit: undefined });
+    });
+    return deferred.promise;
+  }
+
+  /** Deliver the outcome of the in-flight submission, if any. The final
+   * `update` goes out first so a trailing-edge debouncer paints the terminal
+   * state before the caller sees the result. */
+  private settle(outcome: AgentSendOutcome): void {
+    const deferred = this.submission;
+    this.submission = undefined;
+    this.emit("update");
+    deferred?.resolve(outcome);
+  }
+
+  /** Compose and issue one provider request. Called both by `send` and by the
+   * internal continuations, which is why it never touches `submission`. */
+  private async submit(
+    inputMessages?: InputMessage[],
+    opts: SubmitOptions = {},
+  ): Promise<void> {
+    if (opts.raw) {
+      const rawContent: AgentInput[] = (inputMessages ?? []).map((m) => ({
+        type: "text" as const,
+        text: m.text,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      }));
+      if (rawContent.length === 0) {
+        this.settle({ type: "completed" });
+        return;
+      }
+      void this.runTurn(rawContent);
+      opts.onIssued?.();
+      return;
     }
 
     if (this.state.failedSubmit !== undefined) {
@@ -1092,6 +1173,7 @@ export class Agent extends Emitter<AgentEvents> {
     const { content, hasContent } = this.prepareUserContent(inputMessages);
 
     if (!hasContent && contextContent.length === 0) {
+      this.settle({ type: "completed" });
       return;
     }
 
@@ -1124,6 +1206,7 @@ export class Agent extends Emitter<AgentEvents> {
     );
     this.emit("update");
     void this.runTurn(contentToSend);
+    opts.onIssued?.();
   }
 
   private getLastAssistantMessage():
@@ -1152,6 +1235,7 @@ export class Agent extends Emitter<AgentEvents> {
           type: "set-mode",
           mode: { type: "yielded", response, tornDown: true },
         });
+        this.settleYield(response);
         break;
       }
       case "none":
@@ -1159,16 +1243,27 @@ export class Agent extends Emitter<AgentEvents> {
           type: "set-mode",
           mode: { type: "yielded", response: yieldResult },
         });
+        this.settleYield(yieldResult);
         break;
       case "reject":
-        await this.sendMessage([{ type: "system", text: action.message }]);
+        await this.submit([{ type: "system", text: action.message }]);
         return;
       case "send-message":
-        await this.sendMessage([{ type: "system", text: action.text }]);
+        await this.submit([{ type: "system", text: action.text }]);
         return;
       default:
         assertUnreachable(action);
     }
+  }
+
+  /** A yield is the end of the submission that produced it. The value was
+   * minted where the tool's input was still structured, so nothing here has to
+   * parse the response text back. */
+  private settleYield(response: string): void {
+    this.settle({
+      type: "yielded",
+      value: this.state.lastYieldValue ?? { type: "text", text: response },
+    });
   }
 
   private async getAndPrepareContextUpdates(): Promise<{
@@ -1366,18 +1461,6 @@ export class Agent extends Emitter<AgentEvents> {
       content: messageContent,
       hasContent: (inputMessages?.length ?? 0) > 0,
     };
-  }
-
-  sendRawMessage(messages: InputMessage[]): void {
-    const contentToSend: AgentInput[] = messages.map((m) => ({
-      type: "text" as const,
-      text: m.text,
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    }));
-
-    if (contentToSend.length === 0) return;
-
-    void this.runTurn(contentToSend);
   }
 
   private consultEndTurnSupervisors(context: EndTurnContext): EndTurnAction {

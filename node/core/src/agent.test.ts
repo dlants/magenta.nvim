@@ -13,7 +13,10 @@ import {
   AnthropicRunner,
   type AnthropicRunnerOptions,
 } from "./providers/anthropic-runner.ts";
-import { MockAnthropicClient } from "./providers/mock-anthropic-client.ts";
+import {
+  MockAnthropicClient,
+  type MockStream,
+} from "./providers/mock-anthropic-client.ts";
 import type {
   AgentOptions,
   Provider,
@@ -68,6 +71,20 @@ function createMockProvider(mockClient: MockAnthropicClient): Provider {
   };
 }
 
+/** Wait for a stream other than `prev`. `awaitStream` returns the most recent
+ * stream, which is still the previous one until the next submission has been
+ * issued — and `send` now resolves at rest rather than at issue time. */
+function awaitNextStream(
+  mockClient: MockAnthropicClient,
+  prev: unknown,
+): Promise<MockStream> {
+  return pollUntil(() => {
+    const stream = mockClient.streams[mockClient.streams.length - 1];
+    if (stream && stream !== prev && !stream.aborted) return stream;
+    throw new Error("waiting for a new stream");
+  });
+}
+
 function createAgentWithMock(
   overrides?: Partial<AgentContext>,
   threadId: ThreadId = "test-thread" as ThreadId,
@@ -120,12 +137,18 @@ function createAgentWithMock(
     maxConcurrentFastSubagents: 8,
     getAgents: () => ({}),
     getProvider: () => provider,
-    conversationLogBaseDir: TEST_ARCHIVE_DIR,
     ...overrides,
   };
 
   return {
-    core: new Thread(threadId, context),
+    core: new Thread(
+      threadId,
+      context,
+      { type: "fresh" },
+      {
+        baseDir: TEST_ARCHIVE_DIR,
+      },
+    ),
     mockClient,
     context,
   };
@@ -138,7 +161,7 @@ describe("Thread.phase", () => {
   });
   it("is running/streaming during a turn and idle/completed after it", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     await pollUntil(() => {
       if (core.phase.type === "running") return true;
@@ -160,7 +183,7 @@ describe("Thread.phase", () => {
   });
   it("reports a failed submission as idle with the resubmit text", async () => {
     const { core, mockClient } = createAgentWithMock();
-    await core.sendMessage([{ type: "user", text: "find the bug" }]);
+    void core.send([{ type: "user", text: "find the bug" }]);
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("provider failure"));
     await pollUntil(() => {
@@ -177,7 +200,7 @@ describe("Thread.phase", () => {
 
   it("reports an aborted turn as idle with an aborted result", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial");
     await core.abort();
@@ -220,7 +243,7 @@ describe("Thread.phase", () => {
         required: ["count"],
       },
     });
-    core.sendMessage([{ type: "user", text: "do the task" }]);
+    void core.send([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(
       "tool-phase-structured" as ToolRequestId,
@@ -245,7 +268,7 @@ describe("Thread.phase", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    core.sendMessage([{ type: "user", text: "do the task" }]);
+    void core.send([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(
       "tool-phase-yield" as ToolRequestId,
@@ -269,7 +292,7 @@ describe("Agent.handleProviderStopped", () => {
       threadType: "subagent" as ThreadType,
     });
 
-    core.sendMessage([{ type: "user", text: "do the task" }]);
+    void core.send([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
 
     const toolUseId = "tool-yield-1" as ToolRequestId;
@@ -305,7 +328,7 @@ describe("Agent.handleProviderStopped", () => {
       },
     });
 
-    core.sendMessage([{ type: "user", text: "do the task" }]);
+    void core.send([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
 
     const toolUseId = "tool-yield-structured" as ToolRequestId;
@@ -329,7 +352,7 @@ describe("Agent.handleProviderStopped", () => {
   it("max_tokens with truncated (incomplete) tool_use block sends error tool_result and auto-continues", async () => {
     const { core, mockClient } = createAgentWithMock();
 
-    core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
 
     const toolUseId = "tool-1" as ToolRequestId;
@@ -398,7 +421,7 @@ describe("Agent.handleProviderStopped", () => {
   it("max_tokens with text-only content sends continuation prompt", async () => {
     const { core, mockClient } = createAgentWithMock();
 
-    core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
 
     // Stream only text, then stop with max_tokens
@@ -428,7 +451,7 @@ describe("Agent.abort on yielded thread", () => {
       threadType: "subagent" as ThreadType,
     });
 
-    core.sendMessage([{ type: "user", text: "do the task" }]);
+    void core.send([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
 
     const toolUseId = "tool-yield-1" as ToolRequestId;
@@ -463,7 +486,7 @@ describe("Agent.abort appends user abort message", () => {
   it("appends abort message when aborting during streaming", async () => {
     const { core, mockClient } = createAgentWithMock();
 
-    core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
 
     // Start streaming text but don't finish
@@ -503,7 +526,7 @@ describe("Agent.abort appends user abort message", () => {
       } as unknown as AgentContext["fileIO"],
     });
 
-    core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
 
     const toolUseId = "tool-abort-1" as ToolRequestId;
@@ -562,7 +585,7 @@ describe("Agent.abort recovers pending messages", () => {
       recovered.push({ threadId, text });
     });
 
-    core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
 
@@ -589,7 +612,7 @@ describe("Agent.abort recovers pending messages", () => {
       recovered.push({ threadId, text });
     });
 
-    core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
 
@@ -605,7 +628,7 @@ describe("Agent.abort recovers pending messages", () => {
     core.on("recoverPendingMessages", (threadId, text) => {
       recovered.push({ threadId, text });
     });
-    core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
     core.update({
@@ -629,7 +652,7 @@ describe("Agent.abort recovers pending messages", () => {
       recovered.push({ threadId, text });
     });
 
-    core.sendMessage([{ type: "user", text: "do the task" }]);
+    void core.send([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
 
@@ -652,7 +675,7 @@ describe("SubagentSupervisor yield tag detection", () => {
     });
     core.supervisors = [new SubagentSupervisor()];
 
-    core.sendMessage([{ type: "user", text: "do the task" }]);
+    void core.send([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
 
     // Runner writes a <yield> tag in text instead of calling the tool
@@ -686,7 +709,7 @@ describe("SubagentSupervisor yield tag detection", () => {
     });
     core.supervisors = [new SubagentSupervisor()];
 
-    core.sendMessage([{ type: "user", text: "do the task" }]);
+    void core.send([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
 
     // Runner responds with normal text and stops
@@ -708,11 +731,12 @@ describe("AutoCompactSupervisor integration", () => {
     mockClient.mockInputTokenCount = 200;
 
     let compactCalls = 0;
-    core.startCompaction = () => {
+    core.compact = () => {
       compactCalls++;
+      return Promise.resolve({ type: "completed" as const });
     };
 
-    await core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("done");
     stream.finishResponse("end_turn");
@@ -724,8 +748,8 @@ describe("AutoCompactSupervisor integration", () => {
       throw new Error("waiting for token count");
     });
 
-    await core.sendMessage([{ type: "user", text: "again" }]);
-    const stream2 = await mockClient.awaitStream();
+    void core.send([{ type: "user", text: "again" }]);
+    const stream2 = await awaitNextStream(mockClient, stream);
     stream2.streamText("done again");
     stream2.finishResponse("end_turn");
 
@@ -745,11 +769,12 @@ describe("AutoCompactSupervisor integration", () => {
     mockClient.mockInputTokenCount = 50;
 
     let compactCalls = 0;
-    core.startCompaction = () => {
+    core.compact = () => {
       compactCalls++;
+      return Promise.resolve({ type: "completed" as const });
     };
 
-    await core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("done");
     stream.finishResponse("end_turn", { inputTokens: 50, outputTokens: 5 });
@@ -773,12 +798,13 @@ describe("AutoCompactSupervisor integration", () => {
     mockClient.mockInputTokenCount = 200;
 
     let compactCalls = 0;
-    core.startCompaction = () => {
+    core.compact = () => {
       compactCalls++;
+      return Promise.resolve({ type: "completed" as const });
     };
 
     // First turn populates the post-flight inputTokenCount.
-    await core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("done");
     stream.finishResponse("end_turn");
@@ -790,8 +816,8 @@ describe("AutoCompactSupervisor integration", () => {
     // Second turn ends with a tool_use. After the tool resolves, the tool_use
     // handoff sees the over-threshold count and triggers compaction rather
     // than continuing the conversation.
-    await core.sendMessage([{ type: "user", text: "edit a" }]);
-    const stream2 = await mockClient.awaitStream();
+    void core.send([{ type: "user", text: "edit a" }]);
+    const stream2 = await awaitNextStream(mockClient, stream);
     stream2.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
       script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
     });
@@ -812,11 +838,12 @@ describe("AutoCompactSupervisor integration", () => {
     mockClient.mockInputTokenCount = 200;
 
     let compactCalls = 0;
-    core.startCompaction = () => {
+    core.compact = () => {
       compactCalls++;
+      return Promise.resolve({ type: "completed" as const });
     };
 
-    await core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("done");
     stream.finishResponse("end_turn");
@@ -827,8 +854,8 @@ describe("AutoCompactSupervisor integration", () => {
 
     // A max_tokens stop without a tool_use block routes through the handoff
     // check before the truncation-continue path.
-    await core.sendMessage([{ type: "user", text: "again" }]);
-    const stream2 = await mockClient.awaitStream();
+    void core.send([{ type: "user", text: "again" }]);
+    const stream2 = await awaitNextStream(mockClient, stream);
     stream2.streamText("partial");
     stream2.finishResponse("max_tokens");
 
@@ -855,7 +882,7 @@ describe("AutoCompactSupervisor integration", () => {
         },
       },
     ];
-    await core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("done");
     stream.finishResponse("end_turn");
@@ -863,8 +890,8 @@ describe("AutoCompactSupervisor integration", () => {
       if (injected) return true;
       throw new Error("waiting for injection");
     });
-    await core.sendMessage([{ type: "user", text: "next" }]);
-    const stream2 = await mockClient.awaitStream();
+    void core.send([{ type: "user", text: "next" }]);
+    const stream2 = await awaitNextStream(mockClient, stream);
     expect(JSON.stringify(stream2.messages)).toContain("remember this");
     stream2.streamText("ok");
     stream2.finishResponse("end_turn");
@@ -888,11 +915,12 @@ describe("AutoCompactSupervisor integration", () => {
     ];
     let compactPrompt: string | undefined = "unset";
     let compactCalls = 0;
-    core.startCompaction = (p?: string) => {
+    core.compact = (p?: string) => {
       compactCalls++;
       compactPrompt = p;
+      return Promise.resolve({ type: "completed" as const });
     };
-    await core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial");
     // max_tokens would otherwise trigger the continue-prompt; compaction wins.
@@ -930,11 +958,12 @@ describe("AutoCompactSupervisor integration", () => {
     core.supervisors = [first, second, third];
 
     let compactPrompt: string | undefined = "unset";
-    core.startCompaction = (p?: string) => {
+    core.compact = (p?: string) => {
       compactPrompt = p;
+      return Promise.resolve({ type: "completed" as const });
     };
 
-    await core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("done");
     stream.finishResponse("end_turn");
@@ -956,7 +985,7 @@ describe("Agent.turnEnded event", () => {
     const events: Array<{ reason: string }> = [];
     core.on("turnEnded", (payload) => events.push(payload));
 
-    await core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("done");
     stream.finishResponse("end_turn");
@@ -974,7 +1003,7 @@ describe("Agent.turnEnded event", () => {
     const events: Array<{ reason: string }> = [];
     core.on("turnEnded", (payload) => events.push(payload));
 
-    await core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial");
 
@@ -988,7 +1017,7 @@ describe("Agent.turnEnded event", () => {
     const events: Array<{ reason: string }> = [];
     core.on("turnEnded", (payload) => events.push(payload));
 
-    await core.sendMessage([{ type: "user", text: "hello" }]);
+    void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("provider failure"));
 
@@ -1010,7 +1039,7 @@ describe("Agent.editedFilesThisTurn", () => {
 
     expect(core.state.editedFilesThisTurn).toEqual([]);
 
-    await core.sendMessage([{ type: "user", text: "edit a" }]);
+    void core.send([{ type: "user", text: "edit a" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
       script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
@@ -1027,7 +1056,8 @@ describe("Agent.editedFilesThisTurn", () => {
       { path: "/tmp/a.txt", snapshot: "hello" },
     ]);
 
-    await core.sendMessage([{ type: "user", text: "next turn" }]);
+    void core.send([{ type: "user", text: "next turn" }]);
+    await mockClient.awaitStream();
     expect(core.state.editedFilesThisTurn).toEqual([]);
   });
 
@@ -1036,7 +1066,7 @@ describe("Agent.editedFilesThisTurn", () => {
     const { core, mockClient } = createAgentWithMock({
       fileIO: fileIO as unknown as AgentContext["fileIO"],
     });
-    await core.sendMessage([{ type: "user", text: "edit a" }]);
+    void core.send([{ type: "user", text: "edit a" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
       script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
@@ -1048,7 +1078,7 @@ describe("Agent.editedFilesThisTurn", () => {
         `waiting for 1 edited file, got ${core.state.editedFilesThisTurn.length}`,
       );
     });
-    const stream2 = await mockClient.awaitStream();
+    const stream2 = await awaitNextStream(mockClient, stream);
     stream2.streamToolUse("edl-2" as ToolRequestId, "edl" as ToolName, {
       script: `file \`/tmp/a.txt\`\nnarrow /bye/\nreplace "done"`,
     });
@@ -1138,7 +1168,7 @@ describe("Agent bash summary reminder", () => {
       shell: shell as unknown as AgentContext["shell"],
     });
 
-    await core.sendMessage([{ type: "user", text: "run a thing" }]);
+    void core.send([{ type: "user", text: "run a thing" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(
       "tool-bash-1" as ToolRequestId,
@@ -1163,7 +1193,7 @@ describe("Agent bash summary reminder", () => {
       shell: shell as unknown as AgentContext["shell"],
     });
 
-    await core.sendMessage([{ type: "user", text: "run a thing" }]);
+    void core.send([{ type: "user", text: "run a thing" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(
       "tool-bash-1" as ToolRequestId,
@@ -1213,7 +1243,7 @@ describe("Agent bash summary reminder", () => {
     });
 
     // First abbreviated bash → reminder should fire
-    await core.sendMessage([{ type: "user", text: "first" }]);
+    void core.send([{ type: "user", text: "first" }]);
     const stream1 = await mockClient.awaitStream();
     stream1.streamToolUse(
       "tool-bash-1" as ToolRequestId,
@@ -1400,7 +1430,7 @@ describe("Agent non-retryable error resubmit flow", () => {
       events.push({ threadId, text });
     });
 
-    await core.sendMessage([{ type: "user", text: "find the bug" }]);
+    void core.send([{ type: "user", text: "find the bug" }]);
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("provider failure"));
 
@@ -1425,7 +1455,7 @@ describe("Agent non-retryable error resubmit flow", () => {
       events.push({ threadId, text });
     });
 
-    await core.sendMessage([{ type: "user", text: "subagent task" }]);
+    void core.send([{ type: "user", text: "subagent task" }]);
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("subagent provider failure"));
 
@@ -1445,10 +1475,9 @@ describe("Agent non-retryable error resubmit flow", () => {
 
     expect(core.state.preSubmitNativeIdx).toBeUndefined();
 
-    await core.sendMessage([{ type: "user", text: "first message" }]);
-    expect(core.state.preSubmitNativeIdx).toBe(-1);
-
+    void core.send([{ type: "user", text: "first message" }]);
     const stream = await mockClient.awaitStream();
+    expect(core.state.preSubmitNativeIdx).toBe(-1);
     stream.streamText("hi");
     stream.finishResponse("end_turn");
 
@@ -1458,22 +1487,22 @@ describe("Agent non-retryable error resubmit flow", () => {
       throw new Error("waiting for assistant message");
     });
 
-    await core.sendMessage([{ type: "user", text: "second message" }]);
+    void core.send([{ type: "user", text: "second message" }]);
+    await awaitNextStream(mockClient, stream);
     expect(core.state.preSubmitNativeIdx).toBe(1);
   });
 
   it("rolls back queued pending-message text alongside the in-flight user message on error", async () => {
     const { core, mockClient } = createAgentWithMock();
 
-    await core.sendMessage([{ type: "user", text: "find the bug" }]);
+    void core.send([{ type: "user", text: "find the bug" }]);
     const stream = await mockClient.awaitStream();
 
     // While the agent is busy streaming, queue an additional async message —
     // this lands in pendingMessages rather than being sent immediately.
-    await core.handleSendMessageRequest(
-      [{ type: "user", text: "also check the logs" }],
-      "async",
-    );
+    void core.send([{ type: "user", text: "also check the logs" }], {
+      queue: "async",
+    });
     expect(core.state.pendingMessages).toHaveLength(1);
 
     stream.respondWithError(new Error("provider failure"));
@@ -1492,7 +1521,7 @@ describe("Agent non-retryable error resubmit flow", () => {
   it("after non-retryable error, preSubmitNativeIdx remains set and orphan user message remains in history", async () => {
     const { core, mockClient } = createAgentWithMock();
 
-    await core.sendMessage([{ type: "user", text: "find the bug" }]);
+    void core.send([{ type: "user", text: "find the bug" }]);
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("provider failure"));
 
@@ -1512,7 +1541,7 @@ describe("Agent non-retryable error resubmit flow", () => {
   it("discardFailedSubmit truncates agent history back to pre-submit and clears preSubmitNativeIdx but keeps failedSubmit", async () => {
     const { core, mockClient } = createAgentWithMock();
 
-    await core.sendMessage([{ type: "user", text: "find the bug" }]);
+    void core.send([{ type: "user", text: "find the bug" }]);
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("provider failure"));
 
@@ -1540,7 +1569,7 @@ describe("Agent non-retryable error resubmit flow", () => {
   it("after error + discardFailedSubmit, resubmit does not duplicate the user message and resets state", async () => {
     const { core, mockClient } = createAgentWithMock();
 
-    await core.sendMessage([{ type: "user", text: "find the bug" }]);
+    void core.send([{ type: "user", text: "find the bug" }]);
     const firstStream = await mockClient.awaitStream();
     firstStream.respondWithError(new Error("provider failure"));
 
@@ -1557,7 +1586,7 @@ describe("Agent non-retryable error resubmit flow", () => {
     expect(core.state.preSubmitNativeIdx).toBeUndefined();
     expect(core.state.failedSubmit?.userMessage).toContain("find the bug");
 
-    await core.sendMessage([{ type: "user", text: "find the bug" }]);
+    void core.send([{ type: "user", text: "find the bug" }]);
     const secondStream = await pollUntil(() => {
       const s = mockClient.streams[mockClient.streams.length - 1];
       if (s && s !== firstStream) return s;
@@ -1596,7 +1625,8 @@ describe("Agent auto-resubmit for non-user-facing threads (Stage 2)", () => {
       setupResubmitEvents.push({ threadId, text });
     });
 
-    await core.sendMessage([{ type: "user", text: "flaky task" }]);
+    void core.send([{ type: "user", text: "flaky task" }]);
+    await vi.advanceTimersByTimeAsync(0);
     const firstStream = await mockClient.awaitStream();
 
     // Bypass the agent's own mid-stream retry budget so this error is
@@ -1639,7 +1669,8 @@ describe("Agent auto-resubmit for non-user-facing threads (Stage 2)", () => {
       threadType: "subagent" as ThreadType,
     });
 
-    await core.sendMessage([{ type: "user", text: "doomed task" }]);
+    void core.send([{ type: "user", text: "doomed task" }]);
+    await vi.advanceTimersByTimeAsync(0);
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("subagent provider failure"));
     await vi.advanceTimersByTimeAsync(0);
@@ -1659,7 +1690,8 @@ describe("Agent auto-resubmit for non-user-facing threads (Stage 2)", () => {
       threadType: "subagent" as ThreadType,
     });
 
-    await core.sendMessage([{ type: "user", text: "flaky task" }]);
+    void core.send([{ type: "user", text: "flaky task" }]);
+    await vi.advanceTimersByTimeAsync(0);
     let stream = await mockClient.awaitStream();
 
     // Bypass the agent's own mid-stream retry budget so each error is
@@ -1702,7 +1734,8 @@ describe("Agent auto-resubmit for non-user-facing threads (Stage 2)", () => {
       threadType: "subagent" as ThreadType,
     });
 
-    await core.sendMessage([{ type: "user", text: "flaky task" }]);
+    void core.send([{ type: "user", text: "flaky task" }]);
+    await vi.advanceTimersByTimeAsync(0);
     const stream = await mockClient.awaitStream();
 
     // Bypass the agent's own mid-stream retry budget so this error is
@@ -1779,7 +1812,7 @@ describe("Agent conversation archive", () => {
     const { core, mockClient } = createAgentWithMock({ fileIO }, threadId);
 
     try {
-      await core.sendMessage([{ type: "user", text: "edit a" }]);
+      void core.send([{ type: "user", text: "edit a" }]);
       const stream = await mockClient.awaitStream();
       stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
         script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
@@ -1819,7 +1852,7 @@ describe("Agent conversation archive", () => {
     const { core, mockClient } = createAgentWithMock({ fileIO }, threadId);
 
     try {
-      await core.sendMessage([{ type: "user", text: "edit a" }]);
+      void core.send([{ type: "user", text: "edit a" }]);
       const stream = await mockClient.awaitStream();
       stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
         script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
@@ -1865,7 +1898,7 @@ describe("Agent conversation archive", () => {
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
 
     try {
-      await core.sendMessage([{ type: "user", text: "first turn" }]);
+      void core.send([{ type: "user", text: "first turn" }]);
       const stream = await mockClient.awaitStream();
       stream.streamText("done");
       stream.finishResponse("end_turn");
@@ -1929,7 +1962,7 @@ describe("Agent conversation archive", () => {
 
     let child: Thread | undefined;
     try {
-      await parent.sendMessage([{ type: "user", text: "parent turn" }]);
+      void parent.send([{ type: "user", text: "parent turn" }]);
       const stream = await mockClient.awaitStream();
       stream.streamText("parent response");
       stream.finishResponse("end_turn");
@@ -1947,7 +1980,7 @@ describe("Agent conversation archive", () => {
         context,
       });
 
-      await child.sendMessage([{ type: "user", text: "child turn" }]);
+      void child.send([{ type: "user", text: "child turn" }]);
       const childStream = await pollUntil(() => {
         const s = mockClient.streams[mockClient.streams.length - 1];
         if (!s || s === stream) throw new Error("waiting");
@@ -2019,7 +2052,7 @@ describe("Agent scratchpad state", () => {
     const threadId = uniqueThreadId("sp-compact-survive");
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
     try {
-      await core.sendMessage([{ type: "user", text: "first turn" }]);
+      void core.send([{ type: "user", text: "first turn" }]);
       const stream = await mockClient.awaitStream();
       stream.streamText("done");
       stream.finishResponse("end_turn");
@@ -2073,7 +2106,7 @@ describe("Agent scratchpad state", () => {
 
     let child: Thread | undefined;
     try {
-      await parent.sendMessage([{ type: "user", text: "parent turn" }]);
+      void parent.send([{ type: "user", text: "parent turn" }]);
       const stream = await mockClient.awaitStream();
       stream.streamText("parent response");
       stream.finishResponse("end_turn");

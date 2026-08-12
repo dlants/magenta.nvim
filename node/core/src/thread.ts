@@ -4,6 +4,7 @@ import {
   type AgentContext,
   type AgentDeps,
   type AgentEvents,
+  type AgentSendOutcome,
   type InputMessage,
   type ThreadState,
 } from "./agent.ts";
@@ -27,19 +28,28 @@ import type {
   Runner,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import type { SendResult, ThreadPhase } from "./thread-api.ts";
+import type { SendOptions, SendResult, ThreadPhase } from "./thread-api.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type { ThreadSupervisor } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
 import * as Scratchpad from "./tools/scratchpad.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
+import { Defer } from "./utils/async.ts";
 
 const CONTEXT_MANAGER_POLL_INTERVAL_MS = 1000;
 
 /** How a `Thread` comes into being: either brand new, or forked from another
  * thread's history — in which case the cloned runner, its provenance and the
  * inherited scratchpad/registers all arrive together. */
+/** Archive placement for a thread's conversation log. */
+export type ThreadArchiveOptions = {
+  /** Base dir for the conversation archive. Defaults to MAGENTA_TEMP_DIR. */
+  baseDir?: string;
+  /** Name of the magenta script that spawned this thread, if any. */
+  scriptName?: string;
+};
+
 export type ThreadInit =
   | { type: "fresh" }
   | {
@@ -80,6 +90,9 @@ export class Thread extends Emitter<AgentEvents> {
     public id: ThreadId,
     private context: AgentContext,
     init: ThreadInit = { type: "fresh" },
+    /** Where this thread's conversation archive goes. Archive plumbing, not
+     * agent configuration, so it is not part of the context bag. */
+    private archiveOptions: ThreadArchiveOptions = {},
   ) {
     super();
     const forkProvenance = init.type === "clone" ? init.provenance : undefined;
@@ -87,14 +100,13 @@ export class Thread extends Emitter<AgentEvents> {
       id,
       context.threadType,
       () => this.getProviderMessages(),
-      () => this.getProviderMessages().length,
       context.logger,
       {
-        ...(context.conversationLogBaseDir !== undefined
-          ? { baseDir: context.conversationLogBaseDir }
+        ...(archiveOptions.baseDir !== undefined
+          ? { baseDir: archiveOptions.baseDir }
           : {}),
-        ...(context.scriptName !== undefined
-          ? { scriptName: context.scriptName }
+        ...(archiveOptions.scriptName !== undefined
+          ? { scriptName: archiveOptions.scriptName }
           : {}),
         cwd: context.cwd,
         ...(forkProvenance ? { forkedFrom: forkProvenance } : {}),
@@ -174,20 +186,25 @@ export class Thread extends Emitter<AgentEvents> {
       initialFiles,
       initialGitState: sourceThread.gitTracker.getAgentView(),
     };
-    const cloned = new Thread(newId, contextWithFiles, {
-      type: "clone",
-      sourceRunner: sourceThread.runner,
-      nativeMessageIdx,
-      provenance: {
-        fromThreadId: sourceThread.id,
+    const cloned = new Thread(
+      newId,
+      contextWithFiles,
+      {
+        type: "clone",
+        sourceRunner: sourceThread.runner,
         nativeMessageIdx,
+        provenance: {
+          fromThreadId: sourceThread.id,
+          nativeMessageIdx,
+        },
+        scratchpad: Scratchpad.cloneScratchpad(sourceThread.state.scratchpad),
+        edlRegisters: {
+          registers: new Map(sourceThread.state.edlRegisters.registers),
+          nextSavedId: sourceThread.state.edlRegisters.nextSavedId,
+        },
       },
-      scratchpad: Scratchpad.cloneScratchpad(sourceThread.state.scratchpad),
-      edlRegisters: {
-        registers: new Map(sourceThread.state.edlRegisters.registers),
-        nextSavedId: sourceThread.state.edlRegisters.nextSavedId,
-      },
-    });
+      sourceThread.archiveOptions,
+    );
     for (const [id, structured] of sourceThread.structuredToolResults) {
       cloned.structuredToolResults.set(id, structured);
     }
@@ -301,7 +318,6 @@ export class Thread extends Emitter<AgentEvents> {
       gitTracker: this.gitTracker,
       structuredToolResults: this.structuredToolResults,
       getSupervisors: () => this.supervisors,
-      requestCompaction: (nextPrompt) => this.startCompaction(nextPrompt),
       runnerInit,
     });
     this.attachAgent(agent);
@@ -319,12 +335,9 @@ export class Thread extends Emitter<AgentEvents> {
       agent.on(name, listener);
       unsubscribes.push(() => agent.off(name, listener));
     }
-    const onUpdate = () => this.threadLogger.onUpdate();
-    const onTurnEnded = () => this.threadLogger.onTurnEnded();
+    const onUpdate = () => this.threadLogger.record(this.phase.type === "idle");
     agent.on("update", onUpdate);
-    agent.on("turnEnded", onTurnEnded);
     unsubscribes.push(() => agent.off("update", onUpdate));
-    unsubscribes.push(() => agent.off("turnEnded", onTurnEnded));
     this.agentListeners = unsubscribes;
   }
 
@@ -407,42 +420,57 @@ export class Thread extends Emitter<AgentEvents> {
     this.threadLogger.recordTitle(title);
   }
 
-  async sendMessage(inputMessages?: InputMessage[]): Promise<void> {
-    await this.agent.sendMessage(inputMessages);
-  }
-
   async abort(): Promise<void> {
     await this.agent.abort();
   }
 
-  async handleSendMessageRequest(
+  /** The submission currently in flight, if any. Queued messages ride it: they
+   * are drained into a continuation of the same submission, so they resolve
+   * with its outcome. */
+  private currentSubmission: Promise<SendResult> | undefined;
+
+  /** Submit `messages` and resolve once the thread comes to rest.
+   *
+   * Internal continuations — auto-respond, supervisor nudges, the max_tokens
+   * continue-prompt, a compaction handoff — do not resolve it; the promise
+   * spans the whole thing, including the turn that runs after a compaction.
+   */
+  async send(
     messages: InputMessage[],
-    queue?: "async" | "next",
-  ): Promise<void> {
+    { queue }: SendOptions = {},
+  ): Promise<SendResult> {
+    // The compact thread's content is composed by its caller, so it bypasses
+    // context updates, reminders and the queue entirely.
     if (this.state.threadType === "compact") {
-      this.agent.sendRawMessage(messages);
-      return;
+      return this.followSubmission(this.agent.send(messages, { raw: true }));
     }
 
     if (this.agent.isBusy) {
-      if (queue === "async") {
+      if (queue === "async" || queue === "next") {
         this.update(
-          { type: "push-pending-messages", messages },
+          {
+            type:
+              queue === "async"
+                ? "push-pending-messages"
+                : "push-pending-next-messages",
+            messages,
+          },
           { silent: true },
         );
-        return;
-      } else if (queue === "next") {
-        this.update(
-          { type: "push-pending-next-messages", messages },
-          { silent: true },
-        );
-        return;
-      } else {
-        await this.agent.abortAndWait();
+        return this.currentSubmission ?? Promise.resolve({ type: "completed" });
       }
+      await this.agent.abortAndWait();
     }
 
-    await this.sendMessage(messages);
+    const result = this.followSubmission(
+      this.agent.send(messages, {
+        onIssued: () => {
+          if (messages.length) {
+            setTimeout(() => this.emit("scrollToLastMessage"), 100);
+          }
+        },
+      }),
+    );
 
     if (!this.state.title) {
       this.setThreadTitle(messages.map((m) => m.text).join("\n")).catch(
@@ -453,9 +481,20 @@ export class Thread extends Emitter<AgentEvents> {
       );
     }
 
-    if (messages.length) {
-      setTimeout(() => this.emit("scrollToLastMessage"), 100);
-    }
+    return result;
+  }
+
+  /** Follow one submission across any compaction handoffs it triggers: the
+   * agent stops, the thread swaps in a replacement, and the submission
+   * continues on it. */
+  private followSubmission(
+    outcome: Promise<AgentSendOutcome>,
+  ): Promise<SendResult> {
+    const result = outcome.then((o) =>
+      o.type === "compact" ? this.compact(o.nextPrompt) : o,
+    );
+    this.currentSubmission = result;
+    return result;
   }
 
   async setThreadTitle(userMessage: string): Promise<void> {
@@ -494,7 +533,11 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     }
   }
 
-  startCompaction(nextPrompt?: string): void {
+  /** Hand the conversation off to a summarizing pass and continue it on a
+   * replacement agent. Resolves when that continuation comes to rest. */
+  compact(nextPrompt?: string): Promise<SendResult> {
+    const done = new Defer<SendResult>();
+    this.compactionDone = done;
     const manager = new CompactionManager({
       logger: this.context.logger,
       profile: this.context.profile,
@@ -534,6 +577,15 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     });
     this.compactionController = manager;
     manager.start(this.getProviderMessages(), nextPrompt);
+    return done.promise;
+  }
+
+  private compactionDone: Defer<SendResult> | undefined;
+
+  private settleCompaction(result: SendResult): void {
+    const done = this.compactionDone;
+    this.compactionDone = undefined;
+    done?.resolve(result);
   }
 
   private handleCompactionResult(result: CompactionResult): void {
@@ -546,15 +598,28 @@ Come up with a succinct thread title for this prompt. It must be a single line (
         result.nextPrompt,
         result.steps,
         result.scratchpad,
-      ).catch((e: Error) => {
-        this.context.logger.error(
-          `Failed during compact-complete: ${e.message}`,
-        );
-      });
+      ).then(
+        (sendResult) => this.settleCompaction(sendResult),
+        (e: Error) => {
+          this.context.logger.error(
+            `Failed during compact-complete: ${e.message}`,
+          );
+          this.settleCompaction({
+            type: "failed",
+            error: e,
+            resubmit: undefined,
+          });
+        },
+      );
     } else {
       this.update({
         type: "push-compaction-record",
         record: { steps: result.steps, finalSummary: undefined },
+      });
+      this.settleCompaction({
+        type: "failed",
+        error: new Error("Compaction failed"),
+        resubmit: undefined,
       });
     }
   }
@@ -564,7 +629,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     nextPrompt: string | undefined,
     steps: CompactionStep[],
     scratchpad: Scratchpad.Scratchpad,
-  ): Promise<void> {
+  ): Promise<SendResult> {
     this.update({
       type: "push-compaction-record",
       record: { steps, finalSummary: summary },
@@ -594,13 +659,14 @@ Come up with a succinct thread title for this prompt. It must be a single line (
       },
     ]);
 
-    if (nextPrompt) {
-      await this.sendMessage([{ type: "user", text: nextPrompt }]);
-    } else {
-      await this.sendMessage([
-        { type: "user", text: "Please continue from where you left off." },
-      ]);
-    }
+    return this.followSubmission(
+      this.agent.send([
+        {
+          type: "user",
+          text: nextPrompt ?? "Please continue from where you left off.",
+        },
+      ]),
+    );
   }
 
   private destroyed = false;

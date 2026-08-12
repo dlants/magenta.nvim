@@ -201,7 +201,7 @@ it("does not resolve a script's createThread() await on a subagent error", async
       // Manually recover the errored subagent (this simulates the
       // auto-resubmit mechanism that a later stage will add).
       threadWrapper.thread.core.discardFailedSubmit();
-      await threadWrapper.thread.core.sendMessage([
+      void threadWrapper.thread.core.send([
         { type: "user", text: "work on thing" },
       ]);
 

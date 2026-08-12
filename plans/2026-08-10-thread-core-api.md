@@ -633,7 +633,59 @@ Two mechanical stages first, each independently green, then a single semantic cu
    - **A structured yield now surfaces as `{type: "structured"}`.** `ThreadState` gains `lastYieldValue`, minted where the yield tool's input is still an object (and amended when an `accept` prefixes a *text* yield), so `lastSendResult()` never has to parse `mode.yielded.response` back. Both yield variants are tested. Deferred: `lastSendResult()` still derives from three fields by `if` ordering — collapsing it to a single stored `SendResult` belongs with stage 4's deferred-per-submission rewrite, which is what produces the value.
    - New `phase` tests for the remaining branches: a failed submission surfaces `{type:"failed", resubmit: <rolled-back user text>}` (winning over `lastTurnResult`), and an aborted turn surfaces `{type:"aborted"}`.
    - Not done, deliberately: `ThreadPhase.idle.lastResult` still carries the full `SendResult`. A narrowed display-only type is worth revisiting once stage 5 rewrites the consumers and it is clear what they actually render.
-4. **Rewrite `Agent` and `Thread`.** `sendMessage`/`handleSendMessageRequest`/`sendRawMessage` collapse into `Agent.send` with a deferred per-submission promise; `handleStopped`/`handleSuspend`/`finishAbort` resolve it. `Thread.send` wraps it with the queue. `startCompaction` becomes `Thread.compact`. The emitters go away, and with them the self-subscription: `ThreadLogger` becomes a pure cursor-differ driven by `onUpdate` and gated on `phase`, and `conversationLogBaseDir` / `scriptName` / `forkProvenance` leave the context bag. `activateReminder` and the context-update emits become `onBeforeRequest` injections, with the structured record minted by `Thread` and parked on the message.
+4. **[PARTIALLY DONE] Rewrite `Agent` and `Thread`.** `sendMessage`/`handleSendMessageRequest`/`sendRawMessage` collapse into `Agent.send` with a deferred per-submission promise; `handleStopped`/`handleSuspend`/`finishAbort` resolve it. `Thread.send` wraps it with the queue. `startCompaction` becomes `Thread.compact`. The emitters go away, and with them the self-subscription: `ThreadLogger` becomes a pure cursor-differ driven by `onUpdate` and gated on `phase`, and `conversationLogBaseDir` / `scriptName` / `forkProvenance` leave the context bag. `activateReminder` and the context-update emits become `onBeforeRequest` injections, with the structured record minted by `Thread` and parked on the message.
+   Stage 4 notes:
+   - **`Agent.send` is the single submission entry point.** `sendMessage`/`sendRawMessage` are gone;
+     `send(messages, opts)` installs a per-submission `Defer` and delegates to a private `submit`,
+     which is also what every internal continuation calls — so auto-respond, the max_tokens
+     continue-prompt, a supervisor nudge, a rejected yield and an auto-resubmit leave the deferred
+     pending and exactly one outcome is delivered per `send`. `SubmitOptions.raw` replaces
+     `sendRawMessage` (the compact thread composes its own content).
+   - **Settle points**: `handleStopped`'s rest branch (`completed`), `handleYield`'s accept/none
+     (`yielded`, carrying `state.lastYieldValue`), `finishAbort` (`aborted`), `handleErrorState`
+     (`failed` — but only when no auto-resubmit timer is pending), and a no-content submission
+     (`completed`). `settle` emits a final `update` before resolving, so a trailing-edge debouncer
+     always paints the terminal state.
+   - **Deviation: compaction leaves the agent as an outcome rather than a callback.**
+     `AgentDeps.requestCompaction` is deleted; `Agent.send` resolves
+     `AgentSendOutcome = SendResult | {type:"compact"; nextPrompt}`. `Thread.followSubmission`
+     awaits that and, on `compact`, runs `Thread.compact` and returns *its* result — so the caller's
+     promise spans the handoff and the post-compaction continuation, which is the behaviour the plan
+     asks for and is not expressible with a fire-and-forget callback.
+   - **`Thread.send(messages, {queue})`** replaces `handleSendMessageRequest` + `sendMessage`, and
+     `startCompaction` is now `compact(nextPrompt?): Promise<SendResult>` (a `Defer` settled by the
+     compaction controller's terminal transition). Queued sends return the in-flight submission's
+     promise: queued messages are drained into a continuation of that submission, so its outcome
+     *is* theirs. A `QueuedMessage`-shaped queue with per-entry deferreds is deferred to stage 5,
+     where the pending-message state bag is rewritten.
+   - **Deviation: `SubmitOptions.onIssued`.** `send` now resolves at rest, but the scroll effect
+     needs the moment the request was *issued* (it used to ride the old `sendMessage`'s promise).
+     Rather than reintroduce a second promise, `submit` invokes an `onIssued` callback after handing
+     the request to the provider. Stage 5 moves the scroll to the caller and this goes away.
+   - **`ThreadLogger` is a pure cursor-differ.** `onUpdate`/`onTurnEnded` collapse into
+     `record(atRest)`, and its two message getters into one; `Thread` drives it from a single agent
+     `update` subscription gated on `phase.type === "idle"`. It no longer listens to `turnEnded`.
+   - **Archive placement left the context bag.** `conversationLogBaseDir`/`scriptName` are gone from
+     `AgentContext`; `Thread`'s fourth constructor parameter is a `ThreadArchiveOptions`, which
+     `Thread.clone` inherits from its source (a fork archives next to the thread it forked from).
+   - **Deferred, deliberately, with the consumers that force it:**
+     - The emitters stay for now. Removing them requires stage 5's `NvimThread`/`Chat` rewrite; the
+       one self-subscription this stage *did* remove is the archive's.
+     - `activateReminder` and the context-update emits are still what they were. Turning them into
+       `onBeforeRequest` injections needs the structured record to ride on the message and the views
+       to render off that annotation (stage 6) — doing it here would leave the tree red across two
+       stages rather than one.
+   - Test adaptations forced by the new semantics (the mechanical part of stage 7, done early
+     because the suite has to stay green): `await core.sendMessage(...)` becomes
+     `void core.send(...)`, since awaiting now waits for the whole turn; assertions that relied on
+     the old "resolves once issued" guarantee await the stream instead; a new `awaitNextStream`
+     helper replaces `awaitStream` where a *second* submission's stream is wanted (`awaitStream`
+     returns the most recent stream, which is the previous one until the next request is issued).
+     The unused `driver.interceptSendMessage` was deleted rather than ported.
+   - Suite: `tsc -b` and `biome check` clean; `npx vitest run node/core/` fully green. The whole-suite
+     run shows the same pre-existing load-related failures as HEAD (nvim socket ENOENT and the
+     script-manager/spawn-subagents "no pending streams" flakes — verified by running the same file
+     set on a stashed tree).
 5. **Rewrite the consumers.** `NvimThread` loses its subscribe/unsubscribe blocks and moves chime/scroll/resubmit to its own `send`/`abort` call sites. `Chat` composes its supervisor list into the three hooks, takes over docker teardown progress and `tornDown`, and loses `threadYieldCallbacks`/`fireThreadYieldCallbacks`. `ThreadManager.getThreadResult`/`onThreadYielded` become `awaitThreadResult`; `spawn-subagents.ts` awaits. `magenta.ts` reads `phase`. The 32ms throttle moves to the view layer as a trailing-edge debounce.
 6. **Fix the views.** `renderStatus` takes a `ThreadPhase` and nothing else. `NvimThread`'s `get agent()` is deleted; `chat.ts:1376` uses `currentMessageIdx()`; `Chat.getContextAgent()` is deleted outright. `shouldShowContextFiles` becomes `phase.type === "idle"`. Context updates render off the message annotation instead of `messageViewState`. `npx tsc -b` clean.
 7. **Green the suite.** Tests change only where the mechanism changed — construction now takes an `onUpdate`, and every `while (state.mode.type !== "yielded")` poll becomes an `await result`. Check specifically:

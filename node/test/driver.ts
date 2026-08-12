@@ -124,33 +124,6 @@ export class NvimDriver {
     });
   }
 
-  interceptSendMessage() {
-    const thread = this.magenta.chat.getActiveThread();
-    const callDefer = new Defer<Parameters<typeof thread.core.sendMessage>>();
-    const executeDefer = new Defer<void>();
-
-    const spy = vi
-      .spyOn(thread.core, "sendMessage")
-      .mockImplementation(
-        async (...args: Parameters<typeof thread.core.sendMessage>) => {
-          callDefer.resolve(args);
-          return executeDefer.promise;
-        },
-      );
-
-    return {
-      promise: callDefer.promise,
-      spy,
-      execute: (...args: Parameters<typeof thread.core.sendMessage>) => {
-        spy.mockRestore();
-        return thread.core.sendMessage(...args).then(
-          () => executeDefer.resolve(),
-          (err: Error) => executeDefer.reject(err),
-        );
-      },
-    };
-  }
-
   send() {
     return this.magenta.command("send");
   }
