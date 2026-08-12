@@ -1,11 +1,12 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Agent, type AgentContext } from "../agent.ts";
+import type { AgentContext } from "../agent.ts";
 import type { ThreadId, ThreadType } from "../chat-types.ts";
 import type { Logger } from "../logger.ts";
 import type { OpenAIAuth } from "../openai-auth.ts";
 import type { ProviderProfile } from "../provider-options.ts";
+import { Thread } from "../thread.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
 import type { MCPToolManager } from "../tools/mcp/manager.ts";
@@ -34,7 +35,7 @@ function createProvider(client?: MockOpenAIClient): OpenAIProvider {
   return provider;
 }
 
-function createTestAgent(): { core: Agent; client: MockOpenAIClient } {
+function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
   const client = new MockOpenAIClient();
   const provider = createProvider(client);
   const context: AgentContext = {
@@ -82,7 +83,7 @@ function createTestAgent(): { core: Agent; client: MockOpenAIClient } {
     getProvider: () => provider,
     conversationLogBaseDir: path.join(os.tmpdir(), "magenta-test-archive"),
   };
-  return { core: new Agent("openai-thread" as ThreadId, context), client };
+  return { core: new Thread("openai-thread" as ThreadId, context), client };
 }
 
 describe("OpenAI provider wiring", () => {

@@ -7,13 +7,13 @@ import type {
   ThreadSupervisor,
 } from "@magenta/core";
 import {
-  Agent,
   type ContextFiles,
   type ContextManager,
   type InputMessage,
   loadAgents,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
+  Thread,
   type ThreadId,
   type ThreadType,
   type ToolRequestId,
@@ -214,7 +214,7 @@ export class NvimThread {
     forkedTo: { childThreadId: ThreadId; atMessageIdx: NativeMessageIdx }[];
   };
 
-  public core: Agent;
+  public core: Thread;
   private myDispatch: Dispatch<Msg>;
   private lastAppliedTitle: string | undefined;
   public sandboxViolationHandler: SandboxViolationHandler | undefined;
@@ -225,7 +225,7 @@ export class NvimThread {
   }
 
   get agent(): Runner {
-    return this.core.agent;
+    return this.core.runner;
   }
 
   get supervisors(): ThreadSupervisor[] {
@@ -269,7 +269,7 @@ export class NvimThread {
       systemInfo: SystemInfo;
     },
     clonedAgent?: Runner,
-    preBuiltCore?: Agent,
+    preBuiltCore?: Thread,
   ) {
     this.myDispatch = (msg) =>
       this.context.dispatch({
@@ -300,7 +300,7 @@ export class NvimThread {
     if (preBuiltCore) {
       this.core = preBuiltCore;
     } else {
-      this.core = new Agent(
+      this.core = new Thread(
         id,
         {
           logger: context.nvim.logger,
@@ -531,8 +531,8 @@ export class NvimThread {
     const profile = sourceThread.context.profile;
     const sourceCoreState = sourceCore.state;
 
-    const core = await Agent.clone({
-      sourceCore,
+    const core = await Thread.clone({
+      sourceThread: sourceCore,
       newId: newThreadId,
       nativeMessageIdx,
       context: {

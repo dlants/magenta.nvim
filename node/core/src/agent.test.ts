@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Agent, type AgentContext } from "./agent.ts";
+import type { AgentContext } from "./agent.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
@@ -20,6 +20,7 @@ import type {
   Runner,
 } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
+import { Thread } from "./thread.ts";
 import {
   AutoCompactSupervisor,
   SubagentSupervisor,
@@ -70,7 +71,7 @@ function createAgentWithMock(
   overrides?: Partial<AgentContext>,
   threadId: ThreadId = "test-thread" as ThreadId,
 ): {
-  core: Agent;
+  core: Thread;
   mockClient: MockAnthropicClient;
   context: AgentContext;
 } {
@@ -123,7 +124,7 @@ function createAgentWithMock(
   };
 
   return {
-    core: new Agent(threadId, context),
+    core: new Thread(threadId, context),
     mockClient,
     context,
   };
@@ -586,7 +587,7 @@ describe("AutoCompactSupervisor integration", () => {
     // inputTokenCount is populated post-flight, so it lags one turn. Drive a
     // second turn; the handoff at its end sees the over-threshold count.
     await pollUntil(() => {
-      if (core.agent.log.inputTokenCount === 200) return true;
+      if (core.runner.log.inputTokenCount === 200) return true;
       throw new Error("waiting for token count");
     });
 
@@ -621,7 +622,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.finishResponse("end_turn", { inputTokens: 50, outputTokens: 5 });
 
     await pollUntil(() => {
-      if (core.agent.phase.type !== "idle") throw new Error("waiting");
+      if (core.runner.phase.type !== "idle") throw new Error("waiting");
       return true;
     });
 
@@ -649,7 +650,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.streamText("done");
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.agent.log.inputTokenCount === 200) return true;
+      if (core.runner.log.inputTokenCount === 200) return true;
       throw new Error("waiting for token count");
     });
 
@@ -687,7 +688,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.streamText("done");
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.agent.log.inputTokenCount === 200) return true;
+      if (core.runner.log.inputTokenCount === 200) return true;
       throw new Error("waiting for token count");
     });
 
@@ -1534,7 +1535,7 @@ describe("Agent auto-resubmit for non-user-facing threads (Stage 2)", () => {
     // sendMessage API, since every InputMessage (user or system) produces a
     // plain "text" content block that would populate baseText.
     (
-      core as unknown as {
+      core.agent as unknown as {
         maybeAutoResubmitAfterError: (
           error: Error,
           userMessage: string,
@@ -1593,7 +1594,7 @@ describe("Agent conversation archive", () => {
       nextStream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (core.agent.phase.type !== "idle") throw new Error("waiting");
+        if (core.runner.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -1643,7 +1644,7 @@ describe("Agent conversation archive", () => {
 
       nextStream.finishResponse("end_turn");
       await pollUntil(() => {
-        if (core.agent.phase.type !== "idle") throw new Error("waiting");
+        if (core.runner.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -1670,7 +1671,7 @@ describe("Agent conversation archive", () => {
       stream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (core.agent.phase.type !== "idle") throw new Error("waiting");
+        if (core.runner.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -1696,7 +1697,7 @@ describe("Agent conversation archive", () => {
       contStream.finishResponse("end_turn");
       await compactPromise;
       await pollUntil(() => {
-        if (core.agent.phase.type !== "idle") throw new Error("waiting");
+        if (core.runner.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -1726,7 +1727,7 @@ describe("Agent conversation archive", () => {
       context,
     } = createAgentWithMock(undefined, parentId);
 
-    let child: Agent | undefined;
+    let child: Thread | undefined;
     try {
       await parent.sendMessage([{ type: "user", text: "parent turn" }]);
       const stream = await mockClient.awaitStream();
@@ -1734,13 +1735,13 @@ describe("Agent conversation archive", () => {
       stream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (parent.agent.phase.type !== "idle") throw new Error("waiting");
+        if (parent.runner.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
 
-      const nativeMessageIdx = parent.agent.getNativeMessageIdx();
-      child = await Agent.clone({
-        sourceCore: parent,
+      const nativeMessageIdx = parent.runner.getNativeMessageIdx();
+      child = await Thread.clone({
+        sourceThread: parent,
         newId: childId,
         nativeMessageIdx,
         context,
@@ -1756,7 +1757,7 @@ describe("Agent conversation archive", () => {
       childStream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (child!.agent.phase.type !== "idle") throw new Error("waiting");
+        if (child!.runner.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await child.awaitArchiveFlush();
@@ -1824,7 +1825,7 @@ describe("Agent scratchpad state", () => {
       stream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (core.agent.phase.type !== "idle") throw new Error("waiting");
+        if (core.runner.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -1870,14 +1871,14 @@ describe("Agent scratchpad state", () => {
       context,
     } = createAgentWithMock(undefined, parentId);
 
-    let child: Agent | undefined;
+    let child: Thread | undefined;
     try {
       await parent.sendMessage([{ type: "user", text: "parent turn" }]);
       const stream = await mockClient.awaitStream();
       stream.streamText("parent response");
       stream.finishResponse("end_turn");
       await pollUntil(() => {
-        if (parent.agent.phase.type !== "idle") throw new Error("waiting");
+        if (parent.runner.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
 
@@ -1885,9 +1886,9 @@ describe("Agent scratchpad state", () => {
       parent.state.edlRegisters.registers.set("r", "regval");
       parent.state.edlRegisters.nextSavedId = 3;
 
-      const nativeMessageIdx = parent.agent.getNativeMessageIdx();
-      child = await Agent.clone({
-        sourceCore: parent,
+      const nativeMessageIdx = parent.runner.getNativeMessageIdx();
+      child = await Thread.clone({
+        sourceThread: parent,
         newId: childId,
         nativeMessageIdx,
         context,

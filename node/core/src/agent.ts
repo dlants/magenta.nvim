@@ -9,20 +9,11 @@ import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { Shell } from "./capabilities/shell.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
-import type {
-  CompactionRecord,
-  CompactionResult,
-  CompactionStep,
-} from "./compaction-controller.ts";
-import { CompactionManager } from "./compaction-manager.ts";
-import {
-  buildClonedFiles,
-  ContextManager,
-  type Files,
-} from "./context/context-manager.ts";
+import type { CompactionRecord } from "./compaction-controller.ts";
+import type { ContextManager, Files } from "./context/context-manager.ts";
 import {
   type GitContextUpdate,
-  GitTracker,
+  type GitTracker,
   gitUpdateToText,
 } from "./context/git-tracker.ts";
 import type { EdlRegisters } from "./edl/index.ts";
@@ -61,7 +52,6 @@ import {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
-import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type {
   EndTurnAction,
   EndTurnContext,
@@ -79,7 +69,6 @@ import type {
 import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import * as Scratchpad from "./tools/scratchpad.ts";
-import * as ThreadTitle from "./tools/thread-title.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
@@ -193,8 +182,6 @@ const SYSTEM_REMINDER_MIN_TOKEN_INTERVAL = 2000;
 /** Minimum output tokens between bash-summary reminders. */
 const BASH_REMINDER_TOKEN_INTERVAL = 5000;
 
-const CONTEXT_MANAGER_POLL_INTERVAL_MS = 1000;
-
 export type AgentAction =
   | { type: "set-title"; title: string }
   | { type: "set-mode"; mode: ThreadMode }
@@ -224,200 +211,93 @@ export type AgentAction =
       idx: NativeMessageIdx | undefined;
     };
 
-export class Agent extends Emitter<AgentEvents> {
-  public state: {
-    title?: string;
-    threadType: ThreadType;
-    systemPrompt: SystemPrompt;
-    systemInfo: SystemInfo;
-    pendingMessages: InputMessage[];
-    pendingNextMessages: InputMessage[];
-    mode: ThreadMode;
-    edlRegisters: EdlRegisters;
-    scratchpad: Scratchpad.Scratchpad;
-    outputTokensSinceLastReminder: number;
-    compactionHistory: CompactionRecord[];
-    editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];
-    pendingBashReminder: boolean;
-    bashTokensSinceLastReminder: number;
-    firstBashReminderPending: boolean;
-    failedSubmit: { userMessage: string; errorMessage: string } | undefined;
-    /** How the most recent turn ended. Kept for rendering an idle agent. */
-    lastTurnResult: TurnResult | undefined;
-    preSubmitNativeIdx: NativeMessageIdx | undefined;
-    activeReminders: Set<string>;
-    toolSpecs: ProviderToolSpec[];
-  };
+export type ThreadState = {
+  title?: string;
+  threadType: ThreadType;
+  systemPrompt: SystemPrompt;
+  systemInfo: SystemInfo;
+  pendingMessages: InputMessage[];
+  pendingNextMessages: InputMessage[];
+  mode: ThreadMode;
+  edlRegisters: EdlRegisters;
+  scratchpad: Scratchpad.Scratchpad;
+  outputTokensSinceLastReminder: number;
+  compactionHistory: CompactionRecord[];
+  editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];
+  pendingBashReminder: boolean;
+  bashTokensSinceLastReminder: number;
+  firstBashReminderPending: boolean;
+  failedSubmit: { userMessage: string; errorMessage: string } | undefined;
+  /** How the most recent turn ended. Kept for rendering an idle agent. */
+  lastTurnResult: TurnResult | undefined;
+  preSubmitNativeIdx: NativeMessageIdx | undefined;
+  activeReminders: Set<string>;
+  toolSpecs: ProviderToolSpec[];
+};
 
-  public agent: Runner;
-  public contextManager: ContextManager;
-  public gitTracker: GitTracker;
-  public compactionController: CompactionManager | undefined;
-  public supervisors: ThreadSupervisor[] = [];
-  private threadLogger: ThreadLogger;
+/** The names of every event an `Agent` emits, so the owning `Thread` can pipe
+ * them without enumerating them by hand at each call site. */
+export const AGENT_EVENT_NAMES = [
+  "update",
+  "playChime",
+  "scrollToLastMessage",
+  "setupResubmit",
+  "aborting",
+  "recoverPendingMessages",
+  "pendingUpdatesChanged",
+  "turnEnded",
+  "contextUpdatesSent",
+  "gitContextUpdateSent",
+] as const;
+
+/** Collaborators the owning `Thread` supplies. An `Agent` is ephemeral —
+ * compaction replaces it — so everything durable (identity, the queue, the
+ * context managers, the archive) lives on the `Thread` and is handed in. */
+export interface AgentDeps {
+  /** Only used to stamp tool contexts and outgoing events; the agent has no
+   * identity of its own. */
+  threadId: ThreadId;
+  state: ThreadState;
+  contextManager: ContextManager;
+  gitTracker: GitTracker;
+  structuredToolResults: Map<ToolRequestId, ToolStructuredResult>;
+  getSupervisors: () => ThreadSupervisor[];
+  requestCompaction: (nextPrompt?: string) => void;
+  clonedRunner?: Runner;
+}
+
+export class Agent extends Emitter<AgentEvents> {
+  public state: ThreadState;
+  public runner: Runner;
+  public readonly contextManager: ContextManager;
+  public readonly gitTracker: GitTracker;
+  /** Structured tool results by request id, kept for the lifetime of the
+   * thread (so it outlives this agent). The provider strips
+   * `structuredResult` when serializing a tool result to native form, so the
+   * rich renderers need this side channel. */
+  public readonly structuredToolResults: Map<
+    ToolRequestId,
+    ToolStructuredResult
+  >;
+  private readonly threadId: ThreadId;
 
   constructor(
-    public id: ThreadId,
     private context: AgentContext,
-    clonedAgent?: Runner,
-    forkProvenance?: ForkProvenance,
-    initialState?: {
-      scratchpad?: Scratchpad.Scratchpad;
-      edlRegisters?: EdlRegisters;
-    },
+    private deps: AgentDeps,
   ) {
     super();
-    this.threadLogger = new ThreadLogger(
-      id,
-      context.threadType,
-      () => this.getProviderMessages(),
-      () => this.getProviderMessages().length,
-      context.logger,
-      {
-        ...(context.conversationLogBaseDir !== undefined
-          ? { baseDir: context.conversationLogBaseDir }
-          : {}),
-        ...(context.scriptName !== undefined
-          ? { scriptName: context.scriptName }
-          : {}),
-        cwd: context.cwd,
-        ...(forkProvenance ? { forkedFrom: forkProvenance } : {}),
-      },
-    );
-    this.on("update", () => this.threadLogger.onUpdate());
-    this.on("turnEnded", () => this.threadLogger.onTurnEnded());
-    this.contextManager = new ContextManager(
-      context.logger,
-      context.fileIO,
-      context.cwd,
-      context.homeDir,
-      context.initialFiles,
-      CONTEXT_MANAGER_POLL_INTERVAL_MS,
-    );
-    this.contextManager.start();
-    this.gitTracker = new GitTracker(
-      context.gitClient,
-      context.initialGitState,
-      context.logger,
-    );
-    this.state = {
-      threadType: context.threadType,
-      systemPrompt: context.systemPrompt,
-      systemInfo: context.systemInfo,
-      pendingMessages: [],
-      pendingNextMessages: [],
-      mode: { type: "normal" },
-      edlRegisters: initialState?.edlRegisters ?? {
-        registers: new Map(),
-        nextSavedId: 0,
-      },
-      scratchpad: initialState?.scratchpad ?? Scratchpad.emptyScratchpad(),
-      outputTokensSinceLastReminder: 0,
-      compactionHistory: [],
-      editedFilesThisTurn: [],
-      pendingBashReminder: false,
-      bashTokensSinceLastReminder: 0,
-      firstBashReminderPending: true,
-      failedSubmit: undefined,
-      lastTurnResult: undefined,
-      preSubmitNativeIdx: undefined,
-      activeReminders: new Set(),
-      toolSpecs: [],
-    };
+    this.threadId = deps.threadId;
+    this.state = deps.state;
+    this.contextManager = deps.contextManager;
+    this.gitTracker = deps.gitTracker;
+    this.structuredToolResults = deps.structuredToolResults;
     this.refreshToolSpecs();
 
-    this.listenToContextManager();
-
-    if (clonedAgent) {
-      this.agent = clonedAgent;
-      this.bindAgent(this.agent);
+    if (deps.clonedRunner) {
+      this.runner = deps.clonedRunner;
+      this.bindRunner(this.runner);
     } else {
-      this.agent = this.createFreshAgent();
-    }
-  }
-
-  /** Build an independent copy of `sourceCore` that resumes the conversation
-   * frozen at `nativeMessageIdx`. The cloned agent is created exactly once
-   * here and ownership is transferred to the new Agent. The source is
-   * not aborted and shares no mutable state with the result. */
-  static async clone(args: {
-    sourceCore: Agent;
-    newId: ThreadId;
-    nativeMessageIdx: NativeMessageIdx;
-    context: AgentContext;
-  }): Promise<Agent> {
-    const { sourceCore, newId, nativeMessageIdx, context } = args;
-    const agent = sourceCore.agent.clone();
-    agent.truncateMessages(nativeMessageIdx);
-    const initialFiles = await buildClonedFiles(
-      sourceCore.contextManager.files,
-      context.fileIO,
-    );
-    const contextWithFiles: AgentContext = {
-      ...context,
-      initialFiles,
-      initialGitState: sourceCore.gitTracker.getAgentView(),
-    };
-    const cloned = new Agent(
-      newId,
-      contextWithFiles,
-      agent,
-      {
-        fromThreadId: sourceCore.id,
-        nativeMessageIdx,
-      },
-      {
-        scratchpad: Scratchpad.cloneScratchpad(sourceCore.state.scratchpad),
-        edlRegisters: {
-          registers: new Map(sourceCore.state.edlRegisters.registers),
-          nextSavedId: sourceCore.state.edlRegisters.nextSavedId,
-        },
-      },
-    );
-    for (const [id, structured] of sourceCore.structuredToolResults) {
-      cloned.structuredToolResults.set(id, structured);
-    }
-    return cloned;
-  }
-
-  private contextManagerListeners:
-    | {
-        fileAdded: () => void;
-        fileRemoved: () => void;
-        pendingUpdatesChanged: () => void;
-      }
-    | undefined;
-
-  private listenToContextManager(): void {
-    const listeners = {
-      fileAdded: () => this.emit("update"),
-      fileRemoved: () => this.emit("update"),
-      pendingUpdatesChanged: () => this.emit("pendingUpdatesChanged"),
-    };
-    this.contextManagerListeners = listeners;
-    this.contextManager.on("fileAdded", listeners.fileAdded);
-    this.contextManager.on("fileRemoved", listeners.fileRemoved);
-    this.contextManager.on(
-      "pendingUpdatesChanged",
-      listeners.pendingUpdatesChanged,
-    );
-  }
-
-  private unlistenContextManager(): void {
-    if (this.contextManagerListeners) {
-      this.contextManager.off(
-        "fileAdded",
-        this.contextManagerListeners.fileAdded,
-      );
-      this.contextManager.off(
-        "fileRemoved",
-        this.contextManagerListeners.fileRemoved,
-      );
-      this.contextManager.off(
-        "pendingUpdatesChanged",
-        this.contextManagerListeners.pendingUpdatesChanged,
-      );
-      this.contextManagerListeners = undefined;
+      this.runner = this.createRunner();
     }
   }
 
@@ -484,7 +364,6 @@ export class Agent extends Emitter<AgentEvents> {
     switch (action.type) {
       case "set-title":
         this.state.title = action.title;
-        this.threadLogger.recordTitle(action.title);
         break;
       case "set-mode":
         this.state.mode = action.mode;
@@ -582,8 +461,8 @@ export class Agent extends Emitter<AgentEvents> {
     return this.state.toolSpecs;
   }
 
-  /** Point an agent's collaborators at this thread. */
-  private bindAgent(agent: Runner): void {
+  /** Point a runner's collaborators at this agent. */
+  private bindRunner(agent: Runner): void {
     agent.bindHooks({
       executeTools: (requests) => this.executeTools(requests),
       onUpdate: () => this.scheduleUpdate(),
@@ -592,7 +471,7 @@ export class Agent extends Emitter<AgentEvents> {
     agent.onBeforeToolResponse = (args) => this.buildToolResponseExtras(args);
   }
 
-  private createFreshAgent(): Runner {
+  private createRunner(): Runner {
     this.refreshToolSpecs();
     const provider = this.context.getProvider(this.context.profile);
     const agent = provider.createAgent({
@@ -638,24 +517,11 @@ export class Agent extends Emitter<AgentEvents> {
   }
 
   getProviderStatus(): AgentPhase {
-    return this.agent.phase;
+    return this.runner.phase;
   }
-
-  /** For tests: await pending best-effort archive writes. */
-  async awaitArchiveFlush(): Promise<void> {
-    await this.threadLogger.flushed();
-  }
-
-  /** Structured tool results by request id, kept for the lifetime of the
-   * thread. The provider strips `structuredResult` when serializing a tool
-   * result to native form, so the rich renderers need this side channel. */
-  readonly structuredToolResults = new Map<
-    ToolRequestId,
-    ToolStructuredResult
-  >();
 
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
-    return this.agent.log.messages;
+    return this.runner.log.messages;
   }
 
   /** After a non-retryable error, roll back the agent's history to the
@@ -670,7 +536,7 @@ export class Agent extends Emitter<AgentEvents> {
       { type: "set-pre-submit-native-idx", idx: undefined },
       { silent: true },
     );
-    this.agent.truncateMessages(idx);
+    this.runner.truncateMessages(idx);
     this.emit("update");
   }
 
@@ -679,7 +545,7 @@ export class Agent extends Emitter<AgentEvents> {
   }
 
   getLastStopTokenCount(): number {
-    const state = this.agent.log;
+    const state = this.runner.log;
     if (state.inputTokenCount !== undefined) {
       return state.inputTokenCount;
     }
@@ -697,13 +563,17 @@ export class Agent extends Emitter<AgentEvents> {
     );
   }
 
-  setTitle(title: string): void {
-    this.update({ type: "set-title", title });
-  }
-
   /** The in-flight turn, if any. `runTurn` is the only thing that drives the
    * agent forward, so this is exactly "is this thread busy". */
   private currentTurn: Promise<void> | undefined;
+
+  /** `runTurn` is the only thing that drives the runner forward, so this is
+   * exactly "is this agent busy". */
+  get isBusy(): boolean {
+    return (
+      this.currentTurn !== undefined || this.state.mode.type === "tool_use"
+    );
+  }
 
   /** Content to lead the next turn's input with. Used by compaction to seed a
    * fresh agent with the summary before its first request. */
@@ -736,7 +606,7 @@ export class Agent extends Emitter<AgentEvents> {
   private usageAccountedCount = 0;
 
   private accountUsage(): void {
-    const messages = this.agent.log.messages;
+    const messages = this.runner.log.messages;
     if (this.usageAccountedCount > messages.length) {
       this.usageAccountedCount = messages.length;
     }
@@ -757,7 +627,7 @@ export class Agent extends Emitter<AgentEvents> {
   private runTurn(input: AgentInput[]): Promise<void> {
     const prefix = this.pendingTurnPrefix ?? [];
     this.pendingTurnPrefix = undefined;
-    const turn = this.agent
+    const turn = this.runner
       .runTurn([...prefix, ...input])
       .then((result) => {
         this.currentTurn = undefined;
@@ -795,7 +665,7 @@ export class Agent extends Emitter<AgentEvents> {
     this.suspendReason = undefined;
     if (!reason) return;
     if (reason.type === "compact") {
-      this.startCompaction(reason.nextPrompt);
+      this.deps.requestCompaction(reason.nextPrompt);
       return;
     }
     await this.handleYield(reason.result);
@@ -807,7 +677,7 @@ export class Agent extends Emitter<AgentEvents> {
 
     const handoff = this.consultHandoffSupervisors(stopReason);
     if (handoff.type === "compact") {
-      this.startCompaction(handoff.nextPrompt);
+      this.deps.requestCompaction(handoff.nextPrompt);
       return;
     }
 
@@ -852,7 +722,7 @@ export class Agent extends Emitter<AgentEvents> {
   private createToolContext(): CreateToolContext {
     return {
       mcpToolManager: this.context.mcpToolManager,
-      threadId: this.id,
+      threadId: this.threadId,
       logger: this.context.logger,
       lspClient: this.context.lspClient,
       cwd: this.context.cwd,
@@ -1028,7 +898,10 @@ export class Agent extends Emitter<AgentEvents> {
           },
           { silent: true },
         );
-        setTimeout(() => this.emit("setupResubmit", this.id, userMessage), 1);
+        setTimeout(
+          () => this.emit("setupResubmit", this.threadId, userMessage),
+          1,
+        );
       }
     } else {
       this.maybeAutoResubmitAfterError(error, userMessage);
@@ -1088,7 +961,7 @@ export class Agent extends Emitter<AgentEvents> {
   /** Cancel whichever of the two things the turn can be waiting on — the
    * in-flight inference request (the agent's own resource) or the running
    * tools (ours) — and wait for the turn to unwind. */
-  private async abortAndWait(): Promise<void> {
+  async abortAndWait(): Promise<void> {
     this.resetErrorRetryState();
     this.abortRequested = true;
     this.emit("aborting");
@@ -1098,7 +971,7 @@ export class Agent extends Emitter<AgentEvents> {
         entry.handle.abort();
       }
     }
-    this.agent.abort();
+    this.runner.abort();
 
     const turn = this.currentTurn;
     if (turn) {
@@ -1132,7 +1005,7 @@ export class Agent extends Emitter<AgentEvents> {
       this.state.threadType === "root" ||
       this.state.threadType === "docker_root";
     if (isUserFacing && pendingText) {
-      this.emit("recoverPendingMessages", this.id, pendingText);
+      this.emit("recoverPendingMessages", this.threadId, pendingText);
     }
   }
 
@@ -1187,7 +1060,7 @@ export class Agent extends Emitter<AgentEvents> {
     this.update(
       {
         type: "set-pre-submit-native-idx",
-        idx: this.agent.getNativeMessageIdx(),
+        idx: this.runner.getNativeMessageIdx(),
       },
       { silent: true },
     );
@@ -1195,56 +1068,10 @@ export class Agent extends Emitter<AgentEvents> {
     void this.runTurn(contentToSend);
   }
 
-  async handleSendMessageRequest(
-    messages: InputMessage[],
-    queue?: "async" | "next",
-  ): Promise<void> {
-    if (this.state.threadType === "compact") {
-      this.sendRawMessage(messages);
-      return;
-    }
-
-    const isBusy =
-      this.currentTurn !== undefined || this.state.mode.type === "tool_use";
-
-    if (isBusy) {
-      if (queue === "async") {
-        this.update(
-          { type: "push-pending-messages", messages },
-          { silent: true },
-        );
-        return;
-      } else if (queue === "next") {
-        this.update(
-          { type: "push-pending-next-messages", messages },
-          { silent: true },
-        );
-        return;
-      } else {
-        await this.abortAndWait();
-      }
-    }
-
-    await this.sendMessage(messages);
-
-    if (!this.state.title) {
-      this.setThreadTitle(messages.map((m) => m.text).join("\n")).catch(
-        (err: Error) =>
-          this.context.logger.error(
-            `Error getting thread title: ${err.message}\n${err.stack}`,
-          ),
-      );
-    }
-
-    if (messages.length) {
-      setTimeout(() => this.emit("scrollToLastMessage"), 100);
-    }
-  }
-
   private getLastAssistantMessage():
     | ReadonlyArray<ProviderMessageContent>
     | undefined {
-    const messages = this.agent.log.messages;
+    const messages = this.runner.log.messages;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "assistant") {
         return messages[i].content;
@@ -1480,7 +1307,7 @@ export class Agent extends Emitter<AgentEvents> {
     };
   }
 
-  private sendRawMessage(messages: InputMessage[]): void {
+  sendRawMessage(messages: InputMessage[]): void {
     const contentToSend: AgentInput[] = messages.map((m) => ({
       type: "text" as const,
       text: m.text,
@@ -1492,123 +1319,9 @@ export class Agent extends Emitter<AgentEvents> {
     void this.runTurn(contentToSend);
   }
 
-  startCompaction(nextPrompt?: string): void {
-    const manager = new CompactionManager({
-      logger: this.context.logger,
-      profile: this.context.profile,
-      mcpToolManager: this.context.mcpToolManager,
-      threadId: this.id,
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-      lspClient: this.context.lspClient,
-      availableCapabilities: this.context.availableCapabilities,
-      contextManager: this.contextManager,
-      shell: this.context.shell,
-      threadManager: this.context.threadManager,
-      maxConcurrentSubagents: this.context.maxConcurrentSubagents,
-      maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
-      getProvider: this.context.getProvider,
-      requestRender: () => this.emit("update"),
-      initialScratchpad: Scratchpad.cloneScratchpad(this.state.scratchpad),
-    });
-    manager.on("transition", (_prev, next) => {
-      if (next.type === "complete") {
-        this.handleCompactionResult(next.result);
-      } else if (next.type === "error") {
-        this.handleCompactionResult({ type: "error", steps: next.steps });
-      } else if (
-        next.type === "processing-chunk" ||
-        next.type === "waiting-for-tools"
-      ) {
-        this.update({
-          type: "set-mode",
-          mode: {
-            type: "compacting",
-            chunkIndex: next.chunkIndex,
-            totalChunks: next.totalChunks,
-          },
-        });
-      }
-    });
-    this.compactionController = manager;
-    manager.start(this.getProviderMessages(), nextPrompt);
-  }
-
-  private handleCompactionResult(result: CompactionResult): void {
-    this.compactionController = undefined;
-    this.update({ type: "set-mode", mode: { type: "normal" } });
-
-    if (result.type === "complete") {
-      this.handleCompactComplete(
-        result.summary,
-        result.nextPrompt,
-        result.steps,
-        result.scratchpad,
-      ).catch((e: Error) => {
-        this.context.logger.error(
-          `Failed during compact-complete: ${e.message}`,
-        );
-      });
-    } else {
-      this.update({
-        type: "push-compaction-record",
-        record: { steps: result.steps, finalSummary: undefined },
-      });
-    }
-  }
-
-  private async handleCompactComplete(
-    summary: string,
-    nextPrompt: string | undefined,
-    steps: CompactionStep[],
-    scratchpad: Scratchpad.Scratchpad,
-  ): Promise<void> {
-    this.update({
-      type: "push-compaction-record",
-      record: { steps, finalSummary: summary },
-    });
-
-    this.unlistenContextManager();
-    this.contextManager.destroy();
-    this.contextManager = new ContextManager(
-      this.context.logger,
-      this.context.fileIO,
-      this.context.cwd,
-      this.context.homeDir,
-      undefined,
-      CONTEXT_MANAGER_POLL_INTERVAL_MS,
-    );
-    this.contextManager.start();
-    this.listenToContextManager();
-
-    this.agent = this.createFreshAgent();
-    this.threadLogger.recordCompaction({ summary, chunkCount: steps.length });
-    this.threadLogger.resetCursor();
-
-    this.update({ type: "reset-after-compaction" });
-    this.state.scratchpad = scratchpad;
-
-    const summaryText = `<conversation-summary>\n${summary}\n</conversation-summary>`;
-    this.pendingTurnPrefix = [
-      {
-        type: "text",
-        text: summaryText,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ];
-
-    if (nextPrompt) {
-      await this.sendMessage([{ type: "user", text: nextPrompt }]);
-    } else {
-      await this.sendMessage([
-        { type: "user", text: "Please continue from where you left off." },
-      ]);
-    }
-  }
-
   private consultEndTurnSupervisors(context: EndTurnContext): EndTurnAction {
     const texts: string[] = [];
-    for (const sup of this.supervisors) {
+    for (const sup of this.deps.getSupervisors()) {
       const action = sup.onEndTurnWithoutYield?.(context);
       if (action && action.type === "send-message") texts.push(action.text);
     }
@@ -1618,7 +1331,7 @@ export class Agent extends Emitter<AgentEvents> {
 
   private async consultYieldSupervisors(result: string): Promise<YieldAction> {
     const texts: string[] = [];
-    for (const sup of this.supervisors) {
+    for (const sup of this.deps.getSupervisors()) {
       const action = await sup.onYield?.(result);
       if (!action) continue;
       if (action.type === "accept" || action.type === "reject") return action;
@@ -1631,10 +1344,10 @@ export class Agent extends Emitter<AgentEvents> {
   private consultHandoffSupervisors(
     stopReason: StreamStopReason,
   ): HandoffAction {
-    const inputTokenCount = this.agent.log.inputTokenCount;
+    const inputTokenCount = this.runner.log.inputTokenCount;
     const prompts: string[] = [];
     let shouldCompact = false;
-    for (const sup of this.supervisors) {
+    for (const sup of this.deps.getSupervisors()) {
       const action = sup.onHandoff?.({ inputTokenCount, stopReason });
       if (action && action.type === "compact") {
         shouldCompact = true;
@@ -1647,44 +1360,15 @@ export class Agent extends Emitter<AgentEvents> {
       : { type: "compact" };
   }
 
-  async setThreadTitle(userMessage: string): Promise<void> {
-    const profileForRequest: ProviderProfile = {
-      ...this.context.profile,
-      thinking: undefined,
-      reasoning: undefined,
-    };
+  private disposed = false;
 
-    const request = this.context.getProvider(profileForRequest).forceToolUse({
-      model: this.context.profile.fastModel,
-      input: [
-        {
-          type: "text",
-          text: `\
-The user has provided the following prompt:
-${userMessage}
-
-Come up with a succinct thread title for this prompt. It must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).
-`,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        },
-      ],
-      spec: ThreadTitle.spec,
-      systemPrompt: this.state.systemPrompt,
-      disableCaching: true,
-    });
-    const result = await request.promise;
-    if (result.toolRequest.status === "ok") {
-      this.setTitle(
-        (result.toolRequest.value.input as ThreadTitle.Input).title,
-      );
-    }
-  }
-
-  private destroyed = false;
-
-  async destroy(): Promise<void> {
-    if (this.destroyed) return;
-    this.destroyed = true;
+  /** Abort and release this agent's own resources. The durable collaborators
+   * (context manager, git tracker, archive) belong to the owning `Thread` and
+   * are deliberately untouched: compaction disposes an agent and builds
+   * another one against the same collaborators. */
+  async dispose(): Promise<void> {
+    if (this.disposed) return;
+    this.disposed = true;
 
     this.clearErrorRetryTimer();
 
@@ -1697,9 +1381,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     } catch {
       // ignore
     }
-
-    this.unlistenContextManager();
-    this.contextManager.destroy();
 
     this.removeAllListeners();
   }

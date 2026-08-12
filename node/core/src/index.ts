@@ -7,6 +7,7 @@ export {
   type EnvironmentConfig,
   type InputMessage,
   type ThreadMode,
+  type ThreadState,
 } from "./agent.ts";
 export type { AgentInfo, AgentsMap } from "./agents/agents.ts";
 export { loadAgents } from "./agents/agents.ts";
@@ -226,6 +227,7 @@ export {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
+export { Thread } from "./thread.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
   EndTurnAction,

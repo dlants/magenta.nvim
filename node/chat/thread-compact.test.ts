@@ -406,11 +406,10 @@ it("compact flow does not process @file commands in subagent or summary", async 
       .join("\n");
     expect(promptText).toContain("Now read @file:poem.txt and summarize");
 
-    // The @file:poem.txt was processed before compaction (adding poem.txt to
-    // context), but since the summary doesn't mention poem.txt, it is not
-    // retained after compaction.
+    // The context manager belongs to the thread, not to the agent compaction
+    // replaces, so files the user put in context stay in context.
     const contextFiles = Object.keys(thread.contextManager.files);
-    expect(contextFiles.some((f) => f.includes("poem.txt"))).toBe(false);
+    expect(contextFiles.some((f) => f.includes("poem.txt"))).toBe(true);
 
     afterCompactStream.respond({
       stopReason: "end_turn",
@@ -1278,7 +1277,7 @@ it("auto-compact does not trigger on compact threads", async () => {
   });
 });
 
-it("compact drops all context files after compaction", async () => {
+it("compact keeps context files after compaction", async () => {
   await withDriver(
     {
       setupFiles: async (tmpDir) => {
@@ -1375,13 +1374,14 @@ it("compact drops all context files after compaction", async () => {
 
       await driver.assertDisplayBufferContains("Starting fresh!");
 
-      // Context files should always be empty after compaction
-      expect(Object.keys(thread.contextManager.files)).toHaveLength(0);
+      // The context manager is a thread-level collaborator and survives the
+      // agent swap, so the user's context files are still watched.
+      expect(Object.keys(thread.contextManager.files)).toHaveLength(1);
     },
   );
 });
 
-it("compaction drops active reminders (transient reads and context-file blocks)", async () => {
+it("compaction keeps reminders derived from files still tracked in context", async () => {
   await withDriver(
     {
       setupFiles: async (tmpDir) => {
@@ -1471,10 +1471,12 @@ it("compaction drops active reminders (transient reads and context-file blocks)"
       );
       expect(reminder).toBeDefined();
       if (reminder && reminder.type === "text") {
-        // Compaction rebuilds an empty ContextManager and clears the transient
-        // read set, so neither reminder survives.
-        expect(reminder.text).not.toContain("context cat reminder");
-        expect(reminder.text).not.toContain("transient cat reminder");
+        // Compaction clears the transient `activeReminders` set, but the
+        // context manager survives the agent swap, so reminders derived from
+        // the files it still tracks (both the explicitly added one and the
+        // one a get_files read pulled in) are re-derived.
+        expect(reminder.text).toContain("context cat reminder");
+        expect(reminder.text).toContain("transient cat reminder");
       }
 
       afterCompactStream.respond({
