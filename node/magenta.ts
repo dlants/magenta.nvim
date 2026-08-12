@@ -21,6 +21,7 @@ import { Lsp } from "./capabilities/lsp.ts";
 import { StraceUnavailableError } from "./capabilities/strace.ts";
 import { Chat } from "./chat/chat.ts";
 import { CommandRegistry } from "./chat/commands/registry.ts";
+import type { NvimThread } from "./chat/thread.ts";
 import {
   type BufNr,
   type Line,
@@ -1452,7 +1453,7 @@ ${lines.join("\n")}
   /** Run CommandRegistry on user text, returning processed InputMessages. */
   private async processCommands(
     text: string,
-    thread: import("./chat/thread.ts").NvimThread,
+    thread: NvimThread,
   ): Promise<{ messages: InputMessage[]; reminders: string[] }> {
     const { processedText, additionalContent, reminders } =
       await this.commandRegistry.processMessage(text, {

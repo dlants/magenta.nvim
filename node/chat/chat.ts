@@ -847,7 +847,7 @@ export class Chat implements ThreadManager {
     const agentDef = agents[agentName];
     if (!agentDef) {
       throw new Error(
-        `Runner "${agentName}" not found. Available agents: ${Object.keys(agents).join(", ")}`,
+        `Agent "${agentName}" not found. Available agents: ${Object.keys(agents).join(", ")}`,
       );
     }
 
