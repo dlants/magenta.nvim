@@ -136,6 +136,7 @@ export class Thread extends Emitter<AgentEvents> {
       firstBashReminderPending: true,
       failedSubmit: undefined,
       lastTurnResult: undefined,
+      lastYieldValue: undefined,
       preSubmitNativeIdx: undefined,
       activeReminders: new Set(),
       toolSpecs: [],
@@ -242,12 +243,14 @@ export class Thread extends Emitter<AgentEvents> {
         assertUnreachable(runnerPhase);
     }
     if (mode.type === "tool_use") {
+      // The runner has handed the turn off and is idle while the executor
+      // runs; the requested-tool list is the runner's and is gone, so this is
+      // its own variant rather than a `running_tools` with fabricated fields.
       return {
         type: "running",
         activity: {
-          type: "running_tools",
-          requested: [],
-          truncated: false,
+          type: "awaiting_tools",
+          activeTools: mode.activeTools,
         },
       };
     }
@@ -259,7 +262,10 @@ export class Thread extends Emitter<AgentEvents> {
     if (state.mode.type === "yielded") {
       return {
         type: "yielded",
-        value: { type: "text", text: state.mode.response },
+        value: state.lastYieldValue ?? {
+          type: "text",
+          text: state.mode.response,
+        },
       };
     }
     if (state.failedSubmit) {

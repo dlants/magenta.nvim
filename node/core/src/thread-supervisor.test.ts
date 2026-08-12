@@ -1,5 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { AutoCompactSupervisor } from "./thread-supervisor.ts";
+import {
+  AutoCompactSupervisor,
+  mergeRequestActions,
+} from "./thread-supervisor.ts";
+
+describe("mergeRequestActions", () => {
+  it("keeps a compact request when another supervisor injects", () => {
+    expect(
+      mergeRequestActions([
+        { type: "inject", text: "note", andThen: { type: "none" } },
+        { type: "compact", nextPrompt: "go" },
+      ]),
+    ).toEqual({
+      type: "inject",
+      text: "note",
+      andThen: { type: "compact", nextPrompt: "go" },
+    });
+  });
+
+  it("joins injected texts in order", () => {
+    expect(
+      mergeRequestActions([
+        { type: "inject", text: "first", andThen: { type: "none" } },
+        { type: "none" },
+        { type: "inject", text: "second", andThen: { type: "none" } },
+      ]),
+    ).toEqual({
+      type: "inject",
+      text: "first\n\nsecond",
+      andThen: { type: "none" },
+    });
+  });
+
+  it("joins compact prompts and returns none when nothing was requested", () => {
+    expect(
+      mergeRequestActions([
+        { type: "compact", nextPrompt: "a" },
+        { type: "compact", nextPrompt: undefined },
+        { type: "compact", nextPrompt: "b" },
+      ]),
+    ).toEqual({ type: "compact", nextPrompt: "a\n\nb" });
+    expect(mergeRequestActions([{ type: "none" }])).toEqual({ type: "none" });
+  });
+});
 
 describe("AutoCompactSupervisor", () => {
   it("returns compact (with nextPrompt) at or over the threshold", () => {

@@ -1,4 +1,4 @@
-import type { InputMessage } from "./agent.ts";
+import type { ActiveToolEntry, InputMessage } from "./agent.ts";
 import type {
   RequestedTool,
   RetryStatus,
@@ -11,6 +11,7 @@ import type {
   RequestContext,
   YieldAction,
 } from "./thread-supervisor.ts";
+import type { ToolRequestId } from "./tool-types.ts";
 
 /** What a thread hands back when it yields. Which variant a thread produces is
  * fixed at construction — a thread either has a `yieldSchema` or does not — so
@@ -41,6 +42,13 @@ export type TurnActivity =
       requested: ReadonlyArray<RequestedTool>;
       /** the turn was cut short by the output token limit mid-tool-use */
       truncated: boolean;
+    }
+  /** The runner has handed off and is idle while the thread's executor runs
+   * the tools; the runner's requested list is no longer available, so the
+   * live tool entries are what there is to show. */
+  | {
+      type: "awaiting_tools";
+      activeTools: ReadonlyMap<ToolRequestId, ActiveToolEntry>;
     };
 
 /** Where a thread is right now. Observational, for rendering — outcomes travel

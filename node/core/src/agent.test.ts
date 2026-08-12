@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentContext } from "./agent.ts";
+import type { ActiveToolEntry, AgentContext } from "./agent.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
@@ -158,6 +158,89 @@ describe("Thread.phase", () => {
       lastResult: { type: "completed" },
     });
   });
+  it("reports a failed submission as idle with the resubmit text", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    await core.sendMessage([{ type: "user", text: "find the bug" }]);
+    const stream = await mockClient.awaitStream();
+    stream.respondWithError(new Error("provider failure"));
+    await pollUntil(() => {
+      if (core.phase.type === "idle") return true;
+      throw new Error(`waiting for idle, currently: ${core.phase.type}`);
+    });
+    const phase = core.phase;
+    if (phase.type !== "idle") throw new Error("expected idle");
+    expect(phase.lastResult?.type).toBe("failed");
+    if (phase.lastResult?.type !== "failed") throw new Error("expected failed");
+    expect(phase.lastResult.resubmit).toContain("find the bug");
+    expect(phase.lastResult.error.message).toBe("provider failure");
+  });
+
+  it("reports an aborted turn as idle with an aborted result", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    core.sendMessage([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("partial");
+    await core.abort();
+    await pollUntil(() => {
+      if (core.phase.type === "idle") return true;
+      throw new Error(`waiting for idle, currently: ${core.phase.type}`);
+    });
+    expect(core.phase).toEqual({
+      type: "idle",
+      lastResult: { type: "aborted" },
+    });
+  });
+
+  it("is running/awaiting_tools when tools run outside the runner's view", () => {
+    const { core } = createAgentWithMock();
+    const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
+    activeTools.set("tool-await" as ToolRequestId, {
+      handle: undefined as unknown as ActiveToolEntry["handle"],
+      progress: undefined,
+      toolName: "bash" as ToolName,
+      request: {
+        id: "tool-await" as ToolRequestId,
+        toolName: "bash" as ToolName,
+        input: {},
+      } as ActiveToolEntry["request"],
+    });
+    core.state.mode = { type: "tool_use", activeTools };
+    expect(core.phase).toEqual({
+      type: "running",
+      activity: { type: "awaiting_tools", activeTools },
+    });
+  });
+
+  it("surfaces a structured yield as a structured result", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+      yieldSchema: {
+        type: "object",
+        properties: { count: { type: "number" } },
+        required: ["count"],
+      },
+    });
+    core.sendMessage([{ type: "user", text: "do the task" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "tool-phase-structured" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { count: 3 },
+    );
+    stream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (core.state.mode.type === "yielded") return true;
+      throw new Error("waiting for yield");
+    });
+    expect(core.phase).toEqual({
+      type: "idle",
+      lastResult: {
+        type: "yielded",
+        value: { type: "structured", value: { count: 3 } },
+      },
+    });
+  });
+
   it("reports a yield as an idle thread with a yielded result", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
@@ -754,6 +837,73 @@ describe("AutoCompactSupervisor integration", () => {
       throw new Error("waiting for compaction");
     });
     expect(compactCalls).toBe(1);
+  });
+
+  it("prepends an injected text to the next turn", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    let injected = false;
+    core.supervisors = [
+      {
+        onBeforeRequest: () => {
+          if (injected) return { type: "none" };
+          injected = true;
+          return {
+            type: "inject",
+            text: "remember this",
+            andThen: { type: "none" },
+          };
+        },
+      },
+    ];
+    await core.sendMessage([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (injected) return true;
+      throw new Error("waiting for injection");
+    });
+    await core.sendMessage([{ type: "user", text: "next" }]);
+    const stream2 = await mockClient.awaitStream();
+    expect(JSON.stringify(stream2.messages)).toContain("remember this");
+    stream2.streamText("ok");
+    stream2.finishResponse("end_turn");
+  });
+
+  it("compacts when an injecting supervisor also asks for compaction", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    let asked = false;
+    core.supervisors = [
+      {
+        onBeforeRequest: () => {
+          if (asked) return { type: "none" };
+          asked = true;
+          return {
+            type: "inject",
+            text: "note",
+            andThen: { type: "compact", nextPrompt: "carry on" },
+          };
+        },
+      },
+    ];
+    let compactPrompt: string | undefined = "unset";
+    let compactCalls = 0;
+    core.startCompaction = (p?: string) => {
+      compactCalls++;
+      compactPrompt = p;
+    };
+    await core.sendMessage([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("partial");
+    // max_tokens would otherwise trigger the continue-prompt; compaction wins.
+    stream.finishResponse("max_tokens");
+    await pollUntil(() => {
+      if (compactCalls > 0) return true;
+      throw new Error("waiting for compaction");
+    });
+    expect(compactCalls).toBe(1);
+    expect(compactPrompt).toBe("carry on");
+    expect(JSON.stringify(core.pendingTurnContent)).toContain("note");
   });
 
   it("consults all supervisors and combines their compact prompts in order", async () => {

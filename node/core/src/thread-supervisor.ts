@@ -17,18 +17,67 @@ export type YieldAction =
 
 /** Action returned from the `onBeforeRequest` hook. */
 export type RequestAction =
-  | { type: "compact"; nextPrompt?: string }
-  /** Interject text into the request that is about to be issued. The optional
-   * `annotation` is opaque to the runner, which parks it on the message the
-   * injection produced, so a structured record never has to be recovered by
-   * parsing the injected plaintext. */
+  | { type: "compact"; nextPrompt: string | undefined }
+  /** Interject text into the request that is about to be issued. `then` says
+   * what happens to the request itself, so "compact" is representable from
+   * exactly one place in this union rather than from two variants. */
   | {
       type: "inject";
       text: string;
-      annotation?: unknown;
-      alsoCompact?: boolean;
+      andThen:
+        | { type: "compact"; nextPrompt: string | undefined }
+        | { type: "none" };
     }
   | { type: "none" };
+
+/** Today's merge semantics for several supervisors answering the same
+ * request: injected texts are joined, compaction requests are OR-ed and their
+ * prompts joined, and an injection carries any compaction along with it so a
+ * compact request is never lost when a supervisor also injects. */
+export function mergeRequestActions(
+  actions: ReadonlyArray<RequestAction>,
+): RequestAction {
+  const injections: string[] = [];
+  const prompts: string[] = [];
+  let shouldCompact = false;
+  for (const action of actions) {
+    if (action.type === "inject") {
+      injections.push(action.text);
+    }
+    const compaction = requestedCompaction(action);
+    if (compaction) {
+      shouldCompact = true;
+      if (compaction.nextPrompt !== undefined) {
+        prompts.push(compaction.nextPrompt);
+      }
+    }
+  }
+  const nextPrompt = prompts.length > 0 ? prompts.join("\n\n") : undefined;
+  const andThen:
+    | { type: "compact"; nextPrompt: string | undefined }
+    | {
+        type: "none";
+      } = shouldCompact ? { type: "compact", nextPrompt } : { type: "none" };
+  if (injections.length === 0) return andThen;
+  return { type: "inject", text: injections.join("\n\n"), andThen };
+}
+
+/** The compaction a request action asks for, if any — so consumers do not have
+ * to test two variants. */
+export function requestedCompaction(
+  action: RequestAction,
+): { nextPrompt: string | undefined } | undefined {
+  switch (action.type) {
+    case "compact":
+      return { nextPrompt: action.nextPrompt };
+    case "inject":
+      return action.andThen.type === "compact"
+        ? { nextPrompt: action.andThen.nextPrompt }
+        : undefined;
+    case "none":
+      return undefined;
+  }
+}
 
 /** Union of all hook action types. Prefer the narrower per-hook types
  *  where possible so that a hook cannot return an action it does not

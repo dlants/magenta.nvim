@@ -53,12 +53,15 @@ import {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
-import type {
-  EndTurnAction,
-  EndTurnContext,
-  RequestAction,
-  ThreadSupervisor,
-  YieldAction,
+import type { YieldValue } from "./thread-api.ts";
+import {
+  type EndTurnAction,
+  type EndTurnContext,
+  mergeRequestActions,
+  type RequestAction,
+  requestedCompaction,
+  type ThreadSupervisor,
+  type YieldAction,
 } from "./thread-supervisor.ts";
 import type {
   ToolInvocation,
@@ -231,6 +234,11 @@ export type ThreadState = {
   failedSubmit: { userMessage: string; errorMessage: string } | undefined;
   /** How the most recent turn ended. Kept for rendering an idle agent. */
   lastTurnResult: TurnResult | undefined;
+  /** The value the most recent yield produced, minted where the yield tool's
+   * input is still structured so nothing has to parse it back out of
+   * `mode.yielded.response`. */
+
+  lastYieldValue: YieldValue | undefined;
   preSubmitNativeIdx: NativeMessageIdx | undefined;
   activeReminders: Set<string>;
   toolSpecs: ProviderToolSpec[];
@@ -693,8 +701,8 @@ export class Agent extends Emitter<AgentEvents> {
 
     const request = this.consultBeforeRequestSupervisors(stopReason);
     if (request.type === "inject") {
-      // Stage 4 carries the text (and its annotation) on the request itself;
-      // until then the closest available mechanism is the next turn's prefix.
+      // Stage 4 carries the text on the request itself; until then the closest
+      // available mechanism is the next turn's prefix.
       this.prependToNextTurn([
         {
           type: "text",
@@ -703,13 +711,9 @@ export class Agent extends Emitter<AgentEvents> {
         },
       ]);
     }
-    if (
-      request.type === "compact" ||
-      (request.type === "inject" && request.alsoCompact)
-    ) {
-      this.deps.requestCompaction(
-        request.type === "compact" ? request.nextPrompt : undefined,
-      );
+    const compaction = requestedCompaction(request);
+    if (compaction) {
+      this.deps.requestCompaction(compaction.nextPrompt);
       return;
     }
 
@@ -843,6 +847,13 @@ export class Agent extends Emitter<AgentEvents> {
     let yieldResult: string | undefined;
     for (const [id, entry] of activeTools) {
       if (entry.toolName === "yield_to_parent") {
+        this.state.lastYieldValue =
+          this.context.yieldSchema !== undefined
+            ? { type: "structured", value: entry.request.input }
+            : {
+                type: "text",
+                text: (entry.request.input as { result: string }).result,
+              };
         yieldResult =
           this.context.yieldSchema !== undefined
             ? JSON.stringify(entry.request.input)
@@ -877,8 +888,23 @@ export class Agent extends Emitter<AgentEvents> {
     }
 
     const request = this.consultBeforeRequestSupervisors("tool_use");
-    if (request.type === "compact") {
-      this.suspendReason = { type: "compact", nextPrompt: request.nextPrompt };
+    if (request.type === "inject") {
+      // Stage 4 delivers this on the continuation request itself; until then
+      // the next turn's prefix is the closest available mechanism.
+      this.prependToNextTurn([
+        {
+          type: "text",
+          text: request.text,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ]);
+    }
+    const compaction = requestedCompaction(request);
+    if (compaction) {
+      this.suspendReason = {
+        type: "compact",
+        nextPrompt: compaction.nextPrompt,
+      };
       return { type: "suspend", results };
     }
 
@@ -1119,6 +1145,9 @@ export class Agent extends Emitter<AgentEvents> {
         const response = action.resultPrefix
           ? `${action.resultPrefix}\n\n${yieldResult}`
           : yieldResult;
+        if (this.state.lastYieldValue?.type !== "structured") {
+          this.state.lastYieldValue = { type: "text", text: response };
+        }
         this.update({
           type: "set-mode",
           mode: { type: "yielded", response, tornDown: true },
@@ -1377,31 +1406,12 @@ export class Agent extends Emitter<AgentEvents> {
     stopReason: StreamStopReason,
   ): RequestAction {
     const inputTokenCount = this.runner.log.inputTokenCount;
-    const prompts: string[] = [];
-    const injections: string[] = [];
-    let shouldCompact = false;
+    const actions: RequestAction[] = [];
     for (const sup of this.deps.getSupervisors()) {
       const action = sup.onBeforeRequest?.({ inputTokenCount, stopReason });
-      if (!action) continue;
-      if (action.type === "compact") {
-        shouldCompact = true;
-        if (action.nextPrompt !== undefined) prompts.push(action.nextPrompt);
-      } else if (action.type === "inject") {
-        injections.push(action.text);
-        if (action.alsoCompact) shouldCompact = true;
-      }
+      if (action) actions.push(action);
     }
-    if (injections.length > 0) {
-      return {
-        type: "inject",
-        text: injections.join("\n\n"),
-        alsoCompact: shouldCompact,
-      };
-    }
-    if (!shouldCompact) return { type: "none" };
-    return prompts.length > 0
-      ? { type: "compact", nextPrompt: prompts.join("\n\n") }
-      : { type: "compact" };
+    return mergeRequestActions(actions);
   }
 
   private disposed = false;
