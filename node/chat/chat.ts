@@ -59,7 +59,7 @@ import { shortenPath } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
 import { formatTokenCount } from "../utils/tokens.ts";
 import type { SandboxRoot } from "./thread.ts";
-import { Thread } from "./thread.ts";
+import { NvimThread } from "./thread.ts";
 import { DockerSupervisor } from "./thread-supervisor.ts";
 import { view as threadView } from "./thread-view.ts";
 
@@ -80,7 +80,7 @@ type ThreadWrapper = (
     }
   | {
       state: "initialized";
-      thread: Thread;
+      thread: NvimThread;
     }
   | {
       state: "error";
@@ -119,7 +119,7 @@ type ChatState =
 export type Msg =
   | {
       type: "thread-initialized";
-      thread: Thread;
+      thread: NvimThread;
     }
   | {
       type: "thread-error";
@@ -587,7 +587,7 @@ export class Chat implements ThreadManager {
   }
 
   private triggerHierarchyDiscovery(
-    thread: Thread,
+    thread: NvimThread,
     absFilePath: AbsFilePath,
   ): void {
     discoverHierarchyContext(absFilePath, {
@@ -641,7 +641,7 @@ export class Chat implements ThreadManager {
     fileIO?: FileIO;
     environmentConfig?: EnvironmentConfig;
     dockerSpawnConfig?: DockerSpawnConfig | undefined;
-    getParentThread?: () => Thread | undefined;
+    getParentThread?: () => NvimThread | undefined;
     getSandboxRoot?: () => SandboxRoot | undefined;
     yieldSchema?: JSONSchemaType;
     scriptInvocationId?: ScriptInvocationId;
@@ -726,7 +726,7 @@ export class Chat implements ThreadManager {
       ...(subagentConfig ? { subagentConfig } : {}),
     });
 
-    const thread = new Thread(threadId, threadType, systemPrompt, {
+    const thread = new NvimThread(threadId, threadType, systemPrompt, {
       ...this.context,
       options: this.context.getOptions(),
       mcpToolManager: this.mcpToolManager,
@@ -847,7 +847,7 @@ export class Chat implements ThreadManager {
     const agentDef = agents[agentName];
     if (!agentDef) {
       throw new Error(
-        `Agent "${agentName}" not found. Available agents: ${Object.keys(agents).join(", ")}`,
+        `Runner "${agentName}" not found. Available agents: ${Object.keys(agents).join(", ")}`,
       );
     }
 
@@ -1346,7 +1346,7 @@ ${rows}${loadMore}`;
     });
   }
 
-  getActiveThread(): Thread {
+  getActiveThread(): NvimThread {
     if (!this.state.activeThreadId) {
       throw new Error(`Chat is not initialized yet... no active thread`);
     }
@@ -1384,7 +1384,7 @@ ${rows}${loadMore}`;
       lastViewedTime: Date.now(),
     };
 
-    const thread = await Thread.cloneFromNativeMessageIdx({
+    const thread = await NvimThread.cloneFromNativeMessageIdx({
       sourceThread,
       newThreadId,
       nativeMessageIdx: idx,
@@ -1595,7 +1595,8 @@ ${rows}${loadMore}`;
                 };
               default:
                 return assertUnreachable(agentPhase);
-            }          })(),
+            }
+          })(),
         };
 
         return summary;

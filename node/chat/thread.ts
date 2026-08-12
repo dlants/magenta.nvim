@@ -7,13 +7,13 @@ import type {
   ThreadSupervisor,
 } from "@magenta/core";
 import {
+  Agent,
   type ContextFiles,
   type ContextManager,
   type InputMessage,
   loadAgents,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
-  ThreadCore,
   type ThreadId,
   type ThreadType,
   type ToolRequestId,
@@ -30,10 +30,10 @@ import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.t
 import type { Row0Indexed } from "../nvim/window.ts";
 import type { MagentaOptions, Profile } from "../options.ts";
 import {
-  type Agent,
   type AgentPhase,
   getProvider,
   type ProviderMessage,
+  type Runner,
 } from "../providers/provider.ts";
 import type { SystemInfo, SystemPrompt } from "../providers/system-prompt.ts";
 import type { RootMsg } from "../root-msg.ts";
@@ -194,7 +194,7 @@ export type ToolViewState = {
   progressItemExpanded?: { [key: string]: boolean };
 };
 
-export class Thread {
+export class NvimThread {
   public state: {
     showSystemPrompt: boolean;
     showToolDefinitions: boolean;
@@ -214,7 +214,7 @@ export class Thread {
     forkedTo: { childThreadId: ThreadId; atMessageIdx: NativeMessageIdx }[];
   };
 
-  public core: ThreadCore;
+  public core: Agent;
   private myDispatch: Dispatch<Msg>;
   private lastAppliedTitle: string | undefined;
   public sandboxViolationHandler: SandboxViolationHandler | undefined;
@@ -224,7 +224,7 @@ export class Thread {
     return this.core.contextManager;
   }
 
-  get agent(): Agent {
+  get agent(): Runner {
     return this.core.agent;
   }
 
@@ -258,7 +258,7 @@ export class Thread {
       homeDir: HomeDir;
       options: MagentaOptions;
       getDisplayWidth: () => number;
-      getParentThread?: () => Thread | undefined;
+      getParentThread?: () => NvimThread | undefined;
       getSandboxRoot?: () => SandboxRoot | undefined;
       yieldSchema?: JSONSchemaType;
       scriptName?: string;
@@ -268,8 +268,8 @@ export class Thread {
       subagentConfig?: SubagentConfig;
       systemInfo: SystemInfo;
     },
-    clonedAgent?: Agent,
-    preBuiltCore?: ThreadCore,
+    clonedAgent?: Runner,
+    preBuiltCore?: Agent,
   ) {
     this.myDispatch = (msg) =>
       this.context.dispatch({
@@ -300,7 +300,7 @@ export class Thread {
     if (preBuiltCore) {
       this.core = preBuiltCore;
     } else {
-      this.core = new ThreadCore(
+      this.core = new Agent(
         id,
         {
           logger: context.nvim.logger,
@@ -466,12 +466,12 @@ export class Thread {
   }
 
   /** Build an independent fork of `sourceThread` frozen at `nativeMessageIdx`.
-   * The cloned agent is created exactly once (by ThreadCore.clone). The source
+   * The cloned agent is created exactly once (by Agent.clone). The source
    * is not aborted, no auto-context is re-resolved, and no system prompt is
-   * regenerated. The result is a new Thread with its own environment and
+   * regenerated. The result is a new NvimThread with its own environment and
    * Layer 3 view state, ready to continue from the snapshot. */
   static async cloneFromNativeMessageIdx(args: {
-    sourceThread: Thread;
+    sourceThread: NvimThread;
     newThreadId: ThreadId;
     nativeMessageIdx: NativeMessageIdx;
     chat: Chat;
@@ -484,7 +484,7 @@ export class Thread {
     sandbox: Sandbox;
     getOptions: () => MagentaOptions;
     getDisplayWidth: () => number;
-  }): Promise<Thread> {
+  }): Promise<NvimThread> {
     const {
       sourceThread,
       newThreadId,
@@ -531,7 +531,7 @@ export class Thread {
     const profile = sourceThread.context.profile;
     const sourceCoreState = sourceCore.state;
 
-    const core = await ThreadCore.clone({
+    const core = await Agent.clone({
       sourceCore,
       newId: newThreadId,
       nativeMessageIdx,
@@ -573,7 +573,7 @@ export class Thread {
       },
     });
 
-    const thread = new Thread(
+    const thread = new NvimThread(
       newThreadId,
       sourceCoreState.threadType,
       sourceCoreState.systemPrompt,
@@ -930,7 +930,7 @@ export class Thread {
       }
 
       case "toggle-sandbox-bypass": {
-        let root: Thread = this;
+        let root: NvimThread = this;
         let parentThread = root.context.getParentThread?.();
         while (parentThread) {
           root = parentThread;

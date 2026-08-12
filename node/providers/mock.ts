@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import {
   MockOpenAIClient,
-  OpenAIAgent,
+  OpenAIRunner,
   type OpenAIStreamingClient,
   type ToolRequest,
   validateInput,
@@ -9,14 +9,13 @@ import {
 import winston from "winston";
 import { Defer, pollUntil } from "../utils/async.ts";
 import type { Result } from "../utils/result.ts";
-import { AnthropicAgent } from "./anthropic-agent.ts";
+import { AnthropicRunner } from "./anthropic-runner.ts";
 import {
   MockAnthropicClient,
   type MockStream,
 } from "./mock-anthropic-client.ts";
 import { setMockProvider } from "./provider.ts";
 import type {
-  Agent,
   AgentInput,
   AgentOptions,
   Provider,
@@ -25,6 +24,7 @@ import type {
   ProviderStreamRequest,
   ProviderToolSpec,
   ProviderToolUseRequest,
+  Runner,
   StreamStopReason,
   Usage,
 } from "./provider-types.ts";
@@ -60,7 +60,7 @@ type MockForceToolUseRequest = {
   input: AgentInput[];
   spec: ProviderToolSpec;
   systemPrompt?: string | undefined;
-  contextAgent?: Agent | undefined;
+  contextAgent?: Runner | undefined;
   defer: Defer<{
     toolRequest: Result<ToolRequest, { rawRequest: unknown }>;
     stopReason: StreamStopReason;
@@ -113,7 +113,7 @@ export class MockProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: Agent;
+    contextAgent?: Runner;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -372,9 +372,9 @@ Streams: ${this.mockClient.streams.length}`);
     });
   }
 
-  createAgent(options: AgentOptions): Agent {
+  createAgent(options: AgentOptions): Runner {
     if (this.agentKind === "openai") {
-      return new OpenAIAgent(
+      return new OpenAIRunner(
         options,
         this.mockOpenAIClient as unknown as OpenAIStreamingClient,
         {
@@ -384,7 +384,7 @@ Streams: ${this.mockClient.streams.length}`);
         },
       );
     }
-    return new AnthropicAgent(
+    return new AnthropicRunner(
       options,
       this.mockClient as unknown as Anthropic,
       {

@@ -19,16 +19,15 @@ import type {
 } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Result } from "../utils/result.ts";
-import { getRetryDelay, MAX_RETRY_DURATION } from "./anthropic-agent.ts";
+import { getRetryDelay, MAX_RETRY_DURATION } from "./anthropic-runner.ts";
 import {
   bedrockMantleBaseUrl,
   createSigV4Fetch,
   DEFAULT_BEDROCK_MANTLE_REGION,
 } from "./bedrock-sigv4.ts";
 import type { CodexCredentials } from "./codex-auth.ts";
-import { OpenAIAgent } from "./openai-agent.ts";
+import { OpenAIRunner } from "./openai-runner.ts";
 import {
-  type Agent,
   type AgentInput,
   type AgentOptions,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -43,6 +42,7 @@ import {
   type ProviderToolUseRequest,
   type ProviderToolUseResponse,
   type ProviderWebSearchCitation,
+  type Runner,
   type StopReason,
   type Usage,
 } from "./provider-types.ts";
@@ -1017,7 +1017,7 @@ export class OpenAIProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: Agent;
+    contextAgent?: Runner;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -1161,11 +1161,11 @@ export class OpenAIProvider implements Provider {
     };
   }
 
-  createAgent(options: AgentOptions): Agent {
+  createAgent(options: AgentOptions): Runner {
     if (this.authType === "chatgpt") {
       assertChatGPTModelSupported(options.model);
     }
-    return new OpenAIAgent(options, this.client, {
+    return new OpenAIRunner(options, this.client, {
       includeWebSearch: this.includeWebSearch,
       logger: this.logger,
       validateInput: this.validateInput,

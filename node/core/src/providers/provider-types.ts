@@ -211,7 +211,7 @@ export interface Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: Agent;
+    contextAgent?: Runner;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -220,7 +220,7 @@ export interface Provider {
     };
   }): ProviderToolUseRequest;
 
-  createAgent(options: AgentOptions): Agent;
+  createAgent(options: AgentOptions): Runner;
 }
 
 /** Presence of this value implies a usable provider-native item id; there is
@@ -284,7 +284,7 @@ export interface ProviderToolUseRequest {
 }
 
 // ============================================================================
-// Agent - Stateful conversation agent interface
+// Runner - Stateful conversation agent interface
 // ============================================================================
 
 export type RetryStatus = {
@@ -293,8 +293,8 @@ export type RetryStatus = {
   error: Error;
 };
 
-/** Branded type for native message index within an Agent.
- * This is opaque to external code - only the Agent knows how to use it.
+/** Branded type for native message index within an Runner.
+ * This is opaque to external code - only the Runner knows how to use it.
  */
 export type NativeMessageIdx = number & { __nativeMessageIdx: true };
 
@@ -384,7 +384,7 @@ export type AgentLog = {
   readonly inputTokenCount: number | undefined;
 };
 
-export interface Agent {
+export interface Runner {
   readonly phase: AgentPhase;
   readonly log: AgentLog;
 
@@ -425,7 +425,7 @@ export interface Agent {
    * is `idle`, with incomplete blocks and unanswered tool_use cleaned up.
    * The clone keeps the source's hooks; a new owner calls `bindHooks`.
    */
-  clone(): Agent;
+  clone(): Runner;
 
   /** Point the agent's collaborators at a new owner, dropping any
    * `onBeforeToolResponse` installed by the previous one. */

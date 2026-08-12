@@ -11,21 +11,20 @@ import type {
 } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { extendError, type Result } from "../utils/result.ts";
-import {
-  AnthropicAgent,
-  getRetryDelay,
-  isRetryableError,
-  MAX_RETRY_DURATION,
-} from "./anthropic-agent.ts";
 import { withCacheControl } from "./anthropic-cache.ts";
 import {
   CLAUDE_CODE_SPOOF_PROMPT,
   getMaxTokensForModel,
   resolveOutputConfig,
 } from "./anthropic-models.ts";
+import {
+  AnthropicRunner,
+  getRetryDelay,
+  isRetryableError,
+  MAX_RETRY_DURATION,
+} from "./anthropic-runner.ts";
 import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
 import type {
-  Agent,
   AgentInput,
   AgentOptions,
   Provider,
@@ -33,6 +32,7 @@ import type {
   ProviderTextContent,
   ProviderToolSpec,
   ProviderToolUseRequest,
+  Runner,
   Usage,
 } from "./provider-types.ts";
 
@@ -480,7 +480,7 @@ export class AnthropicProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: Agent;
+    contextAgent?: Runner;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -522,7 +522,7 @@ export class AnthropicProvider implements Provider {
 
     // Extract native messages from context agent if provided
     let contextMessages: Anthropic.MessageParam[] = [];
-    if (contextAgent && contextAgent instanceof AnthropicAgent) {
+    if (contextAgent && contextAgent instanceof AnthropicRunner) {
       contextMessages = contextAgent.getNativeMessages();
     }
 
@@ -756,8 +756,8 @@ export class AnthropicProvider implements Provider {
     };
   }
 
-  createAgent(options: AgentOptions): Agent {
-    return new AnthropicAgent(options, this.client, {
+  createAgent(options: AgentOptions): Runner {
+    return new AnthropicRunner(options, this.client, {
       authType: this.authType,
       includeWebSearch: this.includeWebSearch,
       disableParallelToolUseFlag: this.disableParallelToolUseFlag,

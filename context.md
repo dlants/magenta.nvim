@@ -4,7 +4,7 @@ This is a neovim plugin for agentic tool use. The entrypoint is `lua/magenta/ini
 
 The node code is organized as npm workspaces:
 
-- `node/core/` (`@magenta/core`) — standalone logic with no neovim dependency (tools, providers, agents, thread-core, EDL, etc.)
+- `node/core/` (`@magenta/core`) — standalone logic with no neovim dependency (tools, providers, agents, agent/runner, EDL, etc.)
 - Root project — neovim-specific code (sidebar, TEA rendering, buffer-tracker, nvim bindings)
 
 The root `tsconfig.json` uses TypeScript project references to enforce the boundary: core cannot import from the root project.
@@ -33,12 +33,12 @@ Prefer `pkb search <query>` to grep for exploratory queries.
 
 ## Core layer (`@magenta/core`)
 
-Core classes like `ThreadCore` and `AnthropicAgent` are **event emitters**. They extend a custom type-safe `Emitter<Events>` class (`node/core/src/emitter.ts`) that provides `on()`, `off()`, and `emit()` methods parameterized on a typed event map.
+Core classes like `Agent` and `AnthropicRunner` are **event emitters**. They extend a custom type-safe `Emitter<Events>` class (`node/core/src/emitter.ts`) that provides `on()`, `off()`, and `emit()` methods parameterized on a typed event map.
 
-- **`Agent`** (`node/core/src/providers/provider-types.ts`) — emits `didUpdate`, `stopped`, and `error` events as it streams responses.
-- **`ThreadCore`** (`node/core/src/thread-core.ts`) — orchestrates agents and tools. Emits `update`, `playChime`, `scrollToLastMessage`, `setupResubmit`, `aborting`, and `contextUpdatesSent`.
+- **`Runner`** (`node/core/src/providers/provider-types.ts`) — the provider-specific turn loop; emits `didUpdate`, `stopped`, and `error` events as it streams responses.
+- **`Agent`** (`node/core/src/agent.ts`) — orchestrates agents and tools. Emits `update`, `playChime`, `scrollToLastMessage`, `setupResubmit`, `aborting`, and `contextUpdatesSent`.
 
-ThreadCore subscribes to Agent events internally. This means the root project only needs to subscribe to ThreadCore — all core events are routed through a single point rather than requiring the root to subscribe to multiple emitters.
+Agent subscribes to Runner events internally. This means the root project only needs to subscribe to Agent — all core events are routed through a single point rather than requiring the root to subscribe to multiple emitters.
 
 ## Root layer (neovim-specific)
 
@@ -51,7 +51,7 @@ The root project uses a **single-dispatch TEA architecture**:
 
 ## Core → Root bridge
 
-The root `Thread` class (`node/chat/thread.ts`) bridges the two layers. In its constructor, it subscribes to `ThreadCore` events and converts them into dispatches:
+The root `NvimThread` class (`node/chat/thread.ts`) bridges the two layers. In its constructor, it subscribes to `Agent` events and converts them into dispatches:
 
 - `core.on("update")` → dispatches `{ type: "tool-progress" }` to trigger re-renders
 - `core.on("scrollToLastMessage")` → dispatches a `sidebar-msg` to scroll the view

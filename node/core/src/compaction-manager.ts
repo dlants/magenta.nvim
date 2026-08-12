@@ -24,14 +24,13 @@ import { Emitter } from "./emitter.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
-  Agent,
   AgentInput,
   Provider,
   ProviderMessage,
   ProviderToolResult,
   RequestedTool,
+  Runner,
   ToolOutcome,
-  ToolResults,
   TurnResult,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
@@ -66,13 +65,13 @@ export type CompactionState =
       type: "processing-chunk";
       chunkIndex: number;
       totalChunks: number;
-      agent: Agent;
+      agent: Runner;
     }
   | {
       type: "waiting-for-tools";
       chunkIndex: number;
       totalChunks: number;
-      agent: Agent;
+      agent: Runner;
       activeTools: Map<ToolRequestId, ActiveToolEntry>;
     }
   | { type: "complete"; result: CompactionResult }
@@ -281,7 +280,7 @@ export class CompactionManager extends Emitter<CompactionEvents> {
     }
   }
 
-  private createCompactAgent(): Agent {
+  private createCompactAgent(): Runner {
     const provider = this.context.getProvider(this.context.profile);
     const agent = provider.createAgent({
       model: this.context.profile.fastModel,
@@ -348,7 +347,6 @@ export class CompactionManager extends Emitter<CompactionEvents> {
         toolName: request.toolName,
         request,
       });
-
     }
 
     this.send({ type: "tools-started", activeTools });
@@ -372,7 +370,7 @@ export class CompactionManager extends Emitter<CompactionEvents> {
   }
 
   private sendChunkToAgent(
-    agent: Agent,
+    agent: Runner,
     chunks: string[],
     chunkIndex: number,
     nextPrompt?: string,

@@ -1,11 +1,11 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Agent, type AgentContext } from "../agent.ts";
 import type { ThreadId, ThreadType } from "../chat-types.ts";
 import type { Logger } from "../logger.ts";
 import type { OpenAIAuth } from "../openai-auth.ts";
 import type { ProviderProfile } from "../provider-options.ts";
-import { ThreadCore, type ThreadCoreContext } from "../thread-core.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
 import type { MCPToolManager } from "../tools/mcp/manager.ts";
@@ -34,25 +34,25 @@ function createProvider(client?: MockOpenAIClient): OpenAIProvider {
   return provider;
 }
 
-function createThreadCore(): { core: ThreadCore; client: MockOpenAIClient } {
+function createTestAgent(): { core: Agent; client: MockOpenAIClient } {
   const client = new MockOpenAIClient();
   const provider = createProvider(client);
-  const context: ThreadCoreContext = {
+  const context: AgentContext = {
     logger: noopLogger,
     profile: {
       name: "openai-test",
       provider: "openai",
       model: "gpt-5.4",
     } as ProviderProfile,
-    cwd: "/tmp" as ThreadCoreContext["cwd"],
-    homeDir: "/home" as ThreadCoreContext["homeDir"],
+    cwd: "/tmp" as AgentContext["cwd"],
+    homeDir: "/home" as AgentContext["homeDir"],
     threadType: "subagent" as ThreadType,
     systemPrompt: "test system prompt" as unknown as SystemPrompt,
     systemInfo: {
       timestamp: "Mon Jan 01 2024 00:00:00 GMT+0000",
       platform: "linux",
       neovimVersion: "0.10.0",
-      cwd: "/tmp" as ThreadCoreContext["cwd"],
+      cwd: "/tmp" as AgentContext["cwd"],
     },
     mcpToolManager: {
       serverMap: {},
@@ -61,19 +61,19 @@ function createThreadCore(): { core: ThreadCore; client: MockOpenAIClient } {
     threadManager: {
       getThread: () => undefined,
       getThreads: () => [],
-    } as unknown as ThreadCoreContext["threadManager"],
+    } as unknown as AgentContext["threadManager"],
     fileIO: {
       readFile: async () => "",
       writeFile: async () => {},
       fileExists: async () => false,
-    } as unknown as ThreadCoreContext["fileIO"],
+    } as unknown as AgentContext["fileIO"],
     shell: {
       exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    } as unknown as ThreadCoreContext["shell"],
+    } as unknown as AgentContext["shell"],
     gitClient: {
       getState: async () => undefined,
-    } as unknown as ThreadCoreContext["gitClient"],
-    lspClient: {} as unknown as ThreadCoreContext["lspClient"],
+    } as unknown as AgentContext["gitClient"],
+    lspClient: {} as unknown as AgentContext["lspClient"],
     availableCapabilities: new Set(),
     environmentConfig: { type: "local" },
     maxConcurrentSubagents: 1,
@@ -82,7 +82,7 @@ function createThreadCore(): { core: ThreadCore; client: MockOpenAIClient } {
     getProvider: () => provider,
     conversationLogBaseDir: path.join(os.tmpdir(), "magenta-test-archive"),
   };
-  return { core: new ThreadCore("openai-thread" as ThreadId, context), client };
+  return { core: new Agent("openai-thread" as ThreadId, context), client };
 }
 
 describe("OpenAI provider wiring", () => {
@@ -90,8 +90,8 @@ describe("OpenAI provider wiring", () => {
     process.env.MAGENTA_TEST_OPENAI_KEY = "test-key";
   });
 
-  it("runs a ThreadCore turn end to end, including a tool call", async () => {
-    const { core, client } = createThreadCore();
+  it("runs a Agent turn end to end, including a tool call", async () => {
+    const { core, client } = createTestAgent();
     core.sendMessage([{ type: "user", text: "do the task" }]);
 
     const stream = await client.awaitStream();

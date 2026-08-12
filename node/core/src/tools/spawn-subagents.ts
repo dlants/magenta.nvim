@@ -873,7 +873,7 @@ export function getSpec(
                 type: "string",
                 enum: allAgentTypes,
                 description:
-                  "Agent type for this sub-agent. Selects the agent personality/system-prompt. Use 'subagent' for general tasks, or a custom agent name.",
+                  "Runner type for this sub-agent. Selects the agent personality/system-prompt. Use 'subagent' for general tasks, or a custom agent name.",
               },
               ...(dockerConfigured ? DOCKER_AGENT_PROPERTIES : {}),
             },

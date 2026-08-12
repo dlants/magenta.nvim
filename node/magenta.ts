@@ -162,7 +162,7 @@ export class Magenta {
 
         // fork-message: F binding from the view dispatches this. We handle it
         // here at the dispatch layer (clone agent + truncate + switch + populate
-        // input buffer) rather than letting it flow into Thread.update.
+        // input buffer) rather than letting it flow into NvimThread.update.
         if (msg.type === "thread-msg" && msg.msg.type === "fork-message") {
           const sourceThreadId = msg.id;
           const { nativeMessageIdx, prepopulate } = msg.msg;
@@ -1452,7 +1452,7 @@ ${lines.join("\n")}
   /** Run CommandRegistry on user text, returning processed InputMessages. */
   private async processCommands(
     text: string,
-    thread: import("./chat/thread.ts").Thread,
+    thread: import("./chat/thread.ts").NvimThread,
   ): Promise<{ messages: InputMessage[]; reminders: string[] }> {
     const { processedText, additionalContent, reminders } =
       await this.commandRegistry.processMessage(text, {

@@ -1,5 +1,4 @@
 export type {
-  Agent,
   AgentInput,
   AgentLog,
   AgentOptions,
@@ -34,6 +33,7 @@ export type {
   ProviderWebSearchToolResult,
   RequestedTool,
   RetryStatus,
+  Runner,
   StopReason,
   StreamingBlock,
   StreamStopReason,

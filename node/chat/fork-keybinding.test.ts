@@ -3,11 +3,11 @@ import { expect, it } from "vitest";
 import { getCurrentWindow } from "../nvim/nvim.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
-import type { Thread } from "./thread.ts";
+import type { NvimThread } from "./thread.ts";
 
 /** The fork marker is queued for the fork's first turn rather than appended to
  * the cloned history at fork time. */
-function expectForkNotificationQueued(thread: Thread): void {
+function expectForkNotificationQueued(thread: NvimThread): void {
   expect(
     thread.core.pendingTurnContent.some(
       (c) => c.type === "text" && c.text.includes("<fork-notification>"),

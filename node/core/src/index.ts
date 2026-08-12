@@ -1,3 +1,13 @@
+export {
+  type ActiveToolEntry,
+  Agent,
+  type AgentAction,
+  type AgentContext,
+  type AgentEvents,
+  type EnvironmentConfig,
+  type InputMessage,
+  type ThreadMode,
+} from "./agent.ts";
 export type { AgentInfo, AgentsMap } from "./agents/agents.ts";
 export { loadAgents } from "./agents/agents.ts";
 export type { AnthropicAuth, OAuthTokens } from "./anthropic-auth.ts";
@@ -123,11 +133,6 @@ export type {
   ProviderProfile,
 } from "./provider-options.ts";
 export { AnthropicProvider } from "./providers/anthropic.ts";
-export type { AnthropicAgentOptions } from "./providers/anthropic-agent.ts";
-export {
-  ABORT_MARKER_TEXT,
-  AnthropicAgent,
-} from "./providers/anthropic-agent.ts";
 export { withCacheControl } from "./providers/anthropic-cache.ts";
 export { convertAnthropicMessagesToProvider } from "./providers/anthropic-conversion.ts";
 export {
@@ -135,6 +140,11 @@ export {
   getContextWindowForModel,
   getMaxTokensForModel,
 } from "./providers/anthropic-models.ts";
+export type { AnthropicRunnerOptions } from "./providers/anthropic-runner.ts";
+export {
+  ABORT_MARKER_TEXT,
+  AnthropicRunner,
+} from "./providers/anthropic-runner.ts";
 export type { BedrockProviderOptions } from "./providers/bedrock.ts";
 export { BedrockProvider } from "./providers/bedrock.ts";
 export { CodexAuth, CodexAuthError } from "./providers/codex-auth.ts";
@@ -148,12 +158,11 @@ export {
 } from "./providers/mock-openai-client.ts";
 export { OpenAIProvider } from "./providers/openai.ts";
 export {
-  OpenAIAgent,
+  OpenAIRunner,
   type OpenAIStreamingClient,
-} from "./providers/openai-agent.ts";
+} from "./providers/openai-runner.ts";
 export { getProvider, setMockProvider } from "./providers/provider.ts";
 export type {
-  Agent,
   AgentHooks,
   AgentInput,
   AgentLog,
@@ -188,6 +197,7 @@ export type {
   ProviderWebSearchToolResult,
   RequestedTool,
   RetryStatus,
+  Runner,
   StopReason,
   StreamingBlock,
   StreamStopReason,
@@ -216,16 +226,6 @@ export {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
-export {
-  type ActiveToolEntry,
-  type EnvironmentConfig,
-  type InputMessage,
-  ThreadCore,
-  type ThreadCoreAction,
-  type ThreadCoreContext,
-  type ThreadCoreEvents,
-  type ThreadMode,
-} from "./thread-core.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
   EndTurnAction,

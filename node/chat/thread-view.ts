@@ -25,11 +25,11 @@ import {
 } from "../context/context-manager.ts";
 import type {
   AgentPhase,
-  TurnResult,
   ProviderMessage,
   ProviderMessageContent,
   ProviderToolResult,
   StopReason,
+  TurnResult,
   Usage,
 } from "../providers/provider.ts";
 import type { SystemPrompt } from "../providers/system-prompt.ts";
@@ -53,9 +53,9 @@ import {
 } from "../tea/view.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { formatTokens } from "../utils/tokens.ts";
-import type { Msg, Thread, ToolViewState } from "./thread.ts";
+import type { Msg, NvimThread, ToolViewState } from "./thread.ts";
 
-function contextViewCtx(thread: Thread): ContextViewContext {
+function contextViewCtx(thread: NvimThread): ContextViewContext {
   return {
     cwd: thread.context.cwd,
     homeDir: thread.context.homeDir,
@@ -267,7 +267,7 @@ const renderToolDefinitions = (
 
 function renderCompactionHistory(
   history: CompactionRecord[],
-  viewState: Thread["state"]["compactionViewState"],
+  viewState: NvimThread["state"]["compactionViewState"],
   dispatch: Dispatch<Msg>,
 ): VDOMNode {
   if (history.length === 0) return d``;
@@ -326,7 +326,7 @@ function renderCompactionHistory(
 }
 function editedFilesSummaryView(
   editedFiles: ReadonlyArray<{ path: AbsFilePath; snapshot: string }>,
-  thread: Thread,
+  thread: NvimThread,
   dispatch: Dispatch<Msg>,
 ): VDOMNode {
   if (editedFiles.length === 0) return d``;
@@ -360,7 +360,7 @@ const PENDING_PREVIEW_CHARS = 200;
 function renderPendingMessage(
   text: string,
   index: number,
-  thread: Thread,
+  thread: NvimThread,
   dispatch: Dispatch<Msg>,
   label = "# ✉️ queued:\n",
 ): VDOMNode {
@@ -400,7 +400,7 @@ function renderPendingMessage(
 }
 
 export const view: View<{
-  thread: Thread;
+  thread: NvimThread;
   dispatch: Dispatch<Msg>;
 }> = ({ thread, dispatch }) => {
   const threadType = thread.core.state.threadType;
@@ -711,7 +711,7 @@ function renderMessageContent(
   content: ProviderMessageContent,
   messageIdx: number,
   contentIdx: number,
-  thread: Thread,
+  thread: NvimThread,
   dispatch: Dispatch<Msg>,
   messageUsage: Usage | undefined,
   isLastBlock: boolean,
@@ -743,7 +743,7 @@ function renderMessageContentBlock(
   content: ProviderMessageContent,
   messageIdx: number,
   contentIdx: number,
-  thread: Thread,
+  thread: NvimThread,
   dispatch: Dispatch<Msg>,
   messageUsage: Usage | undefined,
   isLastBlock: boolean,
@@ -1145,13 +1145,13 @@ function renderMessageContentBlock(
 
 /** Find the tool result for a given tool request ID using the cached map */
 export function findToolResult(
-  thread: Thread,
+  thread: NvimThread,
   toolRequestId: ToolRequestId,
 ): ProviderToolResult | undefined {
   return thread.state.toolResultMap.get(toolRequestId);
 }
 
-function renderStreamingBlock(thread: Thread): string | VDOMNode {
+function renderStreamingBlock(thread: NvimThread): string | VDOMNode {
   const phase = thread.agent.phase;
   const block = phase.type === "streaming" ? phase.block : undefined;
   if (!block) return d``;

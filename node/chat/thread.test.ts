@@ -1672,7 +1672,7 @@ it("queues @next messages until the agent next stops", async () => {
     expect(thread.core.state.pendingMessages).toHaveLength(0);
     await driver.assertDisplayBufferContains("⏭️ queued (next stop):");
 
-    // Agent uses a tool - the turn continues mid-stream after it completes.
+    // Runner uses a tool - the turn continues mid-stream after it completes.
     request1.respond({
       stopReason: "tool_use",
       text: "I'll read the file.",
