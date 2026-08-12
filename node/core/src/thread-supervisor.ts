@@ -15,22 +15,32 @@ export type YieldAction =
   | { type: "send-message"; text: string }
   | { type: "none" };
 
-/** Action returned from the `onHandoff` hook. */
-export type HandoffAction =
+/** Action returned from the `onBeforeRequest` hook. */
+export type RequestAction =
   | { type: "compact"; nextPrompt?: string }
+  /** Interject text into the request that is about to be issued. The optional
+   * `annotation` is opaque to the runner, which parks it on the message the
+   * injection produced, so a structured record never has to be recovered by
+   * parsing the injected plaintext. */
+  | {
+      type: "inject";
+      text: string;
+      annotation?: unknown;
+      alsoCompact?: boolean;
+    }
   | { type: "none" };
 
 /** Union of all hook action types. Prefer the narrower per-hook types
  *  where possible so that a hook cannot return an action it does not
- *  own (e.g. `compact` is only representable from `onHandoff`). */
-export type SupervisorAction = EndTurnAction | YieldAction | HandoffAction;
+ *  own (e.g. `compact` is only representable from `onBeforeRequest`). */
+export type SupervisorAction = EndTurnAction | YieldAction | RequestAction;
 
 export type EndTurnContext = {
   stopReason: string;
   lastAssistantMessage: ReadonlyArray<ProviderMessageContent> | undefined;
 };
 
-export type HandoffContext = {
+export type RequestContext = {
   inputTokenCount: number | undefined;
   stopReason: StreamStopReason;
 };
@@ -38,7 +48,7 @@ export type HandoffContext = {
 export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
   onYield?(result: string): Promise<YieldAction>;
-  onHandoff?(context: HandoffContext): HandoffAction;
+  onBeforeRequest?(context: RequestContext): RequestAction;
 }
 
 function containsYieldTag(
@@ -120,7 +130,7 @@ export class AutoCompactSupervisor implements ThreadSupervisor {
     this.nextPrompt = opts.nextPrompt;
   }
 
-  onHandoff(context: HandoffContext): HandoffAction {
+  onBeforeRequest(context: RequestContext): RequestAction {
     if (
       context.inputTokenCount !== undefined &&
       context.inputTokenCount >= this.threshold

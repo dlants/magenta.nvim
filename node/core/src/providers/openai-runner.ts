@@ -17,7 +17,6 @@ import {
   usageFromResponse,
 } from "./openai.ts";
 import type {
-  AgentHooks,
   AgentInput,
   AgentLog,
   AgentOptions,
@@ -28,6 +27,7 @@ import type {
   ProviderToolResult,
   RequestedTool,
   Runner,
+  RunnerHooks,
   StreamStopReason,
   ToolOutcome,
   ToolResults,
@@ -96,7 +96,6 @@ type AttemptResult =
 
 export class OpenAIRunner implements Runner {
   phase: AgentPhase = { type: "idle" };
-  onBeforeToolResponse?: Runner["onBeforeToolResponse"];
   /** ProviderMessage[] is the single source of truth; the request body is
    * derived from it on every turn (see `createStreamParameters`). */
   private messages: ProviderMessage[] = [];
@@ -419,14 +418,9 @@ export class OpenAIRunner implements Runner {
     this.notify();
   }
 
-  bindHooks(hooks: AgentHooks): void {
-    this.options = { ...this.options, ...hooks };
-    this.onBeforeToolResponse = undefined;
-  }
-
-  clone(): OpenAIRunner {
+  clone(hooks: RunnerHooks): OpenAIRunner {
     const cloned = new OpenAIRunner(
-      this.options,
+      { ...this.options, onBeforeToolResponse: undefined, ...hooks },
       this.client,
       this.openaiOptions,
     );
@@ -435,7 +429,6 @@ export class OpenAIRunner implements Runner {
     dropDanglingToolUses(cloned.messages);
     cloned.restamp();
     cloned.latestUsage = this.latestUsage ? { ...this.latestUsage } : undefined;
-    cloned.onBeforeToolResponse = this.onBeforeToolResponse;
     return cloned;
   }
 
@@ -520,7 +513,7 @@ export class OpenAIRunner implements Runner {
       if (toolOutcome.type === "suspend") return { type: "suspended" };
       if (this.aborted) return this.finishAbort();
 
-      const extra = await this.onBeforeToolResponse?.({
+      const extra = await this.options.onBeforeToolResponse?.({
         stopReason: outcome.stopReason,
         results: toolOutcome.results,
       });

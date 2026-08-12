@@ -27,11 +27,13 @@ import type {
   Runner,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
+import type { SendResult, ThreadPhase } from "./thread-api.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type { ThreadSupervisor } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
 import * as Scratchpad from "./tools/scratchpad.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
+import { assertUnreachable } from "./utils/assertUnreachable.ts";
 
 const CONTEXT_MANAGER_POLL_INTERVAL_MS = 1000;
 
@@ -42,7 +44,8 @@ export type ThreadInit =
   | { type: "fresh" }
   | {
       type: "clone";
-      runner: Runner;
+      sourceRunner: Runner;
+      nativeMessageIdx: NativeMessageIdx;
       provenance: ForkProvenance;
       scratchpad: Scratchpad.Scratchpad;
       edlRegisters: EdlRegisters;
@@ -141,7 +144,11 @@ export class Thread extends Emitter<AgentEvents> {
     this.listenToContextManager();
     this.agent = this.createAgent(
       init.type === "clone"
-        ? { type: "cloned", runner: init.runner }
+        ? {
+            type: "cloned",
+            cloneFrom: init.sourceRunner,
+            truncateTo: init.nativeMessageIdx,
+          }
         : { type: "new" },
     );
   }
@@ -157,8 +164,6 @@ export class Thread extends Emitter<AgentEvents> {
     context: AgentContext;
   }): Promise<Thread> {
     const { sourceThread, newId, nativeMessageIdx, context } = args;
-    const runner = sourceThread.runner.clone();
-    runner.truncateMessages(nativeMessageIdx);
     const initialFiles = await buildClonedFiles(
       sourceThread.contextManager.files,
       context.fileIO,
@@ -170,7 +175,8 @@ export class Thread extends Emitter<AgentEvents> {
     };
     const cloned = new Thread(newId, contextWithFiles, {
       type: "clone",
-      runner,
+      sourceRunner: sourceThread.runner,
+      nativeMessageIdx,
       provenance: {
         fromThreadId: sourceThread.id,
         nativeMessageIdx,
@@ -190,6 +196,93 @@ export class Thread extends Emitter<AgentEvents> {
   /** The runner driving the current agent. */
   get runner(): Runner {
     return this.agent.runner;
+  }
+
+  /** Where this thread is right now, in the vocabulary the views and the
+   * archive will move to. Derived on read rather than stored: everything in
+   * `TurnActivity` moves between renders, so a mirror would be stale by
+   * construction. Until stage 4 rewrites the internals this reads the mode
+   * bag; the shape it presents is the final one. */
+  get phase(): ThreadPhase {
+    const mode = this.state.mode;
+    if (mode.type === "compacting") {
+      return {
+        type: "compacting",
+        chunkIndex: mode.chunkIndex,
+        totalChunks: mode.totalChunks,
+      };
+    }
+    const runnerPhase = this.runner.phase;
+    switch (runnerPhase.type) {
+      case "aborting":
+        return { type: "aborting" };
+      case "streaming":
+        return {
+          type: "running",
+          activity: {
+            type: "streaming",
+            startedAt: runnerPhase.startedAt,
+            lastEventTime: runnerPhase.lastEventTime,
+            block: runnerPhase.block,
+            retry: runnerPhase.retry,
+          },
+        };
+      case "running_tools":
+        return {
+          type: "running",
+          activity: {
+            type: "running_tools",
+            requested: runnerPhase.requested,
+            truncated: runnerPhase.truncated,
+          },
+        };
+      case "idle":
+        break;
+      default:
+        assertUnreachable(runnerPhase);
+    }
+    if (mode.type === "tool_use") {
+      return {
+        type: "running",
+        activity: {
+          type: "running_tools",
+          requested: [],
+          truncated: false,
+        },
+      };
+    }
+    return { type: "idle", lastResult: this.lastSendResult() };
+  }
+
+  private lastSendResult(): SendResult | undefined {
+    const state = this.state;
+    if (state.mode.type === "yielded") {
+      return {
+        type: "yielded",
+        value: { type: "text", text: state.mode.response },
+      };
+    }
+    if (state.failedSubmit) {
+      return {
+        type: "failed",
+        error: new Error(state.failedSubmit.errorMessage),
+        resubmit: state.failedSubmit.userMessage,
+      };
+    }
+    const last = state.lastTurnResult;
+    if (!last) return undefined;
+    switch (last.type) {
+      case "stopped":
+        return { type: "completed" };
+      case "aborted":
+        return { type: "aborted" };
+      case "failed":
+        return { type: "failed", error: last.error, resubmit: undefined };
+      case "suspended":
+        return undefined;
+      default:
+        assertUnreachable(last);
+    }
   }
 
   private agentListeners: Array<() => void> = [];

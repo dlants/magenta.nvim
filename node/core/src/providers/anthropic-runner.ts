@@ -21,7 +21,6 @@ import {
 } from "./anthropic-models.ts";
 import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
 import type {
-  AgentHooks,
   AgentInput,
   AgentLog,
   AgentOptions,
@@ -31,6 +30,7 @@ import type {
   ProviderToolResult,
   RequestedTool,
   Runner,
+  RunnerHooks,
   StreamStopReason,
   ToolOutcome,
   ToolResults,
@@ -185,7 +185,6 @@ export function getRetryDelay(attempt: number): number {
 
 export class AnthropicRunner implements Runner {
   phase: AgentPhase = { type: "idle" };
-  onBeforeToolResponse?: Runner["onBeforeToolResponse"];
 
   private messages: Anthropic.MessageParam[] = [];
   private currentRequest: MessageStream | undefined;
@@ -514,7 +513,7 @@ export class AnthropicRunner implements Runner {
       if (toolOutcome.type === "suspend") return { type: "suspended" };
       if (this.abortRequested) return this.finishAbort();
 
-      const extra = await this.onBeforeToolResponse?.({
+      const extra = await this.options.onBeforeToolResponse?.({
         stopReason: outcome.stopReason,
         results: toolOutcome.results,
       });
@@ -865,14 +864,9 @@ export class AnthropicRunner implements Runner {
     return messageIdx;
   }
 
-  bindHooks(hooks: AgentHooks): void {
-    this.options = { ...this.options, ...hooks };
-    this.onBeforeToolResponse = undefined;
-  }
-
-  clone(): AnthropicRunner {
+  clone(hooks: RunnerHooks): AnthropicRunner {
     const cloned = new AnthropicRunner(
-      this.options,
+      { ...this.options, onBeforeToolResponse: undefined, ...hooks },
       this.client,
       this.anthropicOptions,
     );
@@ -892,8 +886,6 @@ export class AnthropicRunner implements Runner {
         { ...v, usage: { ...v.usage } },
       ]),
     );
-
-    cloned.onBeforeToolResponse = this.onBeforeToolResponse;
 
     // Copy latestUsage and inputTokenCount if present
     if (this.latestUsage) {

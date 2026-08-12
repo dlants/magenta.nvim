@@ -15,10 +15,18 @@ import type {
   NativeMessageIdx,
   ProviderToolSpec,
   RequestedTool,
+  RunnerHooks,
   StreamingBlock,
   ToolExecutor,
   ToolResults,
 } from "./provider-types.ts";
+
+/** Hooks for a cloned runner: no test clones a runner and then runs tools
+ * through it. */
+const cloneHooks: RunnerHooks = {
+  executeTools: () => Promise.resolve({ type: "continue", results: new Map() }),
+  onUpdate: () => {},
+};
 
 /** Counts `onUpdate` notifications, which is all the agent emits now. */
 type Tracked = { updates: number };
@@ -1775,7 +1783,7 @@ File context here
       await delay(0);
 
       // Clone the agent
-      const cloned = agent.clone();
+      const cloned = agent.clone(cloneHooks);
 
       // Verify cloned agent has same messages
       expect(cloned.log.messages).toHaveLength(4);
@@ -1817,7 +1825,7 @@ File context here
       await delay(0);
 
       // Clone the agent
-      const cloned = agent.clone();
+      const cloned = agent.clone(cloneHooks);
 
       // Add more messages to original
       const turn2 = agent.runTurn([
@@ -1867,7 +1875,7 @@ File context here
       });
 
       // Clone — currentAssistantMessage hasn't been created yet (no block-finished)
-      const cloned = agent.clone();
+      const cloned = agent.clone(cloneHooks);
       const clonedState = cloned.log;
 
       // Only the user message should be present (no assistant message)
@@ -1922,7 +1930,7 @@ File context here
       await stream.settle();
 
       // Clone while tool_use is in-progress (in currentAnthropicBlock)
-      const cloned = agent.clone();
+      const cloned = agent.clone(cloneHooks);
       const clonedState = cloned.log;
 
       // Should have user + assistant with just the finalized text
@@ -1963,7 +1971,7 @@ File context here
       expect(agent.phase.type).toBe("streaming");
 
       // Clone — server_tool_use should be dropped, leaving empty assistant → removed
-      const cloned = agent.clone();
+      const cloned = agent.clone(cloneHooks);
       const clonedState = cloned.log;
 
       expect(clonedState.messages).toHaveLength(1);
@@ -2018,7 +2026,7 @@ File context here
       });
 
       // Clone while the tool results are still outstanding
-      const cloned = agent.clone();
+      const cloned = agent.clone(cloneHooks);
       const clonedState = cloned.log;
 
       // Should have: user, assistant (text + tool_use), user (error tool_result)
@@ -2078,7 +2086,7 @@ File context here
       await stream.settle();
 
       // Clone mid-stream
-      const cloned = agent.clone();
+      const cloned = agent.clone(cloneHooks);
 
       // Continue streaming on source
       stream.streamText("Second part");
@@ -2130,7 +2138,7 @@ File context here
       await delay(0);
 
       // Clone the agent
-      const cloned = agent.clone();
+      const cloned = agent.clone(cloneHooks);
 
       // Verify stop reason is preserved
       const clonedState = cloned.log;
@@ -2158,7 +2166,7 @@ File context here
       await delay(0);
 
       // Clone the agent
-      const cloned = agent.clone();
+      const cloned = agent.clone(cloneHooks);
 
       // Start a turn on the clone; the input is appended immediately
       const clonedTurn = cloned.runTurn([

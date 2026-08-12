@@ -388,17 +388,6 @@ export interface Runner {
   readonly phase: AgentPhase;
   readonly log: AgentLog;
 
-  /** Optional interception point, installed by whoever owns the agent.
-   * Called before the continuation request that carries tool results; the
-   * returned content is appended to that request. Purely additive, and not
-   * re-fired when that request is retried. */
-  onBeforeToolResponse?:
-    | ((args: {
-        stopReason: StreamStopReason;
-        results: ToolResults;
-      }) => Promise<AgentInput[]>)
-    | undefined;
-
   /** Run until stop. Resolves once, with why it stopped. Does not reject for
    * provider errors — those are `failed` results. Rejects only on misuse: a
    * turn is already in flight. */
@@ -423,20 +412,28 @@ export interface Runner {
 
   /** Create a deep copy of this agent. Can be called in any phase; the clone
    * is `idle`, with incomplete blocks and unanswered tool_use cleaned up.
-   * The clone keeps the source's hooks; a new owner calls `bindHooks`.
+   * The new owner supplies its own hooks; none of the source's collaborators
+   * cross over.
    */
-  clone(): Runner;
-
-  /** Point the agent's collaborators at a new owner, dropping any
-   * `onBeforeToolResponse` installed by the previous one. */
-  bindHooks(hooks: AgentHooks): void;
+  clone(hooks: RunnerHooks): Runner;
 }
 
-/** The collaborators an agent is bound to. Supplied at construction, and
- * re-supplied by `clone` when ownership moves to a different object. */
-export type AgentHooks = {
+/** Optional interception point, supplied by whoever owns the runner. Called
+ * before the continuation request that carries tool results; the returned
+ * content is appended to that request. Purely additive, and not re-fired when
+ * that request is retried. */
+export type OnBeforeToolResponse = (args: {
+  stopReason: StreamStopReason;
+  results: ToolResults;
+}) => Promise<AgentInput[]>;
+
+/** The collaborators a runner is bound to. Supplied wherever the runner is
+ * created — construction or `clone` — and never afterwards, so there is no
+ * moment at which a runner exists pointing at the wrong owner. */
+export type RunnerHooks = {
   executeTools: ToolExecutor;
   onUpdate: () => void;
+  onBeforeToolResponse?: OnBeforeToolResponse | undefined;
 };
 
 export interface AgentOptions {
@@ -446,6 +443,7 @@ export interface AgentOptions {
   executeTools: ToolExecutor;
   /** "Something visible moved, re-render." No payload: read `phase` / `log`.
    * Called at streaming rates; the owner is responsible for throttling. */
+  onBeforeToolResponse?: OnBeforeToolResponse | undefined;
   onUpdate: () => void;
   thinking?: {
     enabled: boolean;

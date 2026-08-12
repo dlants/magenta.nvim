@@ -116,18 +116,22 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
 
       // The override compacts at 100k; the default only at 300k.
       expect(
-        overridden.onHandoff({
+        overridden.onBeforeRequest({
           inputTokenCount: 100_000,
           stopReason: "end_turn",
         }).type,
       ).toBe("compact");
       expect(
-        fallback.onHandoff({ inputTokenCount: 100_000, stopReason: "end_turn" })
-          .type,
+        fallback.onBeforeRequest({
+          inputTokenCount: 100_000,
+          stopReason: "end_turn",
+        }).type,
       ).toBe("none");
       expect(
-        fallback.onHandoff({ inputTokenCount: 300_000, stopReason: "end_turn" })
-          .type,
+        fallback.onBeforeRequest({
+          inputTokenCount: 300_000,
+          stopReason: "end_turn",
+        }).type,
       ).toBe("compact");
     },
   );

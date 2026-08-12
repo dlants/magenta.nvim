@@ -34,6 +34,7 @@ export type {
   RequestedTool,
   RetryStatus,
   Runner,
+  RunnerHooks,
   StopReason,
   StreamingBlock,
   StreamStopReason,

@@ -131,6 +131,55 @@ function createAgentWithMock(
   };
 }
 
+describe("Thread.phase", () => {
+  it("is idle with no result before anything is sent", () => {
+    const { core } = createAgentWithMock();
+    expect(core.phase).toEqual({ type: "idle", lastResult: undefined });
+  });
+  it("is running/streaming during a turn and idle/completed after it", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    core.sendMessage([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    await pollUntil(() => {
+      if (core.phase.type === "running") return true;
+      throw new Error(`waiting for running, currently: ${core.phase.type}`);
+    });
+    const running = core.phase;
+    if (running.type !== "running") throw new Error("expected running");
+    expect(running.activity.type).toBe("streaming");
+    stream.streamText("hi");
+    stream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (core.phase.type === "idle") return true;
+      throw new Error(`waiting for idle, currently: ${core.phase.type}`);
+    });
+    expect(core.phase).toEqual({
+      type: "idle",
+      lastResult: { type: "completed" },
+    });
+  });
+  it("reports a yield as an idle thread with a yielded result", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    core.sendMessage([{ type: "user", text: "do the task" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "tool-phase-yield" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "done" },
+    );
+    stream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (core.state.mode.type === "yielded") return true;
+      throw new Error("waiting for yield");
+    });
+    expect(core.phase).toEqual({
+      type: "idle",
+      lastResult: { type: "yielded", value: { type: "text", text: "done" } },
+    });
+  });
+});
 describe("Agent.handleProviderStopped", () => {
   it("max_tokens with completed tool_use block routes through handleProviderStoppedWithToolUse", async () => {
     const { core, mockClient } = createAgentWithMock({
@@ -711,19 +760,19 @@ describe("AutoCompactSupervisor integration", () => {
     const { core, mockClient } = createAgentWithMock();
     const calls: string[] = [];
     const first: ThreadSupervisor = {
-      onHandoff: () => {
+      onBeforeRequest: () => {
         calls.push("first");
         return { type: "none" };
       },
     };
     const second: ThreadSupervisor = {
-      onHandoff: () => {
+      onBeforeRequest: () => {
         calls.push("second");
         return { type: "compact", nextPrompt: "go" };
       },
     };
     const third: ThreadSupervisor = {
-      onHandoff: () => {
+      onBeforeRequest: () => {
         calls.push("third");
         return { type: "compact", nextPrompt: "stop" };
       },

@@ -164,7 +164,6 @@ export {
 } from "./providers/openai-runner.ts";
 export { getProvider, setMockProvider } from "./providers/provider.ts";
 export type {
-  AgentHooks,
   AgentInput,
   AgentLog,
   AgentOptions,
@@ -199,6 +198,7 @@ export type {
   RequestedTool,
   RetryStatus,
   Runner,
+  RunnerHooks,
   StopReason,
   StreamingBlock,
   StreamStopReason,
@@ -228,12 +228,23 @@ export {
   type ReminderKind,
 } from "./providers/system-reminders.ts";
 export { Thread } from "./thread.ts";
+export type {
+  AgentHooks,
+  OnUpdate,
+  QueuedMessage,
+  SendOptions,
+  SendResult,
+  ThreadPhase,
+  ThreadResult,
+  TurnActivity,
+  YieldValue,
+} from "./thread-api.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
   EndTurnAction,
   EndTurnContext,
-  HandoffAction,
-  HandoffContext,
+  RequestAction,
+  RequestContext,
   SupervisorAction,
   ThreadSupervisor,
   YieldAction,

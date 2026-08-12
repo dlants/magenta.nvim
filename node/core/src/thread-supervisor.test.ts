@@ -8,10 +8,10 @@ describe("AutoCompactSupervisor", () => {
       nextPrompt: "go",
     });
     expect(
-      sup.onHandoff({ inputTokenCount: 300000, stopReason: "end_turn" }),
+      sup.onBeforeRequest({ inputTokenCount: 300000, stopReason: "end_turn" }),
     ).toEqual({ type: "compact", nextPrompt: "go" });
     expect(
-      sup.onHandoff({ inputTokenCount: 400000, stopReason: "end_turn" }),
+      sup.onBeforeRequest({ inputTokenCount: 400000, stopReason: "end_turn" }),
     ).toEqual({ type: "compact", nextPrompt: "go" });
   });
 
@@ -21,7 +21,7 @@ describe("AutoCompactSupervisor", () => {
       nextPrompt: "go",
     });
     expect(
-      sup.onHandoff({ inputTokenCount: 299999, stopReason: "end_turn" }),
+      sup.onBeforeRequest({ inputTokenCount: 299999, stopReason: "end_turn" }),
     ).toEqual({ type: "none" });
   });
 
@@ -31,17 +31,20 @@ describe("AutoCompactSupervisor", () => {
       nextPrompt: "go",
     });
     expect(
-      sup.onHandoff({ inputTokenCount: undefined, stopReason: "end_turn" }),
+      sup.onBeforeRequest({
+        inputTokenCount: undefined,
+        stopReason: "end_turn",
+      }),
     ).toEqual({ type: "none" });
   });
 
   it("defaults the threshold to 300000", () => {
     const sup = new AutoCompactSupervisor({ nextPrompt: "go" });
     expect(
-      sup.onHandoff({ inputTokenCount: 300000, stopReason: "end_turn" }),
+      sup.onBeforeRequest({ inputTokenCount: 300000, stopReason: "end_turn" }),
     ).toEqual({ type: "compact", nextPrompt: "go" });
     expect(
-      sup.onHandoff({ inputTokenCount: 299999, stopReason: "end_turn" }),
+      sup.onBeforeRequest({ inputTokenCount: 299999, stopReason: "end_turn" }),
     ).toEqual({ type: "none" });
   });
 
@@ -51,7 +54,7 @@ describe("AutoCompactSupervisor", () => {
       nextPrompt: "custom",
     });
     expect(
-      sup.onHandoff({ inputTokenCount: 200, stopReason: "end_turn" }),
+      sup.onBeforeRequest({ inputTokenCount: 200, stopReason: "end_turn" }),
     ).toEqual({ type: "compact", nextPrompt: "custom" });
   });
 });

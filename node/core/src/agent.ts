@@ -36,6 +36,7 @@ import type {
   ProviderToolSpec,
   RequestedTool,
   Runner,
+  RunnerHooks,
   StopReason,
   StreamStopReason,
   ToolOutcome,
@@ -55,7 +56,7 @@ import {
 import type {
   EndTurnAction,
   EndTurnContext,
-  HandoffAction,
+  RequestAction,
   ThreadSupervisor,
   YieldAction,
 } from "./thread-supervisor.ts";
@@ -272,7 +273,15 @@ export interface AgentDeps {
   requestCompaction: (nextPrompt?: string) => void;
   /** Whether this agent drives a brand-new runner or one cloned from another
    * thread's history. */
-  runnerInit: { type: "new" } | { type: "cloned"; runner: Runner };
+  runnerInit:
+    | { type: "new" }
+    | {
+        /** The source runner is cloned by this agent, so that the clone is
+         * born with this agent's hooks and never points at its source's. */
+        type: "cloned";
+        cloneFrom: Runner;
+        truncateTo: NativeMessageIdx;
+      };
 }
 
 export class Agent extends Emitter<AgentEvents> {
@@ -303,8 +312,9 @@ export class Agent extends Emitter<AgentEvents> {
     this.refreshToolSpecs();
 
     if (deps.runnerInit.type === "cloned") {
-      this.runner = deps.runnerInit.runner;
-      this.bindRunner(this.runner);
+      this.runner = deps.runnerInit.cloneFrom.clone(this.runnerHooks());
+      this.runner.truncateMessages(deps.runnerInit.truncateTo);
+      this.usageAccountedCount = this.runner.log.messages.length;
     } else {
       this.runner = this.createRunner();
     }
@@ -470,14 +480,13 @@ export class Agent extends Emitter<AgentEvents> {
     return this.state.toolSpecs;
   }
 
-  /** Point a runner's collaborators at this agent. */
-  private bindRunner(agent: Runner): void {
-    agent.bindHooks({
+  /** The collaborators every runner this agent creates is bound to. */
+  private runnerHooks(): RunnerHooks {
+    return {
       executeTools: (requests) => this.executeTools(requests),
       onUpdate: () => this.scheduleUpdate(),
-    });
-    this.usageAccountedCount = agent.log.messages.length;
-    agent.onBeforeToolResponse = (args) => this.buildToolResponseExtras(args);
+      onBeforeToolResponse: (args) => this.buildToolResponseExtras(args),
+    };
   }
 
   private createRunner(): Runner {
@@ -486,8 +495,7 @@ export class Agent extends Emitter<AgentEvents> {
     const agent = provider.createAgent({
       model: this.context.profile.model,
       systemPrompt: this.state.systemPrompt,
-      executeTools: (requests) => this.executeTools(requests),
-      onUpdate: () => this.scheduleUpdate(),
+      ...this.runnerHooks(),
       tools: this.getToolSpecs(),
       ...((this.context.profile.provider === "anthropic" ||
         this.context.profile.provider === "bedrock" ||
@@ -520,7 +528,6 @@ export class Agent extends Emitter<AgentEvents> {
           reasoning: this.context.profile.reasoning,
         }),
     });
-    agent.onBeforeToolResponse = (args) => this.buildToolResponseExtras(args);
     this.usageAccountedCount = agent.log.messages.length;
     return agent;
   }
@@ -684,9 +691,25 @@ export class Agent extends Emitter<AgentEvents> {
     this.resetErrorRetryState();
     this.update({ type: "set-mode", mode: { type: "normal" } });
 
-    const handoff = this.consultHandoffSupervisors(stopReason);
-    if (handoff.type === "compact") {
-      this.deps.requestCompaction(handoff.nextPrompt);
+    const request = this.consultBeforeRequestSupervisors(stopReason);
+    if (request.type === "inject") {
+      // Stage 4 carries the text (and its annotation) on the request itself;
+      // until then the closest available mechanism is the next turn's prefix.
+      this.prependToNextTurn([
+        {
+          type: "text",
+          text: request.text,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ]);
+    }
+    if (
+      request.type === "compact" ||
+      (request.type === "inject" && request.alsoCompact)
+    ) {
+      this.deps.requestCompaction(
+        request.type === "compact" ? request.nextPrompt : undefined,
+      );
       return;
     }
 
@@ -853,9 +876,9 @@ export class Agent extends Emitter<AgentEvents> {
       return { type: "suspend", results };
     }
 
-    const handoff = this.consultHandoffSupervisors("tool_use");
-    if (handoff.type === "compact") {
-      this.suspendReason = { type: "compact", nextPrompt: handoff.nextPrompt };
+    const request = this.consultBeforeRequestSupervisors("tool_use");
+    if (request.type === "compact") {
+      this.suspendReason = { type: "compact", nextPrompt: request.nextPrompt };
       return { type: "suspend", results };
     }
 
@@ -1350,18 +1373,30 @@ export class Agent extends Emitter<AgentEvents> {
     return { type: "send-message", text: texts.join("\n\n") };
   }
 
-  private consultHandoffSupervisors(
+  private consultBeforeRequestSupervisors(
     stopReason: StreamStopReason,
-  ): HandoffAction {
+  ): RequestAction {
     const inputTokenCount = this.runner.log.inputTokenCount;
     const prompts: string[] = [];
+    const injections: string[] = [];
     let shouldCompact = false;
     for (const sup of this.deps.getSupervisors()) {
-      const action = sup.onHandoff?.({ inputTokenCount, stopReason });
-      if (action && action.type === "compact") {
+      const action = sup.onBeforeRequest?.({ inputTokenCount, stopReason });
+      if (!action) continue;
+      if (action.type === "compact") {
         shouldCompact = true;
         if (action.nextPrompt !== undefined) prompts.push(action.nextPrompt);
+      } else if (action.type === "inject") {
+        injections.push(action.text);
+        if (action.alsoCompact) shouldCompact = true;
       }
+    }
+    if (injections.length > 0) {
+      return {
+        type: "inject",
+        text: injections.join("\n\n"),
+        alsoCompact: shouldCompact,
+      };
     }
     if (!shouldCompact) return { type: "none" };
     return prompts.length > 0

@@ -16,10 +16,18 @@ import {
   type ProviderToolSpec,
   type RequestedTool,
   type Runner,
+  type RunnerHooks,
   type ToolExecutor,
   type ToolResults,
   type TurnResult,
 } from "./provider-types.ts";
+
+/** Hooks for a cloned runner: no test clones a runner and then runs tools
+ * through it. */
+const cloneHooks: RunnerHooks = {
+  executeTools: () => Promise.resolve({ type: "continue", results: new Map() }),
+  onUpdate: () => {},
+};
 
 const noopLogger = {
   info: () => {},
@@ -277,7 +285,7 @@ describe("OpenAIRunner text turns", () => {
     second.stream.finishResponse();
     await second.turn;
 
-    const cloned = agent.clone();
+    const cloned = agent.clone(cloneHooks);
     const third = await startTurn(client, cloned, "clone");
     expect(third.stream.params.prompt_cache_key).toBe(key);
     third.stream.finishResponse();
@@ -609,7 +617,7 @@ describe("OpenAIRunner clone", () => {
     stream.finishResponse();
     await turn;
 
-    const cloned = agent.clone();
+    const cloned = agent.clone(cloneHooks);
     expect(cloned.phase).toEqual({ type: "idle" });
     expect(cloned.log.messages).toHaveLength(2);
     expect(cloned.log.messages[1].content[0]).toMatchObject({
@@ -630,7 +638,7 @@ describe("OpenAIRunner clone", () => {
     let midToolClone: Runner | undefined;
     const { client, agent } = setup({
       executeTools: (requests) => {
-        midToolClone = agent.clone();
+        midToolClone = agent.clone(cloneHooks);
         return Promise.resolve({
           type: "continue",
           results: okResults(requests),
