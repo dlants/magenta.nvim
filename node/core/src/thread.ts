@@ -28,7 +28,12 @@ import type {
   Runner,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import type { SendOptions, SendResult, ThreadPhase } from "./thread-api.ts";
+import type {
+  SendOptions,
+  SendResult,
+  ThreadPhase,
+  ThreadSendResult,
+} from "./thread-api.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type { ThreadSupervisor } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
@@ -148,7 +153,6 @@ export class Thread extends Emitter<AgentEvents> {
       firstBashReminderPending: true,
       failedSubmit: undefined,
       lastTurnResult: undefined,
-      lastYieldValue: undefined,
       preSubmitNativeIdx: undefined,
       activeReminders: new Set(),
       toolSpecs: [],
@@ -277,18 +281,12 @@ export class Thread extends Emitter<AgentEvents> {
   private lastSendResult(): SendResult | undefined {
     const state = this.state;
     if (state.mode.type === "yielded") {
-      return {
-        type: "yielded",
-        value: state.lastYieldValue ?? {
-          type: "text",
-          text: state.mode.response,
-        },
-      };
+      return { type: "yielded", value: state.mode.value };
     }
     if (state.failedSubmit) {
       return {
         type: "failed",
-        error: new Error(state.failedSubmit.errorMessage),
+        error: state.failedSubmit.error,
         resubmit: state.failedSubmit.userMessage,
       };
     }
@@ -335,7 +333,10 @@ export class Thread extends Emitter<AgentEvents> {
       agent.on(name, listener);
       unsubscribes.push(() => agent.off(name, listener));
     }
-    const onUpdate = () => this.threadLogger.record(this.phase.type === "idle");
+    const onUpdate = () =>
+      this.threadLogger.record(
+        this.phase.type === "idle" ? "at-rest" : "streaming",
+      );
     agent.on("update", onUpdate);
     unsubscribes.push(() => agent.off("update", onUpdate));
     this.agentListeners = unsubscribes;
@@ -424,10 +425,10 @@ export class Thread extends Emitter<AgentEvents> {
     await this.agent.abort();
   }
 
-  /** The submission currently in flight, if any. Queued messages ride it: they
-   * are drained into a continuation of the same submission, so they resolve
-   * with its outcome. */
-  private currentSubmission: Promise<SendResult> | undefined;
+  /** The compaction handoff currently in flight, if any. It is the only piece
+   * of submission state the thread has to track: the caller's promise has to
+   * stay pending across the swap, so the agent's outcome cannot settle it. */
+  private compactionDone: Defer<SendResult> | undefined;
 
   /** Submit `messages` and resolve once the thread comes to rest.
    *
@@ -438,7 +439,7 @@ export class Thread extends Emitter<AgentEvents> {
   async send(
     messages: InputMessage[],
     { queue }: SendOptions = {},
-  ): Promise<SendResult> {
+  ): Promise<ThreadSendResult> {
     // The compact thread's content is composed by its caller, so it bypasses
     // context updates, reminders and the queue entirely.
     if (this.state.threadType === "compact") {
@@ -457,7 +458,7 @@ export class Thread extends Emitter<AgentEvents> {
           },
           { silent: true },
         );
-        return this.currentSubmission ?? Promise.resolve({ type: "completed" });
+        return { type: "queued" };
       }
       await this.agent.abortAndWait();
     }
@@ -490,10 +491,9 @@ export class Thread extends Emitter<AgentEvents> {
   private followSubmission(
     outcome: Promise<AgentSendOutcome>,
   ): Promise<SendResult> {
-    const result = outcome.then((o) =>
+    const result: Promise<SendResult> = outcome.then((o) =>
       o.type === "compact" ? this.compact(o.nextPrompt) : o,
     );
-    this.currentSubmission = result;
     return result;
   }
 
@@ -579,8 +579,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     manager.start(this.getProviderMessages(), nextPrompt);
     return done.promise;
   }
-
-  private compactionDone: Defer<SendResult> | undefined;
 
   private settleCompaction(result: SendResult): void {
     const done = this.compactionDone;

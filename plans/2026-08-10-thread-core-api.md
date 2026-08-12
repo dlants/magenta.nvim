@@ -686,6 +686,30 @@ Two mechanical stages first, each independently green, then a single semantic cu
      run shows the same pre-existing load-related failures as HEAD (nvim socket ENOENT and the
      script-manager/spawn-subagents "no pending streams" flakes — verified by running the same file
      set on a stashed tree).
+
+   - **Review follow-ups (stage 4 addendum).**
+     - **`SendResult` no longer lies about queued sends.** `Thread.send` returns
+       `ThreadSendResult = SendResult | {type:"queued"}`; a queued submission reports `queued`
+       instead of borrowing the in-flight submission's outcome (or fabricating `completed` when
+       there was none). The `SendResult` contract — delivered once, to the actor that submitted —
+       now holds literally.
+     - **One in-flight field, not two.** `currentSubmission` existed only so queued sends could
+       ride it, so it went away with them; `compactionDone` is the only submission state the
+       thread tracks, since the caller's promise has to stay pending across the agent swap.
+     - **The yield value lives in the `yielded` mode.** `ThreadMode.yielded` carries a required
+       `value: YieldValue` alongside the display `response`, and `state.lastYieldValue` is gone.
+       The value now travels `executeTools` -> `suspendReason` -> `handleYield`, so the
+       `?? {type:"text"}` fallbacks in `settleYield` and `Thread.lastSendResult` are gone too.
+     - **`failedSubmit` stores the `Error`**, not its message, so `lastSendResult` no longer
+       manufactures a stack-less `Error` to satisfy `SendResult.failed`.
+     - **`ThreadLogger.record`** takes `"at-rest" | "streaming"` instead of a boolean.
+     - **Tests for the new invariant** (`agent.test.ts`, describes `Thread.send result` and
+       `Thread.send across a compaction handoff`): resolution values for completed / text yield /
+       structured yield / abort / non-retryable error; the two early-settle branches (empty send,
+       empty raw send); the torn-down rejection; a queued send reporting `queued`; the send
+       promise staying pending across a compaction handoff and resolving with the continuation
+       turn's result; both `handleCompactionResult` failure branches; and one resolution across a
+       full auto-resubmit sequence.
 5. **Rewrite the consumers.** `NvimThread` loses its subscribe/unsubscribe blocks and moves chime/scroll/resubmit to its own `send`/`abort` call sites. `Chat` composes its supervisor list into the three hooks, takes over docker teardown progress and `tornDown`, and loses `threadYieldCallbacks`/`fireThreadYieldCallbacks`. `ThreadManager.getThreadResult`/`onThreadYielded` become `awaitThreadResult`; `spawn-subagents.ts` awaits. `magenta.ts` reads `phase`. The 32ms throttle moves to the view layer as a trailing-edge debounce.
 6. **Fix the views.** `renderStatus` takes a `ThreadPhase` and nothing else. `NvimThread`'s `get agent()` is deleted; `chat.ts:1376` uses `currentMessageIdx()`; `Chat.getContextAgent()` is deleted outright. `shouldShowContextFiles` becomes `phase.type === "idle"`. Context updates render off the message annotation instead of `messageViewState`. `npx tsc -b` clean.
 7. **Green the suite.** Tests change only where the mechanism changed — construction now takes an `onUpdate`, and every `while (state.mode.type !== "yielded")` poll becomes an `await result`. Check specifically:

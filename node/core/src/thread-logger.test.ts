@@ -99,7 +99,7 @@ describe("ThreadLogger", () => {
       baseDir: TEST_BASE_DIR,
     });
 
-    tl.record(false);
+    tl.record("streaming");
     await tl.flushed();
 
     async function messageTexts(): Promise<string[]> {
@@ -127,17 +127,17 @@ describe("ThreadLogger", () => {
     expect(await messageTexts()).toEqual(["a", "b"]);
 
     // Repeated record(false) is idempotent by cursor: no duplicates.
-    tl.record(false);
+    tl.record("streaming");
     await tl.flushed();
     expect(await messageTexts()).toEqual(["a", "b"]);
 
     // record(true) persists the withheld final message with no duplicates.
-    tl.record(true);
+    tl.record("at-rest");
     await tl.flushed();
     expect(await messageTexts()).toEqual(["a", "b", "c"]);
 
     // Repeated record(true) stays idempotent.
-    tl.record(true);
+    tl.record("at-rest");
     await tl.flushed();
     expect(await messageTexts()).toEqual(["a", "b", "c"]);
   });
@@ -184,7 +184,7 @@ describe("ThreadLogger", () => {
     await fs.writeFile(dir, "not a dir");
 
     messages.push(msg("a"));
-    expect(() => tl.record(true)).not.toThrow();
+    expect(() => tl.record("at-rest")).not.toThrow();
     await tl.flushed();
     expect(errors.length).toBeGreaterThan(0);
 

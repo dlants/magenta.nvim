@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActiveToolEntry, AgentContext } from "./agent.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
+import type { CompactionResult } from "./compaction-controller.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
@@ -25,6 +26,7 @@ import type {
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { Thread } from "./thread.ts";
+import type { SendResult, ThreadSendResult } from "./thread-api.ts";
 import {
   AutoCompactSupervisor,
   SubagentSupervisor,
@@ -35,7 +37,7 @@ import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import * as Scratchpad from "./tools/scratchpad.ts";
 import { COMPACT_STATIC_TOOL_NAMES } from "./tools/tool-registry.ts";
-import { pollUntil } from "./utils/async.ts";
+import { Defer, pollUntil } from "./utils/async.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
 
 const TEST_ARCHIVE_DIR = path.join(os.tmpdir(), "magenta-test-archive");
@@ -284,6 +286,202 @@ describe("Thread.phase", () => {
       type: "idle",
       lastResult: { type: "yielded", value: { type: "text", text: "done" } },
     });
+  });
+});
+describe("Thread.send result", () => {
+  it("resolves completed when the agent reaches end_turn", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const result = core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("hi");
+    stream.finishResponse("end_turn");
+    expect(await result).toEqual({ type: "completed" });
+  });
+  it("resolves yielded with the text a plain yield produced", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    const result = core.send([{ type: "user", text: "do the task" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "send-yield-text" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "done" },
+    );
+    stream.finishResponse("end_turn");
+    expect(await result).toEqual({
+      type: "yielded",
+      value: { type: "text", text: "done" },
+    });
+  });
+  it("resolves yielded with the structured value a schema'd yield produced", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+      yieldSchema: {
+        type: "object",
+        properties: { count: { type: "number" } },
+        required: ["count"],
+      },
+    });
+    const result = core.send([{ type: "user", text: "do the task" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "send-yield-structured" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { count: 3 },
+    );
+    stream.finishResponse("end_turn");
+    expect(await result).toEqual({
+      type: "yielded",
+      value: { type: "structured", value: { count: 3 } },
+    });
+  });
+  it("resolves aborted when the turn is aborted", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const result = core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("partial");
+    await core.abort();
+    expect(await result).toEqual({ type: "aborted" });
+  });
+  it("resolves failed with the resubmit text on a non-retryable error", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const result = core.send([{ type: "user", text: "find the bug" }]);
+    const stream = await mockClient.awaitStream();
+    stream.respondWithError(new Error("provider failure"));
+    const settled = await result;
+    if (settled.type !== "failed") throw new Error("expected failed");
+    expect(settled.error.message).toBe("provider failure");
+    expect(settled.resubmit).toContain("find the bug");
+  });
+  it("resolves completed rather than hanging when there is nothing to send", async () => {
+    const { core } = createAgentWithMock();
+    expect(await core.send([])).toEqual({ type: "completed" });
+  });
+  it("resolves completed rather than hanging on an empty raw send", async () => {
+    const { core } = createAgentWithMock({
+      threadType: "compact" as ThreadType,
+    });
+    expect(await core.send([])).toEqual({ type: "completed" });
+  });
+  it("rejects once the thread's container has been torn down", async () => {
+    const { core } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    core.state.mode = {
+      type: "yielded",
+      response: "done",
+      value: { type: "text", text: "done" },
+      tornDown: true,
+    };
+    await expect(core.send([{ type: "user", text: "more" }])).rejects.toThrow(
+      /torn down/,
+    );
+  });
+  it("reports a queued send as queued rather than borrowing another submission's outcome", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const first = core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    expect(
+      await core.send([{ type: "user", text: "and also" }], {
+        queue: "async",
+      }),
+    ).toEqual({ type: "queued" });
+    expect(core.state.pendingMessages).toHaveLength(1);
+    stream.streamText("hi");
+    stream.finishResponse("end_turn");
+    const second = await awaitNextStream(mockClient, stream);
+    second.streamText("and also hi");
+    second.finishResponse("end_turn");
+    expect(await first).toEqual({ type: "completed" });
+  });
+});
+describe("Thread.send across a compaction handoff", () => {
+  it("stays pending until the post-compaction turn comes to rest", async () => {
+    const threadId = uniqueThreadId("send-compaction");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      let asked = false;
+      core.supervisors = [
+        {
+          onBeforeRequest: () => {
+            if (asked) return { type: "none" };
+            asked = true;
+            return { type: "compact", nextPrompt: "carry on" };
+          },
+        },
+      ];
+      // The summarizing pass has its own tests; what is under test here is
+      // that the thread swaps agents and keeps the caller waiting for the
+      // continuation turn.
+      core.compact = (nextPrompt?: string) =>
+        (
+          core as unknown as {
+            handleCompactComplete: (
+              summary: string,
+              nextPrompt: string | undefined,
+              steps: unknown[],
+              scratchpad: Scratchpad.Scratchpad,
+            ) => Promise<SendResult>;
+          }
+        ).handleCompactComplete("SUMMARY TEXT", nextPrompt, [{}], {
+          entries: [],
+        });
+      const oldAgent = core.agent;
+      let settled: ThreadSendResult | undefined;
+      const result = core.send([{ type: "user", text: "hello" }]);
+      void result.then((r) => {
+        settled = r;
+      });
+      const stream = await mockClient.awaitStream();
+      stream.streamText("done");
+      stream.finishResponse("end_turn");
+      const contStream = await pollUntil(() => {
+        if (core.agent === oldAgent) throw new Error("waiting for swap");
+        return awaitNextStream(mockClient, stream);
+      });
+      expect(settled).toBeUndefined();
+      contStream.streamText("resumed");
+      contStream.finishResponse("end_turn");
+      expect(await result).toEqual({ type: "completed" });
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
+
+  it("resolves failed when the summarizing pass errors out", async () => {
+    const { core } = createAgentWithMock();
+    const done = new Defer<SendResult>();
+    const priv = core as unknown as {
+      compactionDone: Defer<SendResult> | undefined;
+      handleCompactionResult: (result: CompactionResult) => void;
+    };
+    priv.compactionDone = done;
+    priv.handleCompactionResult({ type: "error", steps: [] });
+    expect(await done.promise).toMatchObject({ type: "failed" });
+  });
+  it("resolves failed when the agent swap itself throws", async () => {
+    const { core } = createAgentWithMock();
+    const done = new Defer<SendResult>();
+    const priv = core as unknown as {
+      compactionDone: Defer<SendResult> | undefined;
+      handleCompactionResult: (result: CompactionResult) => void;
+      handleCompactComplete: () => Promise<SendResult>;
+    };
+    priv.handleCompactComplete = () =>
+      Promise.reject(new Error("swap exploded"));
+    priv.compactionDone = done;
+    priv.handleCompactionResult({
+      type: "complete",
+      summary: "SUMMARY",
+      nextPrompt: undefined,
+      steps: [],
+      scratchpad: Scratchpad.emptyScratchpad(),
+    });
+    const settled = await done.promise;
+    if (settled.type !== "failed") throw new Error("expected failed");
+    expect(settled.error.message).toBe("swap exploded");
   });
 });
 describe("Agent.handleProviderStopped", () => {
@@ -1443,7 +1641,7 @@ describe("Agent non-retryable error resubmit flow", () => {
     expect(events[0].threadId).toBe("test-thread");
     expect(events[0].text).toContain("find the bug");
     expect(core.state.failedSubmit?.userMessage).toContain("find the bug");
-    expect(core.state.failedSubmit?.errorMessage).toBe("provider failure");
+    expect(core.state.failedSubmit?.error.message).toBe("provider failure");
   });
 
   it("does not set failedSubmit or emit setupResubmit for subagent threads", async () => {
@@ -1729,6 +1927,50 @@ describe("Agent auto-resubmit for non-user-facing threads (Stage 2)", () => {
     expect(core.state.lastTurnResult?.type).toBe("failed");
   });
 
+  it("delivers exactly one send result across an auto-resubmit sequence", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    const settlements: ThreadSendResult[] = [];
+    const result = core.send([{ type: "user", text: "flaky task" }]);
+    void result.then((r) => settlements.push(r));
+    await vi.advanceTimersByTimeAsync(0);
+    const firstStream = await mockClient.awaitStream();
+    // Bypass the agent's own mid-stream retry budget so the error reaches the
+    // thread-level auto-resubmit immediately.
+    vi.setSystemTime(new Date(Date.now() + 300_001));
+    firstStream.respondWithError(new Error("terminated"));
+    await vi.advanceTimersByTimeAsync(0);
+    // A scheduled retry means the submission is still running.
+    expect(settlements).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const secondStream = await pollUntil(() => {
+      const s = mockClient.streams[mockClient.streams.length - 1];
+      if (s && s !== firstStream) return s;
+      throw new Error("waiting for auto-resubmit stream");
+    });
+    secondStream.respond({
+      text: "",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "retry-yield" as ToolRequestId,
+            toolName: "yield_to_parent" as ToolName,
+            input: { result: "done" },
+          },
+        },
+      ],
+      stopReason: "end_turn",
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await result).toEqual({
+      type: "yielded",
+      value: { type: "text", text: "done" },
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(settlements).toHaveLength(1);
+  });
   it("aborting a subagent cancels a pending auto-resubmit timer", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,

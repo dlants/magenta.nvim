@@ -124,6 +124,9 @@ export type ThreadMode =
   | {
       type: "yielded";
       response: string;
+      /** What this thread yields. Minted where the yield tool's input was
+       * still structured, so nothing has to parse `response` back out. */
+      value: YieldValue;
       tornDown?: boolean;
       teardownMessage?: string;
     };
@@ -205,7 +208,7 @@ export type AgentAction =
   | { type: "reset-bash-reminder" }
   | {
       type: "set-failed-submit";
-      value: { userMessage: string; errorMessage: string } | undefined;
+      value: { userMessage: string; error: Error } | undefined;
     }
   | {
       type: "set-pre-submit-native-idx";
@@ -228,14 +231,9 @@ export type ThreadState = {
   pendingBashReminder: boolean;
   bashTokensSinceLastReminder: number;
   firstBashReminderPending: boolean;
-  failedSubmit: { userMessage: string; errorMessage: string } | undefined;
+  failedSubmit: { userMessage: string; error: Error } | undefined;
   /** How the most recent turn ended. Kept for rendering an idle agent. */
   lastTurnResult: TurnResult | undefined;
-  /** The value the most recent yield produced, minted where the yield tool's
-   * input is still structured so nothing has to parse it back out of
-   * `mode.yielded.response`. */
-
-  lastYieldValue: YieldValue | undefined;
   preSubmitNativeIdx: NativeMessageIdx | undefined;
   activeReminders: Set<string>;
   toolSpecs: ProviderToolSpec[];
@@ -634,7 +632,7 @@ export class Agent extends Emitter<AgentEvents> {
   /** Why the executor parked the agent. The agent never learns this; it comes
    * back out here when the turn resolves `suspended`. */
   private suspendReason:
-    | { type: "yield"; result: string }
+    | { type: "yield"; result: string; value: YieldValue }
     | { type: "compact"; nextPrompt: string | undefined }
     | undefined;
 
@@ -705,7 +703,7 @@ export class Agent extends Emitter<AgentEvents> {
       this.settle({ type: "compact", nextPrompt: reason.nextPrompt });
       return;
     }
-    await this.handleYield(reason.result);
+    await this.handleYield(reason.result, reason.value);
   }
 
   private async handleStopped(stopReason: StopReason): Promise<void> {
@@ -861,9 +859,10 @@ export class Agent extends Emitter<AgentEvents> {
     );
 
     let yieldResult: string | undefined;
+    let yieldValue: YieldValue | undefined;
     for (const [id, entry] of activeTools) {
       if (entry.toolName === "yield_to_parent") {
-        this.state.lastYieldValue =
+        yieldValue =
           this.context.yieldSchema !== undefined
             ? { type: "structured", value: entry.request.input }
             : {
@@ -898,8 +897,12 @@ export class Agent extends Emitter<AgentEvents> {
       return { type: "aborted", results };
     }
 
-    if (yieldResult !== undefined) {
-      this.suspendReason = { type: "yield", result: yieldResult };
+    if (yieldResult !== undefined && yieldValue !== undefined) {
+      this.suspendReason = {
+        type: "yield",
+        result: yieldResult,
+        value: yieldValue,
+      };
       return { type: "suspend", results };
     }
 
@@ -968,7 +971,7 @@ export class Agent extends Emitter<AgentEvents> {
         this.update(
           {
             type: "set-failed-submit",
-            value: { userMessage, errorMessage: error.message },
+            value: { userMessage, error },
           },
           { silent: true },
         );
@@ -1221,29 +1224,35 @@ export class Agent extends Emitter<AgentEvents> {
     return undefined;
   }
 
-  private async handleYield(yieldResult: string): Promise<void> {
+  private async handleYield(
+    yieldResult: string,
+    yieldValue: YieldValue,
+  ): Promise<void> {
     const action = await this.consultYieldSupervisors(yieldResult);
     switch (action.type) {
       case "accept": {
         const response = action.resultPrefix
           ? `${action.resultPrefix}\n\n${yieldResult}`
           : yieldResult;
-        if (this.state.lastYieldValue?.type !== "structured") {
-          this.state.lastYieldValue = { type: "text", text: response };
-        }
+        // A prefixed text yield reports the prefixed text; a structured yield
+        // is what the schema says it is, prefix or not.
+        const value: YieldValue =
+          yieldValue.type === "structured"
+            ? yieldValue
+            : { type: "text", text: response };
         this.update({
           type: "set-mode",
-          mode: { type: "yielded", response, tornDown: true },
+          mode: { type: "yielded", response, value, tornDown: true },
         });
-        this.settleYield(response);
+        this.settleYield(value);
         break;
       }
       case "none":
         this.update({
           type: "set-mode",
-          mode: { type: "yielded", response: yieldResult },
+          mode: { type: "yielded", response: yieldResult, value: yieldValue },
         });
-        this.settleYield(yieldResult);
+        this.settleYield(yieldValue);
         break;
       case "reject":
         await this.submit([{ type: "system", text: action.message }]);
@@ -1259,11 +1268,8 @@ export class Agent extends Emitter<AgentEvents> {
   /** A yield is the end of the submission that produced it. The value was
    * minted where the tool's input was still structured, so nothing here has to
    * parse the response text back. */
-  private settleYield(response: string): void {
-    this.settle({
-      type: "yielded",
-      value: this.state.lastYieldValue ?? { type: "text", text: response },
-    });
+  private settleYield(value: YieldValue): void {
+    this.settle({ type: "yielded", value });
   }
 
   private async getAndPrepareContextUpdates(): Promise<{

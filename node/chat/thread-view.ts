@@ -685,7 +685,7 @@ ${contentView}`;
             hl_group: "@markup.heading.1.markdown",
           })}${failedSubmit.userMessage}\n`,
           { hl_group: "CursorLine", hl_eol: true },
-        )}${withExtmark(d`Error: ${failedSubmit.errorMessage}\n`, {
+        )}${withExtmark(d`Error: ${failedSubmit.error.message}\n`, {
           hl_group: "ErrorMsg",
         })}`
       : d``;

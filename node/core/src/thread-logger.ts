@@ -121,11 +121,10 @@ export class ThreadLogger {
    * at rest, since the final message is still streaming until then and must
    * be withheld.
    */
-  record(atRest: boolean): void {
+  record(state: "at-rest" | "streaming"): void {
     const messages = this.getMessages();
-    const stableCount = atRest
-      ? messages.length
-      : Math.max(0, messages.length - 1);
+    const stableCount =
+      state === "at-rest" ? messages.length : Math.max(0, messages.length - 1);
     if (stableCount > this.persistedCount) {
       this.flush(messages, stableCount);
     }
