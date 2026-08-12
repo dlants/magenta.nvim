@@ -1769,7 +1769,10 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     });
     const result = await request.promise;
     if (result.toolRequest.status === "ok") {
-      return (result.toolRequest.value.input as ThreadTitle.Input).title;
+      const input = ThreadTitle.validateInput(
+        result.toolRequest.value.input as { [key: string]: unknown },
+      );
+      if (input.status === "ok") return input.value.title;
     }
     return undefined;
   }

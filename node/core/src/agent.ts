@@ -212,7 +212,7 @@ export type AgentAction =
     };
 
 export type ThreadState = {
-  title?: string;
+  title: string | undefined;
   threadType: ThreadType;
   systemPrompt: SystemPrompt;
   systemInfo: SystemInfo;
@@ -248,7 +248,14 @@ export const AGENT_EVENT_NAMES = [
   "turnEnded",
   "contextUpdatesSent",
   "gitContextUpdateSent",
-] as const;
+] as const satisfies readonly (keyof AgentEvents)[];
+
+/** Fails to compile if an event is added to `AgentEvents` without being added
+ * to `AGENT_EVENT_NAMES`. */
+type _AgentEventNamesAreExhaustive =
+  Exclude<keyof AgentEvents, (typeof AGENT_EVENT_NAMES)[number]> extends never
+    ? true
+    : never;
 
 /** Collaborators the owning `Thread` supplies. An `Agent` is ephemeral —
  * compaction replaces it — so everything durable (identity, the queue, the
@@ -263,7 +270,9 @@ export interface AgentDeps {
   structuredToolResults: Map<ToolRequestId, ToolStructuredResult>;
   getSupervisors: () => ThreadSupervisor[];
   requestCompaction: (nextPrompt?: string) => void;
-  clonedRunner?: Runner;
+  /** Whether this agent drives a brand-new runner or one cloned from another
+   * thread's history. */
+  runnerInit: { type: "new" } | { type: "cloned"; runner: Runner };
 }
 
 export class Agent extends Emitter<AgentEvents> {
@@ -293,8 +302,8 @@ export class Agent extends Emitter<AgentEvents> {
     this.structuredToolResults = deps.structuredToolResults;
     this.refreshToolSpecs();
 
-    if (deps.clonedRunner) {
-      this.runner = deps.clonedRunner;
+    if (deps.runnerInit.type === "cloned") {
+      this.runner = deps.runnerInit.runner;
       this.bindRunner(this.runner);
     } else {
       this.runner = this.createRunner();

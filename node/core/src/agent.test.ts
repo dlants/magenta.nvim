@@ -19,6 +19,7 @@ import type {
   Provider,
   Runner,
 } from "./providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { Thread } from "./thread.ts";
 import {
@@ -1910,5 +1911,142 @@ describe("Agent scratchpad state", () => {
       await cleanupArchive(parentId);
       await cleanupArchive(childId);
     }
+  });
+});
+
+describe("Thread survives the compaction agent swap", () => {
+  /** Drive a compaction handoff to completion, including the post-compaction
+   * continuation turn the fresh agent issues. */
+  async function compact(
+    core: Thread,
+    mockClient: MockAnthropicClient,
+  ): Promise<void> {
+    const streamsBefore = mockClient.streams.length;
+    const compactPromise = (
+      core as unknown as {
+        handleCompactComplete: (
+          summary: string,
+          nextPrompt: string | undefined,
+          steps: unknown[],
+          scratchpad: Scratchpad.Scratchpad,
+        ) => Promise<void>;
+      }
+    ).handleCompactComplete("SUMMARY TEXT", undefined, [{}], { entries: [] });
+    const contStream = await pollUntil(() => {
+      if (mockClient.streams.length <= streamsBefore)
+        throw new Error("waiting");
+      return mockClient.streams[streamsBefore];
+    });
+    contStream.streamText("resumed");
+    contStream.finishResponse("end_turn");
+    await compactPromise;
+    await pollUntil(() => {
+      if (core.runner.phase.type !== "idle") throw new Error("waiting");
+      return true;
+    });
+  }
+
+  it("keeps structured tool results recorded before the compaction", async () => {
+    const threadId = uniqueThreadId("compact-structured");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      const map = core.structuredToolResults;
+      map.set(
+        "req-1" as ToolRequestId,
+        {
+          toolName: "thread_title" as ToolName,
+        } as never,
+      );
+      await compact(core, mockClient);
+      expect(core.structuredToolResults).toBe(map);
+      expect(core.structuredToolResults.has("req-1" as ToolRequestId)).toBe(
+        true,
+      );
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
+
+  it("forwards events from the replacement agent and none from the old one", async () => {
+    const threadId = uniqueThreadId("compact-events");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      const oldAgent = core.agent;
+      await compact(core, mockClient);
+      expect(core.agent).not.toBe(oldAgent);
+
+      let updates = 0;
+      core.on("update", () => updates++);
+      oldAgent.emit("update");
+      expect(updates).toBe(0);
+      core.agent.emit("update");
+      expect(updates).toBe(1);
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
+
+  it("seeds the replacement agent's prefix with the summary alone", async () => {
+    const threadId = uniqueThreadId("compact-prefix");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      // Queued on the pre-compaction agent, which the swap discards: the
+      // prefix belongs to the message list being replaced.
+      core.prependToNextTurn([
+        {
+          type: "text",
+          text: "stale prefix",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ]);
+      const compactPromise = (
+        core as unknown as {
+          handleCompactComplete: (
+            summary: string,
+            nextPrompt: string | undefined,
+            steps: unknown[],
+            scratchpad: Scratchpad.Scratchpad,
+          ) => Promise<void>;
+        }
+      ).handleCompactComplete("SUMMARY TEXT", undefined, [{}], {
+        entries: [],
+      });
+      const contStream = await mockClient.awaitStream();
+      const texts = core.pendingTurnContent.map((c) =>
+        c.type === "text" ? c.text : "",
+      );
+      expect(texts.some((t) => t.includes("stale prefix"))).toBe(false);
+      contStream.streamText("resumed");
+      contStream.finishResponse("end_turn");
+      await compactPromise;
+      await pollUntil(() => {
+        if (core.runner.phase.type !== "idle") throw new Error("waiting");
+        return true;
+      });
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
+});
+
+describe("Thread.destroy", () => {
+  it("tears down the context manager so its poll timer stops", async () => {
+    const threadId = uniqueThreadId("destroy-context");
+    const { core } = createAgentWithMock(undefined, threadId);
+    const contextManager = core.contextManager;
+    let updates = 0;
+    core.on("update", () => updates++);
+    await core.destroy();
+    await cleanupArchive(threadId);
+
+    expect(
+      (contextManager as unknown as { pollTimer: unknown }).pollTimer,
+    ).toBeUndefined();
+    // listeners are gone, so a stray emit cannot reach a destroyed thread
+    contextManager.emit("fileAdded", "/tmp/x" as never);
+    expect(updates).toBe(0);
   });
 });

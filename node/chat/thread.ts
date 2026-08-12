@@ -268,7 +268,8 @@ export class NvimThread {
       subagentConfig?: SubagentConfig;
       systemInfo: SystemInfo;
     },
-    clonedAgent?: Runner,
+    /** A `Thread` built by the caller — the fork path, which needs to clone
+     * the source's history before the wrapper exists. */
     preBuiltCore?: Thread,
   ) {
     this.myDispatch = (msg) =>
@@ -300,55 +301,49 @@ export class NvimThread {
     if (preBuiltCore) {
       this.core = preBuiltCore;
     } else {
-      this.core = new Thread(
-        id,
-        {
-          logger: context.nvim.logger,
-          profile: context.profile,
-          cwd: isDocker ? env.cwd : context.cwd,
-          homeDir: isDocker ? env.homeDir : context.homeDir,
-          threadType,
-          ...(context.scriptName ? { scriptName: context.scriptName } : {}),
-          ...(context.subagentConfig
-            ? { subagentConfig: context.subagentConfig }
-            : {}),
-          systemPrompt,
-          systemInfo: context.systemInfo,
-          mcpToolManager: context.mcpToolManager,
-          threadManager: context.chat,
-          getScriptRunner: () => context.chat.scriptRunner,
-          fileIO: env.fileIO,
-          shell: env.shell,
-          gitClient: env.gitClient,
-          ...(context.initialGitState !== undefined
-            ? { initialGitState: context.initialGitState }
-            : {}),
-          lspClient: env.lspClient,
-          ...(env.luaExecutor !== undefined
-            ? { luaExecutor: env.luaExecutor }
-            : {}),
-          availableCapabilities: env.availableCapabilities,
-          environmentConfig: env.environmentConfig,
-          maxConcurrentSubagents: context.options.maxConcurrentSubagents || 3,
-          maxConcurrentFastSubagents:
-            context.options.maxConcurrentFastSubagents || 8,
-          ...(context.options.dockerfile
-            ? { subagentDockerfile: context.options.dockerfile }
-            : {}),
-          ...(context.yieldSchema ? { yieldSchema: context.yieldSchema } : {}),
-          getAgents: () =>
-            loadAgents({
-              cwd: isDocker ? env.cwd : context.cwd,
-              logger: context.nvim.logger,
-              options: context.options,
-            }),
-          getProvider: (profile) => getProvider(context.nvim, profile),
-          ...(context.initialFiles
-            ? { initialFiles: context.initialFiles }
-            : {}),
-        },
-        clonedAgent,
-      );
+      this.core = new Thread(id, {
+        logger: context.nvim.logger,
+        profile: context.profile,
+        cwd: isDocker ? env.cwd : context.cwd,
+        homeDir: isDocker ? env.homeDir : context.homeDir,
+        threadType,
+        ...(context.scriptName ? { scriptName: context.scriptName } : {}),
+        ...(context.subagentConfig
+          ? { subagentConfig: context.subagentConfig }
+          : {}),
+        systemPrompt,
+        systemInfo: context.systemInfo,
+        mcpToolManager: context.mcpToolManager,
+        threadManager: context.chat,
+        getScriptRunner: () => context.chat.scriptRunner,
+        fileIO: env.fileIO,
+        shell: env.shell,
+        gitClient: env.gitClient,
+        ...(context.initialGitState !== undefined
+          ? { initialGitState: context.initialGitState }
+          : {}),
+        lspClient: env.lspClient,
+        ...(env.luaExecutor !== undefined
+          ? { luaExecutor: env.luaExecutor }
+          : {}),
+        availableCapabilities: env.availableCapabilities,
+        environmentConfig: env.environmentConfig,
+        maxConcurrentSubagents: context.options.maxConcurrentSubagents || 3,
+        maxConcurrentFastSubagents:
+          context.options.maxConcurrentFastSubagents || 8,
+        ...(context.options.dockerfile
+          ? { subagentDockerfile: context.options.dockerfile }
+          : {}),
+        ...(context.yieldSchema ? { yieldSchema: context.yieldSchema } : {}),
+        getAgents: () =>
+          loadAgents({
+            cwd: isDocker ? env.cwd : context.cwd,
+            logger: context.nvim.logger,
+            options: context.options,
+          }),
+        getProvider: (profile) => getProvider(context.nvim, profile),
+        ...(context.initialFiles ? { initialFiles: context.initialFiles } : {}),
+      });
     }
 
     const coreListeners = {
@@ -593,7 +588,6 @@ export class NvimThread {
           ? { subagentConfig: sourceThread.context.subagentConfig }
           : {}),
       },
-      undefined,
       core,
     );
 

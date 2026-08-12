@@ -2,6 +2,7 @@ import {
   AGENT_EVENT_NAMES,
   Agent,
   type AgentContext,
+  type AgentDeps,
   type AgentEvents,
   type InputMessage,
   type ThreadState,
@@ -34,6 +35,19 @@ import * as ThreadTitle from "./tools/thread-title.ts";
 
 const CONTEXT_MANAGER_POLL_INTERVAL_MS = 1000;
 
+/** How a `Thread` comes into being: either brand new, or forked from another
+ * thread's history — in which case the cloned runner, its provenance and the
+ * inherited scratchpad/registers all arrive together. */
+export type ThreadInit =
+  | { type: "fresh" }
+  | {
+      type: "clone";
+      runner: Runner;
+      provenance: ForkProvenance;
+      scratchpad: Scratchpad.Scratchpad;
+      edlRegisters: EdlRegisters;
+    };
+
 /**
  * The durable half of a conversation: a stable `ThreadId`, the queue of
  * messages waiting for the current turn to finish, compaction, the archive
@@ -62,14 +76,10 @@ export class Thread extends Emitter<AgentEvents> {
   constructor(
     public id: ThreadId,
     private context: AgentContext,
-    clonedRunner?: Runner,
-    forkProvenance?: ForkProvenance,
-    initialState?: {
-      scratchpad?: Scratchpad.Scratchpad;
-      edlRegisters?: EdlRegisters;
-    },
+    init: ThreadInit = { type: "fresh" },
   ) {
     super();
+    const forkProvenance = init.type === "clone" ? init.provenance : undefined;
     this.threadLogger = new ThreadLogger(
       id,
       context.threadType,
@@ -108,11 +118,13 @@ export class Thread extends Emitter<AgentEvents> {
       pendingMessages: [],
       pendingNextMessages: [],
       mode: { type: "normal" },
-      edlRegisters: initialState?.edlRegisters ?? {
-        registers: new Map(),
-        nextSavedId: 0,
-      },
-      scratchpad: initialState?.scratchpad ?? Scratchpad.emptyScratchpad(),
+      edlRegisters:
+        init.type === "clone"
+          ? init.edlRegisters
+          : { registers: new Map(), nextSavedId: 0 },
+      scratchpad:
+        init.type === "clone" ? init.scratchpad : Scratchpad.emptyScratchpad(),
+      title: undefined,
       outputTokensSinceLastReminder: 0,
       compactionHistory: [],
       editedFilesThisTurn: [],
@@ -127,7 +139,11 @@ export class Thread extends Emitter<AgentEvents> {
     };
 
     this.listenToContextManager();
-    this.agent = this.createAgent(clonedRunner);
+    this.agent = this.createAgent(
+      init.type === "clone"
+        ? { type: "cloned", runner: init.runner }
+        : { type: "new" },
+    );
   }
 
   /** Build an independent copy of `sourceThread` that resumes the conversation
@@ -152,22 +168,19 @@ export class Thread extends Emitter<AgentEvents> {
       initialFiles,
       initialGitState: sourceThread.gitTracker.getAgentView(),
     };
-    const cloned = new Thread(
-      newId,
-      contextWithFiles,
+    const cloned = new Thread(newId, contextWithFiles, {
+      type: "clone",
       runner,
-      {
+      provenance: {
         fromThreadId: sourceThread.id,
         nativeMessageIdx,
       },
-      {
-        scratchpad: Scratchpad.cloneScratchpad(sourceThread.state.scratchpad),
-        edlRegisters: {
-          registers: new Map(sourceThread.state.edlRegisters.registers),
-          nextSavedId: sourceThread.state.edlRegisters.nextSavedId,
-        },
+      scratchpad: Scratchpad.cloneScratchpad(sourceThread.state.scratchpad),
+      edlRegisters: {
+        registers: new Map(sourceThread.state.edlRegisters.registers),
+        nextSavedId: sourceThread.state.edlRegisters.nextSavedId,
       },
-    );
+    });
     for (const [id, structured] of sourceThread.structuredToolResults) {
       cloned.structuredToolResults.set(id, structured);
     }
@@ -181,7 +194,7 @@ export class Thread extends Emitter<AgentEvents> {
 
   private agentListeners: Array<() => void> = [];
 
-  private createAgent(clonedRunner?: Runner): Agent {
+  private createAgent(runnerInit: AgentDeps["runnerInit"]): Agent {
     const agent = new Agent(this.context, {
       threadId: this.id,
       state: this.state,
@@ -190,7 +203,7 @@ export class Thread extends Emitter<AgentEvents> {
       structuredToolResults: this.structuredToolResults,
       getSupervisors: () => this.supervisors,
       requestCompaction: (nextPrompt) => this.startCompaction(nextPrompt),
-      ...(clonedRunner ? { clonedRunner } : {}),
+      runnerInit,
     });
     this.attachAgent(agent);
     return agent;
@@ -221,45 +234,28 @@ export class Thread extends Emitter<AgentEvents> {
     this.agentListeners = [];
   }
 
-  private contextManagerListeners:
-    | {
-        fileAdded: () => void;
-        fileRemoved: () => void;
-        pendingUpdatesChanged: () => void;
-      }
-    | undefined;
+  private contextManagerListeners: Array<() => void> = [];
 
   private listenToContextManager(): void {
-    const listeners = {
-      fileAdded: () => this.emit("update"),
-      fileRemoved: () => this.emit("update"),
-      pendingUpdatesChanged: () => this.emit("pendingUpdatesChanged"),
-    };
-    this.contextManagerListeners = listeners;
-    this.contextManager.on("fileAdded", listeners.fileAdded);
-    this.contextManager.on("fileRemoved", listeners.fileRemoved);
-    this.contextManager.on(
-      "pendingUpdatesChanged",
-      listeners.pendingUpdatesChanged,
-    );
+    const onFilesChanged = () => this.emit("update");
+    const onPendingUpdatesChanged = () => this.emit("pendingUpdatesChanged");
+    this.contextManager.on("fileAdded", onFilesChanged);
+    this.contextManager.on("fileRemoved", onFilesChanged);
+    this.contextManager.on("pendingUpdatesChanged", onPendingUpdatesChanged);
+    this.contextManagerListeners = [
+      () => this.contextManager.off("fileAdded", onFilesChanged),
+      () => this.contextManager.off("fileRemoved", onFilesChanged),
+      () =>
+        this.contextManager.off(
+          "pendingUpdatesChanged",
+          onPendingUpdatesChanged,
+        ),
+    ];
   }
 
   private unlistenContextManager(): void {
-    if (this.contextManagerListeners) {
-      this.contextManager.off(
-        "fileAdded",
-        this.contextManagerListeners.fileAdded,
-      );
-      this.contextManager.off(
-        "fileRemoved",
-        this.contextManagerListeners.fileRemoved,
-      );
-      this.contextManager.off(
-        "pendingUpdatesChanged",
-        this.contextManagerListeners.pendingUpdatesChanged,
-      );
-      this.contextManagerListeners = undefined;
-    }
+    for (const unsubscribe of this.contextManagerListeners) unsubscribe();
+    this.contextManagerListeners = [];
   }
 
   update(...args: Parameters<Agent["update"]>): void {
@@ -390,9 +386,12 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     });
     const result = await request.promise;
     if (result.toolRequest.status === "ok") {
-      this.setTitle(
-        (result.toolRequest.value.input as ThreadTitle.Input).title,
+      const input = ThreadTitle.validateInput(
+        result.toolRequest.value.input as { [key: string]: unknown },
       );
+      if (input.status === "ok") {
+        this.setTitle(input.value.title);
+      }
     }
   }
 
@@ -476,7 +475,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     // is watching has nothing to do with which agent is running, so it
     // deliberately survives the swap.
     const previousAgent = this.agent;
-    this.agent = this.createAgent();
+    this.agent = this.createAgent({ type: "new" });
     await previousAgent.dispose();
 
     this.threadLogger.recordCompaction({ summary, chunkCount: steps.length });
