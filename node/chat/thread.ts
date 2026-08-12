@@ -9,12 +9,15 @@ import type {
 import {
   type ContextFiles,
   type ContextManager,
+  composeSupervisors,
   type InputMessage,
   loadAgents,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
   Thread,
+  type ThreadCallbacks,
   type ThreadId,
+  type ThreadSendResult,
   type ThreadType,
   type ToolRequestId,
 } from "@magenta/core";
@@ -50,6 +53,12 @@ import type {
 import { displayPath } from "../utils/files.ts";
 import type { Chat } from "./chat.ts";
 import { notifyUser } from "./notify.ts";
+
+/** Trailing-edge coalescing window for core updates. The core no longer
+ * throttles; a render cadence is a view decision. */
+const RENDER_DEBOUNCE_MS = 32;
+/** The view needs the new message to exist before it can scroll to it. */
+const SCROLL_DELAY_MS = 100;
 
 export type SandboxRoot = {
   readonly isSandboxBypassed: boolean;
@@ -228,13 +237,9 @@ export class NvimThread {
     return this.core.runner;
   }
 
-  get supervisors(): ThreadSupervisor[] {
-    return this.core.supervisors;
-  }
-
-  set supervisors(value: ThreadSupervisor[]) {
-    this.core.supervisors = value;
-  }
+  /** The supervisor list this thread's hooks were composed from. Kept so the
+   * wiring is inspectable; the core only ever sees the composed hooks. */
+  public supervisors: ThreadSupervisor[] = [];
 
   get isSandboxBypassed(): boolean {
     const sandboxRoot = this.context.getSandboxRoot?.();
@@ -300,6 +305,7 @@ export class NvimThread {
 
     if (preBuiltCore) {
       this.core = preBuiltCore;
+      this.core.callbacks = this.coreCallbacks();
     } else {
       this.core = new Thread(
         id,
@@ -347,64 +353,79 @@ export class NvimThread {
             ? { initialFiles: context.initialFiles }
             : {}),
         },
+        this.coreCallbacks(),
         { type: "fresh" },
         context.scriptName ? { scriptName: context.scriptName } : {},
       );
     }
 
-    const coreListeners = {
-      update: () => {
-        this.rebuildToolResultMap();
-        const title = this.core.state.title;
-        if (title !== undefined && title !== this.lastAppliedTitle) {
-          this.lastAppliedTitle = title;
-          this.context.dispatch({
-            type: "set-thread-title-effect",
-            id: this.core.id,
-            title,
-          });
-        }
-        this.myDispatch({ type: "tool-progress" });
-      },
-      pendingUpdatesChanged: () => this.myDispatch({ type: "tool-progress" }),
-      turnEnded: (payload: { reason: "end_turn" | "aborted" | "error" }) => {
-        this.myDispatch({ type: "turn-ended" });
-        if (payload.reason === "end_turn" || payload.reason === "error") {
-          notifyUser(
-            {
-              nvim: this.context.nvim,
-              options: this.context.options,
-            },
-            "thread-turn-end",
-          );
-        }
-      },
-      setupResubmit: (threadId: ThreadId, lastUserMessage: string) =>
+    this.core.hooks = composeSupervisors(() => this.supervisors);
+
+    this.rebuildToolResultMap();
+  }
+
+  /** Coalesce the core's unthrottled `onUpdate` into at most one dispatch per
+   * frame. Trailing-edge on purpose: the core fires once more after the
+   * thread comes to rest, and a leading-edge throttle would drop exactly that
+   * call and leave a stale streaming block on screen forever. */
+  private renderDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  private onCoreUpdate(): void {
+    if (this.renderDebounceTimer) return;
+    this.renderDebounceTimer = setTimeout(() => {
+      this.renderDebounceTimer = undefined;
+      if (this.destroyed) return;
+      this.rebuildToolResultMap();
+      const title = this.core.state.title;
+      if (title !== undefined && title !== this.lastAppliedTitle) {
+        this.lastAppliedTitle = title;
         this.context.dispatch({
-          type: "sidebar-msg",
-          msg: { type: "setup-resubmit", threadId, lastUserMessage },
-        }),
-      recoverPendingMessages: (threadId: ThreadId, text: string) =>
-        this.context.dispatch({
-          type: "sidebar-msg",
-          msg: { type: "append-to-input", threadId, text },
-        }),
-      scrollToLastMessage: () =>
+          type: "set-thread-title-effect",
+          id: this.core.id,
+          title,
+        });
+      }
+      this.myDispatch({ type: "tool-progress" });
+      this.maybeScrollToSubmission();
+    }, RENDER_DEBOUNCE_MS);
+  }
+
+  /** The message count when the pending submission was issued, if a send is
+   * waiting to be scrolled into view. The scroll belongs to the actor that
+   * submitted, and has to wait until the message it is scrolling to exists. */
+  private scrollAfterMessageCount: number | undefined;
+
+  private maybeScrollToSubmission(): void {
+    if (this.scrollAfterMessageCount === undefined) return;
+    if (
+      this.core.getProviderMessages().length <= this.scrollAfterMessageCount
+    ) {
+      return;
+    }
+    this.scrollAfterMessageCount = undefined;
+    setTimeout(
+      () =>
         this.context.dispatch({
           type: "sidebar-msg",
           msg: { type: "scroll-to-last-user-message" },
         }),
-      aborting: () => {
-        this.sandboxViolationHandler?.rejectAll();
-      },
-      contextUpdatesSent: (updates: Record<string, unknown>) => {
+      SCROLL_DELAY_MS,
+    );
+  }
+
+  /** The callbacks the core needs. Everything else it used to broadcast is
+   * now the return value of the `send`/`abort` this thread itself issued. */
+  private coreCallbacks(): ThreadCallbacks {
+    return {
+      onUpdate: () => this.onCoreUpdate(),
+      onContextUpdatesSent: (updates) => {
         const messageCount = this.core.getProviderMessages().length;
         this.state.messageViewState[messageCount] = {
           ...this.state.messageViewState[messageCount],
           contextUpdates: updates as FileUpdates,
         };
       },
-      gitContextUpdateSent: (update: GitContextUpdate) => {
+      onGitContextUpdateSent: (update) => {
         const messageCount = this.core.getProviderMessages().length;
         this.state.messageViewState[messageCount] = {
           ...this.state.messageViewState[messageCount],
@@ -412,21 +433,29 @@ export class NvimThread {
         };
       },
     };
-    this.coreListeners = coreListeners;
-    this.core.on("update", coreListeners.update);
-    this.core.on("pendingUpdatesChanged", coreListeners.pendingUpdatesChanged);
-    this.core.on("turnEnded", coreListeners.turnEnded);
-    this.core.on("setupResubmit", coreListeners.setupResubmit);
-    this.core.on(
-      "recoverPendingMessages",
-      coreListeners.recoverPendingMessages,
-    );
-    this.core.on("scrollToLastMessage", coreListeners.scrollToLastMessage);
-    this.core.on("aborting", coreListeners.aborting);
-    this.core.on("contextUpdatesSent", coreListeners.contextUpdatesSent);
-    this.core.on("gitContextUpdateSent", coreListeners.gitContextUpdateSent);
+  }
 
-    this.rebuildToolResultMap();
+  /** Turn a finished submission into the effects that used to be broadcast
+   * events: the turn-end notification and the rolled-back input text. */
+  private handleSendResult(result: ThreadSendResult): void {
+    if (result.type === "queued") return;
+    this.myDispatch({ type: "turn-ended" });
+    if (result.type === "completed" || result.type === "failed") {
+      notifyUser(
+        { nvim: this.context.nvim, options: this.context.options },
+        "thread-turn-end",
+      );
+    }
+    if (result.type === "failed" && result.resubmit !== undefined) {
+      this.context.dispatch({
+        type: "sidebar-msg",
+        msg: {
+          type: "setup-resubmit",
+          threadId: this.id,
+          lastUserMessage: result.resubmit,
+        },
+      });
+    }
   }
 
   /** Walks the agent's provider messages and rebuilds the tool result map.
@@ -572,6 +601,9 @@ export class NvimThread {
           }),
         getProvider: (p) => getProvider(nvim, p),
       },
+      // Replaced by the wrapper's own callbacks as soon as it exists; a fork
+      // has to clone the source's history before there is a wrapper to talk to.
+      callbacks: { onUpdate: () => {} },
     });
 
     const thread = new NvimThread(
@@ -625,54 +657,15 @@ export class NvimThread {
     return thread;
   }
 
-  private coreListeners:
-    | {
-        update: () => void;
-        pendingUpdatesChanged: () => void;
-        turnEnded: (payload: {
-          reason: "end_turn" | "aborted" | "error";
-        }) => void;
-        setupResubmit: (threadId: ThreadId, lastUserMessage: string) => void;
-        recoverPendingMessages: (threadId: ThreadId, text: string) => void;
-        scrollToLastMessage: () => void;
-        aborting: () => void;
-        contextUpdatesSent: (updates: Record<string, unknown>) => void;
-        gitContextUpdateSent: (update: GitContextUpdate) => void;
-      }
-    | undefined;
-
   private destroyed = false;
 
   async destroy(): Promise<void> {
     if (this.destroyed) return;
     this.destroyed = true;
 
-    if (this.coreListeners) {
-      this.core.off("update", this.coreListeners.update);
-      this.core.off(
-        "pendingUpdatesChanged",
-        this.coreListeners.pendingUpdatesChanged,
-      );
-      this.core.off("turnEnded", this.coreListeners.turnEnded);
-      this.core.off("setupResubmit", this.coreListeners.setupResubmit);
-      this.core.off(
-        "recoverPendingMessages",
-        this.coreListeners.recoverPendingMessages,
-      );
-      this.core.off(
-        "scrollToLastMessage",
-        this.coreListeners.scrollToLastMessage,
-      );
-      this.core.off("aborting", this.coreListeners.aborting);
-      this.core.off(
-        "contextUpdatesSent",
-        this.coreListeners.contextUpdatesSent,
-      );
-      this.core.off(
-        "gitContextUpdateSent",
-        this.coreListeners.gitContextUpdateSent,
-      );
-      this.coreListeners = undefined;
+    if (this.renderDebounceTimer) {
+      clearTimeout(this.renderDebounceTimer);
+      this.renderDebounceTimer = undefined;
     }
 
     await this.core.destroy();
@@ -723,9 +716,20 @@ export class NvimThread {
             this.core.update({ type: "activate-reminder", text });
           }
         }
+        if (msg.queue === undefined && this.core.phase.type !== "idle") {
+          // The send is about to preempt the turn in flight; pending sandbox
+          // approvals belong to that turn.
+          this.sandboxViolationHandler?.rejectAll();
+        }
+        if (msg.messages.length) {
+          this.scrollAfterMessageCount = this.core.getProviderMessages().length;
+        }
         this.core
           .send(msg.messages, msg.queue ? { queue: msg.queue } : {})
-          .catch((e: Error) => this.context.nvim.logger.error(e));
+          .then(
+            (result) => this.handleSendResult(result),
+            (e: Error) => this.context.nvim.logger.error(e),
+          );
         return;
 
       case "start-compaction":
@@ -960,6 +964,21 @@ export class NvimThread {
   }
 
   async abortAndWait(): Promise<void> {
-    await this.core.abort();
+    this.sandboxViolationHandler?.rejectAll();
+    const { unsent } = await this.core.abort();
+    const isUserFacing =
+      this.core.state.threadType === "root" ||
+      this.core.state.threadType === "docker_root";
+    if (!isUserFacing) return;
+    const text = unsent
+      .flatMap((q) => q.messages)
+      .filter((m) => m.type === "user")
+      .map((m) => m.text)
+      .join("\n");
+    if (!text) return;
+    this.context.dispatch({
+      type: "sidebar-msg",
+      msg: { type: "append-to-input", threadId: this.id, text },
+    });
   }
 }

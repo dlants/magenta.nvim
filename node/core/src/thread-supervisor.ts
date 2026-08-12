@@ -2,6 +2,7 @@ import type {
   ProviderMessageContent,
   StreamStopReason,
 } from "./providers/provider-types.ts";
+import type { AgentHooks } from "./thread-api.ts";
 
 /** Action returned from the `onEndTurnWithoutYield` hook. */
 export type EndTurnAction =
@@ -77,6 +78,50 @@ export function requestedCompaction(
     case "none":
       return undefined;
   }
+}
+
+/** Fold a list of supervisors into the single `AgentHooks` trio an `Agent`
+ * consults. The merge rules are exactly today's: `send-message` texts join
+ * with a blank line, the first `accept`/`reject` wins a yield, and request
+ * actions merge per `mergeRequestActions`. Arbitration lives here rather than
+ * in the agent because it is policy over a plural collaborator, and each
+ * consumer is free to choose a different one. */
+export function composeSupervisors(
+  getSupervisors: () => ReadonlyArray<ThreadSupervisor>,
+): AgentHooks {
+  return {
+    onEndTurn: (context) => {
+      const texts: string[] = [];
+      for (const sup of getSupervisors()) {
+        const action = sup.onEndTurnWithoutYield?.(context);
+        if (action && action.type === "send-message") texts.push(action.text);
+      }
+      if (texts.length === 0) return { type: "none" };
+      return { type: "send-message", text: texts.join("\n\n") };
+    },
+    onYield: async (value) => {
+      // The built-in supervisors predate structured yields and read text.
+      const result =
+        value.type === "text" ? value.text : JSON.stringify(value.value);
+      const texts: string[] = [];
+      for (const sup of getSupervisors()) {
+        const action = await sup.onYield?.(result);
+        if (!action) continue;
+        if (action.type === "accept" || action.type === "reject") return action;
+        if (action.type === "send-message") texts.push(action.text);
+      }
+      if (texts.length === 0) return { type: "none" };
+      return { type: "send-message", text: texts.join("\n\n") };
+    },
+    onBeforeRequest: (context) => {
+      const actions: RequestAction[] = [];
+      for (const sup of getSupervisors()) {
+        const action = sup.onBeforeRequest?.(context);
+        if (action) actions.push(action);
+      }
+      return mergeRequestActions(actions);
+    },
+  };
 }
 
 /** Union of all hook action types. Prefer the narrower per-hook types

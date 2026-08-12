@@ -298,12 +298,11 @@ export class Magenta {
         if (!wrapper || wrapper.state !== "initialized") {
           return "";
         }
-        if (wrapper.thread.getProviderStatus().type !== "idle") {
+        const phase = wrapper.thread.core.phase;
+        if (phase.type !== "idle") {
           return "⏳";
         }
-        return wrapper.thread.core.state.lastTurnResult?.type === "failed"
-          ? "✗"
-          : "✓";
+        return phase.lastResult?.type === "failed" ? "✗" : "✓";
       },
       this.bufferManager,
       () => this.getActiveKey(),

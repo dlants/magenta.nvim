@@ -1,10 +1,9 @@
 import {
-  AGENT_EVENT_NAMES,
   Agent,
   type AgentContext,
   type AgentDeps,
-  type AgentEvents,
   type AgentSendOutcome,
+  type ContextUpdateSink,
   type InputMessage,
   type ThreadState,
 } from "./agent.ts";
@@ -17,7 +16,6 @@ import { CompactionManager } from "./compaction-manager.ts";
 import { buildClonedFiles, ContextManager } from "./context/context-manager.ts";
 import { GitTracker } from "./context/git-tracker.ts";
 import type { EdlRegisters } from "./edl/index.ts";
-import { Emitter } from "./emitter.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
   AgentInput,
@@ -29,13 +27,16 @@ import type {
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type {
+  AgentHooks,
+  OnUpdate,
+  QueuedMessage,
   SendOptions,
   SendResult,
   ThreadPhase,
+  ThreadResult,
   ThreadSendResult,
 } from "./thread-api.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
-import type { ThreadSupervisor } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
 import * as Scratchpad from "./tools/scratchpad.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
@@ -76,13 +77,24 @@ export type ThreadInit =
  * still thread 3 after a compaction, which is why the archive keys by thread
  * id and why the context manager survives the swap.
  */
-export class Thread extends Emitter<AgentEvents> {
+/** The collaborators the owner supplies. `onUpdate` is the one channel a
+ * thread has for saying "something visible moved"; the two context-update
+ * sinks are a stage-6 placeholder, where they become `onBeforeRequest`
+ * injections whose structured record rides on the message. */
+export type ThreadCallbacks = ContextUpdateSink & {
+  onUpdate: OnUpdate;
+};
+
+export class Thread {
   public state: ThreadState;
   public agent: Agent;
   public contextManager: ContextManager;
   public gitTracker: GitTracker;
   public compactionController: CompactionManager | undefined;
-  public supervisors: ThreadSupervisor[] = [];
+  /** The owner's answers to the agent's three questions. Composed from a
+   * supervisor list by `composeSupervisors` at the call site that knows the
+   * policy; the agent never sees a list. */
+  public hooks: AgentHooks = {};
   /** Structured tool results by request id, kept for the lifetime of the
    * thread — so they outlive any one agent. */
   readonly structuredToolResults = new Map<
@@ -94,12 +106,14 @@ export class Thread extends Emitter<AgentEvents> {
   constructor(
     public id: ThreadId,
     private context: AgentContext,
+    /** Mutable only for the fork path, which must build a `Thread` before the
+     * wrapper that owns it exists. Every other caller supplies it once. */
+    public callbacks: ThreadCallbacks,
     init: ThreadInit = { type: "fresh" },
     /** Where this thread's conversation archive goes. Archive plumbing, not
      * agent configuration, so it is not part of the context bag. */
     private archiveOptions: ThreadArchiveOptions = {},
   ) {
-    super();
     const forkProvenance = init.type === "clone" ? init.provenance : undefined;
     this.threadLogger = new ThreadLogger(
       id,
@@ -179,8 +193,9 @@ export class Thread extends Emitter<AgentEvents> {
     newId: ThreadId;
     nativeMessageIdx: NativeMessageIdx;
     context: AgentContext;
+    callbacks: ThreadCallbacks;
   }): Promise<Thread> {
-    const { sourceThread, newId, nativeMessageIdx, context } = args;
+    const { sourceThread, newId, nativeMessageIdx, context, callbacks } = args;
     const initialFiles = await buildClonedFiles(
       sourceThread.contextManager.files,
       context.fileIO,
@@ -193,6 +208,7 @@ export class Thread extends Emitter<AgentEvents> {
     const cloned = new Thread(
       newId,
       contextWithFiles,
+      callbacks,
       {
         type: "clone",
         sourceRunner: sourceThread.runner,
@@ -306,63 +322,52 @@ export class Thread extends Emitter<AgentEvents> {
     }
   }
 
-  private agentListeners: Array<() => void> = [];
-
   private createAgent(runnerInit: AgentDeps["runnerInit"]): Agent {
-    const agent = new Agent(this.context, {
+    return new Agent(this.context, {
       threadId: this.id,
       state: this.state,
       contextManager: this.contextManager,
       gitTracker: this.gitTracker,
       structuredToolResults: this.structuredToolResults,
-      getSupervisors: () => this.supervisors,
+      getHooks: () => this.hooks,
+      onUpdate: () => this.handleUpdate(),
+      contextUpdateSink: {
+        ...(this.callbacks.onContextUpdatesSent
+          ? { onContextUpdatesSent: this.callbacks.onContextUpdatesSent }
+          : {}),
+        ...(this.callbacks.onGitContextUpdateSent
+          ? { onGitContextUpdateSent: this.callbacks.onGitContextUpdateSent }
+          : {}),
+      },
       runnerInit,
     });
-    this.attachAgent(agent);
-    return agent;
   }
 
-  /** Pipe every agent event out through the thread, and drive the archive off
-   * the two it cares about. */
-  private attachAgent(agent: Agent): void {
-    this.detachAgent();
-    const unsubscribes: Array<() => void> = [];
-    for (const name of AGENT_EVENT_NAMES) {
-      const listener = (...args: AgentEvents[typeof name]) =>
-        this.emit(name, ...args);
-      agent.on(name, listener);
-      unsubscribes.push(() => agent.off(name, listener));
-    }
-    const onUpdate = () =>
-      this.threadLogger.record(
-        this.phase.type === "idle" ? "at-rest" : "streaming",
-      );
-    agent.on("update", onUpdate);
-    unsubscribes.push(() => agent.off("update", onUpdate));
-    this.agentListeners = unsubscribes;
-  }
-
-  private detachAgent(): void {
-    for (const unsubscribe of this.agentListeners) unsubscribe();
-    this.agentListeners = [];
+  /** The single "something moved" path: drive the archive's cursor-differ,
+   * then tell the owner. There is no throttle here — coalescing is the
+   * recipient's job, and it must be trailing-edge so the final call at rest
+   * is not dropped. */
+  private handleUpdate(): void {
+    // A destroyed thread has no owner left to tell; disposing the agent can
+    // still produce one last abort-driven update.
+    if (this.destroyed) return;
+    this.threadLogger.record(
+      this.phase.type === "idle" ? "at-rest" : "streaming",
+    );
+    this.callbacks.onUpdate();
   }
 
   private contextManagerListeners: Array<() => void> = [];
 
   private listenToContextManager(): void {
-    const onFilesChanged = () => this.emit("update");
-    const onPendingUpdatesChanged = () => this.emit("pendingUpdatesChanged");
-    this.contextManager.on("fileAdded", onFilesChanged);
-    this.contextManager.on("fileRemoved", onFilesChanged);
-    this.contextManager.on("pendingUpdatesChanged", onPendingUpdatesChanged);
+    const onChanged = () => this.callbacks.onUpdate();
+    this.contextManager.on("fileAdded", onChanged);
+    this.contextManager.on("fileRemoved", onChanged);
+    this.contextManager.on("pendingUpdatesChanged", onChanged);
     this.contextManagerListeners = [
-      () => this.contextManager.off("fileAdded", onFilesChanged),
-      () => this.contextManager.off("fileRemoved", onFilesChanged),
-      () =>
-        this.contextManager.off(
-          "pendingUpdatesChanged",
-          onPendingUpdatesChanged,
-        ),
+      () => this.contextManager.off("fileAdded", onChanged),
+      () => this.contextManager.off("fileRemoved", onChanged),
+      () => this.contextManager.off("pendingUpdatesChanged", onChanged),
     ];
   }
 
@@ -421,8 +426,25 @@ export class Thread extends Emitter<AgentEvents> {
     this.threadLogger.recordTitle(title);
   }
 
-  async abort(): Promise<void> {
-    await this.agent.abort();
+  /** Abort the turn in flight and hand back the queued messages that will now
+   * never be sent. The debris goes to whoever aborted; nothing is broadcast. */
+  async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
+    return await this.agent.abort();
+  }
+
+  /** Resolves when the thread yields, or when it is destroyed without ever
+   * having yielded. Settles at most once. For actors who never submitted —
+   * the subagent tool, the script runner — where `send`'s promise is private
+   * to its submitter. */
+  get result(): Promise<ThreadResult> {
+    return this.resultDefer.promise;
+  }
+  private resultDefer = new Defer<ThreadResult>();
+  private resultSettled = false;
+  private settleResult(result: ThreadResult): void {
+    if (this.resultSettled) return;
+    this.resultSettled = true;
+    this.resultDefer.resolve(result);
   }
 
   /** The compaction handoff currently in flight, if any. It is the only piece
@@ -463,15 +485,7 @@ export class Thread extends Emitter<AgentEvents> {
       await this.agent.abortAndWait();
     }
 
-    const result = this.followSubmission(
-      this.agent.send(messages, {
-        onIssued: () => {
-          if (messages.length) {
-            setTimeout(() => this.emit("scrollToLastMessage"), 100);
-          }
-        },
-      }),
-    );
+    const result = this.followSubmission(this.agent.send(messages));
 
     if (!this.state.title) {
       this.setThreadTitle(messages.map((m) => m.text).join("\n")).catch(
@@ -494,7 +508,10 @@ export class Thread extends Emitter<AgentEvents> {
     const result: Promise<SendResult> = outcome.then((o) =>
       o.type === "compact" ? this.compact(o.nextPrompt) : o,
     );
-    return result;
+    return result.then((r) => {
+      if (r.type === "yielded") this.settleResult(r);
+      return r;
+    });
   }
 
   async setThreadTitle(userMessage: string): Promise<void> {
@@ -553,7 +570,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
       maxConcurrentSubagents: this.context.maxConcurrentSubagents,
       maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
       getProvider: this.context.getProvider,
-      requestRender: () => this.emit("update"),
+      requestRender: () => this.callbacks.onUpdate(),
       initialScratchpad: Scratchpad.cloneScratchpad(this.state.scratchpad),
     });
     manager.on("transition", (_prev, next) => {
@@ -673,12 +690,14 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     if (this.destroyed) return;
     this.destroyed = true;
 
-    this.detachAgent();
     await this.agent.dispose();
 
     this.unlistenContextManager();
     this.contextManager.destroy();
 
-    this.removeAllListeners();
+    this.settleResult({
+      type: "aborted",
+      reason: "thread destroyed before it yielded",
+    });
   }
 }

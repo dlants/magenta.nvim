@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
-import type { ScriptCatalogEntry, ThreadId } from "@magenta/core";
+import type { ScriptCatalogEntry, ThreadId, ThreadResult } from "@magenta/core";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import { v7 as uuidv7 } from "uuid";
 import type {
@@ -70,6 +70,26 @@ export type ScriptInvocation = {
 
 const REGISTRATION_TIMEOUT_MS = 5000;
 const SIGKILL_GRACE_MS = 2000;
+
+type ScriptThreadResult =
+  | { status: "ok"; value: string }
+  | { status: "error"; error: string };
+
+/** A thread's outcome as the script SDK sees it. A structured yield is
+ * stringified here, at the display/transport edge, rather than by the thread
+ * itself. */
+function toScriptResult(result: ThreadResult): ScriptThreadResult {
+  if (result.type === "aborted") {
+    return { status: "error", error: result.reason };
+  }
+  return {
+    status: "ok",
+    value:
+      result.value.type === "text"
+        ? result.value.text
+        : JSON.stringify(result.value.value),
+  };
+}
 
 export class ScriptManager {
   private catalog: Map<string, { file: string; meta: ScriptMeta }> = new Map();
@@ -408,12 +428,13 @@ export class ScriptManager {
             invocation.threadIds.push(threadId);
             invocation.entries.push({ type: "thread", threadId });
             invocation.pendingThreads.set(requestId, threadId);
-            this.context.chat.onThreadYielded(threadId, () => {
-              const result = this.context.chat.getThreadResult(threadId);
-              if (result.status === "done") {
-                this.resolveThread(id, requestId, result.result);
-              }
-            });
+            void this.context.chat
+              .awaitThreadResult(threadId)
+              .then((threadResult) => {
+                const result = toScriptResult(threadResult);
+                this.threadYields.set(threadId, result);
+                this.resolveThread(id, requestId, result);
+              });
             this.myDispatch({ type: "invocation-updated", id });
           })
           .catch((err: unknown) => {
@@ -453,9 +474,7 @@ export class ScriptManager {
   private resolveThread(
     id: ScriptInvocationId,
     requestId: number,
-    result:
-      | { status: "ok"; value: string }
-      | { status: "error"; error: string },
+    result: ScriptThreadResult,
   ): void {
     const invocation = this.invocations.get(id);
     if (!invocation) return;
@@ -525,15 +544,19 @@ export class ScriptManager {
     }).catch((e: Error) => this.context.nvim.logger.error(e.message));
   }
 
+  /** A thread's settled outcome, kept for rendering: a promise cannot be read
+   * synchronously by a view. */
+  private threadYields = new Map<ThreadId, ScriptThreadResult>();
+
   private renderThreadYield(threadId: ThreadId): VDOMNode {
-    const result = this.context.chat.getThreadResult(threadId);
-    if (result.status !== "done") {
+    const result = this.threadYields.get(threadId);
+    if (!result) {
       return d``;
     }
-    if (result.result.status === "ok") {
-      return d`\n  ⮑ yielded: ${result.result.value}`;
+    if (result.status === "ok") {
+      return d`\n  ⮑ yielded: ${result.value}`;
     }
-    return d`\n  ⮑ error: ${result.result.error}`;
+    return d`\n  ⮑ error: ${result.error}`;
   }
 
   view(): VDOMNode {

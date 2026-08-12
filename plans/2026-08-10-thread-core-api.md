@@ -710,8 +710,70 @@ Two mechanical stages first, each independently green, then a single semantic cu
        promise staying pending across a compaction handoff and resolving with the continuation
        turn's result; both `handleCompactionResult` failure branches; and one resolution across a
        full auto-resubmit sequence.
-5. **Rewrite the consumers.** `NvimThread` loses its subscribe/unsubscribe blocks and moves chime/scroll/resubmit to its own `send`/`abort` call sites. `Chat` composes its supervisor list into the three hooks, takes over docker teardown progress and `tornDown`, and loses `threadYieldCallbacks`/`fireThreadYieldCallbacks`. `ThreadManager.getThreadResult`/`onThreadYielded` become `awaitThreadResult`; `spawn-subagents.ts` awaits. `magenta.ts` reads `phase`. The 32ms throttle moves to the view layer as a trailing-edge debounce.
-6. **Fix the views.** `renderStatus` takes a `ThreadPhase` and nothing else. `NvimThread`'s `get agent()` is deleted; `chat.ts:1376` uses `currentMessageIdx()`; `Chat.getContextAgent()` is deleted outright. `shouldShowContextFiles` becomes `phase.type === "idle"`. Context updates render off the message annotation instead of `messageViewState`. `npx tsc -b` clean.
+5. **[DONE] Rewrite the consumers.** `NvimThread` loses its subscribe/unsubscribe blocks and moves chime/scroll/resubmit to its own `send`/`abort` call sites. `Chat` composes its supervisor list into the three hooks, takes over docker teardown progress and `tornDown`, and loses `threadYieldCallbacks`/`fireThreadYieldCallbacks`. `ThreadManager.getThreadResult`/`onThreadYielded` become `awaitThreadResult`; `spawn-subagents.ts` awaits. `magenta.ts` reads `phase`. The 32ms throttle moves to the view layer as a trailing-edge debounce.
+
+   Stage 5 notes (**[DONE]**):
+   - **The emitters are gone.** `Agent` and `Thread` no longer extend `Emitter`; `AgentEvents`,
+     `AGENT_EVENT_NAMES`, `TurnEndReason` and the pipe-every-event `attachAgent`/`detachAgent` pair
+     are deleted. `AgentDeps` gains `onUpdate` (the one signal) and `getHooks`; `Thread` takes a
+     `ThreadCallbacks` bundle as its third constructor parameter and drives the archive from the
+     same single path (`handleUpdate`).
+   - **Every effect event became a return value.** `playChime` was *dead* (nothing subscribed) and
+     was deleted rather than relocated. `turnEnded` -> `NvimThread.handleSendResult`, which
+     dispatches `turn-ended` and notifies on `completed`/`failed`. `setupResubmit` ->
+     `SendResult.failed.resubmit`, dispatched by the submitter (the `setTimeout(..., 1)` is gone).
+     `recoverPendingMessages` -> `Agent.abort()`/`Thread.abort()` returning
+     `{unsent: QueuedMessage[]}`, with the user-facing filtering moved to the consumer.
+     `aborting` -> `sandboxViolationHandler.rejectAll()` at `NvimThread`'s own abort and
+     preempting-send call sites.
+   - **Deviation: the scroll is not a timer off the submission.** `SubmitOptions.onIssued` is gone
+     as planned, but scrolling 100ms after `send` was called (rather than after the request was
+     issued) raced the render — `sidebar.test.ts` caught it. `NvimThread` instead records the
+     message count at submission and scrolls on the first render where it has grown, which is
+     strictly more precise than what the event did.
+   - **Supervisors compose into hooks.** `composeSupervisors(getSupervisors)` in
+     `thread-supervisor.ts` implements today's three merges and returns an `AgentHooks`; `Agent`'s
+     three `consult*` methods are one-line delegations to `deps.getHooks()`, and it no longer
+     imports `mergeRequestActions` or `ThreadSupervisor`. `AgentHooks.onYield` takes a `YieldValue`
+     (the composer stringifies for the text-only built-in supervisors).
+   - **Deviation: composition happens in `NvimThread`, not `Chat`, and the list stays assignable.**
+     `NvimThread` sets `core.hooks = composeSupervisors(() => this.supervisors)` once in its
+     constructor and owns the `supervisors` array that `Chat` populates. Making hooks a readonly
+     constructor argument would have meant rewriting ~20 test sites and `Chat`'s
+     assign-then-push wiring for no behavioural gain; the core still never sees a list, which is
+     the property that matters.
+   - **`ThreadManager.getThreadResult`/`onThreadYielded` -> `awaitThreadResult(id)`.** `Thread`
+     gains a `result: Promise<ThreadResult>`, settled by a `yielded` submission outcome or by
+     `destroy()`. `Chat` keeps one `Defer` per thread (so the promise exists before the thread
+     finishes initializing) and settles it from `thread.core.result`, from `thread-error`, or from
+     a delete. `threadYieldCallbacks`/`fireThreadYieldCallbacks` are gone, as is
+     `spawn-subagents`' "check immediately in case it already yielded" line — it awaits, races the
+     abort signal, and stores each child's `ThreadResult` for `buildResult`. `script-manager`
+     awaits too and keeps the settled value in a `threadYields` map for rendering.
+   - **Docker teardown progress moved to `Chat`.** `AgentAction.set-teardown-message` and the
+     `ThreadMode.yielded.teardownMessage` field are gone; `DockerSupervisor.onProgress` writes to
+     `Chat.teardownMessages`, which the overview renders and which is cleared when the thread's
+     result settles. This removes one of the two outside callers of the public reducer.
+   - **Deferred, deliberately:** `tornDown` stays on `ThreadMode.yielded` (moving it needs the
+     `YieldAction.accept.value` redesign, which is stage 6/7 work), and `contextUpdatesSent` /
+     `gitContextUpdateSent` became two narrow `ContextUpdateSink` callbacks rather than
+     disappearing — they become `onBeforeRequest` injections with the record riding on the message
+     in stage 6. So `NvimThread` has no subscribe/unsubscribe block, but it does still supply two
+     placeholder callbacks.
+   - **The 32ms throttle moved to the view layer.** `scheduleUpdate`/`flushUpdate` still exist
+     inside `Agent` only as the runner-facing coalescer; the render cadence is now
+     `NvimThread.onCoreUpdate`, a trailing-edge debounce (`RENDER_DEBOUNCE_MS = 32`) that also
+     does the tool-result-map rebuild and title diff. `Thread.handleUpdate` refuses to fire after
+     `destroy()`, so disposing the agent cannot reach a torn-down owner.
+   - `magenta.ts` reads `thread.core.phase` for the sidebar icon; `Chat.getContextAgent()` (no
+     callers) is deleted.
+   - Tests: `Agent.turnEnded event` deleted (covered by `Thread.send result`), the
+     `recoverPendingMessages` describe rewritten as `Thread.abort returns the unsent queue`, and
+     the `setupResubmit` assertions rewritten against `SendResult.failed.resubmit`.
+   - Suite: `tsc -b` and `biome check` clean (2 pre-existing warnings in `node/test/driver.ts`);
+     `npx vitest run node/core/` fully green (780 tests). The whole-suite run shows the same
+     pre-existing parallel-load flakiness as HEAD — verified by running the same file set on a
+     stashed tree, which fails a different subset. Every failing file passes when run on its own.6. **Fix the views.** `renderStatus` takes a `ThreadPhase` and nothing else. `NvimThread`'s `get agent()` is deleted; `chat.ts:1376` uses `currentMessageIdx()`; `Chat.getContextAgent()` is deleted outright. `shouldShowContextFiles` becomes `phase.type === "idle"`. Context updates render off the message annotation instead of `messageViewState`. `npx tsc -b` clean.
 7. **Green the suite.** Tests change only where the mechanism changed — construction now takes an `onUpdate`, and every `while (state.mode.type !== "yielded")` poll becomes an `await result`. Check specifically:
    - A submission that triggers auto-respond, a supervisor nudge, or the max_tokens continue prompt resolves _once_, at the end.
    - A compaction handoff mid-turn: `send` resolves after the post-compaction continuation completes, not at the handoff.

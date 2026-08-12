@@ -26,9 +26,14 @@ import type {
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { Thread } from "./thread.ts";
-import type { SendResult, ThreadSendResult } from "./thread-api.ts";
+import type {
+  QueuedMessage,
+  SendResult,
+  ThreadSendResult,
+} from "./thread-api.ts";
 import {
   AutoCompactSupervisor,
+  composeSupervisors,
   SubagentSupervisor,
   type ThreadSupervisor,
 } from "./thread-supervisor.ts";
@@ -146,6 +151,7 @@ function createAgentWithMock(
     core: new Thread(
       threadId,
       context,
+      { onUpdate: () => {} },
       { type: "fresh" },
       {
         baseDir: TEST_ARCHIVE_DIR,
@@ -402,7 +408,7 @@ describe("Thread.send across a compaction handoff", () => {
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
     try {
       let asked = false;
-      core.supervisors = [
+      core.hooks = composeSupervisors(() => [
         {
           onBeforeRequest: () => {
             if (asked) return { type: "none" };
@@ -410,7 +416,7 @@ describe("Thread.send across a compaction handoff", () => {
             return { type: "compact", nextPrompt: "carry on" };
           },
         },
-      ];
+      ]);
       // The summarizing pass has its own tests; what is under test here is
       // that the thread swaps agents and keeps the caller waiting for the
       // continuation turn.
@@ -775,18 +781,19 @@ describe("Agent.abort appends user abort message", () => {
   });
 });
 
-describe("Agent.abort recovers pending messages", () => {
-  it("drains pending messages and emits recoverPendingMessages on abort", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    const recovered: Array<{ threadId: ThreadId; text: string }> = [];
-    core.on("recoverPendingMessages", (threadId, text) => {
-      recovered.push({ threadId, text });
-    });
+describe("Thread.abort returns the unsent queue", () => {
+  const queuedText = (unsent: ReadonlyArray<QueuedMessage>) =>
+    unsent
+      .flatMap((q) => q.messages)
+      .filter((m) => m.type === "user")
+      .map((m) => m.text)
+      .join("\n");
 
+  it("drains the queue and hands it back to whoever aborted", async () => {
+    const { core, mockClient } = createAgentWithMock();
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
-
     core.update({
       type: "push-pending-messages",
       messages: [
@@ -794,38 +801,23 @@ describe("Agent.abort recovers pending messages", () => {
         { type: "user", text: "queued two" },
       ],
     });
-
-    await core.abort();
-
+    const { unsent } = await core.abort();
     expect(core.state.pendingMessages).toEqual([]);
-    expect(recovered).toHaveLength(1);
-    expect(recovered[0].threadId).toBe("test-thread");
-    expect(recovered[0].text).toBe("queued one\nqueued two");
+    expect(queuedText(unsent)).toBe("queued one\nqueued two");
   });
 
-  it("does not emit recoverPendingMessages when there are no pending messages", async () => {
+  it("returns an empty list when nothing was queued", async () => {
     const { core, mockClient } = createAgentWithMock();
-    const recovered: Array<{ threadId: ThreadId; text: string }> = [];
-    core.on("recoverPendingMessages", (threadId, text) => {
-      recovered.push({ threadId, text });
-    });
-
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
-
-    await core.abort();
-
-    expect(recovered).toHaveLength(0);
+    const { unsent } = await core.abort();
+    expect(unsent).toEqual([]);
     expect(core.state.pendingMessages).toEqual([]);
   });
 
-  it("excludes system pending messages from recovered text", async () => {
+  it("returns system messages too; filtering is the consumer's policy", async () => {
     const { core, mockClient } = createAgentWithMock();
-    const recovered: Array<{ threadId: ThreadId; text: string }> = [];
-    core.on("recoverPendingMessages", (threadId, text) => {
-      recovered.push({ threadId, text });
-    });
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
@@ -836,42 +828,34 @@ describe("Agent.abort recovers pending messages", () => {
         { type: "system", text: "queued system" },
       ],
     });
-    await core.abort();
+    const { unsent } = await core.abort();
     expect(core.state.pendingMessages).toEqual([]);
-    expect(recovered).toHaveLength(1);
-    expect(recovered[0].text).toBe("queued user");
+    expect(unsent.flatMap((q) => q.messages)).toHaveLength(2);
+    expect(queuedText(unsent)).toBe("queued user");
   });
-  it("does not emit recoverPendingMessages for subagent threads", async () => {
+
+  it("reports the queue for a subagent thread as well", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    const recovered: Array<{ threadId: ThreadId; text: string }> = [];
-    core.on("recoverPendingMessages", (threadId, text) => {
-      recovered.push({ threadId, text });
-    });
-
     void core.send([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
-
     core.update({
       type: "push-pending-messages",
       messages: [{ type: "user", text: "queued" }],
     });
-
-    await core.abort();
-
-    expect(recovered).toHaveLength(0);
+    const { unsent } = await core.abort();
+    expect(queuedText(unsent)).toBe("queued");
     expect(core.state.pendingMessages).toEqual([]);
   });
 });
-
 describe("SubagentSupervisor yield tag detection", () => {
   it("nudges agent when it writes a <yield_to_parent> XML tag instead of calling the tool", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    core.supervisors = [new SubagentSupervisor()];
+    core.hooks = composeSupervisors(() => [new SubagentSupervisor()]);
 
     void core.send([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
@@ -905,7 +889,7 @@ describe("SubagentSupervisor yield tag detection", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    core.supervisors = [new SubagentSupervisor()];
+    core.hooks = composeSupervisors(() => [new SubagentSupervisor()]);
 
     void core.send([{ type: "user", text: "do the task" }]);
     const stream = await mockClient.awaitStream();
@@ -923,9 +907,9 @@ describe("SubagentSupervisor yield tag detection", () => {
 describe("AutoCompactSupervisor integration", () => {
   it("triggers compaction on end_turn handoff when input tokens breach the threshold", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
+    core.hooks = composeSupervisors(() => [
       new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
-    ];
+    ]);
     mockClient.mockInputTokenCount = 200;
 
     let compactCalls = 0;
@@ -961,9 +945,9 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("does not trigger compaction when input tokens are below the threshold", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
+    core.hooks = composeSupervisors(() => [
       new AutoCompactSupervisor({ threshold: 100000, nextPrompt: "go" }),
-    ];
+    ]);
     mockClient.mockInputTokenCount = 50;
 
     let compactCalls = 0;
@@ -990,9 +974,9 @@ describe("AutoCompactSupervisor integration", () => {
     const { core, mockClient } = createAgentWithMock({
       fileIO: fileIO as unknown as AgentContext["fileIO"],
     });
-    core.supervisors = [
+    core.hooks = composeSupervisors(() => [
       new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
-    ];
+    ]);
     mockClient.mockInputTokenCount = 200;
 
     let compactCalls = 0;
@@ -1030,9 +1014,9 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("triggers compaction on a max_tokens handoff when over threshold", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.supervisors = [
+    core.hooks = composeSupervisors(() => [
       new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
-    ];
+    ]);
     mockClient.mockInputTokenCount = 200;
 
     let compactCalls = 0;
@@ -1067,7 +1051,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("prepends an injected text to the next turn", async () => {
     const { core, mockClient } = createAgentWithMock();
     let injected = false;
-    core.supervisors = [
+    core.hooks = composeSupervisors(() => [
       {
         onBeforeRequest: () => {
           if (injected) return { type: "none" };
@@ -1079,7 +1063,7 @@ describe("AutoCompactSupervisor integration", () => {
           };
         },
       },
-    ];
+    ]);
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("done");
@@ -1098,7 +1082,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("compacts when an injecting supervisor also asks for compaction", async () => {
     const { core, mockClient } = createAgentWithMock();
     let asked = false;
-    core.supervisors = [
+    core.hooks = composeSupervisors(() => [
       {
         onBeforeRequest: () => {
           if (asked) return { type: "none" };
@@ -1110,7 +1094,7 @@ describe("AutoCompactSupervisor integration", () => {
           };
         },
       },
-    ];
+    ]);
     let compactPrompt: string | undefined = "unset";
     let compactCalls = 0;
     core.compact = (p?: string) => {
@@ -1153,7 +1137,7 @@ describe("AutoCompactSupervisor integration", () => {
         return { type: "compact", nextPrompt: "stop" };
       },
     };
-    core.supervisors = [first, second, third];
+    core.hooks = composeSupervisors(() => [first, second, third]);
 
     let compactPrompt: string | undefined = "unset";
     core.compact = (p?: string) => {
@@ -1174,57 +1158,6 @@ describe("AutoCompactSupervisor integration", () => {
     // All supervisors are consulted; compact prompts are combined in order.
     expect(calls).toEqual(["first", "second", "third"]);
     expect(compactPrompt).toBe("go\n\nstop");
-  });
-});
-
-describe("Agent.turnEnded event", () => {
-  it("emits turnEnded with reason end_turn when agent stops cleanly", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    const events: Array<{ reason: string }> = [];
-    core.on("turnEnded", (payload) => events.push(payload));
-
-    void core.send([{ type: "user", text: "hello" }]);
-    const stream = await mockClient.awaitStream();
-    stream.streamText("done");
-    stream.finishResponse("end_turn");
-
-    await pollUntil(() => {
-      if (events.length > 0) return true;
-      throw new Error("waiting for turnEnded");
-    });
-
-    expect(events).toEqual([{ reason: "end_turn" }]);
-  });
-
-  it("emits turnEnded with reason aborted when user aborts", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    const events: Array<{ reason: string }> = [];
-    core.on("turnEnded", (payload) => events.push(payload));
-
-    void core.send([{ type: "user", text: "hello" }]);
-    const stream = await mockClient.awaitStream();
-    stream.streamText("partial");
-
-    await core.abort();
-
-    expect(events).toEqual([{ reason: "aborted" }]);
-  });
-
-  it("emits turnEnded with reason error when provider fails", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    const events: Array<{ reason: string }> = [];
-    core.on("turnEnded", (payload) => events.push(payload));
-
-    void core.send([{ type: "user", text: "hello" }]);
-    const stream = await mockClient.awaitStream();
-    stream.respondWithError(new Error("provider failure"));
-
-    await pollUntil(() => {
-      if (events.length > 0) return true;
-      throw new Error("waiting for turnEnded");
-    });
-
-    expect(events).toEqual([{ reason: "error" }]);
   });
 });
 
@@ -1621,38 +1554,23 @@ describe("Agent createFreshAgent thinking effort override", () => {
 });
 
 describe("Agent non-retryable error resubmit flow", () => {
-  it("emits setupResubmit with threadId and message text after error", async () => {
+  it("hands the rolled-back user text back to the submitter", async () => {
     const { core, mockClient } = createAgentWithMock();
-    const events: Array<{ threadId: ThreadId; text: string }> = [];
-    core.on("setupResubmit", (threadId, text) => {
-      events.push({ threadId, text });
-    });
-
-    void core.send([{ type: "user", text: "find the bug" }]);
+    const sent = core.send([{ type: "user", text: "find the bug" }]);
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("provider failure"));
-
-    await pollUntil(() => {
-      if (events.length > 0) return true;
-      throw new Error("waiting for setupResubmit");
-    });
-
-    expect(events).toHaveLength(1);
-    expect(events[0].threadId).toBe("test-thread");
-    expect(events[0].text).toContain("find the bug");
+    const result = await sent;
+    expect(result.type).toBe("failed");
+    if (result.type !== "failed") throw new Error("expected failed");
+    expect(result.resubmit).toContain("find the bug");
     expect(core.state.failedSubmit?.userMessage).toContain("find the bug");
     expect(core.state.failedSubmit?.error.message).toBe("provider failure");
   });
 
-  it("does not set failedSubmit or emit setupResubmit for subagent threads", async () => {
+  it("does not set failedSubmit or offer a resubmit for subagent threads", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    const events: Array<{ threadId: ThreadId; text: string }> = [];
-    core.on("setupResubmit", (threadId, text) => {
-      events.push({ threadId, text });
-    });
-
     void core.send([{ type: "user", text: "subagent task" }]);
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("subagent provider failure"));
@@ -1662,7 +1580,6 @@ describe("Agent non-retryable error resubmit flow", () => {
       throw new Error("waiting for error state");
     });
 
-    expect(events).toHaveLength(0);
     expect(core.state.failedSubmit).toBeUndefined();
     expect(core.getProviderMessages().length).toBe(1);
     expect(core.state.lastTurnResult?.type).toBe("failed");
@@ -1818,10 +1735,6 @@ describe("Agent auto-resubmit for non-user-facing threads (Stage 2)", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    const setupResubmitEvents: Array<{ threadId: ThreadId; text: string }> = [];
-    core.on("setupResubmit", (threadId, text) => {
-      setupResubmitEvents.push({ threadId, text });
-    });
 
     void core.send([{ type: "user", text: "flaky task" }]);
     await vi.advanceTimersByTimeAsync(0);
@@ -1835,7 +1748,6 @@ describe("Agent auto-resubmit for non-user-facing threads (Stage 2)", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(core.state.lastTurnResult?.type).toBe("failed");
-    expect(setupResubmitEvents).toHaveLength(0);
     expect(core.state.failedSubmit).toBeUndefined();
 
     // Advance past the first thread-level retry delay (1000ms).
@@ -1859,7 +1771,6 @@ describe("Agent auto-resubmit for non-user-facing threads (Stage 2)", () => {
       .getProviderMessages()
       .filter((m) => m.role === "user");
     expect(userMessages.length).toBe(1);
-    expect(setupResubmitEvents).toHaveLength(0);
   });
 
   it("subagent with a non-recoverable error stays parked and never auto-succeeds", async () => {
@@ -2220,6 +2131,7 @@ describe("Agent conversation archive", () => {
         newId: childId,
         nativeMessageIdx,
         context,
+        callbacks: { onUpdate: () => {} },
       });
 
       void child.send([{ type: "user", text: "child turn" }]);
@@ -2367,6 +2279,7 @@ describe("Agent scratchpad state", () => {
         newId: childId,
         nativeMessageIdx,
         context,
+        callbacks: { onUpdate: () => {} },
       });
 
       expect(child.state.scratchpad.entries).toEqual([
@@ -2451,10 +2364,8 @@ describe("Thread survives the compaction agent swap", () => {
       expect(core.agent).not.toBe(oldAgent);
 
       let updates = 0;
-      core.on("update", () => updates++);
-      oldAgent.emit("update");
-      expect(updates).toBe(0);
-      core.agent.emit("update");
+      core.callbacks.onUpdate = () => updates++;
+      core.agent.update({ type: "set-title", title: "after compaction" });
       expect(updates).toBe(1);
     } finally {
       await core.destroy();
@@ -2512,7 +2423,7 @@ describe("Thread.destroy", () => {
     const { core } = createAgentWithMock(undefined, threadId);
     const contextManager = core.contextManager;
     let updates = 0;
-    core.on("update", () => updates++);
+    core.callbacks.onUpdate = () => updates++;
     await core.destroy();
     await cleanupArchive(threadId);
 

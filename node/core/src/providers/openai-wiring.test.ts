@@ -86,6 +86,7 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
     core: new Thread(
       "openai-thread" as ThreadId,
       context,
+      { onUpdate: () => {} },
       { type: "fresh" },
       {
         baseDir: path.join(os.tmpdir(), "magenta-test-archive"),

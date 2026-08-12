@@ -1,6 +1,6 @@
 import type { SubagentConfig, ThreadId, ThreadType } from "../chat-types.ts";
+import type { ThreadResult } from "../thread-api.ts";
 import type { UnresolvedFilePath } from "../utils/files.ts";
-import type { Result } from "../utils/result.ts";
 
 export type DockerSpawnConfig = {
   containerName: string;
@@ -21,9 +21,8 @@ export interface ThreadManager {
     cwd?: string;
   }): Promise<ThreadId>;
 
-  onThreadYielded(threadId: ThreadId, callback: () => void): void;
-
-  getThreadResult(
-    threadId: ThreadId,
-  ): { status: "done"; result: Result<string> } | { status: "pending" };
+  /** Resolves when the thread finishes — an accepted yield, or a teardown
+   * that beat it. A promise rather than a poll plus a callback registry, so
+   * the "did I miss the edge" guard every consumer used to need is gone. */
+  awaitThreadResult(threadId: ThreadId): Promise<ThreadResult>;
 }

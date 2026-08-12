@@ -17,7 +17,6 @@ import {
   gitUpdateToText,
 } from "./context/git-tracker.ts";
 import type { EdlRegisters } from "./edl/index.ts";
-import { Emitter } from "./emitter.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import {
@@ -53,14 +52,18 @@ import {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
-import type { SendResult, YieldValue } from "./thread-api.ts";
+import type {
+  AgentHooks,
+  OnUpdate,
+  QueuedMessage,
+  SendResult,
+  YieldValue,
+} from "./thread-api.ts";
 import {
   type EndTurnAction,
   type EndTurnContext,
-  mergeRequestActions,
   type RequestAction,
   requestedCompaction,
-  type ThreadSupervisor,
   type YieldAction,
 } from "./thread-supervisor.ts";
 import type {
@@ -128,29 +131,20 @@ export type ThreadMode =
        * still structured, so nothing has to parse `response` back out. */
       value: YieldValue;
       tornDown?: boolean;
-      teardownMessage?: string;
     };
 
 export type EnvironmentConfig =
   | { type: "local"; cwd?: NvimCwd }
   | { type: "docker"; container: string; cwd: string };
 
-export type TurnEndReason = "end_turn" | "aborted" | "error";
-
-export type AgentEvents = {
-  update: [];
-  playChime: [];
-  scrollToLastMessage: [];
-  setupResubmit: [threadId: ThreadId, lastUserMessage: string];
-  aborting: [];
-  recoverPendingMessages: [threadId: ThreadId, text: string];
-  pendingUpdatesChanged: [];
-  turnEnded: [{ reason: TurnEndReason }];
-
-  contextUpdatesSent: [updates: Record<string, unknown>];
-  gitContextUpdateSent: [update: GitContextUpdate];
+/** Structured records the owning `Thread` wants attached to the message an
+ * injection produced. Stage 6 turns these into `onBeforeRequest` injections
+ * that ride on the message; until then they are two narrow callbacks rather
+ * than a broadcast channel. */
+export type ContextUpdateSink = {
+  onContextUpdatesSent?: (updates: Record<string, unknown>) => void;
+  onGitContextUpdateSent?: (update: GitContextUpdate) => void;
 };
-
 export interface AgentContext {
   logger: Logger;
   profile: ProviderProfile;
@@ -196,7 +190,6 @@ export type AgentAction =
     }
   | { type: "increment-output-tokens"; tokens: number }
   | { type: "reset-output-tokens" }
-  | { type: "set-teardown-message"; message: string }
   | { type: "push-pending-messages"; messages: InputMessage[] }
   | { type: "drain-pending-messages" }
   | { type: "push-pending-next-messages"; messages: InputMessage[] }
@@ -239,28 +232,6 @@ export type ThreadState = {
   toolSpecs: ProviderToolSpec[];
 };
 
-/** The names of every event an `Agent` emits, so the owning `Thread` can pipe
- * them without enumerating them by hand at each call site. */
-export const AGENT_EVENT_NAMES = [
-  "update",
-  "playChime",
-  "scrollToLastMessage",
-  "setupResubmit",
-  "aborting",
-  "recoverPendingMessages",
-  "pendingUpdatesChanged",
-  "turnEnded",
-  "contextUpdatesSent",
-  "gitContextUpdateSent",
-] as const satisfies readonly (keyof AgentEvents)[];
-
-/** Fails to compile if an event is added to `AgentEvents` without being added
- * to `AGENT_EVENT_NAMES`. */
-type _AgentEventNamesAreExhaustive =
-  Exclude<keyof AgentEvents, (typeof AGENT_EVENT_NAMES)[number]> extends never
-    ? true
-    : never;
-
 /** Collaborators the owning `Thread` supplies. An `Agent` is ephemeral —
  * compaction replaces it — so everything durable (identity, the queue, the
  * context managers, the archive) lives on the `Thread` and is handed in. */
@@ -272,7 +243,13 @@ export interface AgentDeps {
   contextManager: ContextManager;
   gitTracker: GitTracker;
   structuredToolResults: Map<ToolRequestId, ToolStructuredResult>;
-  getSupervisors: () => ThreadSupervisor[];
+  /** The owner's answers to the agent's three questions. Arbitration between
+   * several policies is the owner's business (see `composeSupervisors`). */
+  getHooks: () => AgentHooks;
+  /** "Something visible moved." Unthrottled: the recipient coalesces with a
+   * trailing-edge debounce. */
+  onUpdate: OnUpdate;
+  contextUpdateSink: ContextUpdateSink;
   /** Whether this agent drives a brand-new runner or one cloned from another
    * thread's history. */
   runnerInit:
@@ -293,17 +270,13 @@ export type SubmitOptions = {
   /** Skip context updates, reminders and failed-submit bookkeeping: the caller
    * has composed the exact content (the compact thread). */
   raw?: boolean;
-  /** Called once the request has actually been handed to the provider, for
-   * effects that need the new message to exist. Stage 5 moves the one
-   * remaining such effect — the scroll — to the actor that called `send`. */
-  onIssued?: () => void;
 };
 
 export type AgentSendOutcome =
   | SendResult
   | { type: "compact"; nextPrompt: string | undefined };
 
-export class Agent extends Emitter<AgentEvents> {
+export class Agent {
   public state: ThreadState;
   public runner: Runner;
   public readonly contextManager: ContextManager;
@@ -322,7 +295,6 @@ export class Agent extends Emitter<AgentEvents> {
     private context: AgentContext,
     private deps: AgentDeps,
   ) {
-    super();
     this.threadId = deps.threadId;
     this.state = deps.state;
     this.contextManager = deps.contextManager;
@@ -371,7 +343,7 @@ export class Agent extends Emitter<AgentEvents> {
   private flushUpdate(): void {
     if (this.updatePending) {
       this.updatePending = false;
-      this.emit("update");
+      this.deps.onUpdate();
     }
   }
 
@@ -427,11 +399,6 @@ export class Agent extends Emitter<AgentEvents> {
       case "reset-output-tokens":
         this.state.outputTokensSinceLastReminder = 0;
         break;
-      case "set-teardown-message":
-        if (this.state.mode.type === "yielded") {
-          this.state.mode.teardownMessage = action.message;
-        }
-        break;
       case "push-pending-messages":
         this.state.pendingMessages.push(...action.messages);
         break;
@@ -478,7 +445,7 @@ export class Agent extends Emitter<AgentEvents> {
         assertUnreachable(action);
     }
     if (!silent) {
-      this.emit("update");
+      this.deps.onUpdate();
     }
   }
 
@@ -572,7 +539,7 @@ export class Agent extends Emitter<AgentEvents> {
       { silent: true },
     );
     this.runner.truncateMessages(idx);
-    this.emit("update");
+    this.deps.onUpdate();
   }
 
   getMessages(): ProviderMessage[] {
@@ -764,8 +731,6 @@ export class Agent extends Emitter<AgentEvents> {
       return;
     }
 
-    this.emit("playChime");
-    this.emit("turnEnded", { reason: "end_turn" });
     this.settle({ type: "completed" });
   }
 
@@ -799,7 +764,7 @@ export class Agent extends Emitter<AgentEvents> {
       threadManager: this.context.threadManager,
       scriptRunner: this.context.getScriptRunner?.(),
       luaExecutor: this.context.luaExecutor,
-      requestRender: () => this.emit("update"),
+      requestRender: () => this.deps.onUpdate(),
       getAgents: () => this.context.getAgents(),
     };
   }
@@ -831,9 +796,6 @@ export class Agent extends Emitter<AgentEvents> {
     }
 
     this.update({ type: "set-mode", mode: { type: "tool_use", activeTools } });
-    if (activeTools.size > 0) {
-      this.emit("playChime");
-    }
 
     await Promise.all(
       [...activeTools].map(([id, entry]) =>
@@ -975,16 +937,11 @@ export class Agent extends Emitter<AgentEvents> {
           },
           { silent: true },
         );
-        setTimeout(
-          () => this.emit("setupResubmit", this.threadId, userMessage),
-          1,
-        );
       }
     } else {
       this.maybeAutoResubmitAfterError(error, userMessage);
     }
     this.context.logger.error(error);
-    this.emit("turnEnded", { reason: "error" });
     // A scheduled auto-resubmit means the submission is still going; only a
     // submission that has come to rest in an error state settles.
     if (this.errorRetry?.timer === undefined) {
@@ -1036,21 +993,24 @@ export class Agent extends Emitter<AgentEvents> {
     };
   }
 
-  async abort(): Promise<void> {
+  /** The queue drained by the abort in flight, handed to whoever aborted. */
+  private unsentOnAbort: QueuedMessage[] = [];
+
+  async abort(): Promise<{ unsent: QueuedMessage[] }> {
     // A yielded thread has already completed its work — don't overwrite its state.
     if (this.state.mode.type === "yielded") {
-      return;
+      return { unsent: [] };
     }
-    await this.abortAndWait();
+    return await this.abortAndWait();
   }
 
   /** Cancel whichever of the two things the turn can be waiting on — the
    * in-flight inference request (the agent's own resource) or the running
    * tools (ours) — and wait for the turn to unwind. */
-  async abortAndWait(): Promise<void> {
+  async abortAndWait(): Promise<{ unsent: QueuedMessage[] }> {
+    this.unsentOnAbort = [];
     this.resetErrorRetryState();
     this.abortRequested = true;
-    this.emit("aborting");
 
     if (this.state.mode.type === "tool_use") {
       for (const [, entry] of this.state.mode.activeTools) {
@@ -1065,35 +1025,30 @@ export class Agent extends Emitter<AgentEvents> {
     } else {
       this.finishAbort();
     }
+    return { unsent: this.unsentOnAbort };
   }
 
   private finishAbort(): void {
     this.abortRequested = false;
-    this.emit("update");
-    this.recoverPendingMessagesOnAbort();
+    this.deps.onUpdate();
+    this.drainQueueOnAbort();
     this.update({ type: "set-mode", mode: { type: "normal" } });
-    this.emit("turnEnded", { reason: "aborted" });
     this.settle({ type: "aborted" });
   }
 
-  private recoverPendingMessagesOnAbort(): void {
-    const pendingText = [
-      ...this.state.pendingMessages,
-      ...this.state.pendingNextMessages,
-    ]
-      .filter((m) => m.type === "user")
-      .map((m) => m.text)
-      .join("\n");
-
+  /** Drain the queue on abort and hand the debris back to whoever aborted.
+   * Nothing is broadcast: the caller gets its own return value. */
+  private drainQueueOnAbort(): void {
+    this.unsentOnAbort = [
+      ...this.state.pendingMessages.map(
+        (m): QueuedMessage => ({ when: "async", messages: [m] }),
+      ),
+      ...this.state.pendingNextMessages.map(
+        (m): QueuedMessage => ({ when: "next", messages: [m] }),
+      ),
+    ];
     this.update({ type: "drain-pending-messages" });
     this.update({ type: "drain-pending-next-messages" });
-
-    const isUserFacing =
-      this.state.threadType === "root" ||
-      this.state.threadType === "docker_root";
-    if (isUserFacing && pendingText) {
-      this.emit("recoverPendingMessages", this.threadId, pendingText);
-    }
   }
 
   /** The submission currently in flight, settled at the moment the agent comes
@@ -1133,7 +1088,7 @@ export class Agent extends Emitter<AgentEvents> {
   private settle(outcome: AgentSendOutcome): void {
     const deferred = this.submission;
     this.submission = undefined;
-    this.emit("update");
+    this.deps.onUpdate();
     deferred?.resolve(outcome);
   }
 
@@ -1154,7 +1109,6 @@ export class Agent extends Emitter<AgentEvents> {
         return;
       }
       void this.runTurn(rawContent);
-      opts.onIssued?.();
       return;
     }
 
@@ -1181,10 +1135,10 @@ export class Agent extends Emitter<AgentEvents> {
     }
 
     if (contextUpdates) {
-      this.emit("contextUpdatesSent", contextUpdates);
+      this.deps.contextUpdateSink.onContextUpdatesSent?.(contextUpdates);
     }
     if (gitUpdate) {
-      this.emit("gitContextUpdateSent", gitUpdate);
+      this.deps.contextUpdateSink.onGitContextUpdateSent?.(gitUpdate);
     }
 
     const isFirstMessage = this.getProviderMessages().length === 0;
@@ -1207,9 +1161,8 @@ export class Agent extends Emitter<AgentEvents> {
       },
       { silent: true },
     );
-    this.emit("update");
+    this.deps.onUpdate();
     void this.runTurn(contentToSend);
-    opts.onIssued?.();
   }
 
   private getLastAssistantMessage():
@@ -1228,7 +1181,7 @@ export class Agent extends Emitter<AgentEvents> {
     yieldResult: string,
     yieldValue: YieldValue,
   ): Promise<void> {
-    const action = await this.consultYieldSupervisors(yieldResult);
+    const action = await this.consultYieldSupervisors(yieldValue);
     switch (action.type) {
       case "accept": {
         const response = action.resultPrefix
@@ -1378,10 +1331,10 @@ export class Agent extends Emitter<AgentEvents> {
       const { content } = this.prepareUserContent(pendingMessages);
       contentToSend.push(...toAgentInput(content));
       if (contextUpdates) {
-        this.emit("contextUpdatesSent", contextUpdates);
+        this.deps.contextUpdateSink.onContextUpdatesSent?.(contextUpdates);
       }
       if (gitUpdate) {
-        this.emit("gitContextUpdateSent", gitUpdate);
+        this.deps.contextUpdateSink.onGitContextUpdateSent?.(gitUpdate);
       }
       return contentToSend;
     }
@@ -1421,10 +1374,10 @@ export class Agent extends Emitter<AgentEvents> {
     }
 
     if (contextUpdates) {
-      this.emit("contextUpdatesSent", contextUpdates);
+      this.deps.contextUpdateSink.onContextUpdatesSent?.(contextUpdates);
     }
     if (gitUpdate) {
-      this.emit("gitContextUpdateSent", gitUpdate);
+      this.deps.contextUpdateSink.onGitContextUpdateSent?.(gitUpdate);
     }
 
     return contentToSend;
@@ -1470,37 +1423,27 @@ export class Agent extends Emitter<AgentEvents> {
   }
 
   private consultEndTurnSupervisors(context: EndTurnContext): EndTurnAction {
-    const texts: string[] = [];
-    for (const sup of this.deps.getSupervisors()) {
-      const action = sup.onEndTurnWithoutYield?.(context);
-      if (action && action.type === "send-message") texts.push(action.text);
-    }
-    if (texts.length === 0) return { type: "none" };
-    return { type: "send-message", text: texts.join("\n\n") };
+    return this.deps.getHooks().onEndTurn?.(context) ?? { type: "none" };
   }
 
-  private async consultYieldSupervisors(result: string): Promise<YieldAction> {
-    const texts: string[] = [];
-    for (const sup of this.deps.getSupervisors()) {
-      const action = await sup.onYield?.(result);
-      if (!action) continue;
-      if (action.type === "accept" || action.type === "reject") return action;
-      if (action.type === "send-message") texts.push(action.text);
-    }
-    if (texts.length === 0) return { type: "none" };
-    return { type: "send-message", text: texts.join("\n\n") };
+  private async consultYieldSupervisors(
+    value: YieldValue,
+  ): Promise<YieldAction> {
+    const onYield = this.deps.getHooks().onYield;
+    if (!onYield) return { type: "none" };
+    return await onYield(value);
   }
 
   private consultBeforeRequestSupervisors(
     stopReason: StreamStopReason,
   ): RequestAction {
     const inputTokenCount = this.runner.log.inputTokenCount;
-    const actions: RequestAction[] = [];
-    for (const sup of this.deps.getSupervisors()) {
-      const action = sup.onBeforeRequest?.({ inputTokenCount, stopReason });
-      if (action) actions.push(action);
-    }
-    return mergeRequestActions(actions);
+    return (
+      this.deps.getHooks().onBeforeRequest?.({
+        inputTokenCount,
+        stopReason,
+      }) ?? { type: "none" }
+    );
   }
 
   private disposed = false;
@@ -1524,7 +1467,5 @@ export class Agent extends Emitter<AgentEvents> {
     } catch {
       // ignore
     }
-
-    this.removeAllListeners();
   }
 }

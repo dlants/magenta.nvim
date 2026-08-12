@@ -6,7 +6,9 @@ import type { ThreadManager } from "../capabilities/thread-manager.ts";
 import type { ThreadId } from "../chat-types.ts";
 import type { ProvisionResult } from "../container/types.ts";
 import type { ProviderToolResult } from "../providers/provider-types.ts";
+import type { ThreadResult } from "../thread-api.ts";
 import type { ToolRequestId } from "../tool-types.ts";
+import { Defer } from "../utils/async.ts";
 import type { NvimCwd, UnresolvedFilePath } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
 
@@ -27,34 +29,26 @@ type MockThreadManager = ThreadManager & {
 function createMockThreadManager(
   overrides: Partial<ThreadManager> = {},
 ): MockThreadManager {
-  const results = new Map<string, { status: "done"; result: Result<string> }>();
-  const callbacks = new Map<string, Array<() => void>>();
-
+  const defers = new Map<string, Defer<ThreadResult>>();
+  const deferFor = (threadId: string) => {
+    let defer = defers.get(threadId);
+    if (!defer) {
+      defer = new Defer<ThreadResult>();
+      defers.set(threadId, defer);
+    }
+    return defer;
+  };
   const manager: MockThreadManager = {
     spawnThread: vi.fn().mockResolvedValue("thread-1" as ThreadId),
-    onThreadYielded: vi.fn((threadId: ThreadId, callback: () => void) => {
-      let cbs = callbacks.get(threadId);
-      if (!cbs) {
-        cbs = [];
-        callbacks.set(threadId, cbs);
-      }
-      cbs.push(callback);
-      // If already yielded, fire immediately
-      if (results.has(threadId)) {
-        callback();
-      }
-    }),
-    getThreadResult: vi.fn((threadId: ThreadId) => {
-      return results.get(threadId) ?? { status: "pending" as const };
-    }),
+    awaitThreadResult: vi.fn(
+      (threadId: ThreadId) => deferFor(threadId).promise,
+    ),
     simulateYield(threadId: ThreadId, result: Result<string>) {
-      results.set(threadId, { status: "done", result });
-      const cbs = callbacks.get(threadId);
-      if (cbs) {
-        for (const cb of cbs) {
-          cb();
-        }
-      }
+      deferFor(threadId).resolve(
+        result.status === "ok"
+          ? { type: "yielded", value: { type: "text", text: result.value } }
+          : { type: "aborted", reason: result.error },
+      );
     },
     ...overrides,
   };

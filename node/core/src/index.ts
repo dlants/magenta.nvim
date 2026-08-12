@@ -3,7 +3,6 @@ export {
   Agent,
   type AgentAction,
   type AgentContext,
-  type AgentEvents,
   type EnvironmentConfig,
   type InputMessage,
   type ThreadMode,
@@ -227,7 +226,7 @@ export {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
-export { Thread } from "./thread.ts";
+export { Thread, type ThreadCallbacks } from "./thread.ts";
 export type {
   AgentHooks,
   OnUpdate,
@@ -236,6 +235,7 @@ export type {
   SendResult,
   ThreadPhase,
   ThreadResult,
+  ThreadSendResult,
   TurnActivity,
   YieldValue,
 } from "./thread-api.ts";
@@ -251,6 +251,7 @@ export type {
 } from "./thread-supervisor.ts";
 export {
   AutoCompactSupervisor,
+  composeSupervisors,
   SubagentSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";

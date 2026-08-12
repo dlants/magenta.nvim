@@ -15,6 +15,7 @@ import type {
   ProviderToolSpec,
 } from "../providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
+import type { ThreadResult } from "../thread-api.ts";
 import type {
   GenericToolRequest,
   ToolInvocation,
@@ -431,6 +432,9 @@ export function execute(
     /** Woken by `abort()` so waiters unblock without a yield. */
     listeners: new Set<() => void>(),
   };
+  /** Each child's outcome, kept here because the tool result is assembled
+   * after every element has finished. */
+  const threadResults = new Map<ThreadId, ThreadResult>();
 
   const spawnEntry = async (
     element: SpawnSubagentsProgress["elements"][0],
@@ -558,25 +562,26 @@ export function execute(
       return;
     }
     const threadId = element.state.threadId;
+    // A promise, not a poll plus a callback registry: a thread that finished
+    // before we got here still resolves, so there is no edge to miss.
     await new Promise<void>((resolve) => {
-      const done = () => {
-        abortController.listeners.delete(check);
+      const onAbort = () => resolve();
+      abortController.listeners.add(onAbort);
+      if (abortController.aborted) {
         resolve();
-      };
-      const check = () => {
-        if (abortController.aborted) {
-          done();
-          return;
-        }
-        const result = context.threadManager.getThreadResult(threadId);
-        if (result.status === "done") {
-          done();
-        }
-      };
-      abortController.listeners.add(check);
-      context.threadManager.onThreadYielded(threadId, check);
-      // Check immediately in case the thread already yielded
-      check();
+        return;
+      }
+      context.threadManager.awaitThreadResult(threadId).then(
+        (result) => {
+          threadResults.set(threadId, result);
+          abortController.listeners.delete(onAbort);
+          resolve();
+        },
+        () => {
+          abortController.listeners.delete(onAbort);
+          resolve();
+        },
+      );
     });
   };
 
@@ -632,7 +637,7 @@ export function execute(
         };
       }
 
-      return buildResult(request.id, progress, context.threadManager);
+      return buildResult(request.id, progress, threadResults);
     } catch (e) {
       return {
         type: "tool_result",
@@ -661,7 +666,7 @@ export function execute(
 function buildResult(
   requestId: ToolRequest["id"],
   progress: SpawnSubagentsProgress,
-  threadManager: ThreadManager,
+  threadResults: ReadonlyMap<ThreadId, ThreadResult>,
 ): ProviderToolResult {
   const agents: StructuredResult["agents"] = [];
   let successCount = 0;
@@ -692,8 +697,8 @@ function buildResult(
       continue;
     }
 
-    const threadResult = threadManager.getThreadResult(item.state.threadId);
-    if (threadResult.status === "pending") {
+    const threadResult = threadResults.get(item.state.threadId);
+    if (threadResult === undefined) {
       failCount++;
       resultText += `❌ ${truncatedPrompt}:\nthread did not complete\n\n`;
       agents.push({
@@ -704,7 +709,16 @@ function buildResult(
       continue;
     }
 
-    const result = threadResult.result;
+    const result: Result<string> =
+      threadResult.type === "yielded"
+        ? {
+            status: "ok",
+            value:
+              threadResult.value.type === "text"
+                ? threadResult.value.text
+                : JSON.stringify(threadResult.value.value),
+          }
+        : { status: "error", error: threadResult.reason };
     if (result.status === "ok") {
       successCount++;
       resultText += `✅ ${truncatedPrompt}:\n${result.value}\n\n`;

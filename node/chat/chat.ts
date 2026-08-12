@@ -5,11 +5,13 @@ import type {
   ScriptRunner,
   SubagentConfig,
   ThreadId,
+  ThreadResult,
   ThreadType,
 } from "@magenta/core";
 import {
   type ArchiveEntry,
   AutoCompactSupervisor,
+  Defer,
   deleteArchivedThread,
   listArchivedThreads,
   loadAgents,
@@ -56,7 +58,6 @@ import type {
   UnresolvedFilePath,
 } from "../utils/files.ts";
 import { shortenPath } from "../utils/files.ts";
-import type { Result } from "../utils/result.ts";
 import { formatTokenCount } from "../utils/tokens.ts";
 import type { SandboxRoot } from "./thread.ts";
 import { NvimThread } from "./thread.ts";
@@ -188,7 +189,12 @@ export class Chat implements ThreadManager {
   public scriptRunner: ScriptRunner | undefined = undefined;
   private mcpToolManager: MCPToolManagerImpl;
   private expandedThreads: Set<ThreadId>;
-  private threadYieldCallbacks: Map<ThreadId, Array<() => void>>;
+  /** One deferred per thread, so `awaitThreadResult` can be called before the
+   * thread finishes initializing — or after it has already yielded. */
+  private threadResults: Map<ThreadId, Defer<ThreadResult>>;
+  /** Docker teardown progress. The core has no opinion about containers, so
+   * the message a supervisor reports lives with the shell that owns them. */
+  private teardownMessages: Map<ThreadId, string>;
 
   constructor(
     private context: {
@@ -206,7 +212,8 @@ export class Chat implements ThreadManager {
   ) {
     this.threadWrappers = {};
     this.expandedThreads = new Set();
-    this.threadYieldCallbacks = new Map();
+    this.threadResults = new Map();
+    this.teardownMessages = new Map();
     this.state = {
       state: "thread-overview",
       activeThreadId: undefined,
@@ -263,10 +270,6 @@ export class Chat implements ThreadManager {
             }
           }
         }
-
-        if (this.getThreadResult(thread.id).status === "done") {
-          this.fireThreadYieldCallbacks(thread.id);
-        }
       }
     }
   }
@@ -300,6 +303,15 @@ export class Chat implements ThreadManager {
         };
         this.threadWrappers[msg.thread.id] = wrapper;
 
+        msg.thread.core.result.then(
+          (result) => this.settleThreadResult(msg.thread.id, result),
+          (e: Error) =>
+            this.settleThreadResult(msg.thread.id, {
+              type: "aborted",
+              reason: e.message,
+            }),
+        );
+
         return;
       }
 
@@ -324,9 +336,10 @@ export class Chat implements ThreadManager {
           };
         }
 
-        if (thread) {
-          this.fireThreadYieldCallbacks(msg.id);
-        }
+        this.settleThreadResult(msg.id, {
+          type: "aborted",
+          reason: msg.error.message,
+        });
 
         return;
       }
@@ -572,20 +585,6 @@ export class Chat implements ThreadManager {
     return [];
   }
 
-  /** Get the active agent for use as context in forceToolUse calls */
-  getContextAgent() {
-    if (
-      this.state.state === "thread-selected" &&
-      this.state.activeThreadId in this.threadWrappers
-    ) {
-      const threadState = this.threadWrappers[this.state.activeThreadId];
-      if (threadState.state === "initialized") {
-        return threadState.thread.agent;
-      }
-    }
-    return undefined;
-  }
-
   private triggerHierarchyDiscovery(
     thread: NvimThread,
     absFilePath: AbsFilePath,
@@ -781,10 +780,7 @@ export class Chat implements ThreadManager {
           dockerSpawnConfig.hostDir,
           {
             onProgress: (message) => {
-              thread.core.update({
-                type: "set-teardown-message",
-                message,
-              });
+              this.teardownMessages.set(thread.id, message);
               this.context.dispatch({
                 type: "thread-msg",
                 id: thread.id,
@@ -903,7 +899,11 @@ export class Chat implements ThreadManager {
         });
       }
       delete this.threadWrappers[id];
-      this.threadYieldCallbacks.delete(id);
+      this.settleThreadResult(id, {
+        type: "aborted",
+        reason: "thread deleted",
+      });
+      this.threadResults.delete(id);
     }
 
     this.context.removeThreadBuffers?.(idsToDelete);
@@ -1432,54 +1432,6 @@ ${rows}${loadMore}`;
     return newThreadId;
   }
 
-  getThreadResult(
-    threadId: ThreadId,
-  ): { status: "done"; result: Result<string> } | { status: "pending" } {
-    const threadWrapper = this.threadWrappers[threadId];
-    if (!threadWrapper) {
-      return {
-        status: "pending",
-      };
-    }
-
-    switch (threadWrapper.state) {
-      case "pending":
-        return { status: "pending" };
-
-      case "error":
-        return {
-          status: "done",
-          result: {
-            status: "error",
-            error: threadWrapper.error.message,
-          },
-        };
-
-      case "initialized": {
-        const thread = threadWrapper.thread;
-
-        // Check for yielded state first
-        if (thread.core.state.mode.type === "yielded") {
-          return {
-            status: "done",
-            result: {
-              status: "ok",
-              value: thread.core.state.mode.response,
-            },
-          };
-        }
-
-        // All other states (including aborted and error) are considered
-        // pending. An aborted or errored thread can still be resumed and
-        // eventually yield.
-        return { status: "pending" };
-      }
-
-      default:
-        return assertUnreachable(threadWrapper);
-    }
-  }
-
   threadHasPendingApprovals(threadId: ThreadId): boolean {
     if (this.getThreadPendingApprovalTools(threadId).length > 0) return true;
     const wrapper = this.threadWrappers[threadId];
@@ -1541,13 +1493,14 @@ ${rows}${loadMore}`;
           title: thread.core.state.title,
           status: (() => {
             // Check mode for thread-specific states first
+            const teardownMessage = this.teardownMessages.get(threadId);
+            if (teardownMessage) {
+              return {
+                type: "running" as const,
+                activity: `🐳 ${teardownMessage}`,
+              };
+            }
             if (mode.type === "yielded") {
-              if (mode.teardownMessage) {
-                return {
-                  type: "running" as const,
-                  activity: `🐳 ${mode.teardownMessage}`,
-                };
-              }
               return {
                 type: "yielded" as const,
                 response: mode.response,
@@ -1607,14 +1560,18 @@ ${rows}${loadMore}`;
     }
   }
 
-  private fireThreadYieldCallbacks(threadId: ThreadId): void {
-    const callbacks = this.threadYieldCallbacks.get(threadId);
-    if (callbacks && callbacks.length > 0) {
-      for (const callback of callbacks) {
-        callback();
-      }
-      this.threadYieldCallbacks.delete(threadId);
+  private threadResultDefer(threadId: ThreadId): Defer<ThreadResult> {
+    let defer = this.threadResults.get(threadId);
+    if (!defer) {
+      defer = new Defer<ThreadResult>();
+      this.threadResults.set(threadId, defer);
     }
+    return defer;
+  }
+
+  private settleThreadResult(threadId: ThreadId, result: ThreadResult): void {
+    this.teardownMessages.delete(threadId);
+    this.threadResultDefer(threadId).resolve(result);
   }
 
   async spawnThread(opts: {
@@ -1777,13 +1734,8 @@ The title must be a single line (no newlines) and a few words long (ideally arou
     return undefined;
   }
 
-  onThreadYielded(threadId: ThreadId, callback: () => void): void {
-    let callbacks = this.threadYieldCallbacks.get(threadId);
-    if (!callbacks) {
-      callbacks = [];
-      this.threadYieldCallbacks.set(threadId, callbacks);
-    }
-    callbacks.push(callback);
+  awaitThreadResult(threadId: ThreadId): Promise<ThreadResult> {
+    return this.threadResultDefer(threadId).promise;
   }
 
   renderSingleThread(threadId: ThreadId) {
