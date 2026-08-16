@@ -1,5 +1,5 @@
 import type { ThreadId } from "@magenta/core";
-import { expect, vi } from "vitest";
+import { expect } from "vitest";
 import type { BufferKey } from "../buffer-manager.ts";
 import type { Magenta } from "../magenta.ts";
 import type { BufNr, Line, NvimBuffer } from "../nvim/buffer.ts";
@@ -16,7 +16,7 @@ import {
 import type { MockProvider } from "../providers/mock.ts";
 import { type BindingKey, getBinding } from "../tea/bindings.ts";
 import { calculatePosition } from "../tea/util.ts";
-import { Defer, pollUntil } from "../utils/async.ts";
+import { pollUntil } from "../utils/async.ts";
 import { CompletionsInteraction } from "./driver/completions.ts";
 import { SidebarInteraction } from "./driver/sidebar.ts";
 import type { MockSandboxManager } from "./mock-sandbox-manager.ts";

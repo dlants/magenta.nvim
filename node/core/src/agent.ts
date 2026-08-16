@@ -1231,7 +1231,7 @@ export class Agent {
 
   private async getAndPrepareContextUpdates(): Promise<{
     content: AgentInput[];
-    updates: Record<string, unknown> | undefined;
+    updates: FileUpdates | undefined;
     gitUpdate: GitContextUpdate | undefined;
   }> {
     const content: AgentInput[] = [];
