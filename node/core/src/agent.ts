@@ -10,7 +10,11 @@ import type { Shell } from "./capabilities/shell.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
 import type { CompactionRecord } from "./compaction-controller.ts";
-import type { ContextManager, Files } from "./context/context-manager.ts";
+import type {
+  ContextManager,
+  Files,
+  FileUpdates,
+} from "./context/context-manager.ts";
 import {
   type GitContextUpdate,
   type GitTracker,
@@ -142,7 +146,7 @@ export type EnvironmentConfig =
  * that ride on the message; until then they are two narrow callbacks rather
  * than a broadcast channel. */
 export type ContextUpdateSink = {
-  onContextUpdatesSent?: (updates: Record<string, unknown>) => void;
+  onContextUpdatesSent?: (updates: FileUpdates) => void;
   onGitContextUpdateSent?: (update: GitContextUpdate) => void;
 };
 export interface AgentContext {

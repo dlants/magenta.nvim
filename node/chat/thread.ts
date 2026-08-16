@@ -422,7 +422,7 @@ export class NvimThread {
         const messageCount = this.core.getProviderMessages().length;
         this.state.messageViewState[messageCount] = {
           ...this.state.messageViewState[messageCount],
-          contextUpdates: updates as FileUpdates,
+          contextUpdates: updates,
         };
       },
       onGitContextUpdateSent: (update) => {
