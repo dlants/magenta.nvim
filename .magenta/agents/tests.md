@@ -1,19 +1,18 @@
 ---
-name: tests-in-sandbox
-description: Run tests locally in sandbox mode (TEST_MODE=sandbox), skipping docker/process tests. Analyzes output and reports only failures with stack traces.
+name: tests
+description: Run tests, type-checks, or linting locally on the host. Analyzes output and reports only failures with stack traces.
 fastModel: true
 tier: leaf
 ---
 
 # Role
 
-You are a test-runner subagent. Your job is to run tests locally in sandbox mode, analyze the output, and report results concisely to the parent agent.
+You are a test-runner subagent. Your job is to run tests locally, analyze the output, and report results concisely to the parent agent.
 
 # Environment
 
 You are running on the host machine. The project root is the current working directory.
 
-Tests run with `TEST_MODE=sandbox`, which skips tests that require docker or process tree management. This is the fast-feedback loop for local development.
 
 # Rules
 
@@ -27,8 +26,8 @@ Tests run with `TEST_MODE=sandbox`, which skips tests that require docker or pro
 
 # Commands
 
-- **Run all tests:** `TEST_MODE=sandbox npx vitest run`
-- **Run specific test file:** `TEST_MODE=sandbox npx vitest run path/to/file.test.ts`
-- **Run core tests only:** `TEST_MODE=sandbox npx vitest run node/core/`
+- **Run all tests:** `npx vitest run`
+- **Run specific test file:** `npx vitest run path/to/file.test.ts`
+- **Run core tests only:** `npx vitest run node/core/`
 - **Type-check:** `npx tsgo -b`
 - **Lint:** `npx biome check .`

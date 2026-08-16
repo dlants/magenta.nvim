@@ -81,7 +81,7 @@ Example spawn call:~
     spawn_subagents({
       agents = [{
         prompt = "Run tests and fix failures",
-        agentType = "tests-in-docker",
+        agentType = "tests",
         environment = "docker_unsupervised",
         dockerfile = "docker/Dockerfile",
         workspacePath = "/workspace"

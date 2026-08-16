@@ -2,7 +2,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ToolName, ToolRequestId } from "@magenta/core";
 import { describe, expect, it } from "vitest";
-import { HOST_DOCKER_AVAILABLE } from "../test/capabilities.ts";
 import { withDriver } from "../test/preamble.ts";
 
 const MINIMAL_DOCKERFILE = `\
@@ -12,7 +11,7 @@ COPY . .
 CMD ["tail", "-f", "/dev/null"]
 `;
 
-describe.runIf(HOST_DOCKER_AVAILABLE)("docker subagent file sync", () => {
+describe("docker subagent file sync", () => {
   it(
     "files edited and created in docker container are synced back to host on yield",
     async () => {

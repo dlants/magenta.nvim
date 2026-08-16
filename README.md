@@ -82,7 +82,6 @@ I haven't actually used other neovim AI plugins in a while, so take this with a 
 - Exponential backoff retry for Anthropic 429/529 rate limit errors.
 - Simplified file I/O: disk-first approach, removed BufferTracker complexity.
 - Expand/collapse for subagent progress and result rows in the chat view.
-- Test segmentation: `TEST_MODE` env var splits tests into sandbox (local) and full-capabilities (docker) modes. New `tests-in-sandbox` subagent for fast local feedback.
 - Renamed the `docs` tool to `learn` tool.
 - Claude Code keychain auth: new `authType = "keychain"` profile option (macOS) reuses the Anthropic Console API key that Claude Code stores in the login Keychain, for users on the "Anthropic Console Account (API usage billing)" sign-in mode.
 

@@ -19,7 +19,6 @@ import {
 } from "@magenta/core";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDockerEnvironment } from "../environment.ts";
-import { FULL_CAPABILITIES } from "../test/capabilities.ts";
 import { DockerFileIO } from "./docker-file-io.ts";
 import { DockerShell } from "./docker-shell.ts";
 
@@ -31,7 +30,7 @@ const mockMcpToolManager: MCPToolManager = {
   getToolSpecs: () => [],
 };
 
-describe.runIf(FULL_CAPABILITIES)("Docker Environment", () => {
+describe("Docker Environment", () => {
   let containerId: string;
 
   beforeAll(async () => {

@@ -4,14 +4,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { FULL_CAPABILITIES } from "../test/capabilities.ts";
 import { provisionContainer } from "./provision.ts";
 import { teardownContainer } from "./teardown.ts";
 import type { ContainerConfig } from "./types.ts";
 
 const execFile = promisify(execFileCb);
 
-describe.runIf(FULL_CAPABILITIES)("Container Provisioning", () => {
+describe("Container Provisioning", () => {
   let hostDir: string;
   let result: { containerName: string; imageName: string } | undefined;
 

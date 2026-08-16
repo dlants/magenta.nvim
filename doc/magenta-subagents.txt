@@ -47,8 +47,7 @@ Cannot spawn sub-agents. Used for specific focused work.
 Examples:~
     - `explore`: Code discovery and analysis
     - `fast-edit`: Lightweight, quick edits with fast models
-    - `tests-in-sandbox`: Run tests locally (sandbox mode)
-    - `tests-in-docker`: Run tests in Docker with full capabilities
+    - `tests`: Run tests locally
 
 THREAD AGENTS                                          *magenta-agent-thread*
 
@@ -143,7 +142,7 @@ Usage:~
 >typescript
     spawn_subagents({
       agents: [{
-        agentType: "tests-in-sandbox",
+        agentType: "tests",
         prompt: "Run the test suite and fix any failures"
       }]
     })
@@ -164,7 +163,7 @@ Usage:~
 >typescript
     spawn_subagents({
       agents: [{
-        agentType: "tests-in-docker",
+        agentType: "tests",
         environment: "docker_unsupervised",
         prompt: "Run the full test suite"
       }]
@@ -242,7 +241,7 @@ Example:~
 >typescript
     spawn_subagents({
       agents: [{
-        agentType: "tests-in-docker",
+        agentType: "tests",
         environment: "docker_unsupervised",
         dockerfile: "docker/Dockerfile",
         workspacePath: "/workspace",
