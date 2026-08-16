@@ -1,83 +1,84 @@
 {
-  "blobSha": "00b6edc42018b3d4d74e48f5ebae20a9bf7287c8",
+  "blobSha": "e86f812f73692330119530dfeb5c956319b4e8d7",
   "modelName": "voyage-context-4@256",
-  "version": 10,
+  "version": 11,
+  "chunking": "auto",
   "chunks": [
     {
       "start": 0,
-      "end": 2357
+      "end": 2296
     },
     {
-      "start": 2365,
-      "end": 4801
+      "start": 2304,
+      "end": 4740
     },
     {
-      "start": 4809,
-      "end": 7180
+      "start": 4748,
+      "end": 7119
     },
     {
-      "start": 7188,
-      "end": 9534
+      "start": 7127,
+      "end": 9473
     },
     {
-      "start": 9542,
-      "end": 11585
+      "start": 9481,
+      "end": 11524
     },
     {
-      "start": 11593,
-      "end": 13879
+      "start": 11532,
+      "end": 13818
     },
     {
-      "start": 13887,
-      "end": 16363
+      "start": 13826,
+      "end": 16302
     },
     {
-      "start": 16367,
-      "end": 18629
+      "start": 16306,
+      "end": 18568
     },
     {
-      "start": 18631,
-      "end": 20782
+      "start": 18570,
+      "end": 20721
     },
     {
-      "start": 20790,
-      "end": 22989
+      "start": 20729,
+      "end": 22928
     },
     {
-      "start": 22997,
-      "end": 25249
+      "start": 22936,
+      "end": 25188
     },
     {
-      "start": 25257,
-      "end": 27484
+      "start": 25196,
+      "end": 27423
     },
     {
-      "start": 27492,
-      "end": 29865
+      "start": 27431,
+      "end": 29804
     },
     {
-      "start": 29873,
-      "end": 32277
+      "start": 29812,
+      "end": 32216
     },
     {
-      "start": 32285,
-      "end": 34466
+      "start": 32224,
+      "end": 34380
     },
     {
-      "start": 34474,
-      "end": 36686
+      "start": 34388,
+      "end": 36493
     },
     {
-      "start": 36696,
-      "end": 38925
+      "start": 36501,
+      "end": 38695
     },
     {
-      "start": 38935,
-      "end": 40664
+      "start": 38703,
+      "end": 40208
     },
     {
-      "start": 40674,
-      "end": 42704
+      "start": 40216,
+      "end": 42142
     }
   ]
 }

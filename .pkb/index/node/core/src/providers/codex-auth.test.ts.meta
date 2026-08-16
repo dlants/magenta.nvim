@@ -1,7 +1,8 @@
 {
   "blobSha": "6c9351153a8c93dc524512ace094340500607068",
   "modelName": "voyage-context-4@256",
-  "version": 10,
+  "version": 11,
+  "chunking": "auto",
   "chunks": [
     {
       "start": 0,
