@@ -800,7 +800,18 @@ export class Agent {
         continue;
       }
       const request = requested.request.value;
-      const invocation = createTool(request, this.createToolContext());
+      let invocation;
+      try {
+        invocation = createTool(request, this.createToolContext());
+      } catch (err) {
+        // a tool whose capability is missing must surface as a tool error
+        // rather than tearing down the turn
+        results.set(requested.id, {
+          status: "error",
+          error: `Tool creation failed: ${(err as Error).message}`,
+        });
+        continue;
+      }
       activeTools.set(request.id, {
         handle: invocation,
         progress: "progress" in invocation ? invocation.progress : undefined,

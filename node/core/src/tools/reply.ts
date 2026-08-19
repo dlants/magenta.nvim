@@ -14,7 +14,10 @@ import type { Result } from "../utils/result.ts";
 export type Reply = { commentId: CommentId; text: string };
 export type Input = { replies: Reply[] };
 export type ToolRequest = GenericToolRequest<"reply", Input>;
-export type PerReplyResult = { commentId: CommentId; isError: boolean };
+export type PerReplyResult = { commentId: CommentId } & (
+  | { status: "ok" }
+  | { status: "error"; error: string }
+);
 export type StructuredResult = {
   toolName: "reply";
   replies: PerReplyResult[];
@@ -35,14 +38,21 @@ export function execute(
         reply.text,
       );
       if (result.status === "error") {
-        replies.push({ commentId: reply.commentId, isError: true });
+        replies.push({
+          commentId: reply.commentId,
+          status: "error",
+          error: result.error,
+        });
         lines.push(`${reply.commentId}: error - ${result.error}`);
       } else {
-        replies.push({ commentId: reply.commentId, isError: false });
+        replies.push({ commentId: reply.commentId, status: "ok" });
         lines.push(`${reply.commentId}: replied`);
       }
     }
-    if (replies.some((r) => r.isError)) {
+    if (lines.length === 0) {
+      lines.push("No replies were provided.");
+    }
+    if (replies.some((r) => r.status === "error")) {
       const open = context.commentStore.listOpenCommentIds();
       lines.push(
         open.length
@@ -63,9 +73,9 @@ export function execute(
           },
         ],
         structuredResult: {
-          toolName: "reply" as ToolName,
+          toolName: "reply",
           replies,
-        } as StructuredResult & { toolName: ToolName },
+        },
       },
       nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     };

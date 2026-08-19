@@ -12,7 +12,7 @@ export function renderSummary(
   _displayContext: DisplayContext,
 ): VDOMNode {
   const input = request.input as Input;
-  const ids = (input.replies ?? []).map((r) => r.commentId).join(", ");
+  const ids = input.replies.map((r) => r.commentId).join(", ");
   return d`💬 reply: ${ids}`;
 }
 
@@ -25,8 +25,6 @@ export function renderInput(
     return undefined;
   }
   const input = request.input as Input;
-  const body = (input.replies ?? [])
-    .map((r) => `${r.commentId}: ${r.text}`)
-    .join("\n");
+  const body = input.replies.map((r) => `${r.commentId}: ${r.text}`).join("\n");
   return withCode(d`${body}`);
 }

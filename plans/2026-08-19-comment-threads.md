@@ -641,6 +641,21 @@ Notes / deviations:
   already listens to.
 - The three `Tool Definitions (8)` snapshots in `node/chat/thread.test.ts` became `(9)`.
 
+Review follow-ups (stage 5):
+
+- `PerReplyResult` is a discriminated union (`{commentId} & ({status:"ok"} | {status:"error"; error})`),
+  so the structured result keeps the error message instead of a bare `isError` flag.
+- The two casts on `structuredResult` are gone; `StructuredResult.toolName` is the literal `"reply"`,
+  matching `edl.ts`.
+- `node/render-tools/reply.ts` no longer defends with `input.replies ?? []` — the type is required
+  and `validateInput` enforces it.
+- An empty batch now returns `No replies were provided.` rather than an empty text block (some
+  providers reject empty text content).
+- `Agent.executeTools` wraps `createTool` in a try/catch and turns a throw (a missing capability,
+  e.g. `reply` without a `commentStore`) into a tool error result instead of tearing down the turn.
+- New `node/core/src/tools/reply.test.ts`: a neovim-free table covering every `validateInput`
+  rejection branch plus the ok case, and the empty-batch `execute` path.
+
 
 - Goal: `reply` is registered, gated on the new `comments` capability, available only to root chat threads; the root `NvimThread` supplies its `CommentStore` as the capability; replies append to the decoration (via the store's `changed` event) and render as a tool use in the thread.
 - Tests:
