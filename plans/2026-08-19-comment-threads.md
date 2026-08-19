@@ -681,6 +681,27 @@ Notes / deviations:
 - `stampCommentsOnBufEnter` runs after the existing `handlingBufEnter` re-entrancy guard (awaiting
   before it made BufEnter re-entrant and destabilized unrelated tests) and is a no-op when the
   active root thread has no comments.
+Review follow-ups (stage 6):
+
+- `Chat.getActiveRootThreadOrUndefined()` encodes "no active/initialized root thread" in the return
+  type; `syncCommentVisibility` and `stampCommentsOnBufEnter` branch on the value instead of
+  catching a throw. A thread that exists but isn't a root thread is still a throw — that's an
+  invariant violation, not a routine state. `getActiveRootThread()` (and hence
+  `Magenta.getCommentController()`) keeps throwing for callers that require one.
+- The controller list in `syncCommentVisibility` is built with the `isRootThread()` narrowing
+  predicate rather than an ad-hoc truthiness check on `commentController`, so no `{id, controller}`
+  pairs and no re-find by id.
+- Caught values are formatted with `e instanceof Error ? e.message : String(e)` instead of
+  `(e as Error).message`.
+- The hide-before-show ordering is now pinned by a test: the re-opened-window test switches back to
+  thread A (both threads comment on poem.txt) and asserts A's virt_lines are present and B's gone.
+  Verified it fails when the order is flipped.
+- The same test asserts that switching to the thread overview leaves the decorations alone.
+- Not pinned by a test: `stampCommentsOnBufEnter` runs before the sidebar-visibility guard in
+  `onBufEnter`, so it fires with the sidebar hidden too. That's intentional — comments live in the
+  user's buffers and shouldn't depend on the sidebar being open — but the driver has no
+  `hideSidebar` helper, so it stays untested.
+
 - Thread deletion needed no new code: `deleteThreadSubtree` already calls `NvimThread.destroy()`,
   which destroys the `CommentController` (hiding the render namespace and dropping every anchor
   extmark). The stage's test asserts both namespaces are empty afterwards.

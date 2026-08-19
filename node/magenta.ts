@@ -691,48 +691,36 @@ export class Magenta {
   private async syncCommentVisibility(): Promise<void> {
     if (this.chat.state.state !== "thread-selected") return;
 
-    let activeRootId: ThreadId;
-    try {
-      activeRootId = this.chat.getActiveRootThreadId();
-    } catch {
-      return;
-    }
+    const activeRoot = this.chat.getActiveRootThreadOrUndefined();
+    if (!activeRoot) return;
 
     // Hide first: the render namespace is shared, so showing the active thread
     // before clearing the others would wipe the stamps we just made in any
     // buffer both threads comment on.
-    const controllers = Object.values(this.chat.threadWrappers).flatMap(
+    const rootThreads = Object.values(this.chat.threadWrappers).flatMap(
       (wrapper) =>
-        wrapper?.state === "initialized" && wrapper.thread.commentController
-          ? [
-              {
-                id: wrapper.thread.id,
-                controller: wrapper.thread.commentController,
-              },
-            ]
+        wrapper?.state === "initialized" && wrapper.thread.isRootThread()
+          ? [wrapper.thread]
           : [],
     );
 
-    for (const { id, controller } of controllers) {
+    for (const thread of rootThreads) {
+      if (thread.id === activeRoot.id) continue;
       try {
-        if (id === activeRootId) continue;
-        await controller.hide();
+        await thread.commentController.hide();
       } catch (e) {
         this.nvim.logger.error(
-          `Error hiding comments for thread ${id}: ${(e as Error).message}`,
+          `Error hiding comments for thread ${thread.id}: ${e instanceof Error ? e.message : String(e)}`,
         );
       }
     }
 
-    const active = controllers.find(({ id }) => id === activeRootId);
-    if (active) {
-      try {
-        await active.controller.show();
-      } catch (e) {
-        this.nvim.logger.error(
-          `Error showing comments for thread ${activeRootId}: ${(e as Error).message}`,
-        );
-      }
+    try {
+      await activeRoot.commentController.show();
+    } catch (e) {
+      this.nvim.logger.error(
+        `Error showing comments for thread ${activeRoot.id}: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
@@ -1012,15 +1000,9 @@ ${lines.join("\n")}
    * root thread was active, so re-stamp the active thread's comments on it. */
   private async stampCommentsOnBufEnter(bufNr: BufNr): Promise<void> {
     if (this.chat.state.state !== "thread-selected") return;
-    try {
-      const controller = this.getCommentController();
-      if (!controller.hasComments()) return;
-      await controller.refreshBuffer(bufNr);
-    } catch (e) {
-      this.nvim.logger.debug(
-        `Skipping comment stamp on BufEnter: ${(e as Error).message}`,
-      );
-    }
+    const activeRoot = this.chat.getActiveRootThreadOrUndefined();
+    if (!activeRoot?.commentController.hasComments()) return;
+    await activeRoot.commentController.refreshBuffer(bufNr);
   }
 
   /** `<leader>mc`: open the authoring float over the cursor line or selection. */

@@ -1351,6 +1351,23 @@ ${rows}${loadMore}`;
     return this.getRootAncestorId(this.getActiveThread().id);
   }
 
+  /** The active root thread, or `undefined` while the chat has no active
+   * thread or that thread hasn't finished initializing. A thread that exists
+   * but isn't a root thread is an invariant violation and still throws. */
+  getActiveRootThreadOrUndefined(): RootNvimThread | undefined {
+    if (!this.state.activeThreadId) return undefined;
+    const threadWrapper =
+      this.threadWrappers[this.getRootAncestorId(this.state.activeThreadId)];
+    if (!(threadWrapper && threadWrapper.state === "initialized")) {
+      return undefined;
+    }
+    const thread = threadWrapper.thread;
+    if (!thread.isRootThread()) {
+      throw new Error(`Thread ${thread.id} is not a root thread`);
+    }
+    return thread;
+  }
+
   /** The root ancestor of the active thread — the thread that owns the
    * comment store, since comments belong to a root conversation. */
   getActiveRootThread(): RootNvimThread {

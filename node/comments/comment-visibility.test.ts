@@ -1,4 +1,3 @@
-import type { ThreadId } from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import {
   type BufNr,
@@ -105,6 +104,7 @@ describe("comment visibility across threads", () => {
       await driver.showSidebar();
       await driver.editFile("poem.txt");
       await comment(driver, 2, "thread A comment");
+      const threadA = driver.magenta.chat.getActiveRootThreadId();
 
       await driver.magenta.command("new-thread");
       await driver.editFile("poem.txt");
@@ -116,6 +116,29 @@ describe("comment visibility across threads", () => {
       await pollUntil(async () => {
         expect(await virtLines(buffer)).toEqual([
           "  you: thread B comment",
+          "  (pending)",
+        ]);
+      });
+
+      // switching back must hide B before stamping A: both threads comment on
+      // this same buffer, so a show-then-hide order would wipe A's stamps.
+      await driver.magenta.selectThreadEffect(threadA);
+      await pollUntil(async () => {
+        expect(await virtLines(buffer)).toEqual([
+          "  you: thread A comment",
+          "  (pending)",
+        ]);
+      });
+
+      // the overview doesn't select a different conversation, so it leaves the
+      // decorations alone
+      driver.magenta.dispatch({
+        type: "chat-msg",
+        msg: { type: "threads-overview" },
+      });
+      await pollUntil(async () => {
+        expect(await virtLines(buffer)).toEqual([
+          "  you: thread A comment",
           "  (pending)",
         ]);
       });
@@ -137,9 +160,7 @@ describe("comment visibility across threads", () => {
       });
 
       await pollUntil(async () => {
-        expect(
-          driver.magenta.chat.threadWrappers[threadId as ThreadId],
-        ).toBeUndefined();
+        expect(driver.magenta.chat.threadWrappers[threadId]).toBeUndefined();
         expect(await virtLines(buffer)).toEqual([]);
         expect(
           await buffer.getExtmarks(MAGENTA_COMMENT_ANCHOR_NAMESPACE),
