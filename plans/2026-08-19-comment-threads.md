@@ -664,7 +664,26 @@ Review follow-ups (stage 5):
   - A subagent's tool specs do not include `reply`; a root thread's do.
   - Full round trip: user comments -> agent replies -> user follows up on the same comment with `<leader>mc` -> the follow-up block carries the same comment id and the decoration shows all three messages in order.
 
-## Visibility across threads
+## Visibility across threads — DONE
+
+Implemented in `node/magenta.ts` (`syncCommentVisibility`, called at the end of `syncActiveView`,
+and `stampCommentsOnBufEnter`, called from `onBufEnter`). Tests in
+`node/comments/comment-visibility.test.ts`.
+
+Notes / deviations:
+
+- Visibility is only synced while the chat is in `thread-selected`. The overview and archive views
+  don't select a different conversation, they just stop displaying one, so they leave the current
+  decorations alone rather than flickering them off and back on.
+- Inactive controllers are hidden *before* the active one is shown: the render namespace is shared
+  across threads, so the reverse order would let a hide wipe stamps just made in a buffer both
+  threads comment on.
+- `stampCommentsOnBufEnter` runs after the existing `handlingBufEnter` re-entrancy guard (awaiting
+  before it made BufEnter re-entrant and destabilized unrelated tests) and is a no-op when the
+  active root thread has no comments.
+- Thread deletion needed no new code: `deleteThreadSubtree` already calls `NvimThread.destroy()`,
+  which destroys the `CommentController` (hiding the render namespace and dropping every anchor
+  extmark). The stage's test asserts both namespaces are empty afterwards.
 
 - Goal: comments are scoped to their root thread and shown/hidden on thread switch and on buffer enter.
 - Tests:

@@ -680,6 +680,60 @@ export class Magenta {
         );
       }
     }
+
+    await this.syncCommentVisibility();
+  }
+
+  /** Comments live in the user's own buffers, so only the active root thread's
+   * decorations may be stamped. Overview and archive views leave the current
+   * visibility alone: they don't select a different conversation, they just
+   * stop displaying one. */
+  private async syncCommentVisibility(): Promise<void> {
+    if (this.chat.state.state !== "thread-selected") return;
+
+    let activeRootId: ThreadId;
+    try {
+      activeRootId = this.chat.getActiveRootThreadId();
+    } catch {
+      return;
+    }
+
+    // Hide first: the render namespace is shared, so showing the active thread
+    // before clearing the others would wipe the stamps we just made in any
+    // buffer both threads comment on.
+    const controllers = Object.values(this.chat.threadWrappers).flatMap(
+      (wrapper) =>
+        wrapper?.state === "initialized" && wrapper.thread.commentController
+          ? [
+              {
+                id: wrapper.thread.id,
+                controller: wrapper.thread.commentController,
+              },
+            ]
+          : [],
+    );
+
+    for (const { id, controller } of controllers) {
+      try {
+        if (id === activeRootId) continue;
+        await controller.hide();
+      } catch (e) {
+        this.nvim.logger.error(
+          `Error hiding comments for thread ${id}: ${(e as Error).message}`,
+        );
+      }
+    }
+
+    const active = controllers.find(({ id }) => id === activeRootId);
+    if (active) {
+      try {
+        await active.controller.show();
+      } catch (e) {
+        this.nvim.logger.error(
+          `Error showing comments for thread ${activeRootId}: ${(e as Error).message}`,
+        );
+      }
+    }
   }
 
   async command(input: string): Promise<void> {
@@ -926,6 +980,7 @@ ${lines.join("\n")}
    */
   async onBufEnter(bufNr: BufNr, winId: WindowId): Promise<void> {
     if (this.handlingBufEnter) return;
+    await this.stampCommentsOnBufEnter(bufNr);
     if (this.sidebar.state.state !== "visible") return;
 
     const { displayWindow, inputWindow } = this.sidebar.state;
@@ -951,6 +1006,21 @@ ${lines.join("\n")}
    * comments: the store they hold is the one the agent drains. */
   getCommentController(): CommentController {
     return this.chat.getActiveRootThread().commentController;
+  }
+
+  /** A buffer that comes back into view may have been hidden while a different
+   * root thread was active, so re-stamp the active thread's comments on it. */
+  private async stampCommentsOnBufEnter(bufNr: BufNr): Promise<void> {
+    if (this.chat.state.state !== "thread-selected") return;
+    try {
+      const controller = this.getCommentController();
+      if (!controller.hasComments()) return;
+      await controller.refreshBuffer(bufNr);
+    } catch (e) {
+      this.nvim.logger.debug(
+        `Skipping comment stamp on BufEnter: ${(e as Error).message}`,
+      );
+    }
   }
 
   /** `<leader>mc`: open the authoring float over the cursor line or selection. */
