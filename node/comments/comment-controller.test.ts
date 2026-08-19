@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {
+  type CommentId,
   CommentStore,
   type HomeDir,
   type NvimCwd,
@@ -21,6 +22,14 @@ import { withDriver, withNvimClient } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
 import type { AbsFilePath } from "../utils/files.ts";
 import { CommentController } from "./comment-controller.ts";
+
+function anchoredLocation(store: CommentStore, id: CommentId) {
+  const location = store.comments[id].location;
+  if (location.state !== "anchored") {
+    throw new Error(`expected ${id} to be anchored, got ${location.state}`);
+  }
+  return location;
+}
 
 const rows = (start: number, end: number) => ({
   start: start as Row0Indexed,
@@ -126,8 +135,8 @@ describe("CommentController", () => {
         (m) => m.options.line_hl_group,
       );
       expect(lineMarks.map((m) => m.startPos.row)).toEqual([2]);
-      expect(store.comments[id].location.lines).toEqual({ start: 3, end: 3 });
-      expect(store.comments[id].location.selection).toEqual("two");
+      expect(anchoredLocation(store, id).lines).toEqual({ start: 3, end: 3 });
+      expect(anchoredLocation(store, id).selection).toEqual("two");
     });
   });
 
@@ -159,6 +168,37 @@ describe("CommentController", () => {
       expect(await virtLines(buffer)).toContain(
         "  (stale: the commented range was deleted)",
       );
+    });
+  });
+
+  it("creates a new comment on rows a stale comment used to occupy", async () => {
+    await withNvimClient(async (nvim) => {
+      const { buffer, controller, store } = await setup(nvim, [
+        "one",
+        "two",
+        "three",
+      ]);
+      const stale = await controller.addComment({
+        bufnr: buffer.id,
+        rows: rows(1, 1),
+        text: "why?",
+      });
+      await buffer.setLines({
+        start: 1 as Row0Indexed,
+        end: 2 as Row0Indexed,
+        lines: [] as Line[],
+      });
+      await controller.refreshBuffer(buffer.id);
+      expect(store.comments[stale].location.state).toEqual("stale");
+
+      const fresh = await controller.addComment({
+        bufnr: buffer.id,
+        rows: rows(1, 1),
+        text: "and this?",
+      });
+      expect(fresh).not.toEqual(stale);
+      expect(store.comments[fresh].messages).toHaveLength(1);
+      expect(store.comments[stale].messages).toHaveLength(1);
     });
   });
 
@@ -367,7 +407,7 @@ INS`,
         });
 
         await controller.refreshBuffer(bufnr);
-        expect(store.comments[id].location.selection).toEqual("two");
+        expect(anchoredLocation(store, id).selection).toEqual("two");
       },
     );
   });

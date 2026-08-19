@@ -94,7 +94,7 @@ export class CommentController {
   ): Promise<CommentLocation> {
     const bufferLabel = await this.bufferLabel(bufnr);
     if (!extent) {
-      return { bufferLabel, bufnr, selection: "", state: "stale" };
+      return { bufferLabel, bufnr, state: "stale" };
     }
     const lines = await this.buffer(bufnr).getLines({
       start: extent.startRow,
@@ -123,7 +123,7 @@ export class CommentController {
       anchor.extmarkId,
       MAGENTA_COMMENT_ANCHOR_NAMESPACE,
     );
-    if (!mark || (mark.options as { invalid?: boolean }).invalid) {
+    if (!mark || mark.options.invalid) {
       return undefined;
     }
     const startRow = mark.startPos.row as Row0Indexed;
@@ -131,10 +131,12 @@ export class CommentController {
     return { startRow, endRow };
   }
 
-  /** The comment whose extent covers `row`, if any. At most one. */
+  /** The comment whose extent covers `row`, if any. At most one. A stale
+   * comment covers nothing — its range is gone, so a new comment there is a
+   * new comment, not a follow-up. */
   async at(bufnr: BufNr, row: Row0Indexed): Promise<CommentId | undefined> {
     for (const id of this.commentIdsInBuffer(bufnr)) {
-      const extent = (await this.readExtent(id)) ?? this.extents[id];
+      const extent = await this.readExtent(id);
       if (extent && row >= extent.startRow && row <= extent.endRow) {
         return id;
       }
@@ -245,10 +247,10 @@ export class CommentController {
 
     for (const id of ids) {
       const extent = await this.readExtent(id);
-      const anchor = this.anchors[id];
+      let staleRow: Row0Indexed | undefined;
       if (!extent) {
-        const lastRow = this.extents[id]?.startRow ?? (0 as Row0Indexed);
-        this.anchors[id] = { state: "stale", bufnr, lastRow };
+        staleRow = this.extents[id]?.startRow ?? (0 as Row0Indexed);
+        this.anchors[id] = { state: "stale", bufnr, lastRow: staleRow };
         this.store.setLocation(
           id,
           await this.resolveLocation(bufnr, undefined),
@@ -265,15 +267,11 @@ export class CommentController {
       if (!comment || !this.visible) {
         continue;
       }
-      const renderExtent =
+      const renderExtent: CommentExtent =
         extent ??
         ({
-          startRow: (anchor && anchor.state === "stale"
-            ? anchor.lastRow
-            : 0) as Row0Indexed,
-          endRow: (anchor && anchor.state === "stale"
-            ? anchor.lastRow
-            : 0) as Row0Indexed,
+          startRow: staleRow ?? (0 as Row0Indexed),
+          endRow: staleRow ?? (0 as Row0Indexed),
         } satisfies CommentExtent);
       await renderComment({
         buffer,
@@ -341,8 +339,10 @@ function locationsEqual(
     a.bufferLabel === b.bufferLabel &&
     a.bufnr === b.bufnr &&
     a.state === b.state &&
-    a.selection === b.selection &&
-    a.lines?.start === b.lines?.start &&
-    a.lines?.end === b.lines?.end
+    (a.state !== "anchored" ||
+      b.state !== "anchored" ||
+      (a.selection === b.selection &&
+        a.lines.start === b.lines.start &&
+        a.lines.end === b.lines.end))
   );
 }

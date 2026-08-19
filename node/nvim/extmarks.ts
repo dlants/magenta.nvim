@@ -139,6 +139,8 @@ export type ExtmarkOptions = {
   // Persistence
   undo_restore?: boolean;
   invalidate?: boolean;
+  /** Read-only: set by neovim when an `invalidate: true` mark's range is gone. */
+  invalid?: boolean;
   ephemeral?: boolean;
 };
 

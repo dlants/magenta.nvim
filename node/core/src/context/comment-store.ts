@@ -19,12 +19,16 @@ export type CommentLocation = {
    * file-backed, otherwise the bufname. */
   bufferLabel: string;
   bufnr: BufNr;
-  /** 1-indexed inclusive, as shown to the agent. Absent when stale. */
-  lines?: { start: number; end: number } | undefined;
-  /** The commented text, for the `<selection>` body. */
-  selection: string;
-  state: "anchored" | "stale";
-};
+} & (
+  | {
+      state: "anchored";
+      /** 1-indexed inclusive, as shown to the agent. */
+      lines: { start: number; end: number };
+      /** The commented text, for the `<selection>` body. */
+      selection: string;
+    }
+  | { state: "stale" }
+);
 
 export type Comment = {
   id: CommentId;
@@ -37,10 +41,14 @@ export type CommentCloseReason = "deleted" | "buffer-unloaded";
 export type CommentUpdateEntry = {
   commentId: CommentId;
   location: CommentLocation;
-  status: "new-messages" | CommentCloseReason;
-  /** The undelivered user messages this entry carries. Empty for a close. */
-  messages: CommentMessage[];
-};
+} & (
+  | {
+      status: "new-messages";
+      /** The undelivered user messages this entry carries; never empty. */
+      messages: [CommentMessage, ...CommentMessage[]];
+    }
+  | { status: CommentCloseReason }
+);
 
 export type CommentStoreEvents = {
   /** Something the nvim layer needs to redraw changed. */
@@ -48,7 +56,7 @@ export type CommentStoreEvents = {
 };
 
 function locationLabel(location: CommentLocation): string {
-  if (!location.lines) {
+  if (location.state === "stale") {
     return `${location.bufferLabel} (range deleted)`;
   }
   const { start, end } = location.lines;
@@ -68,7 +76,7 @@ function statusLabel(entry: CommentUpdateEntry): string {
     case "buffer-unloaded":
       return "closed: buffer unloaded";
     default:
-      return assertUnreachable(entry.status);
+      return assertUnreachable(entry);
   }
 }
 
@@ -83,8 +91,9 @@ export class CommentStore extends Emitter<CommentStoreEvents> {
 
   /** Number of messages of each comment already delivered to the agent. */
   private deliveredCounts: { [id: CommentId]: number } = {};
-  /** Terminal notices queued for comments that have already been dropped. */
-  private closedEntries: CommentUpdateEntry[] = [];
+  /** Entries for comments that have already been dropped: the terminal notice,
+   * preceded by any user messages that were still undelivered at close time. */
+  private queuedEntries: CommentUpdateEntry[] = [];
   /** Order in which comments first became pending, so the manifest reads in
    * submission order. */
   private pendingOrder: CommentId[] = [];
@@ -137,11 +146,19 @@ export class CommentStore extends Emitter<CommentStoreEvents> {
     if (!comment) {
       return;
     }
-    this.closedEntries.push({
+    const undelivered = this.undeliveredMessages(id);
+    if (undelivered.length) {
+      this.queuedEntries.push({
+        commentId: id,
+        location: comment.location,
+        status: "new-messages",
+        messages: undelivered as [CommentMessage, ...CommentMessage[]],
+      });
+    }
+    this.queuedEntries.push({
       commentId: id,
       location: comment.location,
       status: reason,
-      messages: [],
     });
     delete this.comments[id];
     delete this.deliveredCounts[id];
@@ -167,23 +184,30 @@ export class CommentStore extends Emitter<CommentStoreEvents> {
   }
 
   private buildEntries(): CommentUpdateEntry[] {
-    const closedById = new Map(
-      this.closedEntries.map((entry) => [entry.commentId, entry]),
-    );
+    const queuedById = new Map<CommentId, CommentUpdateEntry[]>();
+    for (const entry of this.queuedEntries) {
+      const list = queuedById.get(entry.commentId) ?? [];
+      list.push(entry);
+      queuedById.set(entry.commentId, list);
+    }
     const entries: CommentUpdateEntry[] = [];
     for (const id of this.pendingOrder) {
-      const closed = closedById.get(id);
-      if (closed) {
-        entries.push(closed);
+      const queued = queuedById.get(id);
+      if (queued) {
+        entries.push(...queued);
+        continue;
+      }
+      const comment = this.comments[id];
+      if (!comment) {
         continue;
       }
       const messages = this.undeliveredMessages(id);
       if (messages.length) {
         entries.push({
           commentId: id,
-          location: this.comments[id].location,
+          location: comment.location,
           status: "new-messages",
-          messages,
+          messages: messages as [CommentMessage, ...CommentMessage[]],
         });
       }
     }
@@ -209,7 +233,7 @@ export class CommentStore extends Emitter<CommentStoreEvents> {
         this.deliveredCounts[entry.commentId] = comment.messages.length;
       }
     }
-    this.closedEntries = [];
+    this.queuedEntries = [];
     this.pendingOrder = [];
     if (entries.length) {
       this.emit("changed");
@@ -252,12 +276,14 @@ export function commentUpdatesToContent(
     const messages = entry.messages
       .map((m) => `<user>${m.text}</user>`)
       .join("\n");
-    bodies.push(`\
-- \`${entry.commentId}\` buffer ${location.bufnr} \`${location.bufferLabel}\`${
-      location.lines
-        ? ` lines ${location.lines.start}-${location.lines.end}`
-        : " (the commented range was deleted)"
+    if (location.state === "stale") {
+      bodies.push(`\
+- \`${entry.commentId}\` buffer ${location.bufnr} \`${location.bufferLabel}\` (the commented range was deleted)
+${messages}`);
+      continue;
     }
+    bodies.push(`\
+- \`${entry.commentId}\` buffer ${location.bufnr} \`${location.bufferLabel}\` lines ${location.lines.start}-${location.lines.end}
 <selection>
 ${location.selection}
 </selection>

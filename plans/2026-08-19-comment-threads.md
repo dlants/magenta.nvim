@@ -436,6 +436,24 @@ Notes / deviations:
   line) rather than one ranged extmark, since `line_hl_group` is a per-mark-line property.
 - Rendering already supports the `maxMessages` elision the stage-3 input UI needs.
 
+Review follow-ups (stage 2):
+
+- `CommentLocation` is now a discriminated union on `state`: `anchored` carries `lines` and
+  `selection`, `stale` carries neither, so a stale location can no longer fabricate
+  `selection: ""`.
+- `CommentUpdateEntry` is likewise a union: `new-messages` carries a non-empty
+  `[CommentMessage, ...CommentMessage[]]`, close entries carry no messages.
+- Closing a comment that still has undelivered user messages now queues those messages as a
+  `new-messages` entry *before* the terminal notice, so a delete never silently swallows what the
+  user wrote. Covered by a test.
+- `CommentController.at()` no longer falls back to the cached extent: a stale comment covers no
+  rows, so a new comment on those rows is a new comment rather than a follow-up. Tested.
+- Extmark namespace parameters are typed `MagentaNamespace` (a union of the three exported
+  constants) instead of bare `string`; `ExtmarkOptions` gained the read-only `invalid` flag so the
+  stale check is type-checked rather than cast.
+- `commentVirtLines`'s `maxMessages` elision is covered by a neovim-free unit test
+  (`node/comments/comment-render.test.ts`), including the singular/plural boundary.
+
 - Goal: `CommentStore` and `CommentController` exist and work end-to-end from a programmatic API — add a comment over a range, anchor it with an extmark, stamp the sign, extent highlight and inline `virt_lines`, add messages, delete, show/hide. No keymaps, no agent involvement yet. Also delete the dead `setInlineKeymaps`.
 - The store's tests need no neovim at all: locations go in as data, `<comment_update>` text comes out. Only the controller's tests drive a real buffer.
 - Tests:

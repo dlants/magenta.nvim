@@ -5,11 +5,9 @@ import {
   CommentStore,
 } from "./comment-store.ts";
 
-type LocOverrides = Partial<Omit<CommentLocation, "lines">> & {
-  lines?: CommentLocation["lines"] | undefined;
-};
+type AnchoredLocation = Extract<CommentLocation, { state: "anchored" }>;
 
-function loc(overrides: LocOverrides = {}): CommentLocation {
+function loc(overrides: Partial<AnchoredLocation> = {}): CommentLocation {
   return {
     bufferLabel: "node/foo.ts",
     bufnr: 4 as BufNr,
@@ -17,6 +15,14 @@ function loc(overrides: LocOverrides = {}): CommentLocation {
     selection: "  const x = compute();",
     state: "anchored",
     ...overrides,
+  };
+}
+
+function staleLoc(): CommentLocation {
+  return {
+    bufferLabel: "node/foo.ts",
+    bufnr: 4 as BufNr,
+    state: "stale",
   };
 }
 
@@ -90,10 +96,7 @@ describe("CommentStore", () => {
   it("reports a stale location", () => {
     const store = new CommentStore();
     const id = store.addComment(loc(), "why?");
-    store.setLocation(
-      id,
-      loc({ lines: undefined, state: "stale", selection: "" }),
-    );
+    store.setLocation(id, staleLoc());
     const out = text(store);
     expect(out).toContain("(range deleted)");
     expect(out).toContain("the commented range was deleted");
@@ -120,6 +123,35 @@ describe("CommentStore", () => {
     expect(text(store)).toContain(
       `${id} node/foo.ts:41-42 (closed: buffer unloaded)`,
     );
+  });
+
+  it("still delivers undelivered messages when a comment is closed", () => {
+    const store = new CommentStore();
+    const id = store.addComment(loc(), "why?");
+
+    store.closeComment(id, "deleted");
+    const out = text(store);
+    expect(out).toContain(`${id} node/foo.ts:41-42 (1 new message)`);
+    expect(out).toContain(`${id} node/foo.ts:41-42 (deleted)`);
+    expect(out).toContain("<user>why?</user>");
+    expect(out.indexOf("(1 new message)")).toBeLessThan(
+      out.indexOf("(deleted)"),
+    );
+  });
+
+  it("mixes new-message and close entries in one block", () => {
+    const store = new CommentStore();
+    const a = store.addComment(loc(), "first");
+    store.commitPending();
+    const b = store.addComment(loc({ bufferLabel: "node/bar.ts" }), "second");
+    store.closeComment(a, "buffer-unloaded");
+
+    const out = text(store);
+    expect(out).toContain(`${a} node/foo.ts:41-42 (closed: buffer unloaded)`);
+    expect(out).toContain(`${b} node/bar.ts:41-42 (1 new message)`);
+    // only the open comment gets a body
+    expect(out).toContain(`- \`${b}\``);
+    expect(out).not.toContain(`- \`${a}\``);
   });
 
   it("reports the current location, not the one at creation", () => {
