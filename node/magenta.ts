@@ -2,6 +2,7 @@ import * as os from "node:os";
 import type { SandboxAskCallback } from "@anthropic-ai/sandbox-runtime";
 import type { InputMessage, NativeMessageIdx, ThreadId } from "@magenta/core";
 import {
+  CommentStore,
   isThreadId,
   probeAndSaveClipboardImage,
   readArchivedThreadLog,
@@ -22,6 +23,8 @@ import { StraceUnavailableError } from "./capabilities/strace.ts";
 import { Chat } from "./chat/chat.ts";
 import { CommandRegistry } from "./chat/commands/registry.ts";
 import type { NvimThread } from "./chat/thread.ts";
+import { CommentController } from "./comments/comment-controller.ts";
+import { CommentInput } from "./comments/comment-input.ts";
 import {
   type BufNr,
   type Line,
@@ -85,6 +88,10 @@ const MAGENTA_BUF_DELETE = "magentaBufDelete";
 const MAGENTA_OPEN_ARCHIVED_THREAD_LOG = "magentaOpenArchivedThreadLog";
 const MAGENTA_CLIPBOARD_IMAGE_PASTE = "magentaClipboardImagePaste";
 const MAGENTA_CLIPBOARD_TEXT_PASTE = "magentaClipboardTextPaste";
+const MAGENTA_COMMENT = "magentaComment";
+const MAGENTA_COMMENT_DELETE = "magentaCommentDelete";
+const MAGENTA_COMMENT_JUMP = "magentaCommentJump";
+const MAGENTA_COMMENT_INPUT = "magentaCommentInput";
 
 function decodeArchivedThreadLogNotification(args: unknown[]): ThreadId {
   const payload = args[0];
@@ -114,6 +121,11 @@ export class Magenta {
   public commandRegistry: CommandRegistry;
   public optionsLoader: DynamicOptionsLoader;
   public activeBuffers: { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer };
+  /** One comment store + controller per root thread. Stage 4 of the comment
+   * plan moves ownership of the store into `NvimThread`; until it is drained
+   * by the agent, `Magenta` holds it so the UI has something to talk to. */
+  private commentControllers: { [threadId: ThreadId]: CommentController } = {};
+  private commentInput: CommentInput | undefined;
   private suppressDispatchRender = false;
 
   constructor(
@@ -914,6 +926,102 @@ ${lines.join("\n")}
     }
   }
 
+  /** The comment controller for the active root thread, created on demand. */
+  getCommentController(): CommentController {
+    const rootId = this.chat.getActiveRootThreadId();
+    let controller = this.commentControllers[rootId];
+    if (!controller) {
+      controller = new CommentController(
+        this.nvim,
+        this.cwd,
+        this.homeDir,
+        new CommentStore(),
+      );
+      this.commentControllers[rootId] = controller;
+    }
+    return controller;
+  }
+
+  /** `<leader>mc`: open the authoring float over the cursor line or selection. */
+  async onComment({
+    bufnr,
+    winid,
+    startRow,
+    endRow,
+  }: {
+    bufnr: BufNr;
+    winid: WindowId;
+    startRow: Row0Indexed;
+    endRow: Row0Indexed;
+  }): Promise<void> {
+    if (this.commentInput) {
+      await this.commentInput.cancel();
+      this.commentInput = undefined;
+    }
+    this.commentInput = await CommentInput.open({
+      nvim: this.nvim,
+      controller: this.getCommentController(),
+      bufnr,
+      winid,
+      rows: { start: startRow, end: endRow },
+    });
+  }
+
+  async onCommentInput(action: "submit" | "cancel"): Promise<void> {
+    const input = this.commentInput;
+    if (!input) return;
+    this.commentInput = undefined;
+    if (action === "cancel") {
+      await input.cancel();
+      return;
+    }
+    const commentId = await input.submit();
+    if (commentId) {
+      await this.nvim.call("nvim_exec_lua", [
+        `require("magenta.keymaps").set_comment_navigation_keymaps(...)`,
+        [input.target.bufnr],
+      ]);
+    }
+  }
+
+  /** `<leader>mD`: delete the comment under the cursor. */
+  async onCommentDelete({
+    bufnr,
+    row,
+  }: {
+    bufnr: BufNr;
+    row: Row0Indexed;
+  }): Promise<void> {
+    const controller = this.getCommentController();
+    const id = await controller.at(bufnr, row);
+    if (id) {
+      await controller.deleteComment(id);
+    }
+  }
+
+  /** `]c` / `[c`: jump between the comments in a buffer. */
+  async onCommentJump({
+    bufnr,
+    row,
+    direction,
+  }: {
+    bufnr: BufNr;
+    row: Row0Indexed;
+    direction: "next" | "prev";
+  }): Promise<void> {
+    const extents = await this.getCommentController().extentsInBuffer(bufnr);
+    const target =
+      direction === "next"
+        ? extents.find((e) => e.extent.startRow > row)
+        : [...extents].reverse().find((e) => e.extent.startRow < row);
+    if (target) {
+      await this.nvim.call("nvim_win_set_cursor", [
+        0,
+        [target.extent.startRow + 1, 0],
+      ]);
+    }
+  }
+
   /** Recover or unregister the view identity associated with a deleted buffer. */
   async onBufDelete(bufNr: BufNr): Promise<void> {
     const bufInfo = this.bufferManager.lookupBuffer(bufNr);
@@ -1251,6 +1359,63 @@ ${lines.join("\n")}
         }
       },
     );
+    nvim.onNotification(MAGENTA_COMMENT, async (args) => {
+      try {
+        const data = (
+          args as unknown as {
+            bufnr: number;
+            winid: number;
+            startRow: number;
+            endRow: number;
+          }[]
+        )[0];
+        await getMagenta().onComment({
+          bufnr: data.bufnr as BufNr,
+          winid: data.winid as WindowId,
+          startRow: data.startRow as Row0Indexed,
+          endRow: data.endRow as Row0Indexed,
+        });
+      } catch (err) {
+        notifyErr(nvim, "comment", err);
+      }
+    });
+    nvim.onNotification(MAGENTA_COMMENT_INPUT, async (args) => {
+      try {
+        const data = (args as unknown as { action: "submit" | "cancel" }[])[0];
+        await getMagenta().onCommentInput(data.action);
+      } catch (err) {
+        notifyErr(nvim, "comment input", err);
+      }
+    });
+    nvim.onNotification(MAGENTA_COMMENT_DELETE, async (args) => {
+      try {
+        const data = (args as unknown as { bufnr: number; row: number }[])[0];
+        await getMagenta().onCommentDelete({
+          bufnr: data.bufnr as BufNr,
+          row: data.row as Row0Indexed,
+        });
+      } catch (err) {
+        notifyErr(nvim, "comment delete", err);
+      }
+    });
+    nvim.onNotification(MAGENTA_COMMENT_JUMP, async (args) => {
+      try {
+        const data = (
+          args as unknown as {
+            bufnr: number;
+            row: number;
+            direction: "next" | "prev";
+          }[]
+        )[0];
+        await getMagenta().onCommentJump({
+          bufnr: data.bufnr as BufNr,
+          row: data.row as Row0Indexed,
+          direction: data.direction,
+        });
+      } catch (err) {
+        notifyErr(nvim, "comment jump", err);
+      }
+    });
     nvim.onNotification(MAGENTA_BUF_DELETE, async (args) => {
       try {
         const data = (args as unknown as { bufnr: number }[])[0];

@@ -18,7 +18,12 @@ import type { ExtmarkId } from "../nvim/extmarks.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
 import { pos } from "../tea/view.ts";
-import { type CommentExtent, renderComment } from "./comment-render.ts";
+import {
+  type CommentExtent,
+  commentVirtLines,
+  renderComment,
+  renderPreview,
+} from "./comment-render.ts";
 
 export type CommentAnchor =
   | { state: "anchored"; bufnr: BufNr; extmarkId: ExtmarkId }
@@ -33,6 +38,12 @@ export class CommentController {
   private anchors: { [id: CommentId]: CommentAnchor } = {};
   /** Last resolved extent per comment, used for rendering and hit testing. */
   private extents: { [id: CommentId]: CommentExtent } = {};
+  /** While an input is open on a comment, its transcript is capped so the
+   * float and the exchange both fit on screen. */
+  private transcriptCaps: { [id: CommentId]: number } = {};
+  /** Provisional highlight over a range being commented on for the first
+   * time, so the user can see what they selected while typing. */
+  private preview: { bufnr: BufNr; extent: CommentExtent } | undefined;
   private visible = true;
   /** Set while a refresh is stamping, so the `setLocation` calls it makes
    * don't schedule a redundant refresh on top of themselves. */
@@ -47,7 +58,7 @@ export class CommentController {
     private nvim: Nvim,
     private cwd: NvimCwd,
     private homeDir: HomeDir,
-    private store: CommentStore,
+    public readonly store: CommentStore,
   ) {
     this.store.on("changed", this.onStoreChanged);
   }
@@ -67,6 +78,9 @@ export class CommentController {
 
   private commentedBufnrs(): BufNr[] {
     const bufnrs = new Set<BufNr>(this.orphanedBufnrs);
+    if (this.preview) {
+      bufnrs.add(this.preview.bufnr);
+    }
     for (const id of this.store.listOpenCommentIds()) {
       const anchor = this.anchors[id];
       if (anchor) {
@@ -158,13 +172,11 @@ export class CommentController {
     rows: { start: Row0Indexed; end: Row0Indexed };
     text: string;
   }): Promise<CommentId> {
-    for (let row = rows.start; row <= rows.end; row++) {
-      const existing = await this.at(bufnr, row as Row0Indexed);
-      if (existing) {
-        this.store.addUserMessage(existing, text);
-        await this.refreshAll();
-        return existing;
-      }
+    const existing = await this.inRange(bufnr, rows);
+    if (existing) {
+      this.store.addUserMessage(existing, text);
+      await this.refreshAll();
+      return existing;
     }
 
     const buffer = this.buffer(bufnr);
@@ -193,6 +205,75 @@ export class CommentController {
     this.extents[id] = extent;
     await this.refreshAll();
     return id;
+  }
+
+  /** Cap the transcript of a comment while its input is open, so the whole
+   * unit (extent + transcript + float) fits on screen. */
+  async setTranscriptCap(
+    id: CommentId,
+    maxMessages: number | undefined,
+  ): Promise<void> {
+    if (maxMessages === undefined) {
+      delete this.transcriptCaps[id];
+    } else {
+      this.transcriptCaps[id] = maxMessages;
+    }
+    await this.refreshAll();
+  }
+
+  /** How many virtual lines a comment currently renders — the offset the
+   * input float must clear to sit below the exchange rather than over it. */
+  virtLineCount(id: CommentId): number {
+    const comment = this.store.comments[id];
+    if (!comment) {
+      return 0;
+    }
+    return commentVirtLines({
+      comment,
+      pending: this.store.pendingCommentIds().includes(id),
+      maxMessages: this.transcriptCaps[id],
+    }).length;
+  }
+
+  /** Provisionally highlight a range being commented on for the first time.
+   * Cleared with `setPreview(undefined)`. */
+  async setPreview(
+    preview: { bufnr: BufNr; extent: CommentExtent } | undefined,
+  ): Promise<void> {
+    const previous = this.preview;
+    if (previous) {
+      this.orphanedBufnrs.add(previous.bufnr);
+    }
+    this.preview = preview;
+    await this.refreshAll();
+  }
+
+  /** Every comment in this buffer with its current extent, in row order. */
+  async extentsInBuffer(
+    bufnr: BufNr,
+  ): Promise<Array<{ id: CommentId; extent: CommentExtent }>> {
+    const result: Array<{ id: CommentId; extent: CommentExtent }> = [];
+    for (const id of this.commentIdsInBuffer(bufnr)) {
+      const extent = await this.readExtent(id);
+      if (extent) {
+        result.push({ id, extent });
+      }
+    }
+    return result.sort((a, b) => a.extent.startRow - b.extent.startRow);
+  }
+
+  /** The single comment overlapping an inclusive row range, if any. */
+  async inRange(
+    bufnr: BufNr,
+    rows: { start: Row0Indexed; end: Row0Indexed },
+  ): Promise<CommentId | undefined> {
+    for (let row = rows.start; row <= rows.end; row++) {
+      const existing = await this.at(bufnr, row as Row0Indexed);
+      if (existing) {
+        return existing;
+      }
+    }
+    return undefined;
   }
 
   async deleteComment(id: CommentId): Promise<void> {
@@ -242,6 +323,10 @@ export class CommentController {
     }
     await buffer.clearAllExtmarks(MAGENTA_COMMENT_NAMESPACE);
 
+    if (this.visible && this.preview && this.preview.bufnr === bufnr) {
+      await renderPreview(buffer, this.preview.extent);
+    }
+
     const ids = this.commentIdsInBuffer(bufnr);
     const pending = new Set(this.store.pendingCommentIds());
 
@@ -278,6 +363,7 @@ export class CommentController {
         comment,
         extent: renderExtent,
         pending: pending.has(id),
+        maxMessages: this.transcriptCaps[id],
       });
     }
   }

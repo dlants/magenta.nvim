@@ -62,6 +62,25 @@ export function commentVirtLines({
 }
 
 /**
+ * Highlight a range that is about to become a comment, so the user can see
+ * what they selected while the input is open. Lives in the render namespace,
+ * so a refresh drops it unless the controller re-stamps it.
+ */
+export async function renderPreview(
+  buffer: NvimBuffer,
+  extent: CommentExtent,
+): Promise<void> {
+  for (let row = extent.startRow; row <= extent.endRow; row++) {
+    await buffer.setExtmark({
+      startPos: pos(row, 0),
+      endPos: pos(row, 0),
+      options: { line_hl_group: "CursorLine", priority: 100 },
+      namespace: MAGENTA_COMMENT_NAMESPACE,
+    });
+  }
+}
+
+/**
  * Stamp a comment's decoration into the render namespace. Idempotent given a
  * cleared namespace: everything drawn here is derived from the store.
  */

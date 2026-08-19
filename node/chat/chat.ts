@@ -1346,6 +1346,11 @@ ${rows}${loadMore}`;
     });
   }
 
+  /** The root of the active thread's ancestry — the thread comments belong to. */
+  getActiveRootThreadId(): ThreadId {
+    return this.getRootAncestorId(this.getActiveThread().id);
+  }
+
   getActiveThread(): NvimThread {
     if (!this.state.activeThreadId) {
       throw new Error(`Chat is not initialized yet... no active thread`);

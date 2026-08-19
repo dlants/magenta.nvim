@@ -77,6 +77,13 @@ local defaults = {
       ["-"] = ":Magenta threads-navigate-up<CR>",
     }
   },
+  commentKeymaps = {
+    normal = {
+      ["<CR>"] = ":MagentaCommentSubmit<CR>",
+      ["q"] = ":MagentaCommentCancel<CR>",
+      ["<C-c>"] = ":MagentaCommentCancel<CR>",
+    }
+  },
 
   -- note: some OSs are case sensitive, and some are not.
   -- to make this work cross-platform, we will run all globs

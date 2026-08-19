@@ -42,8 +42,28 @@ M.default_keymaps = function()
   vim.keymap.set(
     "n",
     "<leader>mc",
-    ":Magenta clear<CR>",
-    { silent = true, noremap = true, desc = "Clear Magenta state" }
+    function()
+      require("magenta.keymaps").comment()
+    end,
+    { silent = true, noremap = true, desc = "Comment on the line under the cursor" }
+  )
+
+  vim.keymap.set(
+    "v",
+    "<leader>mc",
+    function()
+      require("magenta.keymaps").comment_visual()
+    end,
+    { silent = true, noremap = true, desc = "Comment on the visual selection" }
+  )
+
+  vim.keymap.set(
+    "n",
+    "<leader>mD",
+    function()
+      require("magenta.keymaps").comment_delete()
+    end,
+    { silent = true, noremap = true, desc = "Delete the Magenta comment under the cursor" }
   )
 
   vim.keymap.set(
@@ -372,6 +392,148 @@ M.set_display_buffer_keymaps = function(bufnr)
       )
     end
   end
+end
+
+M.set_channel_id = function(channel_id)
+  magenta_channel_id = channel_id
+end
+
+local function notify(event, payload)
+  if not magenta_channel_id then
+    vim.api.nvim_err_writeln("Magenta: not connected — is the node process running?")
+    return
+  end
+  vim.rpcnotify(magenta_channel_id, event, payload)
+end
+
+--- Comment on the line under the cursor (or follow up on the comment there).
+M.comment = function()
+  local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+  notify("magentaComment", {
+    bufnr = vim.api.nvim_get_current_buf(),
+    winid = vim.api.nvim_get_current_win(),
+    startRow = row,
+    endRow = row,
+  })
+end
+
+--- Comment on the current visual selection.
+M.comment_visual = function()
+  local esc = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
+  vim.api.nvim_feedkeys(esc, "x", false)
+  local startRow = vim.fn.getpos("'<")[2] - 1
+  local endRow = vim.fn.getpos("'>")[2] - 1
+  notify("magentaComment", {
+    bufnr = vim.api.nvim_get_current_buf(),
+    winid = vim.api.nvim_get_current_win(),
+    startRow = math.min(startRow, endRow),
+    endRow = math.max(startRow, endRow),
+  })
+end
+
+M.comment_delete = function()
+  notify("magentaCommentDelete", {
+    bufnr = vim.api.nvim_get_current_buf(),
+    row = vim.api.nvim_win_get_cursor(0)[1] - 1,
+  })
+end
+
+--- `]c` / `[c` on a buffer that carries comments.
+M.set_comment_navigation_keymaps = function(bufnr)
+  for key, direction in pairs({ ["]c"] = "next", ["[c"] = "prev" }) do
+    vim.keymap.set("n", key, function()
+      notify("magentaCommentJump", {
+        bufnr = bufnr,
+        row = vim.api.nvim_win_get_cursor(0)[1] - 1,
+        direction = direction,
+      })
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "Jump to Magenta comment" })
+  end
+end
+
+--- Scroll `winid` if the commented extent, its transcript and the input float
+--- (`needed` screen lines below the anchor) would not all fit on screen.
+M.fit_comment_input = function(winid, anchor_row, needed)
+  if not vim.api.nvim_win_is_valid(winid) then
+    return
+  end
+  local win_height = vim.api.nvim_win_get_height(winid)
+  local topline = vim.fn.line("w0", winid)
+  local ok, height = pcall(vim.api.nvim_win_text_height, winid, {
+    start_row = topline - 1,
+    end_row = anchor_row,
+  })
+  local used = ok and height.all or (anchor_row + 2 - topline)
+  if used + needed <= win_height then
+    return
+  end
+  vim.api.nvim_win_call(winid, function()
+    local view = vim.fn.winsaveview()
+    -- put the anchor high enough that the whole unit has room below it
+    view.topline = math.max(1, anchor_row + 1 - math.max(0, win_height - needed - 1))
+    vim.fn.winrestview(view)
+  end)
+end
+
+--- Wire up the authoring float: keymaps, submit-on-write, grow-with-content,
+--- and cancel when the anchor scrolls out of view or focus leaves.
+M.setup_comment_input = function(bufnr, float_win, target_win, max_height, channel_id)
+  magenta_channel_id = channel_id
+  local group = vim.api.nvim_create_augroup("MagentaCommentInput" .. bufnr, { clear = true })
+
+  for mode, values in pairs(Options.options.commentKeymaps or {}) do
+    for key, action in pairs(values) do
+      vim.keymap.set(
+        mode_to_keymap[mode],
+        key,
+        action,
+        { buffer = bufnr, noremap = true, silent = true }
+      )
+    end
+  end
+  vim.keymap.set("n", "<Esc><Esc>", ":MagentaCommentCancel<CR>",
+    { buffer = bufnr, noremap = true, silent = true })
+
+  vim.api.nvim_create_autocmd("BufWriteCmd", {
+    group = group,
+    buffer = bufnr,
+    callback = function()
+      vim.bo[bufnr].modified = false
+      notify("magentaCommentInput", { action = "submit" })
+    end,
+  })
+
+  local function resize()
+    if not vim.api.nvim_win_is_valid(float_win) then
+      return
+    end
+    local ok, height = pcall(vim.api.nvim_win_text_height, float_win, { max_height = max_height })
+    local lines = ok and height.all or math.min(max_height, vim.api.nvim_buf_line_count(bufnr))
+    vim.api.nvim_win_set_height(float_win, math.max(1, math.min(max_height, lines)))
+  end
+
+  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
+    group = group,
+    buffer = bufnr,
+    callback = resize,
+  })
+
+  vim.api.nvim_create_autocmd({ "WinScrolled", "WinClosed" }, {
+    group = group,
+    pattern = tostring(target_win),
+    callback = function()
+      notify("magentaCommentInput", { action = "cancel" })
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("BufWipeout", {
+    group = group,
+    buffer = bufnr,
+    once = true,
+    callback = function()
+      pcall(vim.api.nvim_del_augroup_by_id, group)
+    end,
+  })
 end
 
 return M

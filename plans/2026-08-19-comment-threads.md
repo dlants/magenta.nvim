@@ -468,7 +468,42 @@ Review follow-ups (stage 2):
   - A comment on a non-file scratch buffer (`buftype=nofile`) renders identically and its agent-facing text carries that buffer's bufnr and bufname.
   - Wiping a commented buffer removes the comment and its rendering, and reopening the same file does not restore it.
 
-## Comment input UI and keymaps
+## Comment input UI and keymaps — DONE
+
+Implemented in `node/comments/comment-input.ts` (+ `comment-input.test.ts`), with controller
+support (`setTranscriptCap`, `virtLineCount`, `setPreview`, `extentsInBuffer`, `inRange`) in
+`node/comments/comment-controller.ts`, `renderPreview` in `node/comments/comment-render.ts`,
+notification handlers + `CommentInput`/`CommentController` ownership in `node/magenta.ts`,
+`Chat.getActiveRootThreadId` in `node/chat/chat.ts`, and the lua half in
+`lua/magenta/keymaps.lua`, `lua/magenta/init.lua`, `lua/magenta/options.lua`.
+
+Notes / deviations:
+
+- `clear` is gone: dropped from `normal_commands` and from `default_keymaps`. `<leader>mc`
+  (normal + visual) now opens the comment input; `<leader>mD` deletes the comment under the cursor.
+- **Stage-3 ownership is temporary.** `Magenta` holds a `CommentStore` + `CommentController` per
+  root thread (`Magenta.getCommentController()`), because nothing drains the store yet. Stage 4
+  moves the store into `NvimThread`; this map is what it replaces.
+- Submit/cancel are routed through `:MagentaCommentSubmit` / `:MagentaCommentCancel` user commands
+  (registered by the bridge, torn down with it) plus a `magentaCommentInput` rpcnotify. That keeps
+  the `commentKeymaps` option a plain table of `key -> command string`, matching `sidebarKeymaps`
+  and `displayKeymaps`. `<Esc><Esc>` is bound unconditionally in addition to the option.
+- Everything that is purely geometric lives in lua: `fit_comment_input` (scroll the target window
+  so the extent + transcript + float unit fits, via `nvim_win_text_height` with a fallback) and the
+  `TextChanged`/`TextChangedI` resize inside `setup_comment_input`. Node only supplies the anchor
+  row, the virt-line offset and the unit height.
+- The transcript cap is 3 messages (`INPUT_TRANSCRIPT_MESSAGES`), not "~6 message lines" — a message
+  can wrap to several lines, and capping by message is what `commentVirtLines` already supports.
+- `]c` / `[c` are installed buffer-locally only after a comment is submitted in that buffer, and
+  resolve through node (`magentaCommentJump`) since node owns the extents.
+- New `<leader>mc` on a buffer that already has a comment at the cursor is routed through
+  `CommentController.inRange`, so the follow-up path and the "at most one comment per line" rule
+  share one implementation with `addComment`.
+- Tests drive the lua entry points (`require("magenta.keymaps").comment()` / `comment_visual()` /
+  `comment_delete()`, `:MagentaCommentSubmit`) rather than feeding `<leader>mc` keystrokes, which
+  exercises the same rpcnotify path without depending on leader-key timing.
+- Not covered by an automated test: `q` / `<C-c>` specifically (the cancel *path* is covered via
+  `:MagentaCommentCancel`, which is what those keys are bound to).
 
 - Goal: `<leader>mc` in normal and visual mode opens the authoring float; `<CR>`/`:w` submit, `q`/`<C-c>`/empty cancel; `<leader>mc` over an existing comment adds a follow-up; `<leader>mD` deletes; `]c`/`[c` jump. `clear` is gone.
 - Tests:

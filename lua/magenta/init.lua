@@ -36,6 +36,8 @@ M.teardown_bridge = function(reason, expected)
     M.bridge_augroup = nil
   end
   pcall(vim.api.nvim_del_user_command, "Magenta")
+  pcall(vim.api.nvim_del_user_command, "MagentaCommentSubmit")
+  pcall(vim.api.nvim_del_user_command, "MagentaCommentCancel")
   M.channel_id = nil
 
   if had_bridge and not expected then
@@ -208,7 +210,6 @@ end
 local normal_commands = {
   "abort",
   "agent",
-  "clear",
   "context-files",
   "paste",
   "profile",
@@ -230,6 +231,7 @@ M.bridge = function(channelId)
 
   -- Store the channel ID for later use by other functions
   M.channel_id = channelId
+  require("magenta.keymaps").set_channel_id(channelId)
 
   -- All autocmds registered here go into a named augroup so they can be
   -- cleared on node exit / channel death.
@@ -254,6 +256,20 @@ M.bridge = function(channelId)
     end)
   end
 
+  vim.api.nvim_create_user_command(
+    "MagentaCommentSubmit",
+    function()
+      safe_rpcnotify(channelId, "magentaCommentInput", { action = "submit" })
+    end,
+    { desc = "Submit the open Magenta comment input" }
+  )
+  vim.api.nvim_create_user_command(
+    "MagentaCommentCancel",
+    function()
+      safe_rpcnotify(channelId, "magentaCommentInput", { action = "cancel" })
+    end,
+    { desc = "Cancel the open Magenta comment input" }
+  )
   vim.api.nvim_create_user_command(
     "Magenta",
     function(opts)
