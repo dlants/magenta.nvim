@@ -43,6 +43,7 @@ export function renderStreamdedTool(
     case "yield_to_parent":
     case "run_script":
     case "nvim_lua":
+    case "reply":
       break;
     case "scratchpad": {
       const script = extractPartialJsonStringValue(

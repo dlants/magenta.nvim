@@ -27,6 +27,7 @@ import * as GetFileRender from "./getFile.ts";
 import * as HoverRender from "./hover.ts";
 import * as MCPToolRender from "./mcp-tool.ts";
 import * as NvimLuaRender from "./nvimLua.ts";
+import * as ReplyRender from "./reply.ts";
 import * as RunScriptRender from "./run-script.ts";
 import * as ScratchpadRender from "./scratchpad.ts";
 import * as SpawnSubagentsRender from "./spawn-subagents.ts";
@@ -92,6 +93,8 @@ export function renderToolSummary(
       return NvimLuaRender.renderSummary(request, displayContext);
     case "scratchpad":
       return ScratchpadRender.renderSummary(request, displayContext);
+    case "reply":
+      return ReplyRender.renderSummary(request, displayContext);
     default:
       assertUnreachable(toolName);
   }
@@ -118,6 +121,8 @@ export function renderToolInput(
       return NvimLuaRender.renderInput(request, displayContext, expanded);
     case "scratchpad":
       return ScratchpadRender.renderInput(request, displayContext, expanded);
+    case "reply":
+      return ReplyRender.renderInput(request, displayContext, expanded);
     case "spawn_subagents":
       return SpawnSubagentsRender.renderInput(
         request,
@@ -230,6 +235,8 @@ export function renderToolResultSummary(
       return d`${statusEmoji} nvim_lua (${tokEst})`;
     case "scratchpad":
       return d`${statusEmoji} scratchpad (${tokEst})`;
+    case "reply":
+      return d`${statusEmoji} ${ReplyRender.renderSummary(info.request, displayContext)}`;
     default:
       assertUnreachable(toolName);
   }

@@ -17,6 +17,7 @@ import type * as Edl from "./tools/edl.ts";
 import type * as FindReferences from "./tools/findReferences.ts";
 import type * as GetFile from "./tools/getFile.ts";
 import type * as Hover from "./tools/hover.ts";
+import type * as Reply from "./tools/reply.ts";
 import type * as RunScript from "./tools/run-script.ts";
 import type * as SpawnSubagents from "./tools/spawn-subagents.ts";
 import type * as ThreadTitle from "./tools/thread-title.ts";
@@ -41,6 +42,7 @@ export type ToolStructuredResult =
   | FindReferences.StructuredResult
   | ThreadTitle.StructuredResult
   | YieldToParent.StructuredResult
+  | Reply.StructuredResult
   | RunScript.StructuredResult
   | GenericStructuredResult;
 

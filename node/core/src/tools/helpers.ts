@@ -4,6 +4,7 @@ import * as FindReferences from "./findReferences.ts";
 import * as GetFile from "./getFile.ts";
 import * as Hover from "./hover.ts";
 import * as NvimLua from "./nvimLua.ts";
+import * as Reply from "./reply.ts";
 import * as RunScript from "./run-script.ts";
 import * as Scratchpad from "./scratchpad.ts";
 import * as SpawnSubagents from "./spawn-subagents.ts";
@@ -47,6 +48,8 @@ export function validateInput(
       return NvimLua.validateInput(input);
     case "scratchpad":
       return Scratchpad.validateInput(input);
+    case "reply":
+      return Reply.validateInput(input);
     default:
       throw new Error(`Unexpected toolName: ${toolName as string}`);
   }

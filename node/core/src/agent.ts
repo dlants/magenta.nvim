@@ -777,6 +777,7 @@ export class Agent {
       threadManager: this.context.threadManager,
       scriptRunner: this.context.getScriptRunner?.(),
       luaExecutor: this.context.luaExecutor,
+      commentStore: this.deps.getCommentStore(),
       requestRender: () => this.deps.onUpdate(),
       getAgents: () => this.context.getAgents(),
     };

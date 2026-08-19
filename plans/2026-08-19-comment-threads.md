@@ -614,7 +614,33 @@ Review follow-ups (stage 4):
   - The reported line range reflects the comment's _current_ position after intervening edits, not the position at creation.
   - After a compaction, a new comment still delivers a self-contained block (the `CommentStore` is re-bound to the swapped-in agent, as the context manager is).
 
-## The reply tool
+## The reply tool — DONE
+
+Implemented in `node/core/src/tools/reply.ts` (+ registry / helpers / create-tool / tool-types /
+index wiring), `node/render-tools/reply.ts` (+ `node/render-tools/index.ts`, `streaming.ts`), the
+`comments` capability in `node/environment.ts`, and `commentStore` on `CreateToolContext`
+(supplied from `AgentDeps.getCommentStore()` in `node/core/src/agent.ts`). Tests in
+`node/comments/reply-tool.test.ts`.
+
+Notes / deviations:
+
+- The tool result is always `status: "ok"`; per-reply outcome is reported in the text
+  (`c1: replied` / `c1: error - ...`) and in `StructuredResult.replies`. A batch with any failure
+  also lists the currently open comment ids, so the agent can self-correct without another probe.
+- `validateInput` checks shape only; ids are *not* validated against `listOpenCommentIds()`
+  (the plan suggested narrowing there). An id that has since closed must produce a per-reply error
+  rather than a whole-batch validation failure, which is exactly what `execute` does.
+- The `comments` capability is granted by both `createLocalEnvironment` and
+  `createDockerEnvironment`: comments live in the host neovim, not in the execution environment,
+  so a `docker_root` thread has them too. `reply` is reachable only from `CHAT_STATIC_TOOL_NAMES`
+  (and hence `DOCKER_ROOT_STATIC_TOOL_NAMES`), so subagents and compact threads never see it.
+- `create-tool.ts` throws when `commentStore` is missing, matching the `nvim_lua`/`luaExecutor`
+  precedent. That is unreachable in practice — the capability gate keeps the spec out of any
+  thread without a store.
+- Redraw needed no new wiring: `addAgentMessage` emits `changed`, which the `CommentController`
+  already listens to.
+- The three `Tool Definitions (8)` snapshots in `node/chat/thread.test.ts` became `(9)`.
+
 
 - Goal: `reply` is registered, gated on the new `comments` capability, available only to root chat threads; the root `NvimThread` supplies its `CommentStore` as the capability; replies append to the decoration (via the store's `changed` event) and render as a tool use in the thread.
 - Tests:
