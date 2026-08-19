@@ -14,6 +14,7 @@ const TAGGED_CONTENT: ReadonlyArray<
   ["<system-reminder>", "system_reminder"],
   ["<system-info>", "system_info"],
   ["<context_update>", "context_update"],
+  ["<comment_update>", "comment_update"],
   ["<fork-notification>", "fork_notification"],
 ];
 

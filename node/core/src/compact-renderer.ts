@@ -146,6 +146,7 @@ function renderContentBlock(
     case "system_reminder":
     case "system_info":
     case "fork_notification":
+    case "comment_update":
       return "";
 
     case "context_update": {

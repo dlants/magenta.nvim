@@ -18,6 +18,10 @@ import {
   type ToolRequestId,
 } from "@magenta/core";
 import {
+  jumpToComment,
+  renderCommentUpdate,
+} from "../comments/comment-update-view.ts";
+import {
   type ContextViewContext,
   contextFilesView,
   renderContextUpdate,
@@ -556,6 +560,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
         c.type === "system_reminder" ||
         c.type === "system_info" ||
         c.type === "context_update" ||
+        c.type === "comment_update" ||
         c.type === "fork_notification",
     );
 
@@ -581,6 +586,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
           c.type === "system_reminder" ||
           c.type === "system_info" ||
           c.type === "context_update" ||
+          c.type === "comment_update" ||
           c.type === "fork_notification",
       );
 
@@ -623,6 +629,20 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
         )
       : d``;
 
+    const commentUpdateView = renderCommentUpdate(viewState?.commentUpdates, {
+      expanded: viewState?.expandedCommentUpdates ?? {},
+      onToggle: (commentId) =>
+        dispatch({
+          type: "toggle-expand-comment-update",
+          messageIdx,
+          commentId,
+        }),
+      onJump: (entry) => {
+        jumpToComment(thread.context.nvim, entry).catch((err: Error) =>
+          thread.context.nvim.logger.error(err),
+        );
+      },
+    });
     const gitUpdateView = renderGitUpdate(viewState?.gitUpdate);
 
     // Render content blocks. For user messages we render auto-generated meta
@@ -660,6 +680,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
 ${roleHeader}\
 ${gitUpdateView}\
 ${contextUpdateView}\
+${commentUpdateView}\
 ${contentView}`;
 
     const renderedBody = isUserBlock
@@ -1135,7 +1156,8 @@ function renderMessageContentBlock(
     }
 
     case "context_update":
-      // Context updates are rendered via thread.state.messageViewState
+    case "comment_update":
+      // Rendered via thread.state.messageViewState
       return d``;
 
     default:

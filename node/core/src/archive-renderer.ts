@@ -95,6 +95,8 @@ function renderContentBlock(
 
     case "context_update":
       return `## context update\n${block.text}\n`;
+    case "comment_update":
+      return `## comment update\n${block.text}\n`;
 
     case "tool_use":
       return renderToolUse(block);

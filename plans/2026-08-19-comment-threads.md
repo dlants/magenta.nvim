@@ -541,7 +541,44 @@ Review follow-ups (stage 3):
   - `]c` from above the first comment lands on it; `[c` from below returns.
   - `:Magenta clear` is no longer offered in completion and `<leader>mc` no longer resolves to it.
 
-## Delivery to the agent
+## Delivery to the agent — DONE
+
+Implemented in `node/core/src/agent.ts` (`getCommentStore` dep, `appendCommentUpdates`,
+`commitCommentUpdates`), `node/core/src/thread.ts` (`Thread.commentStore`),
+`node/chat/thread.ts` (root threads own the store + controller, `onCommentUpdatesSent` ledger
+state), `node/comments/comment-update-view.ts` (new), `node/chat/thread-view.ts`,
+`node/chat/chat.ts` (`getActiveRootThread`), `node/magenta.ts` (controller lookup, `BufDelete`
+close). Tests in `node/comments/comment-delivery.test.ts`.
+
+Notes / deviations:
+
+- **`AgentDeps.getCommentStore` is a function**, not a `commentStore` field: the owning `Thread`
+  is handed a store after its first agent already exists, and compaction swaps the agent
+  underneath. `Thread.commentStore` is the durable holder; every agent reads it lazily, so a
+  post-compaction agent keeps delivering.
+- Comment content is appended to the same array `getAndPrepareContextUpdates` returns, so it
+  counts toward the `!hasContent && contextContent.length === 0` early-settle guard for free, and
+  the drain stays pure — `commitCommentUpdates()` runs only next to the three
+  `onContextUpdatesSent` / `onGitContextUpdateSent` sites, i.e. past that guard.
+- The second drain site is `buildToolResponseExtras`, which is what the plan called
+  `buildContinuationContent`.
+- A new `comment_update` provider content type (rather than reusing `context_update`) carries the
+  block, so the display buffer suppresses the raw text and the compaction / archive renderers can
+  treat it correctly. Registered in `tagged-content.ts` and handled in `anthropic.ts`,
+  `openai.ts`, `archive-renderer.ts`, `compact-renderer.ts` and `thread-view.ts`.
+- Root threads (`root` / `docker_root`) construct their own `CommentStore` + `CommentController`
+  in `NvimThread`'s constructor, replacing stage 3's temporary map on `Magenta`.
+  `Magenta.getCommentController()` now resolves through `Chat.getActiveRootThread()`.
+- Locations are refreshed before a send (`NvimThread`'s `send-message` case calls
+  `CommentController.refresh()`), but **only when the thread actually has comments** — an
+  unconditional async hop delayed the send enough to break abort-by-send.
+- `BufDelete`/`BufWipeout` now closes comments on the wiped buffer for every initialized thread,
+  not just the active one (`Magenta.onBufDelete`).
+- Pending markers needed no new work: the decoration already renders `(pending)` from
+  `store.pendingCommentIds()`, and `commitPending` emits `changed`, which re-stamps.
+- Not covered by an automated test: the compaction case (the store is re-read per agent, so it is
+  structurally covered) and the "line range reflects position after intervening edits" case,
+  which the refresh-before-send hook implements.
 
 - Goal: `AgentDeps.commentStore` exists and is drained alongside the context update in `handleSend` and `buildContinuationContent`; the root `NvimThread` constructs the store and hands it to the agent. Pending messages render as `pending` until committed.
 - Tests:

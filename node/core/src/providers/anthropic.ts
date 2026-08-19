@@ -381,6 +381,7 @@ export class AnthropicProvider implements Provider {
               });
               break;
 
+            case "comment_update":
             case "context_update":
               content.push({
                 type: "text",

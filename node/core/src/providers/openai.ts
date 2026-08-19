@@ -265,6 +265,7 @@ export function convertProviderMessagesToInput(
 
         case "system_reminder":
         case "system_info":
+        case "comment_update":
         case "context_update":
         case "fork_notification":
           if (message.role === "user") {

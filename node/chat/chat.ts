@@ -1351,6 +1351,16 @@ ${rows}${loadMore}`;
     return this.getRootAncestorId(this.getActiveThread().id);
   }
 
+  /** The root ancestor of the active thread — the thread that owns the
+   * comment store, since comments belong to a root conversation. */
+  getActiveRootThread(): NvimThread {
+    const threadWrapper = this.threadWrappers[this.getActiveRootThreadId()];
+    if (!(threadWrapper && threadWrapper.state === "initialized")) {
+      throw new Error(`Root thread not initialized yet...`);
+    }
+    return threadWrapper.thread;
+  }
+
   getActiveThread(): NvimThread {
     if (!this.state.activeThreadId) {
       throw new Error(`Chat is not initialized yet... no active thread`);

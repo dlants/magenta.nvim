@@ -7,6 +7,8 @@ import type {
   ThreadSupervisor,
 } from "@magenta/core";
 import {
+  CommentStore,
+  type CommentUpdateEntry,
   type ContextFiles,
   type ContextManager,
   composeSupervisors,
@@ -25,6 +27,7 @@ import * as diff from "diff";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import type { Lsp } from "../capabilities/lsp.ts";
 import type { SandboxViolationHandler } from "../capabilities/sandbox-violation-handler.ts";
+import { CommentController } from "../comments/comment-controller.ts";
 import type { FileUpdates } from "../context/context-manager.ts";
 import { createLocalEnvironment, type Environment } from "../environment.ts";
 import { displaySnapshotDiff } from "../nvim/displaySnapshotDiff.ts";
@@ -108,6 +111,11 @@ export type Msg =
       filePath: string;
     }
   | {
+      type: "toggle-expand-comment-update";
+      messageIdx: number;
+      commentId: string;
+    }
+  | {
       type: "toggle-tool-input-summary";
       toolRequestId: ToolRequestId;
     }
@@ -186,9 +194,11 @@ export type ThreadMsg = {
 /** View state for a single message, stored separately from provider thread content */
 export type MessageViewState = {
   contextUpdates?: FileUpdates;
+  commentUpdates?: CommentUpdateEntry[];
   gitUpdate?: GitContextUpdate;
   forkedFrom?: ThreadId;
   expandedUpdates?: { [absFilePath: string]: boolean };
+  expandedCommentUpdates?: { [commentId: string]: boolean };
   expandedContent?: { [contentIdx: number]: boolean };
 };
 
@@ -227,6 +237,9 @@ export class NvimThread {
   private myDispatch: Dispatch<Msg>;
   private lastAppliedTitle: string | undefined;
   public sandboxViolationHandler: SandboxViolationHandler | undefined;
+  /** The side conversations anchored in buffers. Root chat threads only:
+   * subagents and subthreads neither see comments nor can reply to them. */
+  public commentController: CommentController | undefined;
   public sandboxBypassed = false;
 
   get contextManager(): ContextManager {
@@ -359,6 +372,17 @@ export class NvimThread {
       );
     }
 
+    if (threadType === "root" || threadType === "docker_root") {
+      const commentStore = new CommentStore();
+      this.commentController = new CommentController(
+        context.nvim,
+        context.cwd,
+        context.homeDir,
+        commentStore,
+      );
+      this.core.commentStore = commentStore;
+    }
+
     this.core.hooks = composeSupervisors(() => this.supervisors);
 
     this.rebuildToolResultMap();
@@ -423,6 +447,13 @@ export class NvimThread {
         this.state.messageViewState[messageCount] = {
           ...this.state.messageViewState[messageCount],
           contextUpdates: updates,
+        };
+      },
+      onCommentUpdatesSent: (entries) => {
+        const messageCount = this.core.getProviderMessages().length;
+        this.state.messageViewState[messageCount] = {
+          ...this.state.messageViewState[messageCount],
+          commentUpdates: entries,
         };
       },
       onGitContextUpdateSent: (update) => {
@@ -668,6 +699,7 @@ export class NvimThread {
       this.renderDebounceTimer = undefined;
     }
 
+    await this.commentController?.destroy();
     await this.core.destroy();
   }
 
@@ -724,12 +756,26 @@ export class NvimThread {
         if (msg.messages.length) {
           this.scrollAfterMessageCount = this.core.getProviderMessages().length;
         }
-        this.core
-          .send(msg.messages, msg.queue ? { queue: msg.queue } : {})
-          .then(
-            (result) => this.handleSendResult(result),
-            (e: Error) => this.context.nvim.logger.error(e),
-          );
+        // The drain reads the comment locations core already holds, so they
+        // have to be current before the request goes out. Nothing to refresh
+        // means nothing to wait for: the send must stay synchronous, or an
+        // abort-by-send races the turn it is meant to preempt.
+        {
+          const send = () =>
+            this.core
+              .send(msg.messages, msg.queue ? { queue: msg.queue } : {})
+              .then(
+                (result) => this.handleSendResult(result),
+                (e: Error) => this.context.nvim.logger.error(e),
+              );
+          if (this.commentController?.hasComments()) {
+            this.commentController
+              .refresh()
+              .then(send, (e: Error) => this.context.nvim.logger.error(e));
+          } else {
+            void send();
+          }
+        }
         return;
 
       case "start-compaction":
@@ -788,6 +834,15 @@ export class NvimThread {
         return;
       }
 
+      case "toggle-expand-comment-update": {
+        const viewState = this.state.messageViewState[msg.messageIdx] || {};
+        viewState.expandedCommentUpdates =
+          viewState.expandedCommentUpdates || {};
+        viewState.expandedCommentUpdates[msg.commentId] =
+          !viewState.expandedCommentUpdates[msg.commentId];
+        this.state.messageViewState[msg.messageIdx] = viewState;
+        return;
+      }
       case "toggle-expand-update": {
         const viewState = this.state.messageViewState[msg.messageIdx] || {};
         viewState.expandedUpdates = viewState.expandedUpdates || {};

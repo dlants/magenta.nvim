@@ -11,6 +11,10 @@ import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
 import type { CompactionRecord } from "./compaction-controller.ts";
 import type {
+  CommentStore,
+  CommentUpdateEntry,
+} from "./context/comment-store.ts";
+import type {
   ContextManager,
   Files,
   FileUpdates,
@@ -147,6 +151,7 @@ export type EnvironmentConfig =
  * than a broadcast channel. */
 export type ContextUpdateSink = {
   onContextUpdatesSent?: (updates: FileUpdates) => void;
+  onCommentUpdatesSent?: (entries: CommentUpdateEntry[]) => void;
   onGitContextUpdateSent?: (update: GitContextUpdate) => void;
 };
 export interface AgentContext {
@@ -253,6 +258,10 @@ export interface AgentDeps {
   /** "Something visible moved." Unthrottled: the recipient coalesces with a
    * trailing-edge debounce. */
   onUpdate: OnUpdate;
+  /** The root thread's side conversations, drained alongside the context
+   * update. A function because the owning `Thread` may be handed one after
+   * its first agent exists, and compaction swaps the agent underneath. */
+  getCommentStore?: () => CommentStore | undefined;
   contextUpdateSink: ContextUpdateSink;
   /** Whether this agent drives a brand-new runner or one cloned from another
    * thread's history. */
@@ -1144,6 +1153,7 @@ export class Agent {
     if (gitUpdate) {
       this.deps.contextUpdateSink.onGitContextUpdateSent?.(gitUpdate);
     }
+    this.commitCommentUpdates();
 
     const isFirstMessage = this.getProviderMessages().length === 0;
     const contentToSend: AgentInput[] = [...contextContent];
@@ -1247,6 +1257,7 @@ export class Agent {
 
     const contextUpdates = await this.contextManager.getContextUpdate();
     if (Object.keys(contextUpdates).length === 0) {
+      this.appendCommentUpdates(content);
       return { content, updates: undefined, gitUpdate };
     }
 
@@ -1264,7 +1275,36 @@ export class Agent {
       }
     }
 
+    this.appendCommentUpdates(content);
     return { content, updates: contextUpdates, gitUpdate };
+  }
+
+  /** The `<comment_update>` block, if the user has undelivered comments. Pure:
+   * nothing is marked delivered until `commitCommentUpdates` runs, past the
+   * early-settle guard. */
+  private appendCommentUpdates(content: AgentInput[]): void {
+    const store = this.deps.getCommentStore?.();
+    if (!store) return;
+    for (const part of store.getPendingUpdate()) {
+      if (part.type === "text") {
+        content.push({
+          type: "text",
+          text: part.text,
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        });
+      }
+    }
+  }
+
+  /** Mark the comment messages that rode out on this request as delivered, and
+   * hand the structured entries to the owner's display ledger. */
+  private commitCommentUpdates(): void {
+    const store = this.deps.getCommentStore?.();
+    if (!store) return;
+    const entries = store.commitPending();
+    if (entries.length) {
+      this.deps.contextUpdateSink.onCommentUpdatesSent?.(entries);
+    }
   }
 
   /** The union of transient get_files-read reminders and reminders derived from
@@ -1340,6 +1380,7 @@ export class Agent {
       if (gitUpdate) {
         this.deps.contextUpdateSink.onGitContextUpdateSent?.(gitUpdate);
       }
+      this.commitCommentUpdates();
       return contentToSend;
     }
 
@@ -1383,6 +1424,7 @@ export class Agent {
     if (gitUpdate) {
       this.deps.contextUpdateSink.onGitContextUpdateSent?.(gitUpdate);
     }
+    this.commitCommentUpdates();
 
     return contentToSend;
   }

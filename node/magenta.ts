@@ -2,7 +2,6 @@ import * as os from "node:os";
 import type { SandboxAskCallback } from "@anthropic-ai/sandbox-runtime";
 import type { InputMessage, NativeMessageIdx, ThreadId } from "@magenta/core";
 import {
-  CommentStore,
   isThreadId,
   probeAndSaveClipboardImage,
   readArchivedThreadLog,
@@ -23,7 +22,7 @@ import { StraceUnavailableError } from "./capabilities/strace.ts";
 import { Chat } from "./chat/chat.ts";
 import { CommandRegistry } from "./chat/commands/registry.ts";
 import type { NvimThread } from "./chat/thread.ts";
-import { CommentController } from "./comments/comment-controller.ts";
+import type { CommentController } from "./comments/comment-controller.ts";
 import { CommentInput } from "./comments/comment-input.ts";
 import {
   type BufNr,
@@ -147,10 +146,6 @@ export class Magenta {
   public commandRegistry: CommandRegistry;
   public optionsLoader: DynamicOptionsLoader;
   public activeBuffers: { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer };
-  /** One comment store + controller per root thread. Stage 4 of the comment
-   * plan moves ownership of the store into `NvimThread`; until it is drained
-   * by the agent, `Magenta` holds it so the UI has something to talk to. */
-  private commentControllers: { [threadId: ThreadId]: CommentController } = {};
   private commentInput: CommentInput | undefined;
   private suppressDispatchRender = false;
 
@@ -952,20 +947,14 @@ ${lines.join("\n")}
     }
   }
 
-  /** The comment controller for the active root thread, created on demand. */
+  /** The comment controller of the active root thread. Root threads own their
+   * comments: the store they hold is the one the agent drains. */
   getCommentController(): CommentController {
-    const rootId = this.chat.getActiveRootThreadId();
-    let controller = this.commentControllers[rootId];
-    if (!controller) {
-      controller = new CommentController(
-        this.nvim,
-        this.cwd,
-        this.homeDir,
-        new CommentStore(),
-      );
-      this.commentControllers[rootId] = controller;
+    const thread = this.chat.getActiveRootThread();
+    if (!thread.commentController) {
+      throw new Error(`Thread ${thread.id} does not own comments`);
     }
-    return controller;
+    return thread.commentController;
   }
 
   /** `<leader>mc`: open the authoring float over the cursor line or selection. */
@@ -1050,6 +1039,13 @@ ${lines.join("\n")}
 
   /** Recover or unregister the view identity associated with a deleted buffer. */
   async onBufDelete(bufNr: BufNr): Promise<void> {
+    // A comment cannot outlive its buffer, and every root thread has to hear
+    // about it — not just the active one.
+    for (const wrapper of Object.values(this.chat.threadWrappers)) {
+      if (wrapper.state === "initialized") {
+        await wrapper.thread.commentController?.closeBuffer(bufNr);
+      }
+    }
     const bufInfo = this.bufferManager.lookupBuffer(bufNr);
     if (!bufInfo) return;
 

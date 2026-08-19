@@ -398,6 +398,16 @@ export class CommentController {
     });
   }
 
+  hasComments(): boolean {
+    return this.store.listOpenCommentIds().length > 0;
+  }
+
+  /** Re-read every anchor and re-stamp. Called before a request goes out, so
+   * the locations core delivers are the comments' current positions. */
+  refresh(): Promise<void> {
+    return this.refreshAll();
+  }
+
   async show(): Promise<void> {
     this.visible = true;
     await this.refreshAll();

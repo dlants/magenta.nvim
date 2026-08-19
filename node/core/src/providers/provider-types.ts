@@ -112,6 +112,12 @@ export type ProviderContextUpdateContent = {
   nativeMessageIdx: NativeMessageIdx;
 };
 
+export type ProviderCommentUpdateContent = {
+  type: "comment_update";
+  text: string;
+  nativeMessageIdx: NativeMessageIdx;
+};
+
 export type ProviderForkNotificationContent = {
   type: "fork_notification";
   text: string;
@@ -202,6 +208,7 @@ export type ProviderMessageContent =
   | ProviderSystemReminderContent
   | ProviderSystemInfoContent
   | ProviderContextUpdateContent
+  | ProviderCommentUpdateContent
   | ProviderForkNotificationContent;
 
 export interface Provider {

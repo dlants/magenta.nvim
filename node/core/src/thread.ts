@@ -13,6 +13,7 @@ import type {
   CompactionStep,
 } from "./compaction-controller.ts";
 import { CompactionManager } from "./compaction-manager.ts";
+import type { CommentStore } from "./context/comment-store.ts";
 import { buildClonedFiles, ContextManager } from "./context/context-manager.ts";
 import { GitTracker } from "./context/git-tracker.ts";
 import type { EdlRegisters } from "./edl/index.ts";
@@ -89,6 +90,10 @@ export class Thread {
   public state: ThreadState;
   public agent: Agent;
   public contextManager: ContextManager;
+  /** The root thread's side conversations. Set by the owner right after
+   * construction (only root chat threads have one); read lazily by every
+   * agent this thread creates, including post-compaction ones. */
+  public commentStore: CommentStore | undefined;
   public gitTracker: GitTracker;
   public compactionController: CompactionManager | undefined;
   /** The owner's answers to the agent's three questions. Composed from a
@@ -328,6 +333,7 @@ export class Thread {
       state: this.state,
       contextManager: this.contextManager,
       gitTracker: this.gitTracker,
+      getCommentStore: () => this.commentStore,
       structuredToolResults: this.structuredToolResults,
       getHooks: () => this.hooks,
       onUpdate: () => this.handleUpdate(),
@@ -337,6 +343,9 @@ export class Thread {
           : {}),
         ...(this.callbacks.onGitContextUpdateSent
           ? { onGitContextUpdateSent: this.callbacks.onGitContextUpdateSent }
+          : {}),
+        ...(this.callbacks.onCommentUpdatesSent
+          ? { onCommentUpdatesSent: this.callbacks.onCommentUpdatesSent }
           : {}),
       },
       runnerInit,
