@@ -161,10 +161,8 @@ describe("CommentController", () => {
       await controller.refreshBuffer(buffer.id);
 
       expect(store.comments[id].location.state).toEqual("stale");
-      const parts = store.getPendingUpdate();
-      expect(parts[0].type === "text" && parts[0].text).toContain(
-        "the commented range was deleted",
-      );
+      const parts = store.getPendingUpdate() ?? "";
+      expect(parts).toContain("the commented range was deleted");
       expect(await virtLines(buffer)).toContain(
         "  (stale: the commented range was deleted)",
       );
@@ -320,11 +318,9 @@ describe("CommentController", () => {
       await buffer.delete({ force: true });
 
       expect(store.listOpenCommentIds()).toEqual([]);
-      const parts = store.getPendingUpdate();
-      expect(parts[0].type === "text" && parts[0].text).toContain(`${id} `);
-      expect(parts[0].type === "text" && parts[0].text).toContain(
-        "closed: buffer unloaded",
-      );
+      const parts = store.getPendingUpdate() ?? "";
+      expect(parts).toContain(`${id} `);
+      expect(parts).toContain("closed: buffer unloaded");
 
       // reopening the same path does not restore the comment
       const reopened = await NvimBuffer.bufadd(file as AbsFilePath, nvim);

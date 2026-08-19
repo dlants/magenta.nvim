@@ -950,11 +950,7 @@ ${lines.join("\n")}
   /** The comment controller of the active root thread. Root threads own their
    * comments: the store they hold is the one the agent drains. */
   getCommentController(): CommentController {
-    const thread = this.chat.getActiveRootThread();
-    if (!thread.commentController) {
-      throw new Error(`Thread ${thread.id} does not own comments`);
-    }
-    return thread.commentController;
+    return this.chat.getActiveRootThread().commentController;
   }
 
   /** `<leader>mc`: open the authoring float over the cursor line or selection. */

@@ -112,6 +112,10 @@ export type ProviderContextUpdateContent = {
   nativeMessageIdx: NativeMessageIdx;
 };
 
+/** Like `context_update`, this is only ever *constructed* by
+ * `classifyTextContent`: the block leaves as plain text (the wire format has
+ * nothing else), and is re-tagged on the way back into `ProviderMessage[]` so
+ * the view can suppress it rather than render it verbatim. */
 export type ProviderCommentUpdateContent = {
   type: "comment_update";
   text: string;

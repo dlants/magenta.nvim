@@ -27,11 +27,7 @@ function staleLoc(): CommentLocation {
 }
 
 function text(store: CommentStore): string {
-  const parts = store.getPendingUpdate();
-  if (parts.length === 0) return "";
-  const part = parts[0];
-  if (part.type !== "text") throw new Error("expected text");
-  return part.text;
+  return store.getPendingUpdate() ?? "";
 }
 
 describe("CommentStore", () => {
@@ -52,7 +48,7 @@ describe("CommentStore", () => {
     const a = store.addComment(loc(), "first");
     const b = store.addComment(loc({ bufferLabel: "node/bar.ts" }), "second");
 
-    expect(store.getPendingUpdate()).toHaveLength(1);
+    expect(store.getPendingUpdate()).toBeDefined();
     const out = text(store);
     expect(out.indexOf(`${a} node/foo.ts`)).toBeLessThan(
       out.indexOf(`${b} node/bar.ts`),
@@ -67,7 +63,7 @@ describe("CommentStore", () => {
     const entries = store.commitPending();
     expect(entries).toMatchObject([{ commentId: id, status: "new-messages" }]);
     expect(store.pendingCommentIds()).toEqual([]);
-    expect(store.getPendingUpdate()).toEqual([]);
+    expect(store.getPendingUpdate()).toBeUndefined();
 
     store.addUserMessage(id, "follow up");
     expect(text(store)).toContain("<user>follow up</user>");
@@ -84,7 +80,7 @@ describe("CommentStore", () => {
       value: undefined,
     });
     expect(store.comments[id].messages).toHaveLength(2);
-    expect(store.getPendingUpdate()).toEqual([]);
+    expect(store.getPendingUpdate()).toBeUndefined();
   });
 
   it("errors on a reply to an unknown comment", () => {
@@ -112,7 +108,7 @@ describe("CommentStore", () => {
     expect(text(store)).toContain(`${id} node/foo.ts:41-42 (deleted)`);
 
     store.commitPending();
-    expect(store.getPendingUpdate()).toEqual([]);
+    expect(store.getPendingUpdate()).toBeUndefined();
   });
 
   it("reports an unloaded buffer as closed", () => {

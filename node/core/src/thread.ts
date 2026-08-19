@@ -13,7 +13,7 @@ import type {
   CompactionStep,
 } from "./compaction-controller.ts";
 import { CompactionManager } from "./compaction-manager.ts";
-import type { CommentStore } from "./context/comment-store.ts";
+import { CommentStore } from "./context/comment-store.ts";
 import { buildClonedFiles, ContextManager } from "./context/context-manager.ts";
 import { GitTracker } from "./context/git-tracker.ts";
 import type { EdlRegisters } from "./edl/index.ts";
@@ -90,10 +90,11 @@ export class Thread {
   public state: ThreadState;
   public agent: Agent;
   public contextManager: ContextManager;
-  /** The root thread's side conversations. Set by the owner right after
-   * construction (only root chat threads have one); read lazily by every
-   * agent this thread creates, including post-compaction ones. */
-  public commentStore: CommentStore | undefined;
+  /** The root thread's side conversations — only root chat threads have one,
+   * which is why it is derived from the thread type here rather than handed in.
+   * Read lazily by every agent this thread creates, including post-compaction
+   * ones, so a compaction keeps delivering into the same store. */
+  public readonly commentStore: CommentStore | undefined;
   public gitTracker: GitTracker;
   public compactionController: CompactionManager | undefined;
   /** The owner's answers to the agent's three questions. Composed from a
@@ -119,6 +120,10 @@ export class Thread {
      * agent configuration, so it is not part of the context bag. */
     private archiveOptions: ThreadArchiveOptions = {},
   ) {
+    this.commentStore =
+      context.threadType === "root" || context.threadType === "docker_root"
+        ? new CommentStore()
+        : undefined;
     const forkProvenance = init.type === "clone" ? init.provenance : undefined;
     this.threadLogger = new ThreadLogger(
       id,

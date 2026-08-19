@@ -7,7 +7,7 @@ import type {
   ThreadSupervisor,
 } from "@magenta/core";
 import {
-  CommentStore,
+  type CommentId,
   type CommentUpdateEntry,
   type ContextFiles,
   type ContextManager,
@@ -113,7 +113,7 @@ export type Msg =
   | {
       type: "toggle-expand-comment-update";
       messageIdx: number;
-      commentId: string;
+      commentId: CommentId;
     }
   | {
       type: "toggle-tool-input-summary";
@@ -198,7 +198,7 @@ export type MessageViewState = {
   gitUpdate?: GitContextUpdate;
   forkedFrom?: ThreadId;
   expandedUpdates?: { [absFilePath: string]: boolean };
-  expandedCommentUpdates?: { [commentId: string]: boolean };
+  expandedCommentUpdates?: { [commentId: CommentId]: boolean };
   expandedContent?: { [contentIdx: number]: boolean };
 };
 
@@ -211,6 +211,12 @@ export type ToolViewState = {
   resultExpanded: boolean;
   resultItemExpanded?: { [key: string]: boolean };
   progressItemExpanded?: { [key: string]: boolean };
+};
+
+/** A thread that owns comments — a root thread. Reached through
+ * `NvimThread.isRootThread()` or `Chat.getActiveRootThread()`. */
+export type RootNvimThread = NvimThread & {
+  commentController: CommentController;
 };
 
 export class NvimThread {
@@ -240,6 +246,12 @@ export class NvimThread {
   /** The side conversations anchored in buffers. Root chat threads only:
    * subagents and subthreads neither see comments nor can reply to them. */
   public commentController: CommentController | undefined;
+  /** True exactly when the core thread owns a comment store, i.e. for root
+   * threads. Narrowing through this is what lets comment callers reach a
+   * `CommentController` without a runtime check of their own. */
+  isRootThread(): this is RootNvimThread {
+    return this.commentController !== undefined;
+  }
   public sandboxBypassed = false;
 
   get contextManager(): ContextManager {
@@ -372,15 +384,13 @@ export class NvimThread {
       );
     }
 
-    if (threadType === "root" || threadType === "docker_root") {
-      const commentStore = new CommentStore();
+    if (this.core.commentStore) {
       this.commentController = new CommentController(
         context.nvim,
         context.cwd,
         context.homeDir,
-        commentStore,
+        this.core.commentStore,
       );
-      this.core.commentStore = commentStore;
     }
 
     this.core.hooks = composeSupervisors(() => this.supervisors);

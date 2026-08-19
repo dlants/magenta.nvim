@@ -1,6 +1,4 @@
 import { Emitter } from "../emitter.ts";
-import type { ProviderMessageContent } from "../providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Result } from "../utils/result.ts";
 
@@ -218,9 +216,10 @@ export class CommentStore extends Emitter<CommentStoreEvents> {
     return this.buildEntries().length > 0;
   }
 
-  /** The single `<comment_update>` content part for undelivered messages. Pure. */
-  getPendingUpdate(): ProviderMessageContent[] {
-    return commentUpdatesToContent(this.buildEntries());
+  /** The `<comment_update>` block for undelivered messages, or undefined when
+   * nothing is pending. Pure. */
+  getPendingUpdate(): string | undefined {
+    return commentUpdatesToText(this.buildEntries());
   }
 
   /** Marks everything `getPendingUpdate` would return as delivered, and returns
@@ -254,11 +253,11 @@ export class CommentStore extends Emitter<CommentStoreEvents> {
   }
 }
 
-export function commentUpdatesToContent(
+export function commentUpdatesToText(
   entries: CommentUpdateEntry[],
-): ProviderMessageContent[] {
+): string | undefined {
   if (entries.length === 0) {
-    return [];
+    return undefined;
   }
   const manifest = entries
     .map(
@@ -293,13 +292,7 @@ ${messages}`);
   const header = `\
 These are comments the user has left on ranges of buffers. Use the \`reply\` tool to answer. You will be notified if comments change.`;
 
-  return [
-    {
-      type: "text",
-      text: `<comment_update>\n${header}\n<summary>\n${manifest}\n</summary>${
-        bodies.length ? `\n${bodies.join("\n")}` : ""
-      }\n</comment_update>`,
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    },
-  ];
+  return `<comment_update>\n${header}\n<summary>\n${manifest}\n</summary>${
+    bodies.length ? `\n${bodies.join("\n")}` : ""
+  }\n</comment_update>`;
 }

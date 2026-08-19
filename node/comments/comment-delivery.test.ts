@@ -264,4 +264,132 @@ describe("comment delivery", () => {
       second.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
     });
   });
+  it("does not re-queue a comment when the turn it rode out on is aborted", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      await openPoem(driver);
+      await comment(driver, 1, "why is this here?");
+      await driver.inputMagentaText("take a look");
+      await driver.send();
+      const first = await driver.mockAnthropic.awaitPendingStream();
+      expect(commentUpdateText(first)).toContain(
+        "<user>why is this here?</user>",
+      );
+      await driver.abort();
+      // The block was appended to the message history before the request went
+      // out, so aborting does not lose it — and it is not queued a second
+      // time, which would duplicate it in the next request.
+      await driver.inputMagentaText("actually, nevermind");
+      await driver.send();
+      const second = await driver.mockAnthropic.awaitPendingStream();
+      const blocks = second
+        .getProviderMessages()
+        .flatMap((m) => m.content)
+        .filter((c) => c.type === "comment_update");
+      expect(blocks.length).toBe(1);
+      expect(blocks[0].text).toContain("<user>why is this here?</user>");
+      second.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
+    });
+  });
+
+  it("preempts an in-flight turn when the send carries pending comments", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      await openPoem(driver);
+      await driver.inputMagentaText("get started");
+      await driver.send();
+      const first = await driver.mockAnthropic.awaitPendingStream();
+      await driver.editFile("poem.txt");
+      await comment(driver, 1, "stop, look at this");
+      // The refresh-before-send hop must not delay the send past the abort:
+      // this send is what preempts the running turn.
+      await driver.inputMagentaText("hold on");
+      await driver.send();
+      await pollUntil(() => {
+        if (!first.aborted) throw new Error("first turn not aborted");
+      });
+      const second = await driver.mockAnthropic.awaitPendingStream();
+      expect(commentUpdateText(second)).toContain(
+        "<user>stop, look at this</user>",
+      );
+      second.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
+    });
+  });
+
+  it("closes comments on a wiped buffer for every root thread", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      const { bufnr } = await openPoem(driver);
+      await comment(driver, 1, "thread A comment");
+      const controllerA = driver.magenta.getCommentController();
+      await driver.magenta.command("new-thread");
+      await driver.editFile("poem.txt");
+      await comment(driver, 3, "thread B comment");
+      const controllerB = driver.magenta.getCommentController();
+      expect(controllerB).not.toBe(controllerA);
+      await driver.command(`bwipeout! ${bufnr}`);
+      for (const controller of [controllerA, controllerB]) {
+        expect(controller.store.listOpenCommentIds()).toEqual([]);
+        expect(controller.store.getPendingUpdate()).toContain(
+          "(closed: buffer unloaded)",
+        );
+      }
+    });
+  });
+  it("keeps delivering after a compaction swaps the agent", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      await openPoem(driver);
+      await driver.inputMagentaText("what is 2+2?");
+      await driver.send();
+      (await driver.mockAnthropic.awaitPendingStream()).respond({
+        stopReason: "end_turn",
+        text: "4",
+        toolRequests: [],
+      });
+      await driver.assertDisplayBufferContains("4");
+      await driver.inputMagentaText("@compact keep going");
+      await driver.send();
+      const subagent = await driver.mockAnthropic.awaitPendingStream();
+      subagent.respond({
+        stopReason: "tool_use",
+        text: "compacting",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "edl_1" as never,
+              toolName: "edl" as never,
+              input: {
+                script:
+                  "file `/summary.md`\nselect bof-eof\nreplace <<S\n# Summary\narithmetic\nS",
+              },
+            },
+          },
+        ],
+      });
+      (await driver.mockAnthropic.awaitPendingStream()).respond({
+        stopReason: "end_turn",
+        text: "done",
+        toolRequests: [],
+      });
+      (await driver.mockAnthropic.awaitPendingStream()).respond({
+        stopReason: "end_turn",
+        text: "ok",
+        toolRequests: [],
+      });
+      await driver.assertDisplayBufferContains("ok");
+      // The post-compaction agent reads the thread's store lazily, so a
+      // comment left now still rides out.
+      await driver.editFile("poem.txt");
+      await comment(driver, 1, "post-compaction comment");
+      await driver.inputMagentaText("and this?");
+      await driver.send();
+      const after = await driver.mockAnthropic.awaitPendingStream();
+      expect(commentUpdateText(after)).toContain(
+        "<user>post-compaction comment</user>",
+      );
+      after.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
+    });
+  });
 });

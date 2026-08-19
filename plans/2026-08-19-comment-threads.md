@@ -576,9 +576,32 @@ Notes / deviations:
   not just the active one (`Magenta.onBufDelete`).
 - Pending markers needed no new work: the decoration already renders `(pending)` from
   `store.pendingCommentIds()`, and `commitPending` emits `changed`, which re-stamps.
-- Not covered by an automated test: the compaction case (the store is re-read per agent, so it is
-  structurally covered) and the "line range reflects position after intervening edits" case,
-  which the refresh-before-send hook implements.
+- Not covered by an automated test: the "line range reflects position after intervening edits"
+  case, which the refresh-before-send hook implements.
+
+Review follow-ups (stage 4):
+
+- `CommentStore.getPendingUpdate()` returns `string | undefined` (and `commentUpdatesToContent`
+  became `commentUpdatesToText`), so `Agent.appendCommentUpdates` no longer filters a wide
+  `ProviderMessageContent[]` for the one text part the producer always emits.
+- The store is no longer handed to the core `Thread` after construction: `Thread` derives
+  `readonly commentStore` from its own `threadType` (root / docker_root), which encodes "only root
+  threads have comments" in one place and makes the fork path work without extra plumbing.
+  `AgentDeps.getCommentStore` is now a required prop returning `CommentStore | undefined`.
+- `NvimThread.isRootThread()` narrows to a new `RootNvimThread` type (a thread with a required
+  `commentController`); `Chat.getActiveRootThread()` returns that, so `Magenta.getCommentController`
+  has no runtime throw of its own.
+- `toggle-expand-comment-update` / `expandedCommentUpdates` / `renderCommentUpdate` all key on the
+  branded `CommentId` instead of `string`.
+- `ProviderCommentUpdateContent` is kept (dropping it would make the display buffer render the raw
+  block); a comment records that, like `context_update`, it is only ever constructed by
+  `classifyTextContent` on the way back from the wire. The `null` in `jumpToComment` is likewise
+  kept with a note that it is the lua-`nil` boundary.
+- New tests in `node/comments/comment-delivery.test.ts`: an aborted turn does not re-queue the
+  block (it lives in the message history, so it is delivered exactly once); a send carrying pending
+  comments still preempts an in-flight turn (the refresh-before-send async branch); a wiped buffer
+  closes comments in *two* root threads, not just the active one; and a comment left after a
+  compaction still rides out on the next request.
 
 - Goal: `AgentDeps.commentStore` exists and is drained alongside the context update in `handleSend` and `buildContinuationContent`; the root `NvimThread` constructs the store and hands it to the agent. Pending messages render as `pending` until committed.
 - Tests:

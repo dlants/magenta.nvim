@@ -261,7 +261,7 @@ export interface AgentDeps {
   /** The root thread's side conversations, drained alongside the context
    * update. A function because the owning `Thread` may be handed one after
    * its first agent exists, and compaction swaps the agent underneath. */
-  getCommentStore?: () => CommentStore | undefined;
+  getCommentStore: () => CommentStore | undefined;
   contextUpdateSink: ContextUpdateSink;
   /** Whether this agent drives a brand-new runner or one cloned from another
    * thread's history. */
@@ -1283,23 +1283,19 @@ export class Agent {
    * nothing is marked delivered until `commitCommentUpdates` runs, past the
    * early-settle guard. */
   private appendCommentUpdates(content: AgentInput[]): void {
-    const store = this.deps.getCommentStore?.();
-    if (!store) return;
-    for (const part of store.getPendingUpdate()) {
-      if (part.type === "text") {
-        content.push({
-          type: "text",
-          text: part.text,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        });
-      }
-    }
+    const text = this.deps.getCommentStore()?.getPendingUpdate();
+    if (text === undefined) return;
+    content.push({
+      type: "text",
+      text,
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    });
   }
 
   /** Mark the comment messages that rode out on this request as delivered, and
    * hand the structured entries to the owner's display ledger. */
   private commitCommentUpdates(): void {
-    const store = this.deps.getCommentStore?.();
+    const store = this.deps.getCommentStore();
     if (!store) return;
     const entries = store.commitPending();
     if (entries.length) {

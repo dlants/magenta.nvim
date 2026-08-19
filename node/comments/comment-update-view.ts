@@ -1,4 +1,4 @@
-import type { CommentUpdateEntry } from "@magenta/core";
+import type { CommentId, CommentUpdateEntry } from "@magenta/core";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import { d, type VDOMNode, withBindings, withInlineCode } from "../tea/view.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
@@ -60,6 +60,7 @@ if line then
 end`,
     [
       location.bufnr,
+      // `null` (not `undefined`) so it crosses the RPC boundary as lua `nil`.
       location.state === "anchored" ? location.lines.start : null,
     ],
   ]);
@@ -73,8 +74,8 @@ end`,
 export function renderCommentUpdate(
   entries: CommentUpdateEntry[] | undefined,
   view: {
-    expanded: { [commentId: string]: boolean };
-    onToggle: (commentId: string) => void;
+    expanded: { [commentId: CommentId]: boolean };
+    onToggle: (commentId: CommentId) => void;
     onJump: (entry: CommentUpdateEntry) => void;
   },
 ): VDOMNode {

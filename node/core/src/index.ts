@@ -101,7 +101,7 @@ export {
   CommentStore,
   type CommentStoreEvents,
   type CommentUpdateEntry,
-  commentUpdatesToContent,
+  commentUpdatesToText,
 } from "./context/comment-store.ts";
 export {
   buildClonedFiles,

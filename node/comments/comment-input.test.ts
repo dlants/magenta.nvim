@@ -503,6 +503,13 @@ describe("comment input", () => {
       ).find((id) => id !== rootId);
       expect(childId).toBeDefined();
       await driver.magenta.selectThreadEffect(childId as ThreadId);
+      // the subagent thread initializes asynchronously
+      await pollUntil(() => {
+        const wrapper = driver.magenta.chat.threadWrappers[childId as ThreadId];
+        if (wrapper?.state !== "initialized") {
+          throw new Error("child thread not initialized");
+        }
+      });
       // a subagent resolves to its root's controller, so it sees the same
       // comments rather than starting an empty side conversation
       expect(driver.magenta.getCommentController()).toBe(rootController);

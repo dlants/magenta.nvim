@@ -60,7 +60,7 @@ import type {
 import { shortenPath } from "../utils/files.ts";
 import { formatTokenCount } from "../utils/tokens.ts";
 import type { SandboxRoot } from "./thread.ts";
-import { NvimThread } from "./thread.ts";
+import { NvimThread, type RootNvimThread } from "./thread.ts";
 import { DockerSupervisor } from "./thread-supervisor.ts";
 import { view as threadView } from "./thread-view.ts";
 
@@ -1353,12 +1353,16 @@ ${rows}${loadMore}`;
 
   /** The root ancestor of the active thread — the thread that owns the
    * comment store, since comments belong to a root conversation. */
-  getActiveRootThread(): NvimThread {
+  getActiveRootThread(): RootNvimThread {
     const threadWrapper = this.threadWrappers[this.getActiveRootThreadId()];
     if (!(threadWrapper && threadWrapper.state === "initialized")) {
       throw new Error(`Root thread not initialized yet...`);
     }
-    return threadWrapper.thread;
+    const thread = threadWrapper.thread;
+    if (!thread.isRootThread()) {
+      throw new Error(`Thread ${thread.id} is not a root thread`);
+    }
+    return thread;
   }
 
   getActiveThread(): NvimThread {
