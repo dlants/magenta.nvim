@@ -95,7 +95,7 @@ export async function renderComment({
   comment: Comment;
   extent: CommentExtent;
   pending: boolean;
-  maxMessages?: number;
+  maxMessages?: number | undefined;
 }): Promise<void> {
   for (let row = extent.startRow; row <= extent.endRow; row++) {
     const options: ExtmarkOptions = {

@@ -11,6 +11,12 @@ export const INPUT_TRANSCRIPT_MESSAGES = 3;
 const MAX_INPUT_HEIGHT = 15;
 const MAX_INPUT_WIDTH = 80;
 
+/** A reply anchors to an existing comment's extent and caps its transcript;
+ * a new comment previews the range it will cover. */
+export type InputMode =
+  | { type: "reply"; commentId: CommentId }
+  | { type: "new" };
+
 let inputCounter = 0;
 
 /**
@@ -31,8 +37,8 @@ export class CommentInput {
     },
     public readonly buffer: NvimBuffer,
     public readonly window: NvimWindow,
-    /** Set when this input is a follow-up on an existing comment. */
-    public readonly commentId: CommentId | undefined,
+    /** Which of the two authoring modes this input is in. */
+    public readonly mode: InputMode,
   ) {}
 
   static async open({
@@ -49,20 +55,28 @@ export class CommentInput {
     rows: { start: Row0Indexed; end: Row0Indexed };
   }): Promise<CommentInput> {
     const commentId = await controller.inRange(bufnr, rows);
+    const mode: InputMode = commentId
+      ? { type: "reply", commentId }
+      : { type: "new" };
 
     let anchorRow = rows.end;
     let virtLines = 0;
-    if (commentId) {
-      await controller.setTranscriptCap(commentId, INPUT_TRANSCRIPT_MESSAGES);
-      virtLines = controller.virtLineCount(commentId);
+    if (mode.type === "reply") {
+      await controller.setActiveInput({
+        type: "reply",
+        id: mode.commentId,
+        maxMessages: INPUT_TRANSCRIPT_MESSAGES,
+      });
+      virtLines = controller.virtLineCount(mode.commentId);
       const extent = (await controller.extentsInBuffer(bufnr)).find(
-        (e) => e.id === commentId,
+        (e) => e.id === mode.commentId,
       );
       if (extent) {
         anchorRow = extent.extent.endRow;
       }
     } else {
-      await controller.setPreview({
+      await controller.setActiveInput({
+        type: "new",
         bufnr,
         extent: { startRow: rows.start, endRow: rows.end },
       });
@@ -101,7 +115,10 @@ export class CommentInput {
         height: 1,
         border: "rounded",
         style: "minimal",
-        title: commentId ? ` reply to ${commentId} ` : " new comment ",
+        title:
+          mode.type === "reply"
+            ? ` reply to ${mode.commentId} `
+            : " new comment ",
       },
     ])) as WindowId;
 
@@ -121,7 +138,7 @@ export class CommentInput {
       { bufnr, winid, rows },
       buffer,
       window,
-      commentId,
+      mode,
     );
   }
 
@@ -164,10 +181,6 @@ export class CommentInput {
       await this.nvim.call("nvim_set_current_win", [this.target.winid]);
     }
 
-    if (this.commentId) {
-      await this.controller.setTranscriptCap(this.commentId, undefined);
-    } else {
-      await this.controller.setPreview(undefined);
-    }
+    await this.controller.setActiveInput(undefined);
   }
 }

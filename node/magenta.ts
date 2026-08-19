@@ -93,6 +93,32 @@ const MAGENTA_COMMENT_DELETE = "magentaCommentDelete";
 const MAGENTA_COMMENT_JUMP = "magentaCommentJump";
 const MAGENTA_COMMENT_INPUT = "magentaCommentInput";
 
+/** The lua half sends exactly one table per comment notification, with the
+ * rows and handles already in the form node uses. Declaring the payloads here
+ * keeps the casting to one place instead of one double-cast per handler. */
+type CommentNotificationPayloads = {
+  [MAGENTA_COMMENT]: {
+    bufnr: BufNr;
+    winid: WindowId;
+    startRow: Row0Indexed;
+    endRow: Row0Indexed;
+  };
+  [MAGENTA_COMMENT_DELETE]: { bufnr: BufNr; row: Row0Indexed };
+  [MAGENTA_COMMENT_JUMP]: {
+    bufnr: BufNr;
+    row: Row0Indexed;
+    direction: "next" | "prev";
+  };
+  [MAGENTA_COMMENT_INPUT]: { action: "submit" | "cancel" };
+};
+
+function commentPayload<K extends keyof CommentNotificationPayloads>(
+  _event: K,
+  args: unknown[],
+): CommentNotificationPayloads[K] {
+  return args[0] as CommentNotificationPayloads[K];
+}
+
 function decodeArchivedThreadLogNotification(args: unknown[]): ThreadId {
   const payload = args[0];
   if (typeof payload !== "object" || payload === null) {
@@ -1361,57 +1387,34 @@ ${lines.join("\n")}
     );
     nvim.onNotification(MAGENTA_COMMENT, async (args) => {
       try {
-        const data = (
-          args as unknown as {
-            bufnr: number;
-            winid: number;
-            startRow: number;
-            endRow: number;
-          }[]
-        )[0];
-        await getMagenta().onComment({
-          bufnr: data.bufnr as BufNr,
-          winid: data.winid as WindowId,
-          startRow: data.startRow as Row0Indexed,
-          endRow: data.endRow as Row0Indexed,
-        });
+        await getMagenta().onComment(commentPayload(MAGENTA_COMMENT, args));
       } catch (err) {
         notifyErr(nvim, "comment", err);
       }
     });
     nvim.onNotification(MAGENTA_COMMENT_INPUT, async (args) => {
       try {
-        const data = (args as unknown as { action: "submit" | "cancel" }[])[0];
-        await getMagenta().onCommentInput(data.action);
+        await getMagenta().onCommentInput(
+          commentPayload(MAGENTA_COMMENT_INPUT, args).action,
+        );
       } catch (err) {
         notifyErr(nvim, "comment input", err);
       }
     });
     nvim.onNotification(MAGENTA_COMMENT_DELETE, async (args) => {
       try {
-        const data = (args as unknown as { bufnr: number; row: number }[])[0];
-        await getMagenta().onCommentDelete({
-          bufnr: data.bufnr as BufNr,
-          row: data.row as Row0Indexed,
-        });
+        await getMagenta().onCommentDelete(
+          commentPayload(MAGENTA_COMMENT_DELETE, args),
+        );
       } catch (err) {
         notifyErr(nvim, "comment delete", err);
       }
     });
     nvim.onNotification(MAGENTA_COMMENT_JUMP, async (args) => {
       try {
-        const data = (
-          args as unknown as {
-            bufnr: number;
-            row: number;
-            direction: "next" | "prev";
-          }[]
-        )[0];
-        await getMagenta().onCommentJump({
-          bufnr: data.bufnr as BufNr,
-          row: data.row as Row0Indexed,
-          direction: data.direction,
-        });
+        await getMagenta().onCommentJump(
+          commentPayload(MAGENTA_COMMENT_JUMP, args),
+        );
       } catch (err) {
         notifyErr(nvim, "comment jump", err);
       }

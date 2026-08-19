@@ -241,7 +241,7 @@ end
 
 -- Module-level channel_id. Stashed by the first set_paste_handlers call so
 -- M.do_paste (invoked from the :Magenta dispatcher) can reach node.
-local magenta_channel_id = nil
+local magentaChannelId = nil
 
 -- Shared paste routine used by :Magenta paste and the <D-v>/<leader>mp
 -- keymaps. Probes the clipboard for an image and routes to node for
@@ -250,7 +250,7 @@ local magenta_channel_id = nil
 -- first if needed). Callable from any buffer — the node side addresses
 -- `activeBuffers.inputBuffer` directly.
 M.do_paste = function()
-  if not magenta_channel_id then
+  if not magentaChannelId then
     vim.api.nvim_err_writeln(
       "Magenta: input buffer not ready yet — is the node process running?")
     return
@@ -258,7 +258,7 @@ M.do_paste = function()
   if vim.fn.has("mac") == 1 then
     local ok, result = pcall(vim.fn.system, "osascript -e 'clipboard info'")
     if ok and type(result) == "string" and result:find("class PNGf", 1, true) then
-      vim.rpcnotify(magenta_channel_id, "magentaClipboardImagePaste", {})
+      vim.rpcnotify(magentaChannelId, "magentaClipboardImagePaste", {})
       return
     end
   end
@@ -267,12 +267,12 @@ M.do_paste = function()
     return
   end
   local from_display = last_display_yank ~= nil and text == last_display_yank
-  vim.rpcnotify(magenta_channel_id, "magentaClipboardTextPaste", { text = text, fromDisplay = from_display })
+  vim.rpcnotify(magentaChannelId, "magentaClipboardTextPaste", { text = text, fromDisplay = from_display })
 end
 
 M.set_paste_handlers = function(bufnr, channel_id)
   paste_input_bufnrs[bufnr] = true
-  magenta_channel_id = channel_id
+  magentaChannelId = channel_id
 
   if not original_paste then
     original_paste = vim.paste
@@ -394,16 +394,16 @@ M.set_display_buffer_keymaps = function(bufnr)
   end
 end
 
-M.set_channel_id = function(channel_id)
-  magenta_channel_id = channel_id
+M.set_channel_id = function(channelId)
+  magentaChannelId = channelId
 end
 
 local function notify(event, payload)
-  if not magenta_channel_id then
+  if not magentaChannelId then
     vim.api.nvim_err_writeln("Magenta: not connected — is the node process running?")
     return
   end
-  vim.rpcnotify(magenta_channel_id, event, payload)
+  vim.rpcnotify(magentaChannelId, event, payload)
 end
 
 --- Comment on the line under the cursor (or follow up on the comment there).
@@ -453,32 +453,32 @@ end
 
 --- Scroll `winid` if the commented extent, its transcript and the input float
 --- (`needed` screen lines below the anchor) would not all fit on screen.
-M.fit_comment_input = function(winid, anchor_row, needed)
+M.fit_comment_input = function(winid, anchorRow, needed)
   if not vim.api.nvim_win_is_valid(winid) then
     return
   end
-  local win_height = vim.api.nvim_win_get_height(winid)
+  local winHeight = vim.api.nvim_win_get_height(winid)
   local topline = vim.fn.line("w0", winid)
   local ok, height = pcall(vim.api.nvim_win_text_height, winid, {
     start_row = topline - 1,
-    end_row = anchor_row,
+    end_row = anchorRow,
   })
-  local used = ok and height.all or (anchor_row + 2 - topline)
-  if used + needed <= win_height then
+  local used = ok and height.all or (anchorRow + 2 - topline)
+  if used + needed <= winHeight then
     return
   end
   vim.api.nvim_win_call(winid, function()
     local view = vim.fn.winsaveview()
     -- put the anchor high enough that the whole unit has room below it
-    view.topline = math.max(1, anchor_row + 1 - math.max(0, win_height - needed - 1))
+    view.topline = math.max(1, anchorRow + 1 - math.max(0, winHeight - needed - 1))
     vim.fn.winrestview(view)
   end)
 end
 
 --- Wire up the authoring float: keymaps, submit-on-write, grow-with-content,
 --- and cancel when the anchor scrolls out of view or focus leaves.
-M.setup_comment_input = function(bufnr, float_win, target_win, max_height, channel_id)
-  magenta_channel_id = channel_id
+M.setup_comment_input = function(bufnr, floatWin, targetWin, maxHeight, channelId)
+  magentaChannelId = channelId
   local group = vim.api.nvim_create_augroup("MagentaCommentInput" .. bufnr, { clear = true })
 
   for mode, values in pairs(Options.options.commentKeymaps or {}) do
@@ -504,12 +504,12 @@ M.setup_comment_input = function(bufnr, float_win, target_win, max_height, chann
   })
 
   local function resize()
-    if not vim.api.nvim_win_is_valid(float_win) then
+    if not vim.api.nvim_win_is_valid(floatWin) then
       return
     end
-    local ok, height = pcall(vim.api.nvim_win_text_height, float_win, { max_height = max_height })
-    local lines = ok and height.all or math.min(max_height, vim.api.nvim_buf_line_count(bufnr))
-    vim.api.nvim_win_set_height(float_win, math.max(1, math.min(max_height, lines)))
+    local ok, height = pcall(vim.api.nvim_win_text_height, floatWin, { max_height = maxHeight })
+    local lines = ok and height.all or math.min(maxHeight, vim.api.nvim_buf_line_count(bufnr))
+    vim.api.nvim_win_set_height(floatWin, math.max(1, math.min(maxHeight, lines)))
   end
 
   vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
@@ -520,7 +520,7 @@ M.setup_comment_input = function(bufnr, float_win, target_win, max_height, chann
 
   vim.api.nvim_create_autocmd({ "WinScrolled", "WinClosed" }, {
     group = group,
-    pattern = tostring(target_win),
+    pattern = tostring(targetWin),
     callback = function()
       notify("magentaCommentInput", { action = "cancel" })
     end,

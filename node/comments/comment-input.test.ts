@@ -1,3 +1,4 @@
+import type { ThreadId, ToolName, ToolRequestId } from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import {
   type BufNr,
@@ -307,6 +308,21 @@ describe("comment input", () => {
         const [row] = await driver.nvim.call("nvim_win_get_cursor", [0]);
         expect(row).toEqual(2);
       });
+
+      // past the last comment there is nothing to jump to, and the cursor
+      // stays where it was
+      await lua(driver, `vim.api.nvim_win_set_cursor(0, {4, 0})`);
+      await lua(driver, `vim.api.nvim_feedkeys("]c", "x", false)`);
+      await pollUntil(async () => {
+        const [row] = await driver.nvim.call("nvim_win_get_cursor", [0]);
+        expect(row).toEqual(4);
+      });
+      await lua(driver, `vim.api.nvim_win_set_cursor(0, {1, 0})`);
+      await lua(driver, `vim.api.nvim_feedkeys("[c", "x", false)`);
+      await pollUntil(async () => {
+        const [row] = await driver.nvim.call("nvim_win_get_cursor", [0]);
+        expect(row).toEqual(1);
+      });
     });
   });
 
@@ -396,6 +412,107 @@ describe("comment input", () => {
     });
   });
 
+  it("cancels the open input when a second one is requested", async () => {
+    await withDriver({}, async (driver) => {
+      const { buffer } = await openPoem(driver);
+      await driver.showSidebar();
+      await driver.editFile("poem.txt");
+      const targetWin = (await driver.nvim.call(
+        "nvim_get_current_win",
+        [],
+      )) as WindowId;
+      await lua(driver, `vim.api.nvim_win_set_cursor(0, {2, 0})`);
+      await lua(driver, `require("magenta.keymaps").comment()`);
+      await awaitFloat(driver);
+      await typeIntoFloat(driver, "never submitted");
+
+      // request a second input from the target window while the first is open
+      await lua(
+        driver,
+        `vim.api.nvim_set_current_win(...)
+         vim.api.nvim_win_set_cursor(0, {4, 0})
+         require("magenta.keymaps").comment()`,
+        [targetWin],
+      );
+
+      await pollUntil(async () => {
+        const wins = (await driver.nvim.call(
+          "nvim_list_wins",
+          [],
+        )) as WindowId[];
+        const floats = [];
+        for (const win of wins) {
+          const config = await driver.nvim.call("nvim_win_get_config", [win]);
+          if (config.relative === "win") {
+            floats.push(win);
+          }
+        }
+        expect(floats.length).toEqual(1);
+        // the abandoned input left no comment and no stale preview behind
+        expect(await virtLines(buffer)).toEqual([]);
+        expect(await highlightedRows(buffer)).toEqual([3]);
+      });
+
+      await driver.command("MagentaCommentCancel");
+      await awaitNoFloat(driver);
+      await pollUntil(async () => {
+        expect(await highlightedRows(buffer)).toEqual([]);
+      });
+    });
+  });
+  it("scopes comment controllers to the root thread", async () => {
+    await withDriver({}, async (driver) => {
+      const { buffer } = await openPoem(driver);
+      await driver.showSidebar();
+      await driver.editFile("poem.txt");
+      await lua(driver, `vim.api.nvim_win_set_cursor(0, {2, 0})`);
+      await lua(driver, `require("magenta.keymaps").comment()`);
+      await typeIntoFloat(driver, "root thread comment");
+      await driver.command("MagentaCommentSubmit");
+      await awaitNoFloat(driver);
+      await pollUntil(async () => {
+        expect((await virtLines(buffer)).length).toBeGreaterThan(0);
+      });
+
+      const rootId = driver.magenta.chat.getActiveRootThreadId();
+      const rootController = driver.magenta.getCommentController();
+      expect(rootController.store.listOpenCommentIds().length).toEqual(1);
+
+      await driver.inputMagentaText("spawn a child");
+      await driver.send();
+      const request =
+        await driver.mockAnthropic.awaitPendingStreamWithText("spawn a child");
+      request.respond({
+        stopReason: "tool_use",
+        text: "Spawning.",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "spawn-comment" as ToolRequestId,
+              toolName: "spawn_subagents" as ToolName,
+              input: { agents: [{ prompt: "child" }] },
+            },
+          },
+        ],
+      });
+      await driver.awaitThreadCount(2);
+
+      const childId = (
+        Object.keys(driver.magenta.chat.threadWrappers) as ThreadId[]
+      ).find((id) => id !== rootId);
+      expect(childId).toBeDefined();
+      await driver.magenta.selectThreadEffect(childId as ThreadId);
+      // a subagent resolves to its root's controller, so it sees the same
+      // comments rather than starting an empty side conversation
+      expect(driver.magenta.getCommentController()).toBe(rootController);
+
+      await driver.magenta.command("new-thread");
+      const otherController = driver.magenta.getCommentController();
+      expect(otherController).not.toBe(rootController);
+      expect(otherController.store.listOpenCommentIds()).toEqual([]);
+    });
+  });
   it("no longer offers the clear command", async () => {
     await withDriver({}, async (driver) => {
       const completions = (await lua(

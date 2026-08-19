@@ -505,6 +505,27 @@ Notes / deviations:
 - Not covered by an automated test: `q` / `<C-c>` specifically (the cancel *path* is covered via
   `:MagentaCommentCancel`, which is what those keys are bound to).
 
+Review follow-ups (stage 3):
+
+- `CommentController`'s `transcriptCaps` map and `preview` field collapsed into a single
+  `activeInput: ActiveInput | undefined` (`{type:"reply"; id; maxMessages} | {type:"new"; bufnr; extent}`),
+  set through `setActiveInput`. Only one input is ever open, so a stale cap and a stale preview are
+  no longer representable.
+- `CommentInput` carries an `InputMode` discriminated union instead of `commentId: CommentId | undefined`;
+  `close()` is now a single unconditional `setActiveInput(undefined)`.
+- `renderComment`'s `maxMessages` is `number | undefined` to match `commentVirtLines` under
+  `exactOptionalPropertyTypes`.
+- The four comment notification handlers in `node/magenta.ts` share a `CommentNotificationPayloads`
+  map plus a `commentPayload()` helper, replacing the per-site `as unknown as {...}[]` plus
+  per-field brand casts.
+- Lua naming: `magenta_channel_id` -> `magentaChannelId`, and the parameters of `set_channel_id`,
+  `fit_comment_input` and `setup_comment_input` are camelCase.
+- New tests: opening a second input while one is open leaves exactly one float and no stale preview;
+  comment controllers are keyed by root thread (a subagent resolves to its parent's controller, a
+  new root thread gets an empty one); `]c`/`[c` leave the cursor put at the boundaries. Note the
+  thread-switch test asserts *controller* isolation only — hiding the decoration on switch is
+  stage 6.
+
 - Goal: `<leader>mc` in normal and visual mode opens the authoring float; `<CR>`/`:w` submit, `q`/`<C-c>`/empty cancel; `<leader>mc` over an existing comment adds a follow-up; `<leader>mD` deletes; `]c`/`[c` jump. `clear` is gone.
 - Tests:
   - Visual-select two lines, `<leader>mc`, type text, `<CR>`: the float closes and the comment renders over those lines with its text inline.

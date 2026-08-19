@@ -25,6 +25,12 @@ import {
   renderPreview,
 } from "./comment-render.ts";
 
+/** The input currently open, from the controller's point of view: either a
+ * follow-up on an existing comment, or a brand new comment over a range. */
+export type ActiveInput =
+  | { type: "reply"; id: CommentId; maxMessages: number }
+  | { type: "new"; bufnr: BufNr; extent: CommentExtent };
+
 export type CommentAnchor =
   | { state: "anchored"; bufnr: BufNr; extmarkId: ExtmarkId }
   | { state: "stale"; bufnr: BufNr; lastRow: Row0Indexed };
@@ -38,12 +44,11 @@ export class CommentController {
   private anchors: { [id: CommentId]: CommentAnchor } = {};
   /** Last resolved extent per comment, used for rendering and hit testing. */
   private extents: { [id: CommentId]: CommentExtent } = {};
-  /** While an input is open on a comment, its transcript is capped so the
-   * float and the exchange both fit on screen. */
-  private transcriptCaps: { [id: CommentId]: number } = {};
-  /** Provisional highlight over a range being commented on for the first
-   * time, so the user can see what they selected while typing. */
-  private preview: { bufnr: BufNr; extent: CommentExtent } | undefined;
+  /** The one input open right now, if any. A reply caps the transcript of
+   * the comment it targets; a new comment provisionally highlights the range
+   * being commented on. Exactly one of those is ever in effect, so they share
+   * one field and clear together. */
+  private activeInput: ActiveInput | undefined;
   private visible = true;
   /** Set while a refresh is stamping, so the `setLocation` calls it makes
    * don't schedule a redundant refresh on top of themselves. */
@@ -78,8 +83,9 @@ export class CommentController {
 
   private commentedBufnrs(): BufNr[] {
     const bufnrs = new Set<BufNr>(this.orphanedBufnrs);
-    if (this.preview) {
-      bufnrs.add(this.preview.bufnr);
+    const preview = this.preview();
+    if (preview) {
+      bufnrs.add(preview.bufnr);
     }
     for (const id of this.store.listOpenCommentIds()) {
       const anchor = this.anchors[id];
@@ -207,17 +213,15 @@ export class CommentController {
     return id;
   }
 
-  /** Cap the transcript of a comment while its input is open, so the whole
-   * unit (extent + transcript + float) fits on screen. */
-  async setTranscriptCap(
-    id: CommentId,
-    maxMessages: number | undefined,
-  ): Promise<void> {
-    if (maxMessages === undefined) {
-      delete this.transcriptCaps[id];
-    } else {
-      this.transcriptCaps[id] = maxMessages;
+  /** Record (or clear) the input that is currently open. Caps the targeted
+   * comment's transcript so the whole unit (extent + transcript + float) fits
+   * on screen, or previews the range of a brand new comment. */
+  async setActiveInput(input: ActiveInput | undefined): Promise<void> {
+    const previous = this.activeInput;
+    if (previous?.type === "new") {
+      this.orphanedBufnrs.add(previous.bufnr);
     }
+    this.activeInput = input;
     await this.refreshAll();
   }
 
@@ -231,21 +235,22 @@ export class CommentController {
     return commentVirtLines({
       comment,
       pending: this.store.pendingCommentIds().includes(id),
-      maxMessages: this.transcriptCaps[id],
+      maxMessages: this.maxMessages(id),
     }).length;
   }
 
-  /** Provisionally highlight a range being commented on for the first time.
-   * Cleared with `setPreview(undefined)`. */
-  async setPreview(
-    preview: { bufnr: BufNr; extent: CommentExtent } | undefined,
-  ): Promise<void> {
-    const previous = this.preview;
-    if (previous) {
-      this.orphanedBufnrs.add(previous.bufnr);
-    }
-    this.preview = preview;
-    await this.refreshAll();
+  private maxMessages(id: CommentId): number | undefined {
+    const input = this.activeInput;
+    return input?.type === "reply" && input.id === id
+      ? input.maxMessages
+      : undefined;
+  }
+
+  private preview(): { bufnr: BufNr; extent: CommentExtent } | undefined {
+    const input = this.activeInput;
+    return input?.type === "new"
+      ? { bufnr: input.bufnr, extent: input.extent }
+      : undefined;
   }
 
   /** Every comment in this buffer with its current extent, in row order. */
@@ -323,8 +328,9 @@ export class CommentController {
     }
     await buffer.clearAllExtmarks(MAGENTA_COMMENT_NAMESPACE);
 
-    if (this.visible && this.preview && this.preview.bufnr === bufnr) {
-      await renderPreview(buffer, this.preview.extent);
+    const preview = this.preview();
+    if (this.visible && preview && preview.bufnr === bufnr) {
+      await renderPreview(buffer, preview.extent);
     }
 
     const ids = this.commentIdsInBuffer(bufnr);
@@ -363,7 +369,7 @@ export class CommentController {
         comment,
         extent: renderExtent,
         pending: pending.has(id),
-        maxMessages: this.transcriptCaps[id],
+        maxMessages: this.maxMessages(id),
       });
     }
   }
