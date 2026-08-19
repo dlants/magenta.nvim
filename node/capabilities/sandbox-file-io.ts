@@ -124,7 +124,7 @@ export class SandboxFileIO implements FileIO {
       );
       return;
     }
-    await buffer.attemptEdit();
+    await buffer.reloadFromDisk();
   }
 
   async fileExists(path: string): Promise<boolean> {
