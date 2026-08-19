@@ -24,6 +24,18 @@ export type NamespaceId = number & { __namespaceId: true };
  */
 export const MAGENTA_HIGHLIGHT_NAMESPACE = "magenta-highlights";
 
+/**
+ * Long-lived namespace holding comment anchor extmarks. Deliberately disjoint
+ * from `magenta-highlights`, which the TEA render loop bulk-clears.
+ */
+export const MAGENTA_COMMENT_ANCHOR_NAMESPACE = "magenta-comment-anchors";
+
+/**
+ * Namespace holding the disposable comment rendering (sign, extent highlight,
+ * virtual lines). Cleared and re-stamped by the comment controller only.
+ */
+export const MAGENTA_COMMENT_NAMESPACE = "magenta-comments";
+
 export class NvimBuffer {
   constructor(
     public readonly id: BufNr,
@@ -154,13 +166,6 @@ export class NvimBuffer {
     return this.nvim.call("nvim_exec_lua", [
       `require("magenta.keymaps").setArchiveBufferKeymap(...)`,
       [this.id, this.nvim.channelId, threadId, logPath],
-    ]);
-  }
-
-  setInlineKeymaps(targetBufnr: BufNr) {
-    return this.nvim.call("nvim_exec_lua", [
-      `require("magenta.keymaps").set_inline_buffer_keymaps(${this.id}, ${targetBufnr})`,
-      [],
     ]);
   }
 
@@ -295,12 +300,14 @@ vim.bo[bufnr].modified = false`,
     startPos,
     endPos,
     options,
+    namespace,
   }: {
     startPos: Position0Indexed;
     endPos: Position0Indexed;
     options: ExtmarkOptions;
+    namespace?: string;
   }): Promise<ExtmarkId> {
-    const namespaceId = await this.getMagentaNamespace();
+    const namespaceId = await this.getNamespace(namespace);
 
     // Prepare extmark options with end position
     const extmarkOpts = {
@@ -323,8 +330,8 @@ vim.bo[bufnr].modified = false`,
   /**
    * Delete a specific extmark from this buffer.
    */
-  async deleteExtmark(extmarkId: ExtmarkId): Promise<void> {
-    const namespaceId = await this.getMagentaNamespace();
+  async deleteExtmark(extmarkId: ExtmarkId, namespace?: string): Promise<void> {
+    const namespaceId = await this.getNamespace(namespace);
     await this.nvim.call("nvim_buf_del_extmark", [
       this.id,
       namespaceId,
@@ -336,8 +343,8 @@ vim.bo[bufnr].modified = false`,
    * Clear all extmarks in the magenta highlight namespace for this buffer.
    * This is useful for bulk cleanup when unmounting views or clearing highlights.
    */
-  async clearAllExtmarks(): Promise<void> {
-    const namespaceId = await this.getMagentaNamespace();
+  async clearAllExtmarks(namespace?: string): Promise<void> {
+    const namespaceId = await this.getNamespace(namespace);
 
     // Clear all extmarks in the namespace for this buffer
     await this.nvim.call("nvim_buf_clear_namespace", [
@@ -357,13 +364,15 @@ vim.bo[bufnr].modified = false`,
     startPos,
     endPos,
     options,
+    namespace,
   }: {
     extmarkId: ExtmarkId;
     startPos: Position0Indexed;
     endPos: Position0Indexed;
     options: ExtmarkOptions;
+    namespace?: string;
   }): Promise<ExtmarkId> {
-    const namespaceId = await this.getMagentaNamespace();
+    const namespaceId = await this.getNamespace(namespace);
 
     // Prepare extmark options with end position and existing ID
     const extmarkOpts = {
@@ -388,7 +397,7 @@ vim.bo[bufnr].modified = false`,
    * Get all extmarks in the magenta namespace for this buffer.
    * Returns an array of extmark information including ID, position, and options.
    */
-  async getExtmarks(): Promise<
+  async getExtmarks(namespace?: string): Promise<
     Array<{
       id: ExtmarkId;
       startPos: Position0Indexed;
@@ -396,7 +405,7 @@ vim.bo[bufnr].modified = false`,
       options: ExtmarkOptions;
     }>
   > {
-    const namespaceId = await this.getMagentaNamespace();
+    const namespaceId = await this.getNamespace(namespace);
 
     // Get all extmarks in the namespace
     const extmarks = await this.nvim.call("nvim_buf_get_extmarks", [
@@ -416,7 +425,10 @@ vim.bo[bufnr].modified = false`,
    * Get a specific extmark by its ID from the magenta namespace.
    * Returns undefined if the extmark doesn't exist.
    */
-  async getExtmarkById(extmarkId: ExtmarkId): Promise<
+  async getExtmarkById(
+    extmarkId: ExtmarkId,
+    namespace?: string,
+  ): Promise<
     | {
         id: ExtmarkId;
         startPos: Position0Indexed;
@@ -425,7 +437,7 @@ vim.bo[bufnr].modified = false`,
       }
     | undefined
   > {
-    const namespaceId = await this.getMagentaNamespace();
+    const namespaceId = await this.getNamespace(namespace);
 
     try {
       // Get the specific extmark by ID
@@ -475,9 +487,17 @@ vim.bo[bufnr].modified = false`,
    * Uses a well-known namespace name for consistency across views.
    */
   async getMagentaNamespace(): Promise<NamespaceId> {
-    const namespaceId = await this.nvim.call("nvim_create_namespace", [
-      MAGENTA_HIGHLIGHT_NAMESPACE,
-    ]);
+    return this.getNamespace();
+  }
+
+  /**
+   * Create or get a neovim namespace, defaulting to the shared magenta
+   * highlight namespace.
+   */
+  async getNamespace(
+    name: string = MAGENTA_HIGHLIGHT_NAMESPACE,
+  ): Promise<NamespaceId> {
+    const namespaceId = await this.nvim.call("nvim_create_namespace", [name]);
     return namespaceId as NamespaceId;
   }
 }

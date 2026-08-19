@@ -92,6 +92,18 @@ export type {
   TeardownResult,
 } from "./container/types.ts";
 export {
+  type BufNr,
+  type Comment,
+  type CommentCloseReason,
+  type CommentId,
+  type CommentLocation,
+  type CommentMessage,
+  CommentStore,
+  type CommentStoreEvents,
+  type CommentUpdateEntry,
+  commentUpdatesToContent,
+} from "./context/comment-store.ts";
+export {
   buildClonedFiles,
   ContextManager,
   type ContextManagerEvents,

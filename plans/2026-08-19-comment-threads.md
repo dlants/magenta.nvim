@@ -398,7 +398,7 @@ Notes / deviations:
   rather than round-tripping through `:write` (writing from a `nvim_buf_call` in the test harness hung).
 - The `modified` guard now lives in both `reloadFromDisk` and `SandboxFileIO.reloadBufferIfOpen`
   (the latter keeps its warning log).
-- `setInlineKeymaps` is left in place; the plan lists its deletion under stage 2.
+- `setInlineKeymaps` was left in place here; deleted in stage 2.
 - Review follow-up: added `reloadFromDisk` tests for multi-hunk reloads, a pure deletion hunk,
   truncation to an empty file, and a missing file (silent no-op, buffer left intact).
 
@@ -410,7 +410,31 @@ Notes / deviations:
   - An open buffer with unsaved user changes is left untouched by an agent write (existing behavior preserved).
   - An agent edit to a file whose buffer is open undoes back to the pre-edit content in one `u`.
 
-## Comment state and rendering
+## Comment state and rendering — DONE
+
+Implemented in `node/core/src/context/comment-store.ts` (+ `comment-store.test.ts`),
+`node/comments/comment-render.ts`, `node/comments/comment-controller.ts`
+(+ `comment-controller.test.ts`), with namespace support added to the extmark helpers in
+`node/nvim/buffer.ts`. `setInlineKeymaps` deleted.
+
+Notes / deviations:
+
+- `CommentController.at()` is **async** (the plan showed it sync): resolving "the comment here"
+  requires reading the anchor extmark back, which is an nvim round trip.
+- `CommentStore.addAgentMessage` returns `Result<undefined>`; agent messages are marked delivered
+  immediately (the agent wrote them, so they never queue).
+- Added `CommentStore.hasPendingUpdates()` for stage 4's early-settle guard, and
+  `CommentUpdateEntry` carries the location + the undelivered messages so the display ledger
+  needs nothing else.
+- `CommentLocation.lines` is typed `| undefined` because of `exactOptionalPropertyTypes`.
+- The controller serializes all refreshes through a single promise chain and suppresses its own
+  `changed` handler while stamping — otherwise the `setLocation` calls a refresh makes would
+  schedule a redundant, interleaving refresh and duplicate/erase stamps.
+- `CommentController.closeBuffer(bufnr)` exists for the unload path; the autocmd that calls it is
+  stage 3 work.
+- Extent highlight is stamped one extmark per line (`line_hl_group` + `sign_text` on the first
+  line) rather than one ranged extmark, since `line_hl_group` is a per-mark-line property.
+- Rendering already supports the `maxMessages` elision the stage-3 input UI needs.
 
 - Goal: `CommentStore` and `CommentController` exist and work end-to-end from a programmatic API — add a comment over a range, anchor it with an extmark, stamp the sign, extent highlight and inline `virt_lines`, add messages, delete, show/hide. No keymaps, no agent involvement yet. Also delete the dead `setInlineKeymaps`.
 - The store's tests need no neovim at all: locations go in as data, `<comment_update>` text comes out. Only the controller's tests drive a real buffer.
