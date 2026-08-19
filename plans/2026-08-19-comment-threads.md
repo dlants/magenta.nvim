@@ -399,6 +399,8 @@ Notes / deviations:
 - The `modified` guard now lives in both `reloadFromDisk` and `SandboxFileIO.reloadBufferIfOpen`
   (the latter keeps its warning log).
 - `setInlineKeymaps` is left in place; the plan lists its deletion under stage 2.
+- Review follow-up: added `reloadFromDisk` tests for multi-hunk reloads, a pure deletion hunk,
+  truncation to an empty file, and a missing file (silent no-op, buffer left intact).
 
 
 - Goal: agent edits update open buffers as a minimal diff instead of `:edit`, so extmarks (and undo) survive. `NvimBuffer.attemptEdit` is replaced by `reloadFromDisk`; `SandboxFileIO.reloadBufferIfOpen` calls it.

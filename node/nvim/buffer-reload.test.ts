@@ -85,6 +85,97 @@ describe("NvimBuffer.reloadFromDisk", () => {
     });
   });
 
+  it("applies multiple hunks, including a pure deletion", async () => {
+    await withNvimClient(async (nvim) => {
+      const file = path.join(
+        await fs.mkdtemp("/tmp/magenta-reload-"),
+        "file.txt",
+      );
+      await fs.writeFile(file, "a\nb\nc\nd\ne\n");
+      const buffer = await NvimBuffer.bufadd(file as AbsFilePath, nvim);
+
+      // b,c -> X (change), and f appended (insertion): two hunks at different offsets
+      await fs.writeFile(file, "a\nX\nd\ne\nf\n");
+      await buffer.reloadFromDisk();
+
+      expect(
+        await buffer.getLines({
+          start: 0 as Row0Indexed,
+          end: -1 as Row0Indexed,
+        }),
+      ).toEqual(["a", "X", "d", "e", "f"]);
+      expect(await buffer.getOption("modified")).toBe(false);
+    });
+  });
+
+  it("handles a pure deletion hunk", async () => {
+    await withNvimClient(async (nvim) => {
+      const file = path.join(
+        await fs.mkdtemp("/tmp/magenta-reload-"),
+        "file.txt",
+      );
+      await fs.writeFile(file, "a\nb\nc\n");
+      const buffer = await NvimBuffer.bufadd(file as AbsFilePath, nvim);
+
+      await fs.writeFile(file, "a\nc\n");
+      await buffer.reloadFromDisk();
+
+      expect(
+        await buffer.getLines({
+          start: 0 as Row0Indexed,
+          end: -1 as Row0Indexed,
+        }),
+      ).toEqual(["a", "c"]);
+    });
+  });
+
+  it("handles truncation to an empty file", async () => {
+    await withNvimClient(async (nvim) => {
+      const file = path.join(
+        await fs.mkdtemp("/tmp/magenta-reload-"),
+        "file.txt",
+      );
+      await fs.writeFile(file, "one\ntwo\n");
+      const buffer = await NvimBuffer.bufadd(file as AbsFilePath, nvim);
+
+      await fs.writeFile(file, "");
+      await buffer.reloadFromDisk();
+
+      expect(
+        await buffer.getLines({
+          start: 0 as Row0Indexed,
+          end: -1 as Row0Indexed,
+        }),
+      ).toEqual([""]);
+      expect(await buffer.getOption("modified")).toBe(false);
+    });
+  });
+
+  it("is a no-op when the file no longer exists", async () => {
+    await withNvimClient(async (nvim) => {
+      const file = path.join(
+        await fs.mkdtemp("/tmp/magenta-reload-"),
+        "file.txt",
+      );
+      await fs.writeFile(file, "one\ntwo\n");
+      const buffer = await NvimBuffer.bufadd(file as AbsFilePath, nvim);
+      await buffer.getLines({
+        start: 0 as Row0Indexed,
+        end: -1 as Row0Indexed,
+      });
+
+      await fs.rm(file);
+      await buffer.reloadFromDisk();
+
+      expect(
+        await buffer.getLines({
+          start: 0 as Row0Indexed,
+          end: -1 as Row0Indexed,
+        }),
+      ).toEqual(["one", "two"]);
+    });
+  });
+
   it("leaves a modified buffer untouched", async () => {
     await withNvimClient(async (nvim) => {
       const file = path.join(
