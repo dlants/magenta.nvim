@@ -67,6 +67,38 @@ end`,
 }
 
 /**
+ * The live "not yet sent to the agent" list, rendered next to the context
+ * files above the input. Comments queued on an idle thread are invisible in
+ * the display buffer otherwise — the user would only see them in the
+ * commented buffer.
+ */
+export function pendingCommentsView(
+  entries: CommentUpdateEntry[],
+  view: {
+    expanded: { [commentId: CommentId]: boolean };
+    onToggle: (commentId: CommentId) => void;
+    onJump: (entry: CommentUpdateEntry) => void;
+  },
+): VDOMNode {
+  if (entries.length === 0) {
+    return d``;
+  }
+  return d`${entries.map((entry) => {
+    const line = withBindings(
+      d`${COMMENT_SIGN} ${withInlineCode(d`\`${locationLabel(entry)}\``)} [ pending: ${statusLabel(entry)} ]\n`,
+      {
+        "=": () => view.onToggle(entry.commentId),
+        "<CR>": () => view.onJump(entry),
+      },
+    );
+    if (entry.status !== "new-messages" || !view.expanded[entry.commentId]) {
+      return line;
+    }
+    return d`${line}${entry.messages.map((message) => d`  ${message.text}\n`)}`;
+  })}`;
+}
+
+/**
  * The `💬` ledger: one collapsible line per comment entry that rode out with
  * this message. The agent-facing `<comment_update>` text is never shown; this
  * is what the user sees instead.

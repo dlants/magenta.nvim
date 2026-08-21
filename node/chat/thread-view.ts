@@ -19,6 +19,7 @@ import {
 } from "@magenta/core";
 import {
   jumpToComment,
+  pendingCommentsView,
   renderCommentUpdate,
 } from "../comments/comment-update-view.ts";
 import {
@@ -437,6 +438,19 @@ export const view: View<{
   const agentPhase = thread.agent.phase;
   const mode = thread.core.state.mode;
 
+  const pendingComments = thread.core.commentStore?.getPendingEntries() ?? [];
+  const pendingCommentsNode = pendingComments.length
+    ? d`\n${pendingCommentsView(pendingComments, {
+        expanded: thread.state.expandedPendingComments,
+        onToggle: (commentId) =>
+          dispatch({ type: "toggle-pending-comment", commentId }),
+        onJump: (entry) => {
+          jumpToComment(thread.context.nvim, entry).catch((e: Error) =>
+            thread.context.nvim.logger.error(e.message),
+          );
+        },
+      })}`
+    : d``;
   // Show logo when empty and not busy
   const isIdle = agentPhase.type === "idle";
   if (
@@ -457,7 +471,7 @@ magenta is for agentic flow
 ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
   expanded: thread.state.contextFilesExpanded,
   onToggle: () => dispatch({ type: "toggle-context-files-expanded" }),
-})}`;
+})}${pendingCommentsNode}`;
   }
 
   const latestUsage = thread.agent.log.latestUsage;
@@ -720,6 +734,7 @@ ${messagesView}\
 ${failedSubmitView}\
 ${streamingBlockView}\
 ${contextManagerView}\
+${pendingCommentsNode}\
 ${sandboxView}\
 ${pendingMessagesView}${pendingNextMessagesView}\
 ${trailingForkedToView}\

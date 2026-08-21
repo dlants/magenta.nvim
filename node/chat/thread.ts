@@ -116,6 +116,10 @@ export type Msg =
       commentId: CommentId;
     }
   | {
+      type: "toggle-pending-comment";
+      commentId: CommentId;
+    }
+  | {
       type: "toggle-tool-input-summary";
       toolRequestId: ToolRequestId;
     }
@@ -225,6 +229,7 @@ export class NvimThread {
     showToolDefinitions: boolean;
     expandedToolDefinitions: { [toolName: string]: boolean };
     contextFilesExpanded: boolean;
+    expandedPendingComments: { [commentId: CommentId]: boolean };
     pendingMessagesExpanded: { [index: number]: boolean };
     editedFilesExpanded: { [path: AbsFilePath]: { patch: string } };
     messageViewState: { [messageIdx: number]: MessageViewState };
@@ -317,6 +322,7 @@ export class NvimThread {
       showToolDefinitions: false,
       expandedToolDefinitions: {},
       contextFilesExpanded: false,
+      expandedPendingComments: {},
       pendingMessagesExpanded: {},
       editedFilesExpanded: {},
       messageViewState: {},
@@ -383,6 +389,10 @@ export class NvimThread {
         context.scriptName ? { scriptName: context.scriptName } : {},
       );
     }
+
+    // The pending-comments view lives in the display buffer, so a comment
+    // queued while the thread is idle has to trigger a redraw on its own.
+    this.core.commentStore?.on("changed", () => this.onCoreUpdate());
 
     if (this.core.commentStore) {
       this.commentController = new CommentController(
@@ -828,6 +838,11 @@ export class NvimThread {
 
       case "toggle-context-files-expanded":
         this.state.contextFilesExpanded = !this.state.contextFilesExpanded;
+        return;
+
+      case "toggle-pending-comment":
+        this.state.expandedPendingComments[msg.commentId] =
+          !this.state.expandedPendingComments[msg.commentId];
         return;
 
       case "toggle-pending-message":

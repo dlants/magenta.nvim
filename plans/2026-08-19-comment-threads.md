@@ -191,7 +191,7 @@ The editor is a scratch buffer with `buftype=acwrite`, `bufhidden=wipe`, `filety
 
 Verified in a live nvim: with a 3-line `virt_lines` block on line 3, line 3 renders at screen row 4, the virtual lines occupy rows 5-7 and line 4 lands at row 8; a float opened at `bufpos={2,0}, row=1` was positioned at screen row 5 — **on top of the first message**. `row=1` is therefore wrong for a follow-up. The float opens at `row = 1 + <virt lines currently stamped for this comment>`, a count the controller knows exactly because it stamped them. For a new comment there are none and the offset is 1.
 
-Also verified: the float *does* track scrolling (`relative="win"` + `bufpos` moved the float from screen row 4 to 2 when the window scrolled), but when the anchor scrolls out of view the float does not close — it clamps to the window edge and hangs over unrelated text. So a `WinScrolled` / `WinLeave` autocmd on the target window closes the float (a cancel).
+Also verified: the float _does_ track scrolling (`relative="win"` + `bufpos` moved the float from screen row 4 to 2 when the window scrolled), but when the anchor scrolls out of view the float does not close — it clamps to the window edge and hangs over unrelated text. So a `WinScrolled` / `WinLeave` autocmd on the target window closes the float (a cancel).
 
 ### Seeing what you are replying to
 
@@ -276,7 +276,7 @@ export class CommentStore extends Emitter<CommentStoreEvents> {
 }
 ```
 
-The agent's `AgentDeps` holds this object directly; the drain sites use only `getPendingUpdate` / `commitPending`, and the `reply` tool capability uses only `listOpenCommentIds` / `addAgentMessage`. There is no separate `CommentSource` file — the store *is* the source, exactly as `ContextManager` is.
+The agent's `AgentDeps` holds this object directly; the drain sites use only `getPendingUpdate` / `commitPending`, and the `reply` tool capability uses only `listOpenCommentIds` / `addAgentMessage`. There is no separate `CommentSource` file — the store _is_ the source, exactly as `ContextManager` is.
 
 ### Nvim: `node/comments/comment-controller.ts`
 
@@ -317,7 +317,6 @@ export class CommentController {
 ```
 
 Before a drain, locations must be current — the controller refreshes the anchors of every commented buffer whenever the buffer changes, so `getPendingUpdate` reads locations that are already fresh and stays synchronous and pure.
-
 
 The `reply` tool talks to that same object; ids arrive from the model as plain strings and are narrowed to `CommentId` by `validateInput` against `listOpenCommentIds()`.
 
@@ -385,23 +384,15 @@ Lua: `<leader>mc` -> `magentaComment` rpcnotify with `{bufnr, rows}` (visual var
 
 ## Diff-based buffer reload — DONE
 
-Implemented in `node/nvim/buffer.ts` (`reloadFromDisk`, replacing `attemptEdit`) and
-`node/capabilities/sandbox-file-io.ts`. Tests in `node/nvim/buffer-reload.test.ts`.
+Implemented in `node/nvim/buffer.ts` (`reloadFromDisk`, replacing `attemptEdit`) and `node/capabilities/sandbox-file-io.ts`. Tests in `node/nvim/buffer-reload.test.ts`.
 
 Notes / deviations:
 
-- `reloadFromDisk` reads the file itself in lua (`io.open` on the buffer's name) rather than
-  relying on `:edit`, diffs against the current lines with `vim.diff(..., {result_type="indices"})`
-  and applies hunks back-to-front with `nvim_buf_set_lines`.
-- Trailing-newline handling: `endofline`/`fixendofline` are set from whether the on-disk content
-  ends in `\n`, so a later `:write` reproduces the file byte for byte. The test asserts the options
-  rather than round-tripping through `:write` (writing from a `nvim_buf_call` in the test harness hung).
-- The `modified` guard now lives in both `reloadFromDisk` and `SandboxFileIO.reloadBufferIfOpen`
-  (the latter keeps its warning log).
+- `reloadFromDisk` reads the file itself in lua (`io.open` on the buffer's name) rather than relying on `:edit`, diffs against the current lines with `vim.diff(..., {result_type="indices"})` and applies hunks back-to-front with `nvim_buf_set_lines`.
+- Trailing-newline handling: `endofline`/`fixendofline` are set from whether the on-disk content ends in `\n`, so a later `:write` reproduces the file byte for byte. The test asserts the options rather than round-tripping through `:write` (writing from a `nvim_buf_call` in the test harness hung).
+- The `modified` guard now lives in both `reloadFromDisk` and `SandboxFileIO.reloadBufferIfOpen` (the latter keeps its warning log).
 - `setInlineKeymaps` was left in place here; deleted in stage 2.
-- Review follow-up: added `reloadFromDisk` tests for multi-hunk reloads, a pure deletion hunk,
-  truncation to an empty file, and a missing file (silent no-op, buffer left intact).
-
+- Review follow-up: added `reloadFromDisk` tests for multi-hunk reloads, a pure deletion hunk, truncation to an empty file, and a missing file (silent no-op, buffer left intact).
 
 - Goal: agent edits update open buffers as a minimal diff instead of `:edit`, so extmarks (and undo) survive. `NvimBuffer.attemptEdit` is replaced by `reloadFromDisk`; `SandboxFileIO.reloadBufferIfOpen` calls it.
 - Tests:
@@ -412,47 +403,27 @@ Notes / deviations:
 
 ## Comment state and rendering — DONE
 
-Implemented in `node/core/src/context/comment-store.ts` (+ `comment-store.test.ts`),
-`node/comments/comment-render.ts`, `node/comments/comment-controller.ts`
-(+ `comment-controller.test.ts`), with namespace support added to the extmark helpers in
-`node/nvim/buffer.ts`. `setInlineKeymaps` deleted.
+Implemented in `node/core/src/context/comment-store.ts` (+ `comment-store.test.ts`), `node/comments/comment-render.ts`, `node/comments/comment-controller.ts` (+ `comment-controller.test.ts`), with namespace support added to the extmark helpers in `node/nvim/buffer.ts`. `setInlineKeymaps` deleted.
 
 Notes / deviations:
 
-- `CommentController.at()` is **async** (the plan showed it sync): resolving "the comment here"
-  requires reading the anchor extmark back, which is an nvim round trip.
-- `CommentStore.addAgentMessage` returns `Result<undefined>`; agent messages are marked delivered
-  immediately (the agent wrote them, so they never queue).
-- Added `CommentStore.hasPendingUpdates()` for stage 4's early-settle guard, and
-  `CommentUpdateEntry` carries the location + the undelivered messages so the display ledger
-  needs nothing else.
+- `CommentController.at()` is **async** (the plan showed it sync): resolving "the comment here" requires reading the anchor extmark back, which is an nvim round trip.
+- `CommentStore.addAgentMessage` returns `Result<undefined>`; agent messages are marked delivered immediately (the agent wrote them, so they never queue).
+- Added `CommentStore.hasPendingUpdates()` for stage 4's early-settle guard, and `CommentUpdateEntry` carries the location + the undelivered messages so the display ledger needs nothing else.
 - `CommentLocation.lines` is typed `| undefined` because of `exactOptionalPropertyTypes`.
-- The controller serializes all refreshes through a single promise chain and suppresses its own
-  `changed` handler while stamping — otherwise the `setLocation` calls a refresh makes would
-  schedule a redundant, interleaving refresh and duplicate/erase stamps.
-- `CommentController.closeBuffer(bufnr)` exists for the unload path; the autocmd that calls it is
-  stage 3 work.
-- Extent highlight is stamped one extmark per line (`line_hl_group` + `sign_text` on the first
-  line) rather than one ranged extmark, since `line_hl_group` is a per-mark-line property.
+- The controller serializes all refreshes through a single promise chain and suppresses its own `changed` handler while stamping — otherwise the `setLocation` calls a refresh makes would schedule a redundant, interleaving refresh and duplicate/erase stamps.
+- `CommentController.closeBuffer(bufnr)` exists for the unload path; the autocmd that calls it is stage 3 work.
+- Extent highlight is stamped one extmark per line (`line_hl_group` + `sign_text` on the first line) rather than one ranged extmark, since `line_hl_group` is a per-mark-line property.
 - Rendering already supports the `maxMessages` elision the stage-3 input UI needs.
 
 Review follow-ups (stage 2):
 
-- `CommentLocation` is now a discriminated union on `state`: `anchored` carries `lines` and
-  `selection`, `stale` carries neither, so a stale location can no longer fabricate
-  `selection: ""`.
-- `CommentUpdateEntry` is likewise a union: `new-messages` carries a non-empty
-  `[CommentMessage, ...CommentMessage[]]`, close entries carry no messages.
-- Closing a comment that still has undelivered user messages now queues those messages as a
-  `new-messages` entry *before* the terminal notice, so a delete never silently swallows what the
-  user wrote. Covered by a test.
-- `CommentController.at()` no longer falls back to the cached extent: a stale comment covers no
-  rows, so a new comment on those rows is a new comment rather than a follow-up. Tested.
-- Extmark namespace parameters are typed `MagentaNamespace` (a union of the three exported
-  constants) instead of bare `string`; `ExtmarkOptions` gained the read-only `invalid` flag so the
-  stale check is type-checked rather than cast.
-- `commentVirtLines`'s `maxMessages` elision is covered by a neovim-free unit test
-  (`node/comments/comment-render.test.ts`), including the singular/plural boundary.
+- `CommentLocation` is now a discriminated union on `state`: `anchored` carries `lines` and `selection`, `stale` carries neither, so a stale location can no longer fabricate `selection: ""`.
+- `CommentUpdateEntry` is likewise a union: `new-messages` carries a non-empty `[CommentMessage, ...CommentMessage[]]`, close entries carry no messages.
+- Closing a comment that still has undelivered user messages now queues those messages as a `new-messages` entry _before_ the terminal notice, so a delete never silently swallows what the user wrote. Covered by a test.
+- `CommentController.at()` no longer falls back to the cached extent: a stale comment covers no rows, so a new comment on those rows is a new comment rather than a follow-up. Tested.
+- Extmark namespace parameters are typed `MagentaNamespace` (a union of the three exported constants) instead of bare `string`; `ExtmarkOptions` gained the read-only `invalid` flag so the stale check is type-checked rather than cast.
+- `commentVirtLines`'s `maxMessages` elision is covered by a neovim-free unit test (`node/comments/comment-render.test.ts`), including the singular/plural boundary.
 
 - Goal: `CommentStore` and `CommentController` exist and work end-to-end from a programmatic API — add a comment over a range, anchor it with an extmark, stamp the sign, extent highlight and inline `virt_lines`, add messages, delete, show/hide. No keymaps, no agent involvement yet. Also delete the dead `setInlineKeymaps`.
 - The store's tests need no neovim at all: locations go in as data, `<comment_update>` text comes out. Only the controller's tests drive a real buffer.
@@ -470,67 +441,34 @@ Review follow-ups (stage 2):
 
 ## Comment input UI and keymaps — DONE
 
-Implemented in `node/comments/comment-input.ts` (+ `comment-input.test.ts`), with controller
-support (`setTranscriptCap`, `virtLineCount`, `setPreview`, `extentsInBuffer`, `inRange`) in
-`node/comments/comment-controller.ts`, `renderPreview` in `node/comments/comment-render.ts`,
-notification handlers + `CommentInput`/`CommentController` ownership in `node/magenta.ts`,
-`Chat.getActiveRootThreadId` in `node/chat/chat.ts`, and the lua half in
-`lua/magenta/keymaps.lua`, `lua/magenta/init.lua`, `lua/magenta/options.lua`.
+Implemented in `node/comments/comment-input.ts` (+ `comment-input.test.ts`), with controller support (`setTranscriptCap`, `virtLineCount`, `setPreview`, `extentsInBuffer`, `inRange`) in `node/comments/comment-controller.ts`, `renderPreview` in `node/comments/comment-render.ts`, notification handlers + `CommentInput`/`CommentController` ownership in `node/magenta.ts`, `Chat.getActiveRootThreadId` in `node/chat/chat.ts`, and the lua half in `lua/magenta/keymaps.lua`, `lua/magenta/init.lua`, `lua/magenta/options.lua`.
 
 Notes / deviations:
 
-- `clear` is gone: dropped from `normal_commands` and from `default_keymaps`. `<leader>mc`
-  (normal + visual) now opens the comment input; `<leader>mD` deletes the comment under the cursor.
-- **Stage-3 ownership is temporary.** `Magenta` holds a `CommentStore` + `CommentController` per
-  root thread (`Magenta.getCommentController()`), because nothing drains the store yet. Stage 4
-  moves the store into `NvimThread`; this map is what it replaces.
-- Submit/cancel are routed through `:MagentaCommentSubmit` / `:MagentaCommentCancel` user commands
-  (registered by the bridge, torn down with it) plus a `magentaCommentInput` rpcnotify. That keeps
-  the `commentKeymaps` option a plain table of `key -> command string`, matching `sidebarKeymaps`
-  and `displayKeymaps`. `<Esc><Esc>` is bound unconditionally in addition to the option.
-- Everything that is purely geometric lives in lua: `fit_comment_input` (scroll the target window
-  so the extent + transcript + float unit fits, via `nvim_win_text_height` with a fallback) and the
-  `TextChanged`/`TextChangedI` resize inside `setup_comment_input`. Node only supplies the anchor
-  row, the virt-line offset and the unit height.
-- The transcript cap is 3 messages (`INPUT_TRANSCRIPT_MESSAGES`), not "~6 message lines" — a message
-  can wrap to several lines, and capping by message is what `commentVirtLines` already supports.
-- `]c` / `[c` are installed buffer-locally only after a comment is submitted in that buffer, and
-  resolve through node (`magentaCommentJump`) since node owns the extents.
-- New `<leader>mc` on a buffer that already has a comment at the cursor is routed through
-  `CommentController.inRange`, so the follow-up path and the "at most one comment per line" rule
-  share one implementation with `addComment`.
-- Tests drive the lua entry points (`require("magenta.keymaps").comment()` / `comment_visual()` /
-  `comment_delete()`, `:MagentaCommentSubmit`) rather than feeding `<leader>mc` keystrokes, which
-  exercises the same rpcnotify path without depending on leader-key timing.
-- Not covered by an automated test: `q` / `<C-c>` specifically (the cancel *path* is covered via
-  `:MagentaCommentCancel`, which is what those keys are bound to).
+- `clear` is gone: dropped from `normal_commands` and from `default_keymaps`. `<leader>mc` (normal + visual) now opens the comment input; `<leader>mD` deletes the comment under the cursor.
+- **Stage-3 ownership is temporary.** `Magenta` holds a `CommentStore` + `CommentController` per root thread (`Magenta.getCommentController()`), because nothing drains the store yet. Stage 4 moves the store into `NvimThread`; this map is what it replaces.
+- Submit/cancel are routed through `:MagentaCommentSubmit` / `:MagentaCommentCancel` user commands (registered by the bridge, torn down with it) plus a `magentaCommentInput` rpcnotify. That keeps the `commentKeymaps` option a plain table of `key -> command string`, matching `sidebarKeymaps` and `displayKeymaps`. `<Esc><Esc>` is bound unconditionally in addition to the option.
+- Everything that is purely geometric lives in lua: `fit_comment_input` (scroll the target window so the extent + transcript + float unit fits, via `nvim_win_text_height` with a fallback) and the `TextChanged`/`TextChangedI` resize inside `setup_comment_input`. Node only supplies the anchor row, the virt-line offset and the unit height.
+- The transcript cap is 3 messages (`INPUT_TRANSCRIPT_MESSAGES`), not "~6 message lines" — a message can wrap to several lines, and capping by message is what `commentVirtLines` already supports.
+- `]c` / `[c` are installed buffer-locally only after a comment is submitted in that buffer, and resolve through node (`magentaCommentJump`) since node owns the extents.
+- New `<leader>mc` on a buffer that already has a comment at the cursor is routed through `CommentController.inRange`, so the follow-up path and the "at most one comment per line" rule share one implementation with `addComment`.
+- Tests drive the lua entry points (`require("magenta.keymaps").comment()` / `comment_visual()` / `comment_delete()`, `:MagentaCommentSubmit`) rather than feeding `<leader>mc` keystrokes, which exercises the same rpcnotify path without depending on leader-key timing.
+- Not covered by an automated test: `q` / `<C-c>` specifically (the cancel _path_ is covered via `:MagentaCommentCancel`, which is what those keys are bound to).
 
 Review follow-ups (stage 3):
 
-- `CommentController`'s `transcriptCaps` map and `preview` field collapsed into a single
-  `activeInput: ActiveInput | undefined` (`{type:"reply"; id; maxMessages} | {type:"new"; bufnr; extent}`),
-  set through `setActiveInput`. Only one input is ever open, so a stale cap and a stale preview are
-  no longer representable.
-- `CommentInput` carries an `InputMode` discriminated union instead of `commentId: CommentId | undefined`;
-  `close()` is now a single unconditional `setActiveInput(undefined)`.
-- `renderComment`'s `maxMessages` is `number | undefined` to match `commentVirtLines` under
-  `exactOptionalPropertyTypes`.
-- The four comment notification handlers in `node/magenta.ts` share a `CommentNotificationPayloads`
-  map plus a `commentPayload()` helper, replacing the per-site `as unknown as {...}[]` plus
-  per-field brand casts.
-- Lua naming: `magenta_channel_id` -> `magentaChannelId`, and the parameters of `set_channel_id`,
-  `fit_comment_input` and `setup_comment_input` are camelCase.
-- New tests: opening a second input while one is open leaves exactly one float and no stale preview;
-  comment controllers are keyed by root thread (a subagent resolves to its parent's controller, a
-  new root thread gets an empty one); `]c`/`[c` leave the cursor put at the boundaries. Note the
-  thread-switch test asserts *controller* isolation only — hiding the decoration on switch is
-  stage 6.
+- `CommentController`'s `transcriptCaps` map and `preview` field collapsed into a single `activeInput: ActiveInput | undefined` (`{type:"reply"; id; maxMessages} | {type:"new"; bufnr; extent}`), set through `setActiveInput`. Only one input is ever open, so a stale cap and a stale preview are no longer representable.
+- `CommentInput` carries an `InputMode` discriminated union instead of `commentId: CommentId | undefined`; `close()` is now a single unconditional `setActiveInput(undefined)`.
+- `renderComment`'s `maxMessages` is `number | undefined` to match `commentVirtLines` under `exactOptionalPropertyTypes`.
+- The four comment notification handlers in `node/magenta.ts` share a `CommentNotificationPayloads` map plus a `commentPayload()` helper, replacing the per-site `as unknown as {...}[]` plus per-field brand casts.
+- Lua naming: `magenta_channel_id` -> `magentaChannelId`, and the parameters of `set_channel_id`, `fit_comment_input` and `setup_comment_input` are camelCase.
+- New tests: opening a second input while one is open leaves exactly one float and no stale preview; comment controllers are keyed by root thread (a subagent resolves to its parent's controller, a new root thread gets an empty one); `]c`/`[c` leave the cursor put at the boundaries. Note the thread-switch test asserts _controller_ isolation only — hiding the decoration on switch is stage 6.
 
 - Goal: `<leader>mc` in normal and visual mode opens the authoring float; `<CR>`/`:w` submit, `q`/`<C-c>`/empty cancel; `<leader>mc` over an existing comment adds a follow-up; `<leader>mD` deletes; `]c`/`[c` jump. `clear` is gone.
 - Tests:
   - Visual-select two lines, `<leader>mc`, type text, `<CR>`: the float closes and the comment renders over those lines with its text inline.
   - The float is positioned below the last selected line and grows as the text wraps past one line.
-  - Opening a follow-up on a comment with three messages puts the float *below* all three virtual lines, not over the first one.
+  - Opening a follow-up on a comment with three messages puts the float _below_ all three virtual lines, not over the first one.
   - Opening the input near the bottom of the window scrolls the target window so that the commented extent, the transcript and the input are all on screen.
   - While the input is open on a comment with ten messages, only the last few render plus an `… N earlier messages` line; cancelling restores the full transcript.
   - Opening the input for a new comment highlights the selected range before anything is typed, and cancelling removes that highlight.
@@ -543,65 +481,28 @@ Review follow-ups (stage 3):
 
 ## Delivery to the agent — DONE
 
-Implemented in `node/core/src/agent.ts` (`getCommentStore` dep, `appendCommentUpdates`,
-`commitCommentUpdates`), `node/core/src/thread.ts` (`Thread.commentStore`),
-`node/chat/thread.ts` (root threads own the store + controller, `onCommentUpdatesSent` ledger
-state), `node/comments/comment-update-view.ts` (new), `node/chat/thread-view.ts`,
-`node/chat/chat.ts` (`getActiveRootThread`), `node/magenta.ts` (controller lookup, `BufDelete`
-close). Tests in `node/comments/comment-delivery.test.ts`.
+Implemented in `node/core/src/agent.ts` (`getCommentStore` dep, `appendCommentUpdates`, `commitCommentUpdates`), `node/core/src/thread.ts` (`Thread.commentStore`), `node/chat/thread.ts` (root threads own the store + controller, `onCommentUpdatesSent` ledger state), `node/comments/comment-update-view.ts` (new), `node/chat/thread-view.ts`, `node/chat/chat.ts` (`getActiveRootThread`), `node/magenta.ts` (controller lookup, `BufDelete` close). Tests in `node/comments/comment-delivery.test.ts`.
 
 Notes / deviations:
 
-- **`AgentDeps.getCommentStore` is a function**, not a `commentStore` field: the owning `Thread`
-  is handed a store after its first agent already exists, and compaction swaps the agent
-  underneath. `Thread.commentStore` is the durable holder; every agent reads it lazily, so a
-  post-compaction agent keeps delivering.
-- Comment content is appended to the same array `getAndPrepareContextUpdates` returns, so it
-  counts toward the `!hasContent && contextContent.length === 0` early-settle guard for free, and
-  the drain stays pure — `commitCommentUpdates()` runs only next to the three
-  `onContextUpdatesSent` / `onGitContextUpdateSent` sites, i.e. past that guard.
-- The second drain site is `buildToolResponseExtras`, which is what the plan called
-  `buildContinuationContent`.
-- A new `comment_update` provider content type (rather than reusing `context_update`) carries the
-  block, so the display buffer suppresses the raw text and the compaction / archive renderers can
-  treat it correctly. Registered in `tagged-content.ts` and handled in `anthropic.ts`,
-  `openai.ts`, `archive-renderer.ts`, `compact-renderer.ts` and `thread-view.ts`.
-- Root threads (`root` / `docker_root`) construct their own `CommentStore` + `CommentController`
-  in `NvimThread`'s constructor, replacing stage 3's temporary map on `Magenta`.
-  `Magenta.getCommentController()` now resolves through `Chat.getActiveRootThread()`.
-- Locations are refreshed before a send (`NvimThread`'s `send-message` case calls
-  `CommentController.refresh()`), but **only when the thread actually has comments** — an
-  unconditional async hop delayed the send enough to break abort-by-send.
-- `BufDelete`/`BufWipeout` now closes comments on the wiped buffer for every initialized thread,
-  not just the active one (`Magenta.onBufDelete`).
-- Pending markers needed no new work: the decoration already renders `(pending)` from
-  `store.pendingCommentIds()`, and `commitPending` emits `changed`, which re-stamps.
-- Not covered by an automated test: the "line range reflects position after intervening edits"
-  case, which the refresh-before-send hook implements.
+- **`AgentDeps.getCommentStore` is a function**, not a `commentStore` field: the owning `Thread` is handed a store after its first agent already exists, and compaction swaps the agent underneath. `Thread.commentStore` is the durable holder; every agent reads it lazily, so a post-compaction agent keeps delivering.
+- Comment content is appended to the same array `getAndPrepareContextUpdates` returns, so it counts toward the `!hasContent && contextContent.length === 0` early-settle guard for free, and the drain stays pure — `commitCommentUpdates()` runs only next to the three `onContextUpdatesSent` / `onGitContextUpdateSent` sites, i.e. past that guard.
+- The second drain site is `buildToolResponseExtras`, which is what the plan called `buildContinuationContent`.
+- A new `comment_update` provider content type (rather than reusing `context_update`) carries the block, so the display buffer suppresses the raw text and the compaction / archive renderers can treat it correctly. Registered in `tagged-content.ts` and handled in `anthropic.ts`, `openai.ts`, `archive-renderer.ts`, `compact-renderer.ts` and `thread-view.ts`.
+- Root threads (`root` / `docker_root`) construct their own `CommentStore` + `CommentController` in `NvimThread`'s constructor, replacing stage 3's temporary map on `Magenta`. `Magenta.getCommentController()` now resolves through `Chat.getActiveRootThread()`.
+- Locations are refreshed before a send (`NvimThread`'s `send-message` case calls `CommentController.refresh()`), but **only when the thread actually has comments** — an unconditional async hop delayed the send enough to break abort-by-send.
+- `BufDelete`/`BufWipeout` now closes comments on the wiped buffer for every initialized thread, not just the active one (`Magenta.onBufDelete`).
+- Pending markers needed no new work: the decoration already renders `(pending)` from `store.pendingCommentIds()`, and `commitPending` emits `changed`, which re-stamps.
+- Not covered by an automated test: the "line range reflects position after intervening edits" case, which the refresh-before-send hook implements.
 
 Review follow-ups (stage 4):
 
-- `CommentStore.getPendingUpdate()` returns `string | undefined` (and `commentUpdatesToContent`
-  became `commentUpdatesToText`), so `Agent.appendCommentUpdates` no longer filters a wide
-  `ProviderMessageContent[]` for the one text part the producer always emits.
-- The store is no longer handed to the core `Thread` after construction: `Thread` derives
-  `readonly commentStore` from its own `threadType` (root / docker_root), which encodes "only root
-  threads have comments" in one place and makes the fork path work without extra plumbing.
-  `AgentDeps.getCommentStore` is now a required prop returning `CommentStore | undefined`.
-- `NvimThread.isRootThread()` narrows to a new `RootNvimThread` type (a thread with a required
-  `commentController`); `Chat.getActiveRootThread()` returns that, so `Magenta.getCommentController`
-  has no runtime throw of its own.
-- `toggle-expand-comment-update` / `expandedCommentUpdates` / `renderCommentUpdate` all key on the
-  branded `CommentId` instead of `string`.
-- `ProviderCommentUpdateContent` is kept (dropping it would make the display buffer render the raw
-  block); a comment records that, like `context_update`, it is only ever constructed by
-  `classifyTextContent` on the way back from the wire. The `null` in `jumpToComment` is likewise
-  kept with a note that it is the lua-`nil` boundary.
-- New tests in `node/comments/comment-delivery.test.ts`: an aborted turn does not re-queue the
-  block (it lives in the message history, so it is delivered exactly once); a send carrying pending
-  comments still preempts an in-flight turn (the refresh-before-send async branch); a wiped buffer
-  closes comments in *two* root threads, not just the active one; and a comment left after a
-  compaction still rides out on the next request.
+- `CommentStore.getPendingUpdate()` returns `string | undefined` (and `commentUpdatesToContent` became `commentUpdatesToText`), so `Agent.appendCommentUpdates` no longer filters a wide `ProviderMessageContent[]` for the one text part the producer always emits.
+- The store is no longer handed to the core `Thread` after construction: `Thread` derives `readonly commentStore` from its own `threadType` (root / docker_root), which encodes "only root threads have comments" in one place and makes the fork path work without extra plumbing. `AgentDeps.getCommentStore` is now a required prop returning `CommentStore | undefined`.
+- `NvimThread.isRootThread()` narrows to a new `RootNvimThread` type (a thread with a required `commentController`); `Chat.getActiveRootThread()` returns that, so `Magenta.getCommentController` has no runtime throw of its own.
+- `toggle-expand-comment-update` / `expandedCommentUpdates` / `renderCommentUpdate` all key on the branded `CommentId` instead of `string`.
+- `ProviderCommentUpdateContent` is kept (dropping it would make the display buffer render the raw block); a comment records that, like `context_update`, it is only ever constructed by `classifyTextContent` on the way back from the wire. The `null` in `jumpToComment` is likewise kept with a note that it is the lua-`nil` boundary.
+- New tests in `node/comments/comment-delivery.test.ts`: an aborted turn does not re-queue the block (it lives in the message history, so it is delivered exactly once); a send carrying pending comments still preempts an in-flight turn (the refresh-before-send async branch); a wiped buffer closes comments in _two_ root threads, not just the active one; and a comment left after a compaction still rides out on the next request.
 
 - Goal: `AgentDeps.commentStore` exists and is drained alongside the context update in `handleSend` and `buildContinuationContent`; the root `NvimThread` constructs the store and hands it to the agent. Pending messages render as `pending` until committed.
 - Tests:
@@ -616,46 +517,25 @@ Review follow-ups (stage 4):
 
 ## The reply tool — DONE
 
-Implemented in `node/core/src/tools/reply.ts` (+ registry / helpers / create-tool / tool-types /
-index wiring), `node/render-tools/reply.ts` (+ `node/render-tools/index.ts`, `streaming.ts`), the
-`comments` capability in `node/environment.ts`, and `commentStore` on `CreateToolContext`
-(supplied from `AgentDeps.getCommentStore()` in `node/core/src/agent.ts`). Tests in
-`node/comments/reply-tool.test.ts`.
+Implemented in `node/core/src/tools/reply.ts` (+ registry / helpers / create-tool / tool-types / index wiring), `node/render-tools/reply.ts` (+ `node/render-tools/index.ts`, `streaming.ts`), the `comments` capability in `node/environment.ts`, and `commentStore` on `CreateToolContext` (supplied from `AgentDeps.getCommentStore()` in `node/core/src/agent.ts`). Tests in `node/comments/reply-tool.test.ts`.
 
 Notes / deviations:
 
-- The tool result is always `status: "ok"`; per-reply outcome is reported in the text
-  (`c1: replied` / `c1: error - ...`) and in `StructuredResult.replies`. A batch with any failure
-  also lists the currently open comment ids, so the agent can self-correct without another probe.
-- `validateInput` checks shape only; ids are *not* validated against `listOpenCommentIds()`
-  (the plan suggested narrowing there). An id that has since closed must produce a per-reply error
-  rather than a whole-batch validation failure, which is exactly what `execute` does.
-- The `comments` capability is granted by both `createLocalEnvironment` and
-  `createDockerEnvironment`: comments live in the host neovim, not in the execution environment,
-  so a `docker_root` thread has them too. `reply` is reachable only from `CHAT_STATIC_TOOL_NAMES`
-  (and hence `DOCKER_ROOT_STATIC_TOOL_NAMES`), so subagents and compact threads never see it.
-- `create-tool.ts` throws when `commentStore` is missing, matching the `nvim_lua`/`luaExecutor`
-  precedent. That is unreachable in practice — the capability gate keeps the spec out of any
-  thread without a store.
-- Redraw needed no new wiring: `addAgentMessage` emits `changed`, which the `CommentController`
-  already listens to.
+- The tool result is always `status: "ok"`; per-reply outcome is reported in the text (`c1: replied` / `c1: error - ...`) and in `StructuredResult.replies`. A batch with any failure also lists the currently open comment ids, so the agent can self-correct without another probe.
+- `validateInput` checks shape only; ids are _not_ validated against `listOpenCommentIds()` (the plan suggested narrowing there). An id that has since closed must produce a per-reply error rather than a whole-batch validation failure, which is exactly what `execute` does.
+- The `comments` capability is granted by both `createLocalEnvironment` and `createDockerEnvironment`: comments live in the host neovim, not in the execution environment, so a `docker_root` thread has them too. `reply` is reachable only from `CHAT_STATIC_TOOL_NAMES` (and hence `DOCKER_ROOT_STATIC_TOOL_NAMES`), so subagents and compact threads never see it.
+- `create-tool.ts` throws when `commentStore` is missing, matching the `nvim_lua`/`luaExecutor` precedent. That is unreachable in practice — the capability gate keeps the spec out of any thread without a store.
+- Redraw needed no new wiring: `addAgentMessage` emits `changed`, which the `CommentController` already listens to.
 - The three `Tool Definitions (8)` snapshots in `node/chat/thread.test.ts` became `(9)`.
 
 Review follow-ups (stage 5):
 
-- `PerReplyResult` is a discriminated union (`{commentId} & ({status:"ok"} | {status:"error"; error})`),
-  so the structured result keeps the error message instead of a bare `isError` flag.
-- The two casts on `structuredResult` are gone; `StructuredResult.toolName` is the literal `"reply"`,
-  matching `edl.ts`.
-- `node/render-tools/reply.ts` no longer defends with `input.replies ?? []` — the type is required
-  and `validateInput` enforces it.
-- An empty batch now returns `No replies were provided.` rather than an empty text block (some
-  providers reject empty text content).
-- `Agent.executeTools` wraps `createTool` in a try/catch and turns a throw (a missing capability,
-  e.g. `reply` without a `commentStore`) into a tool error result instead of tearing down the turn.
-- New `node/core/src/tools/reply.test.ts`: a neovim-free table covering every `validateInput`
-  rejection branch plus the ok case, and the empty-batch `execute` path.
-
+- `PerReplyResult` is a discriminated union (`{commentId} & ({status:"ok"} | {status:"error"; error})`), so the structured result keeps the error message instead of a bare `isError` flag.
+- The two casts on `structuredResult` are gone; `StructuredResult.toolName` is the literal `"reply"`, matching `edl.ts`.
+- `node/render-tools/reply.ts` no longer defends with `input.replies ?? []` — the type is required and `validateInput` enforces it.
+- An empty batch now returns `No replies were provided.` rather than an empty text block (some providers reject empty text content).
+- `Agent.executeTools` wraps `createTool` in a try/catch and turns a throw (a missing capability, e.g. `reply` without a `commentStore`) into a tool error result instead of tearing down the turn.
+- New `node/core/src/tools/reply.test.ts`: a neovim-free table covering every `validateInput` rejection branch plus the ok case, and the empty-batch `execute` path.
 
 - Goal: `reply` is registered, gated on the new `comments` capability, available only to root chat threads; the root `NvimThread` supplies its `CommentStore` as the capability; replies append to the decoration (via the store's `changed` event) and render as a tool use in the thread.
 - Tests:
@@ -666,45 +546,22 @@ Review follow-ups (stage 5):
 
 ## Visibility across threads — DONE
 
-Implemented in `node/magenta.ts` (`syncCommentVisibility`, called at the end of `syncActiveView`,
-and `stampCommentsOnBufEnter`, called from `onBufEnter`). Tests in
-`node/comments/comment-visibility.test.ts`.
+Implemented in `node/magenta.ts` (`syncCommentVisibility`, called at the end of `syncActiveView`, and `stampCommentsOnBufEnter`, called from `onBufEnter`). Tests in `node/comments/comment-visibility.test.ts`.
 
 Notes / deviations:
 
-- Visibility is only synced while the chat is in `thread-selected`. The overview and archive views
-  don't select a different conversation, they just stop displaying one, so they leave the current
-  decorations alone rather than flickering them off and back on.
-- Inactive controllers are hidden *before* the active one is shown: the render namespace is shared
-  across threads, so the reverse order would let a hide wipe stamps just made in a buffer both
-  threads comment on.
-- `stampCommentsOnBufEnter` runs after the existing `handlingBufEnter` re-entrancy guard (awaiting
-  before it made BufEnter re-entrant and destabilized unrelated tests) and is a no-op when the
-  active root thread has no comments.
-Review follow-ups (stage 6):
+- Visibility is only synced while the chat is in `thread-selected`. The overview and archive views don't select a different conversation, they just stop displaying one, so they leave the current decorations alone rather than flickering them off and back on.
+- Inactive controllers are hidden _before_ the active one is shown: the render namespace is shared across threads, so the reverse order would let a hide wipe stamps just made in a buffer both threads comment on.
+- `stampCommentsOnBufEnter` runs after the existing `handlingBufEnter` re-entrancy guard (awaiting before it made BufEnter re-entrant and destabilized unrelated tests) and is a no-op when the active root thread has no comments. Review follow-ups (stage 6):
 
-- `Chat.getActiveRootThreadOrUndefined()` encodes "no active/initialized root thread" in the return
-  type; `syncCommentVisibility` and `stampCommentsOnBufEnter` branch on the value instead of
-  catching a throw. A thread that exists but isn't a root thread is still a throw — that's an
-  invariant violation, not a routine state. `getActiveRootThread()` (and hence
-  `Magenta.getCommentController()`) keeps throwing for callers that require one.
-- The controller list in `syncCommentVisibility` is built with the `isRootThread()` narrowing
-  predicate rather than an ad-hoc truthiness check on `commentController`, so no `{id, controller}`
-  pairs and no re-find by id.
-- Caught values are formatted with `e instanceof Error ? e.message : String(e)` instead of
-  `(e as Error).message`.
-- The hide-before-show ordering is now pinned by a test: the re-opened-window test switches back to
-  thread A (both threads comment on poem.txt) and asserts A's virt_lines are present and B's gone.
-  Verified it fails when the order is flipped.
+- `Chat.getActiveRootThreadOrUndefined()` encodes "no active/initialized root thread" in the return type; `syncCommentVisibility` and `stampCommentsOnBufEnter` branch on the value instead of catching a throw. A thread that exists but isn't a root thread is still a throw — that's an invariant violation, not a routine state. `getActiveRootThread()` (and hence `Magenta.getCommentController()`) keeps throwing for callers that require one.
+- The controller list in `syncCommentVisibility` is built with the `isRootThread()` narrowing predicate rather than an ad-hoc truthiness check on `commentController`, so no `{id, controller}` pairs and no re-find by id.
+- Caught values are formatted with `e instanceof Error ? e.message : String(e)` instead of `(e as Error).message`.
+- The hide-before-show ordering is now pinned by a test: the re-opened-window test switches back to thread A (both threads comment on poem.txt) and asserts A's virt_lines are present and B's gone. Verified it fails when the order is flipped.
 - The same test asserts that switching to the thread overview leaves the decorations alone.
-- Not pinned by a test: `stampCommentsOnBufEnter` runs before the sidebar-visibility guard in
-  `onBufEnter`, so it fires with the sidebar hidden too. That's intentional — comments live in the
-  user's buffers and shouldn't depend on the sidebar being open — but the driver has no
-  `hideSidebar` helper, so it stays untested.
+- Not pinned by a test: `stampCommentsOnBufEnter` runs before the sidebar-visibility guard in `onBufEnter`, so it fires with the sidebar hidden too. That's intentional — comments live in the user's buffers and shouldn't depend on the sidebar being open — but the driver has no `hideSidebar` helper, so it stays untested.
 
-- Thread deletion needed no new code: `deleteThreadSubtree` already calls `NvimThread.destroy()`,
-  which destroys the `CommentController` (hiding the render namespace and dropping every anchor
-  extmark). The stage's test asserts both namespaces are empty afterwards.
+- Thread deletion needed no new code: `deleteThreadSubtree` already calls `NvimThread.destroy()`, which destroys the `CommentController` (hiding the render namespace and dropping every anchor extmark). The stage's test asserts both namespaces are empty afterwards.
 
 - Goal: comments are scoped to their root thread and shown/hidden on thread switch and on buffer enter.
 - Tests:

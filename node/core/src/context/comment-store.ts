@@ -181,7 +181,9 @@ export class CommentStore extends Emitter<CommentStoreEvents> {
     }
   }
 
-  private buildEntries(): CommentUpdateEntry[] {
+  /** The entries that would ride out on the next request. Also what the live
+   * "pending comments" view in the display buffer renders. Pure. */
+  getPendingEntries(): CommentUpdateEntry[] {
     const queuedById = new Map<CommentId, CommentUpdateEntry[]>();
     for (const entry of this.queuedEntries) {
       const list = queuedById.get(entry.commentId) ?? [];
@@ -213,19 +215,19 @@ export class CommentStore extends Emitter<CommentStoreEvents> {
   }
 
   hasPendingUpdates(): boolean {
-    return this.buildEntries().length > 0;
+    return this.getPendingEntries().length > 0;
   }
 
   /** The `<comment_update>` block for undelivered messages, or undefined when
    * nothing is pending. Pure. */
   getPendingUpdate(): string | undefined {
-    return commentUpdatesToText(this.buildEntries());
+    return commentUpdatesToText(this.getPendingEntries());
   }
 
   /** Marks everything `getPendingUpdate` would return as delivered, and returns
    * the structured entries for the thread's display ledger. */
   commitPending(): CommentUpdateEntry[] {
-    const entries = this.buildEntries();
+    const entries = this.getPendingEntries();
     for (const entry of entries) {
       const comment = this.comments[entry.commentId];
       if (comment) {

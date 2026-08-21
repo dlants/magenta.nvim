@@ -162,6 +162,31 @@ describe("comment delivery", () => {
     });
   });
 
+  it("lists an undelivered comment above the input until it is sent", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      await openPoem(driver);
+      await comment(driver, 1, "why is this here?");
+
+      await driver.assertDisplayBufferContains(
+        "💬 `poem.txt:2` [ pending: 1 new message ]",
+      );
+      await driver.triggerDisplayBufferKeyOnContent(
+        "💬 `poem.txt:2` [ pending: 1 new message ]",
+        "=",
+      );
+      await driver.assertDisplayBufferContains("why is this here?");
+
+      await driver.inputMagentaText("take a look");
+      await driver.send();
+      const stream = await driver.mockAnthropic.awaitPendingStream();
+      stream.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
+      await driver.assertDisplayBufferContains("ok");
+
+      await driver.assertDisplayBufferDoesNotContain("[ pending:");
+    });
+  });
+
   it("shows a collapsible ledger instead of the raw block", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();

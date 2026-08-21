@@ -25,9 +25,7 @@ pkb search "<natural language query>"   # -k N sets result count (default 5)
 
 Each result is a snippet with its file path — treat it as a pointer and open the file to read the real code. The index reflects the last indexed commit on `main`, not your working tree. The `plans/` dir is excluded from the index (see `pkb.toml`).
 
-<system_reminder>
-Prefer `pkb search <query>` to grep for exploratory queries.
-</system_reminder>
+<system_reminder> Prefer `pkb search <query>` to grep for exploratory queries. </system_reminder>
 
 # Architecture
 
