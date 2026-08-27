@@ -109,8 +109,11 @@ export type EndTurnContext = {
 };
 
 export type RequestContext = {
+  /** "submission": the opening request of a send. "continuation": a request
+   * carrying tool results or a supervisor nudge. */
+  kind: "submission" | "continuation";
   inputTokenCount: number | undefined;
-  stopReason: StreamStopReason;
+  stopReason: StreamStopReason | undefined;
 };
 
 export interface ThreadSupervisor {

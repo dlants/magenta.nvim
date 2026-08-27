@@ -8,6 +8,7 @@ import {
 } from "./thread-supervisor.ts";
 
 const context: RequestContext = {
+  kind: "continuation",
   inputTokenCount: 400000,
   stopReason: "end_turn",
 };
@@ -73,12 +74,14 @@ describe("AutoCompactSupervisor", () => {
     });
     expect(
       await sup.onBeforeRequest({
+        kind: "continuation",
         inputTokenCount: 300000,
         stopReason: "end_turn",
       }),
     ).toEqual({ type: "compact", nextPrompt: "go" });
     expect(
       await sup.onBeforeRequest({
+        kind: "continuation",
         inputTokenCount: 400000,
         stopReason: "end_turn",
       }),
@@ -92,12 +95,14 @@ describe("AutoCompactSupervisor", () => {
     });
     expect(
       await sup.onBeforeRequest({
+        kind: "continuation",
         inputTokenCount: 299999,
         stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });
     expect(
       await sup.onBeforeRequest({
+        kind: "continuation",
         inputTokenCount: undefined,
         stopReason: "end_turn",
       }),
@@ -108,12 +113,14 @@ describe("AutoCompactSupervisor", () => {
     const sup = new AutoCompactSupervisor({ nextPrompt: "go" });
     expect(
       await sup.onBeforeRequest({
+        kind: "continuation",
         inputTokenCount: 300000,
         stopReason: "end_turn",
       }),
     ).toEqual({ type: "compact", nextPrompt: "go" });
     expect(
       await sup.onBeforeRequest({
+        kind: "continuation",
         inputTokenCount: 299999,
         stopReason: "end_turn",
       }),

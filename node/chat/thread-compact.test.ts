@@ -609,7 +609,7 @@ it("auto-compact threshold from options wires into the thread's supervisor", asy
   );
 });
 
-it("auto-compact triggers on handoff when inputTokenCount breaches the supervisor threshold", async () => {
+it("auto-compact triggers when inputTokenCount breaches the supervisor threshold", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
@@ -662,19 +662,10 @@ it("auto-compact triggers on handoff when inputTokenCount breaches the superviso
       }),
     ];
 
-    // Drive a second turn. At its handoff the over-threshold token count
-    // triggers auto-compaction.
+    // The next send consults the supervisor before its opening request, so the
+    // over-threshold token count compacts instead of issuing that request.
     await driver.inputMagentaText("Another question");
     await driver.send();
-
-    const request2 = await driver.mockAnthropic.awaitPendingStream({
-      message: "second request",
-    });
-    request2.respond({
-      stopReason: "end_turn",
-      text: "Sure, happy to help.",
-      toolRequests: [],
-    });
 
     // The thread should enter compacting mode automatically
     await pollUntil(

@@ -214,10 +214,20 @@ Decisions / deviations:
 - New tests in `node/core/src/agent.test.ts`: exactly-once injection when a compaction follows (end_turn path); the same for the tool_use path (`deferInjections` + compaction); injection survives a failed next request and rides the retry; injection survives an aborted next request.
 - Review follow-up: all four stage-2 assertions now use a shared `countOccurrences` helper (exactly-once, not `toContain`), and the abort test — like the failure test — follows up with a `retry` send and asserts the injection rides that next request exactly once.
 
-## 3. `onBeforeRequest` at submission start
+## 3. `onBeforeRequest` at submission start — DONE
 
 - Goal: agent consults `onBeforeRequest` with `kind: "submission"` before the opening request and merges its content ahead of user content.
 - Tests: a supervisor injecting on `kind: "submission"` appears in the first provider request, before the user message. `AutoCompactSupervisor` over threshold compacts from a plain `send`, exactly once.
+
+Decisions / deviations:
+
+- `RequestContext` gains `kind: "submission" | "continuation"` and `stopReason` is now optional (`undefined` on the submission consult). `Agent.applyBeforeRequestActions` takes `Omit<RequestContext, "inputTokenCount">` and fills the token count itself.
+- `deferInjections` grew a second mode: `"pending"` (the tool_use path, unchanged) and `"return"` (the submission path). On the submission path the injections cannot be appended to the log first — the invariant is that they land in the *same* user message as the user's content, ahead of it — so they are returned and prepended to `contentToSend`.
+- **Compaction at submission:** if the submission consult asks to compact, the agent appends the user's own content (plus any legacy context content) to the log with `coalesce`, then settles `compact`. The user's message is therefore in the snapshot handed to `CompactionManager.start` rather than being lost with the discarded agent.
+- **No double consultation.** `submit` is also the entry point for the continuations issued out of `handleStopped` (max_tokens continue-prompt, drained pending messages, an end-turn supervisor nudge), which already consulted. Those call sites pass a new `SubmitOptions.skipBeforeRequest`. The yield-path and error-retry resubmits do consult, since nothing consulted for them.
+- Existing supervisor tests that drove a compaction/injection off a *handoff* now gate on `ctx.kind === "continuation"`, and the three `AutoCompactSupervisor` handoff tests let the token count cross the threshold only after the second response (mock count 50 → 200), so the handoff — not the submission — is still the trigger under test.
+- `node/chat/thread-compact.test.ts`'s auto-compact test now compacts at the second `send` before its request goes out; the test drops the second request/response and is renamed accordingly.
+- New tests in `node/core/src/agent.test.ts`: an injection on `kind: "submission"` appears in the first request ahead of the user text; `AutoCompactSupervisor` over threshold compacts from a plain `send` exactly once, with the user message present in the log.
 
 ## 4. `onToolApplied` hook
 

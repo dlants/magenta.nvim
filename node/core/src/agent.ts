@@ -70,6 +70,7 @@ import type {
 import type {
   EndTurnAction,
   EndTurnContext,
+  RequestContext,
   YieldAction,
 } from "./thread-supervisor.ts";
 import type {
@@ -281,12 +282,23 @@ export type SubmitOptions = {
   /** Skip context updates, reminders and failed-submit bookkeeping: the caller
    * has composed the exact content (the compact thread). */
   raw?: boolean;
+  /** The caller already consulted `onBeforeRequest` for this request (the
+   * continuations issued out of `handleStopped`), so don't consult again. */
+  skipBeforeRequest?: true;
 };
 
 /** A handoff to a fresh, compacted agent. `nextPrompt` is what the new agent
  * is asked to do first, if anything. */
 export type Compaction = { nextPrompt: string | undefined };
 export type AgentSendOutcome = SendResult | ({ type: "compact" } & Compaction);
+
+/** Outcome of consulting the before-request hooks. `injections` is non-empty
+ * only when the caller asked to receive them instead of having them appended
+ * to the log (`deferInjections: "return"`). */
+type BeforeRequestResult = {
+  compaction: Compaction | undefined;
+  injections: AgentInput[];
+};
 
 export class Agent {
   public state: ThreadState;
@@ -689,7 +701,10 @@ export class Agent {
     this.resetErrorRetryState();
     this.update({ type: "set-mode", mode: { type: "normal" } });
 
-    const compaction = await this.applyBeforeRequestActions(stopReason);
+    const { compaction } = await this.applyBeforeRequestActions({
+      kind: "continuation",
+      stopReason,
+    });
     if (compaction) {
       // The submission is not over: the owning Thread runs the handoff and
       // continues it on the replacement agent.
@@ -698,12 +713,15 @@ export class Agent {
     }
 
     if (stopReason === "max_tokens") {
-      await this.submit([
-        {
-          type: "system",
-          text: "Your previous response was truncated due to the output token limit. Please continue where you left off.",
-        },
-      ]);
+      await this.submit(
+        [
+          {
+            type: "system",
+            text: "Your previous response was truncated due to the output token limit. Please continue where you left off.",
+          },
+        ],
+        { skipBeforeRequest: true },
+      );
       return;
     }
 
@@ -718,7 +736,7 @@ export class Agent {
       ];
       this.update({ type: "drain-pending-messages" }, { silent: true });
       this.update({ type: "drain-pending-next-messages" }, { silent: true });
-      await this.submit(pendingMessages);
+      await this.submit(pendingMessages, { skipBeforeRequest: true });
       return;
     }
 
@@ -727,7 +745,9 @@ export class Agent {
       lastAssistantMessage: this.getLastAssistantMessage(),
     });
     if (action.type === "send-message") {
-      await this.submit([{ type: "system", text: action.text }]);
+      await this.submit([{ type: "system", text: action.text }], {
+        skipBeforeRequest: true,
+      });
       return;
     }
 
@@ -880,9 +900,10 @@ export class Agent {
       return { type: "suspend", results };
     }
 
-    const compaction = await this.applyBeforeRequestActions("tool_use", {
-      deferInjections: true,
-    });
+    const { compaction } = await this.applyBeforeRequestActions(
+      { kind: "continuation", stopReason: "tool_use" },
+      { deferInjections: "pending" },
+    );
     if (compaction) {
       this.suspendReason = {
         type: "compact",
@@ -1131,7 +1152,25 @@ export class Agent {
 
     const { content, hasContent } = this.prepareUserContent(inputMessages);
 
-    if (!hasContent && contextContent.length === 0) {
+    const { compaction, injections } = opts.skipBeforeRequest
+      ? { compaction: undefined, injections: [] }
+      : await this.applyBeforeRequestActions(
+          { kind: "submission", stopReason: undefined },
+          { deferInjections: "return" },
+        );
+
+    if (compaction) {
+      // The injections are already in the log; the user's own content has to
+      // join them there so the compaction snapshot carries it too.
+      this.runner.appendUserMessage(
+        [...contextContent, ...toAgentInput(content)],
+        { coalesce: true },
+      );
+      this.settle({ type: "compact", nextPrompt: compaction.nextPrompt });
+      return;
+    }
+
+    if (!hasContent && contextContent.length === 0 && injections.length === 0) {
       this.settle({ type: "completed" });
       return;
     }
@@ -1145,7 +1184,7 @@ export class Agent {
     this.commitCommentUpdates();
 
     const isFirstMessage = this.getProviderMessages().length === 0;
-    const contentToSend: AgentInput[] = [...contextContent];
+    const contentToSend: AgentInput[] = [...contextContent, ...injections];
 
     contentToSend.push(...toAgentInput(content));
 
@@ -1479,14 +1518,14 @@ export class Agent {
    * appended between the two — it rides `buildToolResponseExtras` instead. */
   private pendingInjections: AgentInput[] = [];
   private async applyBeforeRequestActions(
-    stopReason: StreamStopReason,
-    opts?: { deferInjections?: true },
-  ): Promise<Compaction | undefined> {
+    context: Omit<RequestContext, "inputTokenCount">,
+    opts?: { deferInjections?: "pending" | "return" },
+  ): Promise<BeforeRequestResult> {
     const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
-    if (!onBeforeRequest) return undefined;
+    if (!onBeforeRequest) return { compaction: undefined, injections: [] };
     const plan = await onBeforeRequest({
+      ...context,
       inputTokenCount: this.runner.log.inputTokenCount,
-      stopReason,
     });
     const injections: AgentInput[] = plan.injections.map((content) =>
       content.type === "text"
@@ -1500,11 +1539,15 @@ export class Agent {
     // A deferred injection would be dropped by the agent swap, so a compaction
     // forces the append: the content belongs in the snapshot handed over.
     if (opts?.deferInjections && !plan.compaction) {
-      this.pendingInjections.push(...injections);
+      if (opts.deferInjections === "pending") {
+        this.pendingInjections.push(...injections);
+      } else {
+        return { compaction: undefined, injections };
+      }
     } else {
       this.runner.appendUserMessage(injections, { coalesce: true });
     }
-    return plan.compaction;
+    return { compaction: plan.compaction, injections: [] };
   }
 
   private disposed = false;

@@ -411,8 +411,9 @@ describe("Thread.send across a compaction handoff", () => {
       let asked = false;
       core.hooks = composeSupervisors(() => [
         {
-          onBeforeRequest: () => {
-            if (asked) return Promise.resolve({ type: "none" as const });
+          onBeforeRequest: (ctx) => {
+            if (asked || ctx.kind === "submission")
+              return Promise.resolve({ type: "none" as const });
             asked = true;
             return Promise.resolve({
               type: "compact" as const,
@@ -918,7 +919,7 @@ describe("AutoCompactSupervisor integration", () => {
     core.hooks = composeSupervisors(() => [
       new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
     ]);
-    mockClient.mockInputTokenCount = 200;
+    mockClient.mockInputTokenCount = 50;
 
     let compactCalls = 0;
     core.compact = () => {
@@ -934,9 +935,10 @@ describe("AutoCompactSupervisor integration", () => {
     // inputTokenCount is populated post-flight, so it lags one turn. Drive a
     // second turn; the handoff at its end sees the over-threshold count.
     await pollUntil(() => {
-      if (core.runner.log.inputTokenCount === 200) return true;
+      if (core.runner.log.inputTokenCount === 50) return true;
       throw new Error("waiting for token count");
     });
+    mockClient.mockInputTokenCount = 200;
 
     void core.send([{ type: "user", text: "again" }]);
     const stream2 = await awaitNextStream(mockClient, stream);
@@ -985,7 +987,7 @@ describe("AutoCompactSupervisor integration", () => {
     core.hooks = composeSupervisors(() => [
       new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
     ]);
-    mockClient.mockInputTokenCount = 200;
+    mockClient.mockInputTokenCount = 50;
 
     let compactCalls = 0;
     core.compact = () => {
@@ -999,9 +1001,10 @@ describe("AutoCompactSupervisor integration", () => {
     stream.streamText("done");
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.runner.log.inputTokenCount === 200) return true;
+      if (core.runner.log.inputTokenCount === 50) return true;
       throw new Error("waiting for token count");
     });
+    mockClient.mockInputTokenCount = 200;
 
     // Second turn ends with a tool_use. After the tool resolves, the tool_use
     // handoff sees the over-threshold count and triggers compaction rather
@@ -1025,7 +1028,7 @@ describe("AutoCompactSupervisor integration", () => {
     core.hooks = composeSupervisors(() => [
       new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
     ]);
-    mockClient.mockInputTokenCount = 200;
+    mockClient.mockInputTokenCount = 50;
 
     let compactCalls = 0;
     core.compact = () => {
@@ -1038,9 +1041,10 @@ describe("AutoCompactSupervisor integration", () => {
     stream.streamText("done");
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.runner.log.inputTokenCount === 200) return true;
+      if (core.runner.log.inputTokenCount === 50) return true;
       throw new Error("waiting for token count");
     });
+    mockClient.mockInputTokenCount = 200;
 
     // A max_tokens stop without a tool_use block routes through the handoff
     // check before the truncation-continue path.
@@ -1135,8 +1139,9 @@ describe("AutoCompactSupervisor integration", () => {
     let asked = false;
     core.hooks = composeSupervisors(() => [
       {
-        onBeforeRequest: () => {
-          if (asked) return Promise.resolve({ type: "none" as const });
+        onBeforeRequest: (ctx) => {
+          if (asked || ctx.kind === "submission")
+            return Promise.resolve({ type: "none" as const });
           asked = true;
           return Promise.resolve(injectText("note"));
         },
@@ -1295,19 +1300,22 @@ describe("AutoCompactSupervisor integration", () => {
     const { core, mockClient } = createAgentWithMock();
     const calls: string[] = [];
     const first: ThreadSupervisor = {
-      onBeforeRequest: () => {
+      onBeforeRequest: (ctx) => {
+        if (ctx.kind === "submission") return Promise.resolve({ type: "none" });
         calls.push("first");
         return Promise.resolve({ type: "none" });
       },
     };
     const second: ThreadSupervisor = {
-      onBeforeRequest: () => {
+      onBeforeRequest: (ctx) => {
+        if (ctx.kind === "submission") return Promise.resolve({ type: "none" });
         calls.push("second");
         return Promise.resolve({ type: "compact", nextPrompt: "go" });
       },
     };
     const third: ThreadSupervisor = {
-      onBeforeRequest: () => {
+      onBeforeRequest: (ctx) => {
+        if (ctx.kind === "submission") return Promise.resolve({ type: "none" });
         calls.push("third");
         return Promise.resolve({ type: "compact", nextPrompt: "stop" });
       },
@@ -1332,6 +1340,73 @@ describe("AutoCompactSupervisor integration", () => {
 
     expect(calls).toEqual(["first", "second", "third"]);
     expect(compactPrompt).toBe("go");
+  });
+
+  it("injects on the opening request of a send, ahead of the user content", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const kinds: string[] = [];
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: (ctx) => {
+          kinds.push(ctx.kind);
+          return Promise.resolve(
+            ctx.kind === "submission"
+              ? injectText("submission note")
+              : { type: "none" as const },
+          );
+        },
+      },
+    ]);
+
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+
+    expect(kinds[0]).toBe("submission");
+    const serialized = JSON.stringify(stream.messages);
+    expect(serialized).toContain("submission note");
+    expect(serialized.indexOf("submission note")).toBeLessThan(
+      serialized.indexOf("hello"),
+    );
+
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+  });
+
+  it("compacts from a plain send, exactly once, when already over threshold", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    core.hooks = composeSupervisors(() => [
+      new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
+    ]);
+    mockClient.mockInputTokenCount = 200;
+
+    let compactCalls = 0;
+    core.compact = () => {
+      compactCalls++;
+      return Promise.resolve({ type: "completed" as const });
+    };
+
+    // First turn populates the post-flight inputTokenCount.
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (compactCalls > 0) return true;
+      throw new Error("waiting for the end-turn compaction");
+    });
+    expect(compactCalls).toBe(1);
+
+    // The next send is over threshold before its first request goes out, so
+    // the submission consult compacts instead of issuing it — once.
+    compactCalls = 0;
+    void core.send([{ type: "user", text: "again" }]);
+    await pollUntil(() => {
+      if (compactCalls > 0) return true;
+      throw new Error("waiting for the submission compaction");
+    });
+    expect(compactCalls).toBe(1);
+    // The user's message is in the log the compaction snapshot is taken from.
+    expect(JSON.stringify(core.getProviderMessages())).toContain("again");
   });
 });
 
