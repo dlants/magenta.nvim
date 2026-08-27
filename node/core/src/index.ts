@@ -103,6 +103,7 @@ export {
   type CommentUpdateEntry,
   commentUpdatesToText,
 } from "./context/comment-store.ts";
+export { CommentSupervisor } from "./context/comment-supervisor.ts";
 export {
   buildClonedFiles,
   ContextManager,
@@ -115,6 +116,8 @@ export {
   type Patch,
   type WholeFileUpdate,
 } from "./context/context-manager.ts";
+export { FileContextSupervisor } from "./context/file-context-supervisor.ts";
+export { GitSupervisor } from "./context/git-supervisor.ts";
 export {
   type GitContextUpdate,
   GitTracker,

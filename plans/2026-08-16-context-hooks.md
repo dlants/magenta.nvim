@@ -255,13 +255,21 @@ Review follow-ups (stage 4 code review):
 - The collector is typed `{ supervisor: number; path: AbsFilePath; type: ToolApplied["type"] }[]`, so a mistyped variant name is a compile error.
 - `Agent.createToolContext().onToolApplied` wraps the hook call in a try/catch that logs, honoring the "fire-and-forget" contract: a throwing subscriber can no longer break the `editedFilesThisTurn` bookkeeping that runs after it. New test covers exactly that.
 
-## 5. The three supervisors
+## 5. The three supervisors — DONE
 
 - Goal: `GitSupervisor`, `FileContextSupervisor`, `CommentSupervisor` exist and are unit-tested. Not attached yet — the agent's own path is still live, so this is pure addition.
 - Tests (unit, per supervisor):
   - git: a branch change yields the `gitUpdateToText` line once; a second call with unchanged git yields nothing.
   - files: a dirty tracked file yields content matching `contextUpdatesToContent`; a second call with no further edits yields nothing; image/document updates survive as non-text `InjectedContent`.
   - comments: `beforeRead` runs before `getPendingUpdate`; entries reach the display callback and are marked delivered.
+
+Decisions / deviations:
+
+- New files: `node/core/src/context/git-supervisor.ts`, `file-context-supervisor.ts`, `comment-supervisor.ts`, each with a sibling `.test.ts`. All three are re-exported from `node/core/src/index.ts` so the root layer can construct them in stage 6.
+- `onBeforeRequest` takes no argument in all three implementations (the `RequestContext` parameter is unused; the interface's optional-method signature still permits it). Context updates ride every request regardless of `kind`.
+- `FileContextSupervisor.clone(source, { logger, fileIO, cwd, homeDir, pollIntervalMs?, onSent? })` builds a fresh `ContextManager` from `buildClonedFiles`; it does not call `start()` — the owner does, matching how `Thread` drives polling today.
+- `FileContextSupervisor.onBeforeRequest` filters `contextUpdatesToContent` down to text/image/document (the `InjectedContent` shape) and returns `none` if nothing survives.
+- `CommentSupervisor` commits eagerly (`commitPending`) inside the hook, per the "injections are applied unconditionally" invariant, and only fires `onSent` when entries were actually delivered.
 
 ## 6. Cut over the agent
 
