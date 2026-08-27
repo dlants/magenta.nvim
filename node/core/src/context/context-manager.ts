@@ -9,6 +9,7 @@ import { Emitter } from "../emitter.ts";
 import type { Logger } from "../logger.ts";
 import type { ProviderMessageContent } from "../providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
+import type { InjectedContent } from "../thread-supervisor.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { formatSummary, summarizeFile } from "../utils/file-summary.ts";
 import {
@@ -404,12 +405,13 @@ export class ContextManager
     return results;
   }
 
-  contextUpdatesToContent(
-    contextUpdates: FileUpdates,
-  ): ProviderMessageContent[] {
+  contextUpdatesToContent(contextUpdates: FileUpdates): InjectedContent[] {
     const textParts: string[] = [];
     const filePathEntries: string[] = [];
-    const mediaParts: ProviderMessageContent[] = [];
+    const mediaParts: Extract<
+      InjectedContent,
+      { type: "image" | "document" }
+    >[] = [];
 
     for (const path in contextUpdates) {
       const absFilePath = path as AbsFilePath;
@@ -488,7 +490,6 @@ From now on, whenever any of these files are updated by the user, you will get a
       {
         type: "text",
         text: `<context_update>\n${fileList}\n${header}\n${textParts.join("\n")}\n</context_update>`,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
       ...mediaParts,
     ];

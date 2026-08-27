@@ -271,6 +271,11 @@ Decisions / deviations:
 - `FileContextSupervisor.onBeforeRequest` filters `contextUpdatesToContent` down to text/image/document (the `InjectedContent` shape) and returns `none` if nothing survives.
 - `CommentSupervisor` commits eagerly (`commitPending`) inside the hook, per the "injections are applied unconditionally" invariant, and only fires `onSent` when entries were actually delivered.
 
+Review follow-ups (stage 5 code review):
+
+- `ContextManager.contextUpdatesToContent` now returns `InjectedContent[]` (it only ever produced text/image/document), so `FileContextSupervisor.onBeforeRequest` drops its runtime `part.type` filter and the follow-on `content.length === 0` guard. The text block it returns no longer carries `nativeMessageIdx` (the agent's legacy path already re-stamps it with the placeholder).
+- `FileContextSupervisor`'s constructor arg declares `onSent: ((updates: FileUpdates) => void) | undefined`, so `clone` passes `onSent: args.onSent` directly instead of a ternary for `exactOptionalPropertyTypes`.
+
 ## 6. Cut over the agent
 
 - Goal: delete `getAndPrepareContextUpdates`, `appendCommentUpdates`, `commitCommentUpdates`, `ContextUpdateSink`, `getCommentStore`, and the `contextManager`/`gitTracker`/`commentStore` fields on `Agent` and `Thread`. `AgentContext` carries `contextTracker` + `commentStore`. `node/chat/thread.ts` constructs the three managers and supervisors, pushes them in order (auto-compact last), passes the capabilities, subscribes to context-manager and comment-store events for re-render, exposes the `contextManager` getter for the views/commands, supplies `beforeRead`, and destroys them with the thread. `NvimThread` clones the file supervisor. `CompactionManager` takes `contextTracker` + `onToolApplied`. Drop the ad-hoc `commentController.refresh()` from the root's send path.

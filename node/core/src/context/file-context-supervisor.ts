@@ -1,11 +1,7 @@
 import type { OnToolApplied } from "../capabilities/context-tracker.ts";
 import type { FileIO } from "../capabilities/file-io.ts";
 import type { Logger } from "../logger.ts";
-import type {
-  InjectedContent,
-  RequestAction,
-  ThreadSupervisor,
-} from "../thread-supervisor.ts";
+import type { RequestAction, ThreadSupervisor } from "../thread-supervisor.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import type { FileUpdates } from "./context-manager.ts";
 import { buildClonedFiles, ContextManager } from "./context-manager.ts";
@@ -19,7 +15,7 @@ export class FileContextSupervisor implements ThreadSupervisor {
 
   constructor(args: {
     contextManager: ContextManager;
-    onSent?: (updates: FileUpdates) => void;
+    onSent: ((updates: FileUpdates) => void) | undefined;
   }) {
     this.contextManager = args.contextManager;
     this.onSent = args.onSent;
@@ -29,17 +25,7 @@ export class FileContextSupervisor implements ThreadSupervisor {
     const updates = await this.contextManager.getContextUpdate();
     if (Object.keys(updates).length === 0) return { type: "none" };
 
-    const content: InjectedContent[] = [];
-    for (const part of this.contextManager.contextUpdatesToContent(updates)) {
-      if (
-        part.type === "text" ||
-        part.type === "image" ||
-        part.type === "document"
-      ) {
-        content.push(part);
-      }
-    }
-    if (content.length === 0) return { type: "none" };
+    const content = this.contextManager.contextUpdatesToContent(updates);
 
     this.onSent?.(updates);
     return { type: "inject", content };
@@ -79,10 +65,6 @@ export class FileContextSupervisor implements ThreadSupervisor {
       files,
       args.pollIntervalMs,
     );
-    return new FileContextSupervisor(
-      args.onSent
-        ? { contextManager, onSent: args.onSent }
-        : { contextManager },
-    );
+    return new FileContextSupervisor({ contextManager, onSent: args.onSent });
   }
 }
