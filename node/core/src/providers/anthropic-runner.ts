@@ -183,10 +183,15 @@ export function getRetryDelay(attempt: number): number {
     : RETRY_DELAYS[RETRY_DELAYS.length - 1];
 }
 
+/** This class only ever writes block arrays, never the bare-string `content`
+ * form Anthropic's `MessageParam` also permits. */
+type NativeMessage = Omit<Anthropic.MessageParam, "content"> & {
+  content: Anthropic.Messages.ContentBlockParam[];
+};
 export class AnthropicRunner implements Runner {
   phase: AgentPhase = { type: "idle" };
 
-  private messages: Anthropic.MessageParam[] = [];
+  private messages: NativeMessage[] = [];
   private currentRequest: MessageStream | undefined;
   private params: Omit<Anthropic.Messages.MessageStreamParams, "messages">;
   private currentAnthropicBlock: AnthropicStreamingBlock | undefined;
@@ -198,7 +203,7 @@ export class AnthropicRunner implements Runner {
   /** Current block index during streaming, -1 when not streaming a block */
   private currentBlockIndex: number = -1;
   /** Assistant message being built during streaming */
-  private currentAssistantMessage: Anthropic.MessageParam | undefined;
+  private currentAssistantMessage: NativeMessage | undefined;
   /** Stored for cloning */
   private anthropicOptions: AnthropicRunnerOptions;
   /** Token count for the full conversation, updated after each streaming completion */
@@ -411,17 +416,12 @@ export class AnthropicRunner implements Runner {
     this.currentRequest?.abort();
   }
 
-  appendUserMessage(content: AgentInput[], opts?: { coalesce: boolean }): void {
+  appendUserMessage(content: AgentInput[], opts?: { coalesce?: true }): void {
     if (content.length === 0) return;
     const native = this.convertInputToNative(content);
     const last = this.messages[this.messages.length - 1];
     if (opts?.coalesce && last && last.role === "user") {
-      const lastContent = last.content;
-      const existing: Anthropic.ContentBlockParam[] =
-        typeof lastContent === "string"
-          ? [{ type: "text", text: lastContent }]
-          : lastContent;
-      last.content = [...existing, ...native];
+      last.content = [...last.content, ...native];
     } else {
       this.messages.push({ role: "user", content: native });
     }

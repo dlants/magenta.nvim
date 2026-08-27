@@ -192,6 +192,16 @@ Decisions / deviations:
 - `composeSupervisors` drops `{type: "none"}` actions rather than passing them through, so the returned list is exactly the actions that do something.
 - `AnthropicRunner.convertInputToNative` now returns `ContentBlockParam[]` (was `MessageParam["content"]`, i.e. also `string`) so coalescing type-checks.
 
+Review follow-ups (stage 1 code review):
+
+- The composed hook no longer returns `RequestAction[]`. It returns a `BeforeRequestPlan` (`{ injections: InjectedContent[]; compaction: {nextPrompt} | undefined }`), so a contradictory list (several compactions, a stray `none`) is not representable and the agent has no dead `case "none"`. `RequestAction` (with `none`) stays as the *per-supervisor* return type; `composeSupervisors` collapses.
+- `injectText` returns `Extract<RequestAction, {type:"inject"}>`; `InjectedContent` uses `Extract<ProviderMessageContent, ...>` rather than an intersection.
+- `appendUserMessage(content, opts?: { coalesce?: true })` — the `false` state is no longer representable.
+- `AnthropicRunner.messages` is now typed `NativeMessage[]` (content always a block array), which removes the unreachable string-content branch in `appendUserMessage`.
+- Named `Compaction` alias (`{ nextPrompt: string | undefined }`) used by `AgentSendOutcome`, the suspend reason and `applyBeforeRequestActions`.
+- **Deviation from "injections are applied immediately":** on the tool_use continuation path the injection cannot be appended at hook time, because at that moment the tool results have not been written yet and Anthropic requires the `tool_result` blocks to immediately follow the `tool_use` they answer. Injections from that path are held in `Agent.pendingInjections` and emitted from `buildToolResponseExtras`, i.e. in the very next message after the tool results, on the same request. If the plan also asks for a compaction, they are appended to the log immediately instead, so the agent swap cannot discard them. All other paths append immediately, as designed.
+- New tests: runner-parity push-when-nothing-to-fold-into case (both runners); agent-level image injection on the tool_use continuation asserting it lands after the tool_result message; `composeSupervisors` first-compaction-wins.
+
 ## 2. Injections survive the compaction handoff
 
 - Goal: fix agent.ts:694-711. Injections are appended to the message array as they are processed, so by the time a trailing `compact` is applied the content is already in the snapshot handed to `CompactionManager.start` — nothing is held in agent-local `prependToNextTurn` state that the swap can discard.

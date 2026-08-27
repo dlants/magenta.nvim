@@ -5,9 +5,9 @@ import type {
   StreamingBlock,
 } from "./providers/provider-types.ts";
 import type {
+  BeforeRequestPlan,
   EndTurnAction,
   EndTurnContext,
-  RequestAction,
   RequestContext,
   YieldAction,
 } from "./thread-supervisor.ts";
@@ -117,8 +117,8 @@ export type AgentHooks = {
   /** About to issue a provider request — the opening one of a submission, or a
    * continuation carrying tool results. Not re-fired when a request is
    * retried. */
-  /** In supervisor order; the agent applies them in that order. */
-  onBeforeRequest?: (ctx: RequestContext) => Promise<RequestAction[]>;
+  /** Injections in supervisor order, plus at most one compaction. */
+  onBeforeRequest?: (ctx: RequestContext) => Promise<BeforeRequestPlan>;
 };
 
 /** "Something visible moved." No payload: read `phase`. Called at streaming

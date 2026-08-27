@@ -228,4 +228,15 @@ describe("appendUserMessage coalescing", () => {
     expect(JSON.stringify(messages[0].content)).toContain("first");
     expect(JSON.stringify(messages[0].content)).toContain("second");
   });
+  it.each([
+    ["anthropic", makeAnthropic],
+    ["openai", makeOpenAI],
+  ])("%s pushes a new user message when there is nothing to fold into", (_name, make) => {
+    const runner = make();
+    runner.appendUserMessage([text("only")], { coalesce: true });
+    const messages = runner.log.messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("user");
+    expect(JSON.stringify(messages[0].content)).toContain("only");
+  });
 });

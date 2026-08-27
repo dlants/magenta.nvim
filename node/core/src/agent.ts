@@ -283,9 +283,10 @@ export type SubmitOptions = {
   raw?: boolean;
 };
 
-export type AgentSendOutcome =
-  | SendResult
-  | { type: "compact"; nextPrompt: string | undefined };
+/** A handoff to a fresh, compacted agent. `nextPrompt` is what the new agent
+ * is asked to do first, if anything. */
+export type Compaction = { nextPrompt: string | undefined };
+export type AgentSendOutcome = SendResult | ({ type: "compact" } & Compaction);
 
 export class Agent {
   public state: ThreadState;
@@ -611,7 +612,7 @@ export class Agent {
    * back out here when the turn resolves `suspended`. */
   private suspendReason:
     | { type: "yield"; result: string; value: YieldValue }
-    | { type: "compact"; nextPrompt: string | undefined }
+    | ({ type: "compact" } & Compaction)
     | undefined;
 
   /** Number of messages whose usage has already been folded into the
@@ -879,7 +880,9 @@ export class Agent {
       return { type: "suspend", results };
     }
 
-    const compaction = await this.applyBeforeRequestActions("tool_use");
+    const compaction = await this.applyBeforeRequestActions("tool_use", {
+      deferInjections: true,
+    });
     if (compaction) {
       this.suspendReason = {
         type: "compact",
@@ -1351,7 +1354,11 @@ export class Agent {
       gitUpdate,
     } = await this.getAndPrepareContextUpdates();
 
-    const contentToSend: AgentInput[] = [...contextContent];
+    const contentToSend: AgentInput[] = [
+      ...this.pendingInjections,
+      ...contextContent,
+    ];
+    this.pendingInjections = [];
 
     if (pendingMessages.length > 0) {
       const { content } = this.prepareUserContent(pendingMessages);
@@ -1466,44 +1473,38 @@ export class Agent {
    * Injections are appended to the message log immediately — unconditionally,
    * so nothing the agent does next (a failure, an abort, a compaction handoff)
    * can lose them. Returns the compaction the list asks for, if any. */
+  /** Injections produced on the tool_use path, held until the tool results
+   * have been written. Anthropic requires the tool_result blocks to
+   * immediately follow the tool_use they answer, so injected content cannot be
+   * appended between the two — it rides `buildToolResponseExtras` instead. */
+  private pendingInjections: AgentInput[] = [];
   private async applyBeforeRequestActions(
     stopReason: StreamStopReason,
-  ): Promise<{ nextPrompt: string | undefined } | undefined> {
+    opts?: { deferInjections?: true },
+  ): Promise<Compaction | undefined> {
     const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
     if (!onBeforeRequest) return undefined;
-    const actions = await onBeforeRequest({
+    const plan = await onBeforeRequest({
       inputTokenCount: this.runner.log.inputTokenCount,
       stopReason,
     });
-
-    let compaction: { nextPrompt: string | undefined } | undefined;
-    for (const action of actions) {
-      switch (action.type) {
-        case "inject":
-          this.runner.appendUserMessage(
-            action.content.map((content) =>
-              content.type === "text"
-                ? {
-                    type: "text" as const,
-                    text: content.text,
-                    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-                  }
-                : content,
-            ),
-            { coalesce: true },
-          );
-          break;
-        case "compact":
-          // First compaction wins; a later one cannot restate the prompt.
-          compaction ??= { nextPrompt: action.nextPrompt };
-          break;
-        case "none":
-          break;
-        default:
-          assertUnreachable(action);
-      }
+    const injections: AgentInput[] = plan.injections.map((content) =>
+      content.type === "text"
+        ? {
+            type: "text" as const,
+            text: content.text,
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          }
+        : content,
+    );
+    // A deferred injection would be dropped by the agent swap, so a compaction
+    // forces the append: the content belongs in the snapshot handed over.
+    if (opts?.deferInjections && !plan.compaction) {
+      this.pendingInjections.push(...injections);
+    } else {
+      this.runner.appendUserMessage(injections, { coalesce: true });
     }
-    return compaction;
+    return plan.compaction;
   }
 
   private disposed = false;

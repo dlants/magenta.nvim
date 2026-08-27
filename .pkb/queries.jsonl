@@ -14,3 +14,7 @@
 {"timestamp":"2026-08-19T16:57:46Z","query":"render context files in thread view","commit":"0891d068d1965738bc0fd5bf8ab5654a0e4ea03f"}
 {"timestamp":"2026-08-19T16:57:51Z","query":"createTool agent runner -k 5","commit":"0891d068d1965738bc0fd5bf8ab5654a0e4ea03f"}
 {"timestamp":"2026-08-19T18:31:38Z","query":"render context update notification in display buffer expandable -k 8","commit":"0891d068d1965738bc0fd5bf8ab5654a0e4ea03f"}
+{"timestamp":"2026-08-21T23:41:20Z","query":"comment tracker buffer tracking context injection","commit":"9742e4a3a5f368502d6fa72e10882ae989726bd9"}
+{"timestamp":"2026-08-21T23:41:23Z","query":"CommentController construction initialization","commit":"9742e4a3a5f368502d6fa72e10882ae989726bd9"}
+{"timestamp":"2026-08-21T23:41:25Z","query":"comment store messages agent request injection","commit":"9742e4a3a5f368502d6fa72e10882ae989726bd9"}
+{"timestamp":"2026-08-27T04:49:20Z","query":"comments tracker buffer ranges -k 10","commit":"9742e4a3a5f368502d6fa72e10882ae989726bd9"}

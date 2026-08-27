@@ -408,7 +408,7 @@ export interface Runner {
    * request. With `coalesce`, folds into a trailing user message rather than
    * pushing a new one — how supervisor injections land next to the content
    * that follows them. */
-  appendUserMessage(content: AgentInput[], opts?: { coalesce: boolean }): void;
+  appendUserMessage(content: AgentInput[], opts?: { coalesce?: true }): void;
 
   /** Cancels the in-flight inference request (and any retry backoff) and
    * unwinds the loop: fills results for any unanswered tool_use and appends

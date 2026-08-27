@@ -357,7 +357,7 @@ export class OpenAIRunner implements Runner {
     return (this.messages.length - 1) as NativeMessageIdx;
   }
 
-  appendUserMessage(content: AgentInput[], opts?: { coalesce: boolean }): void {
+  appendUserMessage(content: AgentInput[], opts?: { coalesce?: true }): void {
     if (content.length === 0) return;
     // Tagged text has to be re-tagged into its structured content type, exactly
     // as the anthropic agent does, or the view renders it as raw text.

@@ -21,16 +21,26 @@ export type YieldAction =
  * documents. */
 export type InjectedContent =
   | { type: "text"; text: string }
-  | (ProviderMessageContent & { type: "image" | "document" });
+  | Extract<ProviderMessageContent, { type: "image" | "document" }>;
 
-/** Action returned from the `onBeforeRequest` hook. */
+/** Action returned from the `onBeforeRequest` hook by a single supervisor. */
 export type RequestAction =
   | { type: "compact"; nextPrompt: string | undefined }
   | { type: "inject"; content: InjectedContent[] }
   | { type: "none" };
 
+/** What the composed hook hands the agent: the injections to apply, in
+ * supervisor order, and at most one compaction. Unlike a list of
+ * `RequestAction`, this cannot represent a contradictory plan. */
+export type BeforeRequestPlan = {
+  injections: InjectedContent[];
+  compaction: { nextPrompt: string | undefined } | undefined;
+};
+
 /** For the text-only supervisors. */
-export function injectText(text: string): RequestAction {
+export function injectText(
+  text: string,
+): Extract<RequestAction, { type: "inject" }> {
   return { type: "inject", content: [{ type: "text", text }] };
 }
 
@@ -69,12 +79,21 @@ export function composeSupervisors(
       return { type: "send-message", text: texts.join("\n\n") };
     },
     onBeforeRequest: async (context) => {
-      const actions: RequestAction[] = [];
+      const plan: BeforeRequestPlan = {
+        injections: [],
+        compaction: undefined,
+      };
       for (const sup of getSupervisors()) {
         const action = await sup.onBeforeRequest?.(context);
-        if (action && action.type !== "none") actions.push(action);
+        if (!action) continue;
+        if (action.type === "inject") {
+          plan.injections.push(...action.content);
+        } else if (action.type === "compact") {
+          // First compaction wins; a later one cannot restate the prompt.
+          plan.compaction ??= { nextPrompt: action.nextPrompt };
+        }
       }
-      return actions;
+      return plan;
     },
   };
 }

@@ -1079,6 +1079,53 @@ describe("AutoCompactSupervisor integration", () => {
     stream2.finishResponse("end_turn");
   });
 
+  it("injects an image on the tool_use continuation, after the tool result", async () => {
+    const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
+    const { core, mockClient } = createAgentWithMock({
+      fileIO: fileIO as unknown as AgentContext["fileIO"],
+    });
+    let injected = false;
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: (ctx) => {
+          if (injected || ctx.stopReason !== "tool_use") {
+            return Promise.resolve({ type: "none" as const });
+          }
+          injected = true;
+          return Promise.resolve({
+            type: "inject" as const,
+            content: [
+              {
+                type: "image" as const,
+                source: {
+                  type: "base64" as const,
+                  media_type: "image/png" as const,
+                  data: "aW1n",
+                },
+                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              },
+            ],
+          });
+        },
+      },
+    ]);
+    void core.send([{ type: "user", text: "edit a" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
+      script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
+    });
+    stream.finishResponse("tool_use");
+    const stream2 = await awaitNextStream(mockClient, stream);
+    const [toolResultMsg, injectedMsg] = stream2.messages.slice(-2);
+    expect(
+      (toolResultMsg.content as Anthropic.ContentBlockParam[])[0].type,
+    ).toBe("tool_result");
+    expect(
+      (injectedMsg.content as Anthropic.ContentBlockParam[]).map((b) => b.type),
+    ).toContain("image");
+    stream2.streamText("ok");
+    stream2.finishResponse("end_turn");
+  });
   it("keeps the injection in the log when a compaction follows it", async () => {
     const { core, mockClient } = createAgentWithMock();
     let asked = false;

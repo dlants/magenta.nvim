@@ -21,13 +21,16 @@ describe("composeSupervisors onBeforeRequest", () => {
       onBeforeRequest: () => Promise.resolve(injectText("second")),
     };
     const hooks = composeSupervisors(() => [first, second]);
-    expect(await hooks.onBeforeRequest?.(context)).toEqual([
-      { type: "inject", content: [{ type: "text", text: "first" }] },
-      { type: "inject", content: [{ type: "text", text: "second" }] },
-    ]);
+    expect(await hooks.onBeforeRequest?.(context)).toEqual({
+      injections: [
+        { type: "text", text: "first" },
+        { type: "text", text: "second" },
+      ],
+      compaction: undefined,
+    });
   });
 
-  it("puts a trailing compact after the injections", async () => {
+  it("collects the compaction alongside the injections", async () => {
     const injector: ThreadSupervisor = {
       onBeforeRequest: () => Promise.resolve(injectText("note")),
     };
@@ -35,18 +38,30 @@ describe("composeSupervisors onBeforeRequest", () => {
       injector,
       new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
     ]);
-    expect(await hooks.onBeforeRequest?.(context)).toEqual([
-      { type: "inject", content: [{ type: "text", text: "note" }] },
-      { type: "compact", nextPrompt: "go" },
-    ]);
+    expect(await hooks.onBeforeRequest?.(context)).toEqual({
+      injections: [{ type: "text", text: "note" }],
+      compaction: { nextPrompt: "go" },
+    });
   });
 
+  it("keeps the first compaction when several supervisors ask", async () => {
+    const hooks = composeSupervisors(() => [
+      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
+      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "stop" }),
+    ]);
+    expect((await hooks.onBeforeRequest?.(context))?.compaction).toEqual({
+      nextPrompt: "go",
+    });
+  });
   it("drops `none` actions", async () => {
     const quiet: ThreadSupervisor = {
       onBeforeRequest: () => Promise.resolve({ type: "none" as const }),
     };
     const hooks = composeSupervisors(() => [quiet, {}]);
-    expect(await hooks.onBeforeRequest?.(context)).toEqual([]);
+    expect(await hooks.onBeforeRequest?.(context)).toEqual({
+      injections: [],
+      compaction: undefined,
+    });
   });
 });
 
