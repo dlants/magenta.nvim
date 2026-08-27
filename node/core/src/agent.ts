@@ -67,12 +67,10 @@ import type {
   SendResult,
   YieldValue,
 } from "./thread-api.ts";
-import {
-  type EndTurnAction,
-  type EndTurnContext,
-  type RequestAction,
-  requestedCompaction,
-  type YieldAction,
+import type {
+  EndTurnAction,
+  EndTurnContext,
+  YieldAction,
 } from "./thread-supervisor.ts";
 import type {
   ToolInvocation,
@@ -690,19 +688,7 @@ export class Agent {
     this.resetErrorRetryState();
     this.update({ type: "set-mode", mode: { type: "normal" } });
 
-    const request = this.consultBeforeRequestSupervisors(stopReason);
-    if (request.type === "inject") {
-      // Stage 4 carries the text on the request itself; until then the closest
-      // available mechanism is the next turn's prefix.
-      this.prependToNextTurn([
-        {
-          type: "text",
-          text: request.text,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        },
-      ]);
-    }
-    const compaction = requestedCompaction(request);
+    const compaction = await this.applyBeforeRequestActions(stopReason);
     if (compaction) {
       // The submission is not over: the owning Thread runs the handoff and
       // continues it on the replacement agent.
@@ -893,19 +879,7 @@ export class Agent {
       return { type: "suspend", results };
     }
 
-    const request = this.consultBeforeRequestSupervisors("tool_use");
-    if (request.type === "inject") {
-      // Stage 4 delivers this on the continuation request itself; until then
-      // the next turn's prefix is the closest available mechanism.
-      this.prependToNextTurn([
-        {
-          type: "text",
-          text: request.text,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        },
-      ]);
-    }
-    const compaction = requestedCompaction(request);
+    const compaction = await this.applyBeforeRequestActions("tool_use");
     if (compaction) {
       this.suspendReason = {
         type: "compact",
@@ -1488,16 +1462,48 @@ export class Agent {
     return await onYield(value);
   }
 
-  private consultBeforeRequestSupervisors(
+  /** Consult the before-request hooks and apply their actions in order.
+   * Injections are appended to the message log immediately — unconditionally,
+   * so nothing the agent does next (a failure, an abort, a compaction handoff)
+   * can lose them. Returns the compaction the list asks for, if any. */
+  private async applyBeforeRequestActions(
     stopReason: StreamStopReason,
-  ): RequestAction {
-    const inputTokenCount = this.runner.log.inputTokenCount;
-    return (
-      this.deps.getHooks().onBeforeRequest?.({
-        inputTokenCount,
-        stopReason,
-      }) ?? { type: "none" }
-    );
+  ): Promise<{ nextPrompt: string | undefined } | undefined> {
+    const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
+    if (!onBeforeRequest) return undefined;
+    const actions = await onBeforeRequest({
+      inputTokenCount: this.runner.log.inputTokenCount,
+      stopReason,
+    });
+
+    let compaction: { nextPrompt: string | undefined } | undefined;
+    for (const action of actions) {
+      switch (action.type) {
+        case "inject":
+          this.runner.appendUserMessage(
+            action.content.map((content) =>
+              content.type === "text"
+                ? {
+                    type: "text" as const,
+                    text: content.text,
+                    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                  }
+                : content,
+            ),
+            { coalesce: true },
+          );
+          break;
+        case "compact":
+          // First compaction wins; a later one cannot restate the prompt.
+          compaction ??= { nextPrompt: action.nextPrompt };
+          break;
+        case "none":
+          break;
+        default:
+          assertUnreachable(action);
+      }
+    }
+    return compaction;
   }
 
   private disposed = false;

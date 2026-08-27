@@ -411,12 +411,20 @@ export class AnthropicRunner implements Runner {
     this.currentRequest?.abort();
   }
 
-  private appendUserMessage(content: AgentInput[]): void {
+  appendUserMessage(content: AgentInput[], opts?: { coalesce: boolean }): void {
     if (content.length === 0) return;
-    this.messages.push({
-      role: "user",
-      content: this.convertInputToNative(content),
-    });
+    const native = this.convertInputToNative(content);
+    const last = this.messages[this.messages.length - 1];
+    if (opts?.coalesce && last && last.role === "user") {
+      const lastContent = last.content;
+      const existing: Anthropic.ContentBlockParam[] =
+        typeof lastContent === "string"
+          ? [{ type: "text", text: lastContent }]
+          : lastContent;
+      last.content = [...existing, ...native];
+    } else {
+      this.messages.push({ role: "user", content: native });
+    }
     this.updateCachedProviderMessages();
   }
 
@@ -1260,7 +1268,7 @@ export class AnthropicRunner implements Runner {
 
   private convertInputToNative(
     content: AgentInput[],
-  ): Anthropic.MessageParam["content"] {
+  ): Anthropic.Messages.ContentBlockParam[] {
     // biome-ignore lint/suspicious/useIterableCallbackReturn: exhaustive switch handles all cases
     return content.map((c): Anthropic.Messages.ContentBlockParam => {
       switch (c.type) {

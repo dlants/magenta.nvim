@@ -115,24 +115,12 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
       const fallback = getSupervisor(defaultId);
 
       // The override compacts at 100k; the default only at 300k.
-      expect(
-        overridden.onBeforeRequest({
-          inputTokenCount: 100_000,
-          stopReason: "end_turn",
-        }).type,
-      ).toBe("compact");
-      expect(
-        fallback.onBeforeRequest({
-          inputTokenCount: 100_000,
-          stopReason: "end_turn",
-        }).type,
-      ).toBe("none");
-      expect(
-        fallback.onBeforeRequest({
-          inputTokenCount: 300_000,
-          stopReason: "end_turn",
-        }).type,
-      ).toBe("compact");
+      const ask = async (sup: AutoCompactSupervisor, inputTokenCount: number) =>
+        (await sup.onBeforeRequest({ inputTokenCount, stopReason: "end_turn" }))
+          .type;
+      expect(await ask(overridden, 100_000)).toBe("compact");
+      expect(await ask(fallback, 100_000)).toBe("none");
+      expect(await ask(fallback, 300_000)).toBe("compact");
     },
   );
 });

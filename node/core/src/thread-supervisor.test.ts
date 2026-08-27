@@ -1,103 +1,107 @@
 import { describe, expect, it } from "vitest";
 import {
   AutoCompactSupervisor,
-  mergeRequestActions,
+  composeSupervisors,
+  injectText,
+  type RequestContext,
+  type ThreadSupervisor,
 } from "./thread-supervisor.ts";
 
-describe("mergeRequestActions", () => {
-  it("keeps a compact request when another supervisor injects", () => {
-    expect(
-      mergeRequestActions([
-        { type: "inject", text: "note", andThen: { type: "none" } },
-        { type: "compact", nextPrompt: "go" },
-      ]),
-    ).toEqual({
-      type: "inject",
-      text: "note",
-      andThen: { type: "compact", nextPrompt: "go" },
-    });
+const context: RequestContext = {
+  inputTokenCount: 400000,
+  stopReason: "end_turn",
+};
+
+describe("composeSupervisors onBeforeRequest", () => {
+  it("collects the actions in supervisor order", async () => {
+    const first: ThreadSupervisor = {
+      onBeforeRequest: () => Promise.resolve(injectText("first")),
+    };
+    const second: ThreadSupervisor = {
+      onBeforeRequest: () => Promise.resolve(injectText("second")),
+    };
+    const hooks = composeSupervisors(() => [first, second]);
+    expect(await hooks.onBeforeRequest?.(context)).toEqual([
+      { type: "inject", content: [{ type: "text", text: "first" }] },
+      { type: "inject", content: [{ type: "text", text: "second" }] },
+    ]);
   });
 
-  it("joins injected texts in order", () => {
-    expect(
-      mergeRequestActions([
-        { type: "inject", text: "first", andThen: { type: "none" } },
-        { type: "none" },
-        { type: "inject", text: "second", andThen: { type: "none" } },
-      ]),
-    ).toEqual({
-      type: "inject",
-      text: "first\n\nsecond",
-      andThen: { type: "none" },
-    });
+  it("puts a trailing compact after the injections", async () => {
+    const injector: ThreadSupervisor = {
+      onBeforeRequest: () => Promise.resolve(injectText("note")),
+    };
+    const hooks = composeSupervisors(() => [
+      injector,
+      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
+    ]);
+    expect(await hooks.onBeforeRequest?.(context)).toEqual([
+      { type: "inject", content: [{ type: "text", text: "note" }] },
+      { type: "compact", nextPrompt: "go" },
+    ]);
   });
 
-  it("joins compact prompts and returns none when nothing was requested", () => {
-    expect(
-      mergeRequestActions([
-        { type: "compact", nextPrompt: "a" },
-        { type: "compact", nextPrompt: undefined },
-        { type: "compact", nextPrompt: "b" },
-      ]),
-    ).toEqual({ type: "compact", nextPrompt: "a\n\nb" });
-    expect(mergeRequestActions([{ type: "none" }])).toEqual({ type: "none" });
+  it("drops `none` actions", async () => {
+    const quiet: ThreadSupervisor = {
+      onBeforeRequest: () => Promise.resolve({ type: "none" as const }),
+    };
+    const hooks = composeSupervisors(() => [quiet, {}]);
+    expect(await hooks.onBeforeRequest?.(context)).toEqual([]);
   });
 });
 
 describe("AutoCompactSupervisor", () => {
-  it("returns compact (with nextPrompt) at or over the threshold", () => {
+  it("returns compact (with nextPrompt) at or over the threshold", async () => {
     const sup = new AutoCompactSupervisor({
       threshold: 300000,
       nextPrompt: "go",
     });
     expect(
-      sup.onBeforeRequest({ inputTokenCount: 300000, stopReason: "end_turn" }),
+      await sup.onBeforeRequest({
+        inputTokenCount: 300000,
+        stopReason: "end_turn",
+      }),
     ).toEqual({ type: "compact", nextPrompt: "go" });
     expect(
-      sup.onBeforeRequest({ inputTokenCount: 400000, stopReason: "end_turn" }),
+      await sup.onBeforeRequest({
+        inputTokenCount: 400000,
+        stopReason: "end_turn",
+      }),
     ).toEqual({ type: "compact", nextPrompt: "go" });
   });
 
-  it("returns none below the threshold", () => {
+  it("returns none below the threshold or without a token count", async () => {
     const sup = new AutoCompactSupervisor({
       threshold: 300000,
       nextPrompt: "go",
     });
     expect(
-      sup.onBeforeRequest({ inputTokenCount: 299999, stopReason: "end_turn" }),
+      await sup.onBeforeRequest({
+        inputTokenCount: 299999,
+        stopReason: "end_turn",
+      }),
     ).toEqual({ type: "none" });
-  });
-
-  it("returns none when inputTokenCount is undefined", () => {
-    const sup = new AutoCompactSupervisor({
-      threshold: 300000,
-      nextPrompt: "go",
-    });
     expect(
-      sup.onBeforeRequest({
+      await sup.onBeforeRequest({
         inputTokenCount: undefined,
         stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });
   });
 
-  it("defaults the threshold to 300000", () => {
+  it("defaults the threshold to 300000", async () => {
     const sup = new AutoCompactSupervisor({ nextPrompt: "go" });
     expect(
-      sup.onBeforeRequest({ inputTokenCount: 300000, stopReason: "end_turn" }),
+      await sup.onBeforeRequest({
+        inputTokenCount: 300000,
+        stopReason: "end_turn",
+      }),
     ).toEqual({ type: "compact", nextPrompt: "go" });
     expect(
-      sup.onBeforeRequest({ inputTokenCount: 299999, stopReason: "end_turn" }),
+      await sup.onBeforeRequest({
+        inputTokenCount: 299999,
+        stopReason: "end_turn",
+      }),
     ).toEqual({ type: "none" });
-  });
-
-  it("passes through the configured nextPrompt", () => {
-    const sup = new AutoCompactSupervisor({
-      threshold: 100,
-      nextPrompt: "custom",
-    });
-    expect(
-      sup.onBeforeRequest({ inputTokenCount: 200, stopReason: "end_turn" }),
-    ).toEqual({ type: "compact", nextPrompt: "custom" });
   });
 });

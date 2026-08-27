@@ -182,3 +182,50 @@ describe("agent parity for tagged user input", () => {
     }
   });
 });
+
+describe("appendUserMessage coalescing", () => {
+  const makeAnthropic = () =>
+    new AnthropicRunner(
+      {
+        ...sharedOptions,
+        model: "claude-sonnet-4-20250514",
+        skipPostFlightTokenCount: true,
+        executeTools: noExecutor,
+        onUpdate: () => {},
+      },
+      new MockAnthropicClient() as unknown as Anthropic,
+      {
+        authType: "key",
+        includeWebSearch: false,
+        disableParallelToolUseFlag: true,
+        logger: noopLogger,
+        validateInput,
+      },
+    );
+
+  const makeOpenAI = () =>
+    new OpenAIRunner(
+      {
+        ...sharedOptions,
+        model: "gpt-5.4",
+        executeTools: noExecutor,
+        onUpdate: () => {},
+      },
+      new MockOpenAIClient() as unknown as OpenAIStreamingClient,
+      { includeWebSearch: false, logger: noopLogger, validateInput },
+    );
+
+  it.each([
+    ["anthropic", makeAnthropic],
+    ["openai", makeOpenAI],
+  ])("%s folds a coalescing append into the trailing user message", (_name, make) => {
+    const runner = make();
+    runner.appendUserMessage([text("first")]);
+    runner.appendUserMessage([text("second")], { coalesce: true });
+    const messages = runner.log.messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("user");
+    expect(JSON.stringify(messages[0].content)).toContain("first");
+    expect(JSON.stringify(messages[0].content)).toContain("second");
+  });
+});

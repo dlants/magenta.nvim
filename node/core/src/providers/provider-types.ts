@@ -404,6 +404,12 @@ export interface Runner {
    * turn is already in flight. */
   runTurn(input: AgentInput[]): Promise<TurnResult>;
 
+  /** Append content to the message log as user input, without issuing a
+   * request. With `coalesce`, folds into a trailing user message rather than
+   * pushing a new one — how supervisor injections land next to the content
+   * that follows them. */
+  appendUserMessage(content: AgentInput[], opts?: { coalesce: boolean }): void;
+
   /** Cancels the in-flight inference request (and any retry backoff) and
    * unwinds the loop: fills results for any unanswered tool_use and appends
    * the abort marker. The in-flight `runTurn` resolves with

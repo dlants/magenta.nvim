@@ -117,7 +117,8 @@ export type AgentHooks = {
   /** About to issue a provider request — the opening one of a submission, or a
    * continuation carrying tool results. Not re-fired when a request is
    * retried. */
-  onBeforeRequest?: (ctx: RequestContext) => RequestAction;
+  /** In supervisor order; the agent applies them in that order. */
+  onBeforeRequest?: (ctx: RequestContext) => Promise<RequestAction[]>;
 };
 
 /** "Something visible moved." No payload: read `phase`. Called at streaming

@@ -16,74 +16,29 @@ export type YieldAction =
   | { type: "send-message"; text: string }
   | { type: "none" };
 
+/** Content an `onBeforeRequest` supervisor interjects into the request that is
+ * about to be issued. Not a bare string: file context updates can be images or
+ * documents. */
+export type InjectedContent =
+  | { type: "text"; text: string }
+  | (ProviderMessageContent & { type: "image" | "document" });
+
 /** Action returned from the `onBeforeRequest` hook. */
 export type RequestAction =
   | { type: "compact"; nextPrompt: string | undefined }
-  /** Interject text into the request that is about to be issued. `then` says
-   * what happens to the request itself, so "compact" is representable from
-   * exactly one place in this union rather than from two variants. */
-  | {
-      type: "inject";
-      text: string;
-      andThen:
-        | { type: "compact"; nextPrompt: string | undefined }
-        | { type: "none" };
-    }
+  | { type: "inject"; content: InjectedContent[] }
   | { type: "none" };
 
-/** Today's merge semantics for several supervisors answering the same
- * request: injected texts are joined, compaction requests are OR-ed and their
- * prompts joined, and an injection carries any compaction along with it so a
- * compact request is never lost when a supervisor also injects. */
-export function mergeRequestActions(
-  actions: ReadonlyArray<RequestAction>,
-): RequestAction {
-  const injections: string[] = [];
-  const prompts: string[] = [];
-  let shouldCompact = false;
-  for (const action of actions) {
-    if (action.type === "inject") {
-      injections.push(action.text);
-    }
-    const compaction = requestedCompaction(action);
-    if (compaction) {
-      shouldCompact = true;
-      if (compaction.nextPrompt !== undefined) {
-        prompts.push(compaction.nextPrompt);
-      }
-    }
-  }
-  const nextPrompt = prompts.length > 0 ? prompts.join("\n\n") : undefined;
-  const andThen:
-    | { type: "compact"; nextPrompt: string | undefined }
-    | {
-        type: "none";
-      } = shouldCompact ? { type: "compact", nextPrompt } : { type: "none" };
-  if (injections.length === 0) return andThen;
-  return { type: "inject", text: injections.join("\n\n"), andThen };
-}
-
-/** The compaction a request action asks for, if any — so consumers do not have
- * to test two variants. */
-export function requestedCompaction(
-  action: RequestAction,
-): { nextPrompt: string | undefined } | undefined {
-  switch (action.type) {
-    case "compact":
-      return { nextPrompt: action.nextPrompt };
-    case "inject":
-      return action.andThen.type === "compact"
-        ? { nextPrompt: action.andThen.nextPrompt }
-        : undefined;
-    case "none":
-      return undefined;
-  }
+/** For the text-only supervisors. */
+export function injectText(text: string): RequestAction {
+  return { type: "inject", content: [{ type: "text", text }] };
 }
 
 /** Fold a list of supervisors into the single `AgentHooks` trio an `Agent`
  * consults. The merge rules are exactly today's: `send-message` texts join
- * with a blank line, the first `accept`/`reject` wins a yield, and request
- * actions merge per `mergeRequestActions`. Arbitration lives here rather than
+ * with a blank line, and the first `accept`/`reject` wins a yield. Request
+ * actions are not merged: they are collected in supervisor order and the agent
+ * applies them in that order. Arbitration lives here rather than
  * in the agent because it is policy over a plural collaborator, and each
  * consumer is free to choose a different one. */
 export function composeSupervisors(
@@ -113,13 +68,13 @@ export function composeSupervisors(
       if (texts.length === 0) return { type: "none" };
       return { type: "send-message", text: texts.join("\n\n") };
     },
-    onBeforeRequest: (context) => {
+    onBeforeRequest: async (context) => {
       const actions: RequestAction[] = [];
       for (const sup of getSupervisors()) {
-        const action = sup.onBeforeRequest?.(context);
-        if (action) actions.push(action);
+        const action = await sup.onBeforeRequest?.(context);
+        if (action && action.type !== "none") actions.push(action);
       }
-      return mergeRequestActions(actions);
+      return actions;
     },
   };
 }
@@ -142,7 +97,7 @@ export type RequestContext = {
 export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
   onYield?(result: string): Promise<YieldAction>;
-  onBeforeRequest?(context: RequestContext): RequestAction;
+  onBeforeRequest?(context: RequestContext): Promise<RequestAction>;
 }
 
 function containsYieldTag(
@@ -224,7 +179,7 @@ export class AutoCompactSupervisor implements ThreadSupervisor {
     this.nextPrompt = opts.nextPrompt;
   }
 
-  onBeforeRequest(context: RequestContext): RequestAction {
+  async onBeforeRequest(context: RequestContext): Promise<RequestAction> {
     if (
       context.inputTokenCount !== undefined &&
       context.inputTokenCount >= this.threshold

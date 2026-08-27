@@ -357,7 +357,7 @@ export class OpenAIRunner implements Runner {
     return (this.messages.length - 1) as NativeMessageIdx;
   }
 
-  private appendUserMessage(content: AgentInput[]): void {
+  appendUserMessage(content: AgentInput[], opts?: { coalesce: boolean }): void {
     if (content.length === 0) return;
     // Tagged text has to be re-tagged into its structured content type, exactly
     // as the anthropic agent does, or the view renders it as raw text.
@@ -367,7 +367,12 @@ export class OpenAIRunner implements Runner {
           ? classifyTextContent(item.text, item.nativeMessageIdx)
           : undefined) ?? item,
     );
-    this.messages.push({ role: "user", content: classified });
+    const last = this.messages[this.messages.length - 1];
+    if (opts?.coalesce && last && last.role === "user") {
+      last.content = [...last.content, ...classified];
+    } else {
+      this.messages.push({ role: "user", content: classified });
+    }
     this.restamp();
     this.notify();
   }

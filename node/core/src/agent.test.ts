@@ -34,6 +34,7 @@ import type {
 import {
   AutoCompactSupervisor,
   composeSupervisors,
+  injectText,
   SubagentSupervisor,
   type ThreadSupervisor,
 } from "./thread-supervisor.ts";
@@ -411,9 +412,12 @@ describe("Thread.send across a compaction handoff", () => {
       core.hooks = composeSupervisors(() => [
         {
           onBeforeRequest: () => {
-            if (asked) return { type: "none" };
+            if (asked) return Promise.resolve({ type: "none" as const });
             asked = true;
-            return { type: "compact", nextPrompt: "carry on" };
+            return Promise.resolve({
+              type: "compact" as const,
+              nextPrompt: "carry on",
+            });
           },
         },
       ]);
@@ -1048,19 +1052,15 @@ describe("AutoCompactSupervisor integration", () => {
     expect(compactCalls).toBe(1);
   });
 
-  it("prepends an injected text to the next turn", async () => {
+  it("appends an injected text to the message log", async () => {
     const { core, mockClient } = createAgentWithMock();
     let injected = false;
     core.hooks = composeSupervisors(() => [
       {
         onBeforeRequest: () => {
-          if (injected) return { type: "none" };
+          if (injected) return Promise.resolve({ type: "none" as const });
           injected = true;
-          return {
-            type: "inject",
-            text: "remember this",
-            andThen: { type: "none" },
-          };
+          return Promise.resolve(injectText("remember this"));
         },
       },
     ]);
@@ -1079,20 +1079,24 @@ describe("AutoCompactSupervisor integration", () => {
     stream2.finishResponse("end_turn");
   });
 
-  it("compacts when an injecting supervisor also asks for compaction", async () => {
+  it("keeps the injection in the log when a compaction follows it", async () => {
     const { core, mockClient } = createAgentWithMock();
     let asked = false;
     core.hooks = composeSupervisors(() => [
       {
         onBeforeRequest: () => {
-          if (asked) return { type: "none" };
+          if (asked) return Promise.resolve({ type: "none" as const });
           asked = true;
-          return {
-            type: "inject",
-            text: "note",
-            andThen: { type: "compact", nextPrompt: "carry on" },
-          };
+          return Promise.resolve(injectText("note"));
         },
+      },
+      {
+        onBeforeRequest: () =>
+          Promise.resolve(
+            asked
+              ? { type: "compact" as const, nextPrompt: "carry on" }
+              : { type: "none" as const },
+          ),
       },
     ]);
     let compactPrompt: string | undefined = "unset";
@@ -1113,28 +1117,28 @@ describe("AutoCompactSupervisor integration", () => {
     });
     expect(compactCalls).toBe(1);
     expect(compactPrompt).toBe("carry on");
-    expect(JSON.stringify(core.pendingTurnContent)).toContain("note");
+    expect(JSON.stringify(core.getProviderMessages())).toContain("note");
   });
 
-  it("consults all supervisors and combines their compact prompts in order", async () => {
+  it("consults all supervisors in order and the first compaction wins", async () => {
     const { core, mockClient } = createAgentWithMock();
     const calls: string[] = [];
     const first: ThreadSupervisor = {
       onBeforeRequest: () => {
         calls.push("first");
-        return { type: "none" };
+        return Promise.resolve({ type: "none" });
       },
     };
     const second: ThreadSupervisor = {
       onBeforeRequest: () => {
         calls.push("second");
-        return { type: "compact", nextPrompt: "go" };
+        return Promise.resolve({ type: "compact", nextPrompt: "go" });
       },
     };
     const third: ThreadSupervisor = {
       onBeforeRequest: () => {
         calls.push("third");
-        return { type: "compact", nextPrompt: "stop" };
+        return Promise.resolve({ type: "compact", nextPrompt: "stop" });
       },
     };
     core.hooks = composeSupervisors(() => [first, second, third]);
@@ -1155,9 +1159,8 @@ describe("AutoCompactSupervisor integration", () => {
       throw new Error("waiting for supervisor consultation");
     });
 
-    // All supervisors are consulted; compact prompts are combined in order.
     expect(calls).toEqual(["first", "second", "third"]);
-    expect(compactPrompt).toBe("go\n\nstop");
+    expect(compactPrompt).toBe("go");
   });
 });
 
