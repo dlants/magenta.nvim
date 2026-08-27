@@ -1164,7 +1164,125 @@ describe("AutoCompactSupervisor integration", () => {
     });
     expect(compactCalls).toBe(1);
     expect(compactPrompt).toBe("carry on");
-    expect(JSON.stringify(core.getProviderMessages())).toContain("note");
+    // Exactly once: the snapshot handed to the compaction manager is
+    // `getProviderMessages()`, and nothing is left in agent-local state that
+    // the swap would either drop or replay.
+    expect(
+      JSON.stringify(core.getProviderMessages()).split("note").length - 1,
+    ).toBe(1);
+  });
+  it("appends a tool_use-path injection immediately when a compaction follows", async () => {
+    const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
+    const { core, mockClient } = createAgentWithMock({
+      fileIO: fileIO as unknown as AgentContext["fileIO"],
+    });
+    let asked = false;
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: (ctx) => {
+          if (asked || ctx.stopReason !== "tool_use") {
+            return Promise.resolve({ type: "none" as const });
+          }
+          asked = true;
+          return Promise.resolve(injectText("tool-path note"));
+        },
+      },
+      {
+        onBeforeRequest: () =>
+          Promise.resolve(
+            asked
+              ? { type: "compact" as const, nextPrompt: "carry on" }
+              : { type: "none" as const },
+          ),
+      },
+    ]);
+    let compactCalls = 0;
+    core.compact = () => {
+      compactCalls++;
+      return Promise.resolve({ type: "completed" as const });
+    };
+    void core.send([{ type: "user", text: "edit a" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
+      script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
+    });
+    stream.finishResponse("tool_use");
+    await pollUntil(() => {
+      if (compactCalls > 0) return true;
+      throw new Error("waiting for compaction");
+    });
+    expect(
+      JSON.stringify(core.getProviderMessages()).split("tool-path note")
+        .length - 1,
+    ).toBe(1);
+  });
+  it("keeps an injection in the log when the next request fails", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    let injected = false;
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: () => {
+          if (injected) return Promise.resolve({ type: "none" as const });
+          injected = true;
+          return Promise.resolve(injectText("survive the failure"));
+        },
+      },
+    ]);
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (injected) return true;
+      throw new Error("waiting for injection");
+    });
+    void core.send([{ type: "user", text: "next" }]);
+    const stream2 = await awaitNextStream(mockClient, stream);
+    stream2.respondWithError(new Error("provider failure"));
+    await pollUntil(() => {
+      if (core.phase.type === "idle") return true;
+      throw new Error("waiting for idle");
+    });
+    expect(JSON.stringify(core.getProviderMessages())).toContain(
+      "survive the failure",
+    );
+    void core.send([{ type: "user", text: "retry" }]);
+    const stream3 = await awaitNextStream(mockClient, stream2);
+    expect(JSON.stringify(stream3.messages)).toContain("survive the failure");
+    stream3.streamText("ok");
+    stream3.finishResponse("end_turn");
+  });
+  it("keeps an injection in the log when the next request is aborted", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    let injected = false;
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: () => {
+          if (injected) return Promise.resolve({ type: "none" as const });
+          injected = true;
+          return Promise.resolve(injectText("survive the abort"));
+        },
+      },
+    ]);
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (injected) return true;
+      throw new Error("waiting for injection");
+    });
+    void core.send([{ type: "user", text: "next" }]);
+    const stream2 = await awaitNextStream(mockClient, stream);
+    stream2.streamText("partial");
+    await core.abort();
+    await pollUntil(() => {
+      if (core.phase.type === "idle") return true;
+      throw new Error("waiting for idle");
+    });
+    expect(JSON.stringify(core.getProviderMessages())).toContain(
+      "survive the abort",
+    );
   });
 
   it("consults all supervisors in order and the first compaction wins", async () => {

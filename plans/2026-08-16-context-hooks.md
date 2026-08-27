@@ -202,10 +202,16 @@ Review follow-ups (stage 1 code review):
 - **Deviation from "injections are applied immediately":** on the tool_use continuation path the injection cannot be appended at hook time, because at that moment the tool results have not been written yet and Anthropic requires the `tool_result` blocks to immediately follow the `tool_use` they answer. Injections from that path are held in `Agent.pendingInjections` and emitted from `buildToolResponseExtras`, i.e. in the very next message after the tool results, on the same request. If the plan also asks for a compaction, they are appended to the log immediately instead, so the agent swap cannot discard them. All other paths append immediately, as designed.
 - New tests: runner-parity push-when-nothing-to-fold-into case (both runners); agent-level image injection on the tool_use continuation asserting it lands after the tool_result message; `composeSupervisors` first-compaction-wins.
 
-## 2. Injections survive the compaction handoff
+## 2. Injections survive the compaction handoff — DONE
 
 - Goal: fix agent.ts:694-711. Injections are appended to the message array as they are processed, so by the time a trailing `compact` is applied the content is already in the snapshot handed to `CompactionManager.start` — nothing is held in agent-local `prependToNextTurn` state that the swap can discard.
 - Tests: a supervisor injecting while `AutoCompactSupervisor` is over threshold — the injected text appears exactly once in the message array the compaction manager is started with. A supervisor injecting on a request that then fails or is aborted — the text is still in the log and appears in the next request. `node/chat/thread-compact.test.ts` still passes.
+
+Decisions / deviations:
+
+- The production change landed in stage 1: `applyBeforeRequestActions` already appends injections to the runner log immediately, and forces the append (rather than deferring) on the tool_use path when the plan also asks for a compaction. `handleStopped` no longer routes injections through `prependToNextTurn`. Stage 2 was therefore verification + the tests the plan calls for; no further production edits were needed.
+- `Thread.startCompaction` hands `manager.start(this.getProviderMessages(), ...)`, i.e. the agent's live log, so "in the log" and "in the compaction snapshot" are the same assertion.
+- New tests in `node/core/src/agent.test.ts`: exactly-once injection when a compaction follows (end_turn path); the same for the tool_use path (`deferInjections` + compaction); injection survives a failed next request and rides the retry; injection survives an aborted next request.
 
 ## 3. `onBeforeRequest` at submission start
 
