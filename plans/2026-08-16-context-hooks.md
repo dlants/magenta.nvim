@@ -249,6 +249,12 @@ Decisions / deviations:
 - `Agent.createToolContext().onToolApplied` calls `contextManager.toolApplied` (still wired directly, per this stage), then the hook, then the `editedFilesThisTurn` bookkeeping.
 - New test `AgentHooks.onToolApplied` in `node/core/src/agent.test.ts`: a supervisor sees `edl-edit` on `/tmp/a.txt` then `get-file` on `/tmp/b.txt`, with `editedFilesThisTurn` still populated. The read targets a *different* file because `get_files` skips `onToolApplied` when the agent already has the content (the preceding edl edit puts `/tmp/a.txt` in the agent view).
 
+Review follow-ups (stage 4 code review):
+
+- The fan-out test now registers **two** supervisors and asserts both receive both calls in supervisor order, so `composeSupervisors.onToolApplied`'s loop is exercised.
+- The collector is typed `{ supervisor: number; path: AbsFilePath; type: ToolApplied["type"] }[]`, so a mistyped variant name is a compile error.
+- `Agent.createToolContext().onToolApplied` wraps the hook call in a try/catch that logs, honoring the "fire-and-forget" contract: a throwing subscriber can no longer break the `editedFilesThisTurn` bookkeeping that runs after it. New test covers exactly that.
+
 ## 5. The three supervisors
 
 - Goal: `GitSupervisor`, `FileContextSupervisor`, `CommentSupervisor` exist and are unit-tested. Not attached yet — the agent's own path is still live, so this is pure addition.

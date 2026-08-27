@@ -770,7 +770,15 @@ export class Agent {
       contextTracker: this.contextManager as ContextTracker,
       onToolApplied: (absFilePath, tool, fileTypeInfo) => {
         this.contextManager.toolApplied(absFilePath, tool, fileTypeInfo);
-        this.deps.getHooks().onToolApplied?.(absFilePath, tool, fileTypeInfo);
+        try {
+          this.deps.getHooks().onToolApplied?.(absFilePath, tool, fileTypeInfo);
+        } catch (error) {
+          // fire-and-forget: a throwing subscriber must not break the
+          // editedFilesThisTurn bookkeeping below.
+          this.context.logger.error(
+            `onToolApplied hook threw: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
         if (
           tool.type === "edl-edit" &&
           !this.state.editedFilesThisTurn.some((e) => e.path === absFilePath)

@@ -4,6 +4,7 @@ import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActiveToolEntry, AgentContext } from "./agent.ts";
+import type { ToolApplied } from "./capabilities/context-tracker.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { CompactionResult } from "./compaction-controller.ts";
@@ -44,6 +45,7 @@ import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import * as Scratchpad from "./tools/scratchpad.ts";
 import { COMPACT_STATIC_TOOL_NAMES } from "./tools/tool-registry.ts";
 import { Defer, pollUntil } from "./utils/async.ts";
+import type { AbsFilePath } from "./utils/files.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
 
 const TEST_ARCHIVE_DIR = path.join(os.tmpdir(), "magenta-test-archive");
@@ -1481,14 +1483,17 @@ describe("AgentHooks.onToolApplied", () => {
     const { core, mockClient } = createAgentWithMock({
       fileIO: fileIO as unknown as AgentContext["fileIO"],
     });
-    const applied: { path: string; type: string }[] = [];
-    core.hooks = composeSupervisors(() => [
-      {
-        onToolApplied: (absFilePath, tool) => {
-          applied.push({ path: absFilePath, type: tool.type });
-        },
+    const applied: {
+      supervisor: number;
+      path: AbsFilePath;
+      type: ToolApplied["type"];
+    }[] = [];
+    const collector = (supervisor: number): ThreadSupervisor => ({
+      onToolApplied: (absFilePath, tool) => {
+        applied.push({ supervisor, path: absFilePath, type: tool.type });
       },
-    ]);
+    });
+    core.hooks = composeSupervisors(() => [collector(0), collector(1)]);
 
     void core.send([{ type: "user", text: "edit a" }]);
     const stream = await mockClient.awaitStream();
@@ -1504,15 +1509,46 @@ describe("AgentHooks.onToolApplied", () => {
     stream2.finishResponse("tool_use");
 
     await pollUntil(() => {
-      if (applied.length === 2) return true;
+      if (applied.length === 4) return true;
       throw new Error(
-        `waiting for 2 onToolApplied calls, got ${applied.length}`,
+        `waiting for 4 onToolApplied calls, got ${applied.length}`,
       );
     });
     expect(applied).toEqual([
-      { path: "/tmp/a.txt", type: "edl-edit" },
-      { path: "/tmp/b.txt", type: "get-file" },
+      { supervisor: 0, path: "/tmp/a.txt", type: "edl-edit" },
+      { supervisor: 1, path: "/tmp/a.txt", type: "edl-edit" },
+      { supervisor: 0, path: "/tmp/b.txt", type: "get-file" },
+      { supervisor: 1, path: "/tmp/b.txt", type: "get-file" },
     ]);
+    expect(core.state.editedFilesThisTurn).toEqual([
+      { path: "/tmp/a.txt", snapshot: "hello" },
+    ]);
+  });
+
+  it("keeps editedFilesThisTurn bookkeeping when a subscriber throws", async () => {
+    const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
+    const { core, mockClient } = createAgentWithMock({
+      fileIO: fileIO as unknown as AgentContext["fileIO"],
+    });
+    core.hooks = composeSupervisors(() => [
+      {
+        onToolApplied: () => {
+          throw new Error("subscriber blew up");
+        },
+      },
+    ]);
+
+    void core.send([{ type: "user", text: "edit a" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
+      script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
+    });
+    stream.finishResponse("tool_use");
+
+    await pollUntil(() => {
+      if (core.state.editedFilesThisTurn.length === 1) return true;
+      throw new Error("waiting for the edited-file bookkeeping");
+    });
     expect(core.state.editedFilesThisTurn).toEqual([
       { path: "/tmp/a.txt", snapshot: "hello" },
     ]);
