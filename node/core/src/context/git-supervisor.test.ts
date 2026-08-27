@@ -41,7 +41,10 @@ describe("GitSupervisor", () => {
   it("injects the git update text once on a branch change", async () => {
     const { supervisor, onSent } = setup(state("feature"), state("main"));
 
-    const action = await supervisor.onBeforeRequest();
+    const action = await supervisor.onBeforeRequest({
+      kind: "submission",
+      inputTokenCount: 0,
+    });
     expect(action.type).toBe("inject");
     if (action.type !== "inject") throw new Error("expected inject");
     expect(action.content).toHaveLength(1);
@@ -51,13 +54,27 @@ describe("GitSupervisor", () => {
     expect(block.text).toContain("feature");
     expect(onSent).toHaveBeenCalledTimes(1);
 
-    expect((await supervisor.onBeforeRequest()).type).toBe("none");
+    expect(
+      (
+        await supervisor.onBeforeRequest({
+          kind: "submission",
+          inputTokenCount: 0,
+        })
+      ).type,
+    ).toBe("none");
     expect(onSent).toHaveBeenCalledTimes(1);
   });
 
   it("yields nothing when git state is unchanged", async () => {
     const { supervisor, onSent } = setup(state("main"), state("main"));
-    expect((await supervisor.onBeforeRequest()).type).toBe("none");
+    expect(
+      (
+        await supervisor.onBeforeRequest({
+          kind: "submission",
+          inputTokenCount: 0,
+        })
+      ).type,
+    ).toBe("none");
     expect(onSent).not.toHaveBeenCalled();
   });
 });

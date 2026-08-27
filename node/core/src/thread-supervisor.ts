@@ -120,6 +120,11 @@ type SubmissionRequest = { kind: "submission" };
 type ContinuationRequest = {
   kind: "continuation";
   stopReason: StreamStopReason;
+  /** False when the turn is about to end: the agent asks anyway, because a
+   * supervisor may still want to compact, but nothing is going out. A
+   * supervisor that contributes content — the context trackers — must stay
+   * silent, or it would commit an update no request carries. */
+  willRequest: boolean;
 };
 /** The fields the caller of `onBeforeRequest` supplies; the agent fills in the
  * token count itself. */

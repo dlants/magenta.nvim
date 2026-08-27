@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ContextTracker } from "./capabilities/context-tracker.ts";
+import type {
+  ContextTracker,
+  OnToolApplied,
+} from "./capabilities/context-tracker.ts";
 import type { LspClient } from "./capabilities/lsp-client.ts";
 import type { Shell } from "./capabilities/shell.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
@@ -17,7 +20,6 @@ import type {
   CompactionResult,
   CompactionStep,
 } from "./compaction-controller.ts";
-import type { ContextManager } from "./context/context-manager.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import { Emitter } from "./emitter.ts";
@@ -99,7 +101,8 @@ export interface CompactionManagerContext {
   homeDir: HomeDir;
   lspClient: LspClient;
   availableCapabilities: Set<ToolCapability>;
-  contextManager: ContextManager;
+  contextTracker: ContextTracker;
+  onToolApplied: OnToolApplied;
   shell: Shell;
   threadManager: ThreadManager;
   maxConcurrentSubagents: number;
@@ -323,14 +326,8 @@ export class CompactionManager extends Emitter<CompactionEvents> {
         homeDir: this.context.homeDir,
         maxConcurrentSubagents: this.context.maxConcurrentSubagents,
         maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
-        contextTracker: this.context.contextManager as ContextTracker,
-        onToolApplied: (absFilePath, tool, fileTypeInfo) => {
-          this.context.contextManager.toolApplied(
-            absFilePath,
-            tool,
-            fileTypeInfo,
-          );
-        },
+        contextTracker: this.context.contextTracker,
+        onToolApplied: this.context.onToolApplied,
         edlRegisters: this.edlRegisters,
         scratchpad: this.scratchpad,
         fileIO: this.fileIO,

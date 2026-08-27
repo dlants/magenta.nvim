@@ -5,6 +5,7 @@ import type { ToolName, ToolRequestId } from "@magenta/core";
 import { expect, test } from "vitest";
 import { MockProvider } from "../providers/mock.ts";
 import { withDriver } from "../test/preamble.ts";
+import { pollUntil } from "../utils/async.ts";
 
 const SKILL_WITH_REMINDER =
   "# Skill\n\n<system_reminder>\nalways pet the cat\n</system_reminder>\n";
@@ -364,11 +365,16 @@ test("auto-respond combines subsequent and bash reminders into a single system_r
     // After rendering the combined reminder, only one collapsed header should
     // appear for the auto-respond turn (the user-typed message also has its
     // own header, so total across the buffer is 2).
-    await driver.assertDisplayBufferContains("📋 [System Reminder]");
-    const displayText = await driver.getDisplayBufferText();
-    const headerCount = (displayText.match(/📋 \[System Reminder\]/g) ?? [])
-      .length;
-    expect(headerCount).toBe(2);
+    // The auto-respond turn's header appears on a later render than the user
+    // message's, so poll rather than sampling once.
+    await pollUntil(async () => {
+      const displayText = await driver.getDisplayBufferText();
+      const headerCount = (displayText.match(/📋 \[System Reminder\]/g) ?? [])
+        .length;
+      if (headerCount !== 2) {
+        throw new Error(`expected 2 reminder headers, got ${headerCount}`);
+      }
+    });
   });
 });
 

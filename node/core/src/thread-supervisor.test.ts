@@ -11,6 +11,7 @@ const context: RequestContext = {
   kind: "continuation",
   inputTokenCount: 400000,
   stopReason: "end_turn",
+  willRequest: true,
 };
 
 describe("composeSupervisors onBeforeRequest", () => {
@@ -77,6 +78,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: 300000,
         stopReason: "end_turn",
+        willRequest: true,
       }),
     ).toEqual({ type: "compact", nextPrompt: "go" });
     expect(
@@ -84,6 +86,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: 400000,
         stopReason: "end_turn",
+        willRequest: true,
       }),
     ).toEqual({ type: "compact", nextPrompt: "go" });
   });
@@ -98,6 +101,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: 299999,
         stopReason: "end_turn",
+        willRequest: true,
       }),
     ).toEqual({ type: "none" });
     expect(
@@ -105,6 +109,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: undefined,
         stopReason: "end_turn",
+        willRequest: true,
       }),
     ).toEqual({ type: "none" });
   });
@@ -116,6 +121,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: 300000,
         stopReason: "end_turn",
+        willRequest: true,
       }),
     ).toEqual({ type: "compact", nextPrompt: "go" });
     expect(
@@ -123,6 +129,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: 299999,
         stopReason: "end_turn",
+        willRequest: true,
       }),
     ).toEqual({ type: "none" });
   });

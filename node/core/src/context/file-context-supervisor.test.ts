@@ -17,6 +17,7 @@ const TEXT_FILE_TYPE = {
   mimeType: "text/plain",
   extension: ".txt",
 };
+const TEST_REL = "file.txt" as RelFilePath;
 const IMAGE_PATH = "/test/test.jpg" as AbsFilePath;
 const IMAGE_REL = "test.jpg" as RelFilePath;
 const IMAGE_FILE_TYPE = {
@@ -62,20 +63,37 @@ describe("FileContextSupervisor", () => {
     expect(contextManager.files[TEST_PATH]).toBeDefined();
 
     await fileIO.writeFile(TEST_PATH, "formatted content");
-    const action = await supervisor.onBeforeRequest();
+    const action = await supervisor.onBeforeRequest({
+      kind: "submission",
+      inputTokenCount: 0,
+    });
     if (action.type !== "inject") throw new Error("expected inject");
     const block = action.content[0];
     if (block.type !== "text") throw new Error("expected text");
     expect(block.text).toContain("formatted content");
     expect(onSent).toHaveBeenCalledTimes(1);
 
-    expect((await supervisor.onBeforeRequest()).type).toBe("none");
+    expect(
+      (
+        await supervisor.onBeforeRequest({
+          kind: "submission",
+          inputTokenCount: 0,
+        })
+      ).type,
+    ).toBe("none");
     expect(onSent).toHaveBeenCalledTimes(1);
   });
 
   it("yields nothing when nothing is tracked", async () => {
     const { supervisor, onSent } = setup({ [TEST_PATH]: "hi" });
-    expect((await supervisor.onBeforeRequest()).type).toBe("none");
+    expect(
+      (
+        await supervisor.onBeforeRequest({
+          kind: "submission",
+          inputTokenCount: 0,
+        })
+      ).type,
+    ).toBe("none");
     expect(onSent).not.toHaveBeenCalled();
   });
 
@@ -85,12 +103,39 @@ describe("FileContextSupervisor", () => {
     });
     contextManager.addFileContext(IMAGE_PATH, IMAGE_REL, IMAGE_FILE_TYPE);
 
-    const action = await supervisor.onBeforeRequest();
+    const action = await supervisor.onBeforeRequest({
+      kind: "submission",
+      inputTokenCount: 0,
+    });
     if (action.type !== "inject") throw new Error("expected inject");
     expect(action.content.map((c) => c.type)).toEqual(["text", "image"]);
     const image = action.content[1];
     if (image.type !== "image") throw new Error("expected image");
     expect(image.source.media_type).toBe("image/jpeg");
+  });
+
+  it("stays silent on a stop that issues no request", async () => {
+    const { supervisor, contextManager, onSent } = setup({
+      [TEST_PATH]: "hello",
+    });
+    contextManager.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    const action = await supervisor.onBeforeRequest({
+      kind: "continuation",
+      stopReason: "end_turn",
+      willRequest: false,
+      inputTokenCount: 0,
+    });
+    expect(action).toEqual({ type: "none" });
+    expect(onSent).not.toHaveBeenCalled();
+  });
+
+  it("destroy stops the poller", () => {
+    const { supervisor, contextManager } = setup({ [TEST_PATH]: "hello" });
+    contextManager.start();
+    supervisor.destroy();
+    expect(
+      (contextManager as unknown as { pollTimer: unknown }).pollTimer,
+    ).toBeUndefined();
   });
 
   it("clone re-reads text files so the fork's first update is empty", async () => {
@@ -110,10 +155,20 @@ describe("FileContextSupervisor", () => {
     });
     expect(clone.contextManager).not.toBe(supervisor.contextManager);
     expect(clone.contextManager.files[TEST_PATH]).toBeDefined();
-    expect((await clone.onBeforeRequest()).type).toBe("none");
+    expect(
+      (await clone.onBeforeRequest({ kind: "submission", inputTokenCount: 0 }))
+        .type,
+    ).toBe("none");
 
     // The source still owes the agent the on-disk change.
-    expect((await supervisor.onBeforeRequest()).type).toBe("inject");
+    expect(
+      (
+        await supervisor.onBeforeRequest({
+          kind: "submission",
+          inputTokenCount: 0,
+        })
+      ).type,
+    ).toBe("inject");
     clone.destroy();
     supervisor.destroy();
   });

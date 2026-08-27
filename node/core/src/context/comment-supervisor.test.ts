@@ -32,7 +32,10 @@ describe("CommentSupervisor", () => {
       onSent,
     });
 
-    const action = await supervisor.onBeforeRequest();
+    const action = await supervisor.onBeforeRequest({
+      kind: "submission",
+      inputTokenCount: 0,
+    });
     order.push("read");
     expect(order).toEqual(["beforeRead", "read"]);
 
@@ -54,7 +57,14 @@ describe("CommentSupervisor", () => {
       beforeRead: () => Promise.resolve(),
       onSent,
     });
-    expect((await supervisor.onBeforeRequest()).type).toBe("none");
+    expect(
+      (
+        await supervisor.onBeforeRequest({
+          kind: "submission",
+          inputTokenCount: 0,
+        })
+      ).type,
+    ).toBe("none");
     expect(onSent).not.toHaveBeenCalled();
   });
 });

@@ -147,6 +147,7 @@ function createAgentWithMock(
     maxConcurrentFastSubagents: 8,
     getAgents: () => ({}),
     getProvider: () => provider,
+    contextTracker: { files: {} },
     ...overrides,
   };
 
@@ -2807,24 +2808,5 @@ describe("Thread survives the compaction agent swap", () => {
       await core.destroy();
       await cleanupArchive(threadId);
     }
-  });
-});
-
-describe("Thread.destroy", () => {
-  it("tears down the context manager so its poll timer stops", async () => {
-    const threadId = uniqueThreadId("destroy-context");
-    const { core } = createAgentWithMock(undefined, threadId);
-    const contextManager = core.contextManager;
-    let updates = 0;
-    core.callbacks.onUpdate = () => updates++;
-    await core.destroy();
-    await cleanupArchive(threadId);
-
-    expect(
-      (contextManager as unknown as { pollTimer: unknown }).pollTimer,
-    ).toBeUndefined();
-    // listeners are gone, so a stray emit cannot reach a destroyed thread
-    contextManager.emit("fileAdded", "/tmp/x" as never);
-    expect(updates).toBe(0);
   });
 });

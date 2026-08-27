@@ -2,7 +2,7 @@ import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import { type AgentsMap, extractSystemReminderBlock } from "./agents/agents.ts";
 import type { ContextTracker } from "./capabilities/context-tracker.ts";
 import type { FileIO } from "./capabilities/file-io.ts";
-import type { GitClient, GitState } from "./capabilities/git-client.ts";
+import type { GitClient } from "./capabilities/git-client.ts";
 import type { LspClient } from "./capabilities/lsp-client.ts";
 import type { LuaExecutor } from "./capabilities/lua-executor.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
@@ -10,20 +10,7 @@ import type { Shell } from "./capabilities/shell.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
 import type { CompactionRecord } from "./compaction-controller.ts";
-import type {
-  CommentStore,
-  CommentUpdateEntry,
-} from "./context/comment-store.ts";
-import type {
-  ContextManager,
-  Files,
-  FileUpdates,
-} from "./context/context-manager.ts";
-import {
-  type GitContextUpdate,
-  type GitTracker,
-  gitUpdateToText,
-} from "./context/git-tracker.ts";
+import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
@@ -144,15 +131,6 @@ export type EnvironmentConfig =
   | { type: "local"; cwd?: NvimCwd }
   | { type: "docker"; container: string; cwd: string };
 
-/** Structured records the owning `Thread` wants attached to the message an
- * injection produced. Stage 6 turns these into `onBeforeRequest` injections
- * that ride on the message; until then they are two narrow callbacks rather
- * than a broadcast channel. */
-export type ContextUpdateSink = {
-  onContextUpdatesSent?: (updates: FileUpdates) => void;
-  onCommentUpdatesSent?: (entries: CommentUpdateEntry[]) => void;
-  onGitContextUpdateSent?: (update: GitContextUpdate) => void;
-};
 export interface AgentContext {
   logger: Logger;
   profile: ProviderProfile;
@@ -168,7 +146,6 @@ export interface AgentContext {
   fileIO: FileIO;
   shell: Shell;
   gitClient: GitClient;
-  initialGitState?: GitState | undefined;
   lspClient: LspClient;
   luaExecutor?: LuaExecutor | undefined;
   availableCapabilities: Set<ToolCapability>;
@@ -178,7 +155,14 @@ export interface AgentContext {
   maxConcurrentFastSubagents: number;
   getAgents: () => AgentsMap;
   getProvider: (profile: ProviderProfile) => Provider;
-  initialFiles?: Files;
+  /** A synchronous, read-only view of the tracked files. Read from inside
+   * tool execution and from the markdown-reminder scan, so it cannot be a
+   * hook. The owner hands in the very object its `FileContextSupervisor`
+   * owns. */
+  contextTracker: ContextTracker;
+  /** The root thread's side conversations, needed by the `reply` tool. The
+   * same store the owner's `CommentSupervisor` owns. */
+  commentStore?: CommentStore | undefined;
   yieldSchema?: JSONSchemaType;
 }
 
@@ -248,8 +232,6 @@ export interface AgentDeps {
    * identity of its own. */
   threadId: ThreadId;
   state: ThreadState;
-  contextManager: ContextManager;
-  gitTracker: GitTracker;
   structuredToolResults: Map<ToolRequestId, ToolStructuredResult>;
   /** The owner's answers to the agent's three questions. Arbitration between
    * several policies is the owner's business (see `composeSupervisors`). */
@@ -257,11 +239,6 @@ export interface AgentDeps {
   /** "Something visible moved." Unthrottled: the recipient coalesces with a
    * trailing-edge debounce. */
   onUpdate: OnUpdate;
-  /** The root thread's side conversations, drained alongside the context
-   * update. A function because the owning `Thread` may be handed one after
-   * its first agent exists, and compaction swaps the agent underneath. */
-  getCommentStore: () => CommentStore | undefined;
-  contextUpdateSink: ContextUpdateSink;
   /** Whether this agent drives a brand-new runner or one cloned from another
    * thread's history. */
   runnerInit:
@@ -303,8 +280,6 @@ type BeforeRequestResult =
 export class Agent {
   public state: ThreadState;
   public runner: Runner;
-  public readonly contextManager: ContextManager;
-  public readonly gitTracker: GitTracker;
   /** Structured tool results by request id, kept for the lifetime of the
    * thread (so it outlives this agent). The provider strips
    * `structuredResult` when serializing a tool result to native form, so the
@@ -321,8 +296,6 @@ export class Agent {
   ) {
     this.threadId = deps.threadId;
     this.state = deps.state;
-    this.contextManager = deps.contextManager;
-    this.gitTracker = deps.gitTracker;
     this.structuredToolResults = deps.structuredToolResults;
     this.refreshToolSpecs();
 
@@ -697,13 +670,61 @@ export class Agent {
     await this.handleYield(reason.result, reason.value);
   }
 
+  /** What the agent sends next after a stop, if anything. Decided *before*
+   * the before-request hooks run: a stop that ends the turn issues no
+   * request, and consulting the context trackers there would drain their
+   * updates into a message nothing is about to send. */
+  private nextContinuation(
+    stopReason: StopReason,
+  ): { messages: InputMessage[]; drainPending?: true } | undefined {
+    if (stopReason === "max_tokens") {
+      return {
+        messages: [
+          {
+            type: "system",
+            text: "Your previous response was truncated due to the output token limit. Please continue where you left off.",
+          },
+        ],
+      };
+    }
+
+    if (
+      stopReason === "end_turn" &&
+      (this.state.pendingMessages.length ||
+        this.state.pendingNextMessages.length)
+    ) {
+      return {
+        messages: [
+          ...this.state.pendingMessages,
+          ...this.state.pendingNextMessages,
+        ],
+        drainPending: true,
+      };
+    }
+
+    const action = this.consultEndTurnSupervisors({
+      stopReason,
+      lastAssistantMessage: this.getLastAssistantMessage(),
+    });
+    if (action.type === "send-message") {
+      return { messages: [{ type: "system", text: action.text }] };
+    }
+    return undefined;
+  }
+
   private async handleStopped(stopReason: StopReason): Promise<void> {
     this.resetErrorRetryState();
     this.update({ type: "set-mode", mode: { type: "normal" } });
 
+    const continuation = this.nextContinuation(stopReason);
+
     const beforeRequest = await this.applyBeforeRequestActions(
-      { kind: "continuation", stopReason },
-      "append",
+      {
+        kind: "continuation",
+        stopReason,
+        willRequest: continuation !== undefined,
+      },
+      "prefix",
     );
     if (beforeRequest.type === "compact") {
       // The submission is not over: the owning Thread runs the handoff and
@@ -715,46 +736,15 @@ export class Agent {
       return;
     }
 
-    if (stopReason === "max_tokens") {
-      await this.submit(
-        [
-          {
-            type: "system",
-            text: "Your previous response was truncated due to the output token limit. Please continue where you left off.",
-          },
-        ],
-        { requestKind: "continuation" },
-      );
+    if (!continuation) {
+      this.settle({ type: "completed" });
       return;
     }
-
-    if (
-      stopReason === "end_turn" &&
-      (this.state.pendingMessages.length ||
-        this.state.pendingNextMessages.length)
-    ) {
-      const pendingMessages = [
-        ...this.state.pendingMessages,
-        ...this.state.pendingNextMessages,
-      ];
+    if (continuation.drainPending) {
       this.update({ type: "drain-pending-messages" }, { silent: true });
       this.update({ type: "drain-pending-next-messages" }, { silent: true });
-      await this.submit(pendingMessages, { requestKind: "continuation" });
-      return;
     }
-
-    const action = this.consultEndTurnSupervisors({
-      stopReason,
-      lastAssistantMessage: this.getLastAssistantMessage(),
-    });
-    if (action.type === "send-message") {
-      await this.submit([{ type: "system", text: action.text }], {
-        requestKind: "continuation",
-      });
-      return;
-    }
-
-    this.settle({ type: "completed" });
+    await this.submit(continuation.messages, { requestKind: "continuation" });
   }
 
   private createToolContext(): CreateToolContext {
@@ -767,9 +757,8 @@ export class Agent {
       homeDir: this.context.homeDir,
       maxConcurrentSubagents: this.context.maxConcurrentSubagents,
       maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
-      contextTracker: this.contextManager as ContextTracker,
+      contextTracker: this.context.contextTracker,
       onToolApplied: (absFilePath, tool, fileTypeInfo) => {
-        this.contextManager.toolApplied(absFilePath, tool, fileTypeInfo);
         try {
           this.deps.getHooks().onToolApplied?.(absFilePath, tool, fileTypeInfo);
         } catch (error) {
@@ -796,7 +785,7 @@ export class Agent {
       threadManager: this.context.threadManager,
       scriptRunner: this.context.getScriptRunner?.(),
       luaExecutor: this.context.luaExecutor,
-      commentStore: this.deps.getCommentStore(),
+      commentStore: this.context.commentStore,
       requestRender: () => this.deps.onUpdate(),
       getAgents: () => this.context.getAgents(),
     };
@@ -913,7 +902,7 @@ export class Agent {
     }
 
     const beforeRequest = await this.applyBeforeRequestActions(
-      { kind: "continuation", stopReason: "tool_use" },
+      { kind: "continuation", stopReason: "tool_use", willRequest: true },
       "pending",
     );
     if (beforeRequest.type === "compact") {
@@ -1156,14 +1145,6 @@ export class Agent {
 
     this.state.editedFilesThisTurn = [];
 
-    const {
-      content: contextContent,
-      updates: contextUpdates,
-      gitUpdate,
-    } = await this.getAndPrepareContextUpdates();
-
-    const { content, hasContent } = this.prepareUserContent(inputMessages);
-
     const beforeRequest: BeforeRequestResult =
       opts.requestKind === "continuation"
         ? { type: "proceed", injections: [] }
@@ -1171,13 +1152,13 @@ export class Agent {
             { kind: "submission" },
             "return",
           );
+    // After the hook: the file tracker's update is what refreshes the agent
+    // view the markdown-reminder scan reads.
+    const { content, hasContent } = this.prepareUserContent(inputMessages);
     if (beforeRequest.type === "compact") {
       // The injections are already in the log; the user's own content has to
       // join them there so the compaction snapshot carries it too.
-      this.runner.appendUserMessage(
-        [...contextContent, ...toAgentInput(content)],
-        { coalesce: true },
-      );
+      this.runner.appendUserMessage(toAgentInput(content), { coalesce: true });
       this.settle({
         type: "compact",
         nextPrompt: beforeRequest.compaction.nextPrompt,
@@ -1186,21 +1167,14 @@ export class Agent {
     }
 
     const injections = beforeRequest.injections;
-    if (!hasContent && contextContent.length === 0 && injections.length === 0) {
+    const hasPrefix = (this.pendingTurnPrefix?.length ?? 0) > 0;
+    if (!hasContent && injections.length === 0 && !hasPrefix) {
       this.settle({ type: "completed" });
       return;
     }
 
-    if (contextUpdates) {
-      this.deps.contextUpdateSink.onContextUpdatesSent?.(contextUpdates);
-    }
-    if (gitUpdate) {
-      this.deps.contextUpdateSink.onGitContextUpdateSent?.(gitUpdate);
-    }
-    this.commitCommentUpdates();
-
     const isFirstMessage = this.getProviderMessages().length === 0;
-    const contentToSend: AgentInput[] = [...contextContent, ...injections];
+    const contentToSend: AgentInput[] = [...injections];
 
     contentToSend.push(...toAgentInput(content));
 
@@ -1283,76 +1257,12 @@ export class Agent {
     this.settle({ type: "yielded", value });
   }
 
-  private async getAndPrepareContextUpdates(): Promise<{
-    content: AgentInput[];
-    updates: FileUpdates | undefined;
-    gitUpdate: GitContextUpdate | undefined;
-  }> {
-    const content: AgentInput[] = [];
-
-    const gitUpdate = await this.gitTracker.getUpdate();
-    if (gitUpdate) {
-      content.push({
-        type: "text",
-        text: gitUpdateToText(gitUpdate),
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      });
-    }
-
-    const contextUpdates = await this.contextManager.getContextUpdate();
-    if (Object.keys(contextUpdates).length === 0) {
-      this.appendCommentUpdates(content);
-      return { content, updates: undefined, gitUpdate };
-    }
-
-    const contextContent =
-      this.contextManager.contextUpdatesToContent(contextUpdates);
-    for (const c of contextContent) {
-      if (c.type === "text") {
-        content.push({
-          type: "text",
-          text: c.text,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        });
-      } else if (c.type === "image" || c.type === "document") {
-        content.push(c);
-      }
-    }
-
-    this.appendCommentUpdates(content);
-    return { content, updates: contextUpdates, gitUpdate };
-  }
-
-  /** The `<comment_update>` block, if the user has undelivered comments. Pure:
-   * nothing is marked delivered until `commitCommentUpdates` runs, past the
-   * early-settle guard. */
-  private appendCommentUpdates(content: AgentInput[]): void {
-    const text = this.deps.getCommentStore()?.getPendingUpdate();
-    if (text === undefined) return;
-    content.push({
-      type: "text",
-      text,
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    });
-  }
-
-  /** Mark the comment messages that rode out on this request as delivered, and
-   * hand the structured entries to the owner's display ledger. */
-  private commitCommentUpdates(): void {
-    const store = this.deps.getCommentStore();
-    if (!store) return;
-    const entries = store.commitPending();
-    if (entries.length) {
-      this.deps.contextUpdateSink.onCommentUpdatesSent?.(entries);
-    }
-  }
-
   /** The union of transient get_files-read reminders and reminders derived from
    * markdown files currently in context, deduped on text. */
   private getActiveReminders(): string[] {
     const reminders = new Set(this.state.activeReminders);
-    for (const key of Object.keys(this.contextManager.files)) {
-      const fileInfo = this.contextManager.files[key as AbsFilePath];
+    for (const key of Object.keys(this.context.contextTracker.files)) {
+      const fileInfo = this.context.contextTracker.files[key as AbsFilePath];
       if (!fileInfo) continue;
       if (!key.toLowerCase().endsWith(".md")) continue;
       if (fileInfo.agentView?.type !== "text") continue;
@@ -1403,28 +1313,12 @@ export class Agent {
       this.update({ type: "drain-pending-messages" }, { silent: true });
     }
 
-    const {
-      content: contextContent,
-      updates: contextUpdates,
-      gitUpdate,
-    } = await this.getAndPrepareContextUpdates();
-
-    const contentToSend: AgentInput[] = [
-      ...this.pendingInjections,
-      ...contextContent,
-    ];
+    const contentToSend: AgentInput[] = [...this.pendingInjections];
     this.pendingInjections = [];
 
     if (pendingMessages.length > 0) {
       const { content } = this.prepareUserContent(pendingMessages);
       contentToSend.push(...toAgentInput(content));
-      if (contextUpdates) {
-        this.deps.contextUpdateSink.onContextUpdatesSent?.(contextUpdates);
-      }
-      if (gitUpdate) {
-        this.deps.contextUpdateSink.onGitContextUpdateSent?.(gitUpdate);
-      }
-      this.commitCommentUpdates();
       return contentToSend;
     }
 
@@ -1461,14 +1355,6 @@ export class Agent {
         this.update({ type: "reset-bash-reminder" }, { silent: true });
       }
     }
-
-    if (contextUpdates) {
-      this.deps.contextUpdateSink.onContextUpdatesSent?.(contextUpdates);
-    }
-    if (gitUpdate) {
-      this.deps.contextUpdateSink.onGitContextUpdateSent?.(gitUpdate);
-    }
-    this.commitCommentUpdates();
 
     return contentToSend;
   }
@@ -1535,7 +1421,7 @@ export class Agent {
   private pendingInjections: AgentInput[] = [];
   private async applyBeforeRequestActions(
     context: RequestContextKind,
-    mode: "append" | "pending" | "return",
+    mode: "prefix" | "pending" | "return",
   ): Promise<BeforeRequestResult> {
     const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
     if (!onBeforeRequest) return { type: "proceed", injections: [] };
@@ -1559,8 +1445,12 @@ export class Agent {
       return { type: "compact", compaction: plan.compaction };
     }
     switch (mode) {
-      case "append":
-        this.runner.appendUserMessage(injections, { coalesce: true });
+      case "prefix":
+        // A stop is not a request: whether a continuation follows is decided
+        // after the hook runs. Queuing as the next turn's prefix lands the
+        // content in the same user message as whatever goes out next —
+        // including a `send` that arrives much later.
+        this.prependToNextTurn(injections);
         return { type: "proceed", injections: [] };
       case "pending":
         this.pendingInjections.push(...injections);

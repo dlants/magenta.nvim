@@ -3,7 +3,6 @@ import {
   type AgentContext,
   type AgentDeps,
   type AgentSendOutcome,
-  type ContextUpdateSink,
   type InputMessage,
   type ThreadState,
 } from "./agent.ts";
@@ -13,9 +12,6 @@ import type {
   CompactionStep,
 } from "./compaction-controller.ts";
 import { CompactionManager } from "./compaction-manager.ts";
-import { CommentStore } from "./context/comment-store.ts";
-import { buildClonedFiles, ContextManager } from "./context/context-manager.ts";
-import { GitTracker } from "./context/git-tracker.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
@@ -43,8 +39,6 @@ import * as Scratchpad from "./tools/scratchpad.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
-
-const CONTEXT_MANAGER_POLL_INTERVAL_MS = 1000;
 
 /** How a `Thread` comes into being: either brand new, or forked from another
  * thread's history — in which case the cloned runner, its provenance and the
@@ -79,23 +73,14 @@ export type ThreadInit =
  * id and why the context manager survives the swap.
  */
 /** The collaborators the owner supplies. `onUpdate` is the one channel a
- * thread has for saying "something visible moved"; the two context-update
- * sinks are a stage-6 placeholder, where they become `onBeforeRequest`
- * injections whose structured record rides on the message. */
-export type ThreadCallbacks = ContextUpdateSink & {
+ * thread has for saying "something visible moved". */
+export type ThreadCallbacks = {
   onUpdate: OnUpdate;
 };
 
 export class Thread {
   public state: ThreadState;
   public agent: Agent;
-  public contextManager: ContextManager;
-  /** The root thread's side conversations — only root chat threads have one,
-   * which is why it is derived from the thread type here rather than handed in.
-   * Read lazily by every agent this thread creates, including post-compaction
-   * ones, so a compaction keeps delivering into the same store. */
-  public readonly commentStore: CommentStore | undefined;
-  public gitTracker: GitTracker;
   public compactionController: CompactionManager | undefined;
   /** The owner's answers to the agent's three questions. Composed from a
    * supervisor list by `composeSupervisors` at the call site that knows the
@@ -120,10 +105,6 @@ export class Thread {
      * agent configuration, so it is not part of the context bag. */
     private archiveOptions: ThreadArchiveOptions = {},
   ) {
-    this.commentStore =
-      context.threadType === "root" || context.threadType === "docker_root"
-        ? new CommentStore()
-        : undefined;
     const forkProvenance = init.type === "clone" ? init.provenance : undefined;
     this.threadLogger = new ThreadLogger(
       id,
@@ -140,20 +121,6 @@ export class Thread {
         cwd: context.cwd,
         ...(forkProvenance ? { forkedFrom: forkProvenance } : {}),
       },
-    );
-    this.contextManager = new ContextManager(
-      context.logger,
-      context.fileIO,
-      context.cwd,
-      context.homeDir,
-      context.initialFiles,
-      CONTEXT_MANAGER_POLL_INTERVAL_MS,
-    );
-    this.contextManager.start();
-    this.gitTracker = new GitTracker(
-      context.gitClient,
-      context.initialGitState,
-      context.logger,
     );
     this.state = {
       threadType: context.threadType,
@@ -182,7 +149,6 @@ export class Thread {
       toolSpecs: [],
     };
 
-    this.listenToContextManager();
     this.agent = this.createAgent(
       init.type === "clone"
         ? {
@@ -206,18 +172,9 @@ export class Thread {
     callbacks: ThreadCallbacks;
   }): Promise<Thread> {
     const { sourceThread, newId, nativeMessageIdx, context, callbacks } = args;
-    const initialFiles = await buildClonedFiles(
-      sourceThread.contextManager.files,
-      context.fileIO,
-    );
-    const contextWithFiles: AgentContext = {
-      ...context,
-      initialFiles,
-      initialGitState: sourceThread.gitTracker.getAgentView(),
-    };
     const cloned = new Thread(
       newId,
-      contextWithFiles,
+      context,
       callbacks,
       {
         type: "clone",
@@ -336,23 +293,9 @@ export class Thread {
     return new Agent(this.context, {
       threadId: this.id,
       state: this.state,
-      contextManager: this.contextManager,
-      gitTracker: this.gitTracker,
-      getCommentStore: () => this.commentStore,
       structuredToolResults: this.structuredToolResults,
       getHooks: () => this.hooks,
       onUpdate: () => this.handleUpdate(),
-      contextUpdateSink: {
-        ...(this.callbacks.onContextUpdatesSent
-          ? { onContextUpdatesSent: this.callbacks.onContextUpdatesSent }
-          : {}),
-        ...(this.callbacks.onGitContextUpdateSent
-          ? { onGitContextUpdateSent: this.callbacks.onGitContextUpdateSent }
-          : {}),
-        ...(this.callbacks.onCommentUpdatesSent
-          ? { onCommentUpdatesSent: this.callbacks.onCommentUpdatesSent }
-          : {}),
-      },
       runnerInit,
     });
   }
@@ -369,25 +312,6 @@ export class Thread {
       this.phase.type === "idle" ? "at-rest" : "streaming",
     );
     this.callbacks.onUpdate();
-  }
-
-  private contextManagerListeners: Array<() => void> = [];
-
-  private listenToContextManager(): void {
-    const onChanged = () => this.callbacks.onUpdate();
-    this.contextManager.on("fileAdded", onChanged);
-    this.contextManager.on("fileRemoved", onChanged);
-    this.contextManager.on("pendingUpdatesChanged", onChanged);
-    this.contextManagerListeners = [
-      () => this.contextManager.off("fileAdded", onChanged),
-      () => this.contextManager.off("fileRemoved", onChanged),
-      () => this.contextManager.off("pendingUpdatesChanged", onChanged),
-    ];
-  }
-
-  private unlistenContextManager(): void {
-    for (const unsubscribe of this.contextManagerListeners) unsubscribe();
-    this.contextManagerListeners = [];
   }
 
   update(...args: Parameters<Agent["update"]>): void {
@@ -578,7 +502,9 @@ Come up with a succinct thread title for this prompt. It must be a single line (
       homeDir: this.context.homeDir,
       lspClient: this.context.lspClient,
       availableCapabilities: this.context.availableCapabilities,
-      contextManager: this.contextManager,
+      contextTracker: this.context.contextTracker,
+      onToolApplied: (absFilePath, tool, fileTypeInfo) =>
+        this.hooks.onToolApplied?.(absFilePath, tool, fileTypeInfo),
       shell: this.context.shell,
       threadManager: this.context.threadManager,
       maxConcurrentSubagents: this.context.maxConcurrentSubagents,
@@ -705,9 +631,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     this.destroyed = true;
 
     await this.agent.dispose();
-
-    this.unlistenContextManager();
-    this.contextManager.destroy();
 
     this.settleResult({
       type: "aborted",

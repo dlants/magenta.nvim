@@ -121,6 +121,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
             kind: "continuation",
             inputTokenCount,
             stopReason: "end_turn",
+            willRequest: true,
           })
         ).type;
       expect(await ask(overridden, 100_000)).toBe("compact");

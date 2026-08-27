@@ -1,7 +1,11 @@
 import type { OnToolApplied } from "../capabilities/context-tracker.ts";
 import type { FileIO } from "../capabilities/file-io.ts";
 import type { Logger } from "../logger.ts";
-import type { RequestAction, ThreadSupervisor } from "../thread-supervisor.ts";
+import type {
+  RequestAction,
+  RequestContext,
+  ThreadSupervisor,
+} from "../thread-supervisor.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import type { FileUpdates } from "./context-manager.ts";
 import { buildClonedFiles, ContextManager } from "./context-manager.ts";
@@ -11,7 +15,9 @@ import { buildClonedFiles, ContextManager } from "./context-manager.ts";
  * there is no second copy to fall out of sync. */
 export class FileContextSupervisor implements ThreadSupervisor {
   readonly contextManager: ContextManager;
-  private readonly onSent: ((updates: FileUpdates) => void) | undefined;
+  /** Mutable so a fork — which must clone the supervisor before the wrapper
+   * that owns the display ledger exists — can attach its sink afterwards. */
+  onSent: ((updates: FileUpdates) => void) | undefined;
 
   constructor(args: {
     contextManager: ContextManager;
@@ -21,7 +27,10 @@ export class FileContextSupervisor implements ThreadSupervisor {
     this.onSent = args.onSent;
   }
 
-  async onBeforeRequest(): Promise<RequestAction> {
+  async onBeforeRequest(context: RequestContext): Promise<RequestAction> {
+    if (context.kind === "continuation" && !context.willRequest) {
+      return { type: "none" };
+    }
     const updates = await this.contextManager.getContextUpdate();
     if (Object.keys(updates).length === 0) return { type: "none" };
 

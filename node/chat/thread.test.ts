@@ -336,6 +336,10 @@ it("clears pending expand state when the queue drains", async () => {
       if (thread.core.state.pendingMessages.length !== 0) {
         throw new Error("queue not drained yet");
       }
+      // The clear rides the debounced re-render, not the drain itself.
+      if (Object.keys(thread.state.pendingMessagesExpanded).length !== 0) {
+        throw new Error("expand state not cleared yet");
+      }
     });
     // Draining the queue must clear stale expand state keyed by index.
     expect(thread.state.pendingMessagesExpanded).toEqual({});

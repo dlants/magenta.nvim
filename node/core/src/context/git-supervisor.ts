@@ -1,4 +1,8 @@
-import type { RequestAction, ThreadSupervisor } from "../thread-supervisor.ts";
+import type {
+  RequestAction,
+  RequestContext,
+  ThreadSupervisor,
+} from "../thread-supervisor.ts";
 import { injectText } from "../thread-supervisor.ts";
 import type { GitContextUpdate, GitTracker } from "./git-tracker.ts";
 import { gitUpdateToText } from "./git-tracker.ts";
@@ -7,7 +11,7 @@ import { gitUpdateToText } from "./git-tracker.ts";
  * `GitTracker.getUpdate` commits the agent view as a side effect, which is
  * correct here: an injection is applied unconditionally. */
 export class GitSupervisor implements ThreadSupervisor {
-  private readonly gitTracker: GitTracker;
+  readonly gitTracker: GitTracker;
   private readonly onSent: ((update: GitContextUpdate) => void) | undefined;
 
   constructor(args: {
@@ -18,7 +22,10 @@ export class GitSupervisor implements ThreadSupervisor {
     this.onSent = args.onSent;
   }
 
-  async onBeforeRequest(): Promise<RequestAction> {
+  async onBeforeRequest(context: RequestContext): Promise<RequestAction> {
+    if (context.kind === "continuation" && !context.willRequest) {
+      return { type: "none" };
+    }
     const update = await this.gitTracker.getUpdate();
     if (!update) return { type: "none" };
     this.onSent?.(update);

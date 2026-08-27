@@ -438,7 +438,7 @@ export const view: View<{
   const agentPhase = thread.agent.phase;
   const mode = thread.core.state.mode;
 
-  const pendingComments = thread.core.commentStore?.getPendingEntries() ?? [];
+  const pendingComments = thread.commentStore?.getPendingEntries() ?? [];
   const pendingCommentsNode = pendingComments.length
     ? d`\n${pendingCommentsView(pendingComments, {
         expanded: thread.state.expandedPendingComments,

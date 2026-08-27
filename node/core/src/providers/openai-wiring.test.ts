@@ -48,6 +48,7 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
     cwd: "/tmp" as AgentContext["cwd"],
     homeDir: "/home" as AgentContext["homeDir"],
     threadType: "subagent" as ThreadType,
+    contextTracker: { files: {} },
     systemPrompt: "test system prompt" as unknown as SystemPrompt,
     systemInfo: {
       timestamp: "Mon Jan 01 2024 00:00:00 GMT+0000",

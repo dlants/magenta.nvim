@@ -1,4 +1,8 @@
-import type { RequestAction, ThreadSupervisor } from "../thread-supervisor.ts";
+import type {
+  RequestAction,
+  RequestContext,
+  ThreadSupervisor,
+} from "../thread-supervisor.ts";
 import { injectText } from "../thread-supervisor.ts";
 import type { CommentStore, CommentUpdateEntry } from "./comment-store.ts";
 
@@ -23,7 +27,10 @@ export class CommentSupervisor implements ThreadSupervisor {
     this.onSent = args.onSent;
   }
 
-  async onBeforeRequest(): Promise<RequestAction> {
+  async onBeforeRequest(context: RequestContext): Promise<RequestAction> {
+    if (context.kind === "continuation" && !context.willRequest) {
+      return { type: "none" };
+    }
     await this.beforeRead();
     const text = this.store.getPendingUpdate();
     if (text === undefined) return { type: "none" };
