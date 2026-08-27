@@ -51,7 +51,10 @@ export function validateInput(
     case "reply":
       return Reply.validateInput(input);
     default:
-      throw new Error(`Unexpected toolName: ${toolName as string}`);
+      return {
+        status: "error" as const,
+        error: `Unexpected toolName: ${toolName as string}`,
+      };
   }
 }
 /** Extract a string value from a partially-streamed JSON object.
