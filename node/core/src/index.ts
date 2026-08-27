@@ -108,6 +108,7 @@ export {
   buildClonedFiles,
   ContextManager,
   type ContextManagerEvents,
+  cloneContextManager,
   type DiffUpdate,
   type FileDeletedUpdate,
   type Files as ContextFiles,

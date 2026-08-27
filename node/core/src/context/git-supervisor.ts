@@ -23,7 +23,7 @@ export class GitSupervisor implements ThreadSupervisor {
   }
 
   async onBeforeRequest(context: RequestContext): Promise<RequestAction> {
-    if (context.kind === "continuation" && !context.willRequest) {
+    if (context.kind === "turn-end") {
       return { type: "none" };
     }
     const update = await this.gitTracker.getUpdate();

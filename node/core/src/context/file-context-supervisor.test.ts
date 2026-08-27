@@ -8,7 +8,11 @@ import {
   type NvimCwd,
   type RelFilePath,
 } from "../utils/files.ts";
-import { ContextManager, type FileUpdates } from "./context-manager.ts";
+import {
+  ContextManager,
+  cloneContextManager,
+  type FileUpdates,
+} from "./context-manager.ts";
 import { FileContextSupervisor } from "./file-context-supervisor.ts";
 
 const TEST_PATH = "/test/file.txt" as AbsFilePath;
@@ -120,9 +124,8 @@ describe("FileContextSupervisor", () => {
     });
     contextManager.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
     const action = await supervisor.onBeforeRequest({
-      kind: "continuation",
+      kind: "turn-end",
       stopReason: "end_turn",
-      willRequest: false,
       inputTokenCount: 0,
     });
     expect(action).toEqual({ type: "none" });
@@ -147,11 +150,14 @@ describe("FileContextSupervisor", () => {
     );
     await fileIO.writeFile(TEST_PATH, "changed on disk");
 
-    const clone = await FileContextSupervisor.clone(supervisor, {
-      logger,
-      fileIO,
-      cwd: "/test" as NvimCwd,
-      homeDir: "/home" as HomeDir,
+    const clone = new FileContextSupervisor({
+      contextManager: await cloneContextManager(supervisor.contextManager, {
+        logger,
+        fileIO,
+        cwd: "/test" as NvimCwd,
+        homeDir: "/home" as HomeDir,
+      }),
+      onSent: () => {},
     });
     expect(clone.contextManager).not.toBe(supervisor.contextManager);
     expect(clone.contextManager.files[TEST_PATH]).toBeDefined();

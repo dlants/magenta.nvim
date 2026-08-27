@@ -1,34 +1,27 @@
 import type { OnToolApplied } from "../capabilities/context-tracker.ts";
-import type { FileIO } from "../capabilities/file-io.ts";
-import type { Logger } from "../logger.ts";
 import type {
   RequestAction,
   RequestContext,
   ThreadSupervisor,
 } from "../thread-supervisor.ts";
-import type { HomeDir, NvimCwd } from "../utils/files.ts";
-import type { FileUpdates } from "./context-manager.ts";
-import { buildClonedFiles, ContextManager } from "./context-manager.ts";
+import type { ContextManager, FileUpdates } from "./context-manager.ts";
 
 /** Contributes tracked-file context updates. The `contextManager` it owns is
  * also the `ContextTracker` capability the agent reads synchronously, so
  * there is no second copy to fall out of sync. */
 export class FileContextSupervisor implements ThreadSupervisor {
   readonly contextManager: ContextManager;
-  /** Mutable so a fork — which must clone the supervisor before the wrapper
-   * that owns the display ledger exists — can attach its sink afterwards. */
-  onSent: ((updates: FileUpdates) => void) | undefined;
-
+  private readonly onSent: (updates: FileUpdates) => void;
   constructor(args: {
     contextManager: ContextManager;
-    onSent: ((updates: FileUpdates) => void) | undefined;
+    onSent: (updates: FileUpdates) => void;
   }) {
     this.contextManager = args.contextManager;
     this.onSent = args.onSent;
   }
 
   async onBeforeRequest(context: RequestContext): Promise<RequestAction> {
-    if (context.kind === "continuation" && !context.willRequest) {
+    if (context.kind === "turn-end") {
       return { type: "none" };
     }
     const updates = await this.contextManager.getContextUpdate();
@@ -36,7 +29,7 @@ export class FileContextSupervisor implements ThreadSupervisor {
 
     const content = this.contextManager.contextUpdatesToContent(updates);
 
-    this.onSent?.(updates);
+    this.onSent(updates);
     return { type: "inject", content };
   }
 
@@ -46,34 +39,5 @@ export class FileContextSupervisor implements ThreadSupervisor {
 
   destroy(): void {
     this.contextManager.destroy();
-  }
-
-  /** Independent file state for a forked thread: text files are re-read from
-   * disk so the fork's first update produces no diff; binary agent views are
-   * copied. */
-  static async clone(
-    source: FileContextSupervisor,
-    args: {
-      logger: Logger;
-      fileIO: FileIO;
-      cwd: NvimCwd;
-      homeDir: HomeDir;
-      pollIntervalMs?: number;
-      onSent?: (updates: FileUpdates) => void;
-    },
-  ): Promise<FileContextSupervisor> {
-    const files = await buildClonedFiles(
-      source.contextManager.files,
-      args.fileIO,
-    );
-    const contextManager = new ContextManager(
-      args.logger,
-      args.fileIO,
-      args.cwd,
-      args.homeDir,
-      files,
-      args.pollIntervalMs,
-    );
-    return new FileContextSupervisor({ contextManager, onSent: args.onSent });
   }
 }

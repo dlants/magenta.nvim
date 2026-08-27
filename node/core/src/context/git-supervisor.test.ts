@@ -65,6 +65,27 @@ describe("GitSupervisor", () => {
     expect(onSent).toHaveBeenCalledTimes(1);
   });
 
+  it("stays silent on a stop that issues no request", async () => {
+    const { supervisor, onSent } = setup(state("feature"), state("main"));
+
+    const action = await supervisor.onBeforeRequest({
+      kind: "turn-end",
+      stopReason: "end_turn",
+      inputTokenCount: 0,
+    });
+    expect(action).toEqual({ type: "none" });
+    expect(onSent).not.toHaveBeenCalled();
+
+    // The agent view was not committed, so the change still rides the next
+    // request.
+    const next = await supervisor.onBeforeRequest({
+      kind: "submission",
+      inputTokenCount: 0,
+    });
+    expect(next.type).toBe("inject");
+    expect(onSent).toHaveBeenCalledTimes(1);
+  });
+
   it("yields nothing when git state is unchanged", async () => {
     const { supervisor, onSent } = setup(state("main"), state("main"));
     expect(

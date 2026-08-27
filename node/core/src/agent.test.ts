@@ -1414,7 +1414,35 @@ describe("AutoCompactSupervisor integration", () => {
       if (kinds.length >= 3) return true;
       throw new Error("waiting for the end-turn consult");
     });
-    expect(kinds).toEqual(["submission", "continuation", "continuation"]);
+    expect(kinds).toEqual(["submission", "continuation", "turn-end"]);
+  });
+  it("reports turn-end only for a stop that issues no request", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const kinds: string[] = [];
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: (ctx) => {
+          kinds.push(ctx.kind);
+          return Promise.resolve({ type: "none" as const });
+        },
+      },
+    ]);
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    // A queued async message means the end_turn stop still issues a request.
+    void core.send([{ type: "user", text: "and this" }], { queue: "async" });
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+    const nextStream = await awaitNextStream(mockClient, stream);
+    expect(kinds).toEqual(["submission", "continuation"]);
+    // This stop has nothing left to send.
+    nextStream.streamText("done");
+    nextStream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (kinds.length >= 3) return true;
+      throw new Error("waiting for the end-turn consult");
+    });
+    expect(kinds).toEqual(["submission", "continuation", "turn-end"]);
   });
 
   it("issues a request for a submission-time injection with no user content", async () => {

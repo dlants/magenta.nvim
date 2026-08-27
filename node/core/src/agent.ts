@@ -720,9 +720,8 @@ export class Agent {
 
     const beforeRequest = await this.applyBeforeRequestActions(
       {
-        kind: "continuation",
+        kind: continuation !== undefined ? "continuation" : "turn-end",
         stopReason,
-        willRequest: continuation !== undefined,
       },
       "prefix",
     );
@@ -902,7 +901,7 @@ export class Agent {
     }
 
     const beforeRequest = await this.applyBeforeRequestActions(
-      { kind: "continuation", stopReason: "tool_use", willRequest: true },
+      { kind: "continuation", stopReason: "tool_use" },
       "pending",
     );
     if (beforeRequest.type === "compact") {

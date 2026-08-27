@@ -707,7 +707,7 @@ export class Magenta {
     for (const thread of rootThreads) {
       if (thread.id === activeRoot.id) continue;
       try {
-        await thread.commentController.hide();
+        await thread.comments.controller.hide();
       } catch (e) {
         this.nvim.logger.error(
           `Error hiding comments for thread ${thread.id}: ${e instanceof Error ? e.message : String(e)}`,
@@ -716,7 +716,7 @@ export class Magenta {
     }
 
     try {
-      await activeRoot.commentController.show();
+      await activeRoot.comments.controller.show();
     } catch (e) {
       this.nvim.logger.error(
         `Error showing comments for thread ${activeRoot.id}: ${e instanceof Error ? e.message : String(e)}`,
@@ -993,7 +993,7 @@ ${lines.join("\n")}
   /** The comment controller of the active root thread. Root threads own their
    * comments: the store they hold is the one the agent drains. */
   getCommentController(): CommentController {
-    return this.chat.getActiveRootThread().commentController;
+    return this.chat.getActiveRootThread().comments.controller;
   }
 
   /** A buffer that comes back into view may have been hidden while a different
@@ -1001,8 +1001,8 @@ ${lines.join("\n")}
   private async stampCommentsOnBufEnter(bufNr: BufNr): Promise<void> {
     if (this.chat.state.state !== "thread-selected") return;
     const activeRoot = this.chat.getActiveRootThreadOrUndefined();
-    if (!activeRoot?.commentController.hasComments()) return;
-    await activeRoot.commentController.refreshBuffer(bufNr);
+    if (!activeRoot?.comments.controller.hasComments()) return;
+    await activeRoot.comments.controller.refreshBuffer(bufNr);
   }
 
   /** `<leader>mc`: open the authoring float over the cursor line or selection. */
@@ -1091,7 +1091,7 @@ ${lines.join("\n")}
     // about it — not just the active one.
     for (const wrapper of Object.values(this.chat.threadWrappers)) {
       if (wrapper.state === "initialized") {
-        await wrapper.thread.commentController?.closeBuffer(bufNr);
+        await wrapper.thread.comments?.controller.closeBuffer(bufNr);
       }
     }
     const bufInfo = this.bufferManager.lookupBuffer(bufNr);

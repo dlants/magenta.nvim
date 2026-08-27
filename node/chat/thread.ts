@@ -13,6 +13,7 @@ import {
   type CommentUpdateEntry,
   type ContextFiles,
   ContextManager,
+  cloneContextManager,
   composeSupervisors,
   FileContextSupervisor,
   GitSupervisor,
@@ -224,10 +225,18 @@ export type ToolViewState = {
   progressItemExpanded?: { [key: string]: boolean };
 };
 
+/** Everything a root thread's side conversations need, in one bag: the three
+ * pieces are created together or not at all, so "store without controller" is
+ * not representable. */
+export type ThreadComments = {
+  store: CommentStore;
+  supervisor: CommentSupervisor;
+  controller: CommentController;
+};
 /** A thread that owns comments — a root thread. Reached through
  * `NvimThread.isRootThread()` or `Chat.getActiveRootThread()`. */
 export type RootNvimThread = NvimThread & {
-  commentController: CommentController;
+  comments: ThreadComments;
 };
 
 export class NvimThread {
@@ -257,12 +266,12 @@ export class NvimThread {
   public sandboxViolationHandler: SandboxViolationHandler | undefined;
   /** The side conversations anchored in buffers. Root chat threads only:
    * subagents and subthreads neither see comments nor can reply to them. */
-  public commentController: CommentController | undefined;
-  /** True exactly when the core thread owns a comment store, i.e. for root
-   * threads. Narrowing through this is what lets comment callers reach a
-   * `CommentController` without a runtime check of their own. */
+  public readonly comments: ThreadComments | undefined;
+  /** True exactly when this is a root thread. Narrowing through this is what
+   * lets comment callers reach the store, supervisor and controller without a
+   * runtime check of their own. */
   isRootThread(): this is RootNvimThread {
-    return this.commentController !== undefined;
+    return this.comments !== undefined;
   }
   public sandboxBypassed = false;
 
@@ -272,9 +281,6 @@ export class NvimThread {
    * `commentStore`). */
   public readonly fileSupervisor: FileContextSupervisor;
   public readonly gitSupervisor: GitSupervisor;
-  private readonly commentSupervisor: CommentSupervisor | undefined;
-  /** The root thread's side conversations. Root threads only. */
-  public readonly commentStore: CommentStore | undefined;
 
   get contextManager(): ContextManager {
     return this.fileSupervisor.contextManager;
@@ -324,7 +330,7 @@ export class NvimThread {
      * history and its tracked-file state before the wrapper exists. */
     preBuilt?: {
       core: Thread;
-      fileSupervisor: FileContextSupervisor;
+      contextManager: ContextManager;
       commentStore: CommentStore | undefined;
     },
   ) {
@@ -357,10 +363,10 @@ export class NvimThread {
     const cwd = isDocker ? env.cwd : context.cwd;
     const homeDir = isDocker ? env.homeDir : context.homeDir;
 
-    this.fileSupervisor =
-      preBuilt?.fileSupervisor ??
-      new FileContextSupervisor({
-        contextManager: new ContextManager(
+    this.fileSupervisor = new FileContextSupervisor({
+      contextManager:
+        preBuilt?.contextManager ??
+        new ContextManager(
           context.nvim.logger,
           env.fileIO,
           cwd,
@@ -368,10 +374,9 @@ export class NvimThread {
           context.initialFiles,
           CONTEXT_MANAGER_POLL_INTERVAL_MS,
         ),
-        onSent: undefined,
-      });
-    this.fileSupervisor.onSent = (updates) =>
-      this.recordMessageViewState({ contextUpdates: updates });
+      onSent: (updates) =>
+        this.recordMessageViewState({ contextUpdates: updates }),
+    });
     this.fileSupervisor.contextManager.start();
 
     this.gitSupervisor = new GitSupervisor({
@@ -383,25 +388,35 @@ export class NvimThread {
       onSent: (update) => this.recordMessageViewState({ gitUpdate: update }),
     });
 
-    this.commentStore = preBuilt
+    const commentStore = preBuilt
       ? preBuilt.commentStore
       : threadType === "root" || threadType === "docker_root"
         ? new CommentStore()
         : undefined;
-    if (this.commentStore) {
-      this.commentSupervisor = new CommentSupervisor({
-        store: this.commentStore,
-        // Extmark positions are the comment locations the store reports, so
-        // they have to be current before *every* request, not just the
-        // opening one.
-        beforeRead: async () => {
-          if (this.commentController?.hasComments()) {
-            await this.commentController.refresh();
-          }
-        },
-        onSent: (entries) =>
-          this.recordMessageViewState({ commentUpdates: entries }),
-      });
+    if (commentStore) {
+      const controller = new CommentController(
+        context.nvim,
+        context.cwd,
+        context.homeDir,
+        commentStore,
+      );
+      this.comments = {
+        store: commentStore,
+        controller,
+        supervisor: new CommentSupervisor({
+          store: commentStore,
+          // Extmark positions are the comment locations the store reports, so
+          // they have to be current before *every* request, not just the
+          // opening one.
+          beforeRead: async () => {
+            if (controller.hasComments()) {
+              await controller.refresh();
+            }
+          },
+          onSent: (entries) =>
+            this.recordMessageViewState({ commentUpdates: entries }),
+        }),
+      };
     }
 
     if (preBuilt) {
@@ -417,7 +432,7 @@ export class NvimThread {
           homeDir,
           threadType,
           contextTracker: this.fileSupervisor.contextManager,
-          commentStore: this.commentStore,
+          commentStore: this.comments?.store,
           ...(context.subagentConfig
             ? { subagentConfig: context.subagentConfig }
             : {}),
@@ -458,7 +473,7 @@ export class NvimThread {
 
     // The pending-comments view lives in the display buffer, so a comment
     // queued while the thread is idle has to trigger a redraw on its own.
-    this.commentStore?.on("changed", () => this.onCoreUpdate());
+    this.comments?.store.on("changed", () => this.onCoreUpdate());
     // Tracked-file churn moves the context-files section of the display.
     for (const event of [
       "fileAdded",
@@ -466,15 +481,6 @@ export class NvimThread {
       "pendingUpdatesChanged",
     ] as const) {
       this.contextManager.on(event, () => this.onCoreUpdate());
-    }
-
-    if (this.commentStore) {
-      this.commentController = new CommentController(
-        context.nvim,
-        context.cwd,
-        context.homeDir,
-        this.commentStore,
-      );
     }
 
     this.core.hooks = composeSupervisors(() => [
@@ -537,8 +543,8 @@ export class NvimThread {
   /** The context trackers, always ahead of the behavioral supervisors so no
    * injection can follow a compaction in the plan. */
   private contextSupervisors(): ThreadSupervisor[] {
-    return this.commentSupervisor
-      ? [this.gitSupervisor, this.fileSupervisor, this.commentSupervisor]
+    return this.comments
+      ? [this.gitSupervisor, this.fileSupervisor, this.comments.supervisor]
       : [this.gitSupervisor, this.fileSupervisor];
   }
 
@@ -686,8 +692,8 @@ export class NvimThread {
 
     // Independent tracked-file state for the fork; comments are root-only and
     // are deliberately not cloned.
-    const fileSupervisor = await FileContextSupervisor.clone(
-      sourceThread.fileSupervisor,
+    const contextManager = await cloneContextManager(
+      sourceThread.contextManager,
       {
         logger: nvim.logger,
         fileIO: environment.fileIO,
@@ -712,7 +718,7 @@ export class NvimThread {
         cwd: environment.cwd,
         homeDir: environment.homeDir,
         threadType,
-        contextTracker: fileSupervisor.contextManager,
+        contextTracker: contextManager,
         commentStore,
         ...(sourceThread.context.subagentConfig
           ? { subagentConfig: sourceThread.context.subagentConfig }
@@ -770,7 +776,7 @@ export class NvimThread {
           ? { subagentConfig: sourceThread.context.subagentConfig }
           : {}),
       },
-      { core, fileSupervisor, commentStore },
+      { core, contextManager, commentStore },
     );
 
     thread.sandboxBypassed = sourceThread.isSandboxBypassed;
@@ -812,7 +818,7 @@ export class NvimThread {
       this.renderDebounceTimer = undefined;
     }
 
-    await this.commentController?.destroy();
+    await this.comments?.controller.destroy();
     await this.core.destroy();
     this.fileSupervisor.destroy();
   }

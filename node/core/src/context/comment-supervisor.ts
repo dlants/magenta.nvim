@@ -28,7 +28,7 @@ export class CommentSupervisor implements ThreadSupervisor {
   }
 
   async onBeforeRequest(context: RequestContext): Promise<RequestAction> {
-    if (context.kind === "continuation" && !context.willRequest) {
+    if (context.kind === "turn-end") {
       return { type: "none" };
     }
     await this.beforeRead();

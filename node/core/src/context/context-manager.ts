@@ -111,6 +111,28 @@ export type ContextManagerEvents = {
  * them as the agentView so the first context update on the cloned thread
  * produces no diff. For binary/pdf files, copy the source's agentView as-is.
  * Files that no longer exist on disk are skipped. */
+/** A fresh `ContextManager` with independent tracked-file state, for a forked
+ * thread. Not started — the owner drives polling. */
+export async function cloneContextManager(
+  source: ContextManager,
+  args: {
+    logger: Logger;
+    fileIO: FileIO;
+    cwd: NvimCwd;
+    homeDir: HomeDir;
+    pollIntervalMs?: number;
+  },
+): Promise<ContextManager> {
+  const files = await buildClonedFiles(source.files, args.fileIO);
+  return new ContextManager(
+    args.logger,
+    args.fileIO,
+    args.cwd,
+    args.homeDir,
+    files,
+    args.pollIntervalMs,
+  );
+}
 export async function buildClonedFiles(
   sourceFiles: Files,
   fileIO: FileIO,
