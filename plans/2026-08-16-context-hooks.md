@@ -212,6 +212,7 @@ Decisions / deviations:
 - The production change landed in stage 1: `applyBeforeRequestActions` already appends injections to the runner log immediately, and forces the append (rather than deferring) on the tool_use path when the plan also asks for a compaction. `handleStopped` no longer routes injections through `prependToNextTurn`. Stage 2 was therefore verification + the tests the plan calls for; no further production edits were needed.
 - `Thread.startCompaction` hands `manager.start(this.getProviderMessages(), ...)`, i.e. the agent's live log, so "in the log" and "in the compaction snapshot" are the same assertion.
 - New tests in `node/core/src/agent.test.ts`: exactly-once injection when a compaction follows (end_turn path); the same for the tool_use path (`deferInjections` + compaction); injection survives a failed next request and rides the retry; injection survives an aborted next request.
+- Review follow-up: all four stage-2 assertions now use a shared `countOccurrences` helper (exactly-once, not `toContain`), and the abort test — like the failure test — follows up with a `retry` send and asserts the injection rides that next request exactly once.
 
 ## 3. `onBeforeRequest` at submission start
 

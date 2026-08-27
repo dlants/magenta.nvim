@@ -908,6 +908,10 @@ describe("SubagentSupervisor yield tag detection", () => {
   });
 });
 
+function countOccurrences(value: unknown, needle: string): number {
+  return JSON.stringify(value).split(needle).length - 1;
+}
+
 describe("AutoCompactSupervisor integration", () => {
   it("triggers compaction on end_turn handoff when input tokens breach the threshold", async () => {
     const { core, mockClient } = createAgentWithMock();
@@ -1167,9 +1171,7 @@ describe("AutoCompactSupervisor integration", () => {
     // Exactly once: the snapshot handed to the compaction manager is
     // `getProviderMessages()`, and nothing is left in agent-local state that
     // the swap would either drop or replay.
-    expect(
-      JSON.stringify(core.getProviderMessages()).split("note").length - 1,
-    ).toBe(1);
+    expect(countOccurrences(core.getProviderMessages(), "note")).toBe(1);
   });
   it("appends a tool_use-path injection immediately when a compaction follows", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
@@ -1211,10 +1213,9 @@ describe("AutoCompactSupervisor integration", () => {
       if (compactCalls > 0) return true;
       throw new Error("waiting for compaction");
     });
-    expect(
-      JSON.stringify(core.getProviderMessages()).split("tool-path note")
-        .length - 1,
-    ).toBe(1);
+    expect(countOccurrences(core.getProviderMessages(), "tool-path note")).toBe(
+      1,
+    );
   });
   it("keeps an injection in the log when the next request fails", async () => {
     const { core, mockClient } = createAgentWithMock();
@@ -1243,12 +1244,12 @@ describe("AutoCompactSupervisor integration", () => {
       if (core.phase.type === "idle") return true;
       throw new Error("waiting for idle");
     });
-    expect(JSON.stringify(core.getProviderMessages())).toContain(
-      "survive the failure",
-    );
+    expect(
+      countOccurrences(core.getProviderMessages(), "survive the failure"),
+    ).toBe(1);
     void core.send([{ type: "user", text: "retry" }]);
     const stream3 = await awaitNextStream(mockClient, stream2);
-    expect(JSON.stringify(stream3.messages)).toContain("survive the failure");
+    expect(countOccurrences(stream3.messages, "survive the failure")).toBe(1);
     stream3.streamText("ok");
     stream3.finishResponse("end_turn");
   });
@@ -1280,9 +1281,14 @@ describe("AutoCompactSupervisor integration", () => {
       if (core.phase.type === "idle") return true;
       throw new Error("waiting for idle");
     });
-    expect(JSON.stringify(core.getProviderMessages())).toContain(
-      "survive the abort",
-    );
+    expect(
+      countOccurrences(core.getProviderMessages(), "survive the abort"),
+    ).toBe(1);
+    void core.send([{ type: "user", text: "retry" }]);
+    const stream3 = await awaitNextStream(mockClient, stream2);
+    expect(countOccurrences(stream3.messages, "survive the abort")).toBe(1);
+    stream3.streamText("ok");
+    stream3.finishResponse("end_turn");
   });
 
   it("consults all supervisors in order and the first compaction wins", async () => {
