@@ -1,3 +1,4 @@
+import type { OnToolApplied } from "./capabilities/context-tracker.ts";
 import type {
   ProviderMessageContent,
   StreamStopReason,
@@ -95,6 +96,11 @@ export function composeSupervisors(
       }
       return plan;
     },
+    onToolApplied: (absFilePath, tool, fileTypeInfo) => {
+      for (const sup of getSupervisors()) {
+        sup.onToolApplied?.(absFilePath, tool, fileTypeInfo);
+      }
+    },
   };
 }
 
@@ -126,6 +132,7 @@ export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
   onYield?(result: string): Promise<YieldAction>;
   onBeforeRequest?(context: RequestContext): Promise<RequestAction>;
+  onToolApplied?: OnToolApplied;
 }
 
 function containsYieldTag(

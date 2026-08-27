@@ -1,4 +1,5 @@
 import type { ActiveToolEntry, InputMessage } from "./agent.ts";
+import type { OnToolApplied } from "./capabilities/context-tracker.ts";
 import type {
   RequestedTool,
   RetryStatus,
@@ -119,6 +120,8 @@ export type AgentHooks = {
    * retried. */
   /** Injections in supervisor order, plus at most one compaction. */
   onBeforeRequest?: (ctx: RequestContext) => Promise<BeforeRequestPlan>;
+  /** A file-touching tool (edl, get_files) finished. Fire-and-forget. */
+  onToolApplied?: OnToolApplied;
 };
 
 /** "Something visible moved." No payload: read `phase`. Called at streaming

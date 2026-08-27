@@ -770,6 +770,7 @@ export class Agent {
       contextTracker: this.contextManager as ContextTracker,
       onToolApplied: (absFilePath, tool, fileTypeInfo) => {
         this.contextManager.toolApplied(absFilePath, tool, fileTypeInfo);
+        this.deps.getHooks().onToolApplied?.(absFilePath, tool, fileTypeInfo);
         if (
           tool.type === "edl-edit" &&
           !this.state.editedFilesThisTurn.some((e) => e.path === absFilePath)

@@ -238,10 +238,16 @@ Review follow-ups (stage 3 code review):
 - New tests: `onBeforeRequest` is consulted exactly once per request across a max_tokens handoff (asserts the full `["submission","continuation","continuation"]` sequence, so dropping `requestKind: "continuation"` fails); an empty `send` with a submission-time injection still issues a request carrying it.
 - Not addressed (nit): the submission-compaction branch's `contextContent` is still unasserted. Legacy context content is removed in stage 6, so the assertion would be deleted with it.
 
-## 4. `onToolApplied` hook
+## 4. `onToolApplied` hook — DONE
 
 - Goal: `AgentHooks.onToolApplied` exists; `createToolContext().onToolApplied` (agent.ts:761) fires it alongside `editedFilesThisTurn` bookkeeping; `composeSupervisors` fans out to all supervisors. `ContextManager` still wired directly, so no subscriber yet.
 - Tests: after an `edl` edit and a `get_files` read, a test supervisor receives the expected `AbsFilePath` + `ToolApplied` variant. `editedFilesThisTurn` still populated.
+
+Decisions / deviations:
+
+- `AgentHooks.onToolApplied?: OnToolApplied` (reusing the existing type from `capabilities/context-tracker.ts`); `ThreadSupervisor` gains the same optional member; `composeSupervisors` always provides the hook and fans out to every supervisor in order.
+- `Agent.createToolContext().onToolApplied` calls `contextManager.toolApplied` (still wired directly, per this stage), then the hook, then the `editedFilesThisTurn` bookkeeping.
+- New test `AgentHooks.onToolApplied` in `node/core/src/agent.test.ts`: a supervisor sees `edl-edit` on `/tmp/a.txt` then `get-file` on `/tmp/b.txt`, with `editedFilesThisTurn` still populated. The read targets a *different* file because `get_files` skips `onToolApplied` when the agent already has the content (the preceding edl edit puts `/tmp/a.txt` in the agent view).
 
 ## 5. The three supervisors
 

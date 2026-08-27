@@ -1472,6 +1472,52 @@ describe("AutoCompactSupervisor integration", () => {
   });
 });
 
+describe("AgentHooks.onToolApplied", () => {
+  it("fires for edl edits and get_files reads, alongside editedFilesThisTurn", async () => {
+    const fileIO = new InMemoryFileIO({
+      "/tmp/a.txt": "hello",
+      "/tmp/b.txt": "other",
+    });
+    const { core, mockClient } = createAgentWithMock({
+      fileIO: fileIO as unknown as AgentContext["fileIO"],
+    });
+    const applied: { path: string; type: string }[] = [];
+    core.hooks = composeSupervisors(() => [
+      {
+        onToolApplied: (absFilePath, tool) => {
+          applied.push({ path: absFilePath, type: tool.type });
+        },
+      },
+    ]);
+
+    void core.send([{ type: "user", text: "edit a" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
+      script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
+    });
+    stream.finishResponse("tool_use");
+
+    const stream2 = await awaitNextStream(mockClient, stream);
+    stream2.streamToolUse("get-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/b.txt" }],
+    });
+    stream2.finishResponse("tool_use");
+
+    await pollUntil(() => {
+      if (applied.length === 2) return true;
+      throw new Error(
+        `waiting for 2 onToolApplied calls, got ${applied.length}`,
+      );
+    });
+    expect(applied).toEqual([
+      { path: "/tmp/a.txt", type: "edl-edit" },
+      { path: "/tmp/b.txt", type: "get-file" },
+    ]);
+    expect(core.state.editedFilesThisTurn).toEqual([
+      { path: "/tmp/a.txt", snapshot: "hello" },
+    ]);
+  });
+});
 describe("Agent.editedFilesThisTurn", () => {
   it("starts empty and resets on new sendMessage", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
