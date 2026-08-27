@@ -108,13 +108,19 @@ export type EndTurnContext = {
   lastAssistantMessage: ReadonlyArray<ProviderMessageContent> | undefined;
 };
 
-export type RequestContext = {
-  /** "submission": the opening request of a send. "continuation": a request
-   * carrying tool results or a supervisor nudge. */
-  kind: "submission" | "continuation";
-  inputTokenCount: number | undefined;
-  stopReason: StreamStopReason | undefined;
+/** The opening request of a send. */
+type SubmissionRequest = { kind: "submission" };
+/** A request carrying tool results or a supervisor nudge. */
+type ContinuationRequest = {
+  kind: "continuation";
+  stopReason: StreamStopReason;
 };
+/** The fields the caller of `onBeforeRequest` supplies; the agent fills in the
+ * token count itself. */
+export type RequestContextKind = SubmissionRequest | ContinuationRequest;
+export type RequestContext = {
+  inputTokenCount: number | undefined;
+} & RequestContextKind;
 
 export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;

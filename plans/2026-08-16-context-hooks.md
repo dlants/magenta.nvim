@@ -229,6 +229,15 @@ Decisions / deviations:
 - `node/chat/thread-compact.test.ts`'s auto-compact test now compacts at the second `send` before its request goes out; the test drops the second request/response and is renamed accordingly.
 - New tests in `node/core/src/agent.test.ts`: an injection on `kind: "submission"` appears in the first request ahead of the user text; `AutoCompactSupervisor` over threshold compacts from a plain `send` exactly once, with the user message present in the log.
 
+Review follow-ups (stage 3 code review):
+
+- `RequestContext` is now a discriminated union — `{ inputTokenCount } & ({kind:"submission"} | {kind:"continuation"; stopReason: StreamStopReason})` — so submission-with-stopReason and continuation-without are not representable. The caller-supplied half is exported as `RequestContextKind` and is what `Agent.applyBeforeRequestActions` takes (`Omit` over a union does not distribute, so the explicit alias replaces it).
+- `BeforeRequestResult` is a discriminated union: `{type:"compact"; compaction} | {type:"proceed"; injections}`, so the compaction path has no meaningless `injections` to read.
+- `applyBeforeRequestActions` takes a required `mode: "append" | "pending" | "return"` and switches on it; the compaction case is handled first (it always forces the append), so the three modes map 1:1 to three branches.
+- `SubmitOptions.skipBeforeRequest` became `requestKind?: "submission" | "continuation"` (default submission), reusing the same discriminator the hook context carries.
+- New tests: `onBeforeRequest` is consulted exactly once per request across a max_tokens handoff (asserts the full `["submission","continuation","continuation"]` sequence, so dropping `requestKind: "continuation"` fails); an empty `send` with a submission-time injection still issues a request carrying it.
+- Not addressed (nit): the submission-compaction branch's `contextContent` is still unasserted. Legacy context content is removed in stage 6, so the assertion would be deleted with it.
+
 ## 4. `onToolApplied` hook
 
 - Goal: `AgentHooks.onToolApplied` exists; `createToolContext().onToolApplied` (agent.ts:761) fires it alongside `editedFilesThisTurn` bookkeeping; `composeSupervisors` fans out to all supervisors. `ContextManager` still wired directly, so no subscriber yet.

@@ -70,7 +70,7 @@ import type {
 import type {
   EndTurnAction,
   EndTurnContext,
-  RequestContext,
+  RequestContextKind,
   YieldAction,
 } from "./thread-supervisor.ts";
 import type {
@@ -282,9 +282,10 @@ export type SubmitOptions = {
   /** Skip context updates, reminders and failed-submit bookkeeping: the caller
    * has composed the exact content (the compact thread). */
   raw?: boolean;
-  /** The caller already consulted `onBeforeRequest` for this request (the
-   * continuations issued out of `handleStopped`), so don't consult again. */
-  skipBeforeRequest?: true;
+  /** Which kind of request this is. A "continuation" (the requests issued out
+   * of `handleStopped`) has already had `onBeforeRequest` consulted for it, so
+   * the hook is not consulted again. Defaults to "submission". */
+  requestKind?: "submission" | "continuation";
 };
 
 /** A handoff to a fresh, compacted agent. `nextPrompt` is what the new agent
@@ -293,12 +294,11 @@ export type Compaction = { nextPrompt: string | undefined };
 export type AgentSendOutcome = SendResult | ({ type: "compact" } & Compaction);
 
 /** Outcome of consulting the before-request hooks. `injections` is non-empty
- * only when the caller asked to receive them instead of having them appended
- * to the log (`deferInjections: "return"`). */
-type BeforeRequestResult = {
-  compaction: Compaction | undefined;
-  injections: AgentInput[];
-};
+ * only when the caller asked to receive them (`injections: "return"`) instead
+ * of having them appended to the log. */
+type BeforeRequestResult =
+  | { type: "compact"; compaction: Compaction }
+  | { type: "proceed"; injections: AgentInput[] };
 
 export class Agent {
   public state: ThreadState;
@@ -701,14 +701,17 @@ export class Agent {
     this.resetErrorRetryState();
     this.update({ type: "set-mode", mode: { type: "normal" } });
 
-    const { compaction } = await this.applyBeforeRequestActions({
-      kind: "continuation",
-      stopReason,
-    });
-    if (compaction) {
+    const beforeRequest = await this.applyBeforeRequestActions(
+      { kind: "continuation", stopReason },
+      "append",
+    );
+    if (beforeRequest.type === "compact") {
       // The submission is not over: the owning Thread runs the handoff and
       // continues it on the replacement agent.
-      this.settle({ type: "compact", nextPrompt: compaction.nextPrompt });
+      this.settle({
+        type: "compact",
+        nextPrompt: beforeRequest.compaction.nextPrompt,
+      });
       return;
     }
 
@@ -720,7 +723,7 @@ export class Agent {
             text: "Your previous response was truncated due to the output token limit. Please continue where you left off.",
           },
         ],
-        { skipBeforeRequest: true },
+        { requestKind: "continuation" },
       );
       return;
     }
@@ -736,7 +739,7 @@ export class Agent {
       ];
       this.update({ type: "drain-pending-messages" }, { silent: true });
       this.update({ type: "drain-pending-next-messages" }, { silent: true });
-      await this.submit(pendingMessages, { skipBeforeRequest: true });
+      await this.submit(pendingMessages, { requestKind: "continuation" });
       return;
     }
 
@@ -746,7 +749,7 @@ export class Agent {
     });
     if (action.type === "send-message") {
       await this.submit([{ type: "system", text: action.text }], {
-        skipBeforeRequest: true,
+        requestKind: "continuation",
       });
       return;
     }
@@ -900,14 +903,14 @@ export class Agent {
       return { type: "suspend", results };
     }
 
-    const { compaction } = await this.applyBeforeRequestActions(
+    const beforeRequest = await this.applyBeforeRequestActions(
       { kind: "continuation", stopReason: "tool_use" },
-      { deferInjections: "pending" },
+      "pending",
     );
-    if (compaction) {
+    if (beforeRequest.type === "compact") {
       this.suspendReason = {
         type: "compact",
-        nextPrompt: compaction.nextPrompt,
+        nextPrompt: beforeRequest.compaction.nextPrompt,
       };
       return { type: "suspend", results };
     }
@@ -1152,24 +1155,28 @@ export class Agent {
 
     const { content, hasContent } = this.prepareUserContent(inputMessages);
 
-    const { compaction, injections } = opts.skipBeforeRequest
-      ? { compaction: undefined, injections: [] }
-      : await this.applyBeforeRequestActions(
-          { kind: "submission", stopReason: undefined },
-          { deferInjections: "return" },
-        );
-
-    if (compaction) {
+    const beforeRequest: BeforeRequestResult =
+      opts.requestKind === "continuation"
+        ? { type: "proceed", injections: [] }
+        : await this.applyBeforeRequestActions(
+            { kind: "submission" },
+            "return",
+          );
+    if (beforeRequest.type === "compact") {
       // The injections are already in the log; the user's own content has to
       // join them there so the compaction snapshot carries it too.
       this.runner.appendUserMessage(
         [...contextContent, ...toAgentInput(content)],
         { coalesce: true },
       );
-      this.settle({ type: "compact", nextPrompt: compaction.nextPrompt });
+      this.settle({
+        type: "compact",
+        nextPrompt: beforeRequest.compaction.nextPrompt,
+      });
       return;
     }
 
+    const injections = beforeRequest.injections;
     if (!hasContent && contextContent.length === 0 && injections.length === 0) {
       this.settle({ type: "completed" });
       return;
@@ -1518,11 +1525,11 @@ export class Agent {
    * appended between the two — it rides `buildToolResponseExtras` instead. */
   private pendingInjections: AgentInput[] = [];
   private async applyBeforeRequestActions(
-    context: Omit<RequestContext, "inputTokenCount">,
-    opts?: { deferInjections?: "pending" | "return" },
+    context: RequestContextKind,
+    mode: "append" | "pending" | "return",
   ): Promise<BeforeRequestResult> {
     const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
-    if (!onBeforeRequest) return { compaction: undefined, injections: [] };
+    if (!onBeforeRequest) return { type: "proceed", injections: [] };
     const plan = await onBeforeRequest({
       ...context,
       inputTokenCount: this.runner.log.inputTokenCount,
@@ -1538,16 +1545,20 @@ export class Agent {
     );
     // A deferred injection would be dropped by the agent swap, so a compaction
     // forces the append: the content belongs in the snapshot handed over.
-    if (opts?.deferInjections && !plan.compaction) {
-      if (opts.deferInjections === "pending") {
-        this.pendingInjections.push(...injections);
-      } else {
-        return { compaction: undefined, injections };
-      }
-    } else {
+    if (plan.compaction) {
       this.runner.appendUserMessage(injections, { coalesce: true });
+      return { type: "compact", compaction: plan.compaction };
     }
-    return { compaction: plan.compaction, injections: [] };
+    switch (mode) {
+      case "append":
+        this.runner.appendUserMessage(injections, { coalesce: true });
+        return { type: "proceed", injections: [] };
+      case "pending":
+        this.pendingInjections.push(...injections);
+        return { type: "proceed", injections: [] };
+      case "return":
+        return { type: "proceed", injections };
+    }
   }
 
   private disposed = false;

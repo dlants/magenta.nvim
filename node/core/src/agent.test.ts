@@ -1096,7 +1096,11 @@ describe("AutoCompactSupervisor integration", () => {
     core.hooks = composeSupervisors(() => [
       {
         onBeforeRequest: (ctx) => {
-          if (injected || ctx.stopReason !== "tool_use") {
+          if (
+            injected ||
+            ctx.kind !== "continuation" ||
+            ctx.stopReason !== "tool_use"
+          ) {
             return Promise.resolve({ type: "none" as const });
           }
           injected = true;
@@ -1187,7 +1191,11 @@ describe("AutoCompactSupervisor integration", () => {
     core.hooks = composeSupervisors(() => [
       {
         onBeforeRequest: (ctx) => {
-          if (asked || ctx.stopReason !== "tool_use") {
+          if (
+            asked ||
+            ctx.kind !== "continuation" ||
+            ctx.stopReason !== "tool_use"
+          ) {
             return Promise.resolve({ type: "none" as const });
           }
           asked = true;
@@ -1368,6 +1376,60 @@ describe("AutoCompactSupervisor integration", () => {
       serialized.indexOf("hello"),
     );
 
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+  });
+
+  it("consults onBeforeRequest exactly once per request across a handoff", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const kinds: string[] = [];
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: (ctx) => {
+          kinds.push(ctx.kind);
+          return Promise.resolve({ type: "none" as const });
+        },
+      },
+    ]);
+
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("truncated");
+    stream.finishResponse("max_tokens");
+
+    // handleStopped consults, then issues the continue-prompt request itself:
+    // that request must not be consulted a second time.
+    const nextStream = await pollUntil(() => {
+      const s = mockClient.streams[mockClient.streams.length - 1];
+      if (s && s !== stream) return s;
+      throw new Error("waiting for the continuation request");
+    });
+    nextStream.streamText("done");
+    nextStream.finishResponse("end_turn");
+
+    await pollUntil(() => {
+      if (kinds.length >= 3) return true;
+      throw new Error("waiting for the end-turn consult");
+    });
+    expect(kinds).toEqual(["submission", "continuation", "continuation"]);
+  });
+
+  it("issues a request for a submission-time injection with no user content", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: (ctx) =>
+          Promise.resolve(
+            ctx.kind === "submission"
+              ? injectText("solo note")
+              : { type: "none" as const },
+          ),
+      },
+    ]);
+
+    void core.send([]);
+    const stream = await mockClient.awaitStream();
+    expect(JSON.stringify(stream.messages)).toContain("solo note");
     stream.streamText("ok");
     stream.finishResponse("end_turn");
   });
