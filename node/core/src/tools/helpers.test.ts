@@ -1,5 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { extractPartialJsonStringValue } from "./helpers.ts";
+import {
+  extractPartialJsonStringValue,
+  extractPartialReplies,
+} from "./helpers.ts";
+
+describe("extractPartialReplies", () => {
+  it("returns nothing before the first id lands", () => {
+    expect(extractPartialReplies('{"replies":[{"comme')).toEqual([]);
+  });
+
+  it("reports an id whose text has not started", () => {
+    expect(extractPartialReplies('{"replies":[{"commentId":"c1","te')).toEqual([
+      { commentId: "c1", text: "" },
+    ]);
+  });
+
+  it("grows the text as it streams", () => {
+    expect(
+      extractPartialReplies('{"replies":[{"commentId":"c1","text":"line\\none'),
+    ).toEqual([{ commentId: "c1", text: "line\none" }]);
+  });
+
+  it("keeps each reply with its own comment", () => {
+    expect(
+      extractPartialReplies(
+        '{"replies":[{"commentId":"c1","text":"a"},{"commentId":"c2","text":"b"}]}',
+      ),
+    ).toEqual([
+      { commentId: "c1", text: "a" },
+      { commentId: "c2", text: "b" },
+    ]);
+  });
+
+  it("does not borrow the next reply's text", () => {
+    expect(
+      extractPartialReplies(
+        '{"replies":[{"commentId":"c1"},{"commentId":"c2","text":"b"}]}',
+      ),
+    ).toEqual([
+      { commentId: "c1", text: "" },
+      { commentId: "c2", text: "b" },
+    ]);
+  });
+});
 
 describe("extractPartialJsonStringValue", () => {
   it("extracts a complete string value", () => {

@@ -95,7 +95,12 @@ describe("comment delivery", () => {
 
       // sending clears the pending marker
       await pollUntil(async () => {
-        expect(await virtLines(buffer)).toEqual(["  you: why is this here?"]);
+        expect(await virtLines(buffer)).toEqual([
+          "  you: why is this here?",
+          // the turn is still in flight, so the comment shows the agent
+          // working on it
+          expect.stringMatching(/^ {2}agent: \S$/),
+        ]);
       });
 
       stream.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });

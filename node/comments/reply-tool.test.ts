@@ -1,4 +1,4 @@
-import { getToolSpecs } from "@magenta/core";
+import { getToolSpecs, type ToolName, type ToolRequestId } from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import {
   type BufNr,
@@ -157,6 +157,31 @@ describe("the reply tool", () => {
     expect(names("subagent")).not.toContain("reply");
   });
 
+  it("streams a reply into the comment it targets", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      const { buffer } = await openPoem(driver);
+      await comment(driver, 0, "why is this here?");
+      const stream = await driver.mockAnthropic.awaitPendingStream();
+      stream.streamToolUsePartial("id1" as ToolRequestId, "reply" as ToolName, [
+        '{"replies":[{"commentId":"c1","text":"it is',
+      ]);
+      await pollUntil(async () => {
+        expect(await allVirtLines(buffer)).toEqual([
+          "  you: why is this here?",
+          expect.stringMatching(/^ {2}agent: it is\S$/),
+        ]);
+      });
+      stream.continueToolUsePartial([' a poem"}]}']);
+      await pollUntil(async () => {
+        expect(await allVirtLines(buffer)).toEqual([
+          "  you: why is this here?",
+          expect.stringMatching(/^ {2}agent: it is a poem\S$/),
+        ]);
+      });
+    });
+  });
+
   it("round trips a comment, a reply and a follow-up", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
@@ -182,6 +207,7 @@ describe("the reply tool", () => {
           "  you: why is this here?",
           "  agent: it is a poem",
           "  you: but why here?",
+          expect.stringMatching(/^ {2}agent: \S$/),
         ]);
       });
       const followup = await driver.mockAnthropic.awaitPendingStream();

@@ -293,6 +293,8 @@ export { formatToolSpec, formatToolSpecs } from "./tools/format-tool-spec.ts";
 export * as GetFile from "./tools/getFile.ts";
 export {
   extractPartialJsonStringValue,
+  extractPartialReplies,
+  type PartialReply,
   validateInput,
 } from "./tools/helpers.ts";
 export * as Hover from "./tools/hover.ts";

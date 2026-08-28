@@ -24,6 +24,31 @@ function comment(count: number): Comment {
 const texts = (lines: Array<Array<[string, string]>>) =>
   lines.map((line) => line.map(([text]) => text).join(""));
 
+describe("activity", () => {
+  it("renders a spinner line while the agent is thinking", () => {
+    const lines = texts(
+      commentVirtLines({
+        comment: comment(1),
+        pending: false,
+        activity: { type: "thinking" },
+      }),
+    );
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toMatch(/^ {2}agent: \S$/);
+  });
+
+  it("streams a partial reply into the comment", () => {
+    const lines = texts(
+      commentVirtLines({
+        comment: comment(1),
+        pending: false,
+        activity: { type: "replying", text: "on it" },
+      }),
+    );
+    expect(lines[1]).toMatch(/^ {2}agent: on it\S$/);
+  });
+});
+
 describe("commentVirtLines", () => {
   it("renders every message when maxMessages is unset", () => {
     expect(

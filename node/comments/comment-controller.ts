@@ -17,8 +17,10 @@ import {
 import type { ExtmarkId } from "../nvim/extmarks.ts";
 import type { Nvim } from "../nvim/nvim-node/index.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
+import { spinnerFrame } from "../spinner.ts";
 import { pos } from "../tea/view.ts";
 import {
+  type CommentActivity,
   type CommentExtent,
   commentVirtLines,
   renderComment,
@@ -30,6 +32,15 @@ import {
 export type ActiveInput =
   | { type: "reply"; id: CommentId; maxMessages: number }
   | { type: "new"; bufnr: BufNr; extent: CommentExtent };
+
+/** What the thread is doing right now, as far as comments are concerned:
+ * either working with no reply written yet, or writing replies (keyed by the
+ * comment each one targets) as the `reply` tool input streams in. */
+export type CommentThreadActivity =
+  | { type: "thinking" }
+  | { type: "replying"; replies: { [id: CommentId]: string } };
+
+const SPINNER_TICK_MS = 333;
 
 export type CommentAnchor =
   | { state: "anchored"; bufnr: BufNr; extmarkId: ExtmarkId }
@@ -64,6 +75,9 @@ export class CommentController {
     private cwd: NvimCwd,
     private homeDir: HomeDir,
     public readonly store: CommentStore,
+    /** Read live, at render time — the turn moves faster than the store. */
+    private getActivity: () => CommentThreadActivity | undefined = () =>
+      undefined,
   ) {
     this.store.on("changed", this.onStoreChanged);
   }
@@ -232,11 +246,64 @@ export class CommentController {
     if (!comment) {
       return 0;
     }
+    const pending = this.store.pendingCommentIds().includes(id);
     return commentVirtLines({
       comment,
-      pending: this.store.pendingCommentIds().includes(id),
+      pending,
       maxMessages: this.maxMessages(id),
+      activity: this.commentActivity(id, pending),
     }).length;
+  }
+
+  /** Redraw if what the agent is doing (or the spinner frame) moved on.
+   * While an activity is up we keep ticking on our own: nothing else redraws
+   * a comment, so the spinner would freeze, and the turn can come to rest
+   * without another store change to take it down. */
+  syncActivity(): Promise<void> {
+    // A hidden controller must not touch the buffer: the render namespace is
+    // shared with the thread whose comments are on screen.
+    if (!this.visible) {
+      this.stopActivityTicker();
+      return Promise.resolve();
+    }
+    const activity = this.getActivity();
+    if (activity && !this.activityTimer) {
+      this.activityTimer = setInterval(
+        () => void this.syncActivity(),
+        SPINNER_TICK_MS,
+      );
+      this.activityTimer.unref?.();
+    } else if (!activity) {
+      this.stopActivityTicker();
+    }
+    const key = JSON.stringify(activity ?? null) + spinnerFrame();
+    if (key === this.lastActivityKey) {
+      return Promise.resolve();
+    }
+    this.lastActivityKey = key;
+    return this.refreshAll();
+  }
+  private lastActivityKey: string | undefined;
+  private activityTimer: ReturnType<typeof setInterval> | undefined;
+
+  /** A comment shows the spinner only once the agent has actually seen it, and
+   * only while it is the one waiting on an answer. */
+  private commentActivity(
+    id: CommentId,
+    pending: boolean,
+  ): CommentActivity | undefined {
+    const activity = this.getActivity();
+    if (!activity || pending) {
+      return undefined;
+    }
+    if (activity.type === "replying") {
+      const text = activity.replies[id];
+      return text === undefined ? undefined : { type: "replying", text };
+    }
+    const messages = this.store.comments[id]?.messages;
+    return messages?.[messages.length - 1]?.from === "user"
+      ? { type: "thinking" }
+      : undefined;
   }
 
   private maxMessages(id: CommentId): number | undefined {
@@ -370,6 +437,7 @@ export class CommentController {
         extent: renderExtent,
         pending: pending.has(id),
         maxMessages: this.maxMessages(id),
+        activity: this.commentActivity(id, pending.has(id)),
       });
     }
   }
@@ -415,6 +483,7 @@ export class CommentController {
 
   async hide(): Promise<void> {
     this.visible = false;
+    this.stopActivityTicker();
     for (const bufnr of this.commentedBufnrs()) {
       const buffer = this.buffer(bufnr);
       if (await buffer.isValid()) {
@@ -423,7 +492,15 @@ export class CommentController {
     }
   }
 
+  private stopActivityTicker(): void {
+    if (this.activityTimer) {
+      clearInterval(this.activityTimer);
+      this.activityTimer = undefined;
+    }
+  }
+
   async destroy(): Promise<void> {
+    this.stopActivityTicker();
     this.store.off("changed", this.onStoreChanged);
     await this.hide();
     for (const id of Object.keys(this.anchors) as CommentId[]) {

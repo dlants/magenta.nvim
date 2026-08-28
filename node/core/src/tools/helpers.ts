@@ -61,9 +61,44 @@ export function validateInput(
 export function extractPartialJsonStringValue(
   inputJson: string,
   key: string,
+  fromIndex = 0,
 ): string | undefined {
+  return readStringValue(inputJson, key, fromIndex)?.value;
+}
+
+/** One reply as it appears mid-stream: `text` grows as deltas arrive, and is
+ * empty until the model starts emitting it. */
+export type PartialReply = { commentId: string; text: string };
+
+/** Parse the `reply` tool's input while it is still streaming, so the UI can
+ * show a reply landing in its comment as it is written. Assumes the schema
+ * order (`commentId` before `text`) that the model emits; a reversed pair is
+ * reported with an empty text rather than mis-attributed. */
+export function extractPartialReplies(inputJson: string): PartialReply[] {
+  const replies: PartialReply[] = [];
+  let cursor = 0;
+  for (;;) {
+    const idField = readStringValue(inputJson, "commentId", cursor);
+    if (!idField) break;
+    const nextId = readStringValue(inputJson, "commentId", idField.end);
+    const textField = readStringValue(inputJson, "text", idField.end);
+    const text =
+      textField && (!nextId || textField.end <= nextId.end)
+        ? textField.value
+        : "";
+    replies.push({ commentId: idField.value, text });
+    cursor = idField.end;
+  }
+  return replies;
+}
+
+function readStringValue(
+  inputJson: string,
+  key: string,
+  fromIndex: number,
+): { value: string; end: number } | undefined {
   const keyPattern = `"${key}"`;
-  const keyIdx = inputJson.indexOf(keyPattern);
+  const keyIdx = inputJson.indexOf(keyPattern, fromIndex);
   if (keyIdx === -1) return undefined;
 
   const afterKey = inputJson.indexOf(":", keyIdx + keyPattern.length);
@@ -72,7 +107,17 @@ export function extractPartialJsonStringValue(
   const openQuote = inputJson.indexOf('"', afterKey + 1);
   if (openQuote === -1) return undefined;
 
-  const encoded = inputJson.slice(openQuote + 1);
+  return decodeJsonString(inputJson, openQuote + 1);
+}
+
+/** Decode a JSON string body starting at `start`, tolerating a body that the
+ * stream has not finished (or closed) yet. `end` is the index just past the
+ * closing quote, or the end of input when it has not arrived. */
+function decodeJsonString(
+  inputJson: string,
+  start: number,
+): { value: string; end: number } {
+  const encoded = inputJson.slice(start);
 
   let result = "";
   for (let i = 0; i < encoded.length; i++) {
@@ -110,11 +155,11 @@ export function extractPartialJsonStringValue(
           result += encoded[i];
       }
     } else if (encoded[i] === '"') {
-      break;
+      return { value: result, end: start + i + 1 };
     } else {
       result += encoded[i];
     }
   }
 
-  return result;
+  return { value: result, end: inputJson.length };
 }

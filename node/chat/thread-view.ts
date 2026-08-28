@@ -48,6 +48,7 @@ import {
   renderToolSummary,
 } from "../render-tools/index.ts";
 import { renderStreamdedTool } from "../render-tools/streaming.ts";
+import { spinnerFrame } from "../spinner.ts";
 import type { Dispatch } from "../tea/tea.ts";
 import {
   d,
@@ -75,14 +76,6 @@ function contextViewCtx(thread: NvimThread): ContextViewContext {
 const shortErrorMessage = (error: Error): string => {
   const msg = error.message.split("\n")[0].trim();
   return msg.length > 80 ? `${msg.slice(0, 77)}...` : msg;
-};
-
-const getAnimationFrame = (sendDate: Date): string => {
-  const frameIndex =
-    Math.floor((Date.now() - sendDate.getTime()) / 333) %
-    MESSAGE_ANIMATION.length;
-
-  return MESSAGE_ANIMATION[frameIndex];
 };
 
 /**
@@ -127,9 +120,9 @@ export const renderStatus = (
       const waitedMs = Date.now() - agentPhase.lastEventTime.getTime();
       if (waitedMs > 3000) {
         const waitedSecs = Math.floor(waitedMs / 1000);
-        return d`Streaming response ${getAnimationFrame(agentPhase.startedAt)} (waiting ${String(waitedSecs)}s)`;
+        return d`Streaming response ${spinnerFrame(agentPhase.startedAt)} (waiting ${String(waitedSecs)}s)`;
       }
-      return d`Streaming response ${getAnimationFrame(agentPhase.startedAt)}`;
+      return d`Streaming response ${spinnerFrame(agentPhase.startedAt)}`;
     }
     case "idle":
       return renderTurnResult(lastTurnResult, latestUsage);
@@ -1214,5 +1207,3 @@ export const LOGO = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "logo.txt"),
   "utf-8",
 );
-
-const MESSAGE_ANIMATION = ["⠁", "⠂", "⠄", "⠂"];

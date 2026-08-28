@@ -192,6 +192,8 @@ describe("comment input", () => {
         expect(await virtLines(buffer)).toEqual([
           "  you: first",
           "  you: second",
+          // the comment rode out with a request that is still in flight
+          expect.stringMatching(/^ {2}agent: \S$/),
         ]);
       });
     });

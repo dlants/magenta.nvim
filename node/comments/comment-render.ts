@@ -2,6 +2,7 @@ import type { Comment, CommentMessage } from "@magenta/core";
 import { MAGENTA_COMMENT_NAMESPACE, type NvimBuffer } from "../nvim/buffer.ts";
 import type { ExtmarkOptions, HLGroup } from "../nvim/extmarks.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
+import { spinnerFrame } from "../spinner.ts";
 import { pos } from "../tea/view.ts";
 
 export const COMMENT_SIGN = "💬";
@@ -42,6 +43,32 @@ const AUTHOR_HL: { [from in CommentMessage["from"]]: HLGroup } = {
   agent: "Function",
 };
 
+/** What the agent is doing about this particular comment right now, as read
+ * off the live turn. `replying` carries the reply text parsed out of the
+ * still-streaming `reply` tool input. */
+export type CommentActivity =
+  | { type: "thinking" }
+  | { type: "replying"; text: string };
+
+/** One message, wrapped, as `prefix: text` virtual lines. */
+function messageLines(
+  from: CommentMessage["from"],
+  text: string,
+): Array<Array<[string, HLGroup]>> {
+  const prefix = from === "user" ? "  you: " : "  agent: ";
+  const hl = AUTHOR_HL[from];
+  return text
+    .split("\n")
+    .flatMap((line) => wrap(line, MAX_COMMENT_WIDTH - prefix.length))
+    .map((line, i) => [
+      [i === 0 ? prefix : " ".repeat(prefix.length), "Comment"] as [
+        string,
+        HLGroup,
+      ],
+      [line, hl] as [string, HLGroup],
+    ]);
+}
+
 export type CommentExtent = { startRow: Row0Indexed; endRow: Row0Indexed };
 
 /**
@@ -52,11 +79,13 @@ export function commentVirtLines({
   comment,
   pending,
   maxMessages,
+  activity,
 }: {
   comment: Comment;
   pending: boolean;
   /** When set, render only the last N messages plus an elision line. */
   maxMessages?: number | undefined;
+  activity?: CommentActivity | undefined;
 }): Array<Array<[string, HLGroup]>> {
   const lines: Array<Array<[string, HLGroup]>> = [];
 
@@ -74,17 +103,12 @@ export function commentVirtLines({
   }
 
   for (const message of messages) {
-    const prefix = message.from === "user" ? "  you: " : "  agent: ";
-    const hl = AUTHOR_HL[message.from];
-    const textLines = message.text
-      .split("\n")
-      .flatMap((line) => wrap(line, MAX_COMMENT_WIDTH - prefix.length));
-    textLines.forEach((text, i) => {
-      lines.push([
-        [i === 0 ? prefix : " ".repeat(prefix.length), "Comment"],
-        [text, hl],
-      ]);
-    });
+    lines.push(...messageLines(message.from, message.text));
+  }
+
+  if (activity) {
+    const streamed = activity.type === "replying" ? activity.text : "";
+    lines.push(...messageLines("agent", `${streamed}${spinnerFrame()}`));
   }
 
   if (pending) {
@@ -123,12 +147,14 @@ export async function renderComment({
   extent,
   pending,
   maxMessages,
+  activity,
 }: {
   buffer: NvimBuffer;
   comment: Comment;
   extent: CommentExtent;
   pending: boolean;
   maxMessages?: number | undefined;
+  activity?: CommentActivity | undefined;
 }): Promise<void> {
   for (let row = extent.startRow; row <= extent.endRow; row++) {
     const options: ExtmarkOptions = {
@@ -151,7 +177,7 @@ export async function renderComment({
     startPos: pos(extent.endRow, 0),
     endPos: pos(extent.endRow, 0),
     options: {
-      virt_lines: commentVirtLines({ comment, pending, maxMessages }),
+      virt_lines: commentVirtLines({ comment, pending, maxMessages, activity }),
       priority: 100,
     },
     namespace: MAGENTA_COMMENT_NAMESPACE,

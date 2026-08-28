@@ -15,6 +15,7 @@ import {
   ContextManager,
   cloneContextManager,
   composeSupervisors,
+  extractPartialReplies,
   FileContextSupervisor,
   GitSupervisor,
   GitTracker,
@@ -33,7 +34,10 @@ import * as diff from "diff";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import type { Lsp } from "../capabilities/lsp.ts";
 import type { SandboxViolationHandler } from "../capabilities/sandbox-violation-handler.ts";
-import { CommentController } from "../comments/comment-controller.ts";
+import {
+  CommentController,
+  type CommentThreadActivity,
+} from "../comments/comment-controller.ts";
 import type { FileUpdates } from "../context/context-manager.ts";
 import { createLocalEnvironment, type Environment } from "../environment.ts";
 import { displaySnapshotDiff } from "../nvim/displaySnapshotDiff.ts";
@@ -399,6 +403,7 @@ export class NvimThread {
         context.cwd,
         context.homeDir,
         commentStore,
+        () => this.commentActivity(),
       );
       this.comments = {
         store: commentStore,
@@ -512,6 +517,7 @@ export class NvimThread {
           title,
         });
       }
+      void this.comments?.controller.syncActivity();
       this.myDispatch({ type: "tool-progress" });
       this.maybeScrollToSubmission();
     }, RENDER_DEBOUNCE_MS);
@@ -538,6 +544,27 @@ export class NvimThread {
         }),
       SCROLL_DELAY_MS,
     );
+  }
+
+  /** What the live turn is doing about the open comments: while the `reply`
+   * tool input is still streaming we can see which comments it targets and
+   * how far each reply has been written. */
+  private commentActivity(): CommentThreadActivity | undefined {
+    if (this.core.phase.type === "idle") {
+      return undefined;
+    }
+    const block =
+      this.agent.phase.type === "streaming"
+        ? this.agent.phase.block
+        : undefined;
+    if (block?.type === "tool_use" && block.name === "reply") {
+      const replies: { [id: CommentId]: string } = {};
+      for (const reply of extractPartialReplies(block.inputJson)) {
+        replies[reply.commentId as CommentId] = reply.text;
+      }
+      return { type: "replying", replies };
+    }
+    return { type: "thinking" };
   }
 
   /** The context trackers, always ahead of the behavioral supervisors so no
