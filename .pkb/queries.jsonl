@@ -19,3 +19,13 @@
 {"timestamp":"2026-08-21T23:41:25Z","query":"comment store messages agent request injection","commit":"9742e4a3a5f368502d6fa72e10882ae989726bd9"}
 {"timestamp":"2026-08-27T04:49:20Z","query":"comments tracker buffer ranges -k 10","commit":"9742e4a3a5f368502d6fa72e10882ae989726bd9"}
 {"timestamp":"2026-08-28T02:01:37Z","query":"comment submission extmark virtual text -k 8","commit":"2649e19186104be5a08732c44381ae571e70f23b"}
+{"timestamp":"2026-08-28T02:23:57Z","query":"streaming tool input JSON delta partial parsing -k 10","commit":"520b13f1f0628699f4158b0d25e5ea0dd91d68d7"}
+{"timestamp":"2026-08-28T02:23:57Z","query":"comments feature state storage","commit":"520b13f1f0628699f4158b0d25e5ea0dd91d68d7"}
+{"timestamp":"2026-08-28T02:23:59Z","query":"reply tool comments","commit":"520b13f1f0628699f4158b0d25e5ea0dd91d68d7"}
+{"timestamp":"2026-08-28T02:23:59Z","query":"streaming tool input block JSON delta -k 10","commit":"520b13f1f0628699f4158b0d25e5ea0dd91d68d7"}
+{"timestamp":"2026-08-28T02:24:01Z","query":"comment rendering view inline display","commit":"520b13f1f0628699f4158b0d25e5ea0dd91d68d7"}
+{"timestamp":"2026-08-28T02:24:08Z","query":"spinner animated thinking icon thread loading -k 10","commit":"520b13f1f0628699f4158b0d25e5ea0dd91d68d7"}
+{"timestamp":"2026-08-28T02:24:12Z","query":"tool progress display rendering tool output -k 10","commit":"520b13f1f0628699f4158b0d25e5ea0dd91d68d7"}
+{"timestamp":"2026-08-28T02:24:19Z","query":"tool call rendering display in thread -k 10","commit":"520b13f1f0628699f4158b0d25e5ea0dd91d68d7"}
+{"timestamp":"2026-08-28T04:28:07Z","query":"openai auth token refresh oauth -k 8","commit":"258aa8660bf70ba9e75f9ff83b366bb1ea93c2b7"}
+{"timestamp":"2026-08-28T22:23:04Z","query":"magenta script registration discovery loading -k 8","commit":"3676b30ca2cd934904b2602217fc098c744d65d9"}

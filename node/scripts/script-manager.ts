@@ -1,5 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import type { Dirent } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import type { ScriptCatalogEntry, ThreadId, ThreadResult } from "@magenta/core";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
@@ -67,6 +74,42 @@ export type ScriptInvocation = {
   child: ChildProcess;
   pendingThreads: Map<number, ThreadId>;
 };
+
+const MANIFEST_FILENAME = ".magenta-manifest.json";
+
+/**
+ * Newest mtime among the script directory's own sources. `node_modules` is
+ * skipped: it dwarfs the rest of the tree and changes only on installs, which
+ * touch `package.json` anyway.
+ */
+function newestSourceMtime(dir: string): number {
+  let newest = 0;
+  const walk = (current: string) => {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name === MANIFEST_FILENAME) {
+        continue;
+      }
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      try {
+        newest = Math.max(newest, statSync(full).mtimeMs);
+      } catch {
+        // raced with a delete; ignore
+      }
+    }
+  };
+  walk(dir);
+  return newest;
+}
 
 const REGISTRATION_TIMEOUT_MS = 5000;
 const SIGKILL_GRACE_MS = 2000;
@@ -230,13 +273,51 @@ export class ScriptManager {
         const indexFile = path.join(dir, entry.name, "index.ts");
         if (!existsSync(indexFile)) continue;
 
-        const metas = await this.captureRegistration(indexFile);
+        const metas = await this.loadRegistration(
+          path.join(dir, entry.name),
+          indexFile,
+        );
         for (const meta of metas) {
           this.catalog.set(meta.name, { file: indexFile, meta });
         }
       }
     }
     this.myDispatch({ type: "catalog-updated" });
+  }
+
+  /**
+   * Forking a script's `index.ts` to capture its `registerScript` calls costs a
+   * full node startup (with TS transform) per script directory, and discovery
+   * runs on every thread creation. Cache the captured metadata in a manifest
+   * next to the script, keyed on the newest mtime of the directory's sources,
+   * so the common case (scripts unchanged) is a handful of stat calls.
+   */
+  private async loadRegistration(
+    scriptDir: string,
+    indexFile: string,
+  ): Promise<ScriptMeta[]> {
+    const manifestFile = path.join(scriptDir, MANIFEST_FILENAME);
+    const mtimeMs = newestSourceMtime(scriptDir);
+
+    try {
+      const cached = JSON.parse(readFileSync(manifestFile, "utf8")) as {
+        mtimeMs: number;
+        scripts: ScriptMeta[];
+      };
+      if (cached.mtimeMs === mtimeMs) return cached.scripts;
+    } catch {
+      // missing or corrupt manifest: fall through and re-capture
+    }
+
+    const scripts = await this.captureRegistration(indexFile);
+    try {
+      writeFileSync(manifestFile, JSON.stringify({ mtimeMs, scripts }));
+    } catch (e) {
+      this.context.nvim.logger.warn(
+        `Failed to write script manifest ${manifestFile}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+    return scripts;
   }
 
   private captureRegistration(file: string): Promise<ScriptMeta[]> {
