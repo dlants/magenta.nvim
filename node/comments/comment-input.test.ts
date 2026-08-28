@@ -25,6 +25,17 @@ async function lua(driver: NvimDriver, code: string, args: unknown[] = []) {
   return driver.nvim.call("nvim_exec_lua", [code, args]);
 }
 
+/** Submitting on an idle thread starts a turn; finish it so the comment is no
+ * longer pending and the rendering is settled. */
+async function settleAutoSend(driver: NvimDriver) {
+  (await driver.mockAnthropic.awaitPendingStream()).respond({
+    stopReason: "end_turn",
+    text: "ok",
+    toolRequests: [],
+  });
+  await driver.assertDisplayBufferContains("ok");
+}
+
 /** The float window, once the input has opened. */
 async function awaitFloat(driver: NvimDriver): Promise<WindowId> {
   return pollUntil(async () => {
@@ -97,11 +108,9 @@ describe("comment input", () => {
       await driver.command("MagentaCommentSubmit");
       await awaitNoFloat(driver);
 
+      await settleAutoSend(driver);
       await pollUntil(async () => {
-        expect(await virtLines(buffer)).toEqual([
-          "  you: why is this here?",
-          "  (pending)",
-        ]);
+        expect(await virtLines(buffer)).toEqual(["  you: why is this here?"]);
         expect(await highlightedRows(buffer)).toEqual([1, 2]);
       });
     });
@@ -167,6 +176,7 @@ describe("comment input", () => {
       await typeIntoFloat(driver, "first");
       await driver.command("MagentaCommentSubmit");
       await awaitNoFloat(driver);
+      await settleAutoSend(driver);
       await pollUntil(async () => {
         expect((await controller.extentsInBuffer(buffer.id)).length).toEqual(1);
       });
@@ -176,12 +186,12 @@ describe("comment input", () => {
       await driver.command("MagentaCommentSubmit");
       await awaitNoFloat(driver);
 
+      await settleAutoSend(driver);
       await pollUntil(async () => {
         expect((await controller.extentsInBuffer(buffer.id)).length).toEqual(1);
         expect(await virtLines(buffer)).toEqual([
           "  you: first",
           "  you: second",
-          "  (pending)",
         ]);
       });
     });
@@ -234,6 +244,7 @@ describe("comment input", () => {
       await driver.command("MagentaCommentSubmit");
       await awaitNoFloat(driver);
 
+      await settleAutoSend(driver);
       const [{ id }] = await controller.extentsInBuffer(buffer.id);
       for (const text of ["m1", "m2", "m3", "m4"]) {
         controller.store.addUserMessage(id, text);

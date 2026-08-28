@@ -52,7 +52,7 @@ jobs:
       matrix:
         command:
           - name: "typecheck"
-            run: "npx tsgo -b"
+            run: "npx tsc -b"
           - name: "biome"
             run: "npx biome check ."
     name: ${{ matrix.command.name }}
