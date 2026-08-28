@@ -1352,8 +1352,8 @@ ${rows}${loadMore}`;
   }
 
   /** The active root thread, or `undefined` while the chat has no active
-   * thread or that thread hasn't finished initializing. A thread that exists
-   * but isn't a root thread is an invariant violation and still throws. */
+   * thread, that thread hasn't finished initializing, or its root ancestor
+   * owns no comments (script threads are parentless subagents). */
   getActiveRootThreadOrUndefined(): RootNvimThread | undefined {
     if (!this.state.activeThreadId) return undefined;
     const threadWrapper =
@@ -1362,10 +1362,7 @@ ${rows}${loadMore}`;
       return undefined;
     }
     const thread = threadWrapper.thread;
-    if (!thread.isRootThread()) {
-      throw new Error(`Thread ${thread.id} is not a root thread`);
-    }
-    return thread;
+    return thread.isRootThread() ? thread : undefined;
   }
 
   /** The root ancestor of the active thread — the thread that owns the
