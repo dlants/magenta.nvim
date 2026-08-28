@@ -42,8 +42,6 @@ import {
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
-import * as Scratchpad from "./tools/scratchpad.ts";
-import { COMPACT_STATIC_TOOL_NAMES } from "./tools/tool-registry.ts";
 import { Defer, pollUntil } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
@@ -435,12 +433,9 @@ describe("Thread.send across a compaction handoff", () => {
               summary: string,
               nextPrompt: string | undefined,
               steps: unknown[],
-              scratchpad: Scratchpad.Scratchpad,
             ) => Promise<SendResult>;
           }
-        ).handleCompactComplete("SUMMARY TEXT", nextPrompt, [{}], {
-          entries: [],
-        });
+        ).handleCompactComplete("SUMMARY TEXT", nextPrompt, [{}]);
       const oldAgent = core.agent;
       let settled: ThreadSendResult | undefined;
       const result = core.send([{ type: "user", text: "hello" }]);
@@ -491,7 +486,6 @@ describe("Thread.send across a compaction handoff", () => {
       summary: "SUMMARY",
       nextPrompt: undefined,
       steps: [],
-      scratchpad: Scratchpad.emptyScratchpad(),
     });
     const settled = await done.promise;
     if (settled.type !== "failed") throw new Error("expected failed");
@@ -2490,12 +2484,9 @@ describe("Agent conversation archive", () => {
             summary: string,
             nextPrompt: string | undefined,
             steps: unknown[],
-            scratchpad: Scratchpad.Scratchpad,
           ) => Promise<void>;
         }
-      ).handleCompactComplete("SUMMARY TEXT", undefined, [{}, {}], {
-        entries: [],
-      });
+      ).handleCompactComplete("SUMMARY TEXT", undefined, [{}, {}]);
 
       const contStream = await pollUntil(() => {
         if (mockClient.streams.length < 2) throw new Error("waiting");
@@ -2594,84 +2585,8 @@ describe("Agent conversation archive", () => {
   });
 });
 
-describe("Agent scratchpad state", () => {
-  it("subagent threads start with an empty scratchpad", () => {
-    const { core } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-    });
-    expect(core.state.scratchpad.entries).toEqual([]);
-  });
-
-  it("empties a populated scratchpad on reset-after-compaction", () => {
-    const { core } = createAgentWithMock();
-    core.state.scratchpad.entries.push({ key: "a", value: "1" });
-    core.state.scratchpad.entries.push({ key: "b", value: "2" });
-    core.update({ type: "reset-after-compaction" });
-    expect(core.state.scratchpad.entries).toEqual([]);
-  });
-
-  it("lists scratchpad keys in the reminder when non-empty", () => {
-    const line = Scratchpad.scratchpadReminder({
-      entries: [
-        { key: "a", value: "1" },
-        { key: "b", value: "2" },
-      ],
-    });
-    expect(line).toBeDefined();
-    expect(line).toContain("[a, b]");
-    expect(line).toContain("Delete keys you no longer need");
-  });
-  it("adds no scratchpad reminder when the scratchpad is empty", () => {
-    expect(Scratchpad.scratchpadReminder({ entries: [] })).toBeUndefined();
-  });
-  it("persists a populated result scratchpad after compaction reset", async () => {
-    const threadId = uniqueThreadId("sp-compact-survive");
-    const { core, mockClient } = createAgentWithMock(undefined, threadId);
-    try {
-      void core.send([{ type: "user", text: "first turn" }]);
-      const stream = await mockClient.awaitStream();
-      stream.streamText("done");
-      stream.finishResponse("end_turn");
-
-      await pollUntil(() => {
-        if (core.runner.phase.type !== "idle") throw new Error("waiting");
-        return true;
-      });
-      await core.awaitArchiveFlush();
-
-      core.state.scratchpad.entries.push({ key: "stale", value: "old" });
-
-      const compactPromise = (
-        core as unknown as {
-          handleCompactComplete: (
-            summary: string,
-            nextPrompt: string | undefined,
-            steps: unknown[],
-            scratchpad: Scratchpad.Scratchpad,
-          ) => Promise<void>;
-        }
-      ).handleCompactComplete("SUMMARY TEXT", undefined, [{}], {
-        entries: [{ key: "a", value: "1" }],
-      });
-
-      const contStream = await pollUntil(() => {
-        if (mockClient.streams.length < 2) throw new Error("waiting");
-        return mockClient.streams[1];
-      });
-      contStream.streamText("resumed");
-      contStream.finishResponse("end_turn");
-      await compactPromise;
-
-      expect(core.state.scratchpad.entries).toEqual([{ key: "a", value: "1" }]);
-    } finally {
-      await core.destroy();
-      await cleanupArchive(threadId);
-    }
-  });
-  it("includes the scratchpad tool in the compaction tool allowlist", () => {
-    expect(COMPACT_STATIC_TOOL_NAMES).toContain("scratchpad");
-  });
-  it("clone deep-copies scratchpad and edlRegisters with isolation", async () => {
+describe("Agent thread state", () => {
+  it("clone deep-copies edlRegisters with isolation", async () => {
     const parentId = uniqueThreadId("sp-parent");
     const childId = uniqueThreadId("sp-child");
     const {
@@ -2691,7 +2606,6 @@ describe("Agent scratchpad state", () => {
         return true;
       });
 
-      parent.state.scratchpad.entries.push({ key: "a", value: "1" });
       parent.state.edlRegisters.registers.set("r", "regval");
       parent.state.edlRegisters.nextSavedId = 3;
 
@@ -2704,15 +2618,10 @@ describe("Agent scratchpad state", () => {
         callbacks: { onUpdate: () => {} },
       });
 
-      expect(child.state.scratchpad.entries).toEqual([
-        { key: "a", value: "1" },
-      ]);
       expect(child.state.edlRegisters.registers.get("r")).toBe("regval");
       expect(child.state.edlRegisters.nextSavedId).toBe(3);
 
-      child.state.scratchpad.entries.push({ key: "b", value: "2" });
       child.state.edlRegisters.registers.set("r2", "x");
-      expect(parent.state.scratchpad.entries.map((e) => e.key)).toEqual(["a"]);
       expect(parent.state.edlRegisters.registers.has("r2")).toBe(false);
     } finally {
       await parent.destroy();
@@ -2737,10 +2646,9 @@ describe("Thread survives the compaction agent swap", () => {
           summary: string,
           nextPrompt: string | undefined,
           steps: unknown[],
-          scratchpad: Scratchpad.Scratchpad,
         ) => Promise<void>;
       }
-    ).handleCompactComplete("SUMMARY TEXT", undefined, [{}], { entries: [] });
+    ).handleCompactComplete("SUMMARY TEXT", undefined, [{}]);
     const contStream = await pollUntil(() => {
       if (mockClient.streams.length <= streamsBefore)
         throw new Error("waiting");
@@ -2814,12 +2722,9 @@ describe("Thread survives the compaction agent swap", () => {
             summary: string,
             nextPrompt: string | undefined,
             steps: unknown[],
-            scratchpad: Scratchpad.Scratchpad,
           ) => Promise<void>;
         }
-      ).handleCompactComplete("SUMMARY TEXT", undefined, [{}], {
-        entries: [],
-      });
+      ).handleCompactComplete("SUMMARY TEXT", undefined, [{}]);
       const contStream = await mockClient.awaitStream();
       const texts = core.pendingTurnContent.map((c) =>
         c.type === "text" ? c.text : "",

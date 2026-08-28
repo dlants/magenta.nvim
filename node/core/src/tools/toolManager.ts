@@ -16,7 +16,6 @@ import * as Hover from "./hover.ts";
 import * as NvimLua from "./nvimLua.ts";
 import * as Reply from "./reply.ts";
 import * as RunScript from "./run-script.ts";
-import * as Scratchpad from "./scratchpad.ts";
 import * as SpawnSubagents from "./spawn-subagents.ts";
 import * as ThreadTitle from "./thread-title.ts";
 import {
@@ -47,7 +46,6 @@ export type StaticToolMap = {
   edl: { input: Edl.Input };
   run_script: { input: RunScript.Input };
   nvim_lua: { input: NvimLua.Input };
-  scratchpad: { input: Scratchpad.Input };
   reply: { input: Reply.Input };
 };
 
@@ -77,7 +75,6 @@ const TOOL_SPEC_MAP: Partial<Record<StaticToolName, ProviderToolSpec>> = {
 
   edl: Edl.spec,
   nvim_lua: NvimLua.spec,
-  scratchpad: Scratchpad.spec,
   reply: Reply.spec,
 };
 

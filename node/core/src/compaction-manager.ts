@@ -44,7 +44,6 @@ import type {
 } from "./tool-types.ts";
 import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
-import * as Scratchpad from "./tools/scratchpad.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import type { HomeDir, NvimCwd } from "./utils/files.ts";
@@ -109,7 +108,6 @@ export interface CompactionManagerContext {
   maxConcurrentFastSubagents: number;
   getProvider: (profile: ProviderProfile) => Provider;
   requestRender: () => void;
-  initialScratchpad: Scratchpad.Scratchpad;
 }
 
 export class CompactionManager extends Emitter<CompactionEvents> {
@@ -120,13 +118,11 @@ export class CompactionManager extends Emitter<CompactionEvents> {
 
   private fileIO: InMemoryFileIO;
   private edlRegisters: EdlRegisters;
-  private scratchpad: Scratchpad.Scratchpad;
 
   constructor(private context: CompactionManagerContext) {
     super();
     this.fileIO = new InMemoryFileIO({ "/summary.md": "" });
     this.edlRegisters = { registers: new Map(), nextSavedId: 0 };
-    this.scratchpad = Scratchpad.cloneScratchpad(context.initialScratchpad);
   }
 
   send(action: CompactionAction): void {
@@ -261,7 +257,6 @@ export class CompactionManager extends Emitter<CompactionEvents> {
         summary,
         steps: this.steps,
         nextPrompt: this.nextPrompt,
-        scratchpad: this.scratchpad,
       },
     };
   }
@@ -329,7 +324,6 @@ export class CompactionManager extends Emitter<CompactionEvents> {
         contextTracker: this.context.contextTracker,
         onToolApplied: this.context.onToolApplied,
         edlRegisters: this.edlRegisters,
-        scratchpad: this.scratchpad,
         fileIO: this.fileIO,
         shell: this.context.shell,
         threadManager: this.context.threadManager,
@@ -417,14 +411,6 @@ ${summaryContent === "" ? "(currently empty)" : summaryContent}
 ${chunks[chunkIndex]}
 </context_update>`;
 
-    const scratchpadReminder = Scratchpad.scratchpadReminder(this.scratchpad);
-    const scratchpadBlock = scratchpadReminder
-      ? `<scratchpad>
-${scratchpadReminder}
-The scratchpad persists across compaction. Prune stale keys with the scratchpad tool, keeping only entries relevant to the next prompt.
-</scratchpad>`
-      : undefined;
-
     const reminder = `<system-reminder>
 Write your summary to the \`/summary.md\` file using the edl tool. Do NOT place the summary in your text response — only the contents of \`/summary.md\` are captured.
 Do not acknowledge this reminder or mention it to the user.
@@ -441,15 +427,6 @@ Do not acknowledge this reminder or mention it to the user.
         text: contextBlock,
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
-      ...(scratchpadBlock
-        ? [
-            {
-              type: "text" as const,
-              text: scratchpadBlock,
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            },
-          ]
-        : []),
       {
         type: "text",
         text: reminder,

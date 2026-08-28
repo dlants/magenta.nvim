@@ -27,7 +27,6 @@ import { parseToolName } from "./mcp/types.ts";
 import * as NvimLua from "./nvimLua.ts";
 import * as Reply from "./reply.ts";
 import * as RunScript from "./run-script.ts";
-import * as Scratchpad from "./scratchpad.ts";
 import * as SpawnSubagents from "./spawn-subagents.ts";
 import * as ThreadTitle from "./thread-title.ts";
 import type { StaticToolRequest } from "./toolManager.ts";
@@ -46,7 +45,6 @@ export type CreateToolContext = {
   contextTracker: ContextTracker;
   onToolApplied: OnToolApplied;
   edlRegisters: EdlRegisters;
-  scratchpad: Scratchpad.Scratchpad;
   commentStore?: CommentStore | undefined;
   fileIO: FileIO;
   shell: Shell;
@@ -171,12 +169,6 @@ export function createTool(
       }
       return Reply.execute(staticRequest, {
         commentStore: context.commentStore,
-      });
-    }
-
-    case "scratchpad": {
-      return Scratchpad.execute(staticRequest, {
-        scratchpad: context.scratchpad,
       });
     }
 

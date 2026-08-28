@@ -29,7 +29,6 @@ import * as MCPToolRender from "./mcp-tool.ts";
 import * as NvimLuaRender from "./nvimLua.ts";
 import * as ReplyRender from "./reply.ts";
 import * as RunScriptRender from "./run-script.ts";
-import * as ScratchpadRender from "./scratchpad.ts";
 import * as SpawnSubagentsRender from "./spawn-subagents.ts";
 import * as ThreadTitleRender from "./thread-title.ts";
 
@@ -91,8 +90,6 @@ export function renderToolSummary(
     }
     case "nvim_lua":
       return NvimLuaRender.renderSummary(request, displayContext);
-    case "scratchpad":
-      return ScratchpadRender.renderSummary(request, displayContext);
     case "reply":
       return ReplyRender.renderSummary(request, displayContext);
     default:
@@ -119,8 +116,6 @@ export function renderToolInput(
       return EdlRender.renderInput(request, displayContext, expanded, inFlight);
     case "nvim_lua":
       return NvimLuaRender.renderInput(request, displayContext, expanded);
-    case "scratchpad":
-      return ScratchpadRender.renderInput(request, displayContext, expanded);
     case "reply":
       return ReplyRender.renderInput(request, displayContext, expanded);
     case "spawn_subagents":
@@ -233,8 +228,6 @@ export function renderToolResultSummary(
       return d`${statusEmoji} run_script (${tokEst})`;
     case "nvim_lua":
       return d`${statusEmoji} nvim_lua (${tokEst})`;
-    case "scratchpad":
-      return d`${statusEmoji} scratchpad (${tokEst})`;
     case "reply":
       return d`${statusEmoji} ${ReplyRender.renderSummary(info.request, displayContext)}`;
     default:

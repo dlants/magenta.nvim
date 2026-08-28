@@ -9,7 +9,6 @@ export const STATIC_TOOL_NAMES = [
   "edl",
   "run_script",
   "nvim_lua",
-  "scratchpad",
   "reply",
 ] as const;
 
@@ -24,15 +23,10 @@ export const CHAT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "edl",
   "run_script",
   "nvim_lua",
-  "scratchpad",
   "reply",
 ];
 
-export const COMPACT_STATIC_TOOL_NAMES: StaticToolName[] = [
-  "get_files",
-  "edl",
-  "scratchpad",
-];
+export const COMPACT_STATIC_TOOL_NAMES: StaticToolName[] = ["get_files", "edl"];
 export const DOCKER_ROOT_STATIC_TOOL_NAMES: StaticToolName[] = [
   ...CHAT_STATIC_TOOL_NAMES,
   "yield_to_parent",
@@ -44,7 +38,6 @@ export const SUBAGENT_STATIC_TOOL_NAMES: StaticToolName[] = [
   "bash_command",
   "yield_to_parent",
   "edl",
-  "scratchpad",
 ];
 
 export const TOOL_CAPABILITIES = [
@@ -73,6 +66,5 @@ export const TOOL_REQUIRED_CAPABILITIES: Record<
   yield_to_parent: new Set(),
   run_script: new Set(["scripts"]),
   nvim_lua: new Set(["nvim"]),
-  scratchpad: new Set(),
   reply: new Set(["comments"]),
 };

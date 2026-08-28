@@ -69,7 +69,6 @@ import type {
 } from "./tool-types.ts";
 import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
-import * as Scratchpad from "./tools/scratchpad.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
@@ -209,7 +208,6 @@ export type ThreadState = {
   pendingNextMessages: InputMessage[];
   mode: ThreadMode;
   edlRegisters: EdlRegisters;
-  scratchpad: Scratchpad.Scratchpad;
   outputTokensSinceLastReminder: number;
   compactionHistory: CompactionRecord[];
   editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];
@@ -413,7 +411,6 @@ export class Agent {
         break;
       case "reset-after-compaction":
         this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
-        this.state.scratchpad = Scratchpad.emptyScratchpad();
         this.state.outputTokensSinceLastReminder = 0;
         this.state.editedFilesThisTurn = [];
         this.state.pendingBashReminder = false;
@@ -778,7 +775,6 @@ export class Agent {
         }
       },
       edlRegisters: this.state.edlRegisters,
-      scratchpad: this.state.scratchpad,
       fileIO: this.context.fileIO,
       shell: this.context.shell,
       threadManager: this.context.threadManager,
@@ -1268,8 +1264,6 @@ export class Agent {
       const reminder = extractSystemReminderBlock(fileInfo.agentView.content);
       if (reminder) reminders.add(reminder);
     }
-    const scratchpadLine = Scratchpad.scratchpadReminder(this.state.scratchpad);
-    if (scratchpadLine) reminders.add(scratchpadLine);
     return [...reminders];
   }
 

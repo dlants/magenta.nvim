@@ -45,18 +45,6 @@ export function renderStreamdedTool(
     case "nvim_lua":
     case "reply":
       break;
-    case "scratchpad": {
-      const script = extractPartialJsonStringValue(
-        streamingBlock.inputJson,
-        "script",
-      );
-      if (script !== undefined) {
-        const lines = script.split("\n");
-        const tail = lines.slice(-10).join("\n");
-        return d`📝 scratchpad:\n${withCode(d`${tail}`)}`;
-      }
-      break;
-    }
     case "spawn_subagents": {
       const input = SpawnSubagents.parsePartialSpawnSubagentsInput(
         streamingBlock.inputJson,

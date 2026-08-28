@@ -35,14 +35,13 @@ import type {
 } from "./thread-api.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
-import * as Scratchpad from "./tools/scratchpad.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
 
 /** How a `Thread` comes into being: either brand new, or forked from another
  * thread's history — in which case the cloned runner, its provenance and the
- * inherited scratchpad/registers all arrive together. */
+ * inherited registers all arrive together. */
 /** Archive placement for a thread's conversation log. */
 export type ThreadArchiveOptions = {
   /** Base dir for the conversation archive. Defaults to MAGENTA_TEMP_DIR. */
@@ -58,7 +57,6 @@ export type ThreadInit =
       sourceRunner: Runner;
       nativeMessageIdx: NativeMessageIdx;
       provenance: ForkProvenance;
-      scratchpad: Scratchpad.Scratchpad;
       edlRegisters: EdlRegisters;
     };
 
@@ -133,8 +131,6 @@ export class Thread {
         init.type === "clone"
           ? init.edlRegisters
           : { registers: new Map(), nextSavedId: 0 },
-      scratchpad:
-        init.type === "clone" ? init.scratchpad : Scratchpad.emptyScratchpad(),
       title: undefined,
       outputTokensSinceLastReminder: 0,
       compactionHistory: [],
@@ -184,7 +180,6 @@ export class Thread {
           fromThreadId: sourceThread.id,
           nativeMessageIdx,
         },
-        scratchpad: Scratchpad.cloneScratchpad(sourceThread.state.scratchpad),
         edlRegisters: {
           registers: new Map(sourceThread.state.edlRegisters.registers),
           nextSavedId: sourceThread.state.edlRegisters.nextSavedId,
@@ -511,7 +506,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
       maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
       getProvider: this.context.getProvider,
       requestRender: () => this.callbacks.onUpdate(),
-      initialScratchpad: Scratchpad.cloneScratchpad(this.state.scratchpad),
     });
     manager.on("transition", (_prev, next) => {
       if (next.type === "complete") {
@@ -552,7 +546,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
         result.summary,
         result.nextPrompt,
         result.steps,
-        result.scratchpad,
       ).then(
         (sendResult) => this.settleCompaction(sendResult),
         (e: Error) => {
@@ -583,7 +576,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     summary: string,
     nextPrompt: string | undefined,
     steps: CompactionStep[],
-    scratchpad: Scratchpad.Scratchpad,
   ): Promise<SendResult> {
     this.update({
       type: "push-compaction-record",
@@ -603,7 +595,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     this.threadLogger.resetCursor();
 
     this.update({ type: "reset-after-compaction" });
-    this.state.scratchpad = scratchpad;
 
     const summaryText = `<conversation-summary>\n${summary}\n</conversation-summary>`;
     this.agent.prependToNextTurn([
