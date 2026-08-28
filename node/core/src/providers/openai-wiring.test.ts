@@ -11,6 +11,7 @@ import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
 import type { MCPToolManager } from "../tools/mcp/manager.ts";
 import { pollUntil } from "../utils/async.ts";
+import { CodexAuthError } from "./codex-auth.ts";
 import { MockOpenAIClient, mockResponse } from "./mock-openai-client.ts";
 import { OpenAIProvider } from "./openai.ts";
 import { anthropicAuthType, getProvider } from "./provider.ts";
@@ -324,6 +325,40 @@ describe("OpenAI provider wiring", () => {
         /codex login/,
       );
       expect(auth.loginCalls.length).toBe(0);
+    });
+
+    /** `isAuthenticated` only sees that token strings exist on disk, so a
+     * spent refresh token looks like a healthy login until the refresh fails. */
+    it("logs in again when the stored refresh token is no longer good", async () => {
+      const auth = stubAuth();
+      auth.getCredentials = () => {
+        if (auth.loginCalls.length === 0) {
+          return Promise.reject(
+            new CodexAuthError("refresh-failed", "could not refresh"),
+          );
+        }
+        return Promise.resolve({ accessToken: "tok-3", accountId: "acct" });
+      };
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(sseToolResponse());
+      const provider = new OpenAIProvider(noopLogger, validateInput, {
+        authType: "chatgpt",
+        auth,
+        authUI: {
+          showOAuthFlow: () => Promise.resolve(""),
+          showError: () => {},
+          showLoginProgress: () => {},
+        },
+      });
+
+      await titleRequest(provider).promise;
+
+      expect(auth.loginCalls.length).toBe(1);
+      const [, init] = fetchMock.mock.calls[0];
+      expect(
+        new Headers((init as RequestInit).headers).get("authorization"),
+      ).toBe("Bearer tok-3");
     });
 
     it("rejects codex-family models with an actionable error", () => {

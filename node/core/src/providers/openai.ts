@@ -25,7 +25,7 @@ import {
   createSigV4Fetch,
   DEFAULT_BEDROCK_MANTLE_REGION,
 } from "./bedrock-sigv4.ts";
-import type { CodexCredentials } from "./codex-auth.ts";
+import { CodexAuthError, type CodexCredentials } from "./codex-auth.ts";
 import { OpenAIRunner } from "./openai-runner.ts";
 import {
   type AgentInput,
@@ -974,17 +974,61 @@ export class OpenAIProvider implements Provider {
       input: string | URL | Request,
       init?: RequestInit,
     ): Promise<Response> => {
-      await this.ensureLoggedIn(auth, authUI, init?.signal ?? undefined);
+      const signal = init?.signal ?? undefined;
+      await this.ensureLoggedIn(auth, authUI, signal);
       const response = await withCredentials(
         input,
         init,
-        await auth.getCredentials(),
+        await this.withRelogin(
+          () => auth.getCredentials(),
+          auth,
+          authUI,
+          signal,
+        ),
       );
       if (response.status !== 401) return response;
 
       this.logger.info("ChatGPT credentials rejected; refreshing once");
-      return withCredentials(input, init, await auth.refreshCredentials());
+      return withCredentials(
+        input,
+        init,
+        await this.withRelogin(
+          () => auth.refreshCredentials(),
+          auth,
+          authUI,
+          signal,
+        ),
+      );
     };
+  }
+
+  /** A spent or rejected refresh token is indistinguishable from being logged
+   * out, and `isAuthenticated` can't tell them apart — it only sees that token
+   * strings exist on disk. Recover by logging in again rather than failing the
+   * request, which the OpenAI SDK would otherwise report as an opaque
+   * "Connection error." since this runs inside its `fetch`. */
+  private async withRelogin(
+    getCredentials: () => Promise<CodexCredentials>,
+    auth: OpenAIAuth,
+    authUI: AuthUI | undefined,
+    signal: AbortSignal | undefined,
+  ): Promise<CodexCredentials> {
+    try {
+      return await getCredentials();
+    } catch (error) {
+      if (
+        !(error instanceof CodexAuthError) ||
+        (error.kind !== "refresh-failed" && error.kind !== "not-logged-in")
+      ) {
+        this.logger.error(`ChatGPT auth failed: ${(error as Error).message}`);
+        throw error;
+      }
+      this.logger.info(
+        `ChatGPT credentials unusable (${error.kind}); logging in again`,
+      );
+      await this.login(auth, authUI, signal);
+      return getCredentials();
+    }
   }
 
   private async ensureLoggedIn(
@@ -993,6 +1037,14 @@ export class OpenAIProvider implements Provider {
     signal: AbortSignal | undefined,
   ): Promise<void> {
     if (await auth.isAuthenticated()) return;
+    await this.login(auth, authUI, signal);
+  }
+
+  private async login(
+    auth: OpenAIAuth,
+    authUI: AuthUI | undefined,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
     if (!authUI) {
       throw new Error(
         "Not logged in to ChatGPT. Run `codex login` in a terminal.",
