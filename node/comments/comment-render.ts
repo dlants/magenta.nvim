@@ -6,6 +6,37 @@ import { pos } from "../tea/view.ts";
 
 export const COMMENT_SIGN = "💬";
 
+/** Virtual text does not wrap, so long messages would run off the window.
+ * Wrap them ourselves at a comfortable reading width. */
+export const MAX_COMMENT_WIDTH = 80;
+
+/** Greedy word wrap, breaking words longer than `width` mid-word. */
+function wrap(text: string, width: number): string[] {
+  if (width <= 0) return [text];
+  const lines: string[] = [];
+  let current = "";
+  for (let word of text.split(/ /)) {
+    while (word.length > width) {
+      if (current) {
+        lines.push(current);
+        current = "";
+      }
+      lines.push(word.slice(0, width));
+      word = word.slice(width);
+    }
+    if (current === "") {
+      current = word;
+    } else if (current.length + 1 + word.length <= width) {
+      current += ` ${word}`;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  lines.push(current);
+  return lines;
+}
+
 const AUTHOR_HL: { [from in CommentMessage["from"]]: HLGroup } = {
   user: "Identifier",
   agent: "Function",
@@ -45,7 +76,9 @@ export function commentVirtLines({
   for (const message of messages) {
     const prefix = message.from === "user" ? "  you: " : "  agent: ";
     const hl = AUTHOR_HL[message.from];
-    const textLines = message.text.split("\n");
+    const textLines = message.text
+      .split("\n")
+      .flatMap((line) => wrap(line, MAX_COMMENT_WIDTH - prefix.length));
     textLines.forEach((text, i) => {
       lines.push([
         [i === 0 ? prefix : " ".repeat(prefix.length), "Comment"],

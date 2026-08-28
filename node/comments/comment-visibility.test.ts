@@ -114,20 +114,14 @@ describe("comment visibility across threads", () => {
       // thread's comments and nothing else
       await lua(driver, `vim.cmd("split poem.txt")`);
       await pollUntil(async () => {
-        expect(await virtLines(buffer)).toEqual([
-          "  you: thread B comment",
-          "  (pending)",
-        ]);
+        expect(await virtLines(buffer)).toEqual(["  you: thread B comment"]);
       });
 
       // switching back must hide B before stamping A: both threads comment on
       // this same buffer, so a show-then-hide order would wipe A's stamps.
       await driver.magenta.selectThreadEffect(threadA);
       await pollUntil(async () => {
-        expect(await virtLines(buffer)).toEqual([
-          "  you: thread A comment",
-          "  (pending)",
-        ]);
+        expect(await virtLines(buffer)).toEqual(["  you: thread A comment"]);
       });
 
       // the overview doesn't select a different conversation, so it leaves the
@@ -137,10 +131,7 @@ describe("comment visibility across threads", () => {
         msg: { type: "threads-overview" },
       });
       await pollUntil(async () => {
-        expect(await virtLines(buffer)).toEqual([
-          "  you: thread A comment",
-          "  (pending)",
-        ]);
+        expect(await virtLines(buffer)).toEqual(["  you: thread A comment"]);
       });
     });
   });

@@ -78,26 +78,14 @@ function commentUpdateText(stream: {
 }
 
 describe("comment delivery", () => {
-  it("delivers an idle-thread comment with the user's next message", async () => {
+  it("sends an idle-thread comment immediately", async () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
       const { buffer } = await openPoem(driver);
       await comment(driver, 1, "why is this here?");
 
-      await pollUntil(async () => {
-        expect(await virtLines(buffer)).toEqual([
-          "  you: why is this here?",
-          "  (pending)",
-        ]);
-      });
-      // a comment does not start a turn on its own
-      expect(
-        driver.magenta.chat.getActiveThread().getProviderMessages().length,
-      ).toBe(0);
-
-      await driver.inputMagentaText("take a look");
-      await driver.send();
-
+      // an idle thread has nothing to piggyback on, so the comment starts a
+      // turn of its own
       const stream = await driver.mockAnthropic.awaitPendingStream();
       const text = commentUpdateText(stream);
       expect(text).toContain("<comment_update>");
@@ -105,19 +93,7 @@ describe("comment delivery", () => {
       expect(text).toContain("<selection>");
       expect(text).toContain("<user>why is this here?</user>");
 
-      // the block precedes the user's own text
-      const messages = stream.getProviderMessages();
-      const lastUser = [...messages].reverse().find((m) => m.role === "user")!;
-      const commentIdx = lastUser.content.findIndex(
-        (c) => c.type === "comment_update",
-      );
-      const textIdx = lastUser.content.findIndex(
-        (c) => c.type === "text" && c.text.includes("take a look"),
-      );
-      expect(commentIdx).toBeGreaterThanOrEqual(0);
-      expect(commentIdx).toBeLessThan(textIdx);
-
-      // committing clears the pending marker
+      // sending clears the pending marker
       await pollUntil(async () => {
         expect(await virtLines(buffer)).toEqual(["  you: why is this here?"]);
       });
@@ -130,11 +106,28 @@ describe("comment delivery", () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
       await openPoem(driver);
-      await comment(driver, 0, "first");
-      await comment(driver, 2, "second");
-
       await driver.inputMagentaText("look at both");
       await driver.send();
+      const first = await driver.mockAnthropic.awaitPendingStream();
+
+      // mid-turn comments accumulate and ride out together
+      await driver.editFile("poem.txt");
+      await comment(driver, 0, "first");
+      await comment(driver, 2, "second");
+      first.respond({
+        stopReason: "tool_use",
+        text: "checking",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "bash-1" as never,
+              toolName: "bash_command" as never,
+              input: { command: "echo hi" },
+            },
+          },
+        ],
+      });
 
       const stream = await driver.mockAnthropic.awaitPendingStream();
       const text = commentUpdateText(stream)!;
@@ -166,6 +159,10 @@ describe("comment delivery", () => {
     await withDriver({}, async (driver) => {
       await driver.showSidebar();
       await openPoem(driver);
+      await driver.inputMagentaText("get started");
+      await driver.send();
+      const first = await driver.mockAnthropic.awaitPendingStream();
+      await driver.editFile("poem.txt");
       await comment(driver, 1, "why is this here?");
 
       await driver.assertDisplayBufferContains(
@@ -177,8 +174,20 @@ describe("comment delivery", () => {
       );
       await driver.assertDisplayBufferContains("why is this here?");
 
-      await driver.inputMagentaText("take a look");
-      await driver.send();
+      first.respond({
+        stopReason: "tool_use",
+        text: "checking",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "bash-1" as never,
+              toolName: "bash_command" as never,
+              input: { command: "echo hi" },
+            },
+          },
+        ],
+      });
       const stream = await driver.mockAnthropic.awaitPendingStream();
       stream.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
       await driver.assertDisplayBufferContains("ok");
@@ -193,8 +202,6 @@ describe("comment delivery", () => {
       await openPoem(driver);
       await comment(driver, 1, "why is this here?");
 
-      await driver.inputMagentaText("take a look");
-      await driver.send();
       const stream = await driver.mockAnthropic.awaitPendingStream();
       stream.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
 
@@ -218,8 +225,6 @@ describe("comment delivery", () => {
       await openPoem(driver);
       await comment(driver, 1, "why is this here?");
 
-      await driver.inputMagentaText("take a look");
-      await driver.send();
       const first = await driver.mockAnthropic.awaitPendingStream();
       first.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
       await driver.assertDisplayBufferContains("ok");
@@ -241,15 +246,19 @@ describe("comment delivery", () => {
       await driver.showSidebar();
       const { bufnr } = await openPoem(driver);
       await comment(driver, 1, "why is this here?");
+      const first = await driver.mockAnthropic.awaitPendingStream();
+      expect(commentUpdateText(first)).toContain(
+        "<user>why is this here?</user>",
+      );
+      first.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
+      await driver.assertDisplayBufferContains("ok");
 
       await driver.command(`bwipeout! ${bufnr}`);
 
       await driver.inputMagentaText("what happened?");
       await driver.send();
       const stream = await driver.mockAnthropic.awaitPendingStream();
-      const text = commentUpdateText(stream)!;
-      expect(text).toContain("<user>why is this here?</user>");
-      expect(text).toContain("(closed: buffer unloaded)");
+      expect(commentUpdateText(stream)).toContain("(closed: buffer unloaded)");
       stream.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
     });
   });
@@ -294,8 +303,6 @@ describe("comment delivery", () => {
       await driver.showSidebar();
       await openPoem(driver);
       await comment(driver, 1, "why is this here?");
-      await driver.inputMagentaText("take a look");
-      await driver.send();
       const first = await driver.mockAnthropic.awaitPendingStream();
       expect(commentUpdateText(first)).toContain(
         "<user>why is this here?</user>",
@@ -346,10 +353,20 @@ describe("comment delivery", () => {
       await driver.showSidebar();
       const { bufnr } = await openPoem(driver);
       await comment(driver, 1, "thread A comment");
+      (await driver.mockAnthropic.awaitPendingStream()).respond({
+        stopReason: "end_turn",
+        text: "ok",
+        toolRequests: [],
+      });
       const controllerA = driver.magenta.getCommentController();
       await driver.magenta.command("new-thread");
       await driver.editFile("poem.txt");
       await comment(driver, 3, "thread B comment");
+      (await driver.mockAnthropic.awaitPendingStream()).respond({
+        stopReason: "end_turn",
+        text: "ok",
+        toolRequests: [],
+      });
       const controllerB = driver.magenta.getCommentController();
       expect(controllerB).not.toBe(controllerA);
       await driver.command(`bwipeout! ${bufnr}`);
@@ -408,8 +425,6 @@ describe("comment delivery", () => {
       // comment left now still rides out.
       await driver.editFile("poem.txt");
       await comment(driver, 1, "post-compaction comment");
-      await driver.inputMagentaText("and this?");
-      await driver.send();
       const after = await driver.mockAnthropic.awaitPendingStream();
       expect(commentUpdateText(after)).toContain(
         "<user>post-compaction comment</user>",

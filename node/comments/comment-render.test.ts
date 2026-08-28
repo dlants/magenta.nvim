@@ -1,7 +1,7 @@
 import type { Comment, CommentId, CommentMessage } from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import type { BufNr } from "../nvim/buffer.ts";
-import { commentVirtLines } from "./comment-render.ts";
+import { commentVirtLines, MAX_COMMENT_WIDTH } from "./comment-render.ts";
 
 function comment(count: number): Comment {
   const messages: CommentMessage[] = [];
@@ -29,6 +29,19 @@ describe("commentVirtLines", () => {
     expect(
       texts(commentVirtLines({ comment: comment(3), pending: false })),
     ).toEqual(["  you: m0", "  agent: m1", "  you: m2"]);
+  });
+
+  it("wraps long messages at the max width", () => {
+    const long = comment(1);
+    long.messages[0].text = "word ".repeat(40).trim();
+    const lines = texts(commentVirtLines({ comment: long, pending: false }));
+    expect(lines.length).toBeGreaterThan(1);
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(MAX_COMMENT_WIDTH);
+    }
+    expect(lines.join(" ").trim().replace(/\s+/g, " ")).toEqual(
+      `you: ${"word ".repeat(40).trim()}`,
+    );
   });
 
   it("elides all but the last N messages", () => {

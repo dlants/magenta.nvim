@@ -162,8 +162,6 @@ describe("the reply tool", () => {
       await driver.showSidebar();
       const { buffer } = await openPoem(driver);
       await comment(driver, 0, "why is this here?");
-      await driver.inputMagentaText("take a look");
-      await driver.send();
       (await driver.mockAnthropic.awaitPendingStream()).respond({
         stopReason: "tool_use",
         text: "replying",
@@ -184,11 +182,8 @@ describe("the reply tool", () => {
           "  you: why is this here?",
           "  agent: it is a poem",
           "  you: but why here?",
-          "  (pending)",
         ]);
       });
-      await driver.inputMagentaText("go on");
-      await driver.send();
       const followup = await driver.mockAnthropic.awaitPendingStream();
       const lastUser = [...followup.getProviderMessages()]
         .reverse()

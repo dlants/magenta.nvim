@@ -1045,6 +1045,17 @@ ${lines.join("\n")}
         [input.target.bufnr],
       ]);
     }
+
+    // An idle thread has no upcoming request to piggyback the comment on, so
+    // send an empty turn: CommentSupervisor injects the pending update.
+    const thread = this.chat.getActiveRootThreadOrUndefined();
+    if (commentId && thread && thread.core.phase.type === "idle") {
+      this.dispatch({
+        type: "thread-msg",
+        id: thread.id,
+        msg: { type: "send-message", messages: [] },
+      });
+    }
   }
 
   /** `<leader>mD`: delete the comment under the cursor. */
