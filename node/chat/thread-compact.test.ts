@@ -226,6 +226,40 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
   });
 });
 
+it("does not seed a compact chunk thread with auto-context files", async () => {
+  await withDriver(
+    { options: { autoContext: ["test-auto-context.md"] } },
+    async (driver) => {
+      await driver.showSidebar();
+      await driver.inputMagentaText("What is 2+2?");
+      await driver.send();
+      (
+        await driver.mockAnthropic.awaitPendingStream({
+          message: "initial request",
+        })
+      ).respond({ stopReason: "end_turn", text: "4.", toolRequests: [] });
+
+      await driver.inputMagentaText("@compact");
+      await driver.send();
+
+      await driver.mockAnthropic.awaitPendingStream({
+        message: "compact chunk stream",
+      });
+
+      // auto-context is resolved against the host filesystem, but a compact
+      // thread's fileIO is an in-memory sandbox - seeding it would make the
+      // context manager report those files as deleted on the next request.
+      const chunkThreadId = compactionRunThreadIds(
+        compactorOf(driver.magenta.chat.getActiveThread())!.current!,
+      )[0];
+      const chunkWrapper = driver.magenta.chat.threadWrappers[chunkThreadId];
+      if (chunkWrapper?.state !== "initialized")
+        throw new Error("expected an initialized chunk thread");
+      expect(Object.keys(chunkWrapper.thread.contextManager.files)).toEqual([]);
+    },
+  );
+});
+
 it("compact flow without continuation: @compact with no next prompt", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();

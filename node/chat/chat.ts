@@ -667,10 +667,15 @@ export class Chat implements ThreadManager {
     const bypassRef = { get: () => false as boolean };
 
     const [autoContextFiles, environment] = await Promise.all([
-      resolveAutoContext({
-        ...this.context,
-        options: this.context.getOptions(),
-      }),
+      // auto-context is discovered against the host filesystem, so it is
+      // meaningless for a thread whose fileIO is a sandbox that doesn't contain
+      // those paths - they would immediately be reported as deleted.
+      fileIO
+        ? Promise.resolve([])
+        : resolveAutoContext({
+            ...this.context,
+            options: this.context.getOptions(),
+          }),
       resolvedConfig.type === "docker"
         ? createDockerEnvironment({
             container: resolvedConfig.container,
