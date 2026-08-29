@@ -47,6 +47,7 @@ import {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
+import type { PendingMessage, ResolveParts } from "./submission/index.ts";
 import type {
   AgentHooks,
   OnUpdate,
@@ -181,10 +182,10 @@ export type AgentAction =
     }
   | { type: "increment-output-tokens"; tokens: number }
   | { type: "reset-output-tokens" }
-  | { type: "push-pending-messages"; messages: InputMessage[] }
-  | { type: "drain-pending-messages" }
-  | { type: "push-pending-next-messages"; messages: InputMessage[] }
-  | { type: "drain-pending-next-messages" }
+  | { type: "enqueue-next-request"; messages: PendingMessage[] }
+  | { type: "drain-next-request-queue" }
+  | { type: "enqueue-next-stop"; messages: PendingMessage[] }
+  | { type: "drain-next-stop-queue" }
   | { type: "push-compaction-record"; record: CompactionRecord }
   | { type: "reset-after-compaction" }
   | { type: "mark-bash-output-abbreviated" }
@@ -204,8 +205,10 @@ export type ThreadState = {
   threadType: ThreadType;
   systemPrompt: SystemPrompt;
   systemInfo: SystemInfo;
-  pendingMessages: InputMessage[];
-  pendingNextMessages: InputMessage[];
+  /** flushed in full when the next provider request is issued (@async) */
+  nextRequestQueue: PendingMessage[];
+  /** flushed in full the next time the agent comes to rest (@next) */
+  nextStopQueue: PendingMessage[];
   mode: ThreadMode;
   edlRegisters: EdlRegisters;
   outputTokensSinceLastReminder: number;
@@ -225,6 +228,11 @@ export type ThreadState = {
 /** Collaborators the owning `Thread` supplies. An `Agent` is ephemeral —
  * compaction replaces it — so everything durable (identity, the queue, the
  * context managers, the archive) lives on the `Thread` and is handed in. */
+type Continuation =
+  | { type: "messages"; messages: InputMessage[] }
+  /** flush both queues, resolving each entry at delivery */
+  | { type: "queues" };
+
 export interface AgentDeps {
   /** Only used to stamp tool contexts and outgoing events; the agent has no
    * identity of its own. */
@@ -237,6 +245,9 @@ export interface AgentDeps {
   /** "Something visible moved." Unthrottled: the recipient coalesces with a
    * trailing-edge debounce. */
   onUpdate: OnUpdate;
+  /** Turns queued `PendingMessage`s into content, at the moment they are
+   * delivered rather than when they were queued. */
+  resolve: ResolveParts;
   /** Whether this agent drives a brand-new runner or one cloned from another
    * thread's history. */
   runnerInit:
@@ -394,17 +405,17 @@ export class Agent {
       case "reset-output-tokens":
         this.state.outputTokensSinceLastReminder = 0;
         break;
-      case "push-pending-messages":
-        this.state.pendingMessages.push(...action.messages);
+      case "enqueue-next-request":
+        this.state.nextRequestQueue.push(...action.messages);
         break;
-      case "drain-pending-messages":
-        this.state.pendingMessages = [];
+      case "drain-next-request-queue":
+        this.state.nextRequestQueue = [];
         break;
-      case "push-pending-next-messages":
-        this.state.pendingNextMessages.push(...action.messages);
+      case "enqueue-next-stop":
+        this.state.nextStopQueue.push(...action.messages);
         break;
-      case "drain-pending-next-messages":
-        this.state.pendingNextMessages = [];
+      case "drain-next-stop-queue":
+        this.state.nextStopQueue = [];
         break;
       case "push-compaction-record":
         this.state.compactionHistory.push(action.record);
@@ -667,15 +678,59 @@ export class Agent {
     await this.handleYield(reason.result, reason.value);
   }
 
+  /** What the agent sends next after a stop. `queues` is deliberately lazy:
+   * resolving a queued message runs its effects, so it must not happen until
+   * we know the request will be issued. */
+  private flushQueue(
+    which: "next-request" | "next-stop",
+  ): Promise<InputMessage[]> {
+    const queue =
+      which === "next-request"
+        ? this.state.nextRequestQueue
+        : this.state.nextStopQueue;
+    const entries = [...queue];
+    this.update(
+      {
+        type:
+          which === "next-request"
+            ? "drain-next-request-queue"
+            : "drain-next-stop-queue",
+      },
+      { silent: true },
+    );
+    return this.resolveQueued(entries);
+  }
+
+  /** Resolve queued entries in order. An entry whose resolution throws is
+   * dropped with a visible error rather than wedging the turn loop. */
+  private async resolveQueued(
+    entries: ReadonlyArray<PendingMessage>,
+  ): Promise<InputMessage[]> {
+    const messages: InputMessage[] = [];
+    for (const entry of entries) {
+      try {
+        const resolved = await this.deps.resolve(entry.parts);
+        for (const text of resolved.reminders) {
+          this.update({ type: "activate-reminder", text }, { silent: true });
+        }
+        messages.push(...resolved.messages);
+      } catch (error) {
+        this.context.logger.error(
+          `Failed to resolve queued message: ${(error as Error).message}`,
+        );
+      }
+    }
+    return messages;
+  }
+
   /** What the agent sends next after a stop, if anything. Decided *before*
    * the before-request hooks run: a stop that ends the turn issues no
    * request, and consulting the context trackers there would drain their
    * updates into a message nothing is about to send. */
-  private nextContinuation(
-    stopReason: StopReason,
-  ): { messages: InputMessage[]; drainPending?: true } | undefined {
+  private nextContinuation(stopReason: StopReason): Continuation | undefined {
     if (stopReason === "max_tokens") {
       return {
+        type: "messages",
         messages: [
           {
             type: "system",
@@ -687,16 +742,11 @@ export class Agent {
 
     if (
       stopReason === "end_turn" &&
-      (this.state.pendingMessages.length ||
-        this.state.pendingNextMessages.length)
+      (this.state.nextRequestQueue.length || this.state.nextStopQueue.length)
     ) {
-      return {
-        messages: [
-          ...this.state.pendingMessages,
-          ...this.state.pendingNextMessages,
-        ],
-        drainPending: true,
-      };
+      // Resolution is deferred until we know the request will actually be
+      // issued — a compaction handoff must leave the queues intact.
+      return { type: "queues" };
     }
 
     const action = this.consultEndTurnSupervisors({
@@ -704,7 +754,10 @@ export class Agent {
       lastAssistantMessage: this.getLastAssistantMessage(),
     });
     if (action.type === "send-message") {
-      return { messages: [{ type: "system", text: action.text }] };
+      return {
+        type: "messages",
+        messages: [{ type: "system", text: action.text }],
+      };
     }
     return undefined;
   }
@@ -736,11 +789,20 @@ export class Agent {
       this.settle({ type: "completed" });
       return;
     }
-    if (continuation.drainPending) {
-      this.update({ type: "drain-pending-messages" }, { silent: true });
-      this.update({ type: "drain-pending-next-messages" }, { silent: true });
+    // Both queues are flushed in full, in insertion order: anything enqueued
+    // while this resolution is running lands in the next flush.
+    const messages =
+      continuation.type === "messages"
+        ? continuation.messages
+        : [
+            ...(await this.flushQueue("next-request")),
+            ...(await this.flushQueue("next-stop")),
+          ];
+    if (!messages.length) {
+      this.settle({ type: "completed" });
+      return;
     }
-    await this.submit(continuation.messages, { requestKind: "continuation" });
+    await this.submit(messages, { requestKind: "continuation" });
   }
 
   private createToolContext(): CreateToolContext {
@@ -920,14 +982,13 @@ export class Agent {
     // type, not just user-facing ones: subagent/compact threads need the
     // same text to auto-resubmit with (see maybeAutoResubmitAfterError).
     const pendingText = [
-      ...this.state.pendingMessages,
-      ...this.state.pendingNextMessages,
+      ...this.state.nextRequestQueue,
+      ...this.state.nextStopQueue,
     ]
-      .filter((m) => m.type === "user")
       .map((m) => m.text)
       .join("\n");
-    this.update({ type: "drain-pending-messages" });
-    this.update({ type: "drain-pending-next-messages" });
+    this.update({ type: "drain-next-request-queue" });
+    this.update({ type: "drain-next-stop-queue" });
 
     const messages = this.getProviderMessages();
     const lastMessage = messages[messages.length - 1];
@@ -1059,15 +1120,15 @@ export class Agent {
    * Nothing is broadcast: the caller gets its own return value. */
   private drainQueueOnAbort(): void {
     this.unsentOnAbort = [
-      ...this.state.pendingMessages.map(
-        (m): QueuedMessage => ({ when: "async", messages: [m] }),
+      ...this.state.nextRequestQueue.map(
+        (message): QueuedMessage => ({ when: "async", message }),
       ),
-      ...this.state.pendingNextMessages.map(
-        (m): QueuedMessage => ({ when: "next", messages: [m] }),
+      ...this.state.nextStopQueue.map(
+        (message): QueuedMessage => ({ when: "next", message }),
       ),
     ];
-    this.update({ type: "drain-pending-messages" });
-    this.update({ type: "drain-pending-next-messages" });
+    this.update({ type: "drain-next-request-queue" });
+    this.update({ type: "drain-next-stop-queue" });
   }
 
   /** The submission currently in flight, settled at the moment the agent comes
@@ -1301,16 +1362,15 @@ export class Agent {
       }
     }
 
-    const pendingMessages = this.state.pendingMessages;
-    if (pendingMessages.length > 0) {
-      this.update({ type: "drain-pending-messages" }, { silent: true });
-    }
+    const queuedForThisRequest = this.state.nextRequestQueue.length
+      ? await this.flushQueue("next-request")
+      : [];
 
     const contentToSend: AgentInput[] = [...this.pendingInjections];
     this.pendingInjections = [];
 
-    if (pendingMessages.length > 0) {
-      const { content } = this.prepareUserContent(pendingMessages);
+    if (queuedForThisRequest.length > 0) {
+      const { content } = this.prepareUserContent(queuedForThisRequest);
       contentToSend.push(...toAgentInput(content));
       return contentToSend;
     }

@@ -101,14 +101,9 @@ export class CommandRegistry {
   }> {
     const additionalContent: ProviderMessageContent[] = [];
     const reminders = new Set<string>();
-    let processedText = text;
-
-    // Handle @async / @next specially - strip them from the beginning
-    if (processedText.trim().startsWith("@async")) {
-      processedText = processedText.replace(/^\s*@async\s*/, "");
-    } else if (processedText.trim().startsWith("@next")) {
-      processedText = processedText.replace(/^\s*@next\s*/, "");
-    }
+    // Delivery prefixes (@compact / @async / @next) are stripped by
+    // `parseSubmission` in core before the text ever reaches here.
+    const processedText = text;
 
     // Find all command matches in the text
     for (const command of this.commands.values()) {

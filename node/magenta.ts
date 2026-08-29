@@ -1,12 +1,15 @@
 import * as os from "node:os";
 import type { SandboxAskCallback } from "@anthropic-ai/sandbox-runtime";
-import type { InputMessage, NativeMessageIdx, ThreadId } from "@magenta/core";
 import {
+  type InputMessage,
   isThreadId,
+  type NativeMessageIdx,
+  parseSubmission,
   probeAndSaveClipboardImage,
   readArchivedThreadLog,
   readThreadMeta,
   renderThreadLogToMarkdown,
+  type ThreadId,
   threadConversationLogPath,
 } from "@magenta/core";
 import {
@@ -254,6 +257,7 @@ export class Magenta {
 
     this.chat = new Chat({
       dispatch: this.dispatch,
+      commandRegistry: this.commandRegistry,
       getDisplayWidth: () => {
         if (this.sidebar.state.state === "visible") {
           return this.sidebar.state.displayWidth;
@@ -1621,14 +1625,12 @@ ${lines.join("\n")}
    */
   private async preprocessAndSend(text: string): Promise<void> {
     const thread = this.chat.getActiveThread();
-
-    // @compact: tell the thread to start compaction
-    if (text.trim().startsWith("@compact")) {
-      const rawNextPrompt = text.replace(/^\s*@compact\s*/, "").trim();
+    const intent = parseSubmission(text);
+    if (intent.type === "compact") {
       // Reminders collected here are intentionally dropped: compaction clears
       // activeReminders, so activating them on this thread would have no effect.
-      const nextMessages = rawNextPrompt
-        ? (await this.processCommands(rawNextPrompt, thread)).messages
+      const nextMessages = intent.nextPrompt
+        ? (await this.processCommands(intent.nextPrompt.text, thread)).messages
         : undefined;
       const nextPrompt = nextMessages?.map((m) => m.text).join("\n");
       this.dispatch({
@@ -1641,37 +1643,16 @@ ${lines.join("\n")}
       });
       return;
     }
-
-    // @async / @next: strip prefix and set queue flag.
-    // @async injects into the current turn at the earliest opportunity;
-    // @next waits until the agent next stops.
-    // Note: @async @compact is not supported. Use @compact @async instead.
-    const isAsync = text.trim().startsWith("@async");
-    const isNext = text.trim().startsWith("@next");
-    const queue = isAsync ? "async" : isNext ? "next" : undefined;
-    const cleanText = isAsync
-      ? text.replace(/^\s*@async\s*/, "")
-      : isNext
-        ? text.replace(/^\s*@next\s*/, "")
-        : text;
-
-    const { messages, reminders } = await this.processCommands(
-      cleanText,
-      thread,
-    );
-
     this.dispatch({
       type: "thread-msg",
       id: thread.id,
       msg: {
-        type: "send-message",
-        messages,
-        ...(queue ? { queue } : {}),
-        ...(reminders.length ? { reminders } : {}),
+        type: "submit-message",
+        message: intent.message,
+        delivery: intent.delivery,
       },
     });
   }
-
   /** Run CommandRegistry on user text, returning processed InputMessages. */
   private async processCommands(
     text: string,

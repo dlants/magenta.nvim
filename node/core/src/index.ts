@@ -242,6 +242,16 @@ export {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
+export {
+  type Delivery,
+  type PendingMessage,
+  type PendingMessagePart,
+  parseSubmission,
+  pendingMessage,
+  type ResolveParts,
+  resolvePartsAsText,
+  type SubmissionIntent,
+} from "./submission/index.ts";
 export { Thread, type ThreadCallbacks } from "./thread.ts";
 export type {
   AgentHooks,

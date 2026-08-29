@@ -15,6 +15,7 @@ import {
   ContextManager,
   cloneContextManager,
   composeSupervisors,
+  type Delivery,
   extractPartialReplies,
   FileContextSupervisor,
   GitSupervisor,
@@ -23,6 +24,8 @@ import {
   loadAgents,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
+  type PendingMessage,
+  type PendingMessagePart,
   Thread,
   type ThreadCallbacks,
   type ThreadId,
@@ -65,6 +68,7 @@ import type {
 } from "../utils/files.ts";
 import { displayPath } from "../utils/files.ts";
 import type { Chat } from "./chat.ts";
+import type { CommandRegistry } from "./commands/registry.ts";
 import { notifyUser } from "./notify.ts";
 
 /** Trailing-edge coalescing window for core updates. The core no longer
@@ -87,6 +91,12 @@ export type Msg =
       messages: InputMessage[];
       queue?: "async" | "next";
       reminders?: string[];
+    }
+  | {
+      /** User text, parsed but not resolved: its commands run at delivery. */
+      type: "submit-message";
+      message: PendingMessage;
+      delivery: Delivery;
     }
   | {
       type: "abort";
@@ -329,6 +339,7 @@ export class NvimThread {
       initialGitState?: GitState | undefined;
       subagentConfig?: SubagentConfig;
       systemInfo: SystemInfo;
+      commandRegistry: CommandRegistry;
     },
     /** Built by the caller — the fork path, which needs to clone the source's
      * history and its tracked-file state before the wrapper exists. */
@@ -588,7 +599,37 @@ export class NvimThread {
   /** The callbacks the core needs. Everything else it used to broadcast is
    * now the return value of the `send`/`abort` this thread itself issued. */
   private coreCallbacks(): ThreadCallbacks {
-    return { onUpdate: () => this.onCoreUpdate() };
+    return {
+      onUpdate: () => this.onCoreUpdate(),
+      resolve: (parts) => this.resolveParts(parts),
+    };
+  }
+
+  /** The nvim half of a submission: expand commands (`@file:`, `@diff`, ...)
+   * against the world as it is *now*. Called at delivery, so a message queued
+   * behind a long turn sees the current file contents, not the ones it was
+   * typed against. */
+  private async resolveParts(
+    parts: ReadonlyArray<PendingMessagePart>,
+  ): Promise<{ messages: InputMessage[]; reminders: string[] }> {
+    const { processedText, additionalContent, reminders } =
+      await this.context.commandRegistry.processMessage(
+        parts.map((p) => p.text).join(""),
+        {
+          nvim: this.context.nvim,
+          cwd: this.context.environment.cwd,
+          homeDir: this.context.environment.homeDir,
+          contextManager: this.contextManager,
+          options: this.context.options,
+        },
+      );
+    const messages: InputMessage[] = [{ type: "user", text: processedText }];
+    for (const content of additionalContent) {
+      if (content.type === "text") {
+        messages.push({ type: "user", text: content.text });
+      }
+    }
+    return { messages, reminders };
   }
 
   /** Turn a finished submission into the effects that used to be broadcast
@@ -791,6 +832,7 @@ export class NvimThread {
         chat,
         mcpToolManager,
         profile,
+        commandRegistry: sourceThread.context.commandRegistry,
         nvim,
         cwd,
         homeDir,
@@ -914,6 +956,19 @@ export class NvimThread {
           );
         return;
 
+      case "submit-message": {
+        if (msg.delivery === "now" && this.core.phase.type !== "idle") {
+          // The send is about to preempt the turn in flight; pending sandbox
+          // approvals belong to that turn.
+          this.sandboxViolationHandler?.rejectAll();
+        }
+        this.scrollAfterMessageCount = this.core.getProviderMessages().length;
+        this.core.submit(msg.message, msg.delivery).then(
+          (result) => this.handleSendResult(result),
+          (e: Error) => this.context.nvim.logger.error(e),
+        );
+        return;
+      }
       case "start-compaction":
         this.core
           .compact(msg.nextPrompt)
@@ -1101,8 +1156,8 @@ export class NvimThread {
 
       case "tool-progress":
         if (
-          this.core.state.pendingMessages.length === 0 &&
-          this.core.state.pendingNextMessages.length === 0
+          this.core.state.nextRequestQueue.length === 0 &&
+          this.core.state.nextStopQueue.length === 0
         ) {
           this.state.pendingMessagesExpanded = {};
         }
@@ -1166,11 +1221,7 @@ export class NvimThread {
       this.core.state.threadType === "root" ||
       this.core.state.threadType === "docker_root";
     if (!isUserFacing) return;
-    const text = unsent
-      .flatMap((q) => q.messages)
-      .filter((m) => m.type === "user")
-      .map((m) => m.text)
-      .join("\n");
+    const text = unsent.map((q) => q.message.text).join("\n");
     if (!text) return;
     this.context.dispatch({
       type: "sidebar-msg",

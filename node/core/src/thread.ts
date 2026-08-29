@@ -23,6 +23,13 @@ import type {
   Runner,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
+import {
+  type Delivery,
+  type PendingMessage,
+  pendingMessage,
+  type ResolveParts,
+  resolvePartsAsText,
+} from "./submission/index.ts";
 import type {
   AgentHooks,
   OnUpdate,
@@ -74,6 +81,10 @@ export type ThreadInit =
  * thread has for saying "something visible moved". */
 export type ThreadCallbacks = {
   onUpdate: OnUpdate;
+  /** Turns a submission's parts into content, at delivery. Defaults to a
+   * plain-text passthrough for threads whose content is composed
+   * programmatically (subagents, scripts, compaction). */
+  resolve?: ResolveParts;
 };
 
 export class Thread {
@@ -124,8 +135,8 @@ export class Thread {
       threadType: context.threadType,
       systemPrompt: context.systemPrompt,
       systemInfo: context.systemInfo,
-      pendingMessages: [],
-      pendingNextMessages: [],
+      nextRequestQueue: [],
+      nextStopQueue: [],
       mode: { type: "normal" },
       edlRegisters:
         init.type === "clone"
@@ -291,6 +302,7 @@ export class Thread {
       structuredToolResults: this.structuredToolResults,
       getHooks: () => this.hooks,
       onUpdate: () => this.handleUpdate(),
+      resolve: this.callbacks.resolve ?? resolvePartsAsText,
       runnerInit,
     });
   }
@@ -391,6 +403,42 @@ export class Thread {
    * continue-prompt, a compaction handoff — do not resolve it; the promise
    * spans the whole thing, including the turn that runs after a compaction.
    */
+  /** The entry point for user text: an unresolved submission plus when it
+   * should be delivered. Its parts are resolved here if it goes out now, or
+   * at flush time if it is queued — never at parse time. */
+  async submit(
+    message: PendingMessage,
+    delivery: Delivery = "now",
+  ): Promise<ThreadSendResult> {
+    if (delivery !== "now" && this.agent.isBusy) {
+      this.enqueue([message], delivery);
+      return { type: "queued" };
+    }
+    const { messages, reminders } = await this.resolve(message.parts);
+    for (const text of reminders) {
+      this.update({ type: "activate-reminder", text });
+    }
+    return this.send(messages);
+  }
+
+  private get resolve(): ResolveParts {
+    return this.callbacks.resolve ?? resolvePartsAsText;
+  }
+
+  private enqueue(
+    messages: PendingMessage[],
+    delivery: "async" | "next",
+  ): void {
+    this.update(
+      {
+        type:
+          delivery === "async" ? "enqueue-next-request" : "enqueue-next-stop",
+        messages,
+      },
+      { silent: true },
+    );
+  }
+
   async send(
     messages: InputMessage[],
     { queue }: SendOptions = {},
@@ -403,15 +451,9 @@ export class Thread {
 
     if (this.agent.isBusy) {
       if (queue === "async" || queue === "next") {
-        this.update(
-          {
-            type:
-              queue === "async"
-                ? "push-pending-messages"
-                : "push-pending-next-messages",
-            messages,
-          },
-          { silent: true },
+        this.enqueue(
+          messages.map((m) => pendingMessage(m.text)),
+          queue,
         );
         return { type: "queued" };
       }

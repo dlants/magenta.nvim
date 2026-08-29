@@ -500,16 +500,16 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     thread,
     dispatch,
   );
-  const pendingCount = thread.core.state.pendingMessages.length;
+  const pendingCount = thread.core.state.nextRequestQueue.length;
   const pendingMessagesView =
     pendingCount > 0
-      ? d`\n${thread.core.state.pendingMessages.map((m, index) =>
+      ? d`\n${thread.core.state.nextRequestQueue.map((m, index) =>
           renderPendingMessage(m.text, index, thread, dispatch),
         )}`
       : d``;
   const pendingNextMessagesView =
-    thread.core.state.pendingNextMessages.length > 0
-      ? d`\n${thread.core.state.pendingNextMessages.map((m, index) =>
+    thread.core.state.nextStopQueue.length > 0
+      ? d`\n${thread.core.state.nextStopQueue.map((m, index) =>
           renderPendingMessage(
             m.text,
             pendingCount + index,

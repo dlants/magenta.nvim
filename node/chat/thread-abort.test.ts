@@ -440,7 +440,7 @@ it("appends pending messages to input buffer on abort", async () => {
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.state.pendingMessages).toHaveLength(1);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(1);
 
     // Type some in-progress text into the input buffer
     await driver.inputMagentaText("In progress typing");
@@ -470,7 +470,7 @@ it("appends pending messages to input buffer on abort", async () => {
     });
 
     // Queue must be empty after abort
-    expect(thread.core.state.pendingMessages).toHaveLength(0);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(0);
   });
 });
 
@@ -488,7 +488,7 @@ it("recovers pending messages into empty input buffer on abort", async () => {
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.state.pendingMessages).toHaveLength(1);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(1);
 
     // Do not type anything into the input buffer; abort with an empty buffer
     await driver.abort();
@@ -513,7 +513,7 @@ it("recovers pending messages into empty input buffer on abort", async () => {
       }
     });
 
-    expect(thread.core.state.pendingMessages).toHaveLength(0);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(0);
   });
 });
 

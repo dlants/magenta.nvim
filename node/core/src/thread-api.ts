@@ -1,10 +1,11 @@
-import type { ActiveToolEntry, InputMessage } from "./agent.ts";
+import type { ActiveToolEntry } from "./agent.ts";
 import type { OnToolApplied } from "./capabilities/context-tracker.ts";
 import type {
   RequestedTool,
   RetryStatus,
   StreamingBlock,
 } from "./providers/provider-types.ts";
+import type { PendingMessage } from "./submission/index.ts";
 import type {
   BeforeRequestPlan,
   EndTurnAction,
@@ -100,7 +101,8 @@ export type ThreadResult =
  * them as two labelled sections of one list. */
 export type QueuedMessage = {
   when: "async" | "next";
-  messages: InputMessage[];
+  /** unresolved: its commands run when (and if) it is finally delivered */
+  message: PendingMessage;
 };
 
 /** The `Agent` -> `Thread` questions. Each is answered by at most one hook,

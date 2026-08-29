@@ -217,7 +217,7 @@ it("folds pending messages into failed-submit on error", async () => {
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.state.pendingMessages).toHaveLength(1);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(1);
 
     const errorMessage = "Simulated error with pending messages";
     stream.respondWithError(new Error(errorMessage));
@@ -225,7 +225,7 @@ it("folds pending messages into failed-submit on error", async () => {
     await driver.assertInputBufferContains("Original message");
     await driver.assertInputBufferContains("Queued pending message");
 
-    expect(thread.core.state.pendingMessages).toHaveLength(0);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(0);
     expect(thread.core.state.failedSubmit?.userMessage).toContain(
       "Original message",
     );
@@ -248,7 +248,7 @@ it("recovers pending messages alone when error arrives after assistant content",
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.state.pendingMessages).toHaveLength(1);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(1);
 
     // Stream assistant content so the last message is an assistant message,
     // then error. The original user message must not be folded back in, but
@@ -259,7 +259,7 @@ it("recovers pending messages alone when error arrives after assistant content",
 
     await driver.assertInputBufferContains("Queued pending message");
 
-    expect(thread.core.state.pendingMessages).toHaveLength(0);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(0);
     expect(thread.core.state.failedSubmit?.userMessage).toBe(
       "Queued pending message",
     );
@@ -281,7 +281,7 @@ it("renders a long pending message trimmed with expand/collapse toggle", async (
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.state.pendingMessages).toHaveLength(1);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(1);
 
     await driver.assertDisplayBufferContains("✉️ queued:");
     await driver.assertDisplayBufferContains("word1");
@@ -294,7 +294,7 @@ it("renders a long pending message trimmed with expand/collapse toggle", async (
     await driver.assertDisplayBufferContains("word60");
     await driver.assertDisplayBufferContains("[collapse]");
     // View-only toggle must not mutate the queue.
-    expect(thread.core.state.pendingMessages).toHaveLength(1);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(1);
 
     await driver.triggerDisplayBufferKeyOnContent("[collapse]", "=");
     await driver.assertDisplayBufferContains("[expand]");
@@ -317,7 +317,7 @@ it("clears pending expand state when the queue drains", async () => {
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.state.pendingMessages).toHaveLength(1);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(1);
 
     // Expand the queued message so index 0 is marked expanded.
     await driver.triggerDisplayBufferKeyOnContent("[expand]", "=");
@@ -333,7 +333,7 @@ it("clears pending expand state when the queue drains", async () => {
 
     const request2 = await driver.mockAnthropic.awaitPendingStream();
     await pollUntil(() => {
-      if (thread.core.state.pendingMessages.length !== 0) {
+      if (thread.core.state.nextRequestQueue.length !== 0) {
         throw new Error("queue not drained yet");
       }
       // The clear rides the debounced re-render, not the drain itself.
@@ -348,7 +348,7 @@ it("clears pending expand state when the queue drains", async () => {
     await driver.inputMagentaText(`@async ${longText}`);
     await driver.send();
 
-    expect(thread.core.state.pendingMessages).toHaveLength(1);
+    expect(thread.core.state.nextRequestQueue).toHaveLength(1);
     // The newly-queued message must render collapsed by default (state was
     // cleared on drain, so index 0 is not stale-expanded).
     await driver.assertDisplayBufferContains("[expand]");
@@ -1638,8 +1638,8 @@ it("handles @async messages and sends them on end turn", async () => {
 
     // Verify message is queued
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.state.pendingMessages).toHaveLength(1);
-    expect(thread.core.state.pendingMessages[0].text).toBe(
+    expect(thread.core.state.nextRequestQueue).toHaveLength(1);
+    expect(thread.core.state.nextRequestQueue[0].text).toBe(
       "Also tell me about JavaScript",
     );
 
@@ -1669,11 +1669,9 @@ it("queues @next messages until the agent next stops", async () => {
     await driver.send();
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.state.pendingNextMessages).toHaveLength(1);
-    expect(thread.core.state.pendingNextMessages[0].text).toBe(
-      "Then summarize it",
-    );
-    expect(thread.core.state.pendingMessages).toHaveLength(0);
+    expect(thread.core.state.nextStopQueue).toHaveLength(1);
+    expect(thread.core.state.nextStopQueue[0].text).toBe("Then summarize it");
+    expect(thread.core.state.nextRequestQueue).toHaveLength(0);
     await driver.assertDisplayBufferContains("⏭️ queued (next stop):");
 
     // Runner uses a tool - the turn continues mid-stream after it completes.
@@ -1706,7 +1704,7 @@ it("queues @next messages until the agent next stops", async () => {
             ),
       );
     expect(hasNextText(request2)).toBe(false);
-    expect(thread.core.state.pendingNextMessages).toHaveLength(1);
+    expect(thread.core.state.nextStopQueue).toHaveLength(1);
 
     // Now the agent fully stops.
     request2.respond({
@@ -1718,7 +1716,7 @@ it("queues @next messages until the agent next stops", async () => {
     // The @next message is now sent as a new turn.
     const request3 = await driver.mockAnthropic.awaitPendingStream();
     expect(hasNextText(request3)).toBe(true);
-    expect(thread.core.state.pendingNextMessages).toHaveLength(0);
+    expect(thread.core.state.nextStopQueue).toHaveLength(0);
   });
 });
 

@@ -59,6 +59,7 @@ import type {
 } from "../utils/files.ts";
 import { shortenPath } from "../utils/files.ts";
 import { formatTokenCount } from "../utils/tokens.ts";
+import type { CommandRegistry } from "./commands/registry.ts";
 import type { SandboxRoot } from "./thread.ts";
 import { NvimThread, type RootNvimThread } from "./thread.ts";
 import { DockerSupervisor } from "./thread-supervisor.ts";
@@ -208,6 +209,8 @@ export class Chat implements ThreadManager {
       sandbox: Sandbox;
       removeThreadBuffers?: (ids: ThreadId[]) => void;
       removeArchivedThreadBuffers: (ids: ThreadId[]) => void;
+      /** Expands `@file:`, `@diff`, ... when a submission is delivered. */
+      commandRegistry: CommandRegistry;
     },
   ) {
     this.threadWrappers = {};

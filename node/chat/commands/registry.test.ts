@@ -133,27 +133,12 @@ describe("CommandRegistry", () => {
     expect(context.contextManager.addFileContext).toHaveBeenCalled();
   });
 
-  it("should handle @async by stripping it", async () => {
+  it("leaves delivery prefixes alone; parseSubmission strips them", async () => {
     const registry = new CommandRegistry();
     const context = createMockContext();
 
-    const result = await registry.processMessage(
-      "@async do something",
-      context,
-    );
+    const result = await registry.processMessage("do something", context);
 
-    // @async should be stripped from the beginning
-    expect(result.processedText).toBe("do something");
-    expect(result.additionalContent).toEqual([]);
-  });
-
-  it("should handle @next by stripping it", async () => {
-    const registry = new CommandRegistry();
-    const context = createMockContext();
-
-    const result = await registry.processMessage("@next do something", context);
-
-    // @next should be stripped from the beginning
     expect(result.processedText).toBe("do something");
     expect(result.additionalContent).toEqual([]);
   });

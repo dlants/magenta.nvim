@@ -26,6 +26,7 @@ import type {
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
+import { pendingMessage, type ResolveParts } from "./submission/index.ts";
 import { Thread } from "./thread.ts";
 import type {
   QueuedMessage,
@@ -96,6 +97,7 @@ function awaitNextStream(
 function createAgentWithMock(
   overrides?: Partial<AgentContext>,
   threadId: ThreadId = "test-thread" as ThreadId,
+  resolve?: ResolveParts,
 ): {
   core: Thread;
   mockClient: MockAnthropicClient;
@@ -153,7 +155,7 @@ function createAgentWithMock(
     core: new Thread(
       threadId,
       context,
-      { onUpdate: () => {} },
+      { onUpdate: () => {}, ...(resolve ? { resolve } : {}) },
       { type: "fresh" },
       {
         baseDir: TEST_ARCHIVE_DIR,
@@ -395,7 +397,7 @@ describe("Thread.send result", () => {
         queue: "async",
       }),
     ).toEqual({ type: "queued" });
-    expect(core.state.pendingMessages).toHaveLength(1);
+    expect(core.state.nextRequestQueue).toHaveLength(1);
     stream.streamText("hi");
     stream.finishResponse("end_turn");
     const second = await awaitNextStream(mockClient, stream);
@@ -783,13 +785,104 @@ describe("Agent.abort appends user abort message", () => {
   });
 });
 
+describe("deferred submissions", () => {
+  /** The text of every user message in the log, flattened. */
+  const userTexts = (core: Thread): string[] =>
+    core
+      .getProviderMessages()
+      .filter((m) => m.role === "user")
+      .flatMap((m) =>
+        typeof m.content === "string"
+          ? [m.content]
+          : m.content
+              .filter((c) => c.type === "text")
+              .map((c) => (c as { text: string }).text),
+      );
+
+  it("resolves a queued message at delivery, not when it was queued", async () => {
+    let fileContents = "before";
+    const calls: string[] = [];
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("deferred-resolve"),
+      (parts) => {
+        calls.push(fileContents);
+        return Promise.resolve({
+          messages: parts.map((p) => ({
+            type: "user" as const,
+            text: `${p.text} [${fileContents}]`,
+          })),
+          reminders: [],
+        });
+      },
+    );
+    void core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    expect(
+      await core.submit(pendingMessage("look at the file"), "next"),
+    ).toEqual({ type: "queued" });
+    // Nothing was resolved at queue time.
+    expect(calls).toEqual([]);
+    fileContents = "after";
+    stream.streamText("working");
+    stream.finishResponse("end_turn");
+    const second = await awaitNextStream(mockClient, stream);
+    expect(calls).toEqual(["after"]);
+    expect(userTexts(core)).toContain("look at the file [after]");
+    second.finishResponse("end_turn");
+  });
+
+  it("flushes the whole queue, in order, at one delivery point", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    void core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    for (const text of ["one", "two", "three"]) {
+      await core.submit(pendingMessage(text), "async");
+    }
+    expect(core.state.nextRequestQueue).toHaveLength(3);
+    stream.streamText("working");
+    stream.finishResponse("end_turn");
+    const second = await awaitNextStream(mockClient, stream);
+    expect(core.state.nextRequestQueue).toEqual([]);
+    const texts = userTexts(core);
+    expect(texts.slice(-3)).toEqual(["one", "two", "three"]);
+    second.finishResponse("end_turn");
+  });
+
+  it("drops an entry whose resolution throws, and stays usable", async () => {
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("deferred-throw"),
+      (parts) =>
+        parts.some((p) => p.text === "bad")
+          ? Promise.reject(new Error("resolution failed"))
+          : Promise.resolve({
+              messages: parts.map((p) => ({
+                type: "user" as const,
+                text: p.text,
+              })),
+              reminders: [],
+            }),
+    );
+    void core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    await core.submit(pendingMessage("bad"), "next");
+    await core.submit(pendingMessage("good"), "next");
+    stream.streamText("working");
+    stream.finishResponse("end_turn");
+    const second = await awaitNextStream(mockClient, stream);
+    const texts = userTexts(core);
+    expect(texts).not.toContain("bad");
+    expect(texts).toContain("good");
+    second.finishResponse("end_turn");
+    // The thread is not wedged: it still accepts and queues further work.
+    await core.submit(pendingMessage("later"), "next");
+  });
+});
+
 describe("Thread.abort returns the unsent queue", () => {
   const queuedText = (unsent: ReadonlyArray<QueuedMessage>) =>
-    unsent
-      .flatMap((q) => q.messages)
-      .filter((m) => m.type === "user")
-      .map((m) => m.text)
-      .join("\n");
+    unsent.map((q) => q.message.text).join("\n");
 
   it("drains the queue and hands it back to whoever aborted", async () => {
     const { core, mockClient } = createAgentWithMock();
@@ -797,14 +890,11 @@ describe("Thread.abort returns the unsent queue", () => {
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
     core.update({
-      type: "push-pending-messages",
-      messages: [
-        { type: "user", text: "queued one" },
-        { type: "user", text: "queued two" },
-      ],
+      type: "enqueue-next-request",
+      messages: [pendingMessage("queued one"), pendingMessage("queued two")],
     });
     const { unsent } = await core.abort();
-    expect(core.state.pendingMessages).toEqual([]);
+    expect(core.state.nextRequestQueue).toEqual([]);
     expect(queuedText(unsent)).toBe("queued one\nqueued two");
   });
 
@@ -815,25 +905,22 @@ describe("Thread.abort returns the unsent queue", () => {
     stream.streamText("partial response");
     const { unsent } = await core.abort();
     expect(unsent).toEqual([]);
-    expect(core.state.pendingMessages).toEqual([]);
+    expect(core.state.nextRequestQueue).toEqual([]);
   });
 
-  it("returns system messages too; filtering is the consumer's policy", async () => {
+  it("returns every queued entry; filtering is the consumer's policy", async () => {
     const { core, mockClient } = createAgentWithMock();
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
     core.update({
-      type: "push-pending-messages",
-      messages: [
-        { type: "user", text: "queued user" },
-        { type: "system", text: "queued system" },
-      ],
+      type: "enqueue-next-request",
+      messages: [pendingMessage("queued user"), pendingMessage("queued other")],
     });
     const { unsent } = await core.abort();
-    expect(core.state.pendingMessages).toEqual([]);
-    expect(unsent.flatMap((q) => q.messages)).toHaveLength(2);
-    expect(queuedText(unsent)).toBe("queued user");
+    expect(core.state.nextRequestQueue).toEqual([]);
+    expect(unsent).toHaveLength(2);
+    expect(queuedText(unsent)).toBe("queued user\nqueued other");
   });
 
   it("reports the queue for a subagent thread as well", async () => {
@@ -844,12 +931,12 @@ describe("Thread.abort returns the unsent queue", () => {
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
     core.update({
-      type: "push-pending-messages",
-      messages: [{ type: "user", text: "queued" }],
+      type: "enqueue-next-request",
+      messages: [pendingMessage("queued")],
     });
     const { unsent } = await core.abort();
     expect(queuedText(unsent)).toBe("queued");
-    expect(core.state.pendingMessages).toEqual([]);
+    expect(core.state.nextRequestQueue).toEqual([]);
   });
 });
 describe("SubagentSupervisor yield tag detection", () => {
@@ -2034,7 +2121,7 @@ describe("Agent non-retryable error resubmit flow", () => {
     void core.send([{ type: "user", text: "also check the logs" }], {
       queue: "async",
     });
-    expect(core.state.pendingMessages).toHaveLength(1);
+    expect(core.state.nextRequestQueue).toHaveLength(1);
 
     stream.respondWithError(new Error("provider failure"));
 
@@ -2046,7 +2133,7 @@ describe("Agent non-retryable error resubmit flow", () => {
     expect(core.state.failedSubmit?.userMessage).toBe(
       "find the bug\nalso check the logs",
     );
-    expect(core.state.pendingMessages).toEqual([]);
+    expect(core.state.nextRequestQueue).toEqual([]);
   });
 
   it("after non-retryable error, preSubmitNativeIdx remains set and orphan user message remains in history", async () => {
