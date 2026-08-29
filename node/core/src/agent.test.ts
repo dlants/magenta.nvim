@@ -498,6 +498,39 @@ describe("runSubmission across a compaction handoff", () => {
     }
   });
 
+  it("falls back to the default continuation when the prompt resolves to nothing", async () => {
+    const threadId = uniqueThreadId("send-compaction-empty-prompt");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      // The owner resolves the `@compact` prompt at handoff time; a prompt made
+      // entirely of commands can expand to nothing, and an empty user turn is
+      // not something to send.
+      compactOnce(core, "   ");
+      const oldAgent = core.agent;
+      const result = runSubmission({
+        thread: core,
+        compactor: stubCompactor(),
+        start: () => core.send([{ type: "user", text: "hello" }]),
+      });
+      const stream = await mockClient.awaitStream();
+      stream.streamText("done");
+      stream.finishResponse("end_turn");
+      const contStream = await pollUntil(() => {
+        if (core.agent === oldAgent) throw new Error("waiting for swap");
+        return awaitNextStream(mockClient, stream);
+      });
+      expect(JSON.stringify(contStream.messages)).toContain(
+        "Please continue from where you left off.",
+      );
+      contStream.streamText("resumed");
+      contStream.finishResponse("end_turn");
+      expect(await result).toEqual({ type: "completed" });
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
+
   it("stays pending across two consecutive handoffs, reseeding each time", async () => {
     const threadId = uniqueThreadId("send-compaction-twice");
     const { core, mockClient } = createAgentWithMock(undefined, threadId);

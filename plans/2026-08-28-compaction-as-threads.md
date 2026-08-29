@@ -433,3 +433,9 @@ What was left to do, and what was already gone:
 - `start-compaction` was the one live remnant. It is gone: `submit-message` now carries the whole `SubmissionIntent` (`{ type: "submit-message"; intent }`), and `NvimThread` branches on `intent.type` — a `compact` intent opens `runSubmission` with the suspension already in hand, a `send` intent goes to `core.submit`.
 - `Magenta.processCommands` went with it. It duplicated `NvimThread.resolveParts`, and existed only to expand the `@compact` continuation prompt eagerly in `magenta.ts`. That expansion is now `NvimThread.resolveCompactPrompt`, which runs at the moment the handoff opens and reuses the thread's own resolver — so `@compact summarize @file:x` expands against the world as it is at the handoff, and `preprocessAndSend` shrinks to parse-and-dispatch.
 - `preprocessAndSend` keeps its `Promise<void>` return and its `await` at the call site. Making it synchronous broke `thread-abort.test.ts` and `reply-tool.test.ts`: `driver.send()` relies on the microtask the `await` yields for the dispatched submission's async work (resolving parts, aborting the in-flight request) to get started before `send` returns.
+
+Follow-up from code review (same stage):
+
+- The "resolved prompt is empty" guard moved out of `NvimThread.resolveCompactPrompt` and into `runSubmission`, which already owned the default continuation text (`reason.nextPrompt?.trim() || "Please continue from where you left off."`). The nvim-side branch was untestable — `CommandRegistry` returns the input text verbatim and `parseSubmission` never yields an empty prompt, so no realistic `@compact ...` input could reach it, while any `ResolveParts` implementation can. Keeping the decision in one place makes it reachable from a core test.
+
+Additional test (`node/core/src/agent.test.ts`): a compact suspension whose `nextPrompt` resolves to whitespace opens the continuation turn with the default text rather than an empty user turn.

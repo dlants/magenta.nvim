@@ -643,8 +643,7 @@ export class NvimThread {
   ): Promise<string | undefined> {
     if (!nextPrompt) return undefined;
     const { messages } = await this.resolveParts(nextPrompt.parts);
-    const text = messages.map((m) => m.text).join("\n");
-    return text || undefined;
+    return messages.map((m) => m.text).join("\n");
   }
 
   /** Turn a finished submission into the effects that used to be broadcast

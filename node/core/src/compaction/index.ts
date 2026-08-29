@@ -90,7 +90,9 @@ export async function runSubmission(args: {
     result = await thread.send([
       {
         type: "user",
-        text: reason.nextPrompt ?? "Please continue from where you left off.",
+        text:
+          reason.nextPrompt?.trim() ||
+          "Please continue from where you left off.",
       },
     ]);
   }
