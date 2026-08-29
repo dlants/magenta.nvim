@@ -82,12 +82,19 @@ const shortErrorMessage = (error: Error): string => {
  * Helper function to render the status message
  * Composes agent status with thread mode for complete display
  */
+/** The compaction in flight, plus the way into the chunk thread doing the
+ * work — the status line is a navigation target, not just a spinner. */
+export type RunningCompaction = {
+  run: Extract<CompactionRunState, { type: "running" }>;
+  onSelectChunk: (threadId: ThreadId) => void;
+};
+
 export const renderStatus = (
   agentPhase: AgentPhase,
   mode: ThreadMode,
   latestUsage: Usage | undefined,
   lastTurnResult: TurnResult | undefined,
-  compaction: Extract<CompactionRunState, { type: "running" }> | undefined,
+  compaction: RunningCompaction | undefined,
 ): VDOMNode => {
   const yieldedResponse = mode.type === "yielded" ? mode.response : undefined;
   // First check mode for thread-specific states
@@ -98,7 +105,13 @@ export const renderStatus = (
     return d`↗️ yielded to parent: ${yieldedResponse}`;
   }
   if (compaction) {
-    return d`📦 Compacting thread... (chunk ${String(compaction.chunkIndex + 1)} / ${String(compaction.totalChunks)})`;
+    const { run, onSelectChunk } = compaction;
+    const line = d`📦 Compacting thread... (chunk ${String(run.chunkIndex + 1)} / ${String(run.totalChunks)})`;
+    const activeChunkThreadId = run.threadIds[run.threadIds.length - 1];
+    if (!activeChunkThreadId) return line;
+    return withBindings(line, {
+      "<CR>": () => onSelectChunk(activeChunkThreadId),
+    });
   }
 
   // Then render based on the phase the turn is passing through
@@ -306,6 +319,16 @@ function renderCompactionHistory(
     return d`${header}${chunkViews}${summaryView}`;
   })}`;
 }
+function runningCompaction(thread: NvimThread): RunningCompaction | undefined {
+  const run = thread.compactor?.current;
+  if (!run) return undefined;
+  return {
+    run,
+    onSelectChunk: (threadId) =>
+      thread.context.dispatch({ type: "select-thread-effect", id: threadId }),
+  };
+}
+
 /** One chunk thread, selectable — the transcript lives in that thread now. */
 function renderChunkThreadRow(
   thread: NvimThread,
@@ -475,7 +498,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     mode,
     latestUsage,
     thread.core.state.lastTurnResult,
-    thread.compactor?.current,
+    runningCompaction(thread),
   );
 
   const contextManagerView = shouldShowContextFiles(

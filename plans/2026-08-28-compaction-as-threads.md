@@ -399,6 +399,18 @@ Additional tests (`node/chat/thread-compact.test.ts`):
   - Pressing `<CR>` on a history row's chunk entry, or on the live status line, selects the corresponding compact thread; that thread's own view renders its edl tool calls.
   - A compact child thread in an error state renders like any other errored thread, and can be messaged from its own view.
 
+**Status: done** (see commit "Stage 4: Display and navigation").
+
+Deviations, decided while implementing:
+
+- Most of this stage's render work landed early, in stage 3: `renderCompactionHistory` already read `Compactor.runs`, already listed each run's chunk threads with `<CR>` to select, and the status line already read `compactor.current`. What remained was the live status line as a navigation target, plus the tests.
+- `renderStatus`'s compaction parameter became `RunningCompaction = { run; onSelectChunk }` so the status line can bind `<CR>` to the chunk thread currently doing the work (the last spawned id). The callback is built by `runningCompaction(thread)` at the call site, keeping `renderStatus` free of dispatch plumbing.
+- Nesting compact children under their parent, excluding them from the root list, and labelling them `compact i/n` needed no code: they are spawned with a `parentThreadId` (so `Chat.renderThreadOverview`'s root filter skips them and `buildChildrenMap` nests them) and stage 3's `label` sets the child's title, which is what the tree row renders.
+
+Tests: new file `node/chat/thread-compact-view.test.ts` (4 tests) — the live chunk counter appearing, opening the chunk thread with `<CR>` on it, and giving way to a history row when the run settles; expanding a history row to its chunk list and final summary, surviving a navigation away and back, opening the chunk thread from the row, and collapsing again; an errored chunk thread rendering its failure like any other thread and being messaged from its own view to completion; the overview showing the chunk thread only nested under its expanded parent (`  - compact 1/1`), never as a root row, and selectable from there.
+
+The docker/container tests (`container.test.ts`, `docker-environment.test.ts`, `docker-sync.test.ts`) fail in this environment independently of this change.
+
 ## Cleanup
 
 - Goal: dead code and dead state removed — `CompactionStep`/`CompactionRecord` from core, `compaction-controller.ts`, `CompactionManager.executeTools` (the duplicated tool loop), and the `start-compaction` thread message.
