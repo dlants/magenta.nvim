@@ -49,7 +49,10 @@ const assetCopies = [
     "node/core/src/tools/spawn-subagents-description.md",
     "dist/spawn-subagents-description.md",
   ],
-  ["node/core/src/compact-system-prompt.md", "dist/compact-system-prompt.md"],
+  [
+    "node/core/src/compaction/compact-system-prompt.md",
+    "dist/compact-system-prompt.md",
+  ],
   ["node/chat/logo.txt", "dist/logo.txt"],
 ];
 

@@ -16,11 +16,7 @@ import type { Thread } from "../thread.ts";
 import type { CompactionOutcome, Compactor } from "./index.ts";
 
 const COMPACT_PROMPT_TEMPLATE = readFileSync(
-  join(
-    dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "compact-system-prompt.md",
-  ),
+  join(dirname(fileURLToPath(import.meta.url)), "compact-system-prompt.md"),
   "utf-8",
 );
 
