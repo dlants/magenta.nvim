@@ -26,7 +26,12 @@ import type {
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
-import { pendingMessage, type ResolveParts } from "./submission/index.ts";
+import {
+  pendingMessage,
+  type ResolveParts,
+  renderPending,
+  resolvePartsAsText,
+} from "./submission/index.ts";
 import { Thread } from "./thread.ts";
 import type {
   QueuedMessage,
@@ -155,7 +160,7 @@ function createAgentWithMock(
     core: new Thread(
       threadId,
       context,
-      { onUpdate: () => {}, ...(resolve ? { resolve } : {}) },
+      { onUpdate: () => {}, resolve: resolve ?? resolvePartsAsText },
       { type: "fresh" },
       {
         baseDir: TEST_ARCHIVE_DIR,
@@ -878,11 +883,133 @@ describe("deferred submissions", () => {
     // The thread is not wedged: it still accepts and queues further work.
     await core.submit(pendingMessage("later"), "next");
   });
+
+  it("sends a deferred submission immediately when the agent is idle", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    // Nothing is in flight, so there is no delivery point to wait for.
+    void core.submit(pendingMessage("do it now"), "next");
+    const stream = await mockClient.awaitStream();
+    expect(core.state.nextStopQueue).toEqual([]);
+    expect(userTexts(core)).toContain("do it now");
+    stream.finishResponse("end_turn");
+  });
+
+  it("activates the reminders a queued entry resolves to", async () => {
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("deferred-reminder"),
+      (parts) =>
+        Promise.resolve({
+          messages: parts.map((p) => ({ type: "user" as const, text: p.text })),
+          reminders: ["remember the file"],
+        }),
+    );
+    void core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    await core.submit(pendingMessage("queued"), "next");
+    expect(core.state.activeReminders.has("remember the file")).toBe(false);
+    stream.streamText("working");
+    stream.finishResponse("end_turn");
+    const second = await awaitNextStream(mockClient, stream);
+    expect(core.state.activeReminders.has("remember the file")).toBe(true);
+    second.finishResponse("end_turn");
+  });
+
+  it("comes to rest when every queued entry fails to resolve", async () => {
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("deferred-all-fail"),
+      () => Promise.reject(new Error("resolution failed")),
+    );
+    const sent = core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    await core.submit(pendingMessage("bad"), "next");
+    const streamsBefore = mockClient.streams.length;
+    stream.finishResponse("end_turn");
+    // The queue emptied into nothing, so there is no request to issue.
+    expect(await sent).toEqual({ type: "completed" });
+    expect(mockClient.streams.length).toBe(streamsBefore);
+    expect(core.state.nextStopQueue).toEqual([]);
+  });
+
+  it("leaves the queues intact and unresolved across a compaction handoff", async () => {
+    const threadId = uniqueThreadId("deferred-compact");
+    const calls: string[] = [];
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      threadId,
+      (parts) => {
+        calls.push(parts.map((p) => p.text).join(""));
+        return Promise.resolve({
+          messages: parts.map((p) => ({
+            type: "user" as const,
+            text: p.text,
+          })),
+          reminders: [],
+        });
+      },
+    );
+    try {
+      let compacted = false;
+      core.hooks = composeSupervisors(() => [
+        {
+          onBeforeRequest: (ctx) =>
+            Promise.resolve(
+              !compacted && ctx.kind !== "submission"
+                ? { type: "compact" as const, nextPrompt: undefined }
+                : { type: "none" as const },
+            ),
+        },
+      ]);
+      let queueAtHandoff = -1;
+      let callsAtHandoff = -1;
+      core.compact = () => {
+        compacted = true;
+        queueAtHandoff = core.state.nextStopQueue.length;
+        callsAtHandoff = calls.length;
+        return (
+          core as unknown as {
+            handleCompactComplete: (
+              summary: string,
+              nextPrompt: string | undefined,
+              steps: unknown[],
+            ) => Promise<void>;
+          }
+        )
+          .handleCompactComplete("SUMMARY TEXT", undefined, [{}])
+          .then(() => ({ type: "completed" as const }));
+      };
+
+      void core.send([{ type: "user", text: "start" }]);
+      const stream = await mockClient.awaitStream();
+      await core.submit(pendingMessage("queued"), "next");
+      stream.finishResponse("end_turn");
+
+      // The handoff issued no request, so the queue is neither drained nor
+      // resolved: its commands must run against the world as it is at
+      // delivery, on the far side of the swap.
+      const contStream = await awaitNextStream(mockClient, stream);
+      expect(queueAtHandoff).toBe(1);
+      expect(callsAtHandoff).toBe(0);
+
+      contStream.streamText("resumed");
+      contStream.finishResponse("end_turn");
+
+      const afterStream = await awaitNextStream(mockClient, contStream);
+      expect(calls).toEqual(["queued"]);
+      expect(core.state.nextStopQueue).toEqual([]);
+      expect(userTexts(core)).toContain("queued");
+      afterStream.finishResponse("end_turn");
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
 });
 
 describe("Thread.abort returns the unsent queue", () => {
   const queuedText = (unsent: ReadonlyArray<QueuedMessage>) =>
-    unsent.map((q) => q.message.text).join("\n");
+    unsent.map((q) => renderPending(q.message)).join("\n");
 
   it("drains the queue and hands it back to whoever aborted", async () => {
     const { core, mockClient } = createAgentWithMock();
@@ -2631,7 +2758,7 @@ describe("Agent conversation archive", () => {
         newId: childId,
         nativeMessageIdx,
         context,
-        callbacks: { onUpdate: () => {} },
+        callbacks: { onUpdate: () => {}, resolve: resolvePartsAsText },
       });
 
       void child.send([{ type: "user", text: "child turn" }]);
@@ -2702,7 +2829,7 @@ describe("Agent thread state", () => {
         newId: childId,
         nativeMessageIdx,
         context,
-        callbacks: { onUpdate: () => {} },
+        callbacks: { onUpdate: () => {}, resolve: resolvePartsAsText },
       });
 
       expect(child.state.edlRegisters.registers.get("r")).toBe("regval");

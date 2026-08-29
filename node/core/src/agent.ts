@@ -47,7 +47,11 @@ import {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
-import type { PendingMessage, ResolveParts } from "./submission/index.ts";
+import {
+  type PendingMessage,
+  type ResolveParts,
+  renderPending,
+} from "./submission/index.ts";
 import type {
   AgentHooks,
   OnUpdate,
@@ -199,6 +203,24 @@ export type AgentAction =
       type: "set-pre-submit-native-idx";
       idx: NativeMessageIdx | undefined;
     };
+
+/** A delivery that defers: which queue holds it, and the two actions that
+ * move it in and out. Kept in one table so the queue field and the drain
+ * action cannot be spelled differently at the two ends. */
+export const DEFERRED_QUEUES = {
+  async: {
+    field: "nextRequestQueue",
+    enqueue: "enqueue-next-request",
+    drain: "drain-next-request-queue",
+  },
+  next: {
+    field: "nextStopQueue",
+    enqueue: "enqueue-next-stop",
+    drain: "drain-next-stop-queue",
+  },
+} as const;
+
+export type DeferredDelivery = keyof typeof DEFERRED_QUEUES;
 
 export type ThreadState = {
   title: string | undefined;
@@ -681,23 +703,10 @@ export class Agent {
   /** What the agent sends next after a stop. `queues` is deliberately lazy:
    * resolving a queued message runs its effects, so it must not happen until
    * we know the request will be issued. */
-  private flushQueue(
-    which: "next-request" | "next-stop",
-  ): Promise<InputMessage[]> {
-    const queue =
-      which === "next-request"
-        ? this.state.nextRequestQueue
-        : this.state.nextStopQueue;
-    const entries = [...queue];
-    this.update(
-      {
-        type:
-          which === "next-request"
-            ? "drain-next-request-queue"
-            : "drain-next-stop-queue",
-      },
-      { silent: true },
-    );
+  private flushQueue(delivery: DeferredDelivery): Promise<InputMessage[]> {
+    const { field, drain } = DEFERRED_QUEUES[delivery];
+    const entries = [...this.state[field]];
+    this.update({ type: drain }, { silent: true });
     return this.resolveQueued(entries);
   }
 
@@ -716,7 +725,7 @@ export class Agent {
         messages.push(...resolved.messages);
       } catch (error) {
         this.context.logger.error(
-          `Failed to resolve queued message: ${(error as Error).message}`,
+          `Failed to resolve queued message: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -795,8 +804,8 @@ export class Agent {
       continuation.type === "messages"
         ? continuation.messages
         : [
-            ...(await this.flushQueue("next-request")),
-            ...(await this.flushQueue("next-stop")),
+            ...(await this.flushQueue("async")),
+            ...(await this.flushQueue("next")),
           ];
     if (!messages.length) {
       this.settle({ type: "completed" });
@@ -985,7 +994,7 @@ export class Agent {
       ...this.state.nextRequestQueue,
       ...this.state.nextStopQueue,
     ]
-      .map((m) => m.text)
+      .map(renderPending)
       .join("\n");
     this.update({ type: "drain-next-request-queue" });
     this.update({ type: "drain-next-stop-queue" });
@@ -1363,7 +1372,7 @@ export class Agent {
     }
 
     const queuedForThisRequest = this.state.nextRequestQueue.length
-      ? await this.flushQueue("next-request")
+      ? await this.flushQueue("async")
       : [];
 
     const contentToSend: AgentInput[] = [...this.pendingInjections];

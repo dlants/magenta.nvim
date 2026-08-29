@@ -26,6 +26,8 @@ import {
   type NativeMessageIdx,
   type PendingMessage,
   type PendingMessagePart,
+  renderPending,
+  resolvePartsAsText,
   Thread,
   type ThreadCallbacks,
   type ThreadId,
@@ -87,10 +89,11 @@ export type SandboxRoot = {
 export type Msg =
   | { type: "set-title"; title: string }
   | {
+      /** Content composed programmatically (comments, thread bootstrap):
+       * already resolved, and always delivered now. User text goes through
+       * `submit-message` instead. */
       type: "send-message";
       messages: InputMessage[];
-      queue?: "async" | "next";
-      reminders?: string[];
     }
   | {
       /** User text, parsed but not resolved: its commands run at delivery. */
@@ -820,7 +823,7 @@ export class NvimThread {
       },
       // Replaced by the wrapper's own callbacks as soon as it exists; a fork
       // has to clone the source's history before there is a wrapper to talk to.
-      callbacks: { onUpdate: () => {} },
+      callbacks: { onUpdate: () => {}, resolve: resolvePartsAsText },
     });
 
     const thread = new NvimThread(
@@ -929,38 +932,33 @@ export class NvimThread {
     }
   }
 
+  /** A send that preempts the turn in flight also drops that turn's pending
+   * sandbox approvals: they belong to the work being abandoned. */
+  private rejectPendingSandboxApprovals(): void {
+    if (this.core.phase.type !== "idle") {
+      this.sandboxViolationHandler?.rejectAll();
+    }
+  }
+
   private myUpdate(msg: Msg): void {
     switch (msg.type) {
       case "send-message":
-        if (msg.reminders) {
-          for (const text of msg.reminders) {
-            this.core.update({ type: "activate-reminder", text });
-          }
-        }
-        if (msg.queue === undefined && this.core.phase.type !== "idle") {
-          // The send is about to preempt the turn in flight; pending sandbox
-          // approvals belong to that turn.
-          this.sandboxViolationHandler?.rejectAll();
-        }
+        this.rejectPendingSandboxApprovals();
         if (msg.messages.length) {
           this.scrollAfterMessageCount = this.core.getProviderMessages().length;
         }
         // Comment positions are refreshed by `CommentSupervisor.beforeRead`,
         // on every request rather than just this one, so the send stays
         // synchronous and an abort-by-send cannot race the turn it preempts.
-        this.core
-          .send(msg.messages, msg.queue ? { queue: msg.queue } : {})
-          .then(
-            (result) => this.handleSendResult(result),
-            (e: Error) => this.context.nvim.logger.error(e),
-          );
+        this.core.send(msg.messages).then(
+          (result) => this.handleSendResult(result),
+          (e: Error) => this.context.nvim.logger.error(e),
+        );
         return;
 
       case "submit-message": {
-        if (msg.delivery === "now" && this.core.phase.type !== "idle") {
-          // The send is about to preempt the turn in flight; pending sandbox
-          // approvals belong to that turn.
-          this.sandboxViolationHandler?.rejectAll();
+        if (msg.delivery === "now") {
+          this.rejectPendingSandboxApprovals();
         }
         this.scrollAfterMessageCount = this.core.getProviderMessages().length;
         this.core.submit(msg.message, msg.delivery).then(
@@ -1221,7 +1219,7 @@ export class NvimThread {
       this.core.state.threadType === "root" ||
       this.core.state.threadType === "docker_root";
     if (!isUserFacing) return;
-    const text = unsent.map((q) => q.message.text).join("\n");
+    const text = unsent.map((q) => renderPending(q.message)).join("\n");
     if (!text) return;
     this.context.dispatch({
       type: "sidebar-msg",

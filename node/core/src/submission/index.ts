@@ -17,12 +17,18 @@ export type Delivery = "now" | "async" | "next";
  * delivery rather than at parse time. */
 export type PendingMessagePart = { type: "text"; text: string };
 
-/** A submission that has been parsed but not resolved. `text` is the raw user
- * text, for rendering the queued entry. */
+/** A submission that has been parsed but not resolved. The parts are the only
+ * source of truth; the display string is derived (`renderPending`) rather than
+ * stored alongside, so the two cannot drift. */
 export type PendingMessage = {
-  text: string;
   parts: PendingMessagePart[];
 };
+
+/** The raw user text of an unresolved submission, for rendering a queued
+ * entry before its commands have been expanded. */
+export function renderPending(message: PendingMessage): string {
+  return message.parts.map((p) => p.text).join("");
+}
 
 export type SubmissionIntent =
   | { type: "compact"; nextPrompt: PendingMessage | undefined }
@@ -49,7 +55,7 @@ export const resolvePartsAsText: ResolveParts = (parts) =>
   });
 
 export function pendingMessage(text: string): PendingMessage {
-  return { text, parts: [{ type: "text", text }] };
+  return { parts: [{ type: "text", text }] };
 }
 
 const COMPACT_PREFIX = /^\s*@compact(?!\w)\s*/;

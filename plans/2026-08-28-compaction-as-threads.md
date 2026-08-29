@@ -286,6 +286,19 @@ Deviations, decided while implementing:
 
 Tests: `parseSubmission` unit tests live in `node/core/src/submission/submission.test.ts`; the delivery-time behaviours (resolution deferred to delivery, whole-queue in-order flush, a rejecting resolver dropping just its entry) are in `node/core/src/agent.test.ts` under "deferred submissions". `node/comments/comment-input.test.ts` is flaky on `main` independently of this change (verified by stashing).
 
+Follow-up from code review (same stage):
+
+- `PendingMessage` lost its `text` field: `parts` is the single source of truth and the display string is derived with `renderPending(message)` (exported from core). `text` and `parts` could otherwise drift, and consumers were picking arbitrarily.
+- `send-message` no longer carries `queue` / `reminders`. It is now strictly "content composed programmatically, delivered now" (the comment path's empty turn, the thread-bootstrap prompt); every deferred or user-text path goes through `submit-message`. Both delivery-now paths share `NvimThread.rejectPendingSandboxApprovals`.
+- `ThreadCallbacks.resolve` is required; callers that compose content programmatically pass `resolvePartsAsText` explicitly, so there is no second, implicit default.
+- The queue selector is a single table, `DEFERRED_QUEUES` in `agent.ts`, keyed on the `Delivery` values `async` / `next` and holding the state field plus the enqueue/drain action names, so the two ends cannot be spelled differently.
+- **Bug found by the missing test**: a compaction handoff *did not* leave the queues intact. `handleCompactComplete` disposes the previous agent, and `Agent.dispose` aborts, which drains both queues into `unsentOnAbort` — silently dropping them. The queues belong to the thread, not to an agent, so `handleCompactComplete` now snapshots them before the dispose and re-enqueues them (still unresolved) on the replacement agent.
+
+Additional tests:
+
+- `node/core/src/agent.test.ts` — a `@next` submission queued before a compaction handoff is neither drained nor resolved at the handoff, and resolves exactly once when the post-compaction turn comes to rest; a deferred submission sent while the agent is idle goes out immediately rather than queueing; reminders returned by a queued entry are activated at delivery; a flush in which every entry fails to resolve settles the submission as `completed` instead of issuing an empty request.
+- `node/chat/thread.test.ts` — end-to-end through the real `CommandRegistry`: `@next summarize @file:poem.txt` queued behind a running turn does not touch the context manager until the turn stops, and the file's contents as of *delivery* (mutated while queued) are what reach the provider.
+
 ## Suspend seam in core
 
 - Goal: core thread stops compacting. `SupervisorAction` carries a generic `suspend` with an opaque reason and `BeforeRequestPlan` collapses into a plain array, `SendResult` gains `suspended`, `Thread.reset(seed)` replaces `Thread.compact` + `handleCompactionResult` + `handleCompactComplete`, and `mode: "compacting"` / `ThreadPhase.compacting` / `compactionHistory` / `Thread.compactionController` are deleted. `CompactionManager` moves out of `Thread` and is driven by the new `runSubmission` loop, so behaviour is unchanged.

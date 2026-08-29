@@ -249,6 +249,7 @@ export {
   parseSubmission,
   pendingMessage,
   type ResolveParts,
+  renderPending,
   resolvePartsAsText,
   type SubmissionIntent,
 } from "./submission/index.ts";

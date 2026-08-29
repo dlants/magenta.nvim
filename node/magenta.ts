@@ -8,6 +8,7 @@ import {
   probeAndSaveClipboardImage,
   readArchivedThreadLog,
   readThreadMeta,
+  renderPending,
   renderThreadLogToMarkdown,
   type ThreadId,
   threadConversationLogPath,
@@ -1630,7 +1631,8 @@ ${lines.join("\n")}
       // Reminders collected here are intentionally dropped: compaction clears
       // activeReminders, so activating them on this thread would have no effect.
       const nextMessages = intent.nextPrompt
-        ? (await this.processCommands(intent.nextPrompt.text, thread)).messages
+        ? (await this.processCommands(renderPending(intent.nextPrompt), thread))
+            .messages
         : undefined;
       const nextPrompt = nextMessages?.map((m) => m.text).join("\n");
       this.dispatch({

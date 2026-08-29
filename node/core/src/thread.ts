@@ -3,6 +3,8 @@ import {
   type AgentContext,
   type AgentDeps,
   type AgentSendOutcome,
+  DEFERRED_QUEUES,
+  type DeferredDelivery,
   type InputMessage,
   type ThreadState,
 } from "./agent.ts";
@@ -28,7 +30,6 @@ import {
   type PendingMessage,
   pendingMessage,
   type ResolveParts,
-  resolvePartsAsText,
 } from "./submission/index.ts";
 import type {
   AgentHooks,
@@ -81,10 +82,10 @@ export type ThreadInit =
  * thread has for saying "something visible moved". */
 export type ThreadCallbacks = {
   onUpdate: OnUpdate;
-  /** Turns a submission's parts into content, at delivery. Defaults to a
-   * plain-text passthrough for threads whose content is composed
-   * programmatically (subagents, scripts, compaction). */
-  resolve?: ResolveParts;
+  /** Turns a submission's parts into content, at delivery. Threads whose
+   * content is composed programmatically (subagents, scripts, compaction)
+   * pass `resolvePartsAsText`. */
+  resolve: ResolveParts;
 };
 
 export class Thread {
@@ -302,7 +303,7 @@ export class Thread {
       structuredToolResults: this.structuredToolResults,
       getHooks: () => this.hooks,
       onUpdate: () => this.handleUpdate(),
-      resolve: this.callbacks.resolve ?? resolvePartsAsText,
+      resolve: (parts) => this.callbacks.resolve(parts),
       runnerInit,
     });
   }
@@ -414,27 +415,19 @@ export class Thread {
       this.enqueue([message], delivery);
       return { type: "queued" };
     }
-    const { messages, reminders } = await this.resolve(message.parts);
+    const { messages, reminders } = await this.callbacks.resolve(message.parts);
     for (const text of reminders) {
       this.update({ type: "activate-reminder", text });
     }
     return this.send(messages);
   }
 
-  private get resolve(): ResolveParts {
-    return this.callbacks.resolve ?? resolvePartsAsText;
-  }
-
   private enqueue(
     messages: PendingMessage[],
-    delivery: "async" | "next",
+    delivery: DeferredDelivery,
   ): void {
     this.update(
-      {
-        type:
-          delivery === "async" ? "enqueue-next-request" : "enqueue-next-stop",
-        messages,
-      },
+      { type: DEFERRED_QUEUES[delivery].enqueue, messages },
       { silent: true },
     );
   }
@@ -629,7 +622,18 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     // deliberately survives the swap.
     const previousAgent = this.agent;
     this.agent = this.createAgent({ type: "new" });
+    // Disposing the old agent drains its queues. The queued submissions belong
+    // to the thread rather than to any one agent, so they are carried across
+    // the swap — still unresolved, so their commands run at their delivery
+    // point on the far side of the compaction.
+    const carried = {
+      async: [...this.state.nextRequestQueue],
+      next: [...this.state.nextStopQueue],
+    };
     await previousAgent.dispose();
+    for (const delivery of ["async", "next"] as const) {
+      if (carried[delivery].length) this.enqueue(carried[delivery], delivery);
+    }
 
     this.threadLogger.recordCompaction({ summary, chunkCount: steps.length });
     // The replacement agent starts from an empty, summarized message list, so

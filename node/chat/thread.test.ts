@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import * as os from "node:os";
 import type { WebSearchResultBlock } from "@anthropic-ai/sdk/resources.mjs";
-import type { ToolName, ToolRequestId } from "@magenta/core";
+import {
+  renderPending,
+  type ToolName,
+  type ToolRequestId,
+} from "@magenta/core";
 import lodash from "lodash";
 import { expect, it } from "vitest";
 import { $, within } from "zx";
@@ -1639,7 +1643,7 @@ it("handles @async messages and sends them on end turn", async () => {
     // Verify message is queued
     const thread = driver.magenta.chat.getActiveThread();
     expect(thread.core.state.nextRequestQueue).toHaveLength(1);
-    expect(thread.core.state.nextRequestQueue[0].text).toBe(
+    expect(renderPending(thread.core.state.nextRequestQueue[0])).toBe(
       "Also tell me about JavaScript",
     );
 
@@ -1670,7 +1674,9 @@ it("queues @next messages until the agent next stops", async () => {
 
     const thread = driver.magenta.chat.getActiveThread();
     expect(thread.core.state.nextStopQueue).toHaveLength(1);
-    expect(thread.core.state.nextStopQueue[0].text).toBe("Then summarize it");
+    expect(renderPending(thread.core.state.nextStopQueue[0])).toBe(
+      "Then summarize it",
+    );
     expect(thread.core.state.nextRequestQueue).toHaveLength(0);
     await driver.assertDisplayBufferContains("⏭️ queued (next stop):");
 
@@ -1717,6 +1723,56 @@ it("queues @next messages until the agent next stops", async () => {
     const request3 = await driver.mockAnthropic.awaitPendingStream();
     expect(hasNextText(request3)).toBe(true);
     expect(thread.core.state.nextStopQueue).toHaveLength(0);
+  });
+});
+
+it("expands a queued message's commands at delivery, not when it was typed", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("Start something long");
+    await driver.send();
+    const request1 = await driver.mockAnthropic.awaitPendingStream();
+
+    await driver.inputMagentaText("@next summarize @file:poem.txt");
+    await driver.send();
+
+    const thread = driver.magenta.chat.getActiveThread();
+    expect(thread.core.state.nextStopQueue).toHaveLength(1);
+    // The command has not run yet: the file is not in context.
+    expect(Object.keys(thread.contextManager.files)).toHaveLength(0);
+
+    const cwd = await getcwd(driver.nvim);
+    const poemPath = `${cwd}/poem.txt`;
+    await fs.promises.writeFile(poemPath, "MUTATED WHILE QUEUED\n");
+
+    request1.respond({
+      stopReason: "end_turn",
+      text: "done for now",
+      toolRequests: [],
+    });
+
+    const request2 = await driver.mockAnthropic.awaitPendingStream();
+    expect(thread.core.state.nextStopQueue).toHaveLength(0);
+    // The @file: command ran at delivery, not when the message was typed.
+    expect(Object.keys(thread.contextManager.files)).toHaveLength(1);
+    request2.respond({
+      stopReason: "end_turn",
+      text: "will do",
+      toolRequests: [],
+    });
+
+    await driver.inputMagentaText("and now?");
+    await driver.send();
+    const request3 = await driver.mockAnthropic.awaitPendingStream();
+    const text = request3.messages
+      .flatMap((m) =>
+        typeof m.content === "string"
+          ? [m.content]
+          : m.content.map((c) => (c.type === "text" ? c.text : "")),
+      )
+      .join("\n");
+    // The contents the file has at delivery, not the ones it had when typed.
+    expect(text).toContain("MUTATED WHILE QUEUED");
   });
 });
 

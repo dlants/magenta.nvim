@@ -11,6 +11,7 @@ import {
   formatToolSpecs,
   type NativeMessageIdx,
   type ProviderToolSpec,
+  renderPending,
   renderThreadToMarkdown,
   type ThreadId,
   type ThreadMode,
@@ -504,14 +505,14 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
   const pendingMessagesView =
     pendingCount > 0
       ? d`\n${thread.core.state.nextRequestQueue.map((m, index) =>
-          renderPendingMessage(m.text, index, thread, dispatch),
+          renderPendingMessage(renderPending(m), index, thread, dispatch),
         )}`
       : d``;
   const pendingNextMessagesView =
     thread.core.state.nextStopQueue.length > 0
       ? d`\n${thread.core.state.nextStopQueue.map((m, index) =>
           renderPendingMessage(
-            m.text,
+            renderPending(m),
             pendingCount + index,
             thread,
             dispatch,

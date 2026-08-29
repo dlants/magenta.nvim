@@ -6,6 +6,7 @@ import type { ThreadId, ThreadType } from "../chat-types.ts";
 import type { Logger } from "../logger.ts";
 import type { OpenAIAuth } from "../openai-auth.ts";
 import type { ProviderProfile } from "../provider-options.ts";
+import { resolvePartsAsText } from "../submission/index.ts";
 import { Thread } from "../thread.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
@@ -88,7 +89,7 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
     core: new Thread(
       "openai-thread" as ThreadId,
       context,
-      { onUpdate: () => {} },
+      { onUpdate: () => {}, resolve: resolvePartsAsText },
       { type: "fresh" },
       {
         baseDir: path.join(os.tmpdir(), "magenta-test-archive"),
