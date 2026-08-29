@@ -16,7 +16,6 @@ import {
   ContextManager,
   cloneContextManager,
   composeSupervisors,
-  type Delivery,
   extractPartialReplies,
   FileContextSupervisor,
   GitSupervisor,
@@ -30,6 +29,7 @@ import {
   renderPending,
   resolvePartsAsText,
   runSubmission,
+  type SubmissionIntent,
   Thread,
   type ThreadCallbacks,
   ThreadCompactor,
@@ -99,17 +99,13 @@ export type Msg =
       messages: InputMessage[];
     }
   | {
-      /** User text, parsed but not resolved: its commands run at delivery. */
+      /** User text, parsed but not resolved: its commands run at delivery
+       * (or, for a `compact` intent, when the handoff is opened). */
       type: "submit-message";
-      message: PendingMessage;
-      delivery: Delivery;
+      intent: SubmissionIntent;
     }
   | {
       type: "abort";
-    }
-  | {
-      type: "start-compaction";
-      nextPrompt?: string;
     }
   | {
       type: "toggle-system-prompt";
@@ -639,6 +635,18 @@ export class NvimThread {
     return { messages, reminders };
   }
 
+  /** The `@compact` continuation prompt, expanded the same way any other user
+   * text is. Reminders it collects are dropped: the compaction clears
+   * `activeReminders`, so activating them here would have no effect. */
+  private async resolveCompactPrompt(
+    nextPrompt: PendingMessage | undefined,
+  ): Promise<string | undefined> {
+    if (!nextPrompt) return undefined;
+    const { messages } = await this.resolveParts(nextPrompt.parts);
+    const text = messages.map((m) => m.text).join("\n");
+    return text || undefined;
+  }
+
   /** Turn a finished submission into the effects that used to be broadcast
    * events: the turn-end notification and the rolled-back input text. */
   /** Every submission this thread issues goes through the compaction loop —
@@ -968,23 +976,28 @@ export class NvimThread {
         return;
 
       case "submit-message": {
-        if (msg.delivery === "now") {
+        const intent = msg.intent;
+        if (intent.type === "compact") {
+          // A manual `@compact` is the same handoff the threshold produces;
+          // the loop is entered with the suspension already in hand.
+          this.runSubmission(async () => ({
+            type: "suspended",
+            reason: {
+              kind: "compact",
+              nextPrompt: await this.resolveCompactPrompt(intent.nextPrompt),
+            },
+          }));
+          return;
+        }
+        if (intent.delivery === "now") {
           this.rejectPendingSandboxApprovals();
         }
         this.scrollAfterMessageCount = this.core.getProviderMessages().length;
-        this.runSubmission(() => this.core.submit(msg.message, msg.delivery));
-        return;
-      }
-      case "start-compaction":
-        // A manual `@compact` is the same handoff the threshold produces; the
-        // loop is entered with the suspension already in hand.
         this.runSubmission(() =>
-          Promise.resolve({
-            type: "suspended",
-            reason: { kind: "compact", nextPrompt: msg.nextPrompt },
-          }),
+          this.core.submit(intent.message, intent.delivery),
         );
         return;
+      }
 
       case "abort": {
         if (this.core.state.mode.type === "tool_use") {

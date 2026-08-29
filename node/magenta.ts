@@ -1,14 +1,12 @@
 import * as os from "node:os";
 import type { SandboxAskCallback } from "@anthropic-ai/sandbox-runtime";
 import {
-  type InputMessage,
   isThreadId,
   type NativeMessageIdx,
   parseSubmission,
   probeAndSaveClipboardImage,
   readArchivedThreadLog,
   readThreadMeta,
-  renderPending,
   renderThreadLogToMarkdown,
   type ThreadId,
   threadConversationLogPath,
@@ -25,7 +23,6 @@ import { Lsp } from "./capabilities/lsp.ts";
 import { StraceUnavailableError } from "./capabilities/strace.ts";
 import { Chat } from "./chat/chat.ts";
 import { CommandRegistry } from "./chat/commands/registry.ts";
-import type { NvimThread } from "./chat/thread.ts";
 import type { CommentController } from "./comments/comment-controller.ts";
 import { CommentInput } from "./comments/comment-input.ts";
 import {
@@ -1621,67 +1618,23 @@ ${lines.join("\n")}
     return magenta;
   }
 
-  /** Preprocess user input text and dispatch the appropriate message.
-   * Handles @fork, @compact, @async detection and command expansion.
-   */
-  private async preprocessAndSend(text: string): Promise<void> {
+  /** Parse user input text into a submission intent and hand it to the
+   * thread, which resolves its commands at delivery. */
+  private preprocessAndSend(text: string): Promise<void> {
     const thread = this.chat.getActiveThread();
     // A compact thread has no compactor — it *is* a compaction — so `@compact`
     // typed into one is parsed as ordinary text rather than a no-op.
     const intent = parseSubmission(text, {
       compactionAvailable: thread.compactor !== undefined,
     });
-    if (intent.type === "compact") {
-      // Reminders collected here are intentionally dropped: compaction clears
-      // activeReminders, so activating them on this thread would have no effect.
-      const nextMessages = intent.nextPrompt
-        ? (await this.processCommands(renderPending(intent.nextPrompt), thread))
-            .messages
-        : undefined;
-      const nextPrompt = nextMessages?.map((m) => m.text).join("\n");
-      this.dispatch({
-        type: "thread-msg",
-        id: thread.id,
-        msg: {
-          type: "start-compaction",
-          ...(nextPrompt ? { nextPrompt } : {}),
-        },
-      });
-      return;
-    }
     this.dispatch({
       type: "thread-msg",
       id: thread.id,
-      msg: {
-        type: "submit-message",
-        message: intent.message,
-        delivery: intent.delivery,
-      },
+      msg: { type: "submit-message", intent },
     });
-  }
-  /** Run CommandRegistry on user text, returning processed InputMessages. */
-  private async processCommands(
-    text: string,
-    thread: NvimThread,
-  ): Promise<{ messages: InputMessage[]; reminders: string[] }> {
-    const { processedText, additionalContent, reminders } =
-      await this.commandRegistry.processMessage(text, {
-        nvim: this.nvim,
-        cwd: thread.context.environment.cwd,
-        homeDir: thread.context.environment.homeDir,
-        contextManager: thread.contextManager,
-        options: this.options,
-      });
-
-    const messages: InputMessage[] = [{ type: "user", text: processedText }];
-
-    // Fold additional content (from @diff, @staged, etc.) into text messages
-    for (const content of additionalContent) {
-      if (content.type === "text") {
-        messages.push({ type: "user", text: content.text });
-      }
-    }
-
-    return { messages, reminders };
+    // The submission's own work (resolving commands, aborting an in-flight
+    // request) is kicked off by the dispatch; yield a tick so callers see it
+    // started before `send` returns.
+    return Promise.resolve();
   }
 }

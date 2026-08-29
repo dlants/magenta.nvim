@@ -424,3 +424,12 @@ Additional test (`node/chat/thread-compact-view.test.ts`): a multi-chunk run whe
 
 - Goal: dead code and dead state removed — `CompactionStep`/`CompactionRecord` from core, `compaction-controller.ts`, `CompactionManager.executeTools` (the duplicated tool loop), and the `start-compaction` thread message.
 - Tests: `npx tsc -b`, `npx vitest run`, `npx biome check .` all clean; no remaining references to the deleted symbols.
+
+**Status: done** (see commit "Stage 5: Cleanup").
+
+What was left to do, and what was already gone:
+
+- `CompactionStep`, `CompactionRecord`, `compaction-controller.ts`, `compaction-manager.ts` and its `executeTools` tool loop were all deleted in stage 3; the only surviving hits are in `node/core/dist/` (gitignored build output) and in this plan's own prose. Nothing to remove.
+- `start-compaction` was the one live remnant. It is gone: `submit-message` now carries the whole `SubmissionIntent` (`{ type: "submit-message"; intent }`), and `NvimThread` branches on `intent.type` — a `compact` intent opens `runSubmission` with the suspension already in hand, a `send` intent goes to `core.submit`.
+- `Magenta.processCommands` went with it. It duplicated `NvimThread.resolveParts`, and existed only to expand the `@compact` continuation prompt eagerly in `magenta.ts`. That expansion is now `NvimThread.resolveCompactPrompt`, which runs at the moment the handoff opens and reuses the thread's own resolver — so `@compact summarize @file:x` expands against the world as it is at the handoff, and `preprocessAndSend` shrinks to parse-and-dispatch.
+- `preprocessAndSend` keeps its `Promise<void>` return and its `await` at the call site. Making it synchronous broke `thread-abort.test.ts` and `reply-tool.test.ts`: `driver.send()` relies on the microtask the `await` yields for the dispatched submission's async work (resolving parts, aborting the in-flight request) to get started before `send` returns.
