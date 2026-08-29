@@ -1,5 +1,5 @@
-import type { ToolName, ToolRequestId } from "@magenta/core";
-import { it } from "vitest";
+import type { ThreadId, ToolName, ToolRequestId } from "@magenta/core";
+import { expect, it } from "vitest";
 import type { NvimDriver } from "../test/driver.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
@@ -11,7 +11,7 @@ const SUMMARY_EDL = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUM
  * chunk thread is waiting on its first stream. */
 async function startCompaction(
   driver: NvimDriver,
-): Promise<{ thread: NvimThread }> {
+): Promise<{ thread: NvimThread; chunkThreadId: ThreadId }> {
   await driver.showSidebar();
   await driver.inputMagentaText("Hello");
   await driver.send();
@@ -27,15 +27,15 @@ async function startCompaction(
   const thread = driver.magenta.chat.getActiveThread();
   await driver.inputMagentaText("@compact");
   await driver.send();
-  await pollUntil(
+  const chunkThreadId = await pollUntil(
     () => {
       const current = thread.compactor?.current;
-      if (!current?.threadIds.length)
-        throw new Error("waiting for the chunk thread to spawn");
+      if (!current) throw new Error("waiting for the chunk thread to spawn");
+      return current.activeThreadId;
     },
     { timeout: 2000, message: "compaction should start" },
   );
-  return { thread };
+  return { thread, chunkThreadId };
 }
 
 /** Drive the pending chunk thread to completion: write /summary.md, yield. */
@@ -78,8 +78,7 @@ async function finishChunk(driver: NvimDriver): Promise<void> {
 
 it("shows a live chunk counter that opens the chunk thread, then a history row", async () => {
   await withDriver({}, async (driver) => {
-    const { thread } = await startCompaction(driver);
-    const chunkThreadId = thread.compactor!.current!.threadIds[0];
+    const { thread, chunkThreadId } = await startCompaction(driver);
 
     await driver.assertDisplayBufferContains(
       "📦 Compacting thread... (chunk 1 / 1)",
@@ -121,8 +120,7 @@ it("shows a live chunk counter that opens the chunk thread, then a history row",
 
 it("expands a history row and opens the chunk thread behind it", async () => {
   await withDriver({}, async (driver) => {
-    const { thread } = await startCompaction(driver);
-    const chunkThreadId = thread.compactor!.current!.threadIds[0];
+    const { thread, chunkThreadId } = await startCompaction(driver);
     await finishChunk(driver);
     const continuation = await driver.mockAnthropic.awaitPendingStream({
       message: "post-compaction continuation",
@@ -174,8 +172,7 @@ it("expands a history row and opens the chunk thread behind it", async () => {
 
 it("renders an errored chunk thread as an ordinary thread, messageable in place", async () => {
   await withDriver({}, async (driver) => {
-    const { thread } = await startCompaction(driver);
-    const chunkThreadId = thread.compactor!.current!.threadIds[0];
+    const { thread, chunkThreadId } = await startCompaction(driver);
 
     const chunkStream = await driver.mockAnthropic.awaitPendingStream({
       message: "compact chunk stream",
@@ -217,8 +214,7 @@ it("renders an errored chunk thread as an ordinary thread, messageable in place"
 
 it("nests the chunk threads under their parent in the thread overview", async () => {
   await withDriver({}, async (driver) => {
-    const { thread } = await startCompaction(driver);
-    const chunkThreadId = thread.compactor!.current!.threadIds[0];
+    const { chunkThreadId } = await startCompaction(driver);
 
     await driver.magenta.command("threads-overview");
     await driver.assertDisplayBufferContains("# Threads");
@@ -234,6 +230,63 @@ it("nests the chunk threads under their parent in the thread overview", async ()
     await driver.awaitChatState({
       state: "thread-selected",
       id: chunkThreadId,
+    });
+  });
+});
+
+it("points the live status line at the chunk thread currently running", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    // >100K chars of transcript, so the compaction runs multiple chunks.
+    const longText = "x".repeat(60_000);
+    for (const [idx, question] of ["First", "Second"].entries()) {
+      await driver.inputMagentaText(`${question} question`);
+      await driver.send();
+      const stream = await driver.mockAnthropic.awaitPendingStream({
+        message: `answer ${idx + 1}`,
+      });
+      stream.respond({
+        stopReason: "end_turn",
+        text: `Answer ${idx + 1}: ${longText}`,
+        toolRequests: [],
+      });
+    }
+
+    const thread = driver.magenta.chat.getActiveThread();
+    await driver.inputMagentaText("@compact");
+    await driver.send();
+
+    const firstChunkThreadId = await pollUntil(
+      () => {
+        const current = thread.compactor?.current;
+        if (!current) throw new Error("waiting for the first chunk thread");
+        return current.activeThreadId;
+      },
+      { timeout: 2000, message: "compaction should start" },
+    );
+    const totalChunks = thread.compactor!.current!.totalChunks;
+    expect(totalChunks).toBeGreaterThanOrEqual(2);
+
+    await finishChunk(driver);
+
+    const secondChunkThreadId = await pollUntil(
+      () => {
+        const current = thread.compactor?.current;
+        if (!current) throw new Error("expected the run to still be going");
+        if (current.activeThreadId === firstChunkThreadId)
+          throw new Error("waiting for the second chunk thread");
+        return current.activeThreadId;
+      },
+      { timeout: 5000, message: "the second chunk thread should spawn" },
+    );
+
+    // The status line follows the chunk doing the work, not the first one.
+    const statusLine = `📦 Compacting thread... (chunk 2 / ${totalChunks.toString()})`;
+    await driver.assertDisplayBufferContains(statusLine);
+    await driver.triggerDisplayBufferKeyOnContent(statusLine, "<CR>");
+    await driver.awaitChatState({
+      state: "thread-selected",
+      id: secondChunkThreadId,
     });
   });
 });

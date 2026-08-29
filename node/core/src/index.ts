@@ -77,6 +77,8 @@ export {
   type CompactionRunState,
   type Compactor,
   type CompactSuspendReason,
+  compactionRunChunkIndex,
+  compactionRunThreadIds,
   runSubmission,
   ThreadCompactor,
   type ThreadCompactorEvents,

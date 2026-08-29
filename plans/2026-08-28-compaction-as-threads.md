@@ -411,6 +411,15 @@ Tests: new file `node/chat/thread-compact-view.test.ts` (4 tests) — the live c
 
 The docker/container tests (`container.test.ts`, `docker-environment.test.ts`, `docker-sync.test.ts`) fail in this environment independently of this change.
 
+Follow-up from code review (same stage):
+
+- `CompactionRunState`'s `running` variant no longer carries the correlated `chunkIndex` / `threadIds` pair. It is now `{ totalChunks; completedThreadIds; activeThreadId }`: a running compaction always has exactly one chunk thread doing the work, so the view has no empty-list branch to defend against, and the chunk index is derived (`compactionRunChunkIndex(run) === completedThreadIds.length`) rather than tracked alongside. `compactionRunThreadIds(run)` gives every chunk thread of a run in order, for any state. `ThreadCompactor.run` therefore pushes the run state *after* spawning the first chunk thread rather than before.
+- `startCompaction` in `thread-compact-view.test.ts` returns `{ thread, chunkThreadId }` — it already polled until the chunk thread existed, so it narrows once and the tests no longer repeat `compactor!.current!.threadIds[0]`.
+
+Additional test (`node/chat/thread-compact-view.test.ts`): a multi-chunk run where the first chunk thread has yielded — the status line reads `chunk 2 / n` and `<CR>` on it selects the *second* spawned thread, covering the "status line follows the active chunk" branch that single-chunk scenarios cannot distinguish.
+
+`node/comments/comment-input.test.ts` remains flaky, unchanged by this work.
+
 ## Cleanup
 
 - Goal: dead code and dead state removed — `CompactionStep`/`CompactionRecord` from core, `compaction-controller.ts`, `CompactionManager.executeTools` (the duplicated tool loop), and the `start-compaction` thread message.

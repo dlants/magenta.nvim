@@ -1,7 +1,11 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { ToolName, ToolRequestId } from "@magenta/core";
-import { AutoCompactSupervisor, type ThreadCompactor } from "@magenta/core";
+import {
+  AutoCompactSupervisor,
+  compactionRunThreadIds,
+  type ThreadCompactor,
+} from "@magenta/core";
 import { expect, it } from "vitest";
 import type { MockStream } from "../providers/mock-anthropic-client.ts";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
@@ -347,7 +351,7 @@ it("lets the user rescue a chunk thread whose turn failed", async () => {
     );
     // A chunk thread that fails is just a stuck thread: the run stays in
     // flight and the parked submission waits for the user to drive it home.
-    const chunkThreadId = compactorOf(thread).current!.threadIds[0];
+    const chunkThreadId = compactorOf(thread).current!.activeThreadId;
     await pollUntil(
       () => {
         const wrapper = driver.magenta.chat.threadWrappers[chunkThreadId];
@@ -1160,7 +1164,9 @@ it("spawns one compact child thread per chunk, carrying the summary forward", as
     // Chunk 2's prompt carries chunk 1's summary, not chunk 1's transcript.
     expect(chunk2Text).toContain("First chunk processed");
     // Two chunk threads so far, and they are children of the parent thread.
-    expect(compactorOf(thread).current!.threadIds).toHaveLength(2);
+    expect(compactionRunThreadIds(compactorOf(thread).current!)).toHaveLength(
+      2,
+    );
 
     const edlScript2 = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked two questions. Both answers were very long.\nCOMPACT_SUMMARY`;
 
@@ -1565,13 +1571,11 @@ it("deleting the compact child thread aborts the parked submission", async () =>
     await pollUntil(
       () => {
         if (!isCompacting(thread)) throw new Error("expected compacting");
-        if (compactorOf(thread).current!.threadIds.length === 0)
-          throw new Error("waiting for the chunk thread");
       },
       { timeout: 2000, message: "thread should spawn a chunk thread" },
     );
 
-    const chunkThreadId = compactorOf(thread).current!.threadIds[0];
+    const chunkThreadId = compactorOf(thread).current!.activeThreadId;
     driver.magenta.chat.deleteThread(chunkThreadId);
 
     await pollUntil(
@@ -1660,12 +1664,10 @@ it("discards an in-flight run when a fresh @compact arrives", async () => {
     await pollUntil(
       () => {
         if (!isCompacting(thread)) throw new Error("expected compacting");
-        if (compactorOf(thread).current!.threadIds.length === 0)
-          throw new Error("waiting for the chunk thread");
       },
       { timeout: 2000, message: "thread should spawn a chunk thread" },
     );
-    const firstChunkThreadId = compactorOf(thread).current!.threadIds[0];
+    const firstChunkThreadId = compactorOf(thread).current!.activeThreadId;
 
     // A second @compact while the first run's chunk thread is still pending.
     await driver.inputMagentaText("@compact");
@@ -1680,9 +1682,7 @@ it("discards an in-flight run when a fresh @compact arrives", async () => {
           throw new Error(`expected aborted, got ${runs[0].type}`);
         if (!isCompacting(thread)) throw new Error("expected a second run");
         const current = compactorOf(thread).current!;
-        if (current.threadIds.length === 0)
-          throw new Error("waiting for the new chunk thread");
-        if (current.threadIds[0] === firstChunkThreadId)
+        if (current.activeThreadId === firstChunkThreadId)
           throw new Error("expected a fresh chunk thread");
       },
       { timeout: 5000, message: "a fresh @compact should discard the old run" },
@@ -1718,7 +1718,7 @@ it("delivers @compact typed into a compact thread as ordinary text", async () =>
     });
     compactStream.respondWithError(new Error("stall the chunk thread"));
 
-    const chunkThreadId = compactorOf(thread).current!.threadIds[0];
+    const chunkThreadId = compactorOf(thread).current!.activeThreadId;
     await pollUntil(
       () => {
         const wrapper = driver.magenta.chat.threadWrappers[chunkThreadId];

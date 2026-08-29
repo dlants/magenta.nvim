@@ -28,6 +28,8 @@ export interface Compactor {
 export {
   type CompactionRunId,
   type CompactionRunState,
+  compactionRunChunkIndex,
+  compactionRunThreadIds,
   ThreadCompactor,
   type ThreadCompactorEvents,
 } from "./compactor.ts";

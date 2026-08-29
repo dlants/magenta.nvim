@@ -6,6 +6,8 @@ import {
   type CompactionRunState,
   type CompletedToolInfo,
   type ContextManager,
+  compactionRunChunkIndex,
+  compactionRunThreadIds,
   displayPath,
   formatToolSpec,
   formatToolSpecs,
@@ -106,11 +108,9 @@ export const renderStatus = (
   }
   if (compaction) {
     const { run, onSelectChunk } = compaction;
-    const line = d`📦 Compacting thread... (chunk ${String(run.chunkIndex + 1)} / ${String(run.totalChunks)})`;
-    const activeChunkThreadId = run.threadIds[run.threadIds.length - 1];
-    if (!activeChunkThreadId) return line;
+    const line = d`📦 Compacting thread... (chunk ${String(compactionRunChunkIndex(run) + 1)} / ${String(run.totalChunks)})`;
     return withBindings(line, {
-      "<CR>": () => onSelectChunk(activeChunkThreadId),
+      "<CR>": () => onSelectChunk(run.activeThreadId),
     });
   }
 
@@ -296,7 +296,8 @@ function renderCompactionHistory(
         : run.type === "aborted"
           ? "aborted"
           : `⚠️ ${run.message}`;
-    const chunkCount = run.threadIds.length;
+    const chunkThreadIds = compactionRunThreadIds(run);
+    const chunkCount = chunkThreadIds.length;
     const header = withBindings(
       withExtmark(
         d`📦 [Compaction ${(recordIdx + 1).toString()} — ${chunkCount.toString()} chunk${chunkCount === 1 ? "" : "s"}, ${status}]\n`,
@@ -308,7 +309,7 @@ function renderCompactionHistory(
       },
     );
     if (!isExpanded) return header;
-    const chunkViews = run.threadIds.map(
+    const chunkViews = chunkThreadIds.map(
       (threadId, chunkIdx) =>
         d`${renderChunkThreadRow(thread, threadId, chunkIdx, chunkCount)}`,
     );
