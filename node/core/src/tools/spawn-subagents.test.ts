@@ -40,6 +40,7 @@ function createMockThreadManager(
   };
   const manager: MockThreadManager = {
     spawnThread: vi.fn().mockResolvedValue("thread-1" as ThreadId),
+    deleteThread: vi.fn(),
     awaitThreadResult: vi.fn(
       (threadId: ThreadId) => deferFor(threadId).promise,
     ),

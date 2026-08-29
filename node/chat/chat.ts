@@ -794,7 +794,11 @@ export class Chat implements ThreadManager {
         ),
       ];
       thread.supervisors.push(...autoCompact);
-    } else if (threadType === "subagent" || threadType === "docker_root") {
+    } else if (
+      threadType === "subagent" ||
+      threadType === "docker_root" ||
+      threadType === "compact"
+    ) {
       thread.supervisors = [new SubagentSupervisor(), ...autoCompact];
     } else {
       thread.supervisors = autoCompact;
@@ -1618,6 +1622,8 @@ ${rows}${loadMore}`;
     contextFiles?: UnresolvedFilePath[];
     dockerSpawnConfig?: DockerSpawnConfig;
     cwd?: string;
+    fileIO?: FileIO;
+    label?: string;
   }): Promise<ThreadId> {
     const parentThreadId = opts.parentThreadId;
     const parentThreadWrapper = this.threadWrappers[parentThreadId];
@@ -1667,6 +1673,7 @@ ${rows}${loadMore}`;
       threadType: opts.threadType,
       ...(opts.subagentConfig ? { subagentConfig: opts.subagentConfig } : {}),
       environmentConfig,
+      ...(opts.fileIO ? { fileIO: opts.fileIO } : {}),
       dockerSpawnConfig: opts.dockerSpawnConfig,
       getParentThread: () => {
         const wrapper = this.threadWrappers[parentThreadId];
@@ -1674,7 +1681,12 @@ ${rows}${loadMore}`;
       },
     });
 
+    if (opts.label) thread.core.setTitle(opts.label);
     return thread.id;
+  }
+
+  deleteThread(threadId: ThreadId): void {
+    this.deleteThreadSubtree(threadId);
   }
 
   async spawnScriptThread(opts: {

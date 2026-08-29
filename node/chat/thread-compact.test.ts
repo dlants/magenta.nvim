@@ -1,18 +1,44 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { ToolName, ToolRequestId } from "@magenta/core";
-import { AutoCompactSupervisor, type ManagedCompactor } from "@magenta/core";
+import { AutoCompactSupervisor, type ThreadCompactor } from "@magenta/core";
 import { expect, it } from "vitest";
+import type { MockStream } from "../providers/mock-anthropic-client.ts";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
+import type { NvimThread } from "./thread.ts";
 
-/** The manager of a compactor the caller has already established is running. */
-function runningManager(compactor: ManagedCompactor) {
-  if (compactor.state.type !== "running") {
-    throw new Error("expected a running compaction");
-  }
-  return compactor.state.manager;
+function compactorOf(thread: NvimThread): ThreadCompactor {
+  if (!thread.compactor) throw new Error("thread has no compactor");
+  return thread.compactor;
+}
+function isCompacting(thread: NvimThread): boolean {
+  return compactorOf(thread).current !== undefined;
+}
+/** The runs that have settled, in order. */
+function finishedRuns(thread: NvimThread) {
+  return compactorOf(thread).runs.filter((run) => run.type !== "running");
+}
+let yieldSeq = 0;
+/** A compact chunk thread hands its summary back the way every child thread
+ * does: by calling yield_to_parent. */
+function yieldChunk(stream: MockStream): void {
+  yieldSeq += 1;
+  stream.respond({
+    stopReason: "tool_use",
+    text: "Summary written.",
+    toolRequests: [
+      {
+        status: "ok",
+        value: {
+          id: `yield_${yieldSeq}` as ToolRequestId,
+          toolName: "yield_to_parent" as ToolName,
+          input: { result: "wrote /summary.md" },
+        },
+      },
+    ],
+  });
 }
 
 it("compact flow: user initiates @compact, spawns compact thread, compacts and continues", async () => {
@@ -65,7 +91,7 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
     // Wait for the thread to enter compacting mode
     await pollUntil(
       () => {
-        if (originalThread.compactor.state.type !== "running")
+        if (!isCompacting(originalThread))
           throw new Error("expected the thread to be compacting");
       },
       { timeout: 2000, message: "thread should enter compacting mode" },
@@ -135,11 +161,7 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
       expect(toolResult.result.status).toBe("ok");
     }
 
-    afterEdlStream.respond({
-      stopReason: "end_turn",
-      text: "I have compacted the conversation.",
-      toolRequests: [],
-    });
+    yieldChunk(afterEdlStream);
 
     // After the compact subagent stops, the parent thread should:
     // 1. Read back the temp file as the summary
@@ -226,7 +248,7 @@ it("compact flow without continuation: @compact with no next prompt", async () =
     // Wait for compacting mode
     await pollUntil(
       () => {
-        if (thread.compactor.state.type !== "running")
+        if (!isCompacting(thread))
           throw new Error("expected the thread to be compacting");
       },
       { timeout: 2000, message: "thread should enter compacting mode" },
@@ -258,11 +280,7 @@ it("compact flow without continuation: @compact with no next prompt", async () =
     const afterEdlStream = await driver.mockAnthropic.awaitPendingStream({
       message: "compact subagent after EDL",
     });
-    afterEdlStream.respond({
-      stopReason: "end_turn",
-      text: "Done compacting.",
-      toolRequests: [],
-    });
+    yieldChunk(afterEdlStream);
 
     // Without a next prompt, the thread sends "Please continue from where you left off."
     const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
@@ -294,7 +312,7 @@ it("compact flow without continuation: @compact with no next prompt", async () =
   });
 });
 
-it("records a summary-less history entry when the compaction errors out", async () => {
+it("lets the user rescue a chunk thread whose turn failed", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
@@ -315,7 +333,7 @@ it("records a summary-less history entry when the compaction errors out", async 
 
     await pollUntil(
       () => {
-        if (thread.compactor.state.type !== "running")
+        if (!isCompacting(thread))
           throw new Error("expected the thread to be compacting");
       },
       { timeout: 2000, message: "thread should enter compacting mode" },
@@ -327,17 +345,66 @@ it("records a summary-less history entry when the compaction errors out", async 
     compactStream.respondWithError(
       new Error("compaction request blew up (non-retryable)"),
     );
-
+    // A chunk thread that fails is just a stuck thread: the run stays in
+    // flight and the parked submission waits for the user to drive it home.
+    const chunkThreadId = compactorOf(thread).current!.threadIds[0];
     await pollUntil(
       () => {
-        if (thread.compactor.history.length !== 1)
-          throw new Error("expected a history entry for the failed run");
+        const wrapper = driver.magenta.chat.threadWrappers[chunkThreadId];
+        if (wrapper?.state !== "initialized") throw new Error("waiting");
+        if (wrapper.thread.agent.phase.type !== "idle")
+          throw new Error("waiting for the failed chunk thread to settle");
       },
-      { timeout: 5000, message: "failed run should be recorded" },
+      { timeout: 5000, message: "chunk thread should settle after the error" },
     );
-    expect(thread.compactor.history[0].finalSummary).toBeUndefined();
-    // The run is over: the status line stops claiming a compaction is running.
-    expect(thread.compactor.state.type).toBe("idle");
+    expect(isCompacting(thread)).toBe(true);
+    expect(finishedRuns(thread)).toHaveLength(0);
+    // The user opens the chunk thread and nudges it; when it yields, the
+    // compaction picks up where it left off with no extra plumbing.
+    driver.magenta.dispatch({
+      type: "thread-msg",
+      id: chunkThreadId,
+      msg: {
+        type: "send-message",
+        messages: [{ type: "user", text: "try again" }],
+      },
+    });
+    const retryStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "chunk thread retry",
+    });
+    retryStream.respond({
+      stopReason: "tool_use",
+      text: "Retrying.",
+      toolRequests: [
+        {
+          status: "ok",
+          value: {
+            id: "edl_retry" as ToolRequestId,
+            toolName: "edl" as ToolName,
+            input: {
+              script:
+                "file `/summary.md`\nselect bof-eof\nreplace <<S\n# Summary\nrecovered\nS",
+            },
+          },
+        },
+      ],
+    });
+    const afterRetry = await driver.mockAnthropic.awaitPendingStream({
+      message: "chunk thread after retry edl",
+    });
+    yieldChunk(afterRetry);
+    const continuation = await driver.mockAnthropic.awaitPendingStream({
+      message: "parent continuation",
+    });
+    continuation.respond({
+      stopReason: "end_turn",
+      text: "Back on track.",
+      toolRequests: [],
+    });
+    await driver.assertDisplayBufferContains("Back on track.");
+    const runs = finishedRuns(thread);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].type).toBe("done");
   });
 });
 
@@ -368,7 +435,7 @@ it("compact flow does not process @file commands in subagent or summary", async 
 
     await pollUntil(
       () => {
-        if (thread.compactor.state.type !== "running")
+        if (!isCompacting(thread))
           throw new Error("expected the thread to be compacting");
       },
       { timeout: 2000, message: "thread should enter compacting mode" },
@@ -418,11 +485,7 @@ it("compact flow does not process @file commands in subagent or summary", async 
     const afterEdlStream = await driver.mockAnthropic.awaitPendingStream({
       message: "compact subagent after EDL",
     });
-    afterEdlStream.respond({
-      stopReason: "end_turn",
-      text: "Done compacting.",
-      toolRequests: [],
-    });
+    yieldChunk(afterEdlStream);
 
     // 2. Verify that after compaction:
     //    - The summary is sent as a raw user message (no command processing)
@@ -556,11 +619,7 @@ it("forks a thread with @compact to clone and compact in one step", async () => 
       message: "compact subagent after EDL in forked thread",
     });
 
-    afterEdlStream2.respond({
-      stopReason: "end_turn",
-      text: "Compacted the arithmetic conversation.",
-      toolRequests: [],
-    });
+    yieldChunk(afterEdlStream2);
 
     // After compact completes, the forked thread should continue with the next prompt
     const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
@@ -647,7 +706,7 @@ it("auto-compact threshold from options wires into the thread's supervisor", asy
 
       await pollUntil(
         () => {
-          if (originalThread.compactor.state.type !== "running")
+          if (!isCompacting(originalThread))
             throw new Error("expected the thread to be compacting");
         },
         { timeout: 2000, message: "thread should auto-compact" },
@@ -717,18 +776,13 @@ it("auto-compact triggers when inputTokenCount breaches the supervisor threshold
     // The thread should enter compacting mode automatically
     await pollUntil(
       () => {
-        if (originalThread.compactor.state.type !== "running")
+        if (!isCompacting(originalThread))
           throw new Error("expected the thread to be compacting");
       },
       { timeout: 2000, message: "thread should auto-compact" },
     );
 
-    // Verify the supervisor's nextPrompt was preserved
-    if (originalThread.compactor.state.type !== "running")
-      throw new Error("expected compacting");
-    expect(runningManager(originalThread.compactor).nextPrompt).toBe(
-      "Now help me with multiplication",
-    );
+    if (!isCompacting(originalThread)) throw new Error("expected compacting");
 
     // Complete the compact subagent flow
     const compactSubagentStream = await driver.mockAnthropic.awaitPendingStream(
@@ -770,11 +824,7 @@ it("auto-compact triggers when inputTokenCount breaches the supervisor threshold
       message: "compact subagent after EDL",
     });
 
-    afterEdlStream.respond({
-      stopReason: "end_turn",
-      text: "I have compacted the conversation.",
-      toolRequests: [],
-    });
+    yieldChunk(afterEdlStream);
 
     // Reset mock token count so the post-compact conversation doesn't re-trigger
     driver.mockAnthropic.mockClient.mockInputTokenCount = 1000;
@@ -848,7 +898,7 @@ it("auto-compact uses the configured next prompt from options", async () => {
         const stream = await driver.mockAnthropic.awaitPendingStream({
           message: `turn ${i}`,
         });
-        if (originalThread.compactor.state.type === "running") {
+        if (isCompacting(originalThread)) {
           compactSubagentStream = stream;
           break;
         }
@@ -910,7 +960,7 @@ it("script-spawned thread honors per-thread autoCompactPrompt override", async (
       const stream = await driver.mockAnthropic.awaitPendingStream({
         message: `script thread turn ${i}`,
       });
-      if (thread.compactor.state.type === "running") {
+      if (isCompacting(thread)) {
         compactSubagentStream = stream;
         break;
       }
@@ -965,7 +1015,7 @@ it("script-spawned thread without prompt override falls back to the default temp
       const stream = await driver.mockAnthropic.awaitPendingStream({
         message: `script thread turn ${i}`,
       });
-      if (thread.compactor.state.type === "running") {
+      if (isCompacting(thread)) {
         compactSubagentStream = stream;
         break;
       }
@@ -997,7 +1047,7 @@ it("script-spawned thread without prompt override falls back to the default temp
   });
 });
 
-it("compaction history records steps from multi-chunk compaction", async () => {
+it("spawns one compact child thread per chunk, carrying the summary forward", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
@@ -1031,7 +1081,7 @@ it("compaction history records steps from multi-chunk compaction", async () => {
     });
 
     const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.compactor.history).toHaveLength(0);
+    expect(finishedRuns(thread)).toHaveLength(0);
 
     // Trigger compaction
     await driver.inputMagentaText("@compact Continue with next task");
@@ -1039,19 +1089,16 @@ it("compaction history records steps from multi-chunk compaction", async () => {
 
     await pollUntil(
       () => {
-        if (thread.compactor.state.type !== "running")
+        if (!isCompacting(thread))
           throw new Error("expected the thread to be compacting");
       },
       { timeout: 2000, message: "thread should enter compacting mode" },
     );
 
     // Verify we got multiple chunks
-    if (thread.compactor.state.type !== "running")
-      throw new Error("not compacting");
-    expect(
-      runningManager(thread.compactor).chunks.length,
-    ).toBeGreaterThanOrEqual(2);
-    const totalChunks = runningManager(thread.compactor).chunks.length;
+    if (!isCompacting(thread)) throw new Error("not compacting");
+    const totalChunks = compactorOf(thread).current!.totalChunks;
+    expect(totalChunks).toBeGreaterThanOrEqual(2);
 
     // === Process chunk 1 ===
     const chunk1Stream = await driver.mockAnthropic.awaitPendingStream({
@@ -1091,11 +1138,7 @@ it("compaction history records steps from multi-chunk compaction", async () => {
     const afterEdl1 = await driver.mockAnthropic.awaitPendingStream({
       message: "compact after EDL chunk 1",
     });
-    afterEdl1.respond({
-      stopReason: "end_turn",
-      text: "Chunk 1 summarized.",
-      toolRequests: [],
-    });
+    yieldChunk(afterEdl1);
 
     // === Process chunk 2 ===
     const chunk2Stream = await driver.mockAnthropic.awaitPendingStream({
@@ -1114,6 +1157,10 @@ it("compaction history records steps from multi-chunk compaction", async () => {
       .map((c) => c.text)
       .join("");
     expect(chunk2Text).toContain("chunk 2 of");
+    // Chunk 2's prompt carries chunk 1's summary, not chunk 1's transcript.
+    expect(chunk2Text).toContain("First chunk processed");
+    // Two chunk threads so far, and they are children of the parent thread.
+    expect(compactorOf(thread).current!.threadIds).toHaveLength(2);
 
     const edlScript2 = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nUser asked two questions. Both answers were very long.\nCOMPACT_SUMMARY`;
 
@@ -1135,11 +1182,7 @@ it("compaction history records steps from multi-chunk compaction", async () => {
     const afterEdl2 = await driver.mockAnthropic.awaitPendingStream({
       message: "compact after EDL chunk 2",
     });
-    afterEdl2.respond({
-      stopReason: "end_turn",
-      text: "Chunk 2 summarized.",
-      toolRequests: [],
-    });
+    yieldChunk(afterEdl2);
 
     // If there are more chunks, process them the same way
     // For safety, drain any remaining chunks
@@ -1165,11 +1208,7 @@ it("compaction history records steps from multi-chunk compaction", async () => {
       const afterEdlExtra = await driver.mockAnthropic.awaitPendingStream({
         message: `compact after EDL chunk ${i + 1}`,
       });
-      afterEdlExtra.respond({
-        stopReason: "end_turn",
-        text: `Chunk ${i + 1} summarized.`,
-        toolRequests: [],
-      });
+      yieldChunk(afterEdlExtra);
     }
 
     // After all chunks, the parent thread should resume
@@ -1185,22 +1224,18 @@ it("compaction history records steps from multi-chunk compaction", async () => {
     await driver.assertDisplayBufferContains("Ready for the next task!");
 
     // === Verify compaction history ===
-    expect(thread.compactor.history).toHaveLength(1);
-    const record = thread.compactor.history[0];
-    expect(record.steps).toHaveLength(totalChunks);
-    expect(record.finalSummary).toBeDefined();
-    expect(record.finalSummary).toContain("Summary");
-
-    // Each step should have the correct chunk index and messages from its agent
-    for (let i = 0; i < totalChunks; i++) {
-      const step = record.steps[i];
-      expect(step.chunkIndex).toBe(i);
-      expect(step.totalChunks).toBe(totalChunks);
-      // Each step should have messages (at least user + assistant exchanges)
-      expect(step.messages.length).toBeGreaterThanOrEqual(2);
-      // The assistant should have produced text and tool_use
-      const assistantMsgs = step.messages.filter((m) => m.role === "assistant");
-      expect(assistantMsgs.length).toBeGreaterThanOrEqual(1);
+    expect(finishedRuns(thread)).toHaveLength(1);
+    const record = finishedRuns(thread)[0];
+    if (record.type !== "done") throw new Error("expected a completed run");
+    // One child thread per chunk, each a real thread the user can open.
+    expect(record.threadIds).toHaveLength(totalChunks);
+    expect(record.summary).toContain("Summary");
+    for (const threadId of record.threadIds) {
+      const wrapper = driver.magenta.chat.threadWrappers[threadId];
+      if (wrapper?.state !== "initialized")
+        throw new Error("expected the chunk thread to still be around");
+      expect(wrapper.thread.core.state.threadType).toBe("compact");
+      expect(wrapper.parentThreadId).toBe(thread.id);
     }
 
     // Verify the compaction history view is renderable in the display
@@ -1248,7 +1283,7 @@ it("auto-compact does not trigger on compact threads", async () => {
 
     await pollUntil(
       () => {
-        if (originalThread.compactor.state.type !== "running")
+        if (!isCompacting(originalThread))
           throw new Error("expected compacting");
       },
       { timeout: 2000, message: "thread should enter compacting mode" },
@@ -1265,7 +1300,7 @@ it("auto-compact does not trigger on compact threads", async () => {
 
     // Verify a compact thread was spawned
     // Verify the thread is in compacting mode with an internal compact agent
-    expect(originalThread.compactor.state.type).toBe("running");
+    expect(isCompacting(originalThread)).toBe(true);
 
     // Clean up: respond to the compact subagent
 
@@ -1289,11 +1324,7 @@ it("auto-compact does not trigger on compact threads", async () => {
     const afterEdlStream = await driver.mockAnthropic.awaitPendingStream({
       message: "compact subagent after EDL",
     });
-    afterEdlStream.respond({
-      stopReason: "end_turn",
-      text: "Done compacting.",
-      toolRequests: [],
-    });
+    yieldChunk(afterEdlStream);
 
     // Reset token count for the resumed conversation
     driver.mockAnthropic.mockClient.mockInputTokenCount = 1000;
@@ -1354,8 +1385,7 @@ it("compact keeps context files after compaction", async () => {
 
       await pollUntil(
         () => {
-          if (thread.compactor.state.type !== "running")
-            throw new Error("expected compacting");
+          if (!isCompacting(thread)) throw new Error("expected compacting");
         },
         { timeout: 2000 },
       );
@@ -1391,11 +1421,7 @@ it("compact keeps context files after compaction", async () => {
       const afterEdlStream = await driver.mockAnthropic.awaitPendingStream({
         message: "after EDL",
       });
-      afterEdlStream.respond({
-        stopReason: "end_turn",
-        text: "Done.",
-        toolRequests: [],
-      });
+      yieldChunk(afterEdlStream);
 
       const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
         message: "after compact",
@@ -1486,11 +1512,7 @@ it("compaction keeps reminders derived from files still tracked in context", asy
       const afterEdlStream = await driver.mockAnthropic.awaitPendingStream({
         message: "compact subagent after EDL",
       });
-      afterEdlStream.respond({
-        stopReason: "end_turn",
-        text: "compacted",
-        toolRequests: [],
-      });
+      yieldChunk(afterEdlStream);
 
       const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
         message: "after compact continuation",
@@ -1520,4 +1542,49 @@ it("compaction keeps reminders derived from files still tracked in context", asy
       });
     },
   );
+});
+
+it("deleting the compact child thread aborts the parked submission", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("Hello");
+    await driver.send();
+    const stream1 = await driver.mockAnthropic.awaitPendingStream({
+      message: "initial request",
+    });
+    stream1.respond({
+      stopReason: "end_turn",
+      text: "Hi there!",
+      toolRequests: [],
+    });
+
+    const thread = driver.magenta.chat.getActiveThread();
+    await driver.inputMagentaText("@compact");
+    await driver.send();
+
+    await pollUntil(
+      () => {
+        if (!isCompacting(thread)) throw new Error("expected compacting");
+        if (compactorOf(thread).current!.threadIds.length === 0)
+          throw new Error("waiting for the chunk thread");
+      },
+      { timeout: 2000, message: "thread should spawn a chunk thread" },
+    );
+
+    const chunkThreadId = compactorOf(thread).current!.threadIds[0];
+    driver.magenta.chat.deleteThread(chunkThreadId);
+
+    await pollUntil(
+      () => {
+        const runs = finishedRuns(thread);
+        if (runs.length !== 1) throw new Error("expected the run to settle");
+        if (runs[0].type !== "aborted")
+          throw new Error(`expected aborted, got ${runs[0].type}`);
+      },
+      { timeout: 2000, message: "deleting the child should abort the run" },
+    );
+    // The parent is idle again: nothing is waiting on the deleted thread.
+    expect(isCompacting(thread)).toBe(false);
+    expect(thread.agent.phase.type).toBe("idle");
+  });
 });

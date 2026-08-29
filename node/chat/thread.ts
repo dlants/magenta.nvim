@@ -22,7 +22,6 @@ import {
   GitTracker,
   type InputMessage,
   loadAgents,
-  ManagedCompactor,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
   type PendingMessage,
@@ -32,6 +31,7 @@ import {
   runSubmission,
   Thread,
   type ThreadCallbacks,
+  ThreadCompactor,
   type ThreadId,
   type ThreadSendResult,
   type ThreadType,
@@ -280,10 +280,9 @@ export class NvimThread {
   };
 
   public core: Thread;
-  /** The summarizing pass this thread's submissions hand off to. Compact
-   * threads have one too, but never suspend for compaction (no
-   * `AutoCompactSupervisor`), so it stays idle. */
-  public readonly compactor: ManagedCompactor;
+  /** The summarizing pass this thread's submissions hand off to. Absent on
+   * compact threads: a compaction must never be able to compact itself. */
+  public readonly compactor: ThreadCompactor | undefined;
   private myDispatch: Dispatch<Msg>;
   private lastAppliedTitle: string | undefined;
   public sandboxViolationHandler: SandboxViolationHandler | undefined;
@@ -496,10 +495,11 @@ export class NvimThread {
       );
     }
 
-    this.compactor = new ManagedCompactor(this.core);
+    this.compactor =
+      threadType === "compact" ? undefined : new ThreadCompactor(this.core);
     // The status line and the history section both read the compactor, so a
     // chunk boundary has to repaint even though nothing on the thread moved.
-    this.compactor.on("progress", () => this.onCoreUpdate());
+    this.compactor?.on("transition", () => this.onCoreUpdate());
 
     // The pending-comments view lives in the display buffer, so a comment
     // queued while the thread is idle has to trigger a redraw on its own.

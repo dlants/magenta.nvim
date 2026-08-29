@@ -352,6 +352,24 @@ Additional tests:
   - Abort: deleting the compact child resolves the parked submission as aborted; a fresh `@compact` discards the in-flight run and starts a new one.
   - Regression: `node/comments/comment-delivery.test.ts` "keeps delivering after a compaction swaps the agent" still passes.
 
+**Status: done** (see commit "Stage 3: Compact threads are real threads").
+
+Deviations, decided while implementing:
+
+- The class is `ThreadCompactor` (`node/core/src/compaction/compactor.ts`), implementing the existing `Compactor` interface; `ManagedCompactor` and `compaction-manager.ts` / `compaction-controller.ts` are deleted. `CompactionOutcome` lost `steps` (there are no steps any more, only child threads) and gained `chunkCount`, a `message` on the error variant, and an `aborted` variant — `runSubmission` maps `aborted` to a `SendResult` of `aborted` rather than `failed`.
+- `CompactionRunState` has four variants, not three: `error` joins `running` / `done` / `aborted`, so "the chunk threads all yielded but `/summary.md` came back empty" is distinguishable from "the user deleted a chunk thread". `ThreadCompactor.runs` holds the current run last; `current` is the accessor the status line uses.
+- `ThreadManager` gained `deleteThread(threadId)` alongside `fileIO` and `label` on `spawnThread`. `discard()` needs it, and deletion is already the thing that settles `awaitThreadResult` as `aborted`, so no second abort channel was needed. `Chat.deleteThread` is a public wrapper over the existing `deleteThreadSubtree`.
+- `label` is implemented as the child thread's title (`core.setTitle`), which is what the thread tree already renders. No new field on `ThreadWrapper`.
+- Chunk threads are spawned with `subagentConfig: { fastModel: true }`, preserving the fast-model behaviour `CompactionManager` had.
+- The chunk prompt now fills in the template's `{{summary}}` and `{{chunk}}` placeholders (which `CompactionManager` left literally unsubstituted, duplicating them in a hand-built context block). `/summary.md` and `/chunk.md` are still present in the child's `InMemoryFileIO`.
+- `NvimThread.compactor` is `undefined` on compact threads rather than a live-but-idle compactor, so a compact thread cannot compact even if a supervisor were misconfigured. `Magenta.preprocessAndSend` uses that to deliver `@compact` typed into a compact thread as ordinary text.
+- Compact threads are wired with `SubagentSupervisor` (the same branch as `subagent` / `docker_root`), so a chunk thread that stops without yielding gets nudged.
+- Stage 4's display work is still outstanding, but `thread-view.ts` had to move off the deleted `CompactionRecord`: the history section now renders one row per settled run, listing its chunk threads with `<CR>` to select, and the status line reads `compactor.current`. The per-step transcript dump is gone — the transcript is the child thread.
+
+Tests (`node/chat/thread-compact.test.ts`, 15 tests): the chunk threads now yield via `yield_to_parent` (helper `yieldChunk`). The old "records a summary-less history entry when the compaction errors out" test became **"lets the user rescue a chunk thread whose turn failed"** — a failing chunk thread no longer settles the run; the test asserts the run stays in flight, then messages the child thread directly and watches the parked submission continue when it yields. The multi-chunk test is now "spawns one compact child thread per chunk, carrying the summary forward" and asserts one `compact` child per chunk parented to the thread, chunk 2's prompt carrying chunk 1's summary. Added "deleting the compact child thread aborts the parked submission".
+
+`node/comments/comment-input.test.ts` remains flaky on `main` (verified again by stashing: 1–2 failures per run either way).
+
 ## Display and navigation
 
 `NvimThread` keeps both existing render sites; they just read `Compactor.runs` instead of `core.state.compactionHistory` / `core.state.mode`.

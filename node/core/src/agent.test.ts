@@ -432,7 +432,7 @@ describe("runSubmission across a compaction handoff", () => {
     outcome: CompactionOutcome = {
       type: "complete",
       summary: "SUMMARY TEXT",
-      steps: [],
+      chunkCount: 1,
     },
   ): Compactor & { calls: (string | undefined)[] } => {
     const calls: (string | undefined)[] = [];
@@ -525,7 +525,7 @@ describe("runSubmission across a compaction handoff", () => {
           return Promise.resolve({
             type: "complete",
             summary: `SUMMARY ${calls.length}`,
-            steps: [],
+            chunkCount: 1,
           });
         },
       };
@@ -574,7 +574,7 @@ describe("runSubmission across a compaction handoff", () => {
       compactOnce(core, undefined);
       const result = runSubmission({
         thread: core,
-        compactor: stubCompactor({ type: "error", steps: [] }),
+        compactor: stubCompactor({ type: "error", message: "boom" }),
         start: () => core.send([{ type: "user", text: "hello" }]),
       });
       const stream = await mockClient.awaitStream();
@@ -1184,7 +1184,7 @@ describe("deferred submissions", () => {
           return Promise.resolve({
             type: "complete",
             summary: "SUMMARY TEXT",
-            steps: [],
+            chunkCount: 1,
           });
         },
       };
@@ -2890,10 +2890,7 @@ describe("Agent conversation archive", () => {
             Promise.resolve({
               type: "complete",
               summary: "SUMMARY TEXT",
-              steps: [
-                { chunkIndex: 0, totalChunks: 2, messages: [] },
-                { chunkIndex: 1, totalChunks: 2, messages: [] },
-              ],
+              chunkCount: 2,
             }),
         },
         start: () =>
@@ -3062,7 +3059,7 @@ describe("Thread survives the compaction agent swap", () => {
           Promise.resolve({
             type: "complete",
             summary: "SUMMARY TEXT",
-            steps: [],
+            chunkCount: 1,
           }),
       },
       // Nothing to run: the suspension is the point.
@@ -3146,7 +3143,7 @@ describe("Thread survives the compaction agent swap", () => {
             Promise.resolve({
               type: "complete",
               summary: "SUMMARY TEXT",
-              steps: [{ chunkIndex: 0, totalChunks: 1, messages: [] }],
+              chunkCount: 1,
             }),
         },
         start: () =>

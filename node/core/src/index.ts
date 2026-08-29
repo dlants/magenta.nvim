@@ -73,26 +73,13 @@ export {
 } from "./compact-renderer.ts";
 export {
   type CompactionOutcome,
-  type CompactionProgress,
+  type CompactionRunState,
   type Compactor,
-  type CompactorState,
   type CompactSuspendReason,
-  ManagedCompactor,
   runSubmission,
+  ThreadCompactor,
+  type ThreadCompactorEvents,
 } from "./compaction/index.ts";
-export type {
-  CompactionController,
-  CompactionRecord,
-  CompactionResult,
-  CompactionStep,
-} from "./compaction-controller.ts";
-export {
-  type CompactionAction,
-  type CompactionEvents,
-  CompactionManager,
-  type CompactionManagerContext,
-  type CompactionState,
-} from "./compaction-manager.ts";
 export { provisionContainer } from "./container/provision.ts";
 export { teardownContainer } from "./container/teardown.ts";
 export type {

@@ -1627,7 +1627,9 @@ ${lines.join("\n")}
   private async preprocessAndSend(text: string): Promise<void> {
     const thread = this.chat.getActiveThread();
     const intent = parseSubmission(text);
-    if (intent.type === "compact") {
+    // A compact thread has no compactor — it *is* a compaction — so `@compact`
+    // typed into one is ordinary text rather than a no-op.
+    if (intent.type === "compact" && thread.compactor) {
       // Reminders collected here are intentionally dropped: compaction clears
       // activeReminders, so activating them on this thread would have no effect.
       const nextMessages = intent.nextPrompt
@@ -1645,13 +1647,19 @@ ${lines.join("\n")}
       });
       return;
     }
+    const message =
+      intent.type === "compact"
+        ? { parts: [{ type: "text" as const, text }] }
+        : intent.message;
+    const delivery =
+      intent.type === "compact" ? ("now" as const) : intent.delivery;
     this.dispatch({
       type: "thread-msg",
       id: thread.id,
       msg: {
         type: "submit-message",
-        message: intent.message,
-        delivery: intent.delivery,
+        message,
+        delivery,
       },
     });
   }

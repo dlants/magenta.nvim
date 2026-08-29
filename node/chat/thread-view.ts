@@ -3,8 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type AbsFilePath,
-  type CompactionProgress,
-  type CompactionRecord,
+  type CompactionRunState,
   type CompletedToolInfo,
   type ContextManager,
   displayPath,
@@ -13,7 +12,6 @@ import {
   type NativeMessageIdx,
   type ProviderToolSpec,
   renderPending,
-  renderThreadToMarkdown,
   type ThreadId,
   type ThreadMode,
   type ToolName,
@@ -89,7 +87,7 @@ export const renderStatus = (
   mode: ThreadMode,
   latestUsage: Usage | undefined,
   lastTurnResult: TurnResult | undefined,
-  compaction: CompactionProgress | undefined,
+  compaction: Extract<CompactionRunState, { type: "running" }> | undefined,
 ): VDOMNode => {
   const yieldedResponse = mode.type === "yielded" ? mode.response : undefined;
   // First check mode for thread-specific states
@@ -266,64 +264,64 @@ const renderToolDefinitions = (
   return d`${header}\n${toolViews}`;
 };
 
+/** Past runs, most recent last. Each chunk of a run is a real thread, so an
+ * expanded run is a list of threads the user can walk into rather than an
+ * inlined transcript. */
 function renderCompactionHistory(
-  history: CompactionRecord[],
+  runs: CompactionRunState[],
+  thread: NvimThread,
   viewState: NvimThread["state"]["compactionViewState"],
   dispatch: Dispatch<Msg>,
 ): VDOMNode {
+  const history = runs.filter((run) => run.type !== "running");
   if (history.length === 0) return d``;
-
-  return d`${history.map((record, recordIdx) => {
-    const rv = viewState[recordIdx];
-    const isExpanded = rv?.expanded || false;
-    const summaryLen = record.finalSummary?.length ?? 0;
+  return d`${history.map((run, recordIdx) => {
+    const isExpanded = viewState[recordIdx]?.expanded || false;
     const status =
-      record.finalSummary !== undefined
-        ? `summary: ${summaryLen} chars`
-        : "⚠️ failed";
-
+      run.type === "done"
+        ? `summary: ${run.summary.length.toString()} chars`
+        : run.type === "aborted"
+          ? "aborted"
+          : `⚠️ ${run.message}`;
+    const chunkCount = run.threadIds.length;
     const header = withBindings(
       withExtmark(
-        d`📦 [Compaction ${(recordIdx + 1).toString()} — ${record.steps.length.toString()} step${record.steps.length === 1 ? "" : "s"}, ${status}]\n`,
+        d`📦 [Compaction ${(recordIdx + 1).toString()} — ${chunkCount.toString()} chunk${chunkCount === 1 ? "" : "s"}, ${status}]\n`,
         { hl_group: "@comment" },
       ),
       {
         "=": () => dispatch({ type: "toggle-compaction-record", recordIdx }),
       },
     );
-
     if (!isExpanded) return header;
-
-    const stepsView = record.steps.map((step, stepIdx) => {
-      const stepExpanded = rv?.expandedSteps[stepIdx] || false;
-      const stepHeader = withBindings(
-        withExtmark(
-          d`  📄 [Step ${(step.chunkIndex + 1).toString()} of ${step.totalChunks.toString()}]\n`,
-          { hl_group: "@comment" },
-        ),
-        {
-          "=": () =>
-            dispatch({
-              type: "toggle-compaction-step",
-              recordIdx,
-              stepIdx,
-            }),
-        },
-      );
-
-      if (!stepExpanded) return stepHeader;
-
-      const { markdown } = renderThreadToMarkdown(step.messages);
-      return d`${stepHeader}${withExtmark(d`${markdown}\n`, { hl_group: "@comment" })}`;
-    });
-
+    const chunkViews = run.threadIds.map(
+      (threadId, chunkIdx) =>
+        d`${renderChunkThreadRow(thread, threadId, chunkIdx, chunkCount)}`,
+    );
     const summaryView =
-      record.finalSummary !== undefined
-        ? d`  📋 Final Summary:\n${withExtmark(d`${record.finalSummary}\n`, { hl_group: "@comment" })}`
-        : d`  ⚠️ Compaction failed — no summary produced\n`;
-
-    return d`${header}${stepsView}${summaryView}`;
+      run.type === "done"
+        ? d`  📋 Final Summary:\n${withExtmark(d`${run.summary}\n`, { hl_group: "@comment" })}`
+        : d`  ⚠️ Compaction did not produce a summary\n`;
+    return d`${header}${chunkViews}${summaryView}`;
   })}`;
+}
+/** One chunk thread, selectable — the transcript lives in that thread now. */
+function renderChunkThreadRow(
+  thread: NvimThread,
+  threadId: ThreadId,
+  chunkIdx: number,
+  totalChunks: number,
+): VDOMNode {
+  return withBindings(
+    withExtmark(
+      d`  📄 [chunk ${(chunkIdx + 1).toString()} of ${totalChunks.toString()}]\n`,
+      { hl_group: "@comment" },
+    ),
+    {
+      "<CR>": () =>
+        thread.context.dispatch({ type: "select-thread-effect", id: threadId }),
+    },
+  );
 }
 function editedFilesSummaryView(
   editedFiles: ReadonlyArray<{ path: AbsFilePath; snapshot: string }>,
@@ -476,9 +474,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     mode,
     latestUsage,
     thread.core.state.lastTurnResult,
-    thread.compactor.state.type === "running"
-      ? thread.compactor.state.progress
-      : undefined,
+    thread.compactor?.current,
   );
 
   const contextManagerView = shouldShowContextFiles(
@@ -497,7 +493,8 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     ? d`\n${thread.sandboxViolationHandler.view()}`
     : d``;
   const compactionHistoryView = renderCompactionHistory(
-    thread.compactor.history,
+    thread.compactor?.runs ?? [],
+    thread,
     thread.state.compactionViewState,
     dispatch,
   );
