@@ -9,7 +9,6 @@ import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { Shell } from "./capabilities/shell.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
-import type { CompactionRecord } from "./compaction-controller.ts";
 import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
@@ -121,7 +120,6 @@ export type ActiveToolEntry = {
 export type ThreadMode =
   | { type: "normal" }
   | { type: "tool_use"; activeTools: Map<ToolRequestId, ActiveToolEntry> }
-  | { type: "compacting"; chunkIndex: number; totalChunks: number }
   | {
       type: "yielded";
       response: string;
@@ -190,8 +188,7 @@ export type AgentAction =
   | { type: "drain-next-request-queue" }
   | { type: "enqueue-next-stop"; messages: PendingMessage[] }
   | { type: "drain-next-stop-queue" }
-  | { type: "push-compaction-record"; record: CompactionRecord }
-  | { type: "reset-after-compaction" }
+  | { type: "reset-agent-state" }
   | { type: "mark-bash-output-abbreviated" }
   | { type: "activate-reminder"; text: string }
   | { type: "reset-bash-reminder" }
@@ -234,7 +231,6 @@ export type ThreadState = {
   mode: ThreadMode;
   edlRegisters: EdlRegisters;
   outputTokensSinceLastReminder: number;
-  compactionHistory: CompactionRecord[];
   editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];
   pendingBashReminder: boolean;
   bashTokensSinceLastReminder: number;
@@ -283,9 +279,6 @@ export interface AgentDeps {
       };
 }
 
-/** Where a submission ends up. `compact` is not a `SendResult`: the agent has
- * stopped, but the submission is not over — the owning `Thread` runs the
- * handoff and keeps the caller's promise pending across it. */
 export type SubmitOptions = {
   /** Skip context updates, reminders and failed-submit bookkeeping: the caller
    * has composed the exact content (the compact thread). */
@@ -296,16 +289,16 @@ export type SubmitOptions = {
   requestKind?: "submission" | "continuation";
 };
 
-/** A handoff to a fresh, compacted agent. `nextPrompt` is what the new agent
- * is asked to do first, if anything. */
-export type Compaction = { nextPrompt: string | undefined };
-export type AgentSendOutcome = SendResult | ({ type: "compact" } & Compaction);
+/** Where a submission ends up. A `suspended` outcome means the agent stopped
+ * before a request at a supervisor's request; whether the submission is over
+ * is the owner's call, not the agent's. */
+export type AgentSendOutcome = SendResult;
 
 /** Outcome of consulting the before-request hooks. `injections` is non-empty
  * only when the caller asked to receive them (`injections: "return"`) instead
  * of having them appended to the log. */
 type BeforeRequestResult =
-  | { type: "compact"; compaction: Compaction }
+  | { type: "suspend"; reason: unknown }
   | { type: "proceed"; injections: AgentInput[] };
 
 export class Agent {
@@ -439,10 +432,7 @@ export class Agent {
       case "drain-next-stop-queue":
         this.state.nextStopQueue = [];
         break;
-      case "push-compaction-record":
-        this.state.compactionHistory.push(action.record);
-        break;
-      case "reset-after-compaction":
+      case "reset-agent-state":
         this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
         this.state.outputTokensSinceLastReminder = 0;
         this.state.editedFilesThisTurn = [];
@@ -627,7 +617,7 @@ export class Agent {
    * back out here when the turn resolves `suspended`. */
   private suspendReason:
     | { type: "yield"; result: string; value: YieldValue }
-    | ({ type: "compact" } & Compaction)
+    | { type: "supervisor"; reason: unknown }
     | undefined;
 
   /** Number of messages whose usage has already been folded into the
@@ -693,8 +683,8 @@ export class Agent {
     const reason = this.suspendReason;
     this.suspendReason = undefined;
     if (!reason) return;
-    if (reason.type === "compact") {
-      this.settle({ type: "compact", nextPrompt: reason.nextPrompt });
+    if (reason.type === "supervisor") {
+      this.settle({ type: "suspended", reason: reason.reason });
       return;
     }
     await this.handleYield(reason.result, reason.value);
@@ -784,13 +774,10 @@ export class Agent {
       },
       "prefix",
     );
-    if (beforeRequest.type === "compact") {
-      // The submission is not over: the owning Thread runs the handoff and
-      // continues it on the replacement agent.
-      this.settle({
-        type: "compact",
-        nextPrompt: beforeRequest.compaction.nextPrompt,
-      });
+    if (beforeRequest.type === "suspend") {
+      // The agent has stopped cleanly; whether the submission is over is the
+      // owner's call.
+      this.settle({ type: "suspended", reason: beforeRequest.reason });
       return;
     }
 
@@ -971,10 +958,10 @@ export class Agent {
       { kind: "continuation", stopReason: "tool_use" },
       "pending",
     );
-    if (beforeRequest.type === "compact") {
+    if (beforeRequest.type === "suspend") {
       this.suspendReason = {
-        type: "compact",
-        nextPrompt: beforeRequest.compaction.nextPrompt,
+        type: "supervisor",
+        reason: beforeRequest.reason,
       };
       return { type: "suspend", results };
     }
@@ -1220,14 +1207,11 @@ export class Agent {
     // After the hook: the file tracker's update is what refreshes the agent
     // view the markdown-reminder scan reads.
     const { content, hasContent } = this.prepareUserContent(inputMessages);
-    if (beforeRequest.type === "compact") {
+    if (beforeRequest.type === "suspend") {
       // The injections are already in the log; the user's own content has to
-      // join them there so the compaction snapshot carries it too.
+      // join them there so the snapshot handed over carries it too.
       this.runner.appendUserMessage(toAgentInput(content), { coalesce: true });
-      this.settle({
-        type: "compact",
-        nextPrompt: beforeRequest.compaction.nextPrompt,
-      });
+      this.settle({ type: "suspended", reason: beforeRequest.reason });
       return;
     }
 
@@ -1474,8 +1458,8 @@ export class Agent {
 
   /** Consult the before-request hooks and apply their actions in order.
    * Injections are appended to the message log immediately — unconditionally,
-   * so nothing the agent does next (a failure, an abort, a compaction handoff)
-   * can lose them. Returns the compaction the list asks for, if any. */
+   * so nothing the agent does next (a failure, an abort, a suspension) can
+   * lose them. Returns the suspension the list asks for, if any. */
   /** Injections produced on the tool_use path, held until the tool results
    * have been written. Anthropic requires the tool_result blocks to
    * immediately follow the tool_use they answer, so injected content cannot be
@@ -1487,24 +1471,35 @@ export class Agent {
   ): Promise<BeforeRequestResult> {
     const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
     if (!onBeforeRequest) return { type: "proceed", injections: [] };
-    const plan = await onBeforeRequest({
+    const actions = await onBeforeRequest({
       ...context,
       inputTokenCount: this.runner.log.inputTokenCount,
     });
-    const injections: AgentInput[] = plan.injections.map((content) =>
-      content.type === "text"
-        ? {
-            type: "text" as const,
-            text: content.text,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          }
-        : content,
-    );
-    // A deferred injection would be dropped by the agent swap, so a compaction
-    // forces the append: the content belongs in the snapshot handed over.
-    if (plan.compaction) {
+    const injections: AgentInput[] = [];
+    // The first suspension wins; a later one cannot restate the reason.
+    let suspension: { reason: unknown } | undefined;
+    for (const action of actions) {
+      if (action.type === "inject") {
+        for (const content of action.content) {
+          injections.push(
+            content.type === "text"
+              ? {
+                  type: "text" as const,
+                  text: content.text,
+                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                }
+              : content,
+          );
+        }
+      } else if (action.type === "suspend") {
+        suspension ??= { reason: action.reason };
+      }
+    }
+    // A deferred injection would be dropped by a reset, so a suspension forces
+    // the append: the content belongs in the snapshot handed over.
+    if (suspension) {
       this.runner.appendUserMessage(injections, { coalesce: true });
-      return { type: "compact", compaction: plan.compaction };
+      return { type: "suspend", reason: suspension.reason };
     }
     switch (mode) {
       case "prefix":

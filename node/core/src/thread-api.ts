@@ -7,10 +7,10 @@ import type {
 } from "./providers/provider-types.ts";
 import type { PendingMessage } from "./submission/index.ts";
 import type {
-  BeforeRequestPlan,
   EndTurnAction,
   EndTurnContext,
   RequestContext,
+  SupervisorAction,
   YieldAction,
 } from "./thread-supervisor.ts";
 import type { ToolRequestId } from "./tool-types.ts";
@@ -64,7 +64,6 @@ export type ThreadPhase =
       lastResult: SendResult | undefined;
     }
   | { type: "running"; activity: TurnActivity }
-  | { type: "compacting"; chunkIndex: number; totalChunks: number }
   | { type: "aborting" };
 
 export type SendOptions = {
@@ -82,7 +81,11 @@ export type SendResult =
   | { type: "yielded"; value: YieldValue }
   | { type: "aborted" }
   /** `resubmit` carries the rolled-back user text, for repopulating an input */
-  | { type: "failed"; error: Error; resubmit: string | undefined };
+  | { type: "failed"; error: Error; resubmit: string | undefined }
+  /** A supervisor stopped the submission before a request was issued. The log
+   * is coherent and resumable; what to do about it is the owner's business,
+   * and the reason is opaque to core's turn loop. */
+  | { type: "suspended"; reason: unknown };
 
 /** What `Thread.send` reports. Either the outcome of the caller's own
  * submission, or `queued`: the messages were parked behind the turn in
@@ -120,8 +123,9 @@ export type AgentHooks = {
   /** About to issue a provider request — the opening one of a submission, or a
    * continuation carrying tool results. Not re-fired when a request is
    * retried. */
-  /** Injections in supervisor order, plus at most one compaction. */
-  onBeforeRequest?: (ctx: RequestContext) => Promise<BeforeRequestPlan>;
+  /** The supervisors' actions, in order. The agent applies every injection
+   * and honours the first `suspend` it scans. */
+  onBeforeRequest?: (ctx: RequestContext) => Promise<SupervisorAction[]>;
   /** A file-touching tool (edl, get_files) finished. Fire-and-forget. */
   onToolApplied?: OnToolApplied;
 };

@@ -1,4 +1,5 @@
 import type { OnToolApplied } from "./capabilities/context-tracker.ts";
+import type { CompactSuspendReason } from "./compaction/index.ts";
 import type {
   ProviderMessageContent,
   StreamStopReason,
@@ -24,24 +25,21 @@ export type InjectedContent =
   | { type: "text"; text: string }
   | Extract<ProviderMessageContent, { type: "image" | "document" }>;
 
-/** Action returned from the `onBeforeRequest` hook by a single supervisor. */
-export type RequestAction =
-  | { type: "compact"; nextPrompt: string | undefined }
+/** Action returned from the `onBeforeRequest` hook by a single supervisor.
+ *
+ * `suspend` says "stop before issuing this request and hand back to my
+ * owner"; the reason is opaque to core's turn loop, which only has to leave
+ * the log coherent and resumable. Whoever wired the supervisor up is the one
+ * who knows what the reason means. */
+export type SupervisorAction =
+  | { type: "suspend"; reason: unknown }
   | { type: "inject"; content: InjectedContent[] }
   | { type: "none" };
-
-/** What the composed hook hands the agent: the injections to apply, in
- * supervisor order, and at most one compaction. Unlike a list of
- * `RequestAction`, this cannot represent a contradictory plan. */
-export type BeforeRequestPlan = {
-  injections: InjectedContent[];
-  compaction: { nextPrompt: string | undefined } | undefined;
-};
 
 /** For the text-only supervisors. */
 export function injectText(
   text: string,
-): Extract<RequestAction, { type: "inject" }> {
+): Extract<SupervisorAction, { type: "inject" }> {
   return { type: "inject", content: [{ type: "text", text }] };
 }
 
@@ -49,7 +47,8 @@ export function injectText(
  * consults. The merge rules are exactly today's: `send-message` texts join
  * with a blank line, and the first `accept`/`reject` wins a yield. Request
  * actions are not merged: they are collected in supervisor order and the agent
- * applies them in that order. Arbitration lives here rather than
+ * applies the injections and honours the first `suspend` it scans.
+ * Arbitration lives here rather than
  * in the agent because it is policy over a plural collaborator, and each
  * consumer is free to choose a different one. */
 export function composeSupervisors(
@@ -80,21 +79,12 @@ export function composeSupervisors(
       return { type: "send-message", text: texts.join("\n\n") };
     },
     onBeforeRequest: async (context) => {
-      const plan: BeforeRequestPlan = {
-        injections: [],
-        compaction: undefined,
-      };
+      const actions: SupervisorAction[] = [];
       for (const sup of getSupervisors()) {
         const action = await sup.onBeforeRequest?.(context);
-        if (!action) continue;
-        if (action.type === "inject") {
-          plan.injections.push(...action.content);
-        } else if (action.type === "compact") {
-          // First compaction wins; a later one cannot restate the prompt.
-          plan.compaction ??= { nextPrompt: action.nextPrompt };
-        }
+        if (action && action.type !== "none") actions.push(action);
       }
-      return plan;
+      return actions;
     },
     onToolApplied: (absFilePath, tool, fileTypeInfo) => {
       for (const sup of getSupervisors()) {
@@ -103,11 +93,6 @@ export function composeSupervisors(
     },
   };
 }
-
-/** Union of all hook action types. Prefer the narrower per-hook types
- *  where possible so that a hook cannot return an action it does not
- *  own (e.g. `compact` is only representable from `onBeforeRequest`). */
-export type SupervisorAction = EndTurnAction | YieldAction | RequestAction;
 
 export type EndTurnContext = {
   stopReason: string;
@@ -122,7 +107,7 @@ type ContinuationRequest = {
   stopReason: StreamStopReason;
 };
 /** A stop that ends the turn: nothing is going out. The agent consults anyway,
- * because a supervisor may still want to compact, but a supervisor that
+ * because a supervisor may still want to suspend, but a supervisor that
  * contributes content — the context trackers — must stay silent, or it would
  * commit an update no request carries. */
 type TurnEndRequest = {
@@ -142,7 +127,7 @@ export type RequestContext = {
 export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
   onYield?(result: string): Promise<YieldAction>;
-  onBeforeRequest?(context: RequestContext): Promise<RequestAction>;
+  onBeforeRequest?(context: RequestContext): Promise<SupervisorAction>;
   onToolApplied?: OnToolApplied;
 }
 
@@ -225,12 +210,16 @@ export class AutoCompactSupervisor implements ThreadSupervisor {
     this.nextPrompt = opts.nextPrompt;
   }
 
-  async onBeforeRequest(context: RequestContext): Promise<RequestAction> {
+  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
     if (
       context.inputTokenCount !== undefined &&
       context.inputTokenCount >= this.threshold
     ) {
-      return { type: "compact", nextPrompt: this.nextPrompt };
+      const reason: CompactSuspendReason = {
+        kind: "compact",
+        nextPrompt: this.nextPrompt,
+      };
+      return { type: "suspend", reason };
     }
     return { type: "none" };
   }

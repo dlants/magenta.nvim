@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type AbsFilePath,
+  type CompactionProgress,
   type CompactionRecord,
   type CompletedToolInfo,
   type ContextManager,
@@ -88,6 +89,7 @@ export const renderStatus = (
   mode: ThreadMode,
   latestUsage: Usage | undefined,
   lastTurnResult: TurnResult | undefined,
+  compaction?: CompactionProgress | undefined,
 ): VDOMNode => {
   const yieldedResponse = mode.type === "yielded" ? mode.response : undefined;
   // First check mode for thread-specific states
@@ -97,8 +99,8 @@ export const renderStatus = (
   if (yieldedResponse !== undefined) {
     return d`↗️ yielded to parent: ${yieldedResponse}`;
   }
-  if (mode.type === "compacting") {
-    return d`📦 Compacting thread... (chunk ${String(mode.chunkIndex + 1)} / ${String(mode.totalChunks)})`;
+  if (compaction) {
+    return d`📦 Compacting thread... (chunk ${String(compaction.chunkIndex + 1)} / ${String(compaction.totalChunks)})`;
   }
 
   // Then render based on the phase the turn is passing through
@@ -474,6 +476,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     mode,
     latestUsage,
     thread.core.state.lastTurnResult,
+    thread.compactor.progress,
   );
 
   const contextManagerView = shouldShowContextFiles(
@@ -492,7 +495,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     ? d`\n${thread.sandboxViolationHandler.view()}`
     : d``;
   const compactionHistoryView = renderCompactionHistory(
-    thread.core.state.compactionHistory,
+    thread.compactor.history,
     thread.state.compactionViewState,
     dispatch,
   );

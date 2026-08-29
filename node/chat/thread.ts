@@ -22,12 +22,14 @@ import {
   GitTracker,
   type InputMessage,
   loadAgents,
+  ManagedCompactor,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
   type PendingMessage,
   type PendingMessagePart,
   renderPending,
   resolvePartsAsText,
+  runSubmission,
   Thread,
   type ThreadCallbacks,
   type ThreadId,
@@ -278,6 +280,10 @@ export class NvimThread {
   };
 
   public core: Thread;
+  /** The summarizing pass this thread's submissions hand off to. Compact
+   * threads have one too, but never suspend for compaction (no
+   * `AutoCompactSupervisor`), so it stays idle. */
+  public readonly compactor: ManagedCompactor;
   private myDispatch: Dispatch<Msg>;
   private lastAppliedTitle: string | undefined;
   public sandboxViolationHandler: SandboxViolationHandler | undefined;
@@ -490,6 +496,11 @@ export class NvimThread {
       );
     }
 
+    this.compactor = new ManagedCompactor(this.core);
+    // The status line and the history section both read the compactor, so a
+    // chunk boundary has to repaint even though nothing on the thread moved.
+    this.compactor.on("progress", () => this.onCoreUpdate());
+
     // The pending-comments view lives in the display buffer, so a comment
     // queued while the thread is idle has to trigger a redraw on its own.
     this.comments?.store.on("changed", () => this.onCoreUpdate());
@@ -637,6 +648,16 @@ export class NvimThread {
 
   /** Turn a finished submission into the effects that used to be broadcast
    * events: the turn-end notification and the rolled-back input text. */
+  /** Every submission this thread issues goes through the compaction loop —
+   * there is no path that reaches `core.send` directly, or auto-compaction
+   * would silently stop working for it. */
+  private runSubmission(start: () => Promise<ThreadSendResult>): void {
+    runSubmission({ thread: this.core, compactor: this.compactor, start }).then(
+      (result) => this.handleSendResult(result),
+      (e: Error) => this.context.nvim.logger.error(e),
+    );
+  }
+
   private handleSendResult(result: ThreadSendResult): void {
     if (result.type === "queued") return;
     this.myDispatch({ type: "turn-ended" });
@@ -950,10 +971,7 @@ export class NvimThread {
         // Comment positions are refreshed by `CommentSupervisor.beforeRead`,
         // on every request rather than just this one, so the send stays
         // synchronous and an abort-by-send cannot race the turn it preempts.
-        this.core.send(msg.messages).then(
-          (result) => this.handleSendResult(result),
-          (e: Error) => this.context.nvim.logger.error(e),
-        );
+        this.runSubmission(() => this.core.send(msg.messages));
         return;
 
       case "submit-message": {
@@ -961,16 +979,18 @@ export class NvimThread {
           this.rejectPendingSandboxApprovals();
         }
         this.scrollAfterMessageCount = this.core.getProviderMessages().length;
-        this.core.submit(msg.message, msg.delivery).then(
-          (result) => this.handleSendResult(result),
-          (e: Error) => this.context.nvim.logger.error(e),
-        );
+        this.runSubmission(() => this.core.submit(msg.message, msg.delivery));
         return;
       }
       case "start-compaction":
-        this.core
-          .compact(msg.nextPrompt)
-          .catch((e: Error) => this.context.nvim.logger.error(e));
+        // A manual `@compact` is the same handoff the threshold produces; the
+        // loop is entered with the suspension already in hand.
+        this.runSubmission(() =>
+          Promise.resolve({
+            type: "suspended",
+            reason: { kind: "compact", nextPrompt: msg.nextPrompt },
+          }),
+        );
         return;
 
       case "abort": {

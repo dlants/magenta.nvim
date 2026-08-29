@@ -123,9 +123,9 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
             stopReason: "end_turn",
           })
         ).type;
-      expect(await ask(overridden, 100_000)).toBe("compact");
+      expect(await ask(overridden, 100_000)).toBe("suspend");
       expect(await ask(fallback, 100_000)).toBe("none");
-      expect(await ask(fallback, 300_000)).toBe("compact");
+      expect(await ask(fallback, 300_000)).toBe("suspend");
     },
   );
 });

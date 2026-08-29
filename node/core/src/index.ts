@@ -71,6 +71,15 @@ export {
   TARGET_CHUNK_TOKENS,
   TOLERANCE_TOKENS,
 } from "./compact-renderer.ts";
+export {
+  asCompactReason,
+  type CompactionOutcome,
+  type CompactionProgress,
+  type Compactor,
+  type CompactSuspendReason,
+  ManagedCompactor,
+  runSubmission,
+} from "./compaction/index.ts";
 export type {
   CompactionController,
   CompactionRecord,
@@ -270,7 +279,6 @@ export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
   EndTurnAction,
   EndTurnContext,
-  RequestAction,
   RequestContext,
   SupervisorAction,
   ThreadSupervisor,

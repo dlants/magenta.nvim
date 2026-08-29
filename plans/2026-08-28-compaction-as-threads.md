@@ -308,6 +308,23 @@ Additional tests:
   - Loop-level: `@compact` and a threshold breach both drive the same loop; the submitter's promise resolves only after the post-compaction continuation turn comes to rest.
   - Existing `node/chat/thread-compact.test.ts` passes, with assertions on `core.state.compactionHistory` / `mode.type === "compacting"` moved to driver-side state.
 
+**Status: done** (see commit "Stage 2: Suspend seam in core").
+
+Deviations, decided while implementing:
+
+- `RequestAction` was renamed to `SupervisorAction`; the pre-existing `SupervisorAction` union (`EndTurnAction | YieldAction | RequestAction`) was unused outside the re-export and was deleted rather than renamed.
+- `BeforeRequestPlan` is gone: `AgentHooks.onBeforeRequest` returns `SupervisorAction[]` and `Agent.applyBeforeRequestActions` scans it, applying every injection and honouring the first `suspend`. Arbitration therefore moved from `composeSupervisors` into the agent, which is where the plan puts it.
+- `runSubmission` takes `{ thread, compactor, start }` rather than `(thread, messages, compactor)`. There are two ways to open a submission (`Thread.send` with composed content, `Thread.submit` with user text) plus the manual `@compact` (which opens *already suspended*), so the loop takes a thunk for the first step instead of re-deriving it.
+- `Thread.reset(seed, archiveCompaction?)` carries an optional archive note. The archive's entry schema has a `compaction` variant, and `ThreadLogger` is private to `Thread`; rather than expose the logger, `reset` forwards the note. This is the only compaction-shaped thing left in `thread.ts`.
+- `Thread.context` became public readonly, so the compactor can build agents against the same environment without a duplicate copy of the wiring.
+- `reset-after-compaction` is now the generic `reset-agent-state`. Its behaviour is unchanged, which means `edlRegisters` are **cleared** by a reset — the plan text says they survive, but they never have, and a saved register refers to text the fresh agent has never seen. `structuredToolResults`, the context manager, the thread id and the archive logger do survive.
+- Stage 4's display work is not done, but the state it renders had to move somewhere: `ManagedCompactor` (`node/core/src/compaction/index.ts`) wraps the existing `CompactionManager`, holds `history: CompactionRecord[]` and `progress: CompactionProgress | undefined`, and emits `progress`. `NvimThread` owns one and subscribes; `thread-view.ts` reads `thread.compactor.history` / `thread.compactor.progress` in place of `core.state.compactionHistory` / `mode.type === "compacting"`. Stage 3 replaces `ManagedCompactor`'s innards with child threads; stage 4 reshapes `history`/`progress` into `Compactor.runs`.
+- `NvimThread.runSubmission` is the single root-side entry point: `send-message`, `submit-message` and `start-compaction` all go through it, so no path reaches `core.send` directly.
+- `ThreadPhase.compacting`, `ThreadMode.compacting`, `ThreadState.compactionHistory`, `Thread.compact`, `Thread.compactionDone` and `Thread.compactionController` are deleted. `CompactionManager` and `compaction-controller.ts` survive to stage 3/5.
+- An unclaimed suspension (a reason the loop does not recognize, or no compactor) resolves the submission as `completed` and leaves the log resumable, per the plan. A `reset` that throws rejects `runSubmission`'s promise rather than resolving `failed`; the old "resolves failed when the agent swap itself throws" test was dropped in favour of the unclaimed-suspension test.
+
+Tests: `node/core/src/agent.test.ts` gained `describe("runSubmission across a compaction handoff")` (pending across the continuation turn, `failed` on a summarizing error, unclaimed suspension resolves `completed` and stays resumable) and `describe("Thread.reset")`. The `Thread survives the compaction agent swap` and archive-marker tests now drive the real loop with a stub `Compactor`. `thread-supervisor.test.ts` asserts the action array. `thread-compact.test.ts` and `supervisor-wiring.test.ts` were mechanically retargeted at driver-side state.
+
 ## Compact threads are real threads
 
 - Goal: `Compactor` replaces `CompactionManager`. Chunks are compacted by sequentially spawned `threadType: "compact"` child threads with an `InMemoryFileIO`, awaited via `awaitThreadResult`. `compaction-manager.ts` and `compaction-controller.ts` are deleted.

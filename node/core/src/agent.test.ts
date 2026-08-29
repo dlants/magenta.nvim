@@ -7,7 +7,12 @@ import type { ActiveToolEntry, AgentContext } from "./agent.ts";
 import type { ToolApplied } from "./capabilities/context-tracker.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
-import type { CompactionResult } from "./compaction-controller.ts";
+import {
+  asCompactReason,
+  type CompactionOutcome,
+  type Compactor,
+  runSubmission,
+} from "./compaction/index.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
@@ -33,11 +38,7 @@ import {
   resolvePartsAsText,
 } from "./submission/index.ts";
 import { Thread } from "./thread.ts";
-import type {
-  QueuedMessage,
-  SendResult,
-  ThreadSendResult,
-} from "./thread-api.ts";
+import type { QueuedMessage, ThreadSendResult } from "./thread-api.ts";
 import {
   AutoCompactSupervisor,
   composeSupervisors,
@@ -48,7 +49,7 @@ import {
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
-import { Defer, pollUntil } from "./utils/async.ts";
+import { pollUntil } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
 
@@ -411,41 +412,72 @@ describe("Thread.send result", () => {
     expect(await first).toEqual({ type: "completed" });
   });
 });
-describe("Thread.send across a compaction handoff", () => {
+/** Stand in for the `runSubmission` loop: record the compaction suspensions a
+ * submission produces, without actually summarizing anything. */
+function trackCompactions(core: Thread): { prompts: (string | undefined)[] } {
+  const prompts: (string | undefined)[] = [];
+  const realSend = core.send.bind(core);
+  core.send = (...args: Parameters<Thread["send"]>) =>
+    realSend(...args).then((r) => {
+      if (r.type === "suspended") {
+        const reason = asCompactReason(r.reason);
+        if (reason) prompts.push(reason.nextPrompt);
+      }
+      return r;
+    });
+  return { prompts };
+}
+
+describe("runSubmission across a compaction handoff", () => {
+  /** A compactor that summarizes without talking to a provider. */
+  const stubCompactor = (
+    outcome: CompactionOutcome = {
+      type: "complete",
+      summary: "SUMMARY TEXT",
+      steps: [],
+    },
+  ): Compactor & { calls: (string | undefined)[] } => {
+    const calls: (string | undefined)[] = [];
+    return {
+      calls,
+      run: (_messages, nextPrompt) => {
+        calls.push(nextPrompt);
+        return Promise.resolve(outcome);
+      },
+    };
+  };
+
+  /** Suspends once, on the first non-submission consult. */
+  const compactOnce = (core: Thread, nextPrompt: string | undefined) => {
+    let asked = false;
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: (ctx) => {
+          if (asked || ctx.kind === "submission")
+            return Promise.resolve({ type: "none" as const });
+          asked = true;
+          return Promise.resolve({
+            type: "suspend" as const,
+            reason: { kind: "compact", nextPrompt },
+          });
+        },
+      },
+    ]);
+  };
+
   it("stays pending until the post-compaction turn comes to rest", async () => {
     const threadId = uniqueThreadId("send-compaction");
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
     try {
-      let asked = false;
-      core.hooks = composeSupervisors(() => [
-        {
-          onBeforeRequest: (ctx) => {
-            if (asked || ctx.kind === "submission")
-              return Promise.resolve({ type: "none" as const });
-            asked = true;
-            return Promise.resolve({
-              type: "compact" as const,
-              nextPrompt: "carry on",
-            });
-          },
-        },
-      ]);
-      // The summarizing pass has its own tests; what is under test here is
-      // that the thread swaps agents and keeps the caller waiting for the
-      // continuation turn.
-      core.compact = (nextPrompt?: string) =>
-        (
-          core as unknown as {
-            handleCompactComplete: (
-              summary: string,
-              nextPrompt: string | undefined,
-              steps: unknown[],
-            ) => Promise<SendResult>;
-          }
-        ).handleCompactComplete("SUMMARY TEXT", nextPrompt, [{}]);
+      compactOnce(core, "carry on");
+      const compactor = stubCompactor();
       const oldAgent = core.agent;
       let settled: ThreadSendResult | undefined;
-      const result = core.send([{ type: "user", text: "hello" }]);
+      const result = runSubmission({
+        thread: core,
+        compactor,
+        start: () => core.send([{ type: "user", text: "hello" }]),
+      });
       void result.then((r) => {
         settled = r;
       });
@@ -457,6 +489,8 @@ describe("Thread.send across a compaction handoff", () => {
         return awaitNextStream(mockClient, stream);
       });
       expect(settled).toBeUndefined();
+      expect(compactor.calls).toEqual(["carry on"]);
+      expect(JSON.stringify(contStream.messages)).toContain("SUMMARY TEXT");
       contStream.streamText("resumed");
       contStream.finishResponse("end_turn");
       expect(await result).toEqual({ type: "completed" });
@@ -467,38 +501,114 @@ describe("Thread.send across a compaction handoff", () => {
   });
 
   it("resolves failed when the summarizing pass errors out", async () => {
-    const { core } = createAgentWithMock();
-    const done = new Defer<SendResult>();
-    const priv = core as unknown as {
-      compactionDone: Defer<SendResult> | undefined;
-      handleCompactionResult: (result: CompactionResult) => void;
-    };
-    priv.compactionDone = done;
-    priv.handleCompactionResult({ type: "error", steps: [] });
-    expect(await done.promise).toMatchObject({ type: "failed" });
+    const threadId = uniqueThreadId("compaction-error");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      compactOnce(core, undefined);
+      const result = runSubmission({
+        thread: core,
+        compactor: stubCompactor({ type: "error", steps: [] }),
+        start: () => core.send([{ type: "user", text: "hello" }]),
+      });
+      const stream = await mockClient.awaitStream();
+      stream.streamText("done");
+      stream.finishResponse("end_turn");
+      expect(await result).toMatchObject({ type: "failed" });
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
   });
-  it("resolves failed when the agent swap itself throws", async () => {
-    const { core } = createAgentWithMock();
-    const done = new Defer<SendResult>();
-    const priv = core as unknown as {
-      compactionDone: Defer<SendResult> | undefined;
-      handleCompactionResult: (result: CompactionResult) => void;
-      handleCompactComplete: () => Promise<SendResult>;
-    };
-    priv.handleCompactComplete = () =>
-      Promise.reject(new Error("swap exploded"));
-    priv.compactionDone = done;
-    priv.handleCompactionResult({
-      type: "complete",
-      summary: "SUMMARY",
-      nextPrompt: undefined,
-      steps: [],
-    });
-    const settled = await done.promise;
-    if (settled.type !== "failed") throw new Error("expected failed");
-    expect(settled.error.message).toBe("swap exploded");
+
+  it("treats a suspension nobody claims as a plain stop", async () => {
+    const threadId = uniqueThreadId("suspend-unclaimed");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      let asked = false;
+      core.hooks = composeSupervisors(() => [
+        {
+          onBeforeRequest: (ctx) => {
+            if (asked || ctx.kind === "submission")
+              return Promise.resolve({ type: "none" as const });
+            asked = true;
+            return Promise.resolve({
+              type: "suspend" as const,
+              reason: { kind: "budget-exhausted" },
+            });
+          },
+        },
+      ]);
+      const compactor = stubCompactor();
+      const result = runSubmission({
+        thread: core,
+        compactor,
+        start: () => core.send([{ type: "user", text: "hello" }]),
+      });
+      const stream = await mockClient.awaitStream();
+      stream.streamText("done");
+      stream.finishResponse("end_turn");
+      expect(await result).toEqual({ type: "completed" });
+      expect(compactor.calls).toEqual([]);
+      // The log is coherent and resumable: a fresh send just continues.
+      const next = core.send([{ type: "user", text: "again" }]);
+      const stream2 = await awaitNextStream(mockClient, stream);
+      stream2.streamText("ok");
+      stream2.finishResponse("end_turn");
+      expect(await next).toEqual({ type: "completed" });
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
   });
 });
+
+describe("Thread.reset", () => {
+  it("starts a fresh agent from the seed and keeps the thread's durables", async () => {
+    const threadId = uniqueThreadId("thread-reset");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      const sent = core.send([{ type: "user", text: "the old conversation" }]);
+      const stream = await mockClient.awaitStream();
+      stream.streamText("old reply");
+      stream.finishResponse("end_turn");
+      await sent;
+
+      core.structuredToolResults.set("tr-1" as ToolRequestId, {
+        toolName: "edl" as ToolName,
+      });
+      const oldAgent = core.agent;
+
+      await core.reset([
+        {
+          type: "text",
+          text: "SEED",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        },
+      ]);
+
+      expect(core.agent).not.toBe(oldAgent);
+      expect(core.getProviderMessages()).toEqual([]);
+      expect(core.structuredToolResults.has("tr-1" as ToolRequestId)).toBe(
+        true,
+      );
+      // The registers belong to the message list being replaced: a saved
+      // fragment refers to text the fresh agent has never seen.
+      expect(core.state.edlRegisters.registers.size).toBe(0);
+
+      void core.send([{ type: "user", text: "continue" }]);
+      const next = await awaitNextStream(mockClient, stream);
+      const body = JSON.stringify(next.messages);
+      expect(body).toContain("SEED");
+      expect(body).not.toContain("the old conversation");
+      next.streamText("ok");
+      next.finishResponse("end_turn");
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
+});
+
 describe("Agent.handleProviderStopped", () => {
   it("max_tokens with completed tool_use block routes through handleProviderStoppedWithToolUse", async () => {
     const { core, mockClient } = createAgentWithMock({
@@ -956,31 +1066,34 @@ describe("deferred submissions", () => {
           onBeforeRequest: (ctx) =>
             Promise.resolve(
               !compacted && ctx.kind !== "submission"
-                ? { type: "compact" as const, nextPrompt: undefined }
+                ? {
+                    type: "suspend" as const,
+                    reason: { kind: "compact", nextPrompt: undefined },
+                  }
                 : { type: "none" as const },
             ),
         },
       ]);
       let queueAtHandoff = -1;
       let callsAtHandoff = -1;
-      core.compact = () => {
-        compacted = true;
-        queueAtHandoff = core.state.nextStopQueue.length;
-        callsAtHandoff = calls.length;
-        return (
-          core as unknown as {
-            handleCompactComplete: (
-              summary: string,
-              nextPrompt: string | undefined,
-              steps: unknown[],
-            ) => Promise<void>;
-          }
-        )
-          .handleCompactComplete("SUMMARY TEXT", undefined, [{}])
-          .then(() => ({ type: "completed" as const }));
+      const compactor: Compactor = {
+        run: () => {
+          compacted = true;
+          queueAtHandoff = core.state.nextStopQueue.length;
+          callsAtHandoff = calls.length;
+          return Promise.resolve({
+            type: "complete",
+            summary: "SUMMARY TEXT",
+            steps: [],
+          });
+        },
       };
 
-      void core.send([{ type: "user", text: "start" }]);
+      void runSubmission({
+        thread: core,
+        compactor,
+        start: () => core.send([{ type: "user", text: "start" }]),
+      });
       const stream = await mockClient.awaitStream();
       await core.submit(pendingMessage("queued"), "next");
       stream.finishResponse("end_turn");
@@ -1132,11 +1245,7 @@ describe("AutoCompactSupervisor integration", () => {
     ]);
     mockClient.mockInputTokenCount = 50;
 
-    let compactCalls = 0;
-    core.compact = () => {
-      compactCalls++;
-      return Promise.resolve({ type: "completed" as const });
-    };
+    const compactions = trackCompactions(core);
 
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
@@ -1157,11 +1266,11 @@ describe("AutoCompactSupervisor integration", () => {
     stream2.finishResponse("end_turn");
 
     await pollUntil(() => {
-      if (compactCalls > 0) return true;
+      if (compactions.prompts.length > 0) return true;
       throw new Error("waiting for compaction");
     });
 
-    expect(compactCalls).toBe(1);
+    expect(compactions.prompts.length).toBe(1);
   });
 
   it("does not trigger compaction when input tokens are below the threshold", async () => {
@@ -1171,11 +1280,7 @@ describe("AutoCompactSupervisor integration", () => {
     ]);
     mockClient.mockInputTokenCount = 50;
 
-    let compactCalls = 0;
-    core.compact = () => {
-      compactCalls++;
-      return Promise.resolve({ type: "completed" as const });
-    };
+    const compactions = trackCompactions(core);
 
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
@@ -1187,7 +1292,7 @@ describe("AutoCompactSupervisor integration", () => {
       return true;
     });
 
-    expect(compactCalls).toBe(0);
+    expect(compactions.prompts.length).toBe(0);
   });
 
   it("triggers compaction on a tool_use handoff after tools resolve", async () => {
@@ -1200,11 +1305,7 @@ describe("AutoCompactSupervisor integration", () => {
     ]);
     mockClient.mockInputTokenCount = 50;
 
-    let compactCalls = 0;
-    core.compact = () => {
-      compactCalls++;
-      return Promise.resolve({ type: "completed" as const });
-    };
+    const compactions = trackCompactions(core);
 
     // First turn populates the post-flight inputTokenCount.
     void core.send([{ type: "user", text: "hello" }]);
@@ -1228,10 +1329,10 @@ describe("AutoCompactSupervisor integration", () => {
     stream2.finishResponse("tool_use");
 
     await pollUntil(() => {
-      if (compactCalls > 0) return true;
+      if (compactions.prompts.length > 0) return true;
       throw new Error("waiting for compaction");
     });
-    expect(compactCalls).toBe(1);
+    expect(compactions.prompts.length).toBe(1);
   });
 
   it("triggers compaction on a max_tokens handoff when over threshold", async () => {
@@ -1241,11 +1342,7 @@ describe("AutoCompactSupervisor integration", () => {
     ]);
     mockClient.mockInputTokenCount = 50;
 
-    let compactCalls = 0;
-    core.compact = () => {
-      compactCalls++;
-      return Promise.resolve({ type: "completed" as const });
-    };
+    const compactions = trackCompactions(core);
 
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
@@ -1265,10 +1362,10 @@ describe("AutoCompactSupervisor integration", () => {
     stream2.finishResponse("max_tokens");
 
     await pollUntil(() => {
-      if (compactCalls > 0) return true;
+      if (compactions.prompts.length > 0) return true;
       throw new Error("waiting for compaction");
     });
-    expect(compactCalls).toBe(1);
+    expect(compactions.prompts.length).toBe(1);
   });
 
   it("appends an injected text to the message log", async () => {
@@ -1365,29 +1462,26 @@ describe("AutoCompactSupervisor integration", () => {
         onBeforeRequest: () =>
           Promise.resolve(
             asked
-              ? { type: "compact" as const, nextPrompt: "carry on" }
+              ? {
+                  type: "suspend" as const,
+                  reason: { kind: "compact", nextPrompt: "carry on" },
+                }
               : { type: "none" as const },
           ),
       },
     ]);
-    let compactPrompt: string | undefined = "unset";
-    let compactCalls = 0;
-    core.compact = (p?: string) => {
-      compactCalls++;
-      compactPrompt = p;
-      return Promise.resolve({ type: "completed" as const });
-    };
+    const compactions = trackCompactions(core);
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial");
     // max_tokens would otherwise trigger the continue-prompt; compaction wins.
     stream.finishResponse("max_tokens");
     await pollUntil(() => {
-      if (compactCalls > 0) return true;
+      if (compactions.prompts.length > 0) return true;
       throw new Error("waiting for compaction");
     });
-    expect(compactCalls).toBe(1);
-    expect(compactPrompt).toBe("carry on");
+    expect(compactions.prompts.length).toBe(1);
+    expect(compactions.prompts[0]).toBe("carry on");
     // Exactly once: the snapshot handed to the compaction manager is
     // `getProviderMessages()`, and nothing is left in agent-local state that
     // the swap would either drop or replay.
@@ -1417,16 +1511,15 @@ describe("AutoCompactSupervisor integration", () => {
         onBeforeRequest: () =>
           Promise.resolve(
             asked
-              ? { type: "compact" as const, nextPrompt: "carry on" }
+              ? {
+                  type: "suspend" as const,
+                  reason: { kind: "compact", nextPrompt: "carry on" },
+                }
               : { type: "none" as const },
           ),
       },
     ]);
-    let compactCalls = 0;
-    core.compact = () => {
-      compactCalls++;
-      return Promise.resolve({ type: "completed" as const });
-    };
+    const compactions = trackCompactions(core);
     void core.send([{ type: "user", text: "edit a" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
@@ -1434,7 +1527,7 @@ describe("AutoCompactSupervisor integration", () => {
     });
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (compactCalls > 0) return true;
+      if (compactions.prompts.length > 0) return true;
       throw new Error("waiting for compaction");
     });
     expect(countOccurrences(core.getProviderMessages(), "tool-path note")).toBe(
@@ -1529,23 +1622,25 @@ describe("AutoCompactSupervisor integration", () => {
       onBeforeRequest: (ctx) => {
         if (ctx.kind === "submission") return Promise.resolve({ type: "none" });
         calls.push("second");
-        return Promise.resolve({ type: "compact", nextPrompt: "go" });
+        return Promise.resolve({
+          type: "suspend",
+          reason: { kind: "compact", nextPrompt: "go" },
+        });
       },
     };
     const third: ThreadSupervisor = {
       onBeforeRequest: (ctx) => {
         if (ctx.kind === "submission") return Promise.resolve({ type: "none" });
         calls.push("third");
-        return Promise.resolve({ type: "compact", nextPrompt: "stop" });
+        return Promise.resolve({
+          type: "suspend",
+          reason: { kind: "compact", nextPrompt: "stop" },
+        });
       },
     };
     core.hooks = composeSupervisors(() => [first, second, third]);
 
-    let compactPrompt: string | undefined = "unset";
-    core.compact = (p?: string) => {
-      compactPrompt = p;
-      return Promise.resolve({ type: "completed" as const });
-    };
+    const compactions = trackCompactions(core);
 
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
@@ -1558,7 +1653,7 @@ describe("AutoCompactSupervisor integration", () => {
     });
 
     expect(calls).toEqual(["first", "second", "third"]);
-    expect(compactPrompt).toBe("go");
+    expect(compactions.prompts[0]).toBe("go");
   });
 
   it("injects on the opening request of a send, ahead of the user content", async () => {
@@ -1680,11 +1775,7 @@ describe("AutoCompactSupervisor integration", () => {
     ]);
     mockClient.mockInputTokenCount = 200;
 
-    let compactCalls = 0;
-    core.compact = () => {
-      compactCalls++;
-      return Promise.resolve({ type: "completed" as const });
-    };
+    const compactions = trackCompactions(core);
 
     // First turn populates the post-flight inputTokenCount.
     void core.send([{ type: "user", text: "hello" }]);
@@ -1692,20 +1783,20 @@ describe("AutoCompactSupervisor integration", () => {
     stream.streamText("done");
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (compactCalls > 0) return true;
+      if (compactions.prompts.length > 0) return true;
       throw new Error("waiting for the end-turn compaction");
     });
-    expect(compactCalls).toBe(1);
+    expect(compactions.prompts.length).toBe(1);
 
     // The next send is over threshold before its first request goes out, so
     // the submission consult compacts instead of issuing it — once.
-    compactCalls = 0;
+    compactions.prompts.length = 0;
     void core.send([{ type: "user", text: "again" }]);
     await pollUntil(() => {
-      if (compactCalls > 0) return true;
+      if (compactions.prompts.length > 0) return true;
       throw new Error("waiting for the submission compaction");
     });
-    expect(compactCalls).toBe(1);
+    expect(compactions.prompts.length).toBe(1);
     // The user's message is in the log the compaction snapshot is taken from.
     expect(JSON.stringify(core.getProviderMessages())).toContain("again");
   });
@@ -2692,15 +2783,25 @@ describe("Agent conversation archive", () => {
       });
       await core.awaitArchiveFlush();
 
-      const compactPromise = (
-        core as unknown as {
-          handleCompactComplete: (
-            summary: string,
-            nextPrompt: string | undefined,
-            steps: unknown[],
-          ) => Promise<void>;
-        }
-      ).handleCompactComplete("SUMMARY TEXT", undefined, [{}, {}]);
+      const compactPromise = runSubmission({
+        thread: core,
+        compactor: {
+          run: () =>
+            Promise.resolve({
+              type: "complete",
+              summary: "SUMMARY TEXT",
+              steps: [
+                { chunkIndex: 0, totalChunks: 2, messages: [] },
+                { chunkIndex: 1, totalChunks: 2, messages: [] },
+              ],
+            }),
+        },
+        start: () =>
+          Promise.resolve({
+            type: "suspended",
+            reason: { kind: "compact", nextPrompt: undefined },
+          }),
+      });
 
       const contStream = await pollUntil(() => {
         if (mockClient.streams.length < 2) throw new Error("waiting");
@@ -2854,15 +2955,23 @@ describe("Thread survives the compaction agent swap", () => {
     mockClient: MockAnthropicClient,
   ): Promise<void> {
     const streamsBefore = mockClient.streams.length;
-    const compactPromise = (
-      core as unknown as {
-        handleCompactComplete: (
-          summary: string,
-          nextPrompt: string | undefined,
-          steps: unknown[],
-        ) => Promise<void>;
-      }
-    ).handleCompactComplete("SUMMARY TEXT", undefined, [{}]);
+    const compactPromise = runSubmission({
+      thread: core,
+      compactor: {
+        run: () =>
+          Promise.resolve({
+            type: "complete",
+            summary: "SUMMARY TEXT",
+            steps: [],
+          }),
+      },
+      // Nothing to run: the suspension is the point.
+      start: () =>
+        Promise.resolve({
+          type: "suspended",
+          reason: { kind: "compact", nextPrompt: undefined },
+        }),
+    });
     const contStream = await pollUntil(() => {
       if (mockClient.streams.length <= streamsBefore)
         throw new Error("waiting");
@@ -2930,15 +3039,22 @@ describe("Thread survives the compaction agent swap", () => {
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      const compactPromise = (
-        core as unknown as {
-          handleCompactComplete: (
-            summary: string,
-            nextPrompt: string | undefined,
-            steps: unknown[],
-          ) => Promise<void>;
-        }
-      ).handleCompactComplete("SUMMARY TEXT", undefined, [{}]);
+      const compactPromise = runSubmission({
+        thread: core,
+        compactor: {
+          run: () =>
+            Promise.resolve({
+              type: "complete",
+              summary: "SUMMARY TEXT",
+              steps: [{ chunkIndex: 0, totalChunks: 1, messages: [] }],
+            }),
+        },
+        start: () =>
+          Promise.resolve({
+            type: "suspended",
+            reason: { kind: "compact", nextPrompt: undefined },
+          }),
+      });
       const contStream = await mockClient.awaitStream();
       const texts = core.pendingTurnContent.map((c) =>
         c.type === "text" ? c.text : "",

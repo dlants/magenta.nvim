@@ -9,11 +9,6 @@ import {
   type ThreadState,
 } from "./agent.ts";
 import type { ThreadId } from "./chat-types.ts";
-import type {
-  CompactionResult,
-  CompactionStep,
-} from "./compaction-controller.ts";
-import { CompactionManager } from "./compaction-manager.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
@@ -91,7 +86,6 @@ export type ThreadCallbacks = {
 export class Thread {
   public state: ThreadState;
   public agent: Agent;
-  public compactionController: CompactionManager | undefined;
   /** The owner's answers to the agent's three questions. Composed from a
    * supervisor list by `composeSupervisors` at the call site that knows the
    * policy; the agent never sees a list. */
@@ -106,7 +100,9 @@ export class Thread {
 
   constructor(
     public id: ThreadId,
-    private context: AgentContext,
+    /** Public so the owner's collaborators (the compactor) can build agents
+     * against the same environment without a second copy of the wiring. */
+    public readonly context: AgentContext,
     /** Mutable only for the fork path, which must build a `Thread` before the
      * wrapper that owns it exists. Every other caller supplies it once. */
     public callbacks: ThreadCallbacks,
@@ -145,7 +141,6 @@ export class Thread {
           : { registers: new Map(), nextSavedId: 0 },
       title: undefined,
       outputTokensSinceLastReminder: 0,
-      compactionHistory: [],
       editedFilesThisTurn: [],
       pendingBashReminder: false,
       bashTokensSinceLastReminder: 0,
@@ -217,13 +212,6 @@ export class Thread {
    * bag; the shape it presents is the final one. */
   get phase(): ThreadPhase {
     const mode = this.state.mode;
-    if (mode.type === "compacting") {
-      return {
-        type: "compacting",
-        chunkIndex: mode.chunkIndex,
-        totalChunks: mode.totalChunks,
-      };
-    }
     const runnerPhase = this.runner.phase;
     switch (runnerPhase.type) {
       case "aborting":
@@ -393,11 +381,6 @@ export class Thread {
     this.resultDefer.resolve(result);
   }
 
-  /** The compaction handoff currently in flight, if any. It is the only piece
-   * of submission state the thread has to track: the caller's promise has to
-   * stay pending across the swap, so the agent's outcome cannot settle it. */
-  private compactionDone: Defer<SendResult> | undefined;
-
   /** Submit `messages` and resolve once the thread comes to rest.
    *
    * Internal continuations — auto-respond, supervisor nudges, the max_tokens
@@ -467,16 +450,12 @@ export class Thread {
     return result;
   }
 
-  /** Follow one submission across any compaction handoffs it triggers: the
-   * agent stops, the thread swaps in a replacement, and the submission
-   * continues on it. */
+  /** Note a yield as it goes past, so `result` settles for actors who never
+   * submitted. */
   private followSubmission(
     outcome: Promise<AgentSendOutcome>,
   ): Promise<SendResult> {
-    const result: Promise<SendResult> = outcome.then((o) =>
-      o.type === "compact" ? this.compact(o.nextPrompt) : o,
-    );
-    return result.then((r) => {
+    return outcome.then((r) => {
       if (r.type === "yielded") this.settleResult(r);
       return r;
     });
@@ -518,114 +497,22 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     }
   }
 
-  /** Hand the conversation off to a summarizing pass and continue it on a
-   * replacement agent. Resolves when that continuation comes to rest. */
-  compact(nextPrompt?: string): Promise<SendResult> {
-    const done = new Defer<SendResult>();
-    this.compactionDone = done;
-    const manager = new CompactionManager({
-      logger: this.context.logger,
-      profile: this.context.profile,
-      mcpToolManager: this.context.mcpToolManager,
-      threadId: this.id,
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-      lspClient: this.context.lspClient,
-      availableCapabilities: this.context.availableCapabilities,
-      contextTracker: this.context.contextTracker,
-      onToolApplied: (absFilePath, tool, fileTypeInfo) =>
-        this.hooks.onToolApplied?.(absFilePath, tool, fileTypeInfo),
-      shell: this.context.shell,
-      threadManager: this.context.threadManager,
-      maxConcurrentSubagents: this.context.maxConcurrentSubagents,
-      maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
-      getProvider: this.context.getProvider,
-      requestRender: () => this.callbacks.onUpdate(),
-    });
-    manager.on("transition", (_prev, next) => {
-      if (next.type === "complete") {
-        this.handleCompactionResult(next.result);
-      } else if (next.type === "error") {
-        this.handleCompactionResult({ type: "error", steps: next.steps });
-      } else if (
-        next.type === "processing-chunk" ||
-        next.type === "waiting-for-tools"
-      ) {
-        this.update({
-          type: "set-mode",
-          mode: {
-            type: "compacting",
-            chunkIndex: next.chunkIndex,
-            totalChunks: next.totalChunks,
-          },
-        });
-      }
-    });
-    this.compactionController = manager;
-    manager.start(this.getProviderMessages(), nextPrompt);
-    return done.promise;
-  }
-
-  private settleCompaction(result: SendResult): void {
-    const done = this.compactionDone;
-    this.compactionDone = undefined;
-    done?.resolve(result);
-  }
-
-  private handleCompactionResult(result: CompactionResult): void {
-    this.compactionController = undefined;
-    this.update({ type: "set-mode", mode: { type: "normal" } });
-
-    if (result.type === "complete") {
-      this.handleCompactComplete(
-        result.summary,
-        result.nextPrompt,
-        result.steps,
-      ).then(
-        (sendResult) => this.settleCompaction(sendResult),
-        (e: Error) => {
-          this.context.logger.error(
-            `Failed during compact-complete: ${e.message}`,
-          );
-          this.settleCompaction({
-            type: "failed",
-            error: e,
-            resubmit: undefined,
-          });
-        },
-      );
-    } else {
-      this.update({
-        type: "push-compaction-record",
-        record: { steps: result.steps, finalSummary: undefined },
-      });
-      this.settleCompaction({
-        type: "failed",
-        error: new Error("Compaction failed"),
-        resubmit: undefined,
-      });
-    }
-  }
-
-  private async handleCompactComplete(
-    summary: string,
-    nextPrompt: string | undefined,
-    steps: CompactionStep[],
-  ): Promise<SendResult> {
-    this.update({
-      type: "push-compaction-record",
-      record: { steps, finalSummary: summary },
-    });
-
-    // The context manager is a thread-level collaborator: which files the user
-    // is watching has nothing to do with which agent is running, so it
-    // deliberately survives the swap.
+  /** Swap in a fresh agent seeded with `seed`. The thread id, context manager,
+   * structured tool results and edl registers survive — thread 3 is still
+   * thread 3 afterwards, which is why the archive keys by thread id.
+   *
+   * `archiveCompaction` is the one compaction-shaped thing left here, and only
+   * because the archive's entry schema has a `compaction` variant. */
+  async reset(
+    seed: AgentInput[],
+    archiveCompaction?: { summary: string; chunkCount: number },
+  ): Promise<void> {
     const previousAgent = this.agent;
     this.agent = this.createAgent({ type: "new" });
     // Disposing the old agent drains its queues. The queued submissions belong
     // to the thread rather than to any one agent, so they are carried across
     // the swap — still unresolved, so their commands run at their delivery
-    // point on the far side of the compaction.
+    // point on the far side of the reset.
     const carried = {
       async: [...this.state.nextRequestQueue],
       next: [...this.state.nextStopQueue],
@@ -635,30 +522,16 @@ Come up with a succinct thread title for this prompt. It must be a single line (
       if (carried[delivery].length) this.enqueue(carried[delivery], delivery);
     }
 
-    this.threadLogger.recordCompaction({ summary, chunkCount: steps.length });
-    // The replacement agent starts from an empty, summarized message list, so
-    // the archive's cursor restarts with it.
+    if (archiveCompaction) {
+      this.threadLogger.recordCompaction(archiveCompaction);
+    }
+    // The replacement agent starts from an empty message list, so the
+    // archive's cursor restarts with it.
     this.threadLogger.resetCursor();
 
-    this.update({ type: "reset-after-compaction" });
+    this.update({ type: "reset-agent-state" });
 
-    const summaryText = `<conversation-summary>\n${summary}\n</conversation-summary>`;
-    this.agent.prependToNextTurn([
-      {
-        type: "text",
-        text: summaryText,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-
-    return this.followSubmission(
-      this.agent.send([
-        {
-          type: "user",
-          text: nextPrompt ?? "Please continue from where you left off.",
-        },
-      ]),
-    );
+    if (seed.length) this.agent.prependToNextTurn(seed);
   }
 
   private destroyed = false;

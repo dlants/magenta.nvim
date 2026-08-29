@@ -1,7 +1,7 @@
 import type { OnToolApplied } from "../capabilities/context-tracker.ts";
 import type {
-  RequestAction,
   RequestContext,
+  SupervisorAction,
   ThreadSupervisor,
 } from "../thread-supervisor.ts";
 import type { ContextManager, FileUpdates } from "./context-manager.ts";
@@ -20,7 +20,7 @@ export class FileContextSupervisor implements ThreadSupervisor {
     this.onSent = args.onSent;
   }
 
-  async onBeforeRequest(context: RequestContext): Promise<RequestAction> {
+  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
     if (context.kind === "turn-end") {
       return { type: "none" };
     }

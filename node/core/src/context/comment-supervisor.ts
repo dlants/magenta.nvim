@@ -1,6 +1,6 @@
 import type {
-  RequestAction,
   RequestContext,
+  SupervisorAction,
   ThreadSupervisor,
 } from "../thread-supervisor.ts";
 import { injectText } from "../thread-supervisor.ts";
@@ -27,7 +27,7 @@ export class CommentSupervisor implements ThreadSupervisor {
     this.onSent = args.onSent;
   }
 
-  async onBeforeRequest(context: RequestContext): Promise<RequestAction> {
+  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
     if (context.kind === "turn-end") {
       return { type: "none" };
     }

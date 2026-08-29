@@ -29,3 +29,11 @@
 {"timestamp":"2026-08-28T02:24:19Z","query":"tool call rendering display in thread -k 10","commit":"520b13f1f0628699f4158b0d25e5ea0dd91d68d7"}
 {"timestamp":"2026-08-28T04:28:07Z","query":"openai auth token refresh oauth -k 8","commit":"258aa8660bf70ba9e75f9ff83b366bb1ea93c2b7"}
 {"timestamp":"2026-08-28T22:23:04Z","query":"magenta script registration discovery loading -k 8","commit":"3676b30ca2cd934904b2602217fc098c744d65d9"}
+{"timestamp":"2026-08-29T05:32:12Z","query":"ThreadManager capability spawnThread awaitThreadResult","commit":"3d75d3cfc4084d83c88a20e654b1b58401d5c002"}
+{"timestamp":"2026-08-29T05:32:12Z","query":"compaction display UI rendering","commit":"3d75d3cfc4084d83c88a20e654b1b58401d5c002"}
+{"timestamp":"2026-08-29T05:32:12Z","query":"compaction trigger token threshold","commit":"3d75d3cfc4084d83c88a20e654b1b58401d5c002"}
+{"timestamp":"2026-08-29T05:32:14Z","query":"compactionController NvimThread","commit":"3d75d3cfc4084d83c88a20e654b1b58401d5c002"}
+{"timestamp":"2026-08-29T05:32:16Z","query":"compact command manual trigger agent decision","commit":"3d75d3cfc4084d83c88a20e654b1b58401d5c002"}
+{"timestamp":"2026-08-29T05:32:25Z","query":"compact tool user input message","commit":"3d75d3cfc4084d83c88a20e654b1b58401d5c002"}
+{"timestamp":"2026-08-29T05:32:26Z","query":"thread list switching subagent thread registered navigable chat","commit":"3d75d3cfc4084d83c88a20e654b1b58401d5c002"}
+{"timestamp":"2026-08-29T05:32:36Z","query":"chat view render threads list","commit":"3d75d3cfc4084d83c88a20e654b1b58401d5c002"}
