@@ -1588,3 +1588,175 @@ it("deleting the compact child thread aborts the parked submission", async () =>
     expect(thread.agent.phase.type).toBe("idle");
   });
 });
+
+it("fails the parked submission when the chunk thread yields an empty summary", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("Hello");
+    await driver.send();
+    const stream1 = await driver.mockAnthropic.awaitPendingStream({
+      message: "initial request",
+    });
+    stream1.respond({
+      stopReason: "end_turn",
+      text: "Hi there!",
+      toolRequests: [],
+    });
+
+    const thread = driver.magenta.chat.getActiveThread();
+    await driver.inputMagentaText("@compact");
+    await driver.send();
+
+    const compactStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact subagent stream",
+    });
+    // The chunk thread yields without ever writing /summary.md.
+    yieldChunk(compactStream);
+
+    await pollUntil(
+      () => {
+        const runs = finishedRuns(thread);
+        if (runs.length !== 1) throw new Error("expected the run to settle");
+        if (runs[0].type !== "error")
+          throw new Error(`expected error, got ${runs[0].type}`);
+      },
+      { timeout: 2000, message: "an empty summary should settle as an error" },
+    );
+
+    // The submission settles rather than hanging: no continuation request is
+    // issued and the thread is idle again.
+    expect(isCompacting(thread)).toBe(false);
+    await pollUntil(
+      () => {
+        if (thread.agent.phase.type !== "idle")
+          throw new Error("waiting for the parent thread to settle");
+      },
+      { timeout: 2000, message: "parent thread should settle" },
+    );
+    await driver.assertDisplayBufferContains(
+      "the compaction finished but /summary.md is empty",
+    );
+  });
+});
+
+it("discards an in-flight run when a fresh @compact arrives", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("Hello");
+    await driver.send();
+    const stream1 = await driver.mockAnthropic.awaitPendingStream({
+      message: "initial request",
+    });
+    stream1.respond({
+      stopReason: "end_turn",
+      text: "Hi there!",
+      toolRequests: [],
+    });
+
+    const thread = driver.magenta.chat.getActiveThread();
+    await driver.inputMagentaText("@compact");
+    await driver.send();
+
+    await pollUntil(
+      () => {
+        if (!isCompacting(thread)) throw new Error("expected compacting");
+        if (compactorOf(thread).current!.threadIds.length === 0)
+          throw new Error("waiting for the chunk thread");
+      },
+      { timeout: 2000, message: "thread should spawn a chunk thread" },
+    );
+    const firstChunkThreadId = compactorOf(thread).current!.threadIds[0];
+
+    // A second @compact while the first run's chunk thread is still pending.
+    await driver.inputMagentaText("@compact");
+    await driver.send();
+
+    await pollUntil(
+      () => {
+        const runs = finishedRuns(thread);
+        if (runs.length !== 1)
+          throw new Error("expected the first run to settle");
+        if (runs[0].type !== "aborted")
+          throw new Error(`expected aborted, got ${runs[0].type}`);
+        if (!isCompacting(thread)) throw new Error("expected a second run");
+        const current = compactorOf(thread).current!;
+        if (current.threadIds.length === 0)
+          throw new Error("waiting for the new chunk thread");
+        if (current.threadIds[0] === firstChunkThreadId)
+          throw new Error("expected a fresh chunk thread");
+      },
+      { timeout: 5000, message: "a fresh @compact should discard the old run" },
+    );
+
+    // The discarded run's chunk thread is gone.
+    expect(
+      driver.magenta.chat.threadWrappers[firstChunkThreadId],
+    ).toBeUndefined();
+  });
+});
+
+it("delivers @compact typed into a compact thread as ordinary text", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("Hello");
+    await driver.send();
+    const stream1 = await driver.mockAnthropic.awaitPendingStream({
+      message: "initial request",
+    });
+    stream1.respond({
+      stopReason: "end_turn",
+      text: "Hi there!",
+      toolRequests: [],
+    });
+
+    const thread = driver.magenta.chat.getActiveThread();
+    await driver.inputMagentaText("@compact");
+    await driver.send();
+
+    const compactStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact subagent stream",
+    });
+    compactStream.respondWithError(new Error("stall the chunk thread"));
+
+    const chunkThreadId = compactorOf(thread).current!.threadIds[0];
+    await pollUntil(
+      () => {
+        const wrapper = driver.magenta.chat.threadWrappers[chunkThreadId];
+        if (wrapper?.state !== "initialized") throw new Error("waiting");
+        if (wrapper.thread.agent.phase.type !== "idle")
+          throw new Error("waiting for the chunk thread to settle");
+      },
+      { timeout: 5000, message: "chunk thread should settle" },
+    );
+
+    // The user walks into the chunk thread and types @compact there. A compact
+    // thread has no compactor, so it is just text.
+    driver.magenta.dispatch({
+      type: "chat-msg",
+      msg: { type: "set-active-thread", id: chunkThreadId },
+    });
+    await driver.inputMagentaText("@compact foo");
+    await driver.send();
+
+    const retryStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "chunk thread after @compact text",
+    });
+    const messages = retryStream.getProviderMessages();
+    const text = messages
+      .flatMap((m) =>
+        m.content
+          .filter(
+            (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
+          )
+          .map((c) => c.text),
+      )
+      .join("\n");
+    expect(text).toContain("@compact foo");
+
+    // No nested compaction was started.
+    const chunkWrapper = driver.magenta.chat.threadWrappers[chunkThreadId];
+    expect(
+      chunkWrapper?.state === "initialized" && chunkWrapper.thread.compactor,
+    ).toBeUndefined();
+  });
+});

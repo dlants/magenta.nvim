@@ -24,19 +24,25 @@ const COMPACT_PROMPT_TEMPLATE = readFileSync(
   "utf-8",
 );
 
+/** Identifies a run across its state transitions, so the view can key its
+ * expand/collapse state on something that does not move when the list of runs
+ * is filtered or appended to. */
+export type CompactionRunId = number & { __compactionRunId: true };
+
 /** One compaction, from the view's perspective. Each chunk is a real child
  * thread, so the ids are all the view needs to let the user walk into one. */
-export type CompactionRunState =
+export type CompactionRunState = { id: CompactionRunId } & (
   | {
       type: "running";
       chunkIndex: number;
       totalChunks: number;
-      threadIds: ThreadId[];
+      threadIds: ReadonlyArray<ThreadId>;
     }
-  | { type: "done"; threadIds: ThreadId[]; summary: string }
-  | { type: "error"; threadIds: ThreadId[]; message: string }
+  | { type: "done"; threadIds: ReadonlyArray<ThreadId>; summary: string }
+  | { type: "error"; threadIds: ReadonlyArray<ThreadId>; message: string }
   /** a chunk thread was deleted, or the parent was destroyed */
-  | { type: "aborted"; threadIds: ThreadId[] };
+  | { type: "aborted"; threadIds: ReadonlyArray<ThreadId> }
+);
 
 export type ThreadCompactorEvents = {
   transition: [CompactionRunState];
@@ -52,7 +58,7 @@ export class ThreadCompactor
 {
   /** The current run last. The view renders these. */
   readonly runs: CompactionRunState[] = [];
-  private discarded = false;
+  private nextRunId = 0;
 
   constructor(private thread: Thread) {
     super();
@@ -68,32 +74,33 @@ export class ThreadCompactor
     nextPrompt: string | undefined,
   ): Promise<CompactionOutcome> {
     this.discard();
-    this.discarded = false;
 
     const chunks = this.chunk(messages);
     if (chunks.length === 0) {
       return { type: "error", message: "nothing to compact" };
     }
 
+    const id = this.nextRunId++ as CompactionRunId;
     const threadIds: ThreadId[] = [];
-    let run: CompactionRunState = {
+    this.runs.push({
+      id,
       type: "running",
       chunkIndex: 0,
       totalChunks: chunks.length,
-      threadIds,
-    };
-    this.runs.push(run);
-    this.emit("transition", run);
+      threadIds: [],
+    });
+    this.emit("transition", this.runs[this.runs.length - 1]!);
 
     let summary = "";
     for (const [chunkIndex, chunk] of chunks.entries()) {
-      run = {
+      const run: Extract<CompactionRunState, { type: "running" }> = {
+        id,
         type: "running",
         chunkIndex,
         totalChunks: chunks.length,
-        threadIds,
+        threadIds: [...threadIds],
       };
-      this.replaceCurrent(run);
+      this.update(id, run);
 
       const fileIO = new InMemoryFileIO({
         "/summary.md": summary,
@@ -114,13 +121,13 @@ export class ThreadCompactor
         label: `compact ${chunkIndex + 1}/${chunks.length}`,
       });
       threadIds.push(threadId);
-      this.replaceCurrent({ ...run, threadIds: [...threadIds] });
+      this.update(id, { ...run, threadIds: [...threadIds] });
 
       const result =
         await this.thread.context.threadManager.awaitThreadResult(threadId);
-      if (this.discarded) return { type: "aborted" };
+      if (!this.isCurrent(id)) return { type: "aborted" };
       if (result.type === "aborted") {
-        this.replaceCurrent({ type: "aborted", threadIds: [...threadIds] });
+        this.update(id, { id, type: "aborted", threadIds: [...threadIds] });
         return { type: "aborted" };
       }
       summary = fileIO.getFileContents("/summary.md") ?? "";
@@ -128,7 +135,8 @@ export class ThreadCompactor
 
     if (summary.trim() === "") {
       const message = "the compaction finished but /summary.md is empty";
-      this.replaceCurrent({
+      this.update(id, {
+        id,
         type: "error",
         threadIds: [...threadIds],
         message,
@@ -136,7 +144,12 @@ export class ThreadCompactor
       return { type: "error", message };
     }
 
-    this.replaceCurrent({ type: "done", threadIds: [...threadIds], summary });
+    this.update(id, {
+      id,
+      type: "done",
+      threadIds: [...threadIds],
+      summary,
+    });
     return { type: "complete", summary, chunkCount: chunks.length };
   }
 
@@ -145,15 +158,26 @@ export class ThreadCompactor
   discard(): void {
     const current = this.current;
     if (!current) return;
-    this.discarded = true;
-    this.replaceCurrent({ type: "aborted", threadIds: [...current.threadIds] });
+    this.update(current.id, {
+      id: current.id,
+      type: "aborted",
+      threadIds: [...current.threadIds],
+    });
     for (const threadId of current.threadIds) {
       this.thread.context.threadManager.deleteThread(threadId);
     }
   }
 
-  private replaceCurrent(next: CompactionRunState): void {
-    if (this.runs.length === 0) return;
+  /** A run that is no longer the last one has been superseded by a fresh
+   * `run()`; its remaining steps must not write state. */
+  private isCurrent(id: CompactionRunId): boolean {
+    const last = this.runs[this.runs.length - 1];
+    return last?.id === id && last.type === "running";
+  }
+
+  private update(id: CompactionRunId, next: CompactionRunState): void {
+    const last = this.runs[this.runs.length - 1];
+    if (!last || last.id !== id) return;
     this.runs[this.runs.length - 1] = next;
     this.emit("transition", next);
   }

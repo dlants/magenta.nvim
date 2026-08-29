@@ -370,6 +370,20 @@ Tests (`node/chat/thread-compact.test.ts`, 15 tests): the chunk threads now yiel
 
 `node/comments/comment-input.test.ts` remains flaky on `main` (verified again by stashing: 1–2 failures per run either way).
 
+Follow-up from code review (same stage):
+
+- `CompactionRunState` gained an `id: CompactionRunId` and its `threadIds` are `ReadonlyArray<ThreadId>`, always stored as a copy — the first push no longer aliased the live array the loop mutates. The view keys `compactionViewState` on `run.id` rather than the position in the *filtered* history array, which shifted whenever a run was in flight (`toggle-compaction-record` now carries `runId`).
+- `ThreadCompactor.discarded` is gone. Cancellation is encoded in the run itself: `run()` captures its id and every write goes through `update(id, ...)`, which no-ops unless that id is still the last run, and `isCurrent(id)` (last run, still `running`) is what a resumed `awaitThreadResult` checks. A stale run parked on `awaitThreadResult` can therefore no longer resurrect itself once a fresh run starts.
+- `NvimThread.state.compactionViewState.expandedSteps` and the `toggle-compaction-step` Msg variant are deleted — there are no steps any more, only chunk threads.
+- `parseSubmission(text, { compactionAvailable })` decides whether `@compact` is significant, so `Magenta.preprocessAndSend` no longer rebuilds a fallback `message`/`delivery` by hand for the compact-thread case.
+- `node/comments/comment-delivery.test.ts` "keeps delivering after a compaction swaps the agent" was broken by stage 3 (its chunk thread ended its turn instead of yielding); it now yields.
+
+Additional tests (`node/chat/thread-compact.test.ts`):
+
+- a chunk thread that yields with an empty `/summary.md` settles the run as `error` and fails the parked submission rather than hanging;
+- a second `@compact` while the first run's chunk thread is pending deletes that thread, records the first run `aborted`, and starts a fresh run;
+- `@compact foo` typed into a compact child thread is delivered as raw text and spawns no nested compaction.
+
 ## Display and navigation
 
 `NvimThread` keeps both existing render sites; they just read `Compactor.runs` instead of `core.state.compactionHistory` / `core.state.mode`.

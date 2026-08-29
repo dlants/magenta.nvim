@@ -73,6 +73,7 @@ export {
 } from "./compact-renderer.ts";
 export {
   type CompactionOutcome,
+  type CompactionRunId,
   type CompactionRunState,
   type Compactor,
   type CompactSuspendReason,

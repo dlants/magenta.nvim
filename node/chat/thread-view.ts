@@ -276,7 +276,7 @@ function renderCompactionHistory(
   const history = runs.filter((run) => run.type !== "running");
   if (history.length === 0) return d``;
   return d`${history.map((run, recordIdx) => {
-    const isExpanded = viewState[recordIdx]?.expanded || false;
+    const isExpanded = viewState[run.id]?.expanded || false;
     const status =
       run.type === "done"
         ? `summary: ${run.summary.length.toString()} chars`
@@ -290,7 +290,8 @@ function renderCompactionHistory(
         { hl_group: "@comment" },
       ),
       {
-        "=": () => dispatch({ type: "toggle-compaction-record", recordIdx }),
+        "=": () =>
+          dispatch({ type: "toggle-compaction-record", runId: run.id }),
       },
     );
     if (!isExpanded) return header;

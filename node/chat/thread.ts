@@ -11,6 +11,7 @@ import {
   CommentStore,
   CommentSupervisor,
   type CommentUpdateEntry,
+  type CompactionRunId,
   type ContextFiles,
   ContextManager,
   cloneContextManager,
@@ -200,12 +201,7 @@ export type Msg =
     }
   | {
       type: "toggle-compaction-record";
-      recordIdx: number;
-    }
-  | {
-      type: "toggle-compaction-step";
-      recordIdx: number;
-      stepIdx: number;
+      runId: CompactionRunId;
     }
   | {
       type: "toggle-sandbox-bypass";
@@ -270,10 +266,7 @@ export class NvimThread {
     messageViewState: { [messageIdx: number]: MessageViewState };
     toolViewState: { [toolRequestId: ToolRequestId]: ToolViewState };
     compactionViewState: {
-      [recordIdx: number]: {
-        expanded: boolean;
-        expandedSteps: { [stepIdx: number]: boolean };
-      };
+      [runId: CompactionRunId]: { expanded: boolean };
     };
     toolResultMap: Map<ToolRequestId, ProviderToolResult>;
     forkedTo: { childThreadId: ThreadId; atMessageIdx: NativeMessageIdx }[];
@@ -1185,25 +1178,13 @@ export class NvimThread {
         return;
 
       case "toggle-compaction-record": {
-        const vs = this.state.compactionViewState[msg.recordIdx] || {
+        const vs = this.state.compactionViewState[msg.runId] ?? {
           expanded: false,
-          expandedSteps: {},
         };
         vs.expanded = !vs.expanded;
-        this.state.compactionViewState[msg.recordIdx] = vs;
+        this.state.compactionViewState[msg.runId] = vs;
         return;
       }
-
-      case "toggle-compaction-step": {
-        const vs = this.state.compactionViewState[msg.recordIdx] || {
-          expanded: false,
-          expandedSteps: {},
-        };
-        vs.expandedSteps[msg.stepIdx] = !vs.expandedSteps[msg.stepIdx];
-        this.state.compactionViewState[msg.recordIdx] = vs;
-        return;
-      }
-
       case "toggle-sandbox-bypass": {
         let root: NvimThread = this;
         let parentThread = root.context.getParentThread?.();

@@ -415,10 +415,21 @@ describe("comment delivery", () => {
           },
         ],
       });
+      // The chunk thread hands its summary back the way every child thread
+      // does: by yielding.
       (await driver.mockAnthropic.awaitPendingStream()).respond({
-        stopReason: "end_turn",
+        stopReason: "tool_use",
         text: "done",
-        toolRequests: [],
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "yield_1" as never,
+              toolName: "yield_to_parent" as never,
+              input: { result: "wrote /summary.md" },
+            },
+          },
+        ],
       });
       (await driver.mockAnthropic.awaitPendingStream()).respond({
         stopReason: "end_turn",

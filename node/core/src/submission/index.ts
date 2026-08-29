@@ -68,9 +68,16 @@ const NEXT_PREFIX = /^\s*@next(?!\w)\s*/;
  *
  * `@compact @async foo` is compaction with `foo` as the follow-up prompt: the
  * delivery of a follow-up prompt is not meaningful, so it is stripped. The
- * reverse order (`@async @compact`) is a plain `@async` send, as before. */
-export function parseSubmission(text: string): SubmissionIntent {
-  if (COMPACT_PREFIX.test(text)) {
+ * reverse order (`@async @compact`) is a plain `@async` send, as before.
+ *
+ * `compactionAvailable: false` (a compact thread, which *is* a compaction and
+ * has no compactor) makes `@compact` insignificant: the text is delivered as
+ * typed rather than the caller reassembling a fallback message by hand. */
+export function parseSubmission(
+  text: string,
+  opts: { compactionAvailable: boolean } = { compactionAvailable: true },
+): SubmissionIntent {
+  if (opts.compactionAvailable && COMPACT_PREFIX.test(text)) {
     const rest = text
       .replace(COMPACT_PREFIX, "")
       .replace(ASYNC_PREFIX, "")

@@ -26,6 +26,7 @@ export interface Compactor {
 }
 
 export {
+  type CompactionRunId,
   type CompactionRunState,
   ThreadCompactor,
   type ThreadCompactorEvents,
