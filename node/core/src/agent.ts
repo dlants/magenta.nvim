@@ -62,6 +62,7 @@ import type {
   EndTurnAction,
   EndTurnContext,
   RequestContextKind,
+  SuspendReason,
   YieldAction,
 } from "./thread-supervisor.ts";
 import type {
@@ -289,16 +290,11 @@ export type SubmitOptions = {
   requestKind?: "submission" | "continuation";
 };
 
-/** Where a submission ends up. A `suspended` outcome means the agent stopped
- * before a request at a supervisor's request; whether the submission is over
- * is the owner's call, not the agent's. */
-export type AgentSendOutcome = SendResult;
-
 /** Outcome of consulting the before-request hooks. `injections` is non-empty
  * only when the caller asked to receive them (`injections: "return"`) instead
  * of having them appended to the log. */
 type BeforeRequestResult =
-  | { type: "suspend"; reason: unknown }
+  | { type: "suspend"; reason: SuspendReason }
   | { type: "proceed"; injections: AgentInput[] };
 
 export class Agent {
@@ -617,7 +613,7 @@ export class Agent {
    * back out here when the turn resolves `suspended`. */
   private suspendReason:
     | { type: "yield"; result: string; value: YieldValue }
-    | { type: "supervisor"; reason: unknown }
+    | { type: "supervisor"; reason: SuspendReason }
     | undefined;
 
   /** Number of messages whose usage has already been folded into the
@@ -1131,7 +1127,7 @@ export class Agent {
    * to rest. Internal continuations — auto-respond, supervisor nudges, the
    * max_tokens continue-prompt, a rejected yield — deliberately leave it
    * pending, so exactly one outcome is delivered per `send`. */
-  private submission: Defer<AgentSendOutcome> | undefined;
+  private submission: Defer<SendResult> | undefined;
 
   /** Issue a submission and resolve once the agent comes to rest.
    *
@@ -1141,7 +1137,7 @@ export class Agent {
   send(
     inputMessages?: InputMessage[],
     opts: SubmitOptions = {},
-  ): Promise<AgentSendOutcome> {
+  ): Promise<SendResult> {
     if (this.state.mode.type === "yielded" && this.state.mode.tornDown) {
       return Promise.reject(
         new Error(
@@ -1149,7 +1145,7 @@ export class Agent {
         ),
       );
     }
-    const deferred = new Defer<AgentSendOutcome>();
+    const deferred = new Defer<SendResult>();
     this.submission = deferred;
     this.submit(inputMessages, opts).catch((error: Error) => {
       this.handleSendMessageError(error);
@@ -1161,7 +1157,7 @@ export class Agent {
   /** Deliver the outcome of the in-flight submission, if any. The final
    * `update` goes out first so a trailing-edge debouncer paints the terminal
    * state before the caller sees the result. */
-  private settle(outcome: AgentSendOutcome): void {
+  private settle(outcome: SendResult): void {
     const deferred = this.submission;
     this.submission = undefined;
     this.deps.onUpdate();
@@ -1471,35 +1467,24 @@ export class Agent {
   ): Promise<BeforeRequestResult> {
     const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
     if (!onBeforeRequest) return { type: "proceed", injections: [] };
-    const actions = await onBeforeRequest({
+    const { injections: content, suspend } = await onBeforeRequest({
       ...context,
       inputTokenCount: this.runner.log.inputTokenCount,
     });
-    const injections: AgentInput[] = [];
-    // The first suspension wins; a later one cannot restate the reason.
-    let suspension: { reason: unknown } | undefined;
-    for (const action of actions) {
-      if (action.type === "inject") {
-        for (const content of action.content) {
-          injections.push(
-            content.type === "text"
-              ? {
-                  type: "text" as const,
-                  text: content.text,
-                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-                }
-              : content,
-          );
-        }
-      } else if (action.type === "suspend") {
-        suspension ??= { reason: action.reason };
-      }
-    }
+    const injections: AgentInput[] = content.map((block) =>
+      block.type === "text"
+        ? {
+            type: "text" as const,
+            text: block.text,
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          }
+        : block,
+    );
     // A deferred injection would be dropped by a reset, so a suspension forces
     // the append: the content belongs in the snapshot handed over.
-    if (suspension) {
+    if (suspend) {
       this.runner.appendUserMessage(injections, { coalesce: true });
-      return { type: "suspend", reason: suspension.reason };
+      return { type: "suspend", reason: suspend.reason };
     }
     switch (mode) {
       case "prefix":

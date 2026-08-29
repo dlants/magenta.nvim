@@ -89,7 +89,7 @@ export const renderStatus = (
   mode: ThreadMode,
   latestUsage: Usage | undefined,
   lastTurnResult: TurnResult | undefined,
-  compaction?: CompactionProgress | undefined,
+  compaction: CompactionProgress | undefined,
 ): VDOMNode => {
   const yieldedResponse = mode.type === "yielded" ? mode.response : undefined;
   // First check mode for thread-specific states
@@ -476,7 +476,9 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     mode,
     latestUsage,
     thread.core.state.lastTurnResult,
-    thread.compactor.progress,
+    thread.compactor.state.type === "running"
+      ? thread.compactor.state.progress
+      : undefined,
   );
 
   const contextManagerView = shouldShowContextFiles(

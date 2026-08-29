@@ -16,19 +16,6 @@ export type CompactSuspendReason = {
   nextPrompt: string | undefined;
 };
 
-export function asCompactReason(
-  reason: unknown,
-): CompactSuspendReason | undefined {
-  if (
-    typeof reason === "object" &&
-    reason !== null &&
-    (reason as { kind?: unknown }).kind === "compact"
-  ) {
-    return reason as CompactSuspendReason;
-  }
-  return undefined;
-}
-
 export type CompactionOutcome =
   | { type: "complete"; summary: string; steps: CompactionStep[] }
   | { type: "error"; steps: CompactionStep[] };
@@ -48,6 +35,15 @@ export type CompactionProgress = {
   totalChunks: number;
 };
 
+export type CompactorState =
+  | { type: "idle" }
+  | {
+      type: "running";
+      /** exposed so the view can reach the live agent */
+      manager: CompactionManager;
+      progress: CompactionProgress | undefined;
+    };
+
 export type CompactorEvents = {
   /** undefined once the run is over */
   progress: [CompactionProgress | undefined];
@@ -59,9 +55,8 @@ export type CompactorEvents = {
 export class ManagedCompactor extends Emitter<CompactorEvents> {
   /** Finished runs, most recent last. The view renders these. */
   readonly history: CompactionRecord[] = [];
-  progress: CompactionProgress | undefined;
-  /** The in-flight manager, exposed so the view can reach its live agent. */
-  manager: CompactionManager | undefined;
+  /** One field, so a live manager and its progress cannot disagree. */
+  state: CompactorState = { type: "idle" };
 
   constructor(private thread: Thread) {
     super();
@@ -91,7 +86,7 @@ export class ManagedCompactor extends Emitter<CompactorEvents> {
       getProvider: context.getProvider,
       requestRender: () => this.thread.callbacks.onUpdate(),
     });
-    this.manager = manager;
+    this.state = { type: "running", manager, progress: undefined };
 
     return new Promise<CompactionOutcome>((resolve) => {
       manager.on("transition", (_prev, next) => {
@@ -126,8 +121,8 @@ export class ManagedCompactor extends Emitter<CompactorEvents> {
     });
   }
 
-  private setProgress(progress: CompactionProgress | undefined): void {
-    this.progress = progress;
+  private setProgress(progress: CompactionProgress): void {
+    if (this.state.type === "running") this.state.progress = progress;
     this.emit("progress", progress);
   }
 
@@ -135,12 +130,12 @@ export class ManagedCompactor extends Emitter<CompactorEvents> {
     outcome: CompactionOutcome,
     resolve: (outcome: CompactionOutcome) => void,
   ): void {
-    this.manager = undefined;
+    this.state = { type: "idle" };
     this.history.push({
       steps: outcome.steps,
       finalSummary: outcome.type === "complete" ? outcome.summary : undefined,
     });
-    this.setProgress(undefined);
+    this.emit("progress", undefined);
     resolve(outcome);
   }
 }
@@ -163,8 +158,8 @@ export async function runSubmission(args: {
   let result = await args.start();
 
   while (result.type === "suspended") {
-    const reason = asCompactReason(result.reason);
-    if (!reason || !compactor) {
+    const reason = result.reason;
+    if (reason.kind !== "compact" || !compactor) {
       // A suspension nobody claims is just a stop.
       return { type: "completed" } satisfies SendResult;
     }
@@ -181,16 +176,20 @@ export async function runSubmission(args: {
       } satisfies SendResult;
     }
 
-    await thread.reset(
-      [
+    await thread.reset({
+      seed: [
         {
           type: "text",
           text: summaryText(outcome.summary),
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ],
-      { summary: outcome.summary, chunkCount: outcome.steps.length },
-    );
+      archive: {
+        type: "compaction",
+        summary: outcome.summary,
+        chunkCount: outcome.steps.length,
+      },
+    });
 
     result = await thread.send([
       {

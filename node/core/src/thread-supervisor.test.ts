@@ -14,7 +14,7 @@ const context: RequestContext = {
 };
 
 describe("composeSupervisors onBeforeRequest", () => {
-  it("collects the actions in supervisor order", async () => {
+  it("merges the injections in supervisor order", async () => {
     const first: ThreadSupervisor = {
       onBeforeRequest: () => Promise.resolve(injectText("first")),
     };
@@ -22,13 +22,16 @@ describe("composeSupervisors onBeforeRequest", () => {
       onBeforeRequest: () => Promise.resolve(injectText("second")),
     };
     const hooks = composeSupervisors(() => [first, second]);
-    expect(await hooks.onBeforeRequest?.(context)).toEqual([
-      injectText("first"),
-      injectText("second"),
-    ]);
+    expect(await hooks.onBeforeRequest?.(context)).toEqual({
+      injections: [
+        { type: "text", text: "first" },
+        { type: "text", text: "second" },
+      ],
+      suspend: undefined,
+    });
   });
 
-  it("collects the compaction alongside the injections", async () => {
+  it("carries the suspension alongside the injections", async () => {
     const injector: ThreadSupervisor = {
       onBeforeRequest: () => Promise.resolve(injectText("note")),
     };
@@ -36,28 +39,32 @@ describe("composeSupervisors onBeforeRequest", () => {
       injector,
       new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
     ]);
-    expect(await hooks.onBeforeRequest?.(context)).toEqual([
-      injectText("note"),
-      { type: "suspend", reason: { kind: "compact", nextPrompt: "go" } },
-    ]);
+    expect(await hooks.onBeforeRequest?.(context)).toEqual({
+      injections: [{ type: "text", text: "note" }],
+      suspend: { reason: { kind: "compact", nextPrompt: "go" } },
+    });
   });
 
-  it("collects every suspension, leaving arbitration to the agent", async () => {
+  it("keeps only the first suspension", async () => {
     const hooks = composeSupervisors(() => [
       new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
       new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "stop" }),
     ]);
-    expect(await hooks.onBeforeRequest?.(context)).toEqual([
-      { type: "suspend", reason: { kind: "compact", nextPrompt: "go" } },
-      { type: "suspend", reason: { kind: "compact", nextPrompt: "stop" } },
-    ]);
+    expect(await hooks.onBeforeRequest?.(context)).toEqual({
+      injections: [],
+      suspend: { reason: { kind: "compact", nextPrompt: "go" } },
+    });
   });
+
   it("drops `none` actions", async () => {
     const quiet: ThreadSupervisor = {
       onBeforeRequest: () => Promise.resolve({ type: "none" as const }),
     };
     const hooks = composeSupervisors(() => [quiet, {}]);
-    expect(await hooks.onBeforeRequest?.(context)).toEqual([]);
+    expect(await hooks.onBeforeRequest?.(context)).toEqual({
+      injections: [],
+      suspend: undefined,
+    });
   });
 });
 

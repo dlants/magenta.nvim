@@ -1,11 +1,19 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { ToolName, ToolRequestId } from "@magenta/core";
-import { AutoCompactSupervisor } from "@magenta/core";
+import { AutoCompactSupervisor, type ManagedCompactor } from "@magenta/core";
 import { expect, it } from "vitest";
 import type { ScriptInvocationId } from "../scripts/script-manager.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
+
+/** The manager of a compactor the caller has already established is running. */
+function runningManager(compactor: ManagedCompactor) {
+  if (compactor.state.type !== "running") {
+    throw new Error("expected a running compaction");
+  }
+  return compactor.state.manager;
+}
 
 it("compact flow: user initiates @compact, spawns compact thread, compacts and continues", async () => {
   await withDriver({}, async (driver) => {
@@ -57,7 +65,7 @@ it("compact flow: user initiates @compact, spawns compact thread, compacts and c
     // Wait for the thread to enter compacting mode
     await pollUntil(
       () => {
-        if (originalThread.compactor.progress === undefined)
+        if (originalThread.compactor.state.type !== "running")
           throw new Error("expected the thread to be compacting");
       },
       { timeout: 2000, message: "thread should enter compacting mode" },
@@ -218,7 +226,7 @@ it("compact flow without continuation: @compact with no next prompt", async () =
     // Wait for compacting mode
     await pollUntil(
       () => {
-        if (thread.compactor.progress === undefined)
+        if (thread.compactor.state.type !== "running")
           throw new Error("expected the thread to be compacting");
       },
       { timeout: 2000, message: "thread should enter compacting mode" },
@@ -286,6 +294,53 @@ it("compact flow without continuation: @compact with no next prompt", async () =
   });
 });
 
+it("records a summary-less history entry when the compaction errors out", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+
+    await driver.inputMagentaText("Hello");
+    await driver.send();
+    const stream1 = await driver.mockAnthropic.awaitPendingStream({
+      message: "initial request",
+    });
+    stream1.respond({
+      stopReason: "end_turn",
+      text: "Hi there!",
+      toolRequests: [],
+    });
+
+    const thread = driver.magenta.chat.getActiveThread();
+    await driver.inputMagentaText("@compact");
+    await driver.send();
+
+    await pollUntil(
+      () => {
+        if (thread.compactor.state.type !== "running")
+          throw new Error("expected the thread to be compacting");
+      },
+      { timeout: 2000, message: "thread should enter compacting mode" },
+    );
+
+    const compactStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact subagent stream",
+    });
+    compactStream.respondWithError(
+      new Error("compaction request blew up (non-retryable)"),
+    );
+
+    await pollUntil(
+      () => {
+        if (thread.compactor.history.length !== 1)
+          throw new Error("expected a history entry for the failed run");
+      },
+      { timeout: 5000, message: "failed run should be recorded" },
+    );
+    expect(thread.compactor.history[0].finalSummary).toBeUndefined();
+    // The run is over: the status line stops claiming a compaction is running.
+    expect(thread.compactor.state.type).toBe("idle");
+  });
+});
+
 it("compact flow does not process @file commands in subagent or summary", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
@@ -313,7 +368,7 @@ it("compact flow does not process @file commands in subagent or summary", async 
 
     await pollUntil(
       () => {
-        if (thread.compactor.progress === undefined)
+        if (thread.compactor.state.type !== "running")
           throw new Error("expected the thread to be compacting");
       },
       { timeout: 2000, message: "thread should enter compacting mode" },
@@ -592,7 +647,7 @@ it("auto-compact threshold from options wires into the thread's supervisor", asy
 
       await pollUntil(
         () => {
-          if (originalThread.compactor.progress === undefined)
+          if (originalThread.compactor.state.type !== "running")
             throw new Error("expected the thread to be compacting");
         },
         { timeout: 2000, message: "thread should auto-compact" },
@@ -662,16 +717,16 @@ it("auto-compact triggers when inputTokenCount breaches the supervisor threshold
     // The thread should enter compacting mode automatically
     await pollUntil(
       () => {
-        if (originalThread.compactor.progress === undefined)
+        if (originalThread.compactor.state.type !== "running")
           throw new Error("expected the thread to be compacting");
       },
       { timeout: 2000, message: "thread should auto-compact" },
     );
 
     // Verify the supervisor's nextPrompt was preserved
-    if (originalThread.compactor.progress === undefined)
+    if (originalThread.compactor.state.type !== "running")
       throw new Error("expected compacting");
-    expect(originalThread.compactor.manager?.nextPrompt).toBe(
+    expect(runningManager(originalThread.compactor).nextPrompt).toBe(
       "Now help me with multiplication",
     );
 
@@ -793,7 +848,7 @@ it("auto-compact uses the configured next prompt from options", async () => {
         const stream = await driver.mockAnthropic.awaitPendingStream({
           message: `turn ${i}`,
         });
-        if (originalThread.compactor.progress !== undefined) {
+        if (originalThread.compactor.state.type === "running") {
           compactSubagentStream = stream;
           break;
         }
@@ -855,7 +910,7 @@ it("script-spawned thread honors per-thread autoCompactPrompt override", async (
       const stream = await driver.mockAnthropic.awaitPendingStream({
         message: `script thread turn ${i}`,
       });
-      if (thread.compactor.progress !== undefined) {
+      if (thread.compactor.state.type === "running") {
         compactSubagentStream = stream;
         break;
       }
@@ -910,7 +965,7 @@ it("script-spawned thread without prompt override falls back to the default temp
       const stream = await driver.mockAnthropic.awaitPendingStream({
         message: `script thread turn ${i}`,
       });
-      if (thread.compactor.progress !== undefined) {
+      if (thread.compactor.state.type === "running") {
         compactSubagentStream = stream;
         break;
       }
@@ -984,17 +1039,19 @@ it("compaction history records steps from multi-chunk compaction", async () => {
 
     await pollUntil(
       () => {
-        if (thread.compactor.progress === undefined)
+        if (thread.compactor.state.type !== "running")
           throw new Error("expected the thread to be compacting");
       },
       { timeout: 2000, message: "thread should enter compacting mode" },
     );
 
     // Verify we got multiple chunks
-    if (thread.compactor.progress === undefined)
+    if (thread.compactor.state.type !== "running")
       throw new Error("not compacting");
-    expect(thread.compactor.manager!.chunks.length).toBeGreaterThanOrEqual(2);
-    const totalChunks = thread.compactor.manager!.chunks.length;
+    expect(
+      runningManager(thread.compactor).chunks.length,
+    ).toBeGreaterThanOrEqual(2);
+    const totalChunks = runningManager(thread.compactor).chunks.length;
 
     // === Process chunk 1 ===
     const chunk1Stream = await driver.mockAnthropic.awaitPendingStream({
@@ -1191,7 +1248,7 @@ it("auto-compact does not trigger on compact threads", async () => {
 
     await pollUntil(
       () => {
-        if (originalThread.compactor.progress === undefined)
+        if (originalThread.compactor.state.type !== "running")
           throw new Error("expected compacting");
       },
       { timeout: 2000, message: "thread should enter compacting mode" },
@@ -1208,7 +1265,7 @@ it("auto-compact does not trigger on compact threads", async () => {
 
     // Verify a compact thread was spawned
     // Verify the thread is in compacting mode with an internal compact agent
-    expect(originalThread.compactor.progress).toBeDefined();
+    expect(originalThread.compactor.state.type).toBe("running");
 
     // Clean up: respond to the compact subagent
 
@@ -1297,7 +1354,7 @@ it("compact keeps context files after compaction", async () => {
 
       await pollUntil(
         () => {
-          if (thread.compactor.progress === undefined)
+          if (thread.compactor.state.type !== "running")
             throw new Error("expected compacting");
         },
         { timeout: 2000 },

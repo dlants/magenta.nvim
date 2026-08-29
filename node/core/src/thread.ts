@@ -2,7 +2,6 @@ import {
   Agent,
   type AgentContext,
   type AgentDeps,
-  type AgentSendOutcome,
   DEFERRED_QUEUES,
   type DeferredDelivery,
   type InputMessage,
@@ -452,9 +451,7 @@ export class Thread {
 
   /** Note a yield as it goes past, so `result` settles for actors who never
    * submitted. */
-  private followSubmission(
-    outcome: Promise<AgentSendOutcome>,
-  ): Promise<SendResult> {
+  private followSubmission(outcome: Promise<SendResult>): Promise<SendResult> {
     return outcome.then((r) => {
       if (r.type === "yielded") this.settleResult(r);
       return r;
@@ -501,12 +498,18 @@ Come up with a succinct thread title for this prompt. It must be a single line (
    * structured tool results and edl registers survive — thread 3 is still
    * thread 3 afterwards, which is why the archive keys by thread id.
    *
-   * `archiveCompaction` is the one compaction-shaped thing left here, and only
-   * because the archive's entry schema has a `compaction` variant. */
-  async reset(
-    seed: AgentInput[],
-    archiveCompaction?: { summary: string; chunkCount: number },
-  ): Promise<void> {
+   * `archive` is the one compaction-shaped thing left here, and only because
+   * the archive's entry schema has a `compaction` variant. The caller states
+   * its intent rather than relying on omission. */
+  async reset({
+    seed,
+    archive,
+  }: {
+    seed: AgentInput[];
+    archive:
+      | { type: "compaction"; summary: string; chunkCount: number }
+      | { type: "none" };
+  }): Promise<void> {
     const previousAgent = this.agent;
     this.agent = this.createAgent({ type: "new" });
     // Disposing the old agent drains its queues. The queued submissions belong
@@ -522,8 +525,11 @@ Come up with a succinct thread title for this prompt. It must be a single line (
       if (carried[delivery].length) this.enqueue(carried[delivery], delivery);
     }
 
-    if (archiveCompaction) {
-      this.threadLogger.recordCompaction(archiveCompaction);
+    if (archive.type === "compaction") {
+      this.threadLogger.recordCompaction({
+        summary: archive.summary,
+        chunkCount: archive.chunkCount,
+      });
     }
     // The replacement agent starts from an empty message list, so the
     // archive's cursor restarts with it.

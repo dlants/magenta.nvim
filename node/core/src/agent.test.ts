@@ -8,7 +8,6 @@ import type { ToolApplied } from "./capabilities/context-tracker.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import {
-  asCompactReason,
   type CompactionOutcome,
   type Compactor,
   runSubmission,
@@ -420,8 +419,7 @@ function trackCompactions(core: Thread): { prompts: (string | undefined)[] } {
   core.send = (...args: Parameters<Thread["send"]>) =>
     realSend(...args).then((r) => {
       if (r.type === "suspended") {
-        const reason = asCompactReason(r.reason);
-        if (reason) prompts.push(reason.nextPrompt);
+        if (r.reason.kind === "compact") prompts.push(r.reason.nextPrompt);
       }
       return r;
     });
@@ -500,6 +498,75 @@ describe("runSubmission across a compaction handoff", () => {
     }
   });
 
+  it("stays pending across two consecutive handoffs, reseeding each time", async () => {
+    const threadId = uniqueThreadId("send-compaction-twice");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      const prompts = ["first continuation", "second continuation"];
+      let handoffs = 0;
+      core.hooks = composeSupervisors(() => [
+        {
+          onBeforeRequest: (ctx) => {
+            if (ctx.kind === "submission" || handoffs >= prompts.length)
+              return Promise.resolve({ type: "none" as const });
+            const nextPrompt = prompts[handoffs];
+            handoffs++;
+            return Promise.resolve({
+              type: "suspend" as const,
+              reason: { kind: "compact" as const, nextPrompt },
+            });
+          },
+        },
+      ]);
+      const calls: (string | undefined)[] = [];
+      const compactor: Compactor = {
+        run: (_messages, nextPrompt) => {
+          calls.push(nextPrompt);
+          return Promise.resolve({
+            type: "complete",
+            summary: `SUMMARY ${calls.length}`,
+            steps: [],
+          });
+        },
+      };
+      let settled: ThreadSendResult | undefined;
+      const result = runSubmission({
+        thread: core,
+        compactor,
+        start: () => core.send([{ type: "user", text: "hello" }]),
+      });
+      void result.then((r) => {
+        settled = r;
+      });
+
+      let stream = await mockClient.awaitStream();
+      for (const [idx, prompt] of prompts.entries()) {
+        const oldAgent = core.agent;
+        stream.streamText("done");
+        stream.finishResponse("end_turn");
+        const prev = stream;
+        stream = await pollUntil(() => {
+          if (core.agent === oldAgent) throw new Error("waiting for swap");
+          return awaitNextStream(mockClient, prev);
+        });
+        expect(settled).toBeUndefined();
+        const body = JSON.stringify(stream.messages);
+        // Each pass reseeds with the newest summary and its own next prompt,
+        // and none of the earlier generations' content survives.
+        expect(body).toContain(`SUMMARY ${idx + 1}`);
+        expect(body).toContain(prompt);
+        if (idx > 0) expect(body).not.toContain(`SUMMARY ${idx}"`);
+      }
+      expect(calls).toEqual(prompts);
+      stream.streamText("resumed");
+      stream.finishResponse("end_turn");
+      expect(await result).toEqual({ type: "completed" });
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
+
   it("resolves failed when the summarizing pass errors out", async () => {
     const threadId = uniqueThreadId("compaction-error");
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
@@ -533,7 +600,7 @@ describe("runSubmission across a compaction handoff", () => {
             asked = true;
             return Promise.resolve({
               type: "suspend" as const,
-              reason: { kind: "budget-exhausted" },
+              reason: { kind: "stop" as const, message: "budget exhausted" },
             });
           },
         },
@@ -578,13 +645,16 @@ describe("Thread.reset", () => {
       });
       const oldAgent = core.agent;
 
-      await core.reset([
-        {
-          type: "text",
-          text: "SEED",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        },
-      ]);
+      await core.reset({
+        seed: [
+          {
+            type: "text",
+            text: "SEED",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          },
+        ],
+        archive: { type: "none" },
+      });
 
       expect(core.agent).not.toBe(oldAgent);
       expect(core.getProviderMessages()).toEqual([]);
@@ -600,6 +670,36 @@ describe("Thread.reset", () => {
       const body = JSON.stringify(next.messages);
       expect(body).toContain("SEED");
       expect(body).not.toContain("the old conversation");
+      next.streamText("ok");
+      next.finishResponse("end_turn");
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
+
+  it("with no seed and no archive record, starts an empty agent silently", async () => {
+    const threadId = uniqueThreadId("thread-reset-bare");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      const sent = core.send([{ type: "user", text: "the old conversation" }]);
+      const stream = await mockClient.awaitStream();
+      stream.streamText("old reply");
+      stream.finishResponse("end_turn");
+      await sent;
+      await core.awaitArchiveFlush();
+
+      await core.reset({ seed: [], archive: { type: "none" } });
+
+      expect(core.getProviderMessages()).toEqual([]);
+      const entries = await readArchive(threadId);
+      expect(entries.map((e) => e.type)).not.toContain("compaction");
+
+      void core.send([{ type: "user", text: "continue" }]);
+      const next = await awaitNextStream(mockClient, stream);
+      expect(JSON.stringify(next.messages)).not.toContain(
+        "the old conversation",
+      );
       next.streamText("ok");
       next.finishResponse("end_turn");
     } finally {

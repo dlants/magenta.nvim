@@ -25,14 +25,21 @@ export type InjectedContent =
   | { type: "text"; text: string }
   | Extract<ProviderMessageContent, { type: "image" | "document" }>;
 
+/** Why a supervisor asked to stop before a request. Core's turn loop does not
+ * act on the reason — it only has to leave the log coherent and resumable —
+ * but the set of reasons is closed, so whoever handles the suspension narrows
+ * on `kind` rather than casting. */
+export type SuspendReason = CompactSuspendReason | PlainStopSuspendReason;
+
+/** "Stop this submission here"; nothing to hand off, just a reason to show. */
+export type PlainStopSuspendReason = { kind: "stop"; message: string };
+
 /** Action returned from the `onBeforeRequest` hook by a single supervisor.
  *
  * `suspend` says "stop before issuing this request and hand back to my
- * owner"; the reason is opaque to core's turn loop, which only has to leave
- * the log coherent and resumable. Whoever wired the supervisor up is the one
- * who knows what the reason means. */
+ * owner". */
 export type SupervisorAction =
-  | { type: "suspend"; reason: unknown }
+  | { type: "suspend"; reason: SuspendReason }
   | { type: "inject"; content: InjectedContent[] }
   | { type: "none" };
 
@@ -43,12 +50,19 @@ export function injectText(
   return { type: "inject", content: [{ type: "text", text }] };
 }
 
+/** The composed result of consulting every supervisor before a request. A
+ * plural collaboration reduced to a single decision: all the injections, and
+ * at most one suspension — the shape cannot represent a contradictory plan. */
+export type ComposedRequestActions = {
+  injections: InjectedContent[];
+  suspend: { reason: SuspendReason } | undefined;
+};
+
 /** Fold a list of supervisors into the single `AgentHooks` trio an `Agent`
  * consults. The merge rules are exactly today's: `send-message` texts join
  * with a blank line, and the first `accept`/`reject` wins a yield. Request
- * actions are not merged: they are collected in supervisor order and the agent
- * applies the injections and honours the first `suspend` it scans.
- * Arbitration lives here rather than
+ * actions are merged into a single `ComposedRequestActions`: every injection,
+ * in supervisor order, and the first `suspend`. Arbitration lives here rather than
  * in the agent because it is policy over a plural collaborator, and each
  * consumer is free to choose a different one. */
 export function composeSupervisors(
@@ -79,12 +93,17 @@ export function composeSupervisors(
       return { type: "send-message", text: texts.join("\n\n") };
     },
     onBeforeRequest: async (context) => {
-      const actions: SupervisorAction[] = [];
+      const injections: InjectedContent[] = [];
+      // The first suspension wins; a later one cannot restate the reason.
+      let suspend: { reason: SuspendReason } | undefined;
       for (const sup of getSupervisors()) {
         const action = await sup.onBeforeRequest?.(context);
-        if (action && action.type !== "none") actions.push(action);
+        if (!action) continue;
+        if (action.type === "inject") injections.push(...action.content);
+        else if (action.type === "suspend")
+          suspend ??= { reason: action.reason };
       }
-      return actions;
+      return { injections, suspend };
     },
     onToolApplied: (absFilePath, tool, fileTypeInfo) => {
       for (const sup of getSupervisors()) {

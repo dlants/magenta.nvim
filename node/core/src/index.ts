@@ -72,10 +72,10 @@ export {
   TOLERANCE_TOKENS,
 } from "./compact-renderer.ts";
 export {
-  asCompactReason,
   type CompactionOutcome,
   type CompactionProgress,
   type Compactor,
+  type CompactorState,
   type CompactSuspendReason,
   ManagedCompactor,
   runSubmission,
@@ -277,10 +277,13 @@ export type {
 } from "./thread-api.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
+  ComposedRequestActions,
   EndTurnAction,
   EndTurnContext,
+  PlainStopSuspendReason,
   RequestContext,
   SupervisorAction,
+  SuspendReason,
   ThreadSupervisor,
   YieldAction,
 } from "./thread-supervisor.ts";

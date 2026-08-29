@@ -325,6 +325,22 @@ Deviations, decided while implementing:
 
 Tests: `node/core/src/agent.test.ts` gained `describe("runSubmission across a compaction handoff")` (pending across the continuation turn, `failed` on a summarizing error, unclaimed suspension resolves `completed` and stays resumable) and `describe("Thread.reset")`. The `Thread survives the compaction agent swap` and archive-marker tests now drive the real loop with a stub `Compactor`. `thread-supervisor.test.ts` asserts the action array. `thread-compact.test.ts` and `supervisor-wiring.test.ts` were mechanically retargeted at driver-side state.
 
+Follow-up from code review (same stage):
+
+- The suspension reason is typed, not `unknown`. `SuspendReason = CompactSuspendReason | PlainStopSuspendReason` (the latter is `{ kind: "stop"; message }`, the "just stop, here's why" case the seam was always meant to serve). `SupervisorAction`, `SendResult["suspended"]` and the agent's internal suspend plumbing all carry it, so `asCompactReason` and its two unchecked casts are deleted — `runSubmission` narrows on `reason.kind === "compact"`.
+- `composeSupervisors` arbitrates again, returning `ComposedRequestActions = { injections: InjectedContent[]; suspend: { reason } | undefined }` instead of a `SupervisorAction[]` the agent scanned. Individual supervisors still return a per-supervisor `SupervisorAction`; only the composed result is unambiguous, so "several suspends plus some `none`s" is no longer representable at the point where it is consumed.
+- `ManagedCompactor` holds one field, `state: { type: "idle" } | { type: "running"; manager; progress }`, replacing the independently-optional `manager` / `progress` pair; the view and tests use `state.type === "running"` as the "is compacting" predicate rather than `progress !== undefined`.
+- `Thread.reset` takes an options object with an explicit `archive: { type: "compaction"; ... } | { type: "none" }`, so the caller states its intent instead of omitting an argument.
+- `renderStatus`'s compaction argument is a required positional parameter.
+- `AgentSendOutcome` (a pure alias of `SendResult`) is deleted in favour of `SendResult`.
+
+Additional tests:
+
+- `node/core/src/agent.test.ts` — `runSubmission` across *two* consecutive handoffs (the caller's promise stays pending throughout, each pass reseeds with the newest summary and its own next prompt, and earlier generations' content is gone); `Thread.reset` with an empty seed and `archive: { type: "none" }` writes no compaction entry to the archive and starts an empty agent.
+- `node/chat/thread-compact.test.ts` — a compact chunk request that errors out pushes a history record with no `finalSummary` and returns `compactor.state` to `idle` (the `ManagedCompactor.finish` error path the history view renders).
+
+`node/comments/comment-input.test.ts` remains flaky on `main`, verified again by stashing.
+
 ## Compact threads are real threads
 
 - Goal: `Compactor` replaces `CompactionManager`. Chunks are compacted by sequentially spawned `threadType: "compact"` child threads with an `InMemoryFileIO`, awaited via `awaitThreadResult`. `compaction-manager.ts` and `compaction-controller.ts` are deleted.

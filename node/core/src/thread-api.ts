@@ -7,10 +7,11 @@ import type {
 } from "./providers/provider-types.ts";
 import type { PendingMessage } from "./submission/index.ts";
 import type {
+  ComposedRequestActions,
   EndTurnAction,
   EndTurnContext,
   RequestContext,
-  SupervisorAction,
+  SuspendReason,
   YieldAction,
 } from "./thread-supervisor.ts";
 import type { ToolRequestId } from "./tool-types.ts";
@@ -85,7 +86,7 @@ export type SendResult =
   /** A supervisor stopped the submission before a request was issued. The log
    * is coherent and resumable; what to do about it is the owner's business,
    * and the reason is opaque to core's turn loop. */
-  | { type: "suspended"; reason: unknown };
+  | { type: "suspended"; reason: SuspendReason };
 
 /** What `Thread.send` reports. Either the outcome of the caller's own
  * submission, or `queued`: the messages were parked behind the turn in
@@ -125,7 +126,7 @@ export type AgentHooks = {
    * retried. */
   /** The supervisors' actions, in order. The agent applies every injection
    * and honours the first `suspend` it scans. */
-  onBeforeRequest?: (ctx: RequestContext) => Promise<SupervisorAction[]>;
+  onBeforeRequest?: (ctx: RequestContext) => Promise<ComposedRequestActions>;
   /** A file-touching tool (edl, get_files) finished. Fire-and-forget. */
   onToolApplied?: OnToolApplied;
 };
