@@ -3,7 +3,7 @@ import type { SandboxAskCallback } from "@anthropic-ai/sandbox-runtime";
 import {
   isThreadId,
   type NativeMessageIdx,
-  parseSubmission,
+  parseDelivery,
   probeAndSaveClipboardImage,
   readArchivedThreadLog,
   readThreadMeta,
@@ -1618,19 +1618,15 @@ ${lines.join("\n")}
     return magenta;
   }
 
-  /** Parse user input text into a submission intent and hand it to the
-   * thread, which resolves its commands at delivery. */
+  /** Parse *when* the user's text should go out and hand it to the thread,
+   * which resolves the rest of it — `@compact` included — at delivery. */
   private preprocessAndSend(text: string): Promise<void> {
     const thread = this.chat.getActiveThread();
-    // A compact thread has no compactor — it *is* a compaction — so `@compact`
-    // typed into one is parsed as ordinary text rather than a no-op.
-    const intent = parseSubmission(text, {
-      compactionAvailable: thread.compactor !== undefined,
-    });
+    const submission = parseDelivery(text);
     this.dispatch({
       type: "thread-msg",
       id: thread.id,
-      msg: { type: "submit-message", intent },
+      msg: { type: "submit-message", submission },
     });
     // The submission's own work (resolving commands, aborting an in-flight
     // request) is kicked off by the dispatch; yield a tick so callers see it

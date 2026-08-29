@@ -120,6 +120,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
           await sup.onBeforeRequest({
             kind: "continuation",
             inputTokenCount,
+            isFirstMessage: false,
             stopReason: "end_turn",
           })
         ).type;

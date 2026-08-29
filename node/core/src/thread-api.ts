@@ -88,10 +88,6 @@ export type SendResult =
    * and the reason is opaque to core's turn loop. */
   | { type: "suspended"; reason: SuspendReason };
 
-/** What `Thread.send` reports. Either the outcome of the caller's own
- * submission, or `queued`: the messages were parked behind the turn in
- * flight, which belongs to another actor, so its result is not ours to
- * report. */
 export type ThreadSendResult = SendResult | { type: "queued" };
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */

@@ -32,9 +32,9 @@ import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import {
   pendingMessage,
-  type ResolveParts,
+  type ResolveSubmission,
   renderPending,
-  resolvePartsAsText,
+  resolveAsText,
 } from "./submission/index.ts";
 import { Thread } from "./thread.ts";
 import type { QueuedMessage, ThreadSendResult } from "./thread-api.ts";
@@ -102,7 +102,7 @@ function awaitNextStream(
 function createAgentWithMock(
   overrides?: Partial<AgentContext>,
   threadId: ThreadId = "test-thread" as ThreadId,
-  resolve?: ResolveParts,
+  resolve?: ResolveSubmission,
 ): {
   core: Thread;
   mockClient: MockAnthropicClient;
@@ -160,7 +160,7 @@ function createAgentWithMock(
     core: new Thread(
       threadId,
       context,
-      { onUpdate: () => {}, resolve: resolve ?? resolvePartsAsText },
+      { onUpdate: () => {}, resolve: resolve ?? resolveAsText },
       { type: "fresh" },
       {
         baseDir: TEST_ARCHIVE_DIR,
@@ -1053,13 +1053,13 @@ describe("deferred submissions", () => {
     const { core, mockClient } = createAgentWithMock(
       undefined,
       uniqueThreadId("deferred-resolve"),
-      (parts) => {
+      (message) => {
         calls.push(fileContents);
         return Promise.resolve({
-          messages: parts.map((p) => ({
-            type: "user" as const,
-            text: `${p.text} [${fileContents}]`,
-          })),
+          compact: false,
+          messages: [
+            { type: "user" as const, text: `${message} [${fileContents}]` },
+          ],
           reminders: [],
         });
       },
@@ -1101,14 +1101,12 @@ describe("deferred submissions", () => {
     const { core, mockClient } = createAgentWithMock(
       undefined,
       uniqueThreadId("deferred-throw"),
-      (parts) =>
-        parts.some((p) => p.text === "bad")
+      (message) =>
+        message === "bad"
           ? Promise.reject(new Error("resolution failed"))
           : Promise.resolve({
-              messages: parts.map((p) => ({
-                type: "user" as const,
-                text: p.text,
-              })),
+              compact: false,
+              messages: [{ type: "user" as const, text: message }],
               reminders: [],
             }),
     );
@@ -1141,9 +1139,10 @@ describe("deferred submissions", () => {
     const { core, mockClient } = createAgentWithMock(
       undefined,
       uniqueThreadId("deferred-reminder"),
-      (parts) =>
+      (message) =>
         Promise.resolve({
-          messages: parts.map((p) => ({ type: "user" as const, text: p.text })),
+          compact: false,
+          messages: [{ type: "user" as const, text: message }],
           reminders: ["remember the file"],
         }),
     );
@@ -1181,13 +1180,11 @@ describe("deferred submissions", () => {
     const { core, mockClient } = createAgentWithMock(
       undefined,
       threadId,
-      (parts) => {
-        calls.push(parts.map((p) => p.text).join(""));
+      (message) => {
+        calls.push(message);
         return Promise.resolve({
-          messages: parts.map((p) => ({
-            type: "user" as const,
-            text: p.text,
-          })),
+          compact: false,
+          messages: [{ type: "user" as const, text: message }],
           reminders: [],
         });
       },
@@ -2989,7 +2986,7 @@ describe("Agent conversation archive", () => {
         newId: childId,
         nativeMessageIdx,
         context,
-        callbacks: { onUpdate: () => {}, resolve: resolvePartsAsText },
+        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
 
       void child.send([{ type: "user", text: "child turn" }]);
@@ -3060,7 +3057,7 @@ describe("Agent thread state", () => {
         newId: childId,
         nativeMessageIdx,
         context,
-        callbacks: { onUpdate: () => {}, resolve: resolvePartsAsText },
+        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
 
       expect(child.state.edlRegisters.registers.get("r")).toBe("regval");

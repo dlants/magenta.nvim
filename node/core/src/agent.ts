@@ -37,18 +37,14 @@ import type {
   TurnResult,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import {
-  formatSystemInfo,
-  type SystemInfo,
-  type SystemPrompt,
-} from "./providers/system-prompt.ts";
+import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
 import {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
 import {
   type PendingMessage,
-  type ResolveParts,
+  type ResolveSubmission,
   renderPending,
 } from "./submission/index.ts";
 import type {
@@ -219,6 +215,13 @@ export const DEFERRED_QUEUES = {
 } as const;
 
 export type DeferredDelivery = keyof typeof DEFERRED_QUEUES;
+/** The result of draining one deferred queue: content for the next request,
+ * or a compaction that the flush ran into. Never both. */
+type QueuedCompaction = { nextPrompt: string | undefined };
+type FlushedQueue = {
+  messages: InputMessage[];
+  compact: QueuedCompaction | undefined;
+};
 
 export type ThreadState = {
   title: string | undefined;
@@ -266,7 +269,7 @@ export interface AgentDeps {
   onUpdate: OnUpdate;
   /** Turns queued `PendingMessage`s into content, at the moment they are
    * delivered rather than when they were queued. */
-  resolve: ResolveParts;
+  resolve: ResolveSubmission;
   /** Whether this agent drives a brand-new runner or one cloned from another
    * thread's history. */
   runnerInit:
@@ -281,9 +284,6 @@ export interface AgentDeps {
 }
 
 export type SubmitOptions = {
-  /** Skip context updates, reminders and failed-submit bookkeeping: the caller
-   * has composed the exact content (the compact thread). */
-  raw?: boolean;
   /** Which kind of request this is. A "continuation" (the requests issued out
    * of `handleStopped`) has already had `onBeforeRequest` consulted for it, so
    * the hook is not consulted again. Defaults to "submission". */
@@ -608,6 +608,9 @@ export class Agent {
   /** Set between the start of an abort and the resolution of the turn it
    * unwinds, so the tool executor knows to report `aborted`. */
   private abortRequested = false;
+  /** A `@compact` that the async queue produced mid-turn, already resolved,
+   * waiting for the stop where the handoff can actually happen. */
+  private deferredCompact: QueuedCompaction | undefined;
 
   /** Why the executor parked the agent. The agent never learns this; it comes
    * back out here when the turn resolves `suspended`. */
@@ -689,22 +692,41 @@ export class Agent {
   /** What the agent sends next after a stop. `queues` is deliberately lazy:
    * resolving a queued message runs its effects, so it must not happen until
    * we know the request will be issued. */
-  private flushQueue(delivery: DeferredDelivery): Promise<InputMessage[]> {
+  private flushQueue(delivery: DeferredDelivery): Promise<FlushedQueue> {
     const { field, drain } = DEFERRED_QUEUES[delivery];
     const entries = [...this.state[field]];
     this.update({ type: drain }, { silent: true });
-    return this.resolveQueued(entries);
+    return this.resolveQueued(entries, delivery);
   }
-
   /** Resolve queued entries in order. An entry whose resolution throws is
-   * dropped with a visible error rather than wedging the turn loop. */
+   * dropped with a visible error rather than wedging the turn loop.
+   *
+   * A `@compact` entry ends the flush: it becomes the compaction's follow-up
+   * prompt (with anything resolved ahead of it folded in, since there is no
+   * request left to carry it), and the entries behind it go back on the queue
+   * to be flushed after the handoff. */
   private async resolveQueued(
     entries: ReadonlyArray<PendingMessage>,
-  ): Promise<InputMessage[]> {
+    delivery: DeferredDelivery,
+  ): Promise<FlushedQueue> {
     const messages: InputMessage[] = [];
-    for (const entry of entries) {
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
       try {
-        const resolved = await this.deps.resolve(entry.parts);
+        const resolved = await this.deps.resolve(entry);
+        if (resolved.compact) {
+          this.requeue(entries.slice(i + 1), delivery);
+          return {
+            messages: [],
+            compact: {
+              nextPrompt:
+                [...messages, ...resolved.messages]
+                  .map((m) => m.text)
+                  .join("\n")
+                  .trim() || undefined,
+            },
+          };
+        }
         for (const text of resolved.reminders) {
           this.update({ type: "activate-reminder", text }, { silent: true });
         }
@@ -715,7 +737,17 @@ export class Agent {
         );
       }
     }
-    return messages;
+    return { messages, compact: undefined };
+  }
+  private requeue(
+    entries: ReadonlyArray<PendingMessage>,
+    delivery: DeferredDelivery,
+  ): void {
+    if (!entries.length) return;
+    this.update(
+      { type: DEFERRED_QUEUES[delivery].enqueue, messages: [...entries] },
+      { silent: true },
+    );
   }
 
   /** What the agent sends next after a stop, if anything. Decided *before*
@@ -760,6 +792,15 @@ export class Agent {
   private async handleStopped(stopReason: StopReason): Promise<void> {
     this.resetErrorRetryState();
     this.update({ type: "set-mode", mode: { type: "normal" } });
+    const deferred = this.deferredCompact;
+    this.deferredCompact = undefined;
+    if (deferred) {
+      this.settle({
+        type: "suspended",
+        reason: { kind: "compact", ...deferred },
+      });
+      return;
+    }
 
     const continuation = this.nextContinuation(stopReason);
 
@@ -783,13 +824,28 @@ export class Agent {
     }
     // Both queues are flushed in full, in insertion order: anything enqueued
     // while this resolution is running lands in the next flush.
-    const messages =
-      continuation.type === "messages"
-        ? continuation.messages
-        : [
-            ...(await this.flushQueue("async")),
-            ...(await this.flushQueue("next")),
-          ];
+    let messages: InputMessage[];
+    if (continuation.type === "messages") {
+      messages = continuation.messages;
+    } else {
+      const async = await this.flushQueue("async");
+      if (async.compact) {
+        this.settle({
+          type: "suspended",
+          reason: { kind: "compact", nextPrompt: async.compact.nextPrompt },
+        });
+        return;
+      }
+      const next = await this.flushQueue("next");
+      if (next.compact) {
+        this.settle({
+          type: "suspended",
+          reason: { kind: "compact", nextPrompt: next.compact.nextPrompt },
+        });
+        return;
+      }
+      messages = [...async.messages, ...next.messages];
+    }
     if (!messages.length) {
       this.settle({ type: "completed" });
       return;
@@ -1130,10 +1186,7 @@ export class Agent {
   private submission: Defer<SendResult> | undefined;
 
   /** Issue a submission and resolve once the agent comes to rest.
-   *
-   * `raw` skips context updates, reminders and the failed-submit bookkeeping:
-   * it is how the compact thread talks to the provider, where the caller has
-   * already composed the exact content. */
+   */
   send(
     inputMessages?: InputMessage[],
     opts: SubmitOptions = {},
@@ -1170,20 +1223,6 @@ export class Agent {
     inputMessages?: InputMessage[],
     opts: SubmitOptions = {},
   ): Promise<void> {
-    if (opts.raw) {
-      const rawContent: AgentInput[] = (inputMessages ?? []).map((m) => ({
-        type: "text" as const,
-        text: m.text,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      }));
-      if (rawContent.length === 0) {
-        this.settle({ type: "completed" });
-        return;
-      }
-      void this.runTurn(rawContent);
-      return;
-    }
-
     if (this.state.failedSubmit !== undefined) {
       this.update(
         { type: "set-failed-submit", value: undefined },
@@ -1222,17 +1261,9 @@ export class Agent {
       return;
     }
 
-    const isFirstMessage = this.getProviderMessages().length === 0;
     // The user's own message goes last, so it is the final thing the model
     // reads: everything else in the turn is preamble to it.
     const contentToSend: AgentInput[] = [...injections];
-    if (isFirstMessage) {
-      contentToSend.push({
-        type: "text",
-        text: formatSystemInfo(this.context.systemInfo),
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      });
-    }
     if (reminder) {
       contentToSend.push(...toAgentInput([reminder]));
     }
@@ -1358,9 +1389,16 @@ export class Agent {
       }
     }
 
-    const queuedForThisRequest = this.state.nextRequestQueue.length
+    // A `@compact` cannot be honoured mid-turn — there is no place to hand
+    // the transcript over from — so it moves to the `next` queue and takes
+    // effect at the earliest point where it can: the next stop.
+    const asyncFlush = this.state.nextRequestQueue.length
       ? await this.flushQueue("async")
-      : [];
+      : undefined;
+    if (asyncFlush?.compact) {
+      this.deferredCompact = asyncFlush.compact;
+    }
+    const queuedForThisRequest = asyncFlush?.messages ?? [];
 
     const contentToSend: AgentInput[] = [...this.pendingInjections];
     this.pendingInjections = [];
@@ -1487,6 +1525,7 @@ export class Agent {
     const { injections: content, suspend } = await onBeforeRequest({
       ...context,
       inputTokenCount: this.runner.log.inputTokenCount,
+      isFirstMessage: this.getProviderMessages().length === 0,
     });
     const injections: AgentInput[] = content.map((block) =>
       block.type === "text"

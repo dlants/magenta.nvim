@@ -4,6 +4,10 @@ import type {
   ProviderMessageContent,
   StreamStopReason,
 } from "./providers/provider-types.ts";
+import {
+  formatSystemInfo,
+  type SystemInfo,
+} from "./providers/system-prompt.ts";
 import type { AgentHooks } from "./thread-api.ts";
 
 /** Action returned from the `onEndTurnWithoutYield` hook. */
@@ -141,6 +145,9 @@ export type RequestContextKind =
   | TurnEndRequest;
 export type RequestContext = {
   inputTokenCount: number | undefined;
+  /** No message has been sent on this agent yet. Survives a compaction reset,
+   * where the replacement agent starts from an empty log. */
+  isFirstMessage: boolean;
 } & RequestContextKind;
 
 export interface ThreadSupervisor {
@@ -160,6 +167,21 @@ function containsYieldTag(
     }
   }
   return false;
+}
+
+/** Puts the machine/environment preamble at the head of the conversation. A
+ * supervisor rather than agent behaviour, so the owner decides which threads
+ * get it — the compaction thread, whose content its caller composes exactly,
+ * does not. */
+export class SystemInfoSupervisor implements ThreadSupervisor {
+  constructor(private readonly systemInfo: SystemInfo) {}
+
+  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
+    if (context.kind !== "submission" || !context.isFirstMessage) {
+      return { type: "none" };
+    }
+    return injectText(formatSystemInfo(this.systemInfo));
+  }
 }
 
 /** For regular subagents. Only intervenes when the agent writes a

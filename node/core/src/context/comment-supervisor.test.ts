@@ -35,6 +35,7 @@ describe("CommentSupervisor", () => {
     const action = await supervisor.onBeforeRequest({
       kind: "submission",
       inputTokenCount: 0,
+      isFirstMessage: false,
     });
     order.push("read");
     expect(order).toEqual(["beforeRead", "read"]);
@@ -63,6 +64,7 @@ describe("CommentSupervisor", () => {
       kind: "turn-end",
       stopReason: "end_turn",
       inputTokenCount: 0,
+      isFirstMessage: false,
     });
     expect(action).toEqual({ type: "none" });
     expect(onSent).not.toHaveBeenCalled();
@@ -71,6 +73,7 @@ describe("CommentSupervisor", () => {
     const next = await supervisor.onBeforeRequest({
       kind: "submission",
       inputTokenCount: 0,
+      isFirstMessage: false,
     });
     expect(next.type).toBe("inject");
     expect(onSent).toHaveBeenCalledTimes(1);
@@ -89,6 +92,7 @@ describe("CommentSupervisor", () => {
         await supervisor.onBeforeRequest({
           kind: "submission",
           inputTokenCount: 0,
+          isFirstMessage: false,
         })
       ).type,
     ).toBe("none");

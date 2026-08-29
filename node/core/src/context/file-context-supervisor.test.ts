@@ -70,6 +70,7 @@ describe("FileContextSupervisor", () => {
     const action = await supervisor.onBeforeRequest({
       kind: "submission",
       inputTokenCount: 0,
+      isFirstMessage: false,
     });
     if (action.type !== "inject") throw new Error("expected inject");
     const block = action.content[0];
@@ -82,6 +83,7 @@ describe("FileContextSupervisor", () => {
         await supervisor.onBeforeRequest({
           kind: "submission",
           inputTokenCount: 0,
+          isFirstMessage: false,
         })
       ).type,
     ).toBe("none");
@@ -95,6 +97,7 @@ describe("FileContextSupervisor", () => {
         await supervisor.onBeforeRequest({
           kind: "submission",
           inputTokenCount: 0,
+          isFirstMessage: false,
         })
       ).type,
     ).toBe("none");
@@ -110,6 +113,7 @@ describe("FileContextSupervisor", () => {
     const action = await supervisor.onBeforeRequest({
       kind: "submission",
       inputTokenCount: 0,
+      isFirstMessage: false,
     });
     if (action.type !== "inject") throw new Error("expected inject");
     expect(action.content.map((c) => c.type)).toEqual(["text", "image"]);
@@ -127,6 +131,7 @@ describe("FileContextSupervisor", () => {
       kind: "turn-end",
       stopReason: "end_turn",
       inputTokenCount: 0,
+      isFirstMessage: false,
     });
     expect(action).toEqual({ type: "none" });
     expect(onSent).not.toHaveBeenCalled();
@@ -162,8 +167,13 @@ describe("FileContextSupervisor", () => {
     expect(clone.contextManager).not.toBe(supervisor.contextManager);
     expect(clone.contextManager.files[TEST_PATH]).toBeDefined();
     expect(
-      (await clone.onBeforeRequest({ kind: "submission", inputTokenCount: 0 }))
-        .type,
+      (
+        await clone.onBeforeRequest({
+          kind: "submission",
+          inputTokenCount: 0,
+          isFirstMessage: false,
+        })
+      ).type,
     ).toBe("none");
 
     // The source still owes the agent the on-disk change.
@@ -172,6 +182,7 @@ describe("FileContextSupervisor", () => {
         await supervisor.onBeforeRequest({
           kind: "submission",
           inputTokenCount: 0,
+          isFirstMessage: false,
         })
       ).type,
     ).toBe("inject");

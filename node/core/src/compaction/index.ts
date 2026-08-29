@@ -37,13 +37,8 @@ export function summaryText(summary: string): string {
   return `<conversation-summary>\n${summary}\n</conversation-summary>`;
 }
 
-/** Follow one submission across every compaction it triggers. This is the
- * only place a `suspended` result is interpreted, and the only place the
- * caller's promise is held pending across the agent swap — which is why every
- * submission path must go through it. */
 export async function runSubmission(args: {
   thread: Thread;
-  /** absent for threads that must never compact (compact threads themselves) */
   compactor: Compactor | undefined;
   start: () => Promise<ThreadSendResult>;
 }): Promise<ThreadSendResult> {

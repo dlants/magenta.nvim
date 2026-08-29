@@ -1794,3 +1794,50 @@ it("delivers @compact typed into a compact thread as ordinary text", async () =>
     ).toBeUndefined();
   });
 });
+
+it("defers a @next @compact until the turn in flight comes to rest", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("What is 2+2?");
+    await driver.send();
+    const inFlight = await driver.mockAnthropic.awaitPendingStream({
+      message: "initial request",
+    });
+    const thread = driver.magenta.chat.getActiveThread();
+    // `@compact` is resolved at delivery, not at parse time, so this queues
+    // like any other `@next` message rather than compacting right away.
+    await driver.inputMagentaText("@next @compact Now do multiplication");
+    await driver.send();
+    await pollUntil(() => {
+      if (!thread.core.state.nextStopQueue.length)
+        throw new Error("waiting for the message to be queued");
+    });
+    expect(isCompacting(thread)).toBe(false);
+    inFlight.respond({
+      stopReason: "end_turn",
+      text: "2+2 equals 4.",
+      toolRequests: [],
+    });
+    await pollUntil(
+      () => {
+        if (!isCompacting(thread))
+          throw new Error("expected the thread to be compacting");
+      },
+      { timeout: 2000, message: "the queued @compact should fire at the stop" },
+    );
+    const chunkStream = await driver.mockAnthropic.awaitPendingStream({
+      message: "compact chunk stream",
+    });
+    const chunkText = chunkStream
+      .getProviderMessages()
+      .flatMap((m) =>
+        m.content
+          .filter(
+            (c): c is Extract<typeof c, { type: "text" }> => c.type === "text",
+          )
+          .map((c) => c.text),
+      )
+      .join("");
+    expect(chunkText).toContain("Now do multiplication");
+  });
+});

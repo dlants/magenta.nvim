@@ -10,6 +10,7 @@ import {
 const context: RequestContext = {
   kind: "continuation",
   inputTokenCount: 400000,
+  isFirstMessage: false,
   stopReason: "end_turn",
 };
 
@@ -78,6 +79,7 @@ describe("AutoCompactSupervisor", () => {
       await sup.onBeforeRequest({
         kind: "continuation",
         inputTokenCount: 300000,
+        isFirstMessage: false,
         stopReason: "end_turn",
       }),
     ).toEqual({
@@ -88,6 +90,7 @@ describe("AutoCompactSupervisor", () => {
       await sup.onBeforeRequest({
         kind: "continuation",
         inputTokenCount: 400000,
+        isFirstMessage: false,
         stopReason: "end_turn",
       }),
     ).toEqual({
@@ -105,6 +108,7 @@ describe("AutoCompactSupervisor", () => {
       await sup.onBeforeRequest({
         kind: "continuation",
         inputTokenCount: 299999,
+        isFirstMessage: false,
         stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });
@@ -112,6 +116,7 @@ describe("AutoCompactSupervisor", () => {
       await sup.onBeforeRequest({
         kind: "continuation",
         inputTokenCount: undefined,
+        isFirstMessage: false,
         stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });
@@ -123,6 +128,7 @@ describe("AutoCompactSupervisor", () => {
       await sup.onBeforeRequest({
         kind: "continuation",
         inputTokenCount: 300000,
+        isFirstMessage: false,
         stopReason: "end_turn",
       }),
     ).toEqual({
@@ -133,6 +139,7 @@ describe("AutoCompactSupervisor", () => {
       await sup.onBeforeRequest({
         kind: "continuation",
         inputTokenCount: 299999,
+        isFirstMessage: false,
         stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });

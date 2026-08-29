@@ -25,11 +25,13 @@ import {
   type MCPToolManagerImpl,
   type NativeMessageIdx,
   type PendingMessage,
-  type PendingMessagePart,
+  parseCompact,
+  type ResolvedSubmission,
   renderPending,
-  resolvePartsAsText,
+  resolveAsText,
   runSubmission,
-  type SubmissionIntent,
+  type Submission,
+  SystemInfoSupervisor,
   Thread,
   type ThreadCallbacks,
   ThreadCompactor,
@@ -102,7 +104,7 @@ export type Msg =
       /** User text, parsed but not resolved: its commands run at delivery
        * (or, for a `compact` intent, when the handoff is opened). */
       type: "submit-message";
-      intent: SubmissionIntent;
+      submission: Submission;
     }
   | {
       type: "abort";
@@ -584,9 +586,20 @@ export class NvimThread {
   /** The context trackers, always ahead of the behavioral supervisors so no
    * injection can follow a compaction in the plan. */
   private contextSupervisors(): ThreadSupervisor[] {
+    // The compact thread's content is composed exactly by the compactor, so it
+    // gets no preamble.
+    const systemInfo =
+      this.core.state.threadType === "compact"
+        ? []
+        : [new SystemInfoSupervisor(this.core.state.systemInfo)];
     return this.comments
-      ? [this.gitSupervisor, this.fileSupervisor, this.comments.supervisor]
-      : [this.gitSupervisor, this.fileSupervisor];
+      ? [
+          this.gitSupervisor,
+          this.fileSupervisor,
+          this.comments.supervisor,
+          ...systemInfo,
+        ]
+      : [this.gitSupervisor, this.fileSupervisor, ...systemInfo];
   }
 
   /** Attach a tracker's structured record to the message its injection is
@@ -604,7 +617,7 @@ export class NvimThread {
   private coreCallbacks(): ThreadCallbacks {
     return {
       onUpdate: () => this.onCoreUpdate(),
-      resolve: (parts) => this.resolveParts(parts),
+      resolve: (message) => this.resolveSubmission(message),
     };
   }
 
@@ -612,38 +625,29 @@ export class NvimThread {
    * against the world as it is *now*. Called at delivery, so a message queued
    * behind a long turn sees the current file contents, not the ones it was
    * typed against. */
-  private async resolveParts(
-    parts: ReadonlyArray<PendingMessagePart>,
-  ): Promise<{ messages: InputMessage[]; reminders: string[] }> {
+  private async resolveSubmission(
+    message: PendingMessage,
+  ): Promise<ResolvedSubmission> {
+    // A compact thread has no compactor — it *is* a compaction — so
+    // `@compact` typed into one is ordinary text.
+    const { compact, rest } = this.compactor
+      ? parseCompact(message)
+      : { compact: false, rest: message };
     const { processedText, additionalContent, reminders } =
-      await this.context.commandRegistry.processMessage(
-        parts.map((p) => p.text).join(""),
-        {
-          nvim: this.context.nvim,
-          cwd: this.context.environment.cwd,
-          homeDir: this.context.environment.homeDir,
-          contextManager: this.contextManager,
-          options: this.context.options,
-        },
-      );
+      await this.context.commandRegistry.processMessage(rest, {
+        nvim: this.context.nvim,
+        cwd: this.context.environment.cwd,
+        homeDir: this.context.environment.homeDir,
+        contextManager: this.contextManager,
+        options: this.context.options,
+      });
     const messages: InputMessage[] = [{ type: "user", text: processedText }];
     for (const content of additionalContent) {
       if (content.type === "text") {
         messages.push({ type: "user", text: content.text });
       }
     }
-    return { messages, reminders };
-  }
-
-  /** The `@compact` continuation prompt, expanded the same way any other user
-   * text is. Reminders it collects are dropped: the compaction clears
-   * `activeReminders`, so activating them here would have no effect. */
-  private async resolveCompactPrompt(
-    nextPrompt: PendingMessage | undefined,
-  ): Promise<string | undefined> {
-    if (!nextPrompt) return undefined;
-    const { messages } = await this.resolveParts(nextPrompt.parts);
-    return messages.map((m) => m.text).join("\n");
+    return { compact, messages, reminders };
   }
 
   /** Turn a finished submission into the effects that used to be broadcast
@@ -844,7 +848,7 @@ export class NvimThread {
       },
       // Replaced by the wrapper's own callbacks as soon as it exists; a fork
       // has to clone the source's history before there is a wrapper to talk to.
-      callbacks: { onUpdate: () => {}, resolve: resolvePartsAsText },
+      callbacks: { onUpdate: () => {}, resolve: resolveAsText },
     });
 
     const thread = new NvimThread(
@@ -975,26 +979,15 @@ export class NvimThread {
         return;
 
       case "submit-message": {
-        const intent = msg.intent;
-        if (intent.type === "compact") {
-          // A manual `@compact` is the same handoff the threshold produces;
-          // the loop is entered with the suspension already in hand.
-          this.runSubmission(async () => ({
-            type: "suspended",
-            reason: {
-              kind: "compact",
-              nextPrompt: await this.resolveCompactPrompt(intent.nextPrompt),
-            },
-          }));
-          return;
-        }
-        if (intent.delivery === "now") {
+        const { delivery, message } = msg.submission;
+        if (delivery === "now") {
           this.rejectPendingSandboxApprovals();
         }
         this.scrollAfterMessageCount = this.core.getProviderMessages().length;
-        this.runSubmission(() =>
-          this.core.submit(intent.message, intent.delivery),
-        );
+        // A `@compact` in the message surfaces as a suspension out of
+        // `submit`, which `runSubmission` turns into the same handoff the
+        // token threshold produces.
+        this.runSubmission(() => this.core.submit(message, delivery));
         return;
       }
 

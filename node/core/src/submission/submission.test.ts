@@ -1,56 +1,51 @@
 import { describe, expect, it } from "vitest";
-import { parseSubmission, renderPending } from "./index.ts";
+import { parseCompact, parseDelivery, pendingMessage } from "./index.ts";
 
-describe("parseSubmission", () => {
+describe("parseDelivery", () => {
   it("treats bare text as an immediate send", () => {
-    expect(parseSubmission("hello there")).toEqual({
-      type: "send",
+    expect(parseDelivery("hello there")).toEqual({
       delivery: "now",
-      message: {
-        parts: [{ type: "text", text: "hello there" }],
-      },
+      message: "hello there",
     });
   });
-
   it("recognizes @async and @next, stripping the prefix", () => {
-    const asyncIntent = parseSubmission("@async keep going");
-    expect(asyncIntent).toMatchObject({ delivery: "async" });
-    expect(
-      asyncIntent.type === "send" && renderPending(asyncIntent.message),
-    ).toBe("keep going");
-    const nextIntent = parseSubmission("@next then this");
-    expect(nextIntent).toMatchObject({ delivery: "next" });
-    expect(
-      nextIntent.type === "send" && renderPending(nextIntent.message),
-    ).toBe("then this");
-  });
-
-  it("recognizes @compact, with and without a follow-up prompt", () => {
-    expect(parseSubmission("@compact")).toEqual({
-      type: "compact",
-      nextPrompt: undefined,
+    expect(parseDelivery("@async keep going")).toEqual({
+      delivery: "async",
+      message: "keep going",
     });
-    const withPrompt = parseSubmission("@compact now do the thing");
-    expect(
-      withPrompt.type === "compact" &&
-        withPrompt.nextPrompt &&
-        renderPending(withPrompt.nextPrompt),
-    ).toBe("now do the thing");
+    expect(parseDelivery("@next then this")).toEqual({
+      delivery: "next",
+      message: "then this",
+    });
   });
-
-  it("drops a delivery prefix on a compaction's follow-up prompt", () => {
-    const intent = parseSubmission("@compact @async now do the thing");
-    expect(
-      intent.type === "compact" &&
-        intent.nextPrompt &&
-        renderPending(intent.nextPrompt),
-    ).toBe("now do the thing");
+  it("leaves @compact in the message for the delivery-time pass", () => {
+    expect(parseDelivery("@next @compact do the thing")).toEqual({
+      delivery: "next",
+      message: "@compact do the thing",
+    });
   });
-
   it("only treats a prefix at the start as significant", () => {
-    const intent = parseSubmission("please run @async later");
-    expect(intent).toMatchObject({ delivery: "now" });
-    const notACommand = parseSubmission("@compactor is a tool");
-    expect(notACommand).toMatchObject({ type: "send", delivery: "now" });
+    expect(parseDelivery("please run @async later")).toMatchObject({
+      delivery: "now",
+    });
+  });
+});
+
+describe("parseCompact", () => {
+  it("recognizes @compact, with and without a follow-up prompt", () => {
+    expect(parseCompact(pendingMessage("@compact"))).toEqual({
+      compact: true,
+      rest: "",
+    });
+    expect(parseCompact(pendingMessage("@compact now do it"))).toEqual({
+      compact: true,
+      rest: "now do it",
+    });
+  });
+  it("leaves other text alone", () => {
+    expect(parseCompact(pendingMessage("@compactor is a tool"))).toEqual({
+      compact: false,
+      rest: "@compactor is a tool",
+    });
   });
 });

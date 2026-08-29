@@ -242,15 +242,17 @@ export {
   type ReminderKind,
 } from "./providers/system-reminders.ts";
 export {
+  compactPrompt,
   type Delivery,
   type PendingMessage,
-  type PendingMessagePart,
-  parseSubmission,
+  parseCompact,
+  parseDelivery,
   pendingMessage,
-  type ResolveParts,
+  type ResolvedSubmission,
+  type ResolveSubmission,
   renderPending,
-  resolvePartsAsText,
-  type SubmissionIntent,
+  resolveAsText,
+  type Submission,
 } from "./submission/index.ts";
 export { Thread, type ThreadCallbacks } from "./thread.ts";
 export type {
@@ -281,6 +283,7 @@ export {
   AutoCompactSupervisor,
   composeSupervisors,
   SubagentSupervisor,
+  SystemInfoSupervisor,
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 export type {
