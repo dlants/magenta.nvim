@@ -1202,11 +1202,15 @@ export class Agent {
           );
     // After the hook: the file tracker's update is what refreshes the agent
     // view the markdown-reminder scan reads.
-    const { content, hasContent } = this.prepareUserContent(inputMessages);
+    const { content, reminder, hasContent } =
+      this.prepareUserContent(inputMessages);
     if (beforeRequest.type === "suspend") {
       // The injections are already in the log; the user's own content has to
       // join them there so the snapshot handed over carries it too.
-      this.runner.appendUserMessage(toAgentInput(content), { coalesce: true });
+      this.runner.appendUserMessage(
+        toAgentInput(reminder ? [reminder, ...content] : content),
+        { coalesce: true },
+      );
       this.settle({ type: "suspended", reason: beforeRequest.reason });
       return;
     }
@@ -1219,10 +1223,9 @@ export class Agent {
     }
 
     const isFirstMessage = this.getProviderMessages().length === 0;
+    // The user's own message goes last, so it is the final thing the model
+    // reads: everything else in the turn is preamble to it.
     const contentToSend: AgentInput[] = [...injections];
-
-    contentToSend.push(...toAgentInput(content));
-
     if (isFirstMessage) {
       contentToSend.push({
         type: "text",
@@ -1230,6 +1233,10 @@ export class Agent {
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       });
     }
+    if (reminder) {
+      contentToSend.push(...toAgentInput([reminder]));
+    }
+    contentToSend.push(...toAgentInput(content));
 
     this.update(
       {
@@ -1359,7 +1366,11 @@ export class Agent {
     this.pendingInjections = [];
 
     if (queuedForThisRequest.length > 0) {
-      const { content } = this.prepareUserContent(queuedForThisRequest);
+      const { content, reminder } =
+        this.prepareUserContent(queuedForThisRequest);
+      if (reminder) {
+        contentToSend.push(...toAgentInput([reminder]));
+      }
       contentToSend.push(...toAgentInput(content));
       return contentToSend;
     }
@@ -1405,8 +1416,11 @@ export class Agent {
     this.context.logger.error(error);
   };
 
+  /** The user's own text is kept separate from the reminder that accompanies
+   * it, so callers can order the turn's blocks with the user's message last. */
   private prepareUserContent(inputMessages?: InputMessage[]): {
     content: ProviderMessageContent[];
+    reminder: ProviderMessageContent | undefined;
     hasContent: boolean;
   } {
     const messageContent: ProviderMessageContent[] = [];
@@ -1417,6 +1431,8 @@ export class Agent {
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       });
     }
+
+    let reminderContent: ProviderMessageContent | undefined;
     if (inputMessages?.length) {
       this.update({ type: "reset-output-tokens" }, { silent: true });
       const reminder = buildSystemReminder({
@@ -1426,16 +1442,17 @@ export class Agent {
         extraReminders: this.getActiveReminders(),
       });
       if (reminder) {
-        messageContent.push({
+        reminderContent = {
           type: "system_reminder",
           text: reminder,
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        });
+        };
       }
     }
 
     return {
       content: messageContent,
+      reminder: reminderContent,
       hasContent: (inputMessages?.length ?? 0) > 0,
     };
   }

@@ -181,8 +181,8 @@ exports[`followup user message text is visible after tool-use cycle > followup-m
 🔧 [Tool Definitions (8) ~4k tok]
 
 # user:
-📋 [System Reminder]
 🖥️  [System Info]
+📋 [System Reminder]
 Read a file for me
 # assistant:
 I'll read the file for you.
@@ -211,8 +211,8 @@ exports[`followup user message text is visible with context updates > followup-w
 Context Updates:
 - \`poem.txt\` [ ~39 tok ]
 
-📋 [System Reminder]
 🖥️  [System Info]
+📋 [System Reminder]
 Help me with this poem
 # assistant:
 I can see the poem. What would you like me to do?
@@ -425,7 +425,7 @@ exports[`forks a thread with multiple messages into a new thread > fork-cloned-m
   {
     "content": [
       {
-        "text": "What is the capital of France?",
+        "text": "<system-info><normalized></system-info>",
         "type": "text",
       },
       {
@@ -447,7 +447,7 @@ Do not acknowledge this reminder or mention it to the user.
         "type": "text",
       },
       {
-        "text": "<system-info><normalized></system-info>",
+        "text": "What is the capital of France?",
         "type": "text",
       },
     ],
@@ -470,13 +470,6 @@ Do not acknowledge this reminder or mention it to the user.
         "type": "text",
       },
       {
-        "text": "Tell me about Italy",
-        "type": "text",
-      },
-      {
-        "cache_control": {
-          "type": "ephemeral",
-        },
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
@@ -494,6 +487,13 @@ Do not acknowledge this reminder or mention it to the user.
 </system-reminder>",
         "type": "text",
       },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "Tell me about Italy",
+        "type": "text",
+      },
     ],
     "role": "user",
   },
@@ -506,8 +506,8 @@ exports[`forks a thread with multiple messages into a new thread > forked-thread
     "content": [
       {
         "nativeMessageIdx": 0,
-        "text": "What is the capital of France?",
-        "type": "text",
+        "text": "<system-info><normalized></system-info>",
+        "type": "system_info",
       },
       {
         "nativeMessageIdx": 0,
@@ -530,8 +530,8 @@ Do not acknowledge this reminder or mention it to the user.
       },
       {
         "nativeMessageIdx": 0,
-        "text": "<system-info><normalized></system-info>",
-        "type": "system_info",
+        "text": "What is the capital of France?",
+        "type": "text",
       },
     ],
     "role": "user",
@@ -560,11 +560,6 @@ Do not acknowledge this reminder or mention it to the user.
       },
       {
         "nativeMessageIdx": 2,
-        "text": "Tell me about Italy",
-        "type": "text",
-      },
-      {
-        "nativeMessageIdx": 2,
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
@@ -581,6 +576,11 @@ Don't spawn sub-agents for things you can do with a single tool call (get_files,
 Do not acknowledge this reminder or mention it to the user.
 </system-reminder>",
         "type": "system_reminder",
+      },
+      {
+        "nativeMessageIdx": 2,
+        "text": "Tell me about Italy",
+        "type": "text",
       },
     ],
     "role": "user",
@@ -603,7 +603,7 @@ exports[`handles @async messages and sends them on end turn 1`] = `
   {
     "content": [
       {
-        "text": "Tell me about TypeScript",
+        "text": "<system-info><normalized></system-info>",
         "type": "text",
       },
       {
@@ -625,7 +625,7 @@ Do not acknowledge this reminder or mention it to the user.
         "type": "text",
       },
       {
-        "text": "<system-info><normalized></system-info>",
+        "text": "Tell me about TypeScript",
         "type": "text",
       },
     ],
@@ -644,13 +644,6 @@ Do not acknowledge this reminder or mention it to the user.
   {
     "content": [
       {
-        "text": "Also tell me about JavaScript",
-        "type": "text",
-      },
-      {
-        "cache_control": {
-          "type": "ephemeral",
-        },
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
@@ -666,6 +659,13 @@ Don't spawn sub-agents for things you can do with a single tool call (get_files,
 
 Do not acknowledge this reminder or mention it to the user.
 </system-reminder>",
+        "type": "text",
+      },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "Also tell me about JavaScript",
         "type": "text",
       },
     ],
@@ -679,7 +679,7 @@ exports[`handles @async messages by queueing them and sending on next tool respo
   {
     "content": [
       {
-        "text": "Can you run a command?",
+        "text": "<system-info><normalized></system-info>",
         "type": "text",
       },
       {
@@ -701,7 +701,7 @@ Do not acknowledge this reminder or mention it to the user.
         "type": "text",
       },
       {
-        "text": "<system-info><normalized></system-info>",
+        "text": "Can you run a command?",
         "type": "text",
       },
     ],
@@ -747,13 +747,6 @@ exit code 0 (<timing>ms)
   {
     "content": [
       {
-        "text": "This should be queued",
-        "type": "text",
-      },
-      {
-        "cache_control": {
-          "type": "ephemeral",
-        },
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
@@ -771,6 +764,13 @@ Do not acknowledge this reminder or mention it to the user.
 </system-reminder>",
         "type": "text",
       },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "This should be queued",
+        "type": "text",
+      },
     ],
     "role": "user",
   },
@@ -783,8 +783,8 @@ exports[`renders successive tool uses with single assistant header and inline me
 🔧 [Tool Definitions (8) ~4k tok]
 
 # user:
-📋 [System Reminder]
 🖥️  [System Info]
+📋 [System Reminder]
 Read two files for me
 # assistant:
 I'll read the first file.

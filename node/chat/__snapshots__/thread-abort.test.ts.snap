@@ -6,8 +6,8 @@ exports[`aborts request when sending new message while waiting for response 1`] 
     "content": [
       {
         "nativeMessageIdx": 0,
-        "text": "First message",
-        "type": "text",
+        "text": "<system-info><normalized></system-info>",
+        "type": "system_info",
       },
       {
         "nativeMessageIdx": 0,
@@ -30,8 +30,8 @@ Do not acknowledge this reminder or mention it to the user.
       },
       {
         "nativeMessageIdx": 0,
-        "text": "<system-info><normalized></system-info>",
-        "type": "system_info",
+        "text": "First message",
+        "type": "text",
       },
     ],
     "role": "user",
@@ -50,11 +50,6 @@ Do not acknowledge this reminder or mention it to the user.
     "content": [
       {
         "nativeMessageIdx": 2,
-        "text": "Second message while first is pending",
-        "type": "text",
-      },
-      {
-        "nativeMessageIdx": 2,
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
@@ -71,6 +66,11 @@ Don't spawn sub-agents for things you can do with a single tool call (get_files,
 Do not acknowledge this reminder or mention it to the user.
 </system-reminder>",
         "type": "system_reminder",
+      },
+      {
+        "nativeMessageIdx": 2,
+        "text": "Second message while first is pending",
+        "type": "text",
       },
     ],
     "role": "user",
@@ -94,8 +94,8 @@ exports[`aborts tool use when sending new message while tool is executing 1`] = 
     "content": [
       {
         "nativeMessageIdx": 0,
-        "text": "Run a slow command",
-        "type": "text",
+        "text": "<system-info><normalized></system-info>",
+        "type": "system_info",
       },
       {
         "nativeMessageIdx": 0,
@@ -118,8 +118,8 @@ Do not acknowledge this reminder or mention it to the user.
       },
       {
         "nativeMessageIdx": 0,
-        "text": "<system-info><normalized></system-info>",
-        "type": "system_info",
+        "text": "Run a slow command",
+        "type": "text",
       },
     ],
     "role": "user",
@@ -187,11 +187,6 @@ terminated by signal SIGTERM (<timing>ms)
     "content": [
       {
         "nativeMessageIdx": 4,
-        "text": "Cancel that, run something else",
-        "type": "text",
-      },
-      {
-        "nativeMessageIdx": 4,
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
@@ -209,6 +204,11 @@ Do not acknowledge this reminder or mention it to the user.
 </system-reminder>",
         "type": "system_reminder",
       },
+      {
+        "nativeMessageIdx": 4,
+        "text": "Cancel that, run something else",
+        "type": "text",
+      },
     ],
     "role": "user",
   },
@@ -220,7 +220,7 @@ exports[`forks a thread while streaming without aborting source 1`] = `
   {
     "content": [
       {
-        "text": "What is 2+2?",
+        "text": "<system-info><normalized></system-info>",
         "type": "text",
       },
       {
@@ -242,7 +242,7 @@ Do not acknowledge this reminder or mention it to the user.
         "type": "text",
       },
       {
-        "text": "<system-info><normalized></system-info>",
+        "text": "What is 2+2?",
         "type": "text",
       },
     ],
@@ -265,13 +265,6 @@ Do not acknowledge this reminder or mention it to the user.
         "type": "text",
       },
       {
-        "text": "Actually, tell me about 5+5",
-        "type": "text",
-      },
-      {
-        "cache_control": {
-          "type": "ephemeral",
-        },
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
@@ -287,6 +280,13 @@ Don't spawn sub-agents for things you can do with a single tool call (get_files,
 
 Do not acknowledge this reminder or mention it to the user.
 </system-reminder>",
+        "type": "text",
+      },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "Actually, tell me about 5+5",
         "type": "text",
       },
     ],
@@ -300,7 +300,7 @@ exports[`forks a thread while waiting for tool use without aborting source 1`] =
   {
     "content": [
       {
-        "text": "Read my secret file",
+        "text": "<system-info><normalized></system-info>",
         "type": "text",
       },
       {
@@ -322,7 +322,7 @@ Do not acknowledge this reminder or mention it to the user.
         "type": "text",
       },
       {
-        "text": "<system-info><normalized></system-info>",
+        "text": "Read my secret file",
         "type": "text",
       },
     ],
@@ -365,13 +365,6 @@ Do not acknowledge this reminder or mention it to the user.
         "type": "text",
       },
       {
-        "text": "Do something else instead",
-        "type": "text",
-      },
-      {
-        "cache_control": {
-          "type": "ephemeral",
-        },
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
@@ -387,6 +380,13 @@ Don't spawn sub-agents for things you can do with a single tool call (get_files,
 
 Do not acknowledge this reminder or mention it to the user.
 </system-reminder>",
+        "type": "text",
+      },
+      {
+        "cache_control": {
+          "type": "ephemeral",
+        },
+        "text": "Do something else instead",
         "type": "text",
       },
     ],

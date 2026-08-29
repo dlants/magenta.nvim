@@ -452,7 +452,10 @@ Content B
         // Check that skills are NOT in the first user message
         const firstMessageContent = firstRequest.messages[0].content;
         const textContent = Array.isArray(firstMessageContent)
-          ? firstMessageContent.find((c) => c.type === "text")?.text
+          ? firstMessageContent
+              .filter((c) => c.type === "text")
+              .map((c) => c.text)
+              .join("\n")
           : firstMessageContent;
 
         expect(textContent).not.toContain("Available Skills");
@@ -478,7 +481,10 @@ Content B
         const secondMessageContent =
           secondRequest.messages[secondRequest.messages.length - 1].content;
         const secondTextContent = Array.isArray(secondMessageContent)
-          ? secondMessageContent.find((c) => c.type === "text")?.text
+          ? secondMessageContent
+              .filter((c) => c.type === "text")
+              .map((c) => c.text)
+              .join("\n")
           : secondMessageContent;
 
         expect(secondTextContent).not.toContain("Available Skills");

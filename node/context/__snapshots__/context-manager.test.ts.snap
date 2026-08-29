@@ -21,7 +21,7 @@ Paint their stories in the night.
         "type": "text",
       },
       {
-        "text": "check out this file",
+        "text": "<system-info><normalized></system-info>",
         "type": "text",
       },
       {
@@ -46,7 +46,7 @@ Do not acknowledge this reminder or mention it to the user.
         "cache_control": {
           "type": "ephemeral",
         },
-        "text": "<system-info><normalized></system-info>",
+        "text": "check out this file",
         "type": "text",
       },
     ],
