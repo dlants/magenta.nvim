@@ -27,10 +27,7 @@ export class CommentSupervisor implements ThreadSupervisor {
     this.onSent = args.onSent;
   }
 
-  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
-    if (context.kind === "turn-end") {
-      return { type: "none" };
-    }
+  async onBeforeRequest(_context: RequestContext): Promise<SupervisorAction> {
     await this.beforeRead();
     const text = this.store.getPendingUpdate();
     if (text === undefined) return { type: "none" };

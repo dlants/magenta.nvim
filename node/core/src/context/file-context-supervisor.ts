@@ -20,10 +20,7 @@ export class FileContextSupervisor implements ThreadSupervisor {
     this.onSent = args.onSent;
   }
 
-  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
-    if (context.kind === "turn-end") {
-      return { type: "none" };
-    }
+  async onBeforeRequest(_context: RequestContext): Promise<SupervisorAction> {
     const updates = await this.contextManager.getContextUpdate();
     if (Object.keys(updates).length === 0) return { type: "none" };
 

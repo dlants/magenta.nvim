@@ -51,37 +51,6 @@ describe("CommentSupervisor", () => {
     expect(store.hasPendingUpdates()).toBe(false);
   });
 
-  it("stays silent on a stop that issues no request", async () => {
-    const store = new CommentStore();
-    store.addComment(loc(), "why is this recomputed?");
-    const onSent = vi.fn<(entries: CommentUpdateEntry[]) => void>();
-    const supervisor = new CommentSupervisor({
-      store,
-      beforeRead: () => Promise.resolve(),
-      onSent,
-    });
-
-    const action = await supervisor.onBeforeRequest({
-      kind: "turn-end",
-      stopReason: "end_turn",
-      inputTokenCount: 0,
-      isFirstMessage: false,
-      outputTokenCount: 0,
-    });
-    expect(action).toEqual({ type: "none" });
-    expect(onSent).not.toHaveBeenCalled();
-    expect(store.hasPendingUpdates()).toBe(true);
-
-    const next = await supervisor.onBeforeRequest({
-      kind: "submission",
-      inputTokenCount: 0,
-      isFirstMessage: false,
-      outputTokenCount: 0,
-    });
-    expect(next.type).toBe("inject");
-    expect(onSent).toHaveBeenCalledTimes(1);
-  });
-
   it("yields nothing when no comments are pending", async () => {
     const store = new CommentStore();
     const onSent = vi.fn<(entries: CommentUpdateEntry[]) => void>();

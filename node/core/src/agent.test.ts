@@ -405,19 +405,18 @@ describe("runSubmission across a compaction handoff", () => {
     };
   };
 
-  /** Suspends once, on the first non-submission consult. */
+  /** Suspends once, at the first stop. */
   const compactOnce = (core: Thread, nextPrompt: string | undefined) => {
     let asked = false;
     core.hooks = composeSupervisors(() => [
       {
-        onBeforeRequest: (ctx) => {
-          if (asked || ctx.kind === "submission")
-            return Promise.resolve({ type: "none" as const });
+        onEndTurnWithoutYield: () => {
+          if (asked) return { type: "none" as const };
           asked = true;
-          return Promise.resolve({
+          return {
             type: "suspend" as const,
             reason: { kind: "compact", nextPrompt },
-          });
+          };
         },
       },
     ]);
@@ -505,15 +504,14 @@ describe("runSubmission across a compaction handoff", () => {
       let handoffs = 0;
       core.hooks = composeSupervisors(() => [
         {
-          onBeforeRequest: (ctx) => {
-            if (ctx.kind === "submission" || handoffs >= prompts.length)
-              return Promise.resolve({ type: "none" as const });
+          onEndTurnWithoutYield: () => {
+            if (handoffs >= prompts.length) return { type: "none" as const };
             const nextPrompt = prompts[handoffs];
             handoffs++;
-            return Promise.resolve({
+            return {
               type: "suspend" as const,
               reason: { kind: "compact" as const, nextPrompt },
-            });
+            };
           },
         },
       ]);
@@ -596,14 +594,13 @@ describe("runSubmission across a compaction handoff", () => {
       let asked = false;
       core.hooks = composeSupervisors(() => [
         {
-          onBeforeRequest: (ctx) => {
-            if (asked || ctx.kind === "submission")
-              return Promise.resolve({ type: "none" as const });
+          onEndTurnWithoutYield: () => {
+            if (asked) return { type: "none" as const };
             asked = true;
-            return Promise.resolve({
+            return {
               type: "suspend" as const,
               reason: { kind: "stop" as const, message: "budget exhausted" },
-            });
+            };
           },
         },
       ]);
@@ -1318,6 +1315,9 @@ describe("AutoCompactSupervisor integration", () => {
     const { core, mockClient } = createAgentWithMock();
     let asked = false;
     core.hooks = composeSupervisors(() => [
+      // max_tokens plans a continuation, so the stop reaches the
+      // before-request supervisors at all.
+      new MaxTokensSupervisor(),
       {
         onBeforeRequest: (ctx) => {
           if (asked || ctx.kind === "submission")
@@ -1342,7 +1342,6 @@ describe("AutoCompactSupervisor integration", () => {
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial");
-    // max_tokens would otherwise trigger the continue-prompt; compaction wins.
     stream.finishResponse("max_tokens");
     await pollUntil(() => {
       if (compactions.prompts.length > 0) return true;
@@ -1480,30 +1479,27 @@ describe("AutoCompactSupervisor integration", () => {
     const { core, mockClient } = createAgentWithMock();
     const calls: string[] = [];
     const first: ThreadSupervisor = {
-      onBeforeRequest: (ctx) => {
-        if (ctx.kind === "submission") return Promise.resolve({ type: "none" });
+      onEndTurnWithoutYield: () => {
         calls.push("first");
-        return Promise.resolve({ type: "none" });
+        return { type: "none" };
       },
     };
     const second: ThreadSupervisor = {
-      onBeforeRequest: (ctx) => {
-        if (ctx.kind === "submission") return Promise.resolve({ type: "none" });
+      onEndTurnWithoutYield: () => {
         calls.push("second");
-        return Promise.resolve({
+        return {
           type: "suspend",
           reason: { kind: "compact", nextPrompt: "go" },
-        });
+        };
       },
     };
     const third: ThreadSupervisor = {
-      onBeforeRequest: (ctx) => {
-        if (ctx.kind === "submission") return Promise.resolve({ type: "none" });
+      onEndTurnWithoutYield: () => {
         calls.push("third");
-        return Promise.resolve({
+        return {
           type: "suspend",
           reason: { kind: "compact", nextPrompt: "stop" },
-        });
+        };
       },
     };
     core.hooks = composeSupervisors(() => [first, second, third]);
@@ -1583,12 +1579,12 @@ describe("AutoCompactSupervisor integration", () => {
     nextStream.finishResponse("end_turn");
 
     await pollUntil(() => {
-      if (kinds.length >= 3) return true;
-      throw new Error("waiting for the end-turn consult");
+      if (!core.isBusy) return true;
+      throw new Error("waiting for the thread to come to rest");
     });
-    expect(kinds).toEqual(["submission", "continuation", "turn-end"]);
+    expect(kinds).toEqual(["submission", "continuation"]);
   });
-  it("reports turn-end only for a stop that issues no request", async () => {
+  it("does not consult onBeforeRequest at a stop that issues no request", async () => {
     const { core, mockClient } = createAgentWithMock();
     const kinds: string[] = [];
     core.hooks = composeSupervisors(() => [
@@ -1611,10 +1607,10 @@ describe("AutoCompactSupervisor integration", () => {
     nextStream.streamText("done");
     nextStream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (kinds.length >= 3) return true;
-      throw new Error("waiting for the end-turn consult");
+      if (!core.isBusy) return true;
+      throw new Error("waiting for the thread to come to rest");
     });
-    expect(kinds).toEqual(["submission", "continuation", "turn-end"]);
+    expect(kinds).toEqual(["submission", "continuation"]);
   });
 
   it("reports tool results before the continuation's before-request hook, with output tokens", async () => {

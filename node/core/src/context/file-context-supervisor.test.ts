@@ -21,7 +21,6 @@ const TEXT_FILE_TYPE = {
   mimeType: "text/plain",
   extension: ".txt",
 };
-const TEST_REL = "file.txt" as RelFilePath;
 const IMAGE_PATH = "/test/test.jpg" as AbsFilePath;
 const IMAGE_REL = "test.jpg" as RelFilePath;
 const IMAGE_FILE_TYPE = {
@@ -124,22 +123,6 @@ describe("FileContextSupervisor", () => {
     const image = action.content[1];
     if (image.type !== "image") throw new Error("expected image");
     expect(image.source.media_type).toBe("image/jpeg");
-  });
-
-  it("stays silent on a stop that issues no request", async () => {
-    const { supervisor, contextManager, onSent } = setup({
-      [TEST_PATH]: "hello",
-    });
-    contextManager.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
-    const action = await supervisor.onBeforeRequest({
-      kind: "turn-end",
-      stopReason: "end_turn",
-      inputTokenCount: 0,
-      isFirstMessage: false,
-      outputTokenCount: 0,
-    });
-    expect(action).toEqual({ type: "none" });
-    expect(onSent).not.toHaveBeenCalled();
   });
 
   it("destroy stops the poller", () => {

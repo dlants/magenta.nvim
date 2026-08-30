@@ -24,6 +24,7 @@ describe("DockerSupervisor", () => {
 
       const action = supervisor.onEndTurnWithoutYield({
         stopReason: "end_turn",
+        inputTokenCount: undefined,
         lastAssistantMessage: undefined,
       });
       expect(action.type).toBe("send-message");
@@ -44,18 +45,21 @@ describe("DockerSupervisor", () => {
       expect(
         supervisor.onEndTurnWithoutYield({
           stopReason: "end_turn",
+          inputTokenCount: undefined,
           lastAssistantMessage: undefined,
         }).type,
       ).toBe("send-message");
       expect(
         supervisor.onEndTurnWithoutYield({
           stopReason: "end_turn",
+          inputTokenCount: undefined,
           lastAssistantMessage: undefined,
         }).type,
       ).toBe("send-message");
       expect(
         supervisor.onEndTurnWithoutYield({
           stopReason: "end_turn",
+          inputTokenCount: undefined,
           lastAssistantMessage: undefined,
         }).type,
       ).toBe("none");
@@ -70,6 +74,7 @@ describe("DockerSupervisor", () => {
 
       const action = supervisor.onEndTurnWithoutYield({
         stopReason: "max_tokens",
+        inputTokenCount: undefined,
         lastAssistantMessage: undefined,
       });
       expect(action.type).toBe("none");

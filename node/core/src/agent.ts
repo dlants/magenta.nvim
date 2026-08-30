@@ -464,11 +464,16 @@ export class Agent {
     await this.handleYield(reason.result, reason.value);
   }
 
-  applyStopHooks(
-    kind: "continuation" | "turn-end",
-    stopReason: StopReason,
-  ): Promise<BeforeRequestResult> {
-    return this.applyBeforeRequestActions({ kind, stopReason }, "prefix");
+  /** Consulted for a continuation that is actually going to be issued. */
+  applyStopHooks(stopReason: StreamStopReason): Promise<BeforeRequestResult> {
+    return this.applyBeforeRequestActions(
+      { kind: "continuation", stopReason },
+      "prefix",
+    );
+  }
+
+  get inputTokenCount(): number | undefined {
+    return this.runner.log.inputTokenCount;
   }
 
   get lastAssistantMessage():

@@ -543,10 +543,7 @@ export class Thread {
     // Last, so the reminder sits after every other injection and immediately
     // before the user's own content.
     const skipReminder =
-      // A `turn-end` consultation issues no request, so it must not consume
-      // reminder state. (Stage 3 removes the case entirely.)
-      ctx.kind === "turn-end" ||
-      (ctx.kind === "submission" && this.openingSubmissionIsEmpty);
+      ctx.kind === "submission" && this.openingSubmissionIsEmpty;
     const reminder = skipReminder
       ? undefined
       : this.systemReminders.onBeforeRequest(ctx);
@@ -681,9 +678,9 @@ export class Thread {
     }
   }
 
-  /** What follows this stop, if anything. The before-request supervisors are
-   * consulted either way — a turn-end consultation is how auto-compaction
-   * gets to suspend — and their answer can override the plan. */
+  /** What follows this stop, if anything. A stop that issues no request never
+   * reaches the before-request supervisors: the resting case is `onEndTurn`'s,
+   * which is where auto-compaction gets to suspend a thread at rest. */
   private async continuation(
     stopReason: StopReason,
   ): Promise<
@@ -692,14 +689,15 @@ export class Thread {
     | { type: "messages"; messages: InputMessage[] }
   > {
     const planned = this.plannedContinuation(stopReason);
-    const beforeRequest = await this.agent.applyStopHooks(
-      planned ? "continuation" : "turn-end",
-      stopReason,
-    );
+    if (planned?.type === "suspend") {
+      return { type: "suspended", reason: planned.reason };
+    }
+    if (!planned) return { type: "rest" };
+
+    const beforeRequest = await this.agent.applyStopHooks(stopReason);
     if (beforeRequest.type === "suspend") {
       return { type: "suspended", reason: beforeRequest.reason };
     }
-    if (!planned) return { type: "rest" };
 
     if (planned.type === "messages") {
       return { type: "messages", messages: planned.messages };
@@ -732,6 +730,7 @@ export class Thread {
   ):
     | { type: "messages"; messages: InputMessage[] }
     | { type: "queues" }
+    | { type: "suspend"; reason: SuspendReason }
     | undefined {
     if (
       stopReason === "end_turn" &&
@@ -742,8 +741,12 @@ export class Thread {
 
     const action = this.hooks.onEndTurn?.({
       stopReason,
+      inputTokenCount: this.agent.inputTokenCount,
       lastAssistantMessage: this.agent.lastAssistantMessage,
     });
+    if (action?.type === "suspend") {
+      return { type: "suspend", reason: action.reason };
+    }
     if (action?.type === "send-message") {
       return {
         type: "messages",

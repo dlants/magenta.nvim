@@ -136,13 +136,22 @@ Policy amendment (mid-stage): the opening request of a thread now always carries
 - An empty send must not become a request just because a reminder was available, so `Thread` records `openingSubmissionIsEmpty` in `runToRest` and skips the supervisor for that submission. (The agent's "injections alone justify a request" rule stays: `agent.test.ts` asserts a submission-time supervisor injection with no user content still issues a request.)
 - Test churn: `system-reminders.test.ts`'s opening-request test inverted; the combined standing+bash render test now expects two reminder headers; `thread.test.ts` / `thread-abort.test.ts` / `context-manager.test.ts` message-shape assertions regained the leading `system_reminder` block (block indices shifted by one in the `@diag`/`@qf`/`@buf` tests); 12 snapshots updated.
 
-## drop the turn-end request context
+## drop the turn-end request context — DONE
 
 `onBeforeRequest` fires today with `kind: "turn-end"` at a stop that issues no request, purely so `AutoCompactSupervisor` can suspend while the thread is at rest (waiting for the user's next message would put that message in the log first). That is an end-of-turn question wearing a before-request costume: three context supervisors open with a `kind === "turn-end"` guard just to opt out of it.
 
 - Move it to `onEndTurn`: `EndTurnAction` gains `{ type: "suspend"; reason: SuspendReason }`, and `EndTurnContext` gains `inputTokenCount` so `AutoCompactSupervisor` can answer there. `composeSupervisors`' `onEndTurn` merge takes the first `suspend`, otherwise joins `send-message` texts as it does now.
 - `RequestContextKind` loses `TurnEndRequest`; `Agent.applyStopHooks` loses its `kind` parameter and only consults the hooks when a continuation is actually planned, so `Thread.continuation` asks `onEndTurn` for the resting case and `applyStopHooks` for the continuing one.
 - The `turn-end` guards come out of `FileContextSupervisor`, `GitSupervisor` and `CommentSupervisor` — the case can no longer reach them.
+
+Notes:
+
+- `AutoCompactSupervisor` now implements both hooks: `onBeforeRequest` for a request about to go out and `onEndTurnWithoutYield` for a thread coming to rest over the threshold. The threshold check and the `CompactSuspendReason` are shared privates.
+- `Thread.plannedContinuation` gained a `{ type: "suspend" }` variant (from `onEndTurn`), and `Thread.continuation` now answers it before touching `applyStopHooks`, so the before-request hooks are only consulted once a continuation is actually planned. `Agent.applyStopHooks(stopReason)` lost its `kind` parameter, and `Agent` exposes `inputTokenCount` for the `EndTurnContext`.
+- The `ctx.kind === "turn-end"` guard is gone from `Thread.beforeRequest` and from `FileContextSupervisor` / `GitSupervisor` / `CommentSupervisor`; their three "stays silent on a stop that issues no request" unit tests were deleted rather than restated — the case is now ruled out by the type, and the invariant is asserted at the agent level instead.
+- Test churn: `agent.test.ts`'s two hook-sequence tests now assert `["submission", "continuation"]` and poll on `core.isBusy`; the test supervisors that used to suspend on a resting `onBeforeRequest` (`compactOnce`, "stays pending across two consecutive handoffs", "treats a suspension nobody claims as a plain stop", "consults all supervisors in order and the first compaction wins") moved to `onEndTurnWithoutYield`, which is also what now covers `composeSupervisors`' end-turn suspend merge. "keeps the injection in the log when a compaction follows it" registers `MaxTokensSupervisor` so its `max_tokens` stop plans a continuation and the injection has a request to ride.
+- `node/chat/thread-supervisor.test.ts`'s `EndTurnContext` literals gained `inputTokenCount: undefined`.
+- Pre-existing (also fails on `main`, passes in isolation): `node/comments/comment-input.test.ts` is order-flaky.
 
 - Goal: `onBeforeRequest` fires only when a request is about to be issued.
 - Tests:

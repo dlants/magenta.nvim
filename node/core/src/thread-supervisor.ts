@@ -15,6 +15,7 @@ import type { ThreadHooks } from "./thread-api.ts";
 /** Action returned from the `onEndTurnWithoutYield` hook. */
 export type EndTurnAction =
   | { type: "send-message"; text: string }
+  | { type: "suspend"; reason: SuspendReason }
   | { type: "none" };
 
 /** Action returned from the `onYield` hook. */
@@ -91,10 +92,17 @@ export function composeSupervisors(
   return {
     onEndTurn: (context) => {
       const texts: string[] = [];
+      // The first suspension wins, and it wins over any nudge: there is no
+      // point asking the model to continue into a request we refuse to issue.
+      let suspend: { reason: SuspendReason } | undefined;
       for (const sup of getSupervisors()) {
         const action = sup.onEndTurnWithoutYield?.(context);
-        if (action && action.type === "send-message") texts.push(action.text);
+        if (!action) continue;
+        if (action.type === "send-message") texts.push(action.text);
+        else if (action.type === "suspend")
+          suspend ??= { reason: action.reason };
       }
+      if (suspend) return { type: "suspend", reason: suspend.reason };
       if (texts.length === 0) return { type: "none" };
       return { type: "send-message", text: texts.join("\n\n") };
     },
@@ -137,6 +145,9 @@ export function composeSupervisors(
 
 export type EndTurnContext = {
   stopReason: StopReason;
+  /** The thread's input token count as of this stop, so an end-turn
+   * supervisor can answer the same question `onBeforeRequest` answers. */
+  inputTokenCount: number | undefined;
   lastAssistantMessage: ReadonlyArray<ProviderMessageContent> | undefined;
 };
 
@@ -147,20 +158,9 @@ type ContinuationRequest = {
   kind: "continuation";
   stopReason: StreamStopReason;
 };
-/** A stop that ends the turn: nothing is going out. The agent consults anyway,
- * because a supervisor may still want to suspend, but a supervisor that
- * contributes content — the context trackers — must stay silent, or it would
- * commit an update no request carries. */
-type TurnEndRequest = {
-  kind: "turn-end";
-  stopReason: StreamStopReason;
-};
 /** The fields the caller of `onBeforeRequest` supplies; the agent fills in the
  * token count itself. */
-export type RequestContextKind =
-  | SubmissionRequest
-  | ContinuationRequest
-  | TurnEndRequest;
+export type RequestContextKind = SubmissionRequest | ContinuationRequest;
 export type RequestContext = {
   inputTokenCount: number | undefined;
   /** Cumulative output tokens across the agent's message log. */
@@ -286,17 +286,24 @@ export class AutoCompactSupervisor implements ThreadSupervisor {
     this.nextPrompt = opts.nextPrompt;
   }
 
+  private breached(inputTokenCount: number | undefined): boolean {
+    return inputTokenCount !== undefined && inputTokenCount >= this.threshold;
+  }
+
+  private get reason(): CompactSuspendReason {
+    return { kind: "compact", nextPrompt: this.nextPrompt };
+  }
+
   async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
-    if (
-      context.inputTokenCount !== undefined &&
-      context.inputTokenCount >= this.threshold
-    ) {
-      const reason: CompactSuspendReason = {
-        kind: "compact",
-        nextPrompt: this.nextPrompt,
-      };
-      return { type: "suspend", reason };
-    }
-    return { type: "none" };
+    if (!this.breached(context.inputTokenCount)) return { type: "none" };
+    return { type: "suspend", reason: this.reason };
+  }
+
+  /** A thread that comes to rest over the threshold still has to compact:
+   * waiting for the next request would put the user's next message in the
+   * log first. */
+  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
+    if (!this.breached(context.inputTokenCount)) return { type: "none" };
+    return { type: "suspend", reason: this.reason };
   }
 }
