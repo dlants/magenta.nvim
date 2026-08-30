@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
+import type { SystemInfo } from "./providers/system-prompt.ts";
 import {
   AutoCompactSupervisor,
   composeSupervisors,
   type EndTurnContext,
   injectText,
   type RequestContext,
+  SystemInfoSupervisor,
   type ThreadSupervisor,
 } from "./thread-supervisor.ts";
 
 const context: RequestContext = {
-  kind: "continuation",
   inputTokenCount: 400000,
-  isFirstMessage: false,
   outputTokenCount: 0,
-  stopReason: "end_turn",
 };
 
 describe("composeSupervisors onBeforeRequest", () => {
@@ -126,6 +125,24 @@ describe("composeSupervisors onEndTurn", () => {
   });
 });
 
+describe("SystemInfoSupervisor", () => {
+  const systemInfo: SystemInfo = {
+    timestamp: "now",
+    platform: "darwin",
+    neovimVersion: "801",
+    cwd: "/tmp" as SystemInfo["cwd"],
+    git: undefined,
+  };
+  it("injects once, and again after a reset", async () => {
+    const sup = new SystemInfoSupervisor(systemInfo);
+    expect((await sup.onBeforeRequest()).type).toBe("inject");
+    expect((await sup.onBeforeRequest()).type).toBe("none");
+    sup.onReset();
+    expect((await sup.onBeforeRequest()).type).toBe("inject");
+    expect((await sup.onBeforeRequest()).type).toBe("none");
+  });
+});
+
 describe("AutoCompactSupervisor", () => {
   it("suspends for compaction at or over the threshold", async () => {
     const sup = new AutoCompactSupervisor({
@@ -134,11 +151,8 @@ describe("AutoCompactSupervisor", () => {
     });
     expect(
       await sup.onBeforeRequest({
-        kind: "continuation",
         inputTokenCount: 300000,
-        isFirstMessage: false,
         outputTokenCount: 0,
-        stopReason: "end_turn",
       }),
     ).toEqual({
       type: "suspend",
@@ -146,11 +160,8 @@ describe("AutoCompactSupervisor", () => {
     });
     expect(
       await sup.onBeforeRequest({
-        kind: "continuation",
         inputTokenCount: 400000,
-        isFirstMessage: false,
         outputTokenCount: 0,
-        stopReason: "end_turn",
       }),
     ).toEqual({
       type: "suspend",
@@ -165,20 +176,14 @@ describe("AutoCompactSupervisor", () => {
     });
     expect(
       await sup.onBeforeRequest({
-        kind: "continuation",
         inputTokenCount: 299999,
-        isFirstMessage: false,
         outputTokenCount: 0,
-        stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });
     expect(
       await sup.onBeforeRequest({
-        kind: "continuation",
         inputTokenCount: undefined,
-        isFirstMessage: false,
         outputTokenCount: 0,
-        stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });
   });
@@ -205,11 +210,8 @@ describe("AutoCompactSupervisor", () => {
     const sup = new AutoCompactSupervisor({ nextPrompt: "go" });
     expect(
       await sup.onBeforeRequest({
-        kind: "continuation",
         inputTokenCount: 300000,
-        isFirstMessage: false,
         outputTokenCount: 0,
-        stopReason: "end_turn",
       }),
     ).toEqual({
       type: "suspend",
@@ -217,11 +219,8 @@ describe("AutoCompactSupervisor", () => {
     });
     expect(
       await sup.onBeforeRequest({
-        kind: "continuation",
         inputTokenCount: 299999,
-        isFirstMessage: false,
         outputTokenCount: 0,
-        stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });
   });

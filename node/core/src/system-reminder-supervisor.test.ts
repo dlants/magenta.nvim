@@ -17,10 +17,8 @@ function makeSupervisor(contextFiles: ContextTracker["files"] = {}) {
 
 function request(outputTokenCount: number): RequestContext {
   return {
-    kind: "submission",
     inputTokenCount: 0,
     outputTokenCount,
-    isFirstMessage: false,
   };
 }
 

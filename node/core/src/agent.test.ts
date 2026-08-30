@@ -1297,14 +1297,14 @@ describe("AutoCompactSupervisor integration", () => {
       fileIO: fileIO as unknown as AgentContext["fileIO"],
     });
     let injected = false;
+    let requests = 0;
     core.hooks = composeSupervisors(() => [
       {
-        onBeforeRequest: (ctx) => {
-          if (
-            injected ||
-            ctx.kind !== "continuation" ||
-            ctx.stopReason !== "tool_use"
-          ) {
+        onBeforeRequest: () => {
+          // The opening request is skipped: the injection belongs on the
+          // continuation that carries the tool result.
+          requests++;
+          if (injected || requests === 1) {
             return Promise.resolve({ type: "none" as const });
           }
           injected = true;
@@ -1342,13 +1342,17 @@ describe("AutoCompactSupervisor integration", () => {
   it("keeps the injection in the log when a compaction follows it", async () => {
     const { core, mockClient } = createAgentWithMock();
     let asked = false;
+    let requests = 0;
     core.hooks = composeSupervisors(() => [
       // max_tokens plans a continuation, so the stop reaches the
       // before-request supervisors at all.
       new MaxTokensSupervisor(),
       {
-        onBeforeRequest: (ctx) => {
-          if (asked || ctx.kind === "submission")
+        onBeforeRequest: () => {
+          // The opening request of the send is skipped; the note rides the
+          // continuation the max_tokens nudge produces.
+          requests++;
+          if (asked || requests === 1)
             return Promise.resolve({ type: "none" as const });
           asked = true;
           return Promise.resolve(injectText("note"));
@@ -1388,14 +1392,12 @@ describe("AutoCompactSupervisor integration", () => {
       fileIO: fileIO as unknown as AgentContext["fileIO"],
     });
     let asked = false;
+    let requests = 0;
     core.hooks = composeSupervisors(() => [
       {
-        onBeforeRequest: (ctx) => {
-          if (
-            asked ||
-            ctx.kind !== "continuation" ||
-            ctx.stopReason !== "tool_use"
-          ) {
+        onBeforeRequest: () => {
+          requests++;
+          if (asked || requests === 1) {
             return Promise.resolve({ type: "none" as const });
           }
           asked = true;
@@ -1550,13 +1552,13 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("injects on the opening request of a send, ahead of the user content", async () => {
     const { core, mockClient } = createAgentWithMock();
-    const kinds: string[] = [];
+    let requests = 0;
     core.hooks = composeSupervisors(() => [
       {
-        onBeforeRequest: (ctx) => {
-          kinds.push(ctx.kind);
+        onBeforeRequest: () => {
+          requests++;
           return Promise.resolve(
-            ctx.kind === "submission"
+            requests === 1
               ? injectText("submission note")
               : { type: "none" as const },
           );
@@ -1567,7 +1569,7 @@ describe("AutoCompactSupervisor integration", () => {
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
 
-    expect(kinds[0]).toBe("submission");
+    expect(requests).toBe(1);
     const serialized = JSON.stringify(stream.messages);
     expect(serialized).toContain("submission note");
     expect(serialized.indexOf("submission note")).toBeLessThan(
@@ -1580,12 +1582,12 @@ describe("AutoCompactSupervisor integration", () => {
 
   it("consults onBeforeRequest exactly once per request across a handoff", async () => {
     const { core, mockClient } = createAgentWithMock();
-    const kinds: string[] = [];
+    let requests = 0;
     core.hooks = composeSupervisors(() => [
       new MaxTokensSupervisor(),
       {
-        onBeforeRequest: (ctx) => {
-          kinds.push(ctx.kind);
+        onBeforeRequest: () => {
+          requests++;
           return Promise.resolve({ type: "none" as const });
         },
       },
@@ -1610,47 +1612,15 @@ describe("AutoCompactSupervisor integration", () => {
       if (!core.isBusy) return true;
       throw new Error("waiting for the thread to come to rest");
     });
-    expect(kinds).toEqual(["submission", "continuation"]);
+    expect(requests).toBe(2);
   });
-  it("reports the provider's stop reason on a continuation that carries tool results", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    const contexts: string[] = [];
-    core.hooks = composeSupervisors(() => [
-      {
-        onBeforeRequest: (ctx) => {
-          contexts.push(
-            ctx.kind === "continuation"
-              ? `continuation:${ctx.stopReason}`
-              : ctx.kind,
-          );
-          return Promise.resolve({ type: "none" as const });
-        },
-      },
-    ]);
-    void core.send([{ type: "user", text: "hello" }]);
-    const stream = await mockClient.awaitStream();
-    // Tools were requested, but the response was cut short by the token limit:
-    // the continuation carries the results under the provider's own stop
-    // reason, not a hardcoded "tool_use".
-    stream.streamToolUse(
-      "tool-truncated" as ToolRequestId,
-      "get_files" as ToolName,
-      { files: [{ filePath: "/tmp/test.txt" }] },
-    );
-    stream.finishResponse("max_tokens");
-    const nextStream = await awaitNextStream(mockClient, stream);
-    expect(contexts).toEqual(["submission", "continuation:max_tokens"]);
-    nextStream.streamText("done");
-    nextStream.finishResponse("end_turn");
-  });
-
   it("does not consult onBeforeRequest at a stop that issues no request", async () => {
     const { core, mockClient } = createAgentWithMock();
-    const kinds: string[] = [];
+    let requests = 0;
     core.hooks = composeSupervisors(() => [
       {
-        onBeforeRequest: (ctx) => {
-          kinds.push(ctx.kind);
+        onBeforeRequest: () => {
+          requests++;
           return Promise.resolve({ type: "none" as const });
         },
       },
@@ -1662,7 +1632,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.streamText("ok");
     stream.finishResponse("end_turn");
     const nextStream = await awaitNextStream(mockClient, stream);
-    expect(kinds).toEqual(["submission", "continuation"]);
+    expect(requests).toBe(2);
     // This stop has nothing left to send.
     nextStream.streamText("done");
     nextStream.finishResponse("end_turn");
@@ -1670,21 +1640,24 @@ describe("AutoCompactSupervisor integration", () => {
       if (!core.isBusy) return true;
       throw new Error("waiting for the thread to come to rest");
     });
-    expect(kinds).toEqual(["submission", "continuation"]);
+    expect(requests).toBe(2);
   });
 
   it("reports tool results before the continuation's before-request hook, with output tokens", async () => {
     const { core, mockClient } = createAgentWithMock();
     const events: string[] = [];
     let continuationOutputTokens: number | undefined;
+    let requests = 0;
     core.hooks = {
       hasPendingContent: () => Promise.resolve(false),
       onToolResults: (results) => {
         events.push(`results:${results.size}`);
       },
       onBeforeRequest: (ctx) => {
-        events.push(`request:${ctx.kind}`);
-        if (ctx.kind === "continuation") {
+        events.push("request");
+        requests++;
+        // Only a continuation has a finished assistant message behind it.
+        if (requests > 1) {
           continuationOutputTokens = ctx.outputTokenCount;
         }
         return Promise.resolve({
@@ -1700,11 +1673,7 @@ describe("AutoCompactSupervisor integration", () => {
     });
     stream.finishResponse("tool_use", { inputTokens: 1, outputTokens: 42 });
     const nextStream = await awaitNextStream(mockClient, stream);
-    expect(events).toEqual([
-      "request:submission",
-      "results:1",
-      "request:continuation",
-    ]);
+    expect(events).toEqual(["request", "results:1", "request"]);
     expect(continuationOutputTokens).toBe(42);
     // A second tool turn: the count accumulates across finished assistant
     // messages, and the in-flight one (no usage yet) contributes nothing.
@@ -1738,8 +1707,8 @@ describe("AutoCompactSupervisor integration", () => {
       onToolResults: (results) => {
         events.push(`results:${results.size}`);
       },
-      onBeforeRequest: (ctx) => {
-        events.push(`request:${ctx.kind}`);
+      onBeforeRequest: () => {
+        events.push("request");
         return Promise.resolve({ type: "proceed" as const, injections: [] });
       },
     };
@@ -1759,7 +1728,7 @@ describe("AutoCompactSupervisor integration", () => {
     resolveStat();
     await abortPromise;
     // The results are reported, and no continuation request follows them.
-    expect(events).toEqual(["request:submission", "results:1"]);
+    expect(events).toEqual(["request", "results:1"]);
   });
   it("reports tool results when the turn yields instead of continuing", async () => {
     const { core, mockClient } = createAgentWithMock({
@@ -1771,8 +1740,8 @@ describe("AutoCompactSupervisor integration", () => {
       onToolResults: (results) => {
         events.push(`results:${results.size}`);
       },
-      onBeforeRequest: (ctx) => {
-        events.push(`request:${ctx.kind}`);
+      onBeforeRequest: () => {
+        events.push("request");
         return Promise.resolve({ type: "proceed" as const, injections: [] });
       },
     };
@@ -1790,7 +1759,7 @@ describe("AutoCompactSupervisor integration", () => {
         `waiting for yielded mode, currently: ${core.state.mode.type}`,
       );
     });
-    expect(events).toEqual(["request:submission", "results:1"]);
+    expect(events).toEqual(["request", "results:1"]);
   });
 
   it("drops a submission aborted while its before-request hooks are in flight", async () => {
@@ -1819,12 +1788,7 @@ describe("AutoCompactSupervisor integration", () => {
     core.hooks = composeSupervisors(() => [
       {
         hasPendingContent: () => Promise.resolve(true),
-        onBeforeRequest: (ctx) =>
-          Promise.resolve(
-            ctx.kind === "submission"
-              ? injectText("solo note")
-              : { type: "none" as const },
-          ),
+        onBeforeRequest: () => Promise.resolve(injectText("solo note")),
       },
     ]);
 

@@ -33,9 +33,7 @@ describe("CommentSupervisor", () => {
     });
 
     const action = await supervisor.onBeforeRequest({
-      kind: "submission",
       inputTokenCount: 0,
-      isFirstMessage: false,
       outputTokenCount: 0,
     });
     order.push("read");
@@ -62,9 +60,7 @@ describe("CommentSupervisor", () => {
     expect(
       (
         await supervisor.onBeforeRequest({
-          kind: "submission",
           inputTokenCount: 0,
-          isFirstMessage: false,
           outputTokenCount: 0,
         })
       ).type,

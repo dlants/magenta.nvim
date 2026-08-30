@@ -134,11 +134,8 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
       const ask = async (sup: AutoCompactSupervisor, inputTokenCount: number) =>
         (
           await sup.onBeforeRequest({
-            kind: "continuation",
             inputTokenCount,
-            isFirstMessage: false,
             outputTokenCount: 0,
-            stopReason: "end_turn",
           })
         ).type;
       expect(await ask(overridden, 100_000)).toBe("suspend");

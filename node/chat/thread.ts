@@ -505,6 +505,16 @@ export class NvimThread {
       this.contextManager.on(event, () => this.onCoreUpdate());
     }
 
+    // The compact thread's content is composed exactly by the compactor, so it
+    // gets no preamble; a forked thread starts from a log that already carries
+    // one.
+    if (this.core.state.threadType !== "compact") {
+      this.systemInfoSupervisor = new SystemInfoSupervisor(
+        this.core.state.systemInfo,
+        { alreadyInjected: this.core.getProviderMessages().length > 0 },
+      );
+    }
+
     this.core.hooks = composeSupervisors(() => [
       new MaxTokensSupervisor(),
       ...this.contextSupervisors(),
@@ -594,15 +604,17 @@ export class NvimThread {
     return { type: "thinking" };
   }
 
+  /** Built once in the constructor rather than per hook invocation: the
+   * supervisor tracks for itself whether it has already injected the preamble,
+   * so a fresh instance would inject it on every request. */
+  private systemInfoSupervisor: SystemInfoSupervisor | undefined;
+
   /** The context trackers, always ahead of the behavioral supervisors so no
    * injection can follow a compaction in the plan. */
   private contextSupervisors(): ThreadSupervisor[] {
-    // The compact thread's content is composed exactly by the compactor, so it
-    // gets no preamble.
-    const systemInfo =
-      this.core.state.threadType === "compact"
-        ? []
-        : [new SystemInfoSupervisor(this.core.state.systemInfo)];
+    const systemInfo = this.systemInfoSupervisor
+      ? [this.systemInfoSupervisor]
+      : [];
     return this.comments
       ? [
           this.gitSupervisor,

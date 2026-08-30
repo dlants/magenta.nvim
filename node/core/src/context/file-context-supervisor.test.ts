@@ -67,9 +67,7 @@ describe("FileContextSupervisor", () => {
 
     await fileIO.writeFile(TEST_PATH, "formatted content");
     const action = await supervisor.onBeforeRequest({
-      kind: "submission",
       inputTokenCount: 0,
-      isFirstMessage: false,
       outputTokenCount: 0,
     });
     if (action.type !== "inject") throw new Error("expected inject");
@@ -81,9 +79,7 @@ describe("FileContextSupervisor", () => {
     expect(
       (
         await supervisor.onBeforeRequest({
-          kind: "submission",
           inputTokenCount: 0,
-          isFirstMessage: false,
           outputTokenCount: 0,
         })
       ).type,
@@ -96,9 +92,7 @@ describe("FileContextSupervisor", () => {
     expect(
       (
         await supervisor.onBeforeRequest({
-          kind: "submission",
           inputTokenCount: 0,
-          isFirstMessage: false,
           outputTokenCount: 0,
         })
       ).type,
@@ -113,9 +107,7 @@ describe("FileContextSupervisor", () => {
     contextManager.addFileContext(IMAGE_PATH, IMAGE_REL, IMAGE_FILE_TYPE);
 
     const action = await supervisor.onBeforeRequest({
-      kind: "submission",
       inputTokenCount: 0,
-      isFirstMessage: false,
       outputTokenCount: 0,
     });
     if (action.type !== "inject") throw new Error("expected inject");
@@ -157,9 +149,7 @@ describe("FileContextSupervisor", () => {
     expect(
       (
         await clone.onBeforeRequest({
-          kind: "submission",
           inputTokenCount: 0,
-          isFirstMessage: false,
           outputTokenCount: 0,
         })
       ).type,
@@ -169,9 +159,7 @@ describe("FileContextSupervisor", () => {
     expect(
       (
         await supervisor.onBeforeRequest({
-          kind: "submission",
           inputTokenCount: 0,
-          isFirstMessage: false,
           outputTokenCount: 0,
         })
       ).type,

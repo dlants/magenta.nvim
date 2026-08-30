@@ -4,7 +4,6 @@ import type { CompactSuspendReason } from "./compaction/index.ts";
 import type {
   ProviderMessageContent,
   StopReason,
-  StreamStopReason,
 } from "./providers/provider-types.ts";
 import {
   formatSystemInfo,
@@ -137,6 +136,11 @@ export function composeSupervisors(
         ? { type: "suspend", reason: suspend.reason, injections }
         : { type: "proceed", injections };
     },
+    onReset: () => {
+      for (const sup of getSupervisors()) {
+        sup.onReset?.();
+      }
+    },
     hasPendingContent: async () => {
       for (const sup of getSupervisors()) {
         if (await sup.hasPendingContent?.()) return true;
@@ -159,28 +163,18 @@ export type EndTurnContext = {
   lastAssistantMessage: ReadonlyArray<ProviderMessageContent> | undefined;
 };
 
-/** The opening request of a send. */
-type SubmissionRequest = { kind: "submission" };
-/** A request carrying tool results or a supervisor nudge. */
-type ContinuationRequest = {
-  kind: "continuation";
-  stopReason: StreamStopReason;
-};
-/** The fields the caller of `onBeforeRequest` supplies; the agent fills in the
- * token count itself. */
-export type RequestContextKind = SubmissionRequest | ContinuationRequest;
 export type RequestContext = {
   inputTokenCount: number | undefined;
   /** Cumulative output tokens across the agent's message log. */
   outputTokenCount: number;
-  /** No message has been sent on this agent yet. Survives a compaction reset,
-   * where the replacement agent starts from an empty log. */
-  isFirstMessage: boolean;
-} & RequestContextKind;
+};
 
 export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
   onYield?(result: string): Promise<YieldAction>;
+  /** The thread threw its log away (compaction) and starts over. A supervisor
+   * whose contribution is once-per-conversation re-arms here. */
+  onReset?(): void;
   onBeforeRequest?(context: RequestContext): Promise<SupervisorAction>;
   /** Would `onBeforeRequest` contribute anything right now? Must not commit
    * any "sent" state — it answers a question about a request that may never
@@ -208,12 +202,28 @@ function containsYieldTag(
  * get it — the compaction thread, whose content its caller composes exactly,
  * does not. */
 export class SystemInfoSupervisor implements ThreadSupervisor {
-  constructor(private readonly systemInfo: SystemInfo) {}
+  /** A thread forked from another starts from a log that already carries the
+   * preamble, so it is created already spent. */
+  constructor(
+    private readonly systemInfo: SystemInfo,
+    { alreadyInjected = false }: { alreadyInjected?: boolean } = {},
+  ) {
+    this.injected = alreadyInjected;
+  }
 
-  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
-    if (context.kind !== "submission" || !context.isFirstMessage) {
-      return { type: "none" };
-    }
+  /** The preamble is once per conversation, so which request carries it is
+   * this supervisor's own bookkeeping rather than something the request has to
+   * describe itself as. Compaction re-arms it: the replacement log starts
+   * empty. */
+  private injected: boolean;
+
+  onReset(): void {
+    this.injected = false;
+  }
+
+  async onBeforeRequest(): Promise<SupervisorAction> {
+    if (this.injected) return { type: "none" };
+    this.injected = true;
     return injectText(formatSystemInfo(this.systemInfo));
   }
 }

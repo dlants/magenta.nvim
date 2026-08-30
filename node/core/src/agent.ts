@@ -38,11 +38,7 @@ import type {
   SendResult,
   YieldValue,
 } from "./thread-api.ts";
-import type {
-  RequestContextKind,
-  SuspendReason,
-  YieldAction,
-} from "./thread-supervisor.ts";
+import type { SuspendReason, YieldAction } from "./thread-supervisor.ts";
 import type {
   ToolInvocation,
   ToolName,
@@ -173,13 +169,6 @@ export interface AgentDeps {
         truncateTo: NativeMessageIdx;
       };
 }
-
-export type SubmitOptions = {
-  /** How the turn's opening request is described to the before-request
-   * supervisors. Defaults to a fresh submission; a thread continuing from a
-   * stop (a nudge, a queue flush) states that instead. */
-  requestKind?: RequestContextKind;
-};
 
 /** What the before-request hooks produced, for a caller that wants to place it
  * itself. */
@@ -680,10 +669,7 @@ export class Agent {
 
   private submission: Defer<SendResult> | undefined;
 
-  send(
-    inputMessages?: InputMessage[],
-    opts: SubmitOptions = {},
-  ): Promise<SendResult> {
+  send(inputMessages?: InputMessage[]): Promise<SendResult> {
     if (this.state.mode.type === "yielded" && this.state.mode.tornDown) {
       return Promise.reject(
         new Error(
@@ -693,7 +679,7 @@ export class Agent {
     }
     const deferred = new Defer<SendResult>();
     this.submission = deferred;
-    this.submit(inputMessages, opts).catch((error: Error) => {
+    this.submit(inputMessages).catch((error: Error) => {
       this.handleSendMessageError(error);
       this.settle({ type: "failed", error, discardedSubmission: true });
     });
@@ -707,15 +693,9 @@ export class Agent {
     deferred?.resolve(outcome);
   }
 
-  private async submit(
-    inputMessages?: InputMessage[],
-    opts: SubmitOptions = {},
-  ): Promise<void> {
+  private async submit(inputMessages?: InputMessage[]): Promise<void> {
     this.state.editedFilesThisTurn = [];
-    this.pendingRequest = {
-      type: "opening",
-      kind: opts.requestKind ?? { kind: "submission" },
-    };
+    this.pendingRequest = { type: "opening" };
     // Whether a send with no user content is worth a request is the owner's
     // call: it probes its supervisors before it gets here, and the request it
     // decides to issue is composed inside the turn, by the gate.
@@ -793,9 +773,7 @@ export class Agent {
     // supervisors' own injections. It is consumed here rather than at
     // `submit`, so a turn that never reaches the gate leaves it for the next.
     const lead = request.type === "opening" ? this.takeTurnPrefix() : [];
-    const kind =
-      request.type === "opening" ? request.kind : this.continuationKind();
-    const composed = await this.composeBeforeRequest(kind);
+    const composed = await this.composeBeforeRequest();
     const content = [...lead, ...composed.injections];
     switch (composed.type) {
       case "proceed":
@@ -823,32 +801,16 @@ export class Agent {
     }
     return { type: "proceed" };
   }
-  /** The request the next gate is about to describe to the supervisors. Set by
-   * `submit` for the turn's opening request and consumed by the first gate;
-   * later gates in the same turn are continuations by construction — the loop
-   * only comes back around after tool results. */
-  private pendingRequest:
-    | { type: "opening"; kind: RequestContextKind }
-    | undefined;
+  /** Set by `submit` for the turn's opening request and consumed by the first
+   * gate; later gates in the same turn are continuations by construction — the
+   * loop only comes back around after tool results. The distinction is the
+   * agent's own (where the injections go), not something the supervisors are
+   * told about. */
+  private pendingRequest: { type: "opening" } | undefined;
   private takeTurnPrefix(): AgentInput[] {
     const prefix = this.pendingTurnPrefix ?? [];
     this.pendingTurnPrefix = undefined;
     return prefix;
-  }
-  /** The stop the loop came back around from. A mid-turn gate always follows a
-   * finished assistant message, so the absence of one is a broken invariant
-   * rather than a case to paper over with a synthetic stop reason. */
-  private continuationKind(): RequestContextKind {
-    const messages = this.runner.log.messages;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      if (message.role !== "assistant") continue;
-      if (message.stopReason === undefined) break;
-      return { kind: "continuation", stopReason: message.stopReason };
-    }
-    throw new Error(
-      "before-request gate fired as a continuation with no finished assistant message",
-    );
   }
 
   private handleSendMessageError = (error: Error): void => {
@@ -885,17 +847,13 @@ export class Agent {
   /** Consult the supervisors. Nothing is appended here: placing what they
    * produce — and ordering it against the turn's own content — belongs to the
    * one caller, `onBeforeRequest`. */
-  private async composeBeforeRequest(
-    context: RequestContextKind,
-  ): Promise<ComposedBeforeRequest> {
+  private async composeBeforeRequest(): Promise<ComposedBeforeRequest> {
     const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
     if (!onBeforeRequest)
       return { type: "proceed", injections: [], submissions: [] };
     const composed = await onBeforeRequest({
-      ...context,
       inputTokenCount: this.runner.log.inputTokenCount,
       outputTokenCount: this.outputTokenCount(),
-      isFirstMessage: this.getProviderMessages().length === 0,
     });
     const injections: AgentInput[] = composed.injections.map((block) =>
       block.type === "text"

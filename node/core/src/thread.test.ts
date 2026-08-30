@@ -14,8 +14,13 @@ import {
   uniqueThreadId,
   userTexts,
 } from "./test-helpers.ts";
+import type { Thread } from "./thread.ts";
 import type { QueuedMessage } from "./thread-api.ts";
-import { composeSupervisors, injectText } from "./thread-supervisor.ts";
+import {
+  composeSupervisors,
+  injectText,
+  SystemInfoSupervisor,
+} from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer, pollUntil } from "./utils/async.ts";
 
@@ -214,6 +219,16 @@ describe("deferred submissions", () => {
     ).toBeGreaterThan(toolResultIdx);
     expect(core.queued.async).toEqual([]);
     continuation.finishResponse("end_turn");
+    // Exactly once: the stop behind the continuation finds both queues empty,
+    // so `flushAtStop` has nothing left to re-deliver.
+    await pollUntil(() => {
+      if (!core.isBusy) return true;
+      throw new Error("waiting for the thread to come to rest");
+    });
+    expect(mockClient.streams.length).toBe(2);
+    expect(
+      userTexts(core).filter((t) => t.includes("also check this")).length,
+    ).toBe(1);
   });
 
   it("defers an @async @compact past the request it cannot ride on", async () => {
@@ -310,11 +325,14 @@ describe("deferred submissions", () => {
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
     try {
       let suspend = true;
+      // Not the opening request of the send: the one the stop-time flush
+      // produces.
+      let requests = 0;
       core.hooks = composeSupervisors(() => [
         {
-          onBeforeRequest: (ctx) =>
+          onBeforeRequest: () =>
             Promise.resolve(
-              suspend && ctx.kind !== "submission"
+              suspend && ++requests > 1
                 ? {
                     type: "suspend" as const,
                     reason: { kind: "stop" as const, message: "halt" },
@@ -363,11 +381,12 @@ describe("deferred submissions", () => {
     );
     try {
       let compacted = false;
+      let requests = 0;
       core.hooks = composeSupervisors(() => [
         {
-          onBeforeRequest: (ctx) =>
+          onBeforeRequest: () =>
             Promise.resolve(
-              !compacted && ctx.kind !== "submission"
+              !compacted && ++requests > 1
                 ? {
                     type: "suspend" as const,
                     reason: { kind: "compact", nextPrompt: undefined },
@@ -489,10 +508,11 @@ describe("Thread.abort between turns", () => {
       () => onUpdate(),
     );
     const stopConsultations: string[] = [];
+    let requests = 0;
     core.hooks = composeSupervisors(() => [
       {
-        onBeforeRequest: (ctx) => {
-          if (ctx.kind !== "submission") stopConsultations.push(ctx.kind);
+        onBeforeRequest: () => {
+          if (++requests > 1) stopConsultations.push("continuation");
           return Promise.resolve({ type: "none" as const });
         },
       },
@@ -581,6 +601,46 @@ describe("Thread.abort returns the unsent queue", () => {
     const { unsent } = await core.abort();
     expect(queuedText(unsent)).toBe("queued");
     expect(core.queued.async).toEqual([]);
+  });
+});
+
+describe("system-info preamble", () => {
+  /** The injection is classified on append, so it is not a plain text block. */
+  const preambles = (core: Thread) =>
+    core
+      .getProviderMessages()
+      .flatMap((m) => (typeof m.content === "string" ? [] : m.content))
+      .filter((b) => b.type === "system_info").length;
+
+  it("rides the first request only, and the first one after a reset", async () => {
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("system-info-preamble"),
+    );
+    // One instance, not one per consultation: the supervisor's own state is
+    // what decides which request carries the preamble.
+    const systemInfo = new SystemInfoSupervisor(core.state.systemInfo);
+    core.hooks = composeSupervisors(() => [systemInfo]);
+    const first = core.send([{ type: "user", text: "one" }]);
+    const stream = await mockClient.awaitStream();
+    stream.finishResponse("end_turn");
+    await first;
+    expect(preambles(core)).toBe(1);
+
+    const second = core.send([{ type: "user", text: "two" }]);
+    const stream2 = await awaitNextStream(mockClient, stream);
+    stream2.finishResponse("end_turn");
+    await second;
+    expect(preambles(core)).toBe(1);
+
+    // The replacement agent starts from an empty log, so the preamble is due
+    // again — the supervisor list survives the swap and has to be re-armed.
+    await core.reset({ seed: [], archive: { type: "none" } });
+    const third = core.send([{ type: "user", text: "three" }]);
+    const stream3 = await awaitNextStream(mockClient, stream2);
+    stream3.finishResponse("end_turn");
+    await third;
+    expect(preambles(core)).toBe(1);
   });
 });
 

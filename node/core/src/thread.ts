@@ -3,7 +3,6 @@ import {
   type AgentContext,
   type AgentDeps,
   type InputMessage,
-  type SubmitOptions,
   type ThreadState,
 } from "./agent.ts";
 import type { ThreadId } from "./chat-types.ts";
@@ -532,6 +531,13 @@ export class Thread {
     };
   }
 
+  /** Whether the next gate belongs to the opening request of a send the thread
+   * issued. The gate fires uniformly now, so "is this request mid-turn" is the
+   * thread's own bookkeeping rather than something the request describes. Set
+   * around each `agent.send`; a send that never reaches a gate leaves it for
+   * the next one to overwrite. */
+  private openingRequestPending = false;
+
   private async beforeRequest(
     ctx: RequestContext,
   ): Promise<ComposedRequestActions> {
@@ -551,11 +557,12 @@ export class Thread {
         injections: [...composed.injections, ...reminder.content],
       };
     }
-    if (
-      ctx.kind !== "continuation" ||
-      ctx.stopReason !== "tool_use" ||
-      !this.nextRequestQueue.length
-    ) {
+    // Only a mid-turn request carries the async queue: at a turn boundary
+    // `flushAtStop` owns both queues, and flushing here as well would deliver
+    // the same entries twice.
+    const opening = this.openingRequestPending;
+    this.openingRequestPending = false;
+    if (opening || !this.nextRequestQueue.length) {
       return { ...composed, submissions: [] };
     }
     return { ...composed, submissions: await this.flushMidTurn() };
@@ -613,6 +620,11 @@ export class Thread {
     return await this.hooks.hasPendingContent();
   }
 
+  private sendToAgent(messages: InputMessage[]): Promise<SendResult> {
+    this.openingRequestPending = true;
+    return this.agent.send(messages);
+  }
+
   /** Bumped for each turn loop as it starts, and carried in `loopState`, so
    * "am I still the current loop" is a property of the state. */
   private sendEpoch = 0;
@@ -633,10 +645,7 @@ export class Thread {
   /** Drive the agent until nothing more should be sent. The agent stops at
    * every turn boundary; deciding whether a stop is really the end — queued
    * content, a supervisor nudge, a truncated response — is the thread's. */
-  private async runToRest(
-    messages: InputMessage[],
-    opts?: SubmitOptions,
-  ): Promise<SendResult> {
+  private async runToRest(messages: InputMessage[]): Promise<SendResult> {
     // An abort can only target a loop that is running, so there is no stale
     // flag to clear here: `abort` leaves `idle` alone.
     const epoch = ++this.sendEpoch;
@@ -651,7 +660,7 @@ export class Thread {
         if (!isCurrentLoop()) return { type: "aborted" };
         if (!pending) return { type: "completed", stopReason: undefined };
       }
-      let result = await this.agent.send(messages, opts);
+      let result = await this.sendToAgent(messages);
       for (;;) {
         // An abort that arrives while a turn is in flight comes back through
         // the agent as an `aborted` result, so there is no separate check
@@ -672,9 +681,7 @@ export class Thread {
             return { type: "suspended", reason: next.reason };
           case "messages":
           case "flushed": {
-            const continued = await this.agent.send(next.messages, {
-              requestKind: { kind: "continuation", stopReason },
-            });
+            const continued = await this.sendToAgent(next.messages);
             if (continued.type === "suspended" && next.type === "flushed") {
               return {
                 type: "suspended",
@@ -869,6 +876,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
 
     this.update({ type: "reset-agent-state" });
     this.systemReminders = this.createReminderSupervisor();
+    this.hooks.onReset?.();
 
     if (seed.length) this.agent.prependToNextTurn(seed);
   }

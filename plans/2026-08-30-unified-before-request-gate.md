@@ -353,7 +353,7 @@ Probes available for `hasPendingContent`, all already non-committing:
   queue emptied).
 - `onBeforeRequest` reads the composed result inside a `switch` on its variant.
 
-## Drop the request kind
+## Drop the request kind — DONE
 
 - Goal: `RequestContext` carries only token counts. `SystemInfoSupervisor` tracks
   whether it has already injected the preamble. `Thread.beforeRequest`'s mid-turn
@@ -371,3 +371,54 @@ Probes available for `hasPendingContent`, all already non-committing:
     exactly once, and is not re-delivered at the following stop.
   - `@async` / `@compact` deferred submissions behave as they do today
     (existing `thread.test.ts` coverage).
+
+### What was done
+
+- `RequestContext` is now `{ inputTokenCount, outputTokenCount }`;
+  `RequestContextKind`, `SubmissionRequest`, `ContinuationRequest` and
+  `isFirstMessage` are gone, along with `Agent.continuationKind`,
+  `SubmitOptions` (its only field was `requestKind`) and the `pendingRequest`
+  variant's `kind`. `Agent.pendingRequest` is now `{ type: "opening" } |
+  undefined` — the opening/continuation distinction survives only as the agent's
+  own placement rule (own message vs coalesce, take the turn prefix or not).
+- The mid-turn question was answered with **thread-side state**:
+  `Thread.openingRequestPending`, set by a new `Thread.sendToAgent` wrapper
+  around each `agent.send` and cleared by the first gate that follows. The async
+  queue is flushed only when the gate is *not* the opening request of a send,
+  which is exactly the old `kind === "continuation" && stopReason === "tool_use"`
+  condition: a mid-turn gate can only follow tool results, and a turn-opening
+  continuation (a nudge, a stop-time queue flush) is a `send` and so an opening
+  request. Flushing on every gate was rejected — a turn-opening continuation
+  would then flush a queue `flushAtStop` had just filled the request from.
+- `SystemInfoSupervisor` owns an `injected` flag, re-armed by a new
+  `ThreadSupervisor.onReset?()` (composed into `ThreadHooks.onReset`, called
+  from `Thread.reset`). That is what makes the preamble come back after a
+  compaction, which `isFirstMessage` used to get from the empty replacement log.
+- Tests: `thread.test.ts` "system-info preamble > rides the first request only,
+  and the first one after a reset"; `thread-supervisor.test.ts`
+  "SystemInfoSupervisor > injects once, and again after a reset"; the existing
+  mid-turn test now also asserts the queued message is delivered exactly once
+  (no second request, one occurrence in the log).
+
+### Deviations
+
+- `SystemInfoSupervisor` gained a second construction case as well as `onReset`:
+  `{ alreadyInjected }`. A **forked** thread starts from a cloned log that
+  already carries the preamble, which `isFirstMessage` covered for free; the
+  supervisor cannot see the log, so `NvimThread` now builds it once in its
+  constructor with `alreadyInjected: this.core.getProviderMessages().length > 0`.
+  Three fork snapshots caught this.
+- Relatedly, `NvimThread.contextSupervisors()` was constructing a fresh
+  `SystemInfoSupervisor` on *every* hook consultation (the composed list is
+  built from a getter). With supervisor-local state that would inject the
+  preamble on every request, so the instance is now a field. The core-level test
+  makes the same point explicitly (one instance, not one per consultation).
+- Two `agent.test.ts` tests lost their subject rather than being ported:
+  "reports the provider's stop reason on a continuation that carries tool
+  results" is deleted (the stop reason is no longer told to anyone), and the
+  request-position tests now count requests instead of listing kinds.
+- An agent-internal `submit` (a yield rejection, a supervisor `send-message`
+  answered inside `Agent`) does not go through `Thread.sendToAgent`, so its
+  request is treated as mid-turn and will carry the async queue. That is a
+  behaviour change from the old `kind: "submission"` and a benign one: the queue
+  asks to ride "the next request that goes out", and this is one.

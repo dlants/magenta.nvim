@@ -42,9 +42,7 @@ describe("GitSupervisor", () => {
     const { supervisor, onSent } = setup(state("feature"), state("main"));
 
     const action = await supervisor.onBeforeRequest({
-      kind: "submission",
       inputTokenCount: 0,
-      isFirstMessage: false,
       outputTokenCount: 0,
     });
     expect(action.type).toBe("inject");
@@ -59,9 +57,7 @@ describe("GitSupervisor", () => {
     expect(
       (
         await supervisor.onBeforeRequest({
-          kind: "submission",
           inputTokenCount: 0,
-          isFirstMessage: false,
           outputTokenCount: 0,
         })
       ).type,
@@ -74,9 +70,7 @@ describe("GitSupervisor", () => {
     expect(
       (
         await supervisor.onBeforeRequest({
-          kind: "submission",
           inputTokenCount: 0,
-          isFirstMessage: false,
           outputTokenCount: 0,
         })
       ).type,
