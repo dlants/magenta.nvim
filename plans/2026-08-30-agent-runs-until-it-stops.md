@@ -241,3 +241,10 @@ Done. The signature change, `Thread.abort`'s drain and the test move landed in s
 - Goal: `thread-view.ts` and `thread.ts` read `core.queued`. `npx tsc -b`, `npx vitest run`, `npx biome check .` clean. Grep for `nextRequestQueue|nextStopQueue|DEFERRED_QUEUES` returns nothing outside `node/core/dist`.
 
 Done in stage 3, which forced it: both root readers go through `core.queued`, the three commands are clean, and `nextRequestQueue` / `nextStopQueue` survive only as private fields of `Thread`.
+
+Stage 5 verification pass: no code changes were needed.
+
+- `thread-view.ts:531` destructures `core.queued` into its two labelled sections; `thread.ts:1203` uses `core.queuedCount === 0`.
+- `node/core/src/index.ts` needs no pruning: `DeferredDelivery` / `FlushedQueue` were never exported (they are private aliases in `thread.ts`), and `ResolveSubmission` / `QueuedMessage` are still live — `ThreadCallbacks.resolve` and `Thread.abort`'s `unsent` respectively.
+- Grep for `nextRequestQueue|nextStopQueue|DEFERRED_QUEUES|DeferredDelivery` outside `dist` matches only private members of `Thread`.
+- `npx tsc -b` and `npx biome check .` clean; `npx vitest run` 1582 passed, with the single failure in `node/comments/comment-input.test.ts` being the known pre-existing flake in that file.
