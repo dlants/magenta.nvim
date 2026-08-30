@@ -343,6 +343,37 @@ describe("Thread turn loop", () => {
     third.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
   });
+  it("delivers a queued message before an end-turn supervisor can suspend", async () => {
+    const threadId = uniqueThreadId("queue-beats-suspend");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    core.hooks = composeSupervisors(() => [
+      {
+        onEndTurnWithoutYield: () => ({
+          type: "suspend" as const,
+          reason: { kind: "stop" as const, message: "halt" },
+        }),
+      },
+    ]);
+    const sent = core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    expect(
+      await core.submit(pendingMessage("queued follow-up"), "next"),
+    ).toEqual({ type: "queued" });
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+    // The queue is consulted first: the suspension has to wait for the thread
+    // to actually come to rest.
+    const second = await awaitNextStream(mockClient, stream);
+    expect(JSON.stringify(second.messages)).toContain("queued follow-up");
+    second.streamText("done");
+    second.finishResponse("end_turn");
+    expect(await sent).toEqual({
+      type: "suspended",
+      reason: { kind: "stop", message: "halt" },
+    });
+    await core.destroy();
+    await cleanupArchive(threadId);
+  });
   it("does not offer the submitted text back when a continuation fails", async () => {
     const { core, mockClient } = createAgentWithMock(
       undefined,
@@ -1301,13 +1332,10 @@ describe("AutoCompactSupervisor integration", () => {
     });
     stream.finishResponse("tool_use");
     const stream2 = await awaitNextStream(mockClient, stream);
-    const [toolResultMsg, injectedMsg] = stream2.messages.slice(-2);
-    expect(
-      (toolResultMsg.content as Anthropic.ContentBlockParam[])[0].type,
-    ).toBe("tool_result");
-    expect(
-      (injectedMsg.content as Anthropic.ContentBlockParam[]).map((b) => b.type),
-    ).toContain("image");
+    const blocks = stream2.messages[stream2.messages.length - 1]
+      .content as Anthropic.ContentBlockParam[];
+    expect(blocks[0].type).toBe("tool_result");
+    expect(blocks.map((b) => b.type)).toContain("image");
     stream2.streamText("ok");
     stream2.finishResponse("end_turn");
   });

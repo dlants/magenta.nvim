@@ -93,16 +93,18 @@ export function composeSupervisors(
     onEndTurn: (context) => {
       const texts: string[] = [];
       // The first suspension wins, and it wins over any nudge: there is no
-      // point asking the model to continue into a request we refuse to issue.
-      let suspend: { reason: SuspendReason } | undefined;
+      // point asking the model to continue into a request we refuse to
+      // issue. Every supervisor is still consulted — as on the
+      // `onBeforeRequest` side, a stop is a fact each of them may need to
+      // record — so this cannot short-circuit out of the loop.
+      let suspend: Extract<EndTurnAction, { type: "suspend" }> | undefined;
       for (const sup of getSupervisors()) {
         const action = sup.onEndTurnWithoutYield?.(context);
         if (!action) continue;
         if (action.type === "send-message") texts.push(action.text);
-        else if (action.type === "suspend")
-          suspend ??= { reason: action.reason };
+        else if (action.type === "suspend") suspend ??= action;
       }
-      if (suspend) return { type: "suspend", reason: suspend.reason };
+      if (suspend) return suspend;
       if (texts.length === 0) return { type: "none" };
       return { type: "send-message", text: texts.join("\n\n") };
     },

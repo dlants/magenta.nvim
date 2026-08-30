@@ -153,6 +153,15 @@ Notes:
 - `node/chat/thread-supervisor.test.ts`'s `EndTurnContext` literals gained `inputTokenCount: undefined`.
 - Pre-existing (also fails on `main`, passes in isolation): `node/comments/comment-input.test.ts` is order-flaky.
 
+Review follow-ups (stage 3):
+
+- `composeSupervisors`' `onEndTurn` gained two unit tests in `node/core/src/thread-supervisor.test.ts`: a suspension beats an accumulated `send-message` nudge, and the first of several suspensions wins.
+- `AutoCompactSupervisor.onEndTurnWithoutYield` gained direct unit coverage (at/below threshold, no token count) alongside the existing `onBeforeRequest` cases.
+- Declined the early-return refactor of the `onEndTurn` merge: every supervisor must still be consulted (a stop is a fact each may record — `agent.test.ts`'s "consults all supervisors in order and the first compaction wins" pins this), so the loop keeps accumulating. The wrapper object became `Extract<EndTurnAction, { type: "suspend" }>` and the discarded-`texts` invariant is now stated in a comment.
+- `Thread.plannedContinuation` returns a total union with an explicit `{ type: "rest" }` instead of a bare `undefined`.
+- New `agent.test.ts` test "delivers a queued message before an end-turn supervisor can suspend": the queue is consulted first, and the suspension lands on the following, genuinely resting stop.
+- `_context: RequestContext` in the three context supervisors is left as is — none of them ever read `kind`/`isFirstMessage`; the underscore is the intended signal.
+
 - Goal: `onBeforeRequest` fires only when a request is about to be issued.
 - Tests:
   - Auto-compaction still triggers at a resting `end_turn` stop once the input token threshold is breached (existing `thread-compact` tests).

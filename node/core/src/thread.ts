@@ -689,10 +689,10 @@ export class Thread {
     | { type: "messages"; messages: InputMessage[] }
   > {
     const planned = this.plannedContinuation(stopReason);
-    if (planned?.type === "suspend") {
+    if (planned.type === "suspend") {
       return { type: "suspended", reason: planned.reason };
     }
-    if (!planned) return { type: "rest" };
+    if (planned.type === "rest") return { type: "rest" };
 
     const beforeRequest = await this.agent.applyStopHooks(stopReason);
     if (beforeRequest.type === "suspend") {
@@ -731,7 +731,7 @@ export class Thread {
     | { type: "messages"; messages: InputMessage[] }
     | { type: "queues" }
     | { type: "suspend"; reason: SuspendReason }
-    | undefined {
+    | { type: "rest" } {
     if (
       stopReason === "end_turn" &&
       (this.nextRequestQueue.length || this.nextStopQueue.length)
@@ -753,7 +753,7 @@ export class Thread {
         messages: [{ type: "system", text: action.text }],
       };
     }
-    return undefined;
+    return { type: "rest" };
   }
 
   async setThreadTitle(userMessage: string): Promise<void> {

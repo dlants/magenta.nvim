@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AutoCompactSupervisor,
   composeSupervisors,
+  type EndTurnContext,
   injectText,
   type RequestContext,
   type ThreadSupervisor,
@@ -72,6 +73,42 @@ describe("composeSupervisors onBeforeRequest", () => {
   });
 });
 
+describe("composeSupervisors onEndTurn", () => {
+  const endTurnContext: EndTurnContext = {
+    stopReason: "end_turn",
+    inputTokenCount: 400000,
+    lastAssistantMessage: undefined,
+  };
+
+  it("lets a suspension win over an accumulated nudge", () => {
+    const nudger: ThreadSupervisor = {
+      onEndTurnWithoutYield: () => ({
+        type: "send-message" as const,
+        text: "keep going",
+      }),
+    };
+    const hooks = composeSupervisors(() => [
+      nudger,
+      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
+    ]);
+    expect(hooks.onEndTurn?.(endTurnContext)).toEqual({
+      type: "suspend",
+      reason: { kind: "compact", nextPrompt: "go" },
+    });
+  });
+
+  it("keeps only the first suspension", () => {
+    const hooks = composeSupervisors(() => [
+      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
+      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "stop" }),
+    ]);
+    expect(hooks.onEndTurn?.(endTurnContext)).toEqual({
+      type: "suspend",
+      reason: { kind: "compact", nextPrompt: "go" },
+    });
+  });
+});
+
 describe("AutoCompactSupervisor", () => {
   it("suspends for compaction at or over the threshold", async () => {
     const sup = new AutoCompactSupervisor({
@@ -127,6 +164,24 @@ describe("AutoCompactSupervisor", () => {
         stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });
+  });
+
+  it("suspends at a resting end turn only over the threshold", () => {
+    const sup = new AutoCompactSupervisor({
+      threshold: 300000,
+      nextPrompt: "go",
+    });
+    const at = (inputTokenCount: number | undefined): EndTurnContext => ({
+      stopReason: "end_turn",
+      inputTokenCount,
+      lastAssistantMessage: undefined,
+    });
+    expect(sup.onEndTurnWithoutYield(at(300000))).toEqual({
+      type: "suspend",
+      reason: { kind: "compact", nextPrompt: "go" },
+    });
+    expect(sup.onEndTurnWithoutYield(at(299999))).toEqual({ type: "none" });
+    expect(sup.onEndTurnWithoutYield(at(undefined))).toEqual({ type: "none" });
   });
 
   it("defaults the threshold to 300000", async () => {
