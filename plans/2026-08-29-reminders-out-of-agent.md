@@ -168,7 +168,13 @@ Review follow-ups (stage 3):
   - `agent.test.ts:1589` / `:1617` — which assert the `["submission", "continuation", "turn-end"]` sequence — become assertions that no hook fires at a resting stop.
   - The context supervisors never drain their pending updates at a stop that issues no request (their existing `turn-end` tests, restated as "no consultation happens").
 
-## cleanup
+## cleanup — DONE
 
 - Goal: `Agent` has no knowledge of reminders; `grep -n "Reminder" node/core/src/agent.ts` is empty. `npx tsc -b`, `npx vitest run`, `npx biome check .` clean.
 - Tests: full suite.
+
+Notes:
+
+- No further code changes were needed: stages 2 and 3 already removed every reminder field, action and helper from `Agent` and `ThreadState`. Verified `grep -n "Reminder" node/core/src/agent.ts` is empty; the only remaining mention is `toAgentInput` mapping the generic `system_reminder` content type to `text`, which is content plumbing rather than reminder policy. Also verified no live references remain to `TurnEndRequest` / `turn-end` request context, `outputTokensSinceLastReminder`, `bashTokensSinceLastReminder`, `pendingBashReminder` (outside the supervisor), `firstBashReminderPending`, `BASH_REMINDER_TOKEN_INTERVAL`, `ReminderKind: "subsequent"`, the five removed `AgentAction`s, or `accountUsage` / `usageAccountedCount`.
+- Full suite green at this commit: `npx tsc -b`, `npx biome check .` (362 files) and `npx vitest run` (1587 passed, 2 skipped, 1 todo) all pass, including the previously order-flaky `node/comments/comment-input.test.ts`.
+- Unrelated in-flight work was present in the working tree when this stage ran (an `onBeforeToolResponse` → `onBeforeContinuation` runner-hook refactor in `agent.ts` / `anthropic-runner.ts` / `openai-runner.ts` / `provider-types.ts`). It is outside this plan's scope, coalesces injections into the tool-result message and so fails three message-shape tests; it was left uncommitted, and the green run above is with it stashed.
