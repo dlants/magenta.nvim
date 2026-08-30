@@ -22,6 +22,7 @@ import {
   GitTracker,
   type InputMessage,
   loadAgents,
+  MaxTokensSupervisor,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
   type PendingMessage,
@@ -505,6 +506,7 @@ export class NvimThread {
     }
 
     this.core.hooks = composeSupervisors(() => [
+      new MaxTokensSupervisor(),
       ...this.contextSupervisors(),
       ...this.supervisors,
     ]);

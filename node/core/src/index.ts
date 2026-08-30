@@ -282,6 +282,7 @@ export type {
 export {
   AutoCompactSupervisor,
   composeSupervisors,
+  MaxTokensSupervisor,
   SubagentSupervisor,
   SystemInfoSupervisor,
   UnsupervisedSupervisor,

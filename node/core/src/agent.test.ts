@@ -46,8 +46,10 @@ import {
   AutoCompactSupervisor,
   composeSupervisors,
   injectText,
+  MaxTokensSupervisor,
   SubagentSupervisor,
   type ThreadSupervisor,
+  UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { validateInput } from "./tools/helpers.ts";
@@ -474,6 +476,7 @@ describe("Thread turn loop", () => {
       undefined,
       uniqueThreadId("continuation-failure"),
     );
+    core.hooks = composeSupervisors(() => [new MaxTokensSupervisor()]);
     const sent = core.send([{ type: "user", text: "original message" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("truncated");
@@ -970,31 +973,56 @@ describe("Agent.handleProviderStopped", () => {
     ).toBeDefined();
     expect(toolResult!.is_error).toBe(true);
   });
+});
 
-  it("max_tokens with text-only content sends continuation prompt", async () => {
+describe("MaxTokensSupervisor", () => {
+  /** Every text block of the last user message on a stream. */
+  const lastUserText = (stream: { messages: Anthropic.MessageParam[] }) => {
+    const last = stream.messages[stream.messages.length - 1];
+    expect(last.role).toBe("user");
+    return (last.content as Anthropic.Messages.ContentBlockParam[])
+      .filter((b): b is Anthropic.Messages.TextBlockParam => b.type === "text")
+      .map((b) => b.text)
+      .join("\n");
+  };
+
+  it("continues a truncated text-only response", async () => {
     const { core, mockClient } = createAgentWithMock();
+    core.hooks = composeSupervisors(() => [new MaxTokensSupervisor()]);
 
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
-
-    // Stream only text, then stop with max_tokens
     stream.streamText("Here is a long response that got");
     stream.finishResponse("max_tokens");
 
-    // Agent should send a continuation system message and auto-continue
-    const nextStream = await pollUntil(() => {
-      const s = mockClient.streams[mockClient.streams.length - 1];
-      if (s && s !== stream) return s;
-      throw new Error("waiting for next stream");
-    });
+    const nextStream = await awaitNextStream(mockClient, stream);
+    expect(lastUserText(nextStream)).toContain("truncated");
+  });
 
-    // The next stream should contain the continuation prompt
-    const lastUserMsg = nextStream.messages[nextStream.messages.length - 1];
-    expect(lastUserMsg.role).toBe("user");
-    const textBlocks = (
-      lastUserMsg.content as Anthropic.Messages.ContentBlockParam[]
-    ).filter((b): b is Anthropic.Messages.TextBlockParam => b.type === "text");
-    expect(textBlocks.some((b) => b.text.includes("truncated"))).toBe(true);
+  it("is the only supervisor to speak on max_tokens, and spends no restart", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const unsupervised = new UnsupervisedSupervisor();
+    core.hooks = composeSupervisors(() => [
+      new MaxTokensSupervisor(),
+      unsupervised,
+    ]);
+
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("cut off");
+    stream.finishResponse("max_tokens");
+
+    const continuation = await awaitNextStream(mockClient, stream);
+    const continuationText = lastUserText(continuation);
+    expect(continuationText).toContain("truncated");
+    expect(continuationText).not.toContain("stopped without yielding");
+
+    // The truncated stop was not a refusal to yield, so the restart budget is
+    // untouched: the first end_turn still gets restart 1.
+    continuation.streamText("done");
+    continuation.finishResponse("end_turn");
+    const restart = await awaitNextStream(mockClient, continuation);
+    expect(lastUserText(restart)).toContain("auto-restart 1/5");
   });
 });
 
@@ -1917,6 +1945,7 @@ describe("AutoCompactSupervisor integration", () => {
     const { core, mockClient } = createAgentWithMock();
     const kinds: string[] = [];
     core.hooks = composeSupervisors(() => [
+      new MaxTokensSupervisor(),
       {
         onBeforeRequest: (ctx) => {
           kinds.push(ctx.kind);

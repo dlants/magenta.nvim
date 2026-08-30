@@ -184,11 +184,26 @@ export class SystemInfoSupervisor implements ThreadSupervisor {
   }
 }
 
+/** A truncated response is not an end of turn: the model was cut off
+ * mid-thought, so it gets asked to pick up where it left off. Lives here
+ * rather than in the agent because it is a policy over a stop, and it must be
+ * consulted before any other end-turn supervisor can read the stop as a
+ * refusal to yield. */
+export class MaxTokensSupervisor implements ThreadSupervisor {
+  onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
+    if (context.stopReason !== "max_tokens") return { type: "none" };
+    return {
+      type: "send-message",
+      text: "Your previous response was truncated due to the output token limit. Please continue where you left off.",
+    };
+  }
+}
 /** For regular subagents. Only intervenes when the agent writes a
  *  `<yield>` XML tag instead of calling the tool. Otherwise allows
  *  the agent to stop normally. */
 export class SubagentSupervisor implements ThreadSupervisor {
   onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
+    if (context.stopReason !== "end_turn") return { type: "none" };
     if (containsYieldTag(context.lastAssistantMessage)) {
       return {
         type: "send-message",
@@ -215,7 +230,7 @@ export class UnsupervisedSupervisor implements ThreadSupervisor {
 
   onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
     if (
-      context.stopReason === "aborted" ||
+      context.stopReason !== "end_turn" ||
       this.restartCount >= this.maxRestarts
     ) {
       return { type: "none" };

@@ -510,18 +510,6 @@ export class Thread {
     | { type: "messages"; messages: InputMessage[] }
     | { type: "queues" }
     | undefined {
-    if (stopReason === "max_tokens") {
-      return {
-        type: "messages",
-        messages: [
-          {
-            type: "system",
-            text: "Your previous response was truncated due to the output token limit. Please continue where you left off.",
-          },
-        ],
-      };
-    }
-
     if (
       stopReason === "end_turn" &&
       (this.state.nextRequestQueue.length || this.state.nextStopQueue.length)

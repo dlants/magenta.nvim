@@ -132,7 +132,7 @@ export type ComposedRequestActions = {
 
 # Stages
 
-> Status: stage 1 (hoist the loop) is **done** and committed. Stages 2-5 are open.
+> Status: stages 1 (hoist the loop) and 2 (max_tokens as a supervisor) are **done** and committed. Stages 3-5 are open.
 
 ## hoist the loop
 
@@ -166,6 +166,14 @@ Done. What was actually built:
 - Goal: `MaxTokensSupervisor` in `thread-supervisor.ts`, wired wherever the standard supervisor list is built. `agent.ts`'s max_tokens branch deleted.
 - Work: add the `stopReason !== "end_turn"` guard to `UnsupervisedSupervisor` and `SubagentSupervisor`.
 - Tests: the existing `Agent.handleProviderStopped` max_tokens cases (`agent.test.ts:747`) move to supervisor-level tests. Add: an unsupervised thread that hits `max_tokens` gets the continue-prompt and _only_ the continue-prompt, and its restart budget is untouched. That is the regression this stage risks.
+
+Done. What was actually built:
+
+- `MaxTokensSupervisor` (`thread-supervisor.ts`) returns the continue-prompt verbatim from the deleted branch when `stopReason === "max_tokens"`, and `{type:"none"}` otherwise. `Thread.plannedContinuation`'s max_tokens branch is gone; the prompt now reaches the agent as a `system` message via the composed `onEndTurn`, exactly as before.
+- Guards added: `SubagentSupervisor` and `UnsupervisedSupervisor` both bail on `stopReason !== "end_turn"`. For `UnsupervisedSupervisor` this replaces the narrower `=== "aborted"` check, so a truncated stop no longer burns a restart.
+- Wiring: `new MaxTokensSupervisor()` is prepended to the `composeSupervisors` list in `NvimThread`'s constructor (`node/chat/thread.ts`), which is the only place root threads' hooks are built — so every thread type gets it, matching the agent-level behavior it replaces. It is deliberately *not* in `contextSupervisors()` (those are trackers) nor in `Chat`'s per-thread-type `supervisors` (which would have needed the same entry in three branches). Exported from `@magenta/core`.
+- Tests: the text-only max_tokens case moved out of `Agent.handleProviderStopped` into a new `describe("MaxTokensSupervisor")` in `agent.test.ts`, joined by the new regression test — a max_tokens stop under `[MaxTokensSupervisor, UnsupervisedSupervisor]` produces the continue-prompt alone, and the following `end_turn` still reports `auto-restart 1/5`. The two tool_use-path max_tokens cases stay in `Agent.handleProviderStopped`: they never involved the continue-prompt. Three existing tests that relied on the agent's implicit max_tokens continuation now install `MaxTokensSupervisor` explicitly.
+- Full suite green (`npx tsc -b`, `npx biome check .`, `npx vitest run`) apart from `node/comments/comment-input.test.ts > comments on a visual selection`, re-confirmed as a pre-existing flake: it fails roughly half the time on a clean `git stash` as well.
 
 ## queues move to Thread
 
