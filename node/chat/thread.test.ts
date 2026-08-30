@@ -164,6 +164,7 @@ it("getMessages correctly interleaves tool requests and responses", async () => 
       messages.flatMap((m) => m.content.map((b) => `${m.role}:${b.type}`)),
     ).toEqual([
       "user:system_info",
+      "user:system_reminder", // the opening request always carries one
       "user:text",
       "assistant:text",
       "assistant:tool_use",
@@ -482,16 +483,16 @@ it("processes @diag keyword to include diagnostics in message", {
     // Should have user message and assistant response
     expect(messages.length).toBe(2);
 
-    // The user message should have three content blocks: system_info + original
-    // text + diagnostics
-    expect(messages[0].content.length).toBe(3);
+    // The user message should have four content blocks: system_info +
+    // system_reminder + original text + diagnostics
+    expect(messages[0].content.length).toBe(4);
     expect(messages[0].content[0].type).toBe("system_info");
-    const content0 = messages[0].content[1];
+    const content0 = messages[0].content[2];
     expect(content0.type).toBe("text");
     expect((content0 as Extract<typeof content0, { type: "text" }>).text).toBe(
       "Help me fix this issue @diag",
     );
-    const content1 = messages[0].content[2];
+    const content1 = messages[0].content[3];
     expect(content1.type).toBe("text");
     expect(
       (content1 as Extract<typeof content1, { type: "text" }>).text,
@@ -553,14 +554,14 @@ it("processes @diagnostics keyword to include diagnostics in message", {
     expect(messages.length).toBe(2);
 
     // The user message should have three content blocks: original text + diagnostics (after system_info)
-    expect(messages[0].content.length).toBe(3);
+    expect(messages[0].content.length).toBe(4);
     expect(messages[0].content[0].type).toBe("system_info");
-    const content0 = messages[0].content[1];
+    const content0 = messages[0].content[2];
     expect(content0.type).toBe("text");
     expect((content0 as Extract<typeof content0, { type: "text" }>).text).toBe(
       "Check these @diagnostics please",
     );
-    const content1 = messages[0].content[2];
+    const content1 = messages[0].content[3];
     expect(content1.type).toBe("text");
     expect(
       (content1 as Extract<typeof content1, { type: "text" }>).text,
@@ -610,14 +611,14 @@ it("processes @qf keyword to include quickfix list in message", {
     expect(messages.length).toBe(2);
 
     // The user message should have three content blocks: original text + quickfix list (after system_info)
-    expect(messages[0].content.length).toBe(3);
+    expect(messages[0].content.length).toBe(4);
     expect(messages[0].content[0].type).toBe("system_info");
-    const content0 = messages[0].content[1];
+    const content0 = messages[0].content[2];
     expect(content0.type).toBe("text");
     expect((content0 as Extract<typeof content0, { type: "text" }>).text).toBe(
       "Help me fix these issues @qf",
     );
-    const content1 = messages[0].content[2];
+    const content1 = messages[0].content[3];
     expect(content1.type).toBe("text");
     expect(
       (content1 as Extract<typeof content1, { type: "text" }>).text,
@@ -674,14 +675,14 @@ it("processes @quickfix keyword to include quickfix list in message", {
     expect(messages.length).toBe(2);
 
     // The user message should have three content blocks: original text + quickfix list (after system_info)
-    expect(messages[0].content.length).toBe(3);
+    expect(messages[0].content.length).toBe(4);
     expect(messages[0].content[0].type).toBe("system_info");
-    const content0 = messages[0].content[1];
+    const content0 = messages[0].content[2];
     expect(content0.type).toBe("text");
     expect((content0 as Extract<typeof content0, { type: "text" }>).text).toBe(
       "Check these @quickfix entries",
     );
-    const content1 = messages[0].content[2];
+    const content1 = messages[0].content[3];
     expect(content1.type).toBe("text");
     expect(
       (content1 as Extract<typeof content1, { type: "text" }>).text,
@@ -726,9 +727,9 @@ it("handles empty quickfix list with @qf command", {
     expect(messages.length).toBe(2);
 
     // The user message should have three content blocks: original text + empty quickfix list (after system_info)
-    expect(messages[0].content.length).toBe(3);
+    expect(messages[0].content.length).toBe(4);
     expect(messages[0].content[0].type).toBe("system_info");
-    const content1 = messages[0].content[2];
+    const content1 = messages[0].content[3];
     expect(content1.type).toBe("text");
     expect((content1 as Extract<typeof content1, { type: "text" }>).text).toBe(
       "Current quickfix list:\n",
@@ -772,14 +773,14 @@ it("processes @buf keyword to include buffers list in message", {
     expect(messages.length).toBe(2);
 
     // The user message should have three content blocks: original text + buffers list (after system_info)
-    expect(messages[0].content.length).toBe(3);
+    expect(messages[0].content.length).toBe(4);
     expect(messages[0].content[0].type).toBe("system_info");
-    const content0 = messages[0].content[1];
+    const content0 = messages[0].content[2];
     expect(content0.type).toBe("text");
     expect((content0 as Extract<typeof content0, { type: "text" }>).text).toBe(
       "Help me organize my files @buf",
     );
-    const content1 = messages[0].content[2];
+    const content1 = messages[0].content[3];
     expect(content1.type).toBe("text");
     expect(
       (content1 as Extract<typeof content1, { type: "text" }>).text,
@@ -829,14 +830,14 @@ it("processes @buffers keyword to include buffers list in message", {
     expect(messages.length).toBe(2);
 
     // The user message should have three content blocks: original text + buffers list (after system_info)
-    expect(messages[0].content.length).toBe(3);
+    expect(messages[0].content.length).toBe(4);
     expect(messages[0].content[0].type).toBe("system_info");
-    const content0 = messages[0].content[1];
+    const content0 = messages[0].content[2];
     expect(content0.type).toBe("text");
     expect((content0 as Extract<typeof content0, { type: "text" }>).text).toBe(
       "Show me my current @buffers",
     );
-    const content1 = messages[0].content[2];
+    const content1 = messages[0].content[3];
     expect(content1.type).toBe("text");
     expect(
       (content1 as Extract<typeof content1, { type: "text" }>).text,
@@ -878,9 +879,9 @@ it("handles empty buffers list with @buf command", {
     expect(messages.length).toBe(2);
 
     // The user message should have three content blocks: original text + buffers list (after system_info)
-    expect(messages[0].content.length).toBe(3);
+    expect(messages[0].content.length).toBe(4);
     expect(messages[0].content[0].type).toBe("system_info");
-    const content1 = messages[0].content[2];
+    const content1 = messages[0].content[3];
     expect(content1.type).toBe("text");
     expect(
       (content1 as Extract<typeof content1, { type: "text" }>).text,
@@ -1598,6 +1599,7 @@ it("handles @async messages by queueing them and sending on next tool response",
     ).toEqual([
       "user:text",
       "user:text", // system_info converted to text
+      "user:text", // opening system_reminder converted to text
       "assistant:text",
       "assistant:tool_use",
       "user:tool_result",

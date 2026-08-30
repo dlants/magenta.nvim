@@ -364,6 +364,7 @@ it("issuing a getFile request adds the file to the context but doesn't send its 
 
     expect(flattenedMessages).toEqual([
       "user;system_info;",
+      "user;system_reminder;",
       "user;text;Please analyze the image test.jpg",
       "assistant;text;I'll analyze the image",
       "assistant;tool_use;",

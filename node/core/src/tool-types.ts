@@ -33,6 +33,27 @@ export type DisplayContext = {
 
 export type GenericStructuredResult = { toolName: ToolName };
 
+/** The structured result of a tool that publishes one, by tool name.
+ * `GenericStructuredResult` is excluded because its `toolName` is the branded
+ * `ToolName` rather than a literal, so comparing it to a name narrows
+ * nothing. */
+export type StructuredResultFor<K extends string> = Extract<
+  ToolStructuredResult,
+  { toolName: K }
+>;
+
+/** Narrow a structured result to a specific tool's shape. */
+export function structuredResultFor<
+  K extends StructuredResultFor<string>["toolName"],
+>(
+  result: ToolStructuredResult,
+  toolName: K,
+): StructuredResultFor<K> | undefined {
+  return result.toolName === toolName
+    ? (result as StructuredResultFor<K>)
+    : undefined;
+}
+
 export type ToolStructuredResult =
   | BashCommand.StructuredResult
   | Edl.StructuredResult

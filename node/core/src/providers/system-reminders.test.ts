@@ -44,12 +44,6 @@ describe("buildSystemReminder", () => {
     expect(reminder).not.toContain("Remember the skills");
   });
 
-  it("returns undefined when no kinds are requested", () => {
-    expect(
-      buildSystemReminder({ threadType: "root", kinds: [] }),
-    ).toBeUndefined();
-  });
-
   it("root standing reminder does not include yield_to_parent", () => {
     const reminder = buildSystemReminder({
       threadType: "root",
@@ -95,23 +89,5 @@ describe("buildSystemReminder", () => {
     });
     expect(reminder).toBeDefined();
     expect(reminder).toContain("always pet the cat");
-  });
-
-  it("does not include extraReminders for compact threads", () => {
-    const reminder = buildSystemReminder({
-      threadType: "compact",
-      kinds: ["standing"],
-      extraReminders: ["always pet the cat"],
-    });
-    expect(reminder).toBeUndefined();
-  });
-
-  it("returns undefined for compact thread regardless of requested kinds", () => {
-    expect(
-      buildSystemReminder({
-        threadType: "compact",
-        kinds: ["standing", "bashSummary"],
-      }),
-    ).toBeUndefined();
   });
 });

@@ -8,9 +8,9 @@ import type { NvimDriver } from "../test/driver.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
 
-/** The standing reminder fires every SYSTEM_REMINDER_MIN_TOKEN_INTERVAL output
- * tokens, so the opening request of a thread never carries one. Drive a full
- * turn first to arm the gate for whatever is sent next. */
+/** After the opening request, the standing reminder fires every
+ * SYSTEM_REMINDER_MIN_TOKEN_INTERVAL output tokens. Drive a full turn first to
+ * arm the gate for whatever is sent next. */
 async function armStandingReminder(driver: NvimDriver): Promise<void> {
   await driver.inputMagentaText("warm up");
   await driver.send();
@@ -41,7 +41,7 @@ function findSystemReminderText(
   );
 }
 
-test("the opening request of a thread carries no system reminder", async () => {
+test("the opening request of a thread carries the standing reminder", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
@@ -50,7 +50,7 @@ test("the opening request of a thread carries no system reminder", async () => {
 
     const request = await driver.mockAnthropic.awaitPendingStream();
     const userMessage = request.messages[request.messages.length - 1];
-    expect(findSystemReminderText(userMessage.content)).toBeUndefined();
+    expect(findSystemReminderText(userMessage.content)).toBeDefined();
   });
 });
 
@@ -389,15 +389,14 @@ test("auto-respond combines the standing and bash reminders into a single system
       toolRequests: [],
     });
 
-    // The combined reminder renders as a single collapsed header. The user's
-    // own message carries none (it was the thread's opening request), so this
-    // is the only one in the buffer.
+    // The combined reminder renders as a single collapsed header, alongside
+    // the one the thread's opening request carried.
     await pollUntil(async () => {
       const displayText = await driver.getDisplayBufferText();
       const headerCount = (displayText.match(/📋 \[System Reminder\]/g) ?? [])
         .length;
-      if (headerCount !== 1) {
-        throw new Error(`expected 1 reminder header, got ${headerCount}`);
+      if (headerCount !== 2) {
+        throw new Error(`expected 2 reminder headers, got ${headerCount}`);
       }
     });
   });
@@ -470,9 +469,10 @@ test("the standing reminder is gated by the token interval, not by user turns", 
     await driver.inputMagentaText("First message");
     await driver.send();
 
+    // The opening request always carries it; the interval governs from there.
     const request1 = await driver.mockAnthropic.awaitPendingStream();
     const userMessage1 = request1.messages[request1.messages.length - 1];
-    expect(findSystemReminderText(userMessage1.content)).toBeUndefined();
+    expect(findSystemReminderText(userMessage1.content)).toBeDefined();
 
     // Under the interval: the next user message still gets nothing.
     request1.respond({

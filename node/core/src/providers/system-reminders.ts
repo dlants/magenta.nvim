@@ -1,6 +1,9 @@
 import type { SubagentConfig, ThreadType } from "../chat-types.ts";
 
 export type ReminderKind = "standing" | "bashSummary";
+/** Compact threads get no reminders at all, so they are excluded by the type
+ * rather than checked for at runtime. */
+export type ReminderThreadType = Exclude<ThreadType, "compact">;
 
 const SKILLS_REMINDER = `\
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
@@ -26,9 +29,9 @@ const BASH_SUMMARY_BODY = `\
 Use the \`bash_summarizer\` subagent to extract information from abbreviated bash output. Pass the log file to the subagent as a contextFile.`;
 
 function getStandingReminderBody(
-  threadType: ThreadType,
+  threadType: ReminderThreadType,
   subagentConfig?: SubagentConfig | undefined,
-): string | undefined {
+): string {
   switch (threadType) {
     case "root":
       return `${SKILLS_REMINDER}
@@ -52,18 +55,7 @@ ${EDL_REMINDER}
 ${customReminder}
 CRITICAL: Use yield_to_parent tool when task is complete.`;
     }
-    case "compact":
-      return undefined;
   }
-}
-
-function getBashSummaryReminderBody(
-  threadType: ThreadType,
-): string | undefined {
-  if (threadType === "compact") {
-    return undefined;
-  }
-  return BASH_SUMMARY_BODY;
 }
 
 export function buildSystemReminder({
@@ -72,27 +64,23 @@ export function buildSystemReminder({
   kinds,
   extraReminders,
 }: {
-  threadType: ThreadType;
+  threadType: ReminderThreadType;
   subagentConfig?: SubagentConfig | undefined;
-  kinds: ReminderKind[];
+  kinds: [ReminderKind, ...ReminderKind[]];
   extraReminders?: string[] | undefined;
-}): string | undefined {
+}): string {
   const bodies: string[] = [];
   for (const kind of kinds) {
     if (kind === "standing") {
       let body = getStandingReminderBody(threadType, subagentConfig);
-      if (body !== undefined) {
-        if (extraReminders && extraReminders.length > 0) {
-          body = `${body}\n${extraReminders.join("\n")}`;
-        }
-        bodies.push(body);
+      if (extraReminders && extraReminders.length > 0) {
+        body = `${body}\n${extraReminders.join("\n")}`;
       }
+      bodies.push(body);
     } else if (kind === "bashSummary") {
-      const body = getBashSummaryReminderBody(threadType);
-      if (body !== undefined) bodies.push(body);
+      bodies.push(BASH_SUMMARY_BODY);
     }
   }
-  if (bodies.length === 0) return undefined;
   return `<system-reminder>
 ${bodies.join("\n")}
 Do not acknowledge this reminder or mention it to the user.

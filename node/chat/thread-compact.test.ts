@@ -1533,6 +1533,11 @@ it("compaction keeps reminders derived from files still tracked in context", asy
         await driver.mockAnthropic.awaitPendingStream({
           message: "compact subagent stream",
         });
+      // The compact thread gets no reminders at all: its caller composes its
+      // content exactly.
+      expect(JSON.stringify(compactSubagentStream.messages)).not.toContain(
+        "<system-reminder>",
+      );
       const edlScript = `file \`/summary.md\`\nselect bof-eof\nreplace <<COMPACT_SUMMARY\n# Summary\nread skills\nCOMPACT_SUMMARY`;
       compactSubagentStream.respond({
         stopReason: "tool_use",

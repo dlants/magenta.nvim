@@ -69,8 +69,6 @@ export type InputMessage =
       text: string;
     };
 
-/** `system_reminder` blocks are a magenta-side annotation; the provider only
- * ever sees plain text. */
 function toAgentInput(
   content: ReadonlyArray<ProviderMessageContent>,
 ): AgentInput[] {
@@ -103,8 +101,6 @@ export type ThreadMode =
   | {
       type: "yielded";
       response: string;
-      /** What this thread yields. Minted where the yield tool's input was
-       * still structured, so nothing has to parse `response` back out. */
       value: YieldValue;
       tornDown?: boolean;
     };
@@ -137,13 +133,7 @@ export interface AgentContext {
   maxConcurrentFastSubagents: number;
   getAgents: () => AgentsMap;
   getProvider: (profile: ProviderProfile) => Provider;
-  /** A synchronous, read-only view of the tracked files. Read from inside
-   * tool execution and from the markdown-reminder scan, so it cannot be a
-   * hook. The owner hands in the very object its `FileContextSupervisor`
-   * owns. */
   contextTracker: ContextTracker;
-  /** The root thread's side conversations, needed by the `reply` tool. The
-   * same store the owner's `CommentSupervisor` owns. */
   commentStore?: CommentStore | undefined;
   yieldSchema?: JSONSchemaType;
 }
@@ -166,34 +156,19 @@ export type ThreadState = {
   mode: ThreadMode;
   edlRegisters: EdlRegisters;
   editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];
-  /** How the most recent turn ended. Kept for rendering an idle agent. */
   lastTurnResult: TurnResult | undefined;
   toolSpecs: ProviderToolSpec[];
 };
 
-/** Collaborators the owning `Thread` supplies. An `Agent` is ephemeral —
- * compaction replaces it — so everything durable (identity, the queue, the
- * context managers, the archive) lives on the `Thread` and is handed in. */
-
 export interface AgentDeps {
-  /** Only used to stamp tool contexts and outgoing events; the agent has no
-   * identity of its own. */
   threadId: ThreadId;
   state: ThreadState;
   structuredToolResults: Map<ToolRequestId, ToolStructuredResult>;
-  /** The owner's answers to the agent's three questions. Arbitration between
-   * several policies is the owner's business (see `composeSupervisors`). */
   getHooks: () => AgentHooks;
-  /** "Something visible moved." Unthrottled: the recipient coalesces with a
-   * trailing-edge debounce. */
   onUpdate: OnUpdate;
-  /** Whether this agent drives a brand-new runner or one cloned from another
-   * thread's history. */
   runnerInit:
     | { type: "new" }
     | {
-        /** The source runner is cloned by this agent, so that the clone is
-         * born with this agent's hooks and never points at its source's. */
         type: "cloned";
         cloneFrom: Runner;
         truncateTo: NativeMessageIdx;
@@ -201,15 +176,9 @@ export interface AgentDeps {
 }
 
 export type SubmitOptions = {
-  /** Which kind of request this is. A "continuation" (the requests issued out
-   * of `handleStopped`) has already had `onBeforeRequest` consulted for it, so
-   * the hook is not consulted again. Defaults to "submission". */
   requestKind?: "submission" | "continuation";
 };
 
-/** Outcome of consulting the before-request hooks. `injections` is non-empty
- * only when the caller asked to receive them (`injections: "return"`) instead
- * of having them appended to the log. */
 export type BeforeRequestResult =
   | { type: "suspend"; reason: SuspendReason }
   | { type: "proceed"; injections: AgentInput[] };
@@ -217,10 +186,6 @@ export type BeforeRequestResult =
 export class Agent {
   public state: ThreadState;
   public runner: Runner;
-  /** Structured tool results by request id, kept for the lifetime of the
-   * thread (so it outlives this agent). The provider strips
-   * `structuredResult` when serializing a tool result to native form, so the
-   * rich renderers need this side channel. */
   public readonly structuredToolResults: Map<
     ToolRequestId,
     ToolStructuredResult
@@ -264,8 +229,6 @@ export class Agent {
     }
   }
 
-  /** Flush any throttled update immediately. Used at turn boundaries so the
-   * view reflects the final state before turn-end side effects run. */
   private flushUpdateNow(): void {
     if (this.updateThrottleTimer) {
       clearTimeout(this.updateThrottleTimer);
@@ -387,14 +350,8 @@ export class Agent {
     return this.runner.log.messages;
   }
 
-  /** Where the log stood before the in-flight request, so a failure can undo
-   * it. Private: rollback is the agent's own business, and it completes
-   * before the failure is reported. */
   private preSubmitNativeIdx: NativeMessageIdx | undefined;
 
-  /** Roll the agent's history back to the snapshot taken before the in-flight
-   * request. Idempotent: the snapshot is cleared, so a second failure cannot
-   * truncate to a stale index. */
   private rollbackToPreSubmit(): void {
     if (this.preSubmitNativeIdx === undefined) {
       return;
@@ -428,25 +385,16 @@ export class Agent {
     );
   }
 
-  /** The in-flight turn, if any. `runTurn` is the only thing that drives the
-   * agent forward, so this is exactly "is this thread busy". */
   private currentTurn: Promise<void> | undefined;
 
-  /** `runTurn` is the only thing that drives the runner forward, so this is
-   * exactly "is this agent busy". */
   get isBusy(): boolean {
     return (
       this.currentTurn !== undefined || this.state.mode.type === "tool_use"
     );
   }
 
-  /** Content to lead the next turn's input with. Used by compaction to seed a
-   * fresh agent with the summary before its first request. */
   private pendingTurnPrefix: AgentInput[] | undefined;
 
-  /** Lead the next turn's input with `content`. Used to inject a marker (fork
-   * notification, compaction summary) that has no turn of its own. */
-  /** Content queued by `prependToNextTurn`, not yet handed to the agent. */
   get pendingTurnContent(): ReadonlyArray<AgentInput> {
     return this.pendingTurnPrefix ?? [];
   }
@@ -455,22 +403,13 @@ export class Agent {
     this.pendingTurnPrefix = [...(this.pendingTurnPrefix ?? []), ...content];
   }
 
-  /** Set between the start of an abort and the resolution of the turn it
-   * unwinds, so the tool executor knows to report `aborted`. */
   private abortRequested = false;
 
-  /** Why the executor parked the agent. The agent never learns this; it comes
-   * back out here when the turn resolves `suspended`. */
   private suspendReason:
     | { type: "yield"; result: string; value: YieldValue }
     | { type: "supervisor"; reason: SuspendReason }
     | undefined;
 
-  /** Cumulative output tokens across the log. Messages without recorded usage
-   * — user messages, and the assistant message still streaming — contribute
-   * nothing rather than making the total unknown: this feeds a monotonic
-   * "tokens since the last reminder" gate, where an under-count only delays a
-   * reminder by one request, and an `undefined` total would stall it entirely. */
   private outputTokenCount(): number {
     let total = 0;
     for (const message of this.runner.log.messages) {
@@ -479,7 +418,6 @@ export class Agent {
     return total;
   }
 
-  /** Drive the agent until it stops, then act on why it stopped. */
   private runTurn(input: AgentInput[]): Promise<void> {
     const prefix = this.pendingTurnPrefix ?? [];
     this.pendingTurnPrefix = undefined;
@@ -526,9 +464,6 @@ export class Agent {
     await this.handleYield(reason.result, reason.value);
   }
 
-  /** Consult the before-request supervisors for the request the owner's loop
-   * is about to issue (or decline to issue). Injections are held as the next
-   * turn's prefix, since a stop is not itself a request. */
   applyStopHooks(
     kind: "continuation" | "turn-end",
     stopReason: StopReason,
@@ -542,8 +477,6 @@ export class Agent {
     return this.getLastAssistantMessage();
   }
 
-  /** A stop is the end of the agent's turn loop. Whether anything follows it
-   * is the owner's decision, so the submission settles here. */
   private handleStopped(stopReason: StopReason): void {
     this.update({ type: "set-mode", mode: { type: "normal" } });
     this.settle({ type: "completed", stopReason });
@@ -564,8 +497,6 @@ export class Agent {
         try {
           this.deps.getHooks().onToolApplied?.(absFilePath, tool, fileTypeInfo);
         } catch (error) {
-          // fire-and-forget: a throwing subscriber must not break the
-          // editedFilesThisTurn bookkeeping below.
           this.context.logger.error(
             `onToolApplied hook threw: ${error instanceof Error ? error.message : String(error)}`,
           );
@@ -592,8 +523,6 @@ export class Agent {
     };
   }
 
-  /** The agent's `executeTools` collaborator: run every requested tool to
-   * completion, then say whether the conversation proceeds. */
   private async executeTools(
     requests: ReadonlyArray<RequestedTool>,
   ): Promise<ToolOutcome> {
@@ -613,8 +542,6 @@ export class Agent {
       try {
         invocation = createTool(request, this.createToolContext());
       } catch (err) {
-        // a tool whose capability is missing must surface as a tool error
-        // rather than tearing down the turn
         results.set(requested.id, {
           status: "error",
           error: `Tool creation failed: ${(err as Error).message}`,
@@ -719,10 +646,6 @@ export class Agent {
     return { type: "continue", results };
   }
 
-  /** The runner has exhausted its retries. Roll the log back to where it stood
-   * before the failed request, so the thread is left coherent and resumable,
-   * and report the failure. Queued submissions are deliberately untouched:
-   * they were never delivered, and they go out with whatever is sent next. */
   private handleErrorState(error: Error): void {
     this.rollbackToPreSubmit();
     this.context.logger.error(error);
@@ -737,9 +660,6 @@ export class Agent {
     await this.abortAndWait();
   }
 
-  /** Cancel whichever of the two things the turn can be waiting on — the
-   * in-flight inference request (the agent's own resource) or the running
-   * tools (ours) — and wait for the turn to unwind. */
   async abortAndWait(): Promise<void> {
     this.abortRequested = true;
 
@@ -765,14 +685,8 @@ export class Agent {
     this.settle({ type: "aborted" });
   }
 
-  /** The submission currently in flight, settled at the moment the agent comes
-   * to rest. Internal continuations — auto-respond, supervisor nudges, the
-   * max_tokens continue-prompt, a rejected yield — deliberately leave it
-   * pending, so exactly one outcome is delivered per `send`. */
   private submission: Defer<SendResult> | undefined;
 
-  /** Issue a submission and resolve once the agent comes to rest.
-   */
   send(
     inputMessages?: InputMessage[],
     opts: SubmitOptions = {},
@@ -793,9 +707,6 @@ export class Agent {
     return deferred.promise;
   }
 
-  /** Deliver the outcome of the in-flight submission, if any. The final
-   * `update` goes out first so a trailing-edge debouncer paints the terminal
-   * state before the caller sees the result. */
   private settle(outcome: SendResult): void {
     const deferred = this.submission;
     this.submission = undefined;
@@ -803,8 +714,6 @@ export class Agent {
     deferred?.resolve(outcome);
   }
 
-  /** Compose and issue one provider request. Called both by `send` and by the
-   * internal continuations, which is why it never touches `submission`. */
   private async submit(
     inputMessages?: InputMessage[],
     opts: SubmitOptions = {},
@@ -820,8 +729,6 @@ export class Agent {
           );
     const { content, hasContent } = this.prepareUserContent(inputMessages);
     if (beforeRequest.type === "suspend") {
-      // The injections are already in the log; the user's own content has to
-      // join them there so the snapshot handed over carries it too.
       this.runner.appendUserMessage(toAgentInput(content), { coalesce: true });
       this.settle({ type: "suspended", reason: beforeRequest.reason });
       return;
@@ -834,8 +741,6 @@ export class Agent {
       return;
     }
 
-    // The user's own message goes last, so it is the final thing the model
-    // reads: everything else in the turn is preamble to it.
     const contentToSend: AgentInput[] = [...injections];
     contentToSend.push(...toAgentInput(content));
 
@@ -866,8 +771,6 @@ export class Agent {
         const response = action.resultPrefix
           ? `${action.resultPrefix}\n\n${yieldResult}`
           : yieldResult;
-        // A prefixed text yield reports the prefixed text; a structured yield
-        // is what the schema says it is, prefix or not.
         const value: YieldValue =
           yieldValue.type === "structured"
             ? yieldValue
@@ -897,21 +800,14 @@ export class Agent {
     }
   }
 
-  /** A yield is the end of the submission that produced it. The value was
-   * minted where the tool's input was still structured, so nothing here has to
-   * parse the response text back. */
   private settleYield(value: YieldValue): void {
     this.settle({ type: "yielded", value });
   }
 
-  /** The agent's `onBeforeToolResponse` hook: extra content to ride along
-   * with the request that carries the tool results. */
   private async buildToolResponseExtras(_args: {
     stopReason: StreamStopReason;
     results: ToolResults;
   }): Promise<AgentInput[]> {
-    // Whatever the owner drained from its async queue for this request; the
-    // agent orders it last, which is why it does not arrive as an injection.
     const queuedForThisRequest = this.pendingSubmissions;
     this.pendingSubmissions = [];
 
@@ -957,17 +853,7 @@ export class Agent {
     return await onYield(value);
   }
 
-  /** Consult the before-request hooks and apply their actions in order.
-   * Injections are appended to the message log immediately — unconditionally,
-   * so nothing the agent does next (a failure, an abort, a suspension) can
-   * lose them. Returns the suspension the list asks for, if any. */
-  /** Injections produced on the tool_use path, held until the tool results
-   * have been written. Anthropic requires the tool_result blocks to
-   * immediately follow the tool_use they answer, so injected content cannot be
-   * appended between the two — it rides `buildToolResponseExtras` instead. */
   private pendingInjections: AgentInput[] = [];
-  /** The user content the owner's `onBeforeRequest` handed over for the
-   * tool_use request, held for the same reason as `pendingInjections`. */
   private pendingSubmissions: InputMessage[] = [];
   private async applyBeforeRequestActions(
     context: RequestContextKind,
@@ -990,18 +876,12 @@ export class Agent {
           }
         : block,
     );
-    // A deferred injection would be dropped by a reset, so a suspension forces
-    // the append: the content belongs in the snapshot handed over.
     if (composed.type === "suspend") {
       this.runner.appendUserMessage(injections, { coalesce: true });
       return { type: "suspend", reason: composed.reason };
     }
     switch (mode) {
       case "prefix":
-        // A stop is not a request: whether a continuation follows is decided
-        // after the hook runs. Queuing as the next turn's prefix lands the
-        // content in the same user message as whatever goes out next —
-        // including a `send` that arrives much later.
         this.prependToNextTurn(injections);
         return { type: "proceed", injections: [] };
       case "pending":
@@ -1015,10 +895,6 @@ export class Agent {
 
   private disposed = false;
 
-  /** Abort and release this agent's own resources. The durable collaborators
-   * (context manager, git tracker, archive) belong to the owning `Thread` and
-   * are deliberately untouched: compaction disposes an agent and builds
-   * another one against the same collaborators. */
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;

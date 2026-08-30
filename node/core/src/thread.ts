@@ -27,7 +27,11 @@ import {
   pendingMessage,
   type ResolveSubmission,
 } from "./submission/index.ts";
-import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
+import {
+  noReminders,
+  type ReminderSupervisor,
+  SystemReminderSupervisor,
+} from "./system-reminder-supervisor.ts";
 import type {
   AgentHooks,
   OnUpdate,
@@ -96,7 +100,7 @@ export class Thread {
    * because the thread is what activates reminders out of message resolution
    * and what resets state on compaction. Absent for compact threads, whose
    * content their caller composes exactly. */
-  private systemReminders: SystemReminderSupervisor | undefined;
+  private systemReminders: ReminderSupervisor;
 
   constructor(
     public id: ThreadId,
@@ -185,8 +189,8 @@ export class Thread {
     return cloned;
   }
 
-  private createReminderSupervisor(): SystemReminderSupervisor | undefined {
-    if (this.context.threadType === "compact") return undefined;
+  private createReminderSupervisor(): ReminderSupervisor {
+    if (this.context.threadType === "compact") return noReminders;
     return new SystemReminderSupervisor({
       threadType: this.context.threadType,
       subagentConfig: this.context.subagentConfig,
@@ -196,7 +200,7 @@ export class Thread {
 
   /** The reminders currently in force. For rendering and tests. */
   get activeReminders(): ReadonlySet<string> {
-    return this.systemReminders?.activeReminders ?? new Set();
+    return this.systemReminders.activeReminders;
   }
 
   /** Busy from the first request of a submission until the loop comes to
@@ -385,7 +389,7 @@ export class Thread {
       };
     }
     for (const text of resolved.reminders) {
-      this.systemReminders?.activateReminder(text);
+      this.systemReminders.activateReminder(text);
     }
     return this.send(resolved.messages);
   }
@@ -493,7 +497,7 @@ export class Thread {
     try {
       const resolved = await this.callbacks.resolve(entry);
       for (const text of resolved.reminders) {
-        this.systemReminders?.activateReminder(text);
+        this.systemReminders.activateReminder(text);
       }
       return resolved;
     } catch (error) {
@@ -521,7 +525,7 @@ export class Thread {
       onBeforeRequest: (ctx) => this.beforeRequest(ctx),
       onToolResults: (results) => {
         this.hooks.onToolResults?.(results);
-        this.systemReminders?.onToolResults(results);
+        this.systemReminders.onToolResults(results);
       },
     };
   }
@@ -538,12 +542,14 @@ export class Thread {
     if (composed.type === "suspend") return composed;
     // Last, so the reminder sits after every other injection and immediately
     // before the user's own content.
-    // A `turn-end` consultation issues no request, so it must not consume
-    // reminder state. (Stage 3 removes the case entirely.)
-    const reminder =
-      ctx.kind === "turn-end"
-        ? undefined
-        : this.systemReminders?.onBeforeRequest(ctx);
+    const skipReminder =
+      // A `turn-end` consultation issues no request, so it must not consume
+      // reminder state. (Stage 3 removes the case entirely.)
+      ctx.kind === "turn-end" ||
+      (ctx.kind === "submission" && this.openingSubmissionIsEmpty);
+    const reminder = skipReminder
+      ? undefined
+      : this.systemReminders.onBeforeRequest(ctx);
     if (reminder?.type === "inject") {
       composed = {
         ...composed,
@@ -604,6 +610,10 @@ export class Thread {
     });
   }
 
+  /** A send that carried no user content: it only becomes a request if a
+   * hook contributes something, and the standing reminder does not count. */
+  private openingSubmissionIsEmpty = false;
+
   /** The turn loop's lifecycle. Non-idle from the moment `runToRest` takes
    * over until it settles: the agent looks idle between turns now that it
    * settles at every stop, so busyness is the loop's to report. `aborting`
@@ -627,6 +637,9 @@ export class Thread {
     // An abort can only target a loop that is running, so there is no stale
     // flag to clear here: `abort` leaves `idle` alone.
     this.loopState = { type: "running" };
+    // A send with no user content is not worth a request of its own, so the
+    // reminder must not manufacture one out of an empty submission.
+    this.openingSubmissionIsEmpty = messages.length === 0;
     try {
       let result = await this.agent.send(messages, opts);
       for (;;) {

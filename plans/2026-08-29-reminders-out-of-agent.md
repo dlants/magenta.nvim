@@ -69,7 +69,7 @@ export class SystemReminderSupervisor {
 - `threadType: "compact"` produces no reminders (`buildSystemReminder` already returns `undefined`; the supervisor is simply not constructed).
 - The bash-summary reminder fires on every request that carries an abbreviated bash output — no token gating, so `BASH_REMINDER_TOKEN_INTERVAL` and the `bashTokensSinceLastReminder` / `firstBashReminderPending` state disappear entirely; the flag is set by `onToolResults` and cleared when the reminder goes out.
 - The standing reminder — the skills/bash/edl/subagent block, plus the extra reminders derived from `get_files` results and markdown files in context, today's `ReminderKind: "subsequent"` — fires every `SYSTEM_REMINDER_MIN_TOKEN_INTERVAL` output tokens, and its counter resets only when it fires. Rename the kind to `"standing"` while we are here: "subsequent" only made sense against an "initial" variant that no longer exists.
-- The very first request of a thread emits no reminder (zero tokens elapsed). The reminder text is not otherwise present in the request, so this needs a test: a `<system_reminder>` block in a markdown file that is read into context, or in an agent definition, must reach the model at least once — either shipped verbatim with the content it came from, or via the first standing reminder that fires.
+- The opening request of a thread always carries the standing reminder: the system prompt does not repeat its contents, so gating it on the token interval would leave the model without it for the whole first stretch of work. After that the interval governs.
 - Compaction starts from clean reminder state: `Thread` mints a fresh `SystemReminderSupervisor` where it dispatches `reset-agent-state` today, rather than reaching into an existing one.
 
 # Stages
@@ -119,6 +119,22 @@ Test churn from the policy change (no reminder on a thread's opening request):
 - `script-manager.test.ts`'s `systemReminder` passthrough test now asserts the sentinel arrives on the continuation rather than the opening request.
 - Message-shape assertions in `thread.test.ts`, `thread-abort.test.ts` and `context-manager.test.ts` lost their leading `system_reminder` block; 12 snapshots updated.
 - Pre-existing (also fails on `main`): `node/comments/comment-input.test.ts` is order-flaky.
+
+Review follow-ups (stage 2):
+
+- `ThreadType` is narrowed to `ReminderThreadType = Exclude<ThreadType, "compact">` in `providers/system-reminders.ts`. `getStandingReminderBody` / `buildSystemReminder` now return `string` (the latter takes a non-empty `[ReminderKind, ...ReminderKind[]]`), so the supervisor's "no reminder for this thread type" guard is gone along with the two `buildSystemReminder` tests that exercised the compact case, which the type now rules out.
+- `Thread.systemReminders` is a `ReminderSupervisor` (new interface in `system-reminder-supervisor.ts`); compact threads get the `noReminders` no-op instance, so the five `?.` call sites and the `?? new Set()` fallback are gone.
+- `tool-types.ts` gained `StructuredResultFor<K>` / `structuredResultFor(result, toolName)`: `Extract` drops `GenericStructuredResult` (whose `toolName` is the branded `ToolName`, so a literal comparison narrows nothing), giving the supervisor typed access to `wasAbbreviated` / `files` without `in` probes. The one unchecked cast now lives in that helper; the `render-tools/*` casts are left alone as out of scope.
+- `extraReminders()` iterates `Object.entries(contextTracker.files)`, dropping the `as AbsFilePath` cast.
+- New `node/core/src/system-reminder-supervisor.test.ts`: opening-request fire, the token-gate boundary, the counter resetting only when the reminder fires, the bash latch firing once and clearing, and dedupe between a transient reminder and the same text derived from a context file.
+- `thread-compact.test.ts` now asserts the compact subagent's own request carries no `<system-reminder>`.
+- The `ctx.kind === "turn-end"` guard could not be pinned by a discriminating test: injections composed at a turn-end consultation are carried into the next turn anyway, so with or without the guard the reminder still reaches the model on the following submission, and the token counter lands on the same value either way. `node/core/src/thread.test.ts` instead asserts the user-visible invariant ("still carries the standing reminder on the submission after a resting turn-end"); stage 3 deletes the case.
+
+Policy amendment (mid-stage): the opening request of a thread now always carries the standing reminder — the system prompt does not repeat its contents, so gating the first one on the token interval left the model without it for the whole first stretch of work. Consequences:
+
+- `SystemReminderSupervisor` tracks `standingReminderSent` alongside the token counter.
+- An empty send must not become a request just because a reminder was available, so `Thread` records `openingSubmissionIsEmpty` in `runToRest` and skips the supervisor for that submission. (The agent's "injections alone justify a request" rule stays: `agent.test.ts` asserts a submission-time supervisor injection with no user content still issues a request.)
+- Test churn: `system-reminders.test.ts`'s opening-request test inverted; the combined standing+bash render test now expects two reminder headers; `thread.test.ts` / `thread-abort.test.ts` / `context-manager.test.ts` message-shape assertions regained the leading `system_reminder` block (block indices shifted by one in the `@diag`/`@qf`/`@buf` tests); 12 snapshots updated.
 
 ## drop the turn-end request context
 

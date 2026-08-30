@@ -45,3 +45,4 @@
 {"timestamp":"2026-08-29T23:31:49Z","query":"Agent.send failure SendResult -k 10","commit":"468d0055186445116d1174f0fc40ea97317879ee"}
 {"timestamp":"2026-08-29T23:32:10Z","query":"subagent thread start send first turn -k 8","commit":"468d0055186445116d1174f0fc40ea97317879ee"}
 {"timestamp":"2026-08-29T23:32:37Z","query":"compact thread spawn send create -k 8","commit":"468d0055186445116d1174f0fc40ea97317879ee"}
+{"timestamp":"2026-08-30T04:47:52Z","query":"composeSupervisors ThreadSupervisor construction registration","commit":"f2675774909bf10dfc4af97a0ad34f55fe1caeea"}

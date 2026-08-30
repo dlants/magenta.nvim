@@ -130,6 +130,25 @@ describe("deferred submissions", () => {
     second.finishResponse("end_turn");
   });
 
+  it("still carries the standing reminder on the submission after a resting turn-end", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("working");
+    // Enough output tokens to arm the standing reminder. Nothing is queued, so
+    // this stop issues no request; the reminder must still reach the model on
+    // the next user submission.
+    stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 5000 });
+    await pollUntil(() => {
+      if (!core.isBusy) return true;
+      throw new Error("waiting for the thread to come to rest");
+    });
+    void core.send([{ type: "user", text: "again" }]);
+    const second = await awaitNextStream(mockClient, stream);
+    const lastMessage = second.messages[second.messages.length - 1];
+    expect(JSON.stringify(lastMessage.content)).toContain("<system-reminder>");
+    second.finishResponse("end_turn");
+  });
   it("comes to rest when every queued entry fails to resolve", async () => {
     const { core, mockClient } = createAgentWithMock(
       undefined,
