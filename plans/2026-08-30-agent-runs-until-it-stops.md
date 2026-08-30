@@ -132,7 +132,7 @@ export type ComposedRequestActions = {
 
 # Stages
 
-> Status: stages 1 (hoist the loop) and 2 (max_tokens as a supervisor) are **done** and committed. Stages 3-5 are open.
+> Status: stages 1 (hoist the loop), 2 (max_tokens as a supervisor) and 3 (queues move to Thread) are **done** and committed. Stage 3 also absorbed the parts of stages 4 and 5 that it forced; see its notes. Stage 4's remaining item is the between-turns abort guard.
 
 ## hoist the loop
 
@@ -187,12 +187,29 @@ Review follow-ups (stage 2):
 - Tests: the `deferred submissions` describe (`agent.test.ts:1033-1246`) moves to `node/core/src/thread.test.ts` **unchanged in behavior** — that is the acceptance criterion. The two assertions that read `core.state.nextRequestQueue` become `core.queued`.
 - Add: a `@compact` submitted with `@async` mid-turn is not delivered on the tool-result request, is still queued after it, and suspends at the following stop. That is the `deferredCompact` deletion, tested directly.
 
+Done. What was actually built:
+
+- Both queues are private fields on `Thread` (`nextRequestQueue` / `nextStopQueue`), with `queue()`, `enqueue()`, `enqueueFront()`, `drainQueues()`, `flushQueue(delivery, "stop" | "mid-turn")` and the public `get queued(): ReadonlyArray<QueuedMessage>`. `ThreadState` has no queue fields, the four enqueue/drain `AgentAction` variants, `DEFERRED_QUEUES`, `DeferredDelivery`, `FlushedQueue`, `flushQueue`, `resolveQueued`, `requeue`, `drainQueueOnAbort`, `deferredCompact` and `deps.resolve` are gone from the agent, and `agent.ts` imports nothing from `submission/index.ts`. `DeferredDelivery` / `FlushedQueue` survive as private aliases in `thread.ts`.
+- **Mid-turn drain**: `ComposedRequestActions` gained `submissions: InputMessage[]` (always `[]` out of `composeSupervisors` — it is the owner's field). `Thread.agentHooks()` now wraps the owner's hooks before handing them to the agent, and `Thread.beforeRequest` drains the async queue into `submissions` on a `{kind:"continuation", stopReason:"tool_use"}` consultation, but only after the composed `suspend` came back empty — that is what keeps the "a suspension leaves the queues intact and unresolved" invariant. The agent holds them in `pendingSubmissions` next to `pendingInjections` and `buildToolResponseExtras` reads them where it read `flushQueue("async")` before, so the reminder/ordering logic is untouched.
+  - Consequence worth naming: `getHooks` is now a wrapper, so `onYield` / `onBeforeRequest` are always defined from the agent's point of view. Both no-op when the owner supplied nothing.
+- **`@compact` mid-turn** is detected with the pure-text `parseCompact` *before* resolving, so it is genuinely not delivered rather than resolved-and-held: it and everything behind it move to the front of the `next` queue, and the following stop's drain picks them up and suspends. This is why `deferredCompact` could be deleted outright.
+- Deviations, both forced by the queues leaving `ThreadState`:
+  - **Stage 4's abort ownership landed here.** `Agent.abort` / `abortAndWait` return `void`; `Thread.abort` awaits the agent, calls `drainQueues()` and returns `{unsent}`; `Thread.send`'s abort-then-send-now path drains and discards, which is what happened before by accident. The remaining stage-4 work is the between-turns abort guard on the loop and its test.
+  - **Stage 5's root reads landed here.** `thread-view.ts` partitions `core.queued` on `when` (keeping the continuous index) and `thread.ts` tests `core.queued.length === 0`.
+- Test layout: `createAgentWithMock` and friends moved out of `agent.test.ts` into a new **`node/core/src/test-helpers.ts`** (with `userTexts`, `awaitNextStream`, `uniqueThreadId`, `cleanupArchive`), since two test files now need them. `deferred submissions` and `Thread.abort returns the unsent queue` moved to **`node/core/src/thread.test.ts`** behaviorally unchanged; the queue assertions read `core.queued`, and the abort tests enqueue via `core.submit(pendingMessage(...), "async")` against a busy thread.
+- New test: `deferred submissions > defers an @async @compact past the request it cannot ride on` — gates a `get_files` tool on a blocked `stat`, queues `@compact wrap it up` while in tool_use, and asserts the tool-result request does not carry it, that it is sitting on the `next` queue afterwards, and that the following `end_turn` resolves `{suspended, reason:{kind:"compact", nextPrompt:"wrap it up"}}`.
+- Full suite green: `npx tsc -b`, `npx biome check .`, `npx vitest run` (1579 passed) — including `node/comments/comment-input.test.ts`, which was the known flake.
+
 ## abort ownership
 
 - Goal: `Agent.abort`/`abortAndWait` return `void`; `Thread.abort` drains and returns `{unsent}`; the loop honours an abort between turns.
 - Tests: `Thread.abort returns the unsent queue` (`agent.test.ts:1255-1313`) moves to `thread.test.ts`; its cases enqueue via `core.submit(pendingMessage(...), "async")` against a busy thread instead of `core.update({type:"enqueue-next-request"})`, which no longer exists.
 - Add: abort delivered while the loop is between turns settles `aborted` and issues no further request.
 
+Partially done in stage 3, which forced it: the signature change, `Thread.abort`'s drain, and the test move are all in. **Remaining: the between-turns abort guard on `runToRest` and its test.**
+
 ## root layer + cleanup
 
 - Goal: `thread-view.ts` and `thread.ts` read `core.queued`. `npx tsc -b`, `npx vitest run`, `npx biome check .` clean. Grep for `nextRequestQueue|nextStopQueue|DEFERRED_QUEUES` returns nothing outside `node/core/dist`.
+
+Done in stage 3, which forced it: both root readers go through `core.queued`, the three commands are clean, and `nextRequestQueue` / `nextStopQueue` survive only as private fields of `Thread`.

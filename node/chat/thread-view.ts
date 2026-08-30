@@ -528,18 +528,26 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     thread,
     dispatch,
   );
-  const pendingCount = thread.core.state.nextRequestQueue.length;
+  const queued = thread.core.queued;
+  const pendingAsync = queued.filter((q) => q.when === "async");
+  const pendingNext = queued.filter((q) => q.when === "next");
+  const pendingCount = pendingAsync.length;
   const pendingMessagesView =
     pendingCount > 0
-      ? d`\n${thread.core.state.nextRequestQueue.map((m, index) =>
-          renderPendingMessage(renderPending(m), index, thread, dispatch),
+      ? d`\n${pendingAsync.map((q, index) =>
+          renderPendingMessage(
+            renderPending(q.message),
+            index,
+            thread,
+            dispatch,
+          ),
         )}`
       : d``;
   const pendingNextMessagesView =
-    thread.core.state.nextStopQueue.length > 0
-      ? d`\n${thread.core.state.nextStopQueue.map((m, index) =>
+    pendingNext.length > 0
+      ? d`\n${pendingNext.map((q, index) =>
           renderPendingMessage(
-            renderPending(m),
+            renderPending(q.message),
             pendingCount + index,
             thread,
             dispatch,

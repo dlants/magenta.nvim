@@ -1200,10 +1200,7 @@ export class NvimThread {
         return;
 
       case "tool-progress":
-        if (
-          this.core.state.nextRequestQueue.length === 0 &&
-          this.core.state.nextStopQueue.length === 0
-        ) {
+        if (this.core.queued.length === 0) {
           this.state.pendingMessagesExpanded = {};
         }
         return;

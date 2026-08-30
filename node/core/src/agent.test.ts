@@ -1,6 +1,4 @@
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
 import type { ActiveToolEntry, AgentContext } from "./agent.ts";
@@ -13,35 +11,30 @@ import {
   runSubmission,
 } from "./compaction/index.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
-import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
-import {
-  AnthropicRunner,
-  type AnthropicRunnerOptions,
-} from "./providers/anthropic-runner.ts";
-import {
-  MockAnthropicClient,
-  type MockStream,
-} from "./providers/mock-anthropic-client.ts";
+import { AnthropicRunner } from "./providers/anthropic-runner.ts";
+import { MockAnthropicClient } from "./providers/mock-anthropic-client.ts";
 import type {
   AgentOptions,
   Provider,
   Runner,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import type { SystemPrompt } from "./providers/system-prompt.ts";
 import {
   pendingMessage,
-  type ResolveSubmission,
   renderPending,
   resolveAsText,
 } from "./submission/index.ts";
+import {
+  awaitNextStream,
+  cleanupArchive,
+  createAgentWithMock,
+  defaultAnthropicOptions,
+  TEST_ARCHIVE_DIR,
+  uniqueThreadId,
+} from "./test-helpers.ts";
 import { Thread } from "./thread.ts";
-import type {
-  QueuedMessage,
-  SendResult,
-  ThreadSendResult,
-} from "./thread-api.ts";
+import type { SendResult, ThreadSendResult } from "./thread-api.ts";
 import {
   AutoCompactSupervisor,
   composeSupervisors,
@@ -52,130 +45,9 @@ import {
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
-import { validateInput } from "./tools/helpers.ts";
-import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import { pollUntil } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
-
-const TEST_ARCHIVE_DIR = path.join(os.tmpdir(), "magenta-test-archive");
-
-const noopLogger: Logger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  trace: () => {},
-} as Logger;
-
-const defaultAnthropicOptions: AnthropicRunnerOptions = {
-  authType: "max",
-  includeWebSearch: false,
-  disableParallelToolUseFlag: true,
-  logger: noopLogger,
-  validateInput,
-};
-
-function createMockProvider(mockClient: MockAnthropicClient): Provider {
-  return {
-    createAgent(options: AgentOptions): Runner {
-      return new AnthropicRunner(
-        options,
-        mockClient as unknown as Anthropic,
-        defaultAnthropicOptions,
-      );
-    },
-    forceToolUse() {
-      throw new Error("Not implemented in mock");
-    },
-  };
-}
-
-/** Wait for a stream other than `prev`. `awaitStream` returns the most recent
- * stream, which is still the previous one until the next submission has been
- * issued — and `send` now resolves at rest rather than at issue time. */
-function awaitNextStream(
-  mockClient: MockAnthropicClient,
-  prev: unknown,
-): Promise<MockStream> {
-  return pollUntil(() => {
-    const stream = mockClient.streams[mockClient.streams.length - 1];
-    if (stream && stream !== prev && !stream.aborted) return stream;
-    throw new Error("waiting for a new stream");
-  });
-}
-
-function createAgentWithMock(
-  overrides?: Partial<AgentContext>,
-  threadId: ThreadId = "test-thread" as ThreadId,
-  resolve?: ResolveSubmission,
-): {
-  core: Thread;
-  mockClient: MockAnthropicClient;
-  context: AgentContext;
-} {
-  const mockClient = new MockAnthropicClient();
-  const provider = createMockProvider(mockClient);
-  const context: AgentContext = {
-    logger: noopLogger,
-    profile: {
-      provider: "mock",
-      model: "claude-3-5-sonnet-20241022",
-    } as ProviderProfile,
-    cwd: "/tmp" as AgentContext["cwd"],
-    homeDir: "/home" as AgentContext["homeDir"],
-    threadType: "root" as ThreadType,
-    systemPrompt: "test system prompt" as unknown as SystemPrompt,
-    systemInfo: {
-      timestamp: "Mon Jan 01 2024 00:00:00 GMT+0000",
-      platform: "linux",
-      neovimVersion: "0.10.0",
-      cwd: "/tmp" as AgentContext["cwd"],
-    },
-    mcpToolManager: {
-      serverMap: {},
-      getToolSpecs: () => [],
-    } as unknown as MCPToolManager,
-    threadManager: {
-      getThread: () => undefined,
-      getThreads: () => [],
-    } as unknown as AgentContext["threadManager"],
-    fileIO: {
-      readFile: async () => "",
-      writeFile: async () => {},
-      fileExists: async () => false,
-    } as unknown as AgentContext["fileIO"],
-    shell: {
-      exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    } as unknown as AgentContext["shell"],
-    gitClient: {
-      getState: async () => undefined,
-    } as unknown as AgentContext["gitClient"],
-    lspClient: {} as unknown as AgentContext["lspClient"],
-    availableCapabilities: new Set(),
-    environmentConfig: { type: "local" },
-    maxConcurrentSubagents: 1,
-    maxConcurrentFastSubagents: 8,
-    getAgents: () => ({}),
-    getProvider: () => provider,
-    contextTracker: { files: {} },
-    ...overrides,
-  };
-
-  return {
-    core: new Thread(
-      threadId,
-      context,
-      { onUpdate: () => {}, resolve: resolve ?? resolveAsText },
-      { type: "fresh" },
-      {
-        baseDir: TEST_ARCHIVE_DIR,
-      },
-    ),
-    mockClient,
-    context,
-  };
-}
 
 describe("Thread.phase", () => {
   it("is idle with no result before anything is sent", () => {
@@ -412,7 +284,7 @@ describe("Thread.send result", () => {
         queue: "async",
       }),
     ).toEqual({ type: "queued" });
-    expect(core.state.nextRequestQueue).toHaveLength(1);
+    expect(core.queued.filter((q) => q.when === "async")).toHaveLength(1);
     stream.streamText("hi");
     stream.finishResponse("end_turn");
     const second = await awaitNextStream(mockClient, stream);
@@ -1175,282 +1047,6 @@ describe("Agent.abort appends user abort message", () => {
   });
 });
 
-describe("deferred submissions", () => {
-  /** The text of every user message in the log, flattened. */
-  const userTexts = (core: Thread): string[] =>
-    core
-      .getProviderMessages()
-      .filter((m) => m.role === "user")
-      .flatMap((m) =>
-        typeof m.content === "string"
-          ? [m.content]
-          : m.content
-              .filter((c) => c.type === "text")
-              .map((c) => (c as { text: string }).text),
-      );
-
-  it("resolves a queued message at delivery, not when it was queued", async () => {
-    let fileContents = "before";
-    const calls: string[] = [];
-    const { core, mockClient } = createAgentWithMock(
-      undefined,
-      uniqueThreadId("deferred-resolve"),
-      (message) => {
-        calls.push(fileContents);
-        return Promise.resolve({
-          compact: false,
-          messages: [
-            { type: "user" as const, text: `${message} [${fileContents}]` },
-          ],
-          reminders: [],
-        });
-      },
-    );
-    void core.send([{ type: "user", text: "start" }]);
-    const stream = await mockClient.awaitStream();
-    expect(
-      await core.submit(pendingMessage("look at the file"), "next"),
-    ).toEqual({ type: "queued" });
-    // Nothing was resolved at queue time.
-    expect(calls).toEqual([]);
-    fileContents = "after";
-    stream.streamText("working");
-    stream.finishResponse("end_turn");
-    const second = await awaitNextStream(mockClient, stream);
-    expect(calls).toEqual(["after"]);
-    expect(userTexts(core)).toContain("look at the file [after]");
-    second.finishResponse("end_turn");
-  });
-
-  it("flushes the whole queue, in order, at one delivery point", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    void core.send([{ type: "user", text: "start" }]);
-    const stream = await mockClient.awaitStream();
-    for (const text of ["one", "two", "three"]) {
-      await core.submit(pendingMessage(text), "async");
-    }
-    expect(core.state.nextRequestQueue).toHaveLength(3);
-    stream.streamText("working");
-    stream.finishResponse("end_turn");
-    const second = await awaitNextStream(mockClient, stream);
-    expect(core.state.nextRequestQueue).toEqual([]);
-    const texts = userTexts(core);
-    expect(texts.slice(-3)).toEqual(["one", "two", "three"]);
-    second.finishResponse("end_turn");
-  });
-
-  it("drops an entry whose resolution throws, and stays usable", async () => {
-    const { core, mockClient } = createAgentWithMock(
-      undefined,
-      uniqueThreadId("deferred-throw"),
-      (message) =>
-        message === "bad"
-          ? Promise.reject(new Error("resolution failed"))
-          : Promise.resolve({
-              compact: false,
-              messages: [{ type: "user" as const, text: message }],
-              reminders: [],
-            }),
-    );
-    void core.send([{ type: "user", text: "start" }]);
-    const stream = await mockClient.awaitStream();
-    await core.submit(pendingMessage("bad"), "next");
-    await core.submit(pendingMessage("good"), "next");
-    stream.streamText("working");
-    stream.finishResponse("end_turn");
-    const second = await awaitNextStream(mockClient, stream);
-    const texts = userTexts(core);
-    expect(texts).not.toContain("bad");
-    expect(texts).toContain("good");
-    second.finishResponse("end_turn");
-    // The thread is not wedged: it still accepts and queues further work.
-    await core.submit(pendingMessage("later"), "next");
-  });
-
-  it("sends a deferred submission immediately when the agent is idle", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    // Nothing is in flight, so there is no delivery point to wait for.
-    void core.submit(pendingMessage("do it now"), "next");
-    const stream = await mockClient.awaitStream();
-    expect(core.state.nextStopQueue).toEqual([]);
-    expect(userTexts(core)).toContain("do it now");
-    stream.finishResponse("end_turn");
-  });
-
-  it("activates the reminders a queued entry resolves to", async () => {
-    const { core, mockClient } = createAgentWithMock(
-      undefined,
-      uniqueThreadId("deferred-reminder"),
-      (message) =>
-        Promise.resolve({
-          compact: false,
-          messages: [{ type: "user" as const, text: message }],
-          reminders: ["remember the file"],
-        }),
-    );
-    void core.send([{ type: "user", text: "start" }]);
-    const stream = await mockClient.awaitStream();
-    await core.submit(pendingMessage("queued"), "next");
-    expect(core.state.activeReminders.has("remember the file")).toBe(false);
-    stream.streamText("working");
-    stream.finishResponse("end_turn");
-    const second = await awaitNextStream(mockClient, stream);
-    expect(core.state.activeReminders.has("remember the file")).toBe(true);
-    second.finishResponse("end_turn");
-  });
-
-  it("comes to rest when every queued entry fails to resolve", async () => {
-    const { core, mockClient } = createAgentWithMock(
-      undefined,
-      uniqueThreadId("deferred-all-fail"),
-      () => Promise.reject(new Error("resolution failed")),
-    );
-    const sent = core.send([{ type: "user", text: "start" }]);
-    const stream = await mockClient.awaitStream();
-    await core.submit(pendingMessage("bad"), "next");
-    const streamsBefore = mockClient.streams.length;
-    stream.finishResponse("end_turn");
-    // The queue emptied into nothing, so there is no request to issue.
-    expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
-    expect(mockClient.streams.length).toBe(streamsBefore);
-    expect(core.state.nextStopQueue).toEqual([]);
-  });
-
-  it("leaves the queues intact and unresolved across a compaction handoff", async () => {
-    const threadId = uniqueThreadId("deferred-compact");
-    const calls: string[] = [];
-    const { core, mockClient } = createAgentWithMock(
-      undefined,
-      threadId,
-      (message) => {
-        calls.push(message);
-        return Promise.resolve({
-          compact: false,
-          messages: [{ type: "user" as const, text: message }],
-          reminders: [],
-        });
-      },
-    );
-    try {
-      let compacted = false;
-      core.hooks = composeSupervisors(() => [
-        {
-          onBeforeRequest: (ctx) =>
-            Promise.resolve(
-              !compacted && ctx.kind !== "submission"
-                ? {
-                    type: "suspend" as const,
-                    reason: { kind: "compact", nextPrompt: undefined },
-                  }
-                : { type: "none" as const },
-            ),
-        },
-      ]);
-      let queueAtHandoff = -1;
-      let callsAtHandoff = -1;
-      const compactor: Compactor = {
-        run: () => {
-          compacted = true;
-          queueAtHandoff = core.state.nextStopQueue.length;
-          callsAtHandoff = calls.length;
-          return Promise.resolve({
-            type: "complete",
-            summary: "SUMMARY TEXT",
-            chunkCount: 1,
-          });
-        },
-      };
-
-      void runSubmission({
-        thread: core,
-        compactor,
-        start: () => core.send([{ type: "user", text: "start" }]),
-      });
-      const stream = await mockClient.awaitStream();
-      await core.submit(pendingMessage("queued"), "next");
-      stream.finishResponse("end_turn");
-
-      // The handoff issued no request, so the queue is neither drained nor
-      // resolved: its commands must run against the world as it is at
-      // delivery, on the far side of the swap.
-      const contStream = await awaitNextStream(mockClient, stream);
-      expect(queueAtHandoff).toBe(1);
-      expect(callsAtHandoff).toBe(0);
-
-      contStream.streamText("resumed");
-      contStream.finishResponse("end_turn");
-
-      const afterStream = await awaitNextStream(mockClient, contStream);
-      expect(calls).toEqual(["queued"]);
-      expect(core.state.nextStopQueue).toEqual([]);
-      expect(userTexts(core)).toContain("queued");
-      afterStream.finishResponse("end_turn");
-    } finally {
-      await core.destroy();
-      await cleanupArchive(threadId);
-    }
-  });
-});
-
-describe("Thread.abort returns the unsent queue", () => {
-  const queuedText = (unsent: ReadonlyArray<QueuedMessage>) =>
-    unsent.map((q) => renderPending(q.message)).join("\n");
-
-  it("drains the queue and hands it back to whoever aborted", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    void core.send([{ type: "user", text: "hello" }]);
-    const stream = await mockClient.awaitStream();
-    stream.streamText("partial response");
-    core.update({
-      type: "enqueue-next-request",
-      messages: [pendingMessage("queued one"), pendingMessage("queued two")],
-    });
-    const { unsent } = await core.abort();
-    expect(core.state.nextRequestQueue).toEqual([]);
-    expect(queuedText(unsent)).toBe("queued one\nqueued two");
-  });
-
-  it("returns an empty list when nothing was queued", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    void core.send([{ type: "user", text: "hello" }]);
-    const stream = await mockClient.awaitStream();
-    stream.streamText("partial response");
-    const { unsent } = await core.abort();
-    expect(unsent).toEqual([]);
-    expect(core.state.nextRequestQueue).toEqual([]);
-  });
-
-  it("returns every queued entry; filtering is the consumer's policy", async () => {
-    const { core, mockClient } = createAgentWithMock();
-    void core.send([{ type: "user", text: "hello" }]);
-    const stream = await mockClient.awaitStream();
-    stream.streamText("partial response");
-    core.update({
-      type: "enqueue-next-request",
-      messages: [pendingMessage("queued user"), pendingMessage("queued other")],
-    });
-    const { unsent } = await core.abort();
-    expect(core.state.nextRequestQueue).toEqual([]);
-    expect(unsent).toHaveLength(2);
-    expect(queuedText(unsent)).toBe("queued user\nqueued other");
-  });
-
-  it("reports the queue for a subagent thread as well", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-    });
-    void core.send([{ type: "user", text: "do the task" }]);
-    const stream = await mockClient.awaitStream();
-    stream.streamText("partial response");
-    core.update({
-      type: "enqueue-next-request",
-      messages: [pendingMessage("queued")],
-    });
-    const { unsent } = await core.abort();
-    expect(queuedText(unsent)).toBe("queued");
-    expect(core.state.nextRequestQueue).toEqual([]);
-  });
-});
 describe("SubagentSupervisor yield tag detection", () => {
   it("nudges agent when it writes a <yield_to_parent> XML tag instead of calling the tool", async () => {
     const { core, mockClient } = createAgentWithMock({
@@ -2609,8 +2205,8 @@ describe("Agent failure rollback", () => {
     void core.send([{ type: "user", text: "and the config" }], {
       queue: "next",
     });
-    expect(core.state.nextRequestQueue).toHaveLength(1);
-    expect(core.state.nextStopQueue).toHaveLength(1);
+    expect(core.queued.filter((q) => q.when === "async")).toHaveLength(1);
+    expect(core.queued.filter((q) => q.when === "next")).toHaveLength(1);
 
     stream.respondWithError(new Error("provider failure"));
     await pollUntil(() => {
@@ -2618,8 +2214,8 @@ describe("Agent failure rollback", () => {
       throw new Error("waiting for error state");
     });
     // The queued entries were never delivered, so they stay queued.
-    expect(core.state.nextRequestQueue).toHaveLength(1);
-    expect(core.state.nextStopQueue).toHaveLength(1);
+    expect(core.queued.filter((q) => q.when === "async")).toHaveLength(1);
+    expect(core.queued.filter((q) => q.when === "next")).toHaveLength(1);
 
     void core.send([{ type: "user", text: "retry" }]);
     const retryStream = await awaitNextStream(mockClient, stream);
@@ -2731,17 +2327,6 @@ async function readArchive(threadId: ThreadId): Promise<ParsedEntry[]> {
     .split("\n")
     .filter((l) => l.length > 0)
     .map((l) => JSON.parse(l) as ParsedEntry);
-}
-
-async function cleanupArchive(threadId: ThreadId): Promise<void> {
-  const dir = path.dirname(
-    threadConversationLogPath(threadId, TEST_ARCHIVE_DIR),
-  );
-  await fs.rm(dir, { recursive: true, force: true });
-}
-
-function uniqueThreadId(prefix: string): ThreadId {
-  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}` as ThreadId;
 }
 
 describe("Agent conversation archive", () => {

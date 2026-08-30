@@ -37,11 +37,9 @@ import {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
-import type { PendingMessage, ResolveSubmission } from "./submission/index.ts";
 import type {
   AgentHooks,
   OnUpdate,
-  QueuedMessage,
   SendResult,
   YieldValue,
 } from "./thread-api.ts";
@@ -170,47 +168,16 @@ export type AgentAction =
     }
   | { type: "increment-output-tokens"; tokens: number }
   | { type: "reset-output-tokens" }
-  | { type: "enqueue-next-request"; messages: PendingMessage[] }
-  | { type: "drain-next-request-queue" }
-  | { type: "enqueue-next-stop"; messages: PendingMessage[] }
-  | { type: "drain-next-stop-queue" }
   | { type: "reset-agent-state" }
   | { type: "mark-bash-output-abbreviated" }
   | { type: "activate-reminder"; text: string }
   | { type: "reset-bash-reminder" };
-
-/** A delivery that defers: which queue holds it, and the two actions that
- * move it in and out. Kept in one table so the queue field and the drain
- * action cannot be spelled differently at the two ends. */
-export const DEFERRED_QUEUES = {
-  async: {
-    field: "nextRequestQueue",
-    enqueue: "enqueue-next-request",
-    drain: "drain-next-request-queue",
-  },
-  next: {
-    field: "nextStopQueue",
-    enqueue: "enqueue-next-stop",
-    drain: "drain-next-stop-queue",
-  },
-} as const;
-
-export type DeferredDelivery = keyof typeof DEFERRED_QUEUES;
-/** The result of draining one deferred queue: content for the next request,
- * or a compaction that the flush ran into — never both. */
-export type FlushedQueue =
-  | { type: "messages"; messages: InputMessage[] }
-  | { type: "compact"; nextPrompt: string | undefined };
 
 export type ThreadState = {
   title: string | undefined;
   threadType: ThreadType;
   systemPrompt: SystemPrompt;
   systemInfo: SystemInfo;
-  /** flushed in full when the next provider request is issued (@async) */
-  nextRequestQueue: PendingMessage[];
-  /** flushed in full the next time the agent comes to rest (@next) */
-  nextStopQueue: PendingMessage[];
   mode: ThreadMode;
   edlRegisters: EdlRegisters;
   outputTokensSinceLastReminder: number;
@@ -240,9 +207,6 @@ export interface AgentDeps {
   /** "Something visible moved." Unthrottled: the recipient coalesces with a
    * trailing-edge debounce. */
   onUpdate: OnUpdate;
-  /** Turns queued `PendingMessage`s into content, at the moment they are
-   * delivered rather than when they were queued. */
-  resolve: ResolveSubmission;
   /** Whether this agent drives a brand-new runner or one cloned from another
    * thread's history. */
   runnerInit:
@@ -362,18 +326,6 @@ export class Agent {
         break;
       case "reset-output-tokens":
         this.state.outputTokensSinceLastReminder = 0;
-        break;
-      case "enqueue-next-request":
-        this.state.nextRequestQueue.push(...action.messages);
-        break;
-      case "drain-next-request-queue":
-        this.state.nextRequestQueue = [];
-        break;
-      case "enqueue-next-stop":
-        this.state.nextStopQueue.push(...action.messages);
-        break;
-      case "drain-next-stop-queue":
-        this.state.nextStopQueue = [];
         break;
       case "reset-agent-state":
         this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
@@ -551,9 +503,6 @@ export class Agent {
   /** Set between the start of an abort and the resolution of the turn it
    * unwinds, so the tool executor knows to report `aborted`. */
   private abortRequested = false;
-  /** A `@compact` that the async queue produced mid-turn, already resolved,
-   * waiting for the stop where the handoff can actually happen. */
-  private deferredCompact: { nextPrompt: string | undefined } | undefined;
 
   /** Why the executor parked the agent. The agent never learns this; it comes
    * back out here when the turn resolves `suspended`. */
@@ -632,64 +581,6 @@ export class Agent {
     await this.handleYield(reason.result, reason.value);
   }
 
-  /** Drain one deferred queue, resolving each entry at delivery. Public only
-   * until the queues themselves move to `Thread`. */
-  flushQueue(delivery: DeferredDelivery): Promise<FlushedQueue> {
-    const { field, drain } = DEFERRED_QUEUES[delivery];
-    const entries = [...this.state[field]];
-    this.update({ type: drain }, { silent: true });
-    return this.resolveQueued(entries, delivery);
-  }
-  /** Resolve queued entries in order. An entry whose resolution throws is
-   * dropped with a visible error rather than wedging the turn loop.
-   *
-   * A `@compact` entry ends the flush: it becomes the compaction's follow-up
-   * prompt (with anything resolved ahead of it folded in, since there is no
-   * request left to carry it), and the entries behind it go back on the queue
-   * to be flushed after the handoff. */
-  private async resolveQueued(
-    entries: ReadonlyArray<PendingMessage>,
-    delivery: DeferredDelivery,
-  ): Promise<FlushedQueue> {
-    const messages: InputMessage[] = [];
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      try {
-        const resolved = await this.deps.resolve(entry);
-        if (resolved.compact) {
-          this.requeue(entries.slice(i + 1), delivery);
-          return {
-            type: "compact",
-            nextPrompt:
-              [...messages, ...resolved.messages]
-                .map((m) => m.text)
-                .join("\n")
-                .trim() || undefined,
-          };
-        }
-        for (const text of resolved.reminders) {
-          this.update({ type: "activate-reminder", text }, { silent: true });
-        }
-        messages.push(...resolved.messages);
-      } catch (error) {
-        this.context.logger.error(
-          `Failed to resolve queued message: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-    return { type: "messages", messages };
-  }
-  private requeue(
-    entries: ReadonlyArray<PendingMessage>,
-    delivery: DeferredDelivery,
-  ): void {
-    if (!entries.length) return;
-    this.update(
-      { type: DEFERRED_QUEUES[delivery].enqueue, messages: [...entries] },
-      { silent: true },
-    );
-  }
-
   /** Consult the before-request supervisors for the request the owner's loop
    * is about to issue (or decline to issue). Injections are held as the next
    * turn's prefix, since a stop is not itself a request. */
@@ -710,15 +601,6 @@ export class Agent {
    * is the owner's decision, so the submission settles here. */
   private handleStopped(stopReason: StopReason): void {
     this.update({ type: "set-mode", mode: { type: "normal" } });
-    const deferred = this.deferredCompact;
-    this.deferredCompact = undefined;
-    if (deferred) {
-      this.settle({
-        type: "suspended",
-        reason: { kind: "compact", ...deferred },
-      });
-      return;
-    }
     this.settle({ type: "completed", stopReason });
   }
 
@@ -900,22 +782,18 @@ export class Agent {
     this.settle({ type: "failed", error, discardedSubmission: true });
   }
 
-  /** The queue drained by the abort in flight, handed to whoever aborted. */
-  private unsentOnAbort: QueuedMessage[] = [];
-
-  async abort(): Promise<{ unsent: QueuedMessage[] }> {
+  async abort(): Promise<void> {
     // A yielded thread has already completed its work — don't overwrite its state.
     if (this.state.mode.type === "yielded") {
-      return { unsent: [] };
+      return;
     }
-    return await this.abortAndWait();
+    await this.abortAndWait();
   }
 
   /** Cancel whichever of the two things the turn can be waiting on — the
    * in-flight inference request (the agent's own resource) or the running
    * tools (ours) — and wait for the turn to unwind. */
-  async abortAndWait(): Promise<{ unsent: QueuedMessage[] }> {
-    this.unsentOnAbort = [];
+  async abortAndWait(): Promise<void> {
     this.abortRequested = true;
 
     if (this.state.mode.type === "tool_use") {
@@ -931,30 +809,13 @@ export class Agent {
     } else {
       this.finishAbort();
     }
-    return { unsent: this.unsentOnAbort };
   }
 
   private finishAbort(): void {
     this.abortRequested = false;
     this.deps.onUpdate();
-    this.drainQueueOnAbort();
     this.update({ type: "set-mode", mode: { type: "normal" } });
     this.settle({ type: "aborted" });
-  }
-
-  /** Drain the queue on abort and hand the debris back to whoever aborted.
-   * Nothing is broadcast: the caller gets its own return value. */
-  private drainQueueOnAbort(): void {
-    this.unsentOnAbort = [
-      ...this.state.nextRequestQueue.map(
-        (message): QueuedMessage => ({ when: "async", message }),
-      ),
-      ...this.state.nextStopQueue.map(
-        (message): QueuedMessage => ({ when: "next", message }),
-      ),
-    ];
-    this.update({ type: "drain-next-request-queue" });
-    this.update({ type: "drain-next-stop-queue" });
   }
 
   /** The submission currently in flight, settled at the moment the agent comes
@@ -1154,17 +1015,11 @@ export class Agent {
       }
     }
 
-    // A `@compact` cannot be honoured mid-turn — there is no place to hand
-    // the transcript over from — so it moves to the `next` queue and takes
-    // effect at the earliest point where it can: the next stop.
-    const asyncFlush = this.state.nextRequestQueue.length
-      ? await this.flushQueue("async")
-      : undefined;
-    if (asyncFlush?.type === "compact") {
-      this.deferredCompact = { nextPrompt: asyncFlush.nextPrompt };
-    }
-    const queuedForThisRequest =
-      asyncFlush?.type === "messages" ? asyncFlush.messages : [];
+    // Whatever the owner drained from its async queue for this request; the
+    // agent orders it last and applies the reminder/token-reset rules to it,
+    // which is why it does not arrive as an injection.
+    const queuedForThisRequest = this.pendingSubmissions;
+    this.pendingSubmissions = [];
 
     const contentToSend: AgentInput[] = [...this.pendingInjections];
     this.pendingInjections = [];
@@ -1278,13 +1133,20 @@ export class Agent {
    * immediately follow the tool_use they answer, so injected content cannot be
    * appended between the two — it rides `buildToolResponseExtras` instead. */
   private pendingInjections: AgentInput[] = [];
+  /** The user content the owner's `onBeforeRequest` handed over for the
+   * tool_use request, held for the same reason as `pendingInjections`. */
+  private pendingSubmissions: InputMessage[] = [];
   private async applyBeforeRequestActions(
     context: RequestContextKind,
     mode: "prefix" | "pending" | "return",
   ): Promise<BeforeRequestResult> {
     const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
     if (!onBeforeRequest) return { type: "proceed", injections: [] };
-    const { injections: content, suspend } = await onBeforeRequest({
+    const {
+      injections: content,
+      submissions,
+      suspend,
+    } = await onBeforeRequest({
       ...context,
       inputTokenCount: this.runner.log.inputTokenCount,
       isFirstMessage: this.getProviderMessages().length === 0,
@@ -1314,6 +1176,7 @@ export class Agent {
         return { type: "proceed", injections: [] };
       case "pending":
         this.pendingInjections.push(...injections);
+        this.pendingSubmissions.push(...submissions);
         return { type: "proceed", injections: [] };
       case "return":
         return { type: "proceed", injections };

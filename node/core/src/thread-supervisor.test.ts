@@ -28,6 +28,7 @@ describe("composeSupervisors onBeforeRequest", () => {
         { type: "text", text: "first" },
         { type: "text", text: "second" },
       ],
+      submissions: [],
       suspend: undefined,
     });
   });
@@ -42,6 +43,7 @@ describe("composeSupervisors onBeforeRequest", () => {
     ]);
     expect(await hooks.onBeforeRequest?.(context)).toEqual({
       injections: [{ type: "text", text: "note" }],
+      submissions: [],
       suspend: { reason: { kind: "compact", nextPrompt: "go" } },
     });
   });
@@ -53,6 +55,7 @@ describe("composeSupervisors onBeforeRequest", () => {
     ]);
     expect(await hooks.onBeforeRequest?.(context)).toEqual({
       injections: [],
+      submissions: [],
       suspend: { reason: { kind: "compact", nextPrompt: "go" } },
     });
   });
@@ -64,6 +67,7 @@ describe("composeSupervisors onBeforeRequest", () => {
     const hooks = composeSupervisors(() => [quiet, {}]);
     expect(await hooks.onBeforeRequest?.(context)).toEqual({
       injections: [],
+      submissions: [],
       suspend: undefined,
     });
   });

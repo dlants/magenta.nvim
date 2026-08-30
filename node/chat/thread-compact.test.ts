@@ -1809,7 +1809,7 @@ it("defers a @next @compact until the turn in flight comes to rest", async () =>
     await driver.inputMagentaText("@next @compact Now do multiplication");
     await driver.send();
     await pollUntil(() => {
-      if (!thread.core.state.nextStopQueue.length)
+      if (!thread.core.queued.filter((q) => q.when === "next").length)
         throw new Error("waiting for the message to be queued");
     });
     expect(isCompacting(thread)).toBe(false);

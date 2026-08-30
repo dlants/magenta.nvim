@@ -1,3 +1,4 @@
+import type { InputMessage } from "./agent.ts";
 import type { OnToolApplied } from "./capabilities/context-tracker.ts";
 import type { CompactSuspendReason } from "./compaction/index.ts";
 import type {
@@ -60,6 +61,11 @@ export function injectText(
  * at most one suspension — the shape cannot represent a contradictory plan. */
 export type ComposedRequestActions = {
   injections: InjectedContent[];
+  /** The user's own content, delivered at this request. Distinct from
+   * `injections` because the agent orders it last and applies the
+   * reminder/token-reset rules to it. Supervisors never produce it — the
+   * owning `Thread` fills it in from its async queue. */
+  submissions: InputMessage[];
   suspend: { reason: SuspendReason } | undefined;
 };
 
@@ -108,7 +114,7 @@ export function composeSupervisors(
         else if (action.type === "suspend")
           suspend ??= { reason: action.reason };
       }
-      return { injections, suspend };
+      return { injections, submissions: [], suspend };
     },
     onToolApplied: (absFilePath, tool, fileTypeInfo) => {
       for (const sup of getSupervisors()) {

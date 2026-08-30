@@ -2,8 +2,6 @@ import {
   Agent,
   type AgentContext,
   type AgentDeps,
-  DEFERRED_QUEUES,
-  type DeferredDelivery,
   type InputMessage,
   type SubmitOptions,
   type ThreadState,
@@ -25,10 +23,12 @@ import {
   compactPrompt,
   type Delivery,
   type PendingMessage,
+  parseCompact,
   pendingMessage,
   type ResolveSubmission,
 } from "./submission/index.ts";
 import type {
+  AgentHooks,
   OnUpdate,
   QueuedMessage,
   SendOptions,
@@ -39,7 +39,11 @@ import type {
   ThreadSendResult,
 } from "./thread-api.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
-import type { SuspendReason } from "./thread-supervisor.ts";
+import type {
+  ComposedRequestActions,
+  RequestContext,
+  SuspendReason,
+} from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
@@ -59,6 +63,15 @@ export type ThreadInit =
       provenance: ForkProvenance;
       edlRegisters: EdlRegisters;
     };
+
+/** Which of the two deferred queues an entry sits in. */
+type DeferredDelivery = "async" | "next";
+
+/** The result of draining one queue: content for the next request, or a
+ * compaction the flush ran into — never both. */
+type FlushedQueue =
+  | { type: "messages"; messages: InputMessage[] }
+  | { type: "compact"; nextPrompt: string | undefined };
 
 export type ThreadCallbacks = {
   onUpdate: OnUpdate;
@@ -107,8 +120,6 @@ export class Thread {
       threadType: context.threadType,
       systemPrompt: context.systemPrompt,
       systemInfo: context.systemInfo,
-      nextRequestQueue: [],
-      nextStopQueue: [],
       mode: { type: "normal" },
       edlRegisters:
         init.type === "clone"
@@ -260,9 +271,8 @@ export class Thread {
       threadId: this.id,
       state: this.state,
       structuredToolResults: this.structuredToolResults,
-      getHooks: () => this.hooks,
+      getHooks: () => this.agentHooks(),
       onUpdate: () => this.handleUpdate(),
-      resolve: (message) => this.callbacks.resolve(message),
       runnerInit,
     });
   }
@@ -321,8 +331,13 @@ export class Thread {
     this.threadLogger.recordTitle(title);
   }
 
+  /** Abort the in-flight turn and hand back whatever never went out. The
+   * queues are the thread's, so the debris is the thread's to report. */
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
-    return await this.agent.abort();
+    await this.agent.abort();
+    const unsent = this.drainQueues();
+    if (unsent.length) this.handleUpdate();
+    return { unsent };
   }
 
   get result(): Promise<ThreadResult> {
@@ -357,14 +372,133 @@ export class Thread {
     return this.send(resolved.messages);
   }
 
+  /** Flushed in full when the next provider request is issued (@async). */
+  private nextRequestQueue: PendingMessage[] = [];
+  /** Flushed in full the next time the thread comes to rest (@next). */
+  private nextStopQueue: PendingMessage[] = [];
+
+  /** Everything waiting for a delivery point, in the order it will go out.
+   * For rendering; nothing may branch on it for control flow. */
+  get queued(): ReadonlyArray<QueuedMessage> {
+    return [
+      ...this.nextRequestQueue.map(
+        (message): QueuedMessage => ({ when: "async", message }),
+      ),
+      ...this.nextStopQueue.map(
+        (message): QueuedMessage => ({ when: "next", message }),
+      ),
+    ];
+  }
+
+  private queue(delivery: DeferredDelivery): PendingMessage[] {
+    return delivery === "async" ? this.nextRequestQueue : this.nextStopQueue;
+  }
+
   private enqueue(
     messages: PendingMessage[],
     delivery: DeferredDelivery,
   ): void {
-    this.update(
-      { type: DEFERRED_QUEUES[delivery].enqueue, messages },
-      { silent: true },
-    );
+    this.queue(delivery).push(...messages);
+  }
+
+  /** Empty both queues and hand the debris back. Nothing is broadcast: the
+   * caller gets its own return value. */
+  private drainQueues(): QueuedMessage[] {
+    const unsent = this.queued.map((q) => ({ ...q }));
+    this.nextRequestQueue = [];
+    this.nextStopQueue = [];
+    return unsent;
+  }
+
+  /** Drain one queue, resolving each entry at the moment it is delivered.
+   * An entry whose resolution throws is dropped with a visible error rather
+   * than wedging the turn loop.
+   *
+   * A `@compact` entry ends the flush. At a stop it becomes the compaction's
+   * follow-up prompt (with anything resolved ahead of it folded in, since
+   * there is no request left to carry it) and the entries behind it go back
+   * on the queue. Mid-turn there is no place to hand the transcript over
+   * from, so the compaction is not resolved at all: it and everything behind
+   * it move to the `next` queue, where the following stop picks them up. */
+  private async flushQueue(
+    delivery: DeferredDelivery,
+    when: "stop" | "mid-turn",
+  ): Promise<FlushedQueue> {
+    const entries = this.queue(delivery).splice(0);
+    const messages: InputMessage[] = [];
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      if (when === "mid-turn" && parseCompact(entry).compact) {
+        this.nextStopQueue.unshift(...entries.slice(i));
+        return { type: "messages", messages };
+      }
+      try {
+        const resolved = await this.callbacks.resolve(entry);
+        if (resolved.compact) {
+          this.enqueueFront(entries.slice(i + 1), delivery);
+          return {
+            type: "compact",
+            nextPrompt:
+              [...messages, ...resolved.messages]
+                .map((m) => m.text)
+                .join("\n")
+                .trim() || undefined,
+          };
+        }
+        for (const text of resolved.reminders) {
+          this.update({ type: "activate-reminder", text }, { silent: true });
+        }
+        messages.push(...resolved.messages);
+      } catch (error) {
+        this.context.logger.error(
+          `Failed to resolve queued message: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    return { type: "messages", messages };
+  }
+
+  private enqueueFront(
+    entries: ReadonlyArray<PendingMessage>,
+    delivery: DeferredDelivery,
+  ): void {
+    if (!entries.length) return;
+    this.queue(delivery).unshift(...entries);
+  }
+
+  /** The agent's view of the owner's hooks. `onEndTurn` is filtered out
+   * structurally by `AgentHooks`; `onBeforeRequest` is wrapped so the async
+   * queue is drained into the request that carries the tool results. */
+  private agentHooks(): AgentHooks {
+    return {
+      ...this.hooks,
+      onBeforeRequest: (ctx) => this.beforeRequest(ctx),
+    };
+  }
+
+  private async beforeRequest(
+    ctx: RequestContext,
+  ): Promise<ComposedRequestActions> {
+    const composed = (await this.hooks.onBeforeRequest?.(ctx)) ?? {
+      injections: [],
+      submissions: [],
+      suspend: undefined,
+    };
+    // A suspension leaves the queues intact and unresolved: their commands
+    // must run against the world as it is when they are finally delivered.
+    if (
+      composed.suspend ||
+      ctx.kind !== "continuation" ||
+      ctx.stopReason !== "tool_use" ||
+      !this.nextRequestQueue.length
+    ) {
+      return composed;
+    }
+    const flushed = await this.flushQueue("async", "mid-turn");
+    return {
+      ...composed,
+      submissions: flushed.type === "messages" ? flushed.messages : [],
+    };
   }
 
   async send(
@@ -386,6 +520,8 @@ export class Thread {
         return { type: "queued" };
       }
       await this.agent.abortAndWait();
+      // Sending now supersedes whatever was waiting on the aborted turn.
+      this.drainQueues();
     }
 
     const result = this.followSubmission(this.runToRest(messages));
@@ -486,7 +622,7 @@ export class Thread {
     // while this resolution is running lands in the next flush.
     const messages: InputMessage[] = [];
     for (const delivery of ["async", "next"] as const) {
-      const flushed = await this.agent.flushQueue(delivery);
+      const flushed = await this.flushQueue(delivery, "stop");
       if (flushed.type === "compact") {
         return {
           type: "suspended",
@@ -512,7 +648,7 @@ export class Thread {
     | undefined {
     if (
       stopReason === "end_turn" &&
-      (this.state.nextRequestQueue.length || this.state.nextStopQueue.length)
+      (this.nextRequestQueue.length || this.nextStopQueue.length)
     ) {
       return { type: "queues" };
     }
@@ -583,17 +719,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
   }): Promise<void> {
     const previousAgent = this.agent;
     this.agent = this.createAgent({ type: "new" });
-    // Disposing the old agent drains its queues, but queued submissions belong
-    // to the thread, so they are carried across the swap — still unresolved,
-    // so their commands run on the far side of the reset.
-    const carried = {
-      async: [...this.state.nextRequestQueue],
-      next: [...this.state.nextStopQueue],
-    };
     await previousAgent.dispose();
-    for (const delivery of ["async", "next"] as const) {
-      if (carried[delivery].length) this.enqueue(carried[delivery], delivery);
-    }
 
     if (archive.type === "compaction") {
       this.threadLogger.recordCompaction({
