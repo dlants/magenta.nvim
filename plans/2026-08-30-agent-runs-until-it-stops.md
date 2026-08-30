@@ -200,6 +200,20 @@ Done. What was actually built:
 - New test: `deferred submissions > defers an @async @compact past the request it cannot ride on` — gates a `get_files` tool on a blocked `stat`, queues `@compact wrap it up` while in tool_use, and asserts the tool-result request does not carry it, that it is sitting on the `next` queue afterwards, and that the following `end_turn` resolves `{suspended, reason:{kind:"compact", nextPrompt:"wrap it up"}}`.
 - Full suite green: `npx tsc -b`, `npx biome check .`, `npx vitest run` (1579 passed) — including `node/comments/comment-input.test.ts`, which was the known flake.
 
+### Review follow-ups (stage 3)
+
+- **The two flush modes are two methods.** `flushQueue(delivery, when)` is split into `flushAtStop(delivery): Promise<FlushedQueue>` and `flushMidTurn(): Promise<InputMessage[]>`. The mid-turn path could never return a `compact`, so its caller was forced into a dead `flushed.type === "messages" ? ... : []` branch that would have silently dropped messages; that branch is gone, along with the never-valid `("next", "mid-turn")` combination. Per-entry resolution (reminders + the drop-on-throw guard) is shared in a new private `resolveQueued`.
+- **`ComposedRequestActions` is a discriminated union**, and the supervisor result is a separate type:
+  - `ComposedSupervisorActions = {type:"suspend"; reason; injections} | {type:"proceed"; injections}` — what `composeSupervisors` returns and what `ThreadHooks.onBeforeRequest` answers.
+  - `ComposedRequestActions` adds `submissions` to the **proceed** variant only, so "suspended *and* carrying user content" is unrepresentable rather than avoided by an early return. Injections deliberately survive a suspension (the agent appends them into the handed-over snapshot), so the suspend variant keeps them.
+  - `ThreadHooks` is now `Omit<AgentHooks, "onBeforeRequest"> & {onEndTurn?; onBeforeRequest?}` rather than a plain superset, since the two layers answer different shapes.
+- **`Thread.queued` is grouped**: `{ async: ReadonlyArray<PendingMessage>; next: ReadonlyArray<PendingMessage> }`, plus `queuedCount`. The `.filter((q) => q.when === ...)` string-tag re-derivation is gone from `thread-view.ts` and from ~40 test assertions. The flat `QueuedMessage[]` shape survives only where it is actually plural-with-provenance: `Thread.abort`'s `unsent` debris.
+- `test-helpers.ts`: `awaitNextStream`'s `prev` is typed `MockStream | undefined`, and the `as unknown as` context stubs go through a `stub<T>(partial: Partial<T>): T` helper so field names and types are checked against the real interface. This immediately caught two dead mocks — `threadManager.getThread`/`getThreads` and `shell.exec` are not members of `ThreadManager`/`Shell` — which are now empty stubs.
+- New tests in `thread.test.ts`:
+  - `Thread.send while busy > discards the queues when the caller sends now instead` — the previously untested load-bearing `drainQueues()` on the abort-then-send-now path.
+  - `deferred submissions > folds entries ahead of a stop-time @compact in, and re-queues the rest` — `["first", "@compact wrap up", "third"]` on the `next` queue suspends with `nextPrompt: "first\nwrap up"` and leaves `"third"` queued.
+- Full suite green: `npx tsc -b`, `npx biome check .`, `npx vitest run` (1581 passed).
+
 ## abort ownership
 
 - Goal: `Agent.abort`/`abortAndWait` return `void`; `Thread.abort` drains and returns `{unsent}`; the loop honours an abort between turns.

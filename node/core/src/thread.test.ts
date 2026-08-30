@@ -60,11 +60,11 @@ describe("deferred submissions", () => {
     for (const text of ["one", "two", "three"]) {
       await core.submit(pendingMessage(text), "async");
     }
-    expect(core.queued.filter((q) => q.when === "async")).toHaveLength(3);
+    expect(core.queued.async).toHaveLength(3);
     stream.streamText("working");
     stream.finishResponse("end_turn");
     const second = await awaitNextStream(mockClient, stream);
-    expect(core.queued.filter((q) => q.when === "async")).toEqual([]);
+    expect(core.queued.async).toEqual([]);
     const texts = userTexts(core);
     expect(texts.slice(-3)).toEqual(["one", "two", "three"]);
     second.finishResponse("end_turn");
@@ -103,7 +103,7 @@ describe("deferred submissions", () => {
     // Nothing is in flight, so there is no delivery point to wait for.
     void core.submit(pendingMessage("do it now"), "next");
     const stream = await mockClient.awaitStream();
-    expect(core.queued.filter((q) => q.when === "next")).toEqual([]);
+    expect(core.queued.next).toEqual([]);
     expect(userTexts(core)).toContain("do it now");
     stream.finishResponse("end_turn");
   });
@@ -144,7 +144,7 @@ describe("deferred submissions", () => {
     // The queue emptied into nothing, so there is no request to issue.
     expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
     expect(mockClient.streams.length).toBe(streamsBefore);
-    expect(core.queued.filter((q) => q.when === "next")).toEqual([]);
+    expect(core.queued.next).toEqual([]);
   });
 
   it("defers an @async @compact past the request it cannot ride on", async () => {
@@ -196,9 +196,7 @@ describe("deferred submissions", () => {
     // request carrying the tool results goes out without it.
     const toolResultStream = await awaitNextStream(mockClient, stream);
     expect(userTexts(core)).not.toContain("wrap it up");
-    expect(core.queued).toEqual([
-      { when: "next", message: pendingMessage("@compact wrap it up") },
-    ]);
+    expect(core.queued.next).toEqual([pendingMessage("@compact wrap it up")]);
 
     // The next stop is the earliest point where it can take effect.
     toolResultStream.finishResponse("end_turn");
@@ -206,6 +204,36 @@ describe("deferred submissions", () => {
       type: "suspended",
       reason: { kind: "compact", nextPrompt: "wrap it up" },
     });
+  });
+
+  it("folds entries ahead of a stop-time @compact in, and re-queues the rest", async () => {
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("deferred-stop-compact"),
+      (message) => {
+        const { compact, rest } = parseCompact(message);
+        return Promise.resolve({
+          compact,
+          messages: rest.length ? [{ type: "user" as const, text: rest }] : [],
+          reminders: [],
+        });
+      },
+    );
+    const sent = core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    for (const text of ["first", "@compact wrap up", "third"]) {
+      await core.submit(pendingMessage(text), "next");
+    }
+    stream.finishResponse("end_turn");
+
+    // There is no request left to carry "first", so it folds into the prompt
+    // the compaction hands to the next generation.
+    expect(await sent).toEqual({
+      type: "suspended",
+      reason: { kind: "compact", nextPrompt: "first\nwrap up" },
+    });
+    // Everything behind the compaction keeps its place in the queue.
+    expect(core.queued.next).toEqual([pendingMessage("third")]);
   });
 
   it("leaves the queues intact and unresolved across a compaction handoff", async () => {
@@ -243,7 +271,7 @@ describe("deferred submissions", () => {
       const compactor: Compactor = {
         run: () => {
           compacted = true;
-          queueAtHandoff = core.queued.filter((q) => q.when === "next").length;
+          queueAtHandoff = core.queued.next.length;
           callsAtHandoff = calls.length;
           return Promise.resolve({
             type: "complete",
@@ -274,13 +302,35 @@ describe("deferred submissions", () => {
 
       const afterStream = await awaitNextStream(mockClient, contStream);
       expect(calls).toEqual(["queued"]);
-      expect(core.queued.filter((q) => q.when === "next")).toEqual([]);
+      expect(core.queued.next).toEqual([]);
       expect(userTexts(core)).toContain("queued");
       afterStream.finishResponse("end_turn");
     } finally {
       await core.destroy();
       await cleanupArchive(threadId);
     }
+  });
+});
+
+describe("Thread.send while busy", () => {
+  it("discards the queues when the caller sends now instead", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    void core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("working");
+    await core.submit(pendingMessage("queued async"), "async");
+    await core.submit(pendingMessage("queued next"), "next");
+
+    // Sending now supersedes whatever was waiting on the aborted turn.
+    void core.send([{ type: "user", text: "never mind, do this" }]);
+    const second = await awaitNextStream(mockClient, stream);
+    expect(core.queued.async).toEqual([]);
+    expect(core.queued.next).toEqual([]);
+    const texts = userTexts(core);
+    expect(texts).not.toContain("queued async");
+    expect(texts).not.toContain("queued next");
+    expect(texts).toContain("never mind, do this");
+    second.finishResponse("end_turn");
   });
 });
 
@@ -300,7 +350,7 @@ describe("Thread.abort returns the unsent queue", () => {
       await core.submit(text, "async");
     }
     const { unsent } = await core.abort();
-    expect(core.queued.filter((q) => q.when === "async")).toEqual([]);
+    expect(core.queued.async).toEqual([]);
     expect(queuedText(unsent)).toBe("queued one\nqueued two");
   });
 
@@ -311,7 +361,7 @@ describe("Thread.abort returns the unsent queue", () => {
     stream.streamText("partial response");
     const { unsent } = await core.abort();
     expect(unsent).toEqual([]);
-    expect(core.queued.filter((q) => q.when === "async")).toEqual([]);
+    expect(core.queued.async).toEqual([]);
   });
 
   it("returns every queued entry; filtering is the consumer's policy", async () => {
@@ -326,7 +376,7 @@ describe("Thread.abort returns the unsent queue", () => {
       await core.submit(text, "async");
     }
     const { unsent } = await core.abort();
-    expect(core.queued.filter((q) => q.when === "async")).toEqual([]);
+    expect(core.queued.async).toEqual([]);
     expect(unsent).toHaveLength(2);
     expect(queuedText(unsent)).toBe("queued user\nqueued other");
   });
@@ -343,6 +393,6 @@ describe("Thread.abort returns the unsent queue", () => {
     }
     const { unsent } = await core.abort();
     expect(queuedText(unsent)).toBe("queued");
-    expect(core.queued.filter((q) => q.when === "async")).toEqual([]);
+    expect(core.queued.async).toEqual([]);
   });
 });

@@ -58,16 +58,25 @@ export function injectText(
 
 /** The composed result of consulting every supervisor before a request. A
  * plural collaboration reduced to a single decision: all the injections, and
- * at most one suspension — the shape cannot represent a contradictory plan. */
-export type ComposedRequestActions = {
-  injections: InjectedContent[];
-  /** The user's own content, delivered at this request. Distinct from
-   * `injections` because the agent orders it last and applies the
-   * reminder/token-reset rules to it. Supervisors never produce it — the
-   * owning `Thread` fills it in from its async queue. */
-  submissions: InputMessage[];
-  suspend: { reason: SuspendReason } | undefined;
-};
+ * at most one suspension. Injections survive a suspension — they belong in
+ * the snapshot handed over. */
+export type ComposedSupervisorActions =
+  | { type: "suspend"; reason: SuspendReason; injections: InjectedContent[] }
+  | { type: "proceed"; injections: InjectedContent[] };
+
+/** What the agent's `onBeforeRequest` hook answers: the supervisors' decision
+ * plus, on the proceed path, the user's own queued content. `submissions` is
+ * separate from `injections` because the agent orders it last and applies the
+ * reminder/token-reset rules to it, and it is absent from the suspend variant
+ * because a suspension must leave the queues undelivered. Only the owning
+ * `Thread` fills it in, from its async queue. */
+export type ComposedRequestActions =
+  | { type: "suspend"; reason: SuspendReason; injections: InjectedContent[] }
+  | {
+      type: "proceed";
+      injections: InjectedContent[];
+      submissions: InputMessage[];
+    };
 
 /** Fold a list of supervisors into the single `ThreadHooks` set a `Thread`
  * consults. The merge rules are exactly today's: `send-message` texts join
@@ -114,7 +123,9 @@ export function composeSupervisors(
         else if (action.type === "suspend")
           suspend ??= { reason: action.reason };
       }
-      return { injections, submissions: [], suspend };
+      return suspend
+        ? { type: "suspend", reason: suspend.reason, injections }
+        : { type: "proceed", injections };
     },
     onToolApplied: (absFilePath, tool, fileTypeInfo) => {
       for (const sup of getSupervisors()) {

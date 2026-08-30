@@ -377,17 +377,18 @@ export class Thread {
   /** Flushed in full the next time the thread comes to rest (@next). */
   private nextStopQueue: PendingMessage[] = [];
 
-  /** Everything waiting for a delivery point, in the order it will go out.
-   * For rendering; nothing may branch on it for control flow. */
-  get queued(): ReadonlyArray<QueuedMessage> {
-    return [
-      ...this.nextRequestQueue.map(
-        (message): QueuedMessage => ({ when: "async", message }),
-      ),
-      ...this.nextStopQueue.map(
-        (message): QueuedMessage => ({ when: "next", message }),
-      ),
-    ];
+  /** Everything waiting for a delivery point, grouped by the point it waits
+   * for and in the order it will go out. For rendering; nothing may branch on
+   * it for control flow. */
+  get queued(): {
+    async: ReadonlyArray<PendingMessage>;
+    next: ReadonlyArray<PendingMessage>;
+  } {
+    return { async: this.nextRequestQueue, next: this.nextStopQueue };
+  }
+
+  get queuedCount(): number {
+    return this.nextRequestQueue.length + this.nextStopQueue.length;
   }
 
   private queue(delivery: DeferredDelivery): PendingMessage[] {
@@ -404,58 +405,85 @@ export class Thread {
   /** Empty both queues and hand the debris back. Nothing is broadcast: the
    * caller gets its own return value. */
   private drainQueues(): QueuedMessage[] {
-    const unsent = this.queued.map((q) => ({ ...q }));
+    const unsent: QueuedMessage[] = [
+      ...this.nextRequestQueue.map(
+        (message): QueuedMessage => ({ when: "async", message }),
+      ),
+      ...this.nextStopQueue.map(
+        (message): QueuedMessage => ({ when: "next", message }),
+      ),
+    ];
     this.nextRequestQueue = [];
     this.nextStopQueue = [];
     return unsent;
   }
 
-  /** Drain one queue, resolving each entry at the moment it is delivered.
-   * An entry whose resolution throws is dropped with a visible error rather
-   * than wedging the turn loop.
+  /** Drain one queue at a stop, resolving each entry at the moment it is
+   * delivered. An entry whose resolution throws is dropped with a visible
+   * error rather than wedging the turn loop.
    *
-   * A `@compact` entry ends the flush. At a stop it becomes the compaction's
-   * follow-up prompt (with anything resolved ahead of it folded in, since
-   * there is no request left to carry it) and the entries behind it go back
-   * on the queue. Mid-turn there is no place to hand the transcript over
-   * from, so the compaction is not resolved at all: it and everything behind
-   * it move to the `next` queue, where the following stop picks them up. */
-  private async flushQueue(
-    delivery: DeferredDelivery,
-    when: "stop" | "mid-turn",
-  ): Promise<FlushedQueue> {
+   * A `@compact` entry ends the flush: it becomes the compaction's follow-up
+   * prompt (with anything resolved ahead of it folded in, since there is no
+   * request left to carry it) and the entries behind it go back on the
+   * queue. */
+  private async flushAtStop(delivery: DeferredDelivery): Promise<FlushedQueue> {
     const entries = this.queue(delivery).splice(0);
     const messages: InputMessage[] = [];
     for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      if (when === "mid-turn" && parseCompact(entry).compact) {
-        this.nextStopQueue.unshift(...entries.slice(i));
-        return { type: "messages", messages };
+      const resolved = await this.resolveQueued(entries[i]);
+      if (!resolved) continue;
+      if (resolved.compact) {
+        this.enqueueFront(entries.slice(i + 1), delivery);
+        return {
+          type: "compact",
+          nextPrompt:
+            [...messages, ...resolved.messages]
+              .map((m) => m.text)
+              .join("\n")
+              .trim() || undefined,
+        };
       }
-      try {
-        const resolved = await this.callbacks.resolve(entry);
-        if (resolved.compact) {
-          this.enqueueFront(entries.slice(i + 1), delivery);
-          return {
-            type: "compact",
-            nextPrompt:
-              [...messages, ...resolved.messages]
-                .map((m) => m.text)
-                .join("\n")
-                .trim() || undefined,
-          };
-        }
-        for (const text of resolved.reminders) {
-          this.update({ type: "activate-reminder", text }, { silent: true });
-        }
-        messages.push(...resolved.messages);
-      } catch (error) {
-        this.context.logger.error(
-          `Failed to resolve queued message: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      messages.push(...resolved.messages);
     }
     return { type: "messages", messages };
+  }
+
+  /** Drain the async queue into the request that is about to carry the tool
+   * results. A `@compact` cannot ride such a request — there is no place to
+   * hand the transcript over from — so it is detected before resolution and
+   * genuinely not delivered: it and everything behind it move to the `next`
+   * queue, where the following stop picks them up. */
+  private async flushMidTurn(): Promise<InputMessage[]> {
+    const entries = this.nextRequestQueue.splice(0);
+    const messages: InputMessage[] = [];
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      if (parseCompact(entry).compact) {
+        this.nextStopQueue.unshift(...entries.slice(i));
+        return messages;
+      }
+      const resolved = await this.resolveQueued(entry);
+      if (resolved) messages.push(...resolved.messages);
+    }
+    return messages;
+  }
+
+  /** Resolve one entry, activating its reminders. An entry whose resolution
+   * throws is dropped with a visible error rather than wedging the turn
+   * loop. */
+  private async resolveQueued(entry: PendingMessage) {
+    try {
+      const resolved = await this.callbacks.resolve(entry);
+      for (const text of resolved.reminders) {
+        this.update({ type: "activate-reminder", text }, { silent: true });
+      }
+      return resolved;
+    } catch (error) {
+      this.context.logger.error(
+        `Failed to resolve queued message: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return undefined;
+    }
   }
 
   private enqueueFront(
@@ -480,25 +508,20 @@ export class Thread {
     ctx: RequestContext,
   ): Promise<ComposedRequestActions> {
     const composed = (await this.hooks.onBeforeRequest?.(ctx)) ?? {
+      type: "proceed" as const,
       injections: [],
-      submissions: [],
-      suspend: undefined,
     };
     // A suspension leaves the queues intact and unresolved: their commands
     // must run against the world as it is when they are finally delivered.
+    if (composed.type === "suspend") return composed;
     if (
-      composed.suspend ||
       ctx.kind !== "continuation" ||
       ctx.stopReason !== "tool_use" ||
       !this.nextRequestQueue.length
     ) {
-      return composed;
+      return { ...composed, submissions: [] };
     }
-    const flushed = await this.flushQueue("async", "mid-turn");
-    return {
-      ...composed,
-      submissions: flushed.type === "messages" ? flushed.messages : [],
-    };
+    return { ...composed, submissions: await this.flushMidTurn() };
   }
 
   async send(
@@ -622,7 +645,7 @@ export class Thread {
     // while this resolution is running lands in the next flush.
     const messages: InputMessage[] = [];
     for (const delivery of ["async", "next"] as const) {
-      const flushed = await this.flushQueue(delivery, "stop");
+      const flushed = await this.flushAtStop(delivery);
       if (flushed.type === "compact") {
         return {
           type: "suspended",

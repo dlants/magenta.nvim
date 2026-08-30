@@ -9,6 +9,7 @@ import type {
 import type { PendingMessage } from "./submission/index.ts";
 import type {
   ComposedRequestActions,
+  ComposedSupervisorActions,
   EndTurnAction,
   EndTurnContext,
   RequestContext,
@@ -143,9 +144,12 @@ export type AgentHooks = {
 /** What the owning `Thread` answers. A superset of `AgentHooks`: the turn
  * loop lives in `Thread`, so the end-of-turn question is asked there and the
  * agent never sees it. */
-export type ThreadHooks = AgentHooks & {
+export type ThreadHooks = Omit<AgentHooks, "onBeforeRequest"> & {
   /** The runner stopped without yielding. */
   onEndTurn?: (ctx: EndTurnContext) => EndTurnAction;
+  /** The supervisors' own decision. It has no `submissions`: queued user
+   * content is the thread's, and `Thread` wraps this hook to add it. */
+  onBeforeRequest?: (ctx: RequestContext) => Promise<ComposedSupervisorActions>;
 };
 
 /** "Something visible moved." No payload: read `phase`. Called at streaming

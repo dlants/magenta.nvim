@@ -270,6 +270,7 @@ export type {
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
   ComposedRequestActions,
+  ComposedSupervisorActions,
   EndTurnAction,
   EndTurnContext,
   PlainStopSuspendReason,

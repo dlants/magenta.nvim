@@ -284,7 +284,7 @@ describe("Thread.send result", () => {
         queue: "async",
       }),
     ).toEqual({ type: "queued" });
-    expect(core.queued.filter((q) => q.when === "async")).toHaveLength(1);
+    expect(core.queued.async).toHaveLength(1);
     stream.streamText("hi");
     stream.finishResponse("end_turn");
     const second = await awaitNextStream(mockClient, stream);
@@ -2205,8 +2205,8 @@ describe("Agent failure rollback", () => {
     void core.send([{ type: "user", text: "and the config" }], {
       queue: "next",
     });
-    expect(core.queued.filter((q) => q.when === "async")).toHaveLength(1);
-    expect(core.queued.filter((q) => q.when === "next")).toHaveLength(1);
+    expect(core.queued.async).toHaveLength(1);
+    expect(core.queued.next).toHaveLength(1);
 
     stream.respondWithError(new Error("provider failure"));
     await pollUntil(() => {
@@ -2214,8 +2214,8 @@ describe("Agent failure rollback", () => {
       throw new Error("waiting for error state");
     });
     // The queued entries were never delivered, so they stay queued.
-    expect(core.queued.filter((q) => q.when === "async")).toHaveLength(1);
-    expect(core.queued.filter((q) => q.when === "next")).toHaveLength(1);
+    expect(core.queued.async).toHaveLength(1);
+    expect(core.queued.next).toHaveLength(1);
 
     void core.send([{ type: "user", text: "retry" }]);
     const retryStream = await awaitNextStream(mockClient, stream);

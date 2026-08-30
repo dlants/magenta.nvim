@@ -1142,16 +1142,12 @@ export class Agent {
   ): Promise<BeforeRequestResult> {
     const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
     if (!onBeforeRequest) return { type: "proceed", injections: [] };
-    const {
-      injections: content,
-      submissions,
-      suspend,
-    } = await onBeforeRequest({
+    const composed = await onBeforeRequest({
       ...context,
       inputTokenCount: this.runner.log.inputTokenCount,
       isFirstMessage: this.getProviderMessages().length === 0,
     });
-    const injections: AgentInput[] = content.map((block) =>
+    const injections: AgentInput[] = composed.injections.map((block) =>
       block.type === "text"
         ? {
             type: "text" as const,
@@ -1162,9 +1158,9 @@ export class Agent {
     );
     // A deferred injection would be dropped by a reset, so a suspension forces
     // the append: the content belongs in the snapshot handed over.
-    if (suspend) {
+    if (composed.type === "suspend") {
       this.runner.appendUserMessage(injections, { coalesce: true });
-      return { type: "suspend", reason: suspend.reason };
+      return { type: "suspend", reason: composed.reason };
     }
     switch (mode) {
       case "prefix":
@@ -1176,7 +1172,7 @@ export class Agent {
         return { type: "proceed", injections: [] };
       case "pending":
         this.pendingInjections.push(...injections);
-        this.pendingSubmissions.push(...submissions);
+        this.pendingSubmissions.push(...composed.submissions);
         return { type: "proceed", injections: [] };
       case "return":
         return { type: "proceed", injections };

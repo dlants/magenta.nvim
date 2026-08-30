@@ -65,13 +65,20 @@ export function createMockProvider(mockClient: MockAnthropicClient): Provider {
  * issued — and `send` now resolves at rest rather than at issue time. */
 export function awaitNextStream(
   mockClient: MockAnthropicClient,
-  prev: unknown,
+  prev: MockStream | undefined,
 ): Promise<MockStream> {
   return pollUntil(() => {
     const stream = mockClient.streams[mockClient.streams.length - 1];
     if (stream && stream !== prev && !stream.aborted) return stream;
     throw new Error("waiting for a new stream");
   });
+}
+
+/** A partial test double, checked field-by-field against the real interface:
+ * the names and types of what is supplied must still line up, so a change to
+ * the interface surfaces here rather than being swallowed by a cast. */
+function stub<T>(partial: Partial<T>): T {
+  return partial as T;
 }
 
 export function createAgentWithMock(
@@ -101,26 +108,21 @@ export function createAgentWithMock(
       neovimVersion: "0.10.0",
       cwd: "/tmp" as AgentContext["cwd"],
     },
-    mcpToolManager: {
+    mcpToolManager: stub<MCPToolManager>({
       serverMap: {},
       getToolSpecs: () => [],
-    } as unknown as MCPToolManager,
-    threadManager: {
-      getThread: () => undefined,
-      getThreads: () => [],
-    } as unknown as AgentContext["threadManager"],
-    fileIO: {
+    }),
+    threadManager: stub<AgentContext["threadManager"]>({}),
+    fileIO: stub<AgentContext["fileIO"]>({
       readFile: async () => "",
       writeFile: async () => {},
       fileExists: async () => false,
-    } as unknown as AgentContext["fileIO"],
-    shell: {
-      exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    } as unknown as AgentContext["shell"],
-    gitClient: {
+    }),
+    shell: stub<AgentContext["shell"]>({}),
+    gitClient: stub<AgentContext["gitClient"]>({
       getState: async () => undefined,
-    } as unknown as AgentContext["gitClient"],
-    lspClient: {} as unknown as AgentContext["lspClient"],
+    }),
+    lspClient: stub<AgentContext["lspClient"]>({}),
     availableCapabilities: new Set(),
     environmentConfig: { type: "local" },
     maxConcurrentSubagents: 1,
