@@ -162,7 +162,7 @@ export type ThreadHooks = Omit<AgentHooks, "onBeforeRequest"> & {
   onBeforeRequest?: (ctx: RequestContext) => Promise<ComposedSupervisorActions>;
   /** Whether any supervisor would contribute content to a request issued
    * right now. Must not commit any "sent" state. */
-  hasPendingContent?: () => Promise<boolean>;
+  hasPendingContent: () => Promise<boolean>;
 };
 
 /** "Something visible moved." No payload: read `phase`. Called at streaming

@@ -127,6 +127,29 @@ describe("GitTracker", () => {
     );
   });
 
+  it("peeks a pending update without committing the agent view", async () => {
+    const changed = { ...base, branch: "feature" };
+    const tracker = new GitTracker(clientFor([changed]), base, noopLogger);
+    expect(await tracker.hasUpdate()).toBe(true);
+    expect(await tracker.hasUpdate()).toBe(true);
+    expect((await tracker.getUpdate())?.current?.branch).toBe("feature");
+  });
+  it("peeks false when nothing worth reporting changed", async () => {
+    const tracker = new GitTracker(
+      clientFor([{ ...base, untrackedCount: 5 }]),
+      base,
+      noopLogger,
+    );
+    expect(await tracker.hasUpdate()).toBe(false);
+  });
+  it("peeks false when reading git state throws", async () => {
+    const tracker = new GitTracker(
+      { getState: () => Promise.reject(new Error("git is down")) },
+      base,
+      noopLogger,
+    );
+    expect(await tracker.hasUpdate()).toBe(false);
+  });
   it("commits the agent view so a change is reported only once", async () => {
     const changed = { ...base, branch: "feature" };
     const tracker = new GitTracker(clientFor([changed]), base, noopLogger);

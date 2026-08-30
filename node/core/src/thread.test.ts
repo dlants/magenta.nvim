@@ -601,6 +601,23 @@ describe("empty send gate", () => {
     await sent;
   });
 
+  it("supersedes an empty send whose probe is still in flight", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const probe = new Defer<boolean>();
+    core.hooks = composeSupervisors(() => [
+      { hasPendingContent: () => probe.promise },
+    ]);
+    const first = core.send([]);
+    const second = core.send([{ type: "user", text: "go" }]);
+    probe.resolve(true);
+    expect(await first).toEqual({ type: "aborted" });
+    const stream = await mockClient.awaitStream();
+    expect(mockClient.streams.length).toBe(1);
+    expect(core.isBusy).toBe(true);
+    stream.finishResponse("end_turn");
+    expect(await second).toEqual({ type: "completed", stopReason: "end_turn" });
+    expect(core.isBusy).toBe(false);
+  });
   it("does not consume pending content when the send is gated off", async () => {
     const { core, mockClient } = createAgentWithMock();
     let available = false;

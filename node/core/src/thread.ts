@@ -89,7 +89,9 @@ export type ThreadCallbacks = {
 export class Thread {
   public state: ThreadState;
   public agent: Agent;
-  public hooks: ThreadHooks = {};
+  public hooks: ThreadHooks = {
+    hasPendingContent: () => Promise.resolve(false),
+  };
   /** Kept for the lifetime of the thread, so they outlive any one agent. */
   readonly structuredToolResults = new Map<
     ToolRequestId,
@@ -355,7 +357,7 @@ export class Thread {
    * queues are the thread's, so the debris is the thread's to report. */
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
     if (this.loopState.type === "running")
-      this.loopState = { type: "aborting" };
+      this.loopState = { type: "aborting", epoch: this.loopState.epoch };
     await this.agent.abort();
     const unsent = this.drainQueues();
     if (unsent.length) this.handleUpdate();
@@ -608,12 +610,11 @@ export class Thread {
    * reminder, the system-info preamble — does not count, and the probe must
    * not consume anything, since the request may never be issued. */
   private async hasPendingContent(): Promise<boolean> {
-    return (await this.hooks.hasPendingContent?.()) ?? false;
+    return await this.hooks.hasPendingContent();
   }
 
-  /** Claimed by each turn loop as it starts. A loop that finds the epoch
-   * moved on has been superseded by a newer send and must not touch the
-   * agent. */
+  /** Bumped for each turn loop as it starts, and carried in `loopState`, so
+   * "am I still the current loop" is a property of the state. */
   private sendEpoch = 0;
 
   /** The turn loop's lifecycle. Non-idle from the moment `runToRest` takes
@@ -623,10 +624,10 @@ export class Thread {
    * nothing in flight to interrupt — still stops the loop. */
   private loopState:
     | { type: "idle" }
-    | { type: "running" }
-    | { type: "aborting" } = { type: "idle" };
-  private isAborting(): boolean {
-    return this.loopState.type === "aborting";
+    | { type: "running"; epoch: number }
+    | { type: "aborting"; epoch: number } = { type: "idle" };
+  private isAborting(epoch: number): boolean {
+    return this.loopState.type === "aborting" && this.loopState.epoch === epoch;
   }
 
   /** Drive the agent until nothing more should be sent. The agent stops at
@@ -639,13 +640,15 @@ export class Thread {
     // An abort can only target a loop that is running, so there is no stale
     // flag to clear here: `abort` leaves `idle` alone.
     const epoch = ++this.sendEpoch;
-    this.loopState = { type: "running" };
+    this.loopState = { type: "running", epoch };
+    const isCurrentLoop = () =>
+      this.loopState.type !== "idle" && this.loopState.epoch === epoch;
     try {
       if (!messages.length) {
         const pending = await this.hasPendingContent();
         // Probing takes time, and a send that arrived while it ran owns the
         // loop now: this one is over before it touched the agent.
-        if (this.sendEpoch !== epoch) return { type: "aborted" };
+        if (!isCurrentLoop()) return { type: "aborted" };
         if (!pending) return { type: "completed", stopReason: undefined };
       }
       let result = await this.agent.send(messages, opts);
@@ -660,7 +663,7 @@ export class Thread {
         if (result.stopReason === undefined) return result;
 
         const next = await this.continuation(result.stopReason);
-        if (this.isAborting()) return { type: "aborted" };
+        if (this.isAborting(epoch)) return { type: "aborted" };
         switch (next.type) {
           case "rest":
             return result;
@@ -684,7 +687,7 @@ export class Thread {
         }
       }
     } finally {
-      if (this.sendEpoch === epoch) this.loopState = { type: "idle" };
+      if (isCurrentLoop()) this.loopState = { type: "idle" };
     }
   }
 

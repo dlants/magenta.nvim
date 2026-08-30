@@ -45,7 +45,7 @@ import {
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
-import { pollUntil } from "./utils/async.ts";
+import { Defer, delay, pollUntil } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
 
@@ -1678,6 +1678,7 @@ describe("AutoCompactSupervisor integration", () => {
     const events: string[] = [];
     let continuationOutputTokens: number | undefined;
     core.hooks = {
+      hasPendingContent: () => Promise.resolve(false),
       onToolResults: (results) => {
         events.push(`results:${results.size}`);
       },
@@ -1733,6 +1734,7 @@ describe("AutoCompactSupervisor integration", () => {
     });
     const events: string[] = [];
     core.hooks = {
+      hasPendingContent: () => Promise.resolve(false),
       onToolResults: (results) => {
         events.push(`results:${results.size}`);
       },
@@ -1765,6 +1767,7 @@ describe("AutoCompactSupervisor integration", () => {
     });
     const events: string[] = [];
     core.hooks = {
+      hasPendingContent: () => Promise.resolve(false),
       onToolResults: (results) => {
         events.push(`results:${results.size}`);
       },
@@ -1790,6 +1793,24 @@ describe("AutoCompactSupervisor integration", () => {
     expect(events).toEqual(["request:submission", "results:1"]);
   });
 
+  it("drops a submission aborted while its before-request hooks are in flight", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const gate = new Defer<void>();
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: async () => {
+          await gate.promise;
+          return injectText("late note");
+        },
+      },
+    ]);
+    const sent = core.send([{ type: "user", text: "hello" }]);
+    await core.abort();
+    gate.resolve();
+    expect(await sent).toEqual({ type: "aborted" });
+    await delay(10);
+    expect(mockClient.streams.length).toBe(0);
+  });
   it("issues a request for a submission-time injection with no user content", async () => {
     const { core, mockClient } = createAgentWithMock();
     core.hooks = composeSupervisors(() => [

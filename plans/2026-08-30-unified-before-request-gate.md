@@ -240,6 +240,22 @@ Probes available for `hasPendingContent`, all already non-committing:
     (Pre-existing hazard; the extra await made it reproducible — it was breaking
     `comment-input.test.ts` "scopes comment controllers to the root thread".)
 
+### Review follow-ups
+
+- `loopState` now carries the generation (`{ idle } | { running; epoch } |
+  { aborting; epoch }`), so "am I still the current loop" is a property of the
+  state rather than a parallel `sendEpoch` comparison; `isAborting(epoch)` is
+  epoch-scoped too.
+- `ThreadHooks.hasPendingContent` is required (still optional per-supervisor);
+  `Thread.hooks` defaults to a `false` probe, and the `?? false` fallback is gone.
+- Added tests for the three previously-untested pieces: the supersession race
+  (`thread.test.ts` "supersedes an empty send whose probe is still in flight",
+  driving the probe with a `Defer`), the `Agent.submit` post-composition
+  submission re-check (`agent.test.ts` "drops a submission aborted while its
+  before-request hooks are in flight"), and `GitTracker.hasUpdate` (three cases
+  in `git-tracker.test.ts`: non-committing peek, no-op change, throw path). Both
+  race tests were verified to fail with their guard removed.
+
 ## Single gate at the top of the turn loop
 
 - Goal: `onBeforeContinuation` becomes `onBeforeRequest`, fired at the top of every
