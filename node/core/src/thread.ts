@@ -670,23 +670,15 @@ export class Thread {
             return result;
           case "suspended":
             return { type: "suspended", reason: next.reason };
-          case "messages": {
+          case "messages":
+          case "flushed": {
             const continued = await this.agent.send(next.messages, {
-              continuationOf: stopReason,
+              requestKind: { kind: "continuation", stopReason },
             });
-            if (
-              continued.type === "suspended" &&
-              continued.reason.kind === "compact" &&
-              next.carry
-            ) {
+            if (continued.type === "suspended" && next.type === "flushed") {
               return {
                 type: "suspended",
-                reason: {
-                  ...continued.reason,
-                  nextPrompt: [continued.reason.nextPrompt, next.carry]
-                    .filter((part): part is string => Boolean(part))
-                    .join("\n\n"),
-                },
+                reason: this.carryOntoSuspension(continued.reason, next.carry),
               };
             }
             // A continuation rolls back only as far as its own request, so
@@ -710,12 +702,14 @@ export class Thread {
   /** What follows this stop, if anything. A stop that issues no request never
    * reaches the before-request supervisors: the resting case is `onEndTurn`'s,
    * which is where auto-compaction gets to suspend a thread at rest. */
-  private async continuation(
-    stopReason: StopReason,
-  ): Promise<
+  private async continuation(stopReason: StopReason): Promise<
     | { type: "rest" }
     | { type: "suspended"; reason: SuspendReason }
-    | { type: "messages"; messages: InputMessage[]; carry?: string }
+    | { type: "messages"; messages: InputMessage[] }
+    /** Messages drained from a queue. Resolving them ran their effects and
+     * emptied the queue, so if the request they were flushed for never goes
+     * out, `carry` (always non-empty) has to travel on the suspension. */
+    | { type: "flushed"; messages: InputMessage[]; carry: string }
   > {
     const planned = this.plannedContinuation(stopReason);
     if (planned.type === "suspend") {
@@ -744,14 +738,34 @@ export class Thread {
     // Resolved queue content is spent: if the request it was flushed for is
     // suspended, it has to travel on the handoff rather than be resolved a
     // second time, so it is handed back for that.
-    return {
-      type: "messages",
-      messages,
-      carry: messages
-        .map((m) => m.text)
-        .join("\n")
-        .trim(),
-    };
+    const carry = messages
+      .map((m) => m.text)
+      .join("\n")
+      .trim();
+    return carry
+      ? { type: "flushed", messages, carry }
+      : { type: "messages", messages };
+  }
+  /** Spent queue content — resolved, so not resolvable again — has to survive
+   * the suspension of the request it was flushed for. */
+  private carryOntoSuspension(reason: SuspendReason, carry: string) {
+    switch (reason.kind) {
+      case "compact":
+        // The log is about to be thrown away, so the content travels on the
+        // handoff and is delivered by the post-compaction request.
+        return {
+          ...reason,
+          nextPrompt: reason.nextPrompt
+            ? `${reason.nextPrompt}\n\n${carry}`
+            : carry,
+        };
+      case "stop":
+        // The runner appends a suspended request's input to the log anyway, so
+        // the content is already in place for whatever resumes the thread.
+        return reason;
+      default:
+        return assertUnreachable(reason);
+    }
   }
 
   /** Decided before anything is resolved or drained, because a stop that ends

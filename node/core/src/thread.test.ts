@@ -305,6 +305,47 @@ describe("deferred submissions", () => {
     expect(core.queued.next).toEqual([pendingMessage("third")]);
   });
 
+  it("keeps a queue flushed for a stop-suspended request for the next request", async () => {
+    const threadId = uniqueThreadId("deferred-stop-suspend");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      let suspend = true;
+      core.hooks = composeSupervisors(() => [
+        {
+          onBeforeRequest: (ctx) =>
+            Promise.resolve(
+              suspend && ctx.kind !== "submission"
+                ? {
+                    type: "suspend" as const,
+                    reason: { kind: "stop" as const, message: "halt" },
+                  }
+                : { type: "none" as const },
+            ),
+        },
+      ]);
+      const first = core.send([{ type: "user", text: "start" }]);
+      const stream = await mockClient.awaitStream();
+      await core.submit(pendingMessage("queued"), "next");
+      stream.finishResponse("end_turn");
+      // The stop flushed the queue for a request the gate then refused. The
+      // content is spent — it cannot be resolved again — so it is held for
+      // whatever request this thread issues next.
+      expect(await first).toEqual({
+        type: "suspended",
+        reason: { kind: "stop", message: "halt" },
+      });
+      expect(core.queued.next).toEqual([]);
+      expect(userTexts(core)).toContain("queued");
+      suspend = false;
+      void core.send([{ type: "user", text: "resume" }]);
+      const resumed = await awaitNextStream(mockClient, stream);
+      expect(userTexts(core).filter((t) => t === "queued")).toHaveLength(1);
+      resumed.finishResponse("end_turn");
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
   it("carries a queue flushed for a suspended request onto the handoff", async () => {
     const threadId = uniqueThreadId("deferred-compact");
     const calls: string[] = [];

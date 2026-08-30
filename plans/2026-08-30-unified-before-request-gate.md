@@ -325,6 +325,34 @@ Probes available for `hasPendingContent`, all already non-committing:
   The stage-1 race test was restructured to resolve its gate before awaiting the
   abort; the race it guarded against is now structurally impossible.
 
+### Review follow-ups
+
+- `SubmitOptions.continuationOf?: StreamStopReason` became
+  `requestKind?: RequestContextKind`, so the two cases are the existing precise
+  type rather than an optional field the callee reassembles.
+- The gate's per-request state is now an explicit
+  `pendingRequest: { type: "opening"; kind } | undefined`; the opening/continuation
+  distinction (which kind, whether to coalesce, whether to take the turn prefix)
+  reads off that variant instead of off the presence of one field. The seeded
+  prefix is still *stored* on `pendingTurnPrefix` and taken by the gate rather
+  than carried on `pendingRequest`: a turn that never reaches the gate (disposed,
+  aborted at the guards) must leave it for the next one.
+- `continuationKind()` no longer fabricates a `tool_use` stop reason. A mid-turn
+  gate always follows a finished assistant message, so the absence of one throws.
+  `ProviderMessage.stopReason` stays optional — an aborted assistant turn
+  legitimately has none.
+- `Thread.continuation`'s `carry` moved out of the `messages` variant into a
+  `flushed` variant carrying a non-empty `carry`, so the empty string is not a
+  second encoding of "nothing to carry" and the type predicate in the join is
+  gone. `carryOntoSuspension` switches on the suspend reason.
+- On a `stop` suspension there is nothing to carry after all: the runner appends
+  a suspended request's input to the log, so the flushed content is already in
+  place for whatever resumes the thread. Only a compaction, which throws the log
+  away, needs the handoff. `thread.test.ts` "keeps a queue flushed for a
+  stop-suspended request for the next request" pins that (delivered exactly once,
+  queue emptied).
+- `onBeforeRequest` reads the composed result inside a `switch` on its variant.
+
 ## Drop the request kind
 
 - Goal: `RequestContext` carries only token counts. `SystemInfoSupervisor` tracks
