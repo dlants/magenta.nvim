@@ -88,6 +88,12 @@ Notes:
 - Deviation: `AnthropicRunner` rebuilt `cachedProviderMessages` *before* recording `messageStopInfo` for a finished message, so the last message's `usage`/`stopReason` only appeared one rebuild later. Reordered those two lines; two `getMessages()` snapshots (`thread-abort.test.ts`, `thread.test.ts`) gained the now-present `usage`/`stopReason` on the final assistant message and were updated.
 - Test-only churn: every `RequestContext` literal in supervisor tests gained `outputTokenCount: 0`.
 
+Review follow-ups (stage 1):
+
+- `onToolResults` fires unconditionally, including on turns that abort or yield and issue no continuation. That is deliberate — a consumer accumulating state off results (abbreviated bash output) needs it carried into the next request even if that request belongs to a later turn — and is now documented on the hook in `thread-api.ts` and covered by two tests (`agent.test.ts`: abort during tool_use, yield_to_parent).
+- `outputTokenCount` stays `number` with a 0 fallback for messages lacking usage: it feeds a monotonic "tokens since the last reminder" gate, where an under-count costs at most one request of delay and an `undefined` would stall the gate. Documented at the definition. Test extended to a second tool turn, asserting the cumulative sum (42 + 8) rather than the last message's usage.
+- Reviewer also suggested turning `ProviderMessage` into a streaming/finished discriminated union to remove the optional `usage`/`stopReason`. Declined for this stage: it touches every provider, runner and snapshot, and is unrelated to pulling reminders out of the agent.
+
 ## reminder supervisor
 
 - Goal: `SystemReminderSupervisor` implements the full policy; `Thread` owns it, feeds it `onToolResults`, routes resolved-message reminders into it, re-mints it on compaction, and appends its injections in `beforeRequest`. All reminder state and logic deleted from `Agent` and `ThreadState`.

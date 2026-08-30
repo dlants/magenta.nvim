@@ -515,6 +515,11 @@ export class Agent {
    * reminder token counters. */
   private usageAccountedCount = 0;
 
+  /** Cumulative output tokens across the log. Messages without recorded usage
+   * — user messages, and the assistant message still streaming — contribute
+   * nothing rather than making the total unknown: this feeds a monotonic
+   * "tokens since the last reminder" gate, where an under-count only delays a
+   * reminder by one request, and an `undefined` total would stall it entirely. */
   private outputTokenCount(): number {
     let total = 0;
     for (const message of this.runner.log.messages) {

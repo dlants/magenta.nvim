@@ -1649,8 +1649,89 @@ describe("AutoCompactSupervisor integration", () => {
       "request:continuation",
     ]);
     expect(continuationOutputTokens).toBe(42);
-    nextStream.streamText("done");
-    nextStream.finishResponse("end_turn");
+    // A second tool turn: the count accumulates across finished assistant
+    // messages, and the in-flight one (no usage yet) contributes nothing.
+    nextStream.streamToolUse("edl-2" as ToolRequestId, "edl" as ToolName, {
+      script: "nonsense",
+    });
+    nextStream.finishResponse("tool_use", { inputTokens: 1, outputTokens: 8 });
+    const thirdStream = await awaitNextStream(mockClient, nextStream);
+    expect(continuationOutputTokens).toBe(50);
+    thirdStream.streamText("done");
+    thirdStream.finishResponse("end_turn");
+  });
+  it("reports tool results even when the turn aborts instead of continuing", async () => {
+    let resolveStat!: () => void;
+    const statPromise = new Promise<{ mtimeMs: number; size: number }>(
+      (resolve) => {
+        resolveStat = () => resolve({ mtimeMs: 0, size: 100 });
+      },
+    );
+    const { core, mockClient } = createAgentWithMock({
+      fileIO: {
+        readFile: async () => "file contents",
+        writeFile: async () => {},
+        fileExists: async () => true,
+        stat: async () => statPromise,
+      } as unknown as AgentContext["fileIO"],
+    });
+    const events: string[] = [];
+    core.hooks = {
+      onToolResults: (results) => {
+        events.push(`results:${results.size}`);
+      },
+      onBeforeRequest: (ctx) => {
+        events.push(`request:${ctx.kind}`);
+        return Promise.resolve({ type: "proceed" as const, injections: [] });
+      },
+    };
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("get-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/test.txt" }],
+    });
+    stream.finishResponse("tool_use");
+    await pollUntil(() => {
+      if (core.state.mode.type === "tool_use") return true;
+      throw new Error(
+        `waiting for tool_use mode, currently: ${core.state.mode.type}`,
+      );
+    });
+    const abortPromise = core.abort();
+    resolveStat();
+    await abortPromise;
+    // The results are reported, and no continuation request follows them.
+    expect(events).toEqual(["request:submission", "results:1"]);
+  });
+  it("reports tool results when the turn yields instead of continuing", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent",
+    });
+    const events: string[] = [];
+    core.hooks = {
+      onToolResults: (results) => {
+        events.push(`results:${results.size}`);
+      },
+      onBeforeRequest: (ctx) => {
+        events.push(`request:${ctx.kind}`);
+        return Promise.resolve({ type: "proceed" as const, injections: [] });
+      },
+    };
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "yield-1" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "all done" },
+    );
+    stream.finishResponse("tool_use");
+    await pollUntil(() => {
+      if (core.state.mode.type === "yielded") return true;
+      throw new Error(
+        `waiting for yielded mode, currently: ${core.state.mode.type}`,
+      );
+    });
+    expect(events).toEqual(["request:submission", "results:1"]);
   });
 
   it("issues a request for a submission-time injection with no user content", async () => {

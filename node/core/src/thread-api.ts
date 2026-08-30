@@ -140,7 +140,12 @@ export type AgentHooks = {
   onBeforeRequest?: (ctx: RequestContext) => Promise<ComposedRequestActions>;
   /** Every requested tool has settled and its results are about to be
    * written. Fire-and-forget, consulted before `onBeforeRequest` for the
-   * continuation that carries them. */
+   * continuation that carries them — but it also fires on turns that stop
+   * here (abort, yield) and issue no continuation at all, deliberately: a
+   * consumer accumulating state off tool results (e.g. an abbreviated bash
+   * output) wants it carried into whatever request comes next, even one from
+   * a later turn. Results are therefore not attached to the continuation
+   * `RequestContext`, which would drop them in exactly those cases. */
   onToolResults?: (results: ToolResults) => void;
   /** A file-touching tool (edl, get_files) finished. Fire-and-forget. */
   onToolApplied?: OnToolApplied;
