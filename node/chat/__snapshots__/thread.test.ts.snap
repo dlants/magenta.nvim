@@ -594,6 +594,11 @@ Do not acknowledge this reminder or mention it to the user.
       },
     ],
     "role": "assistant",
+    "stopReason": "end_turn",
+    "usage": {
+      "inputTokens": 1000,
+      "outputTokens": 5000,
+    },
   },
 ]
 `;

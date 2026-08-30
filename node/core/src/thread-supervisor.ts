@@ -163,6 +163,8 @@ export type RequestContextKind =
   | TurnEndRequest;
 export type RequestContext = {
   inputTokenCount: number | undefined;
+  /** Cumulative output tokens across the agent's message log. */
+  outputTokenCount: number;
   /** No message has been sent on this agent yet. Survives a compaction reset,
    * where the replacement agent starts from an empty log. */
   isFirstMessage: boolean;

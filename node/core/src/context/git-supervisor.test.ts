@@ -45,6 +45,7 @@ describe("GitSupervisor", () => {
       kind: "submission",
       inputTokenCount: 0,
       isFirstMessage: false,
+      outputTokenCount: 0,
     });
     expect(action.type).toBe("inject");
     if (action.type !== "inject") throw new Error("expected inject");
@@ -61,6 +62,7 @@ describe("GitSupervisor", () => {
           kind: "submission",
           inputTokenCount: 0,
           isFirstMessage: false,
+          outputTokenCount: 0,
         })
       ).type,
     ).toBe("none");
@@ -75,6 +77,7 @@ describe("GitSupervisor", () => {
       stopReason: "end_turn",
       inputTokenCount: 0,
       isFirstMessage: false,
+      outputTokenCount: 0,
     });
     expect(action).toEqual({ type: "none" });
     expect(onSent).not.toHaveBeenCalled();
@@ -85,6 +88,7 @@ describe("GitSupervisor", () => {
       kind: "submission",
       inputTokenCount: 0,
       isFirstMessage: false,
+      outputTokenCount: 0,
     });
     expect(next.type).toBe("inject");
     expect(onSent).toHaveBeenCalledTimes(1);
@@ -98,6 +102,7 @@ describe("GitSupervisor", () => {
           kind: "submission",
           inputTokenCount: 0,
           isFirstMessage: false,
+          outputTokenCount: 0,
         })
       ).type,
     ).toBe("none");

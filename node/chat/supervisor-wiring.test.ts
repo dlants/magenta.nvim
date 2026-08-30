@@ -137,6 +137,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
             kind: "continuation",
             inputTokenCount,
             isFirstMessage: false,
+            outputTokenCount: 0,
             stopReason: "end_turn",
           })
         ).type;

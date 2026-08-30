@@ -515,6 +515,14 @@ export class Agent {
    * reminder token counters. */
   private usageAccountedCount = 0;
 
+  private outputTokenCount(): number {
+    let total = 0;
+    for (const message of this.runner.log.messages) {
+      total += message.usage?.outputTokens ?? 0;
+    }
+    return total;
+  }
+
   private accountUsage(): void {
     const messages = this.runner.log.messages;
     if (this.usageAccountedCount > messages.length) {
@@ -741,6 +749,8 @@ export class Agent {
         results.set(id, entry.result.result);
       }
     }
+
+    this.deps.getHooks().onToolResults?.(results);
 
     this.update({ type: "set-mode", mode: { type: "normal" } });
 
@@ -1145,6 +1155,7 @@ export class Agent {
     const composed = await onBeforeRequest({
       ...context,
       inputTokenCount: this.runner.log.inputTokenCount,
+      outputTokenCount: this.outputTokenCount(),
       isFirstMessage: this.getProviderMessages().length === 0,
     });
     const injections: AgentInput[] = composed.injections.map((block) =>

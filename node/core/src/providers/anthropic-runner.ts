@@ -345,8 +345,6 @@ export class AnthropicRunner implements Runner {
           ).push(this.responseBlockToParam(block));
         }
 
-        this.updateCachedProviderMessages();
-
         const usage: Usage = {
           inputTokens: response.usage.input_tokens,
           outputTokens: response.usage.output_tokens,
@@ -367,6 +365,7 @@ export class AnthropicRunner implements Runner {
           this.currentAssistantMessage,
         );
         this.messageStopInfo.set(messageIndex, { stopReason, usage });
+        this.updateCachedProviderMessages();
 
         this.currentAssistantMessage = undefined;
         break;

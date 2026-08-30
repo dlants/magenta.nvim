@@ -71,6 +71,7 @@ describe("FileContextSupervisor", () => {
       kind: "submission",
       inputTokenCount: 0,
       isFirstMessage: false,
+      outputTokenCount: 0,
     });
     if (action.type !== "inject") throw new Error("expected inject");
     const block = action.content[0];
@@ -84,6 +85,7 @@ describe("FileContextSupervisor", () => {
           kind: "submission",
           inputTokenCount: 0,
           isFirstMessage: false,
+          outputTokenCount: 0,
         })
       ).type,
     ).toBe("none");
@@ -98,6 +100,7 @@ describe("FileContextSupervisor", () => {
           kind: "submission",
           inputTokenCount: 0,
           isFirstMessage: false,
+          outputTokenCount: 0,
         })
       ).type,
     ).toBe("none");
@@ -114,6 +117,7 @@ describe("FileContextSupervisor", () => {
       kind: "submission",
       inputTokenCount: 0,
       isFirstMessage: false,
+      outputTokenCount: 0,
     });
     if (action.type !== "inject") throw new Error("expected inject");
     expect(action.content.map((c) => c.type)).toEqual(["text", "image"]);
@@ -132,6 +136,7 @@ describe("FileContextSupervisor", () => {
       stopReason: "end_turn",
       inputTokenCount: 0,
       isFirstMessage: false,
+      outputTokenCount: 0,
     });
     expect(action).toEqual({ type: "none" });
     expect(onSent).not.toHaveBeenCalled();
@@ -172,6 +177,7 @@ describe("FileContextSupervisor", () => {
           kind: "submission",
           inputTokenCount: 0,
           isFirstMessage: false,
+          outputTokenCount: 0,
         })
       ).type,
     ).toBe("none");
@@ -183,6 +189,7 @@ describe("FileContextSupervisor", () => {
           kind: "submission",
           inputTokenCount: 0,
           isFirstMessage: false,
+          outputTokenCount: 0,
         })
       ).type,
     ).toBe("inject");

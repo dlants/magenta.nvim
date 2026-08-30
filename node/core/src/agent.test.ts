@@ -1617,6 +1617,42 @@ describe("AutoCompactSupervisor integration", () => {
     expect(kinds).toEqual(["submission", "continuation", "turn-end"]);
   });
 
+  it("reports tool results before the continuation's before-request hook, with output tokens", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const events: string[] = [];
+    let continuationOutputTokens: number | undefined;
+    core.hooks = {
+      onToolResults: (results) => {
+        events.push(`results:${results.size}`);
+      },
+      onBeforeRequest: (ctx) => {
+        events.push(`request:${ctx.kind}`);
+        if (ctx.kind === "continuation") {
+          continuationOutputTokens = ctx.outputTokenCount;
+        }
+        return Promise.resolve({
+          type: "proceed" as const,
+          injections: [],
+        });
+      },
+    };
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
+      script: "nonsense",
+    });
+    stream.finishResponse("tool_use", { inputTokens: 1, outputTokens: 42 });
+    const nextStream = await awaitNextStream(mockClient, stream);
+    expect(events).toEqual([
+      "request:submission",
+      "results:1",
+      "request:continuation",
+    ]);
+    expect(continuationOutputTokens).toBe(42);
+    nextStream.streamText("done");
+    nextStream.finishResponse("end_turn");
+  });
+
   it("issues a request for a submission-time injection with no user content", async () => {
     const { core, mockClient } = createAgentWithMock();
     core.hooks = composeSupervisors(() => [

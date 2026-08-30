@@ -11,6 +11,7 @@ const context: RequestContext = {
   kind: "continuation",
   inputTokenCount: 400000,
   isFirstMessage: false,
+  outputTokenCount: 0,
   stopReason: "end_turn",
 };
 
@@ -82,6 +83,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: 300000,
         isFirstMessage: false,
+        outputTokenCount: 0,
         stopReason: "end_turn",
       }),
     ).toEqual({
@@ -93,6 +95,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: 400000,
         isFirstMessage: false,
+        outputTokenCount: 0,
         stopReason: "end_turn",
       }),
     ).toEqual({
@@ -111,6 +114,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: 299999,
         isFirstMessage: false,
+        outputTokenCount: 0,
         stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });
@@ -119,6 +123,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: undefined,
         isFirstMessage: false,
+        outputTokenCount: 0,
         stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });
@@ -131,6 +136,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: 300000,
         isFirstMessage: false,
+        outputTokenCount: 0,
         stopReason: "end_turn",
       }),
     ).toEqual({
@@ -142,6 +148,7 @@ describe("AutoCompactSupervisor", () => {
         kind: "continuation",
         inputTokenCount: 299999,
         isFirstMessage: false,
+        outputTokenCount: 0,
         stopReason: "end_turn",
       }),
     ).toEqual({ type: "none" });

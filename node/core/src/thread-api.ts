@@ -5,6 +5,7 @@ import type {
   RetryStatus,
   StopReason,
   StreamingBlock,
+  ToolResults,
 } from "./providers/provider-types.ts";
 import type { PendingMessage } from "./submission/index.ts";
 import type {
@@ -137,6 +138,10 @@ export type AgentHooks = {
   /** The supervisors' actions, in order. The agent applies every injection
    * and honours the first `suspend` it scans. */
   onBeforeRequest?: (ctx: RequestContext) => Promise<ComposedRequestActions>;
+  /** Every requested tool has settled and its results are about to be
+   * written. Fire-and-forget, consulted before `onBeforeRequest` for the
+   * continuation that carries them. */
+  onToolResults?: (results: ToolResults) => void;
   /** A file-touching tool (edl, get_files) finished. Fire-and-forget. */
   onToolApplied?: OnToolApplied;
 };

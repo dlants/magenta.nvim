@@ -36,6 +36,7 @@ describe("CommentSupervisor", () => {
       kind: "submission",
       inputTokenCount: 0,
       isFirstMessage: false,
+      outputTokenCount: 0,
     });
     order.push("read");
     expect(order).toEqual(["beforeRead", "read"]);
@@ -65,6 +66,7 @@ describe("CommentSupervisor", () => {
       stopReason: "end_turn",
       inputTokenCount: 0,
       isFirstMessage: false,
+      outputTokenCount: 0,
     });
     expect(action).toEqual({ type: "none" });
     expect(onSent).not.toHaveBeenCalled();
@@ -74,6 +76,7 @@ describe("CommentSupervisor", () => {
       kind: "submission",
       inputTokenCount: 0,
       isFirstMessage: false,
+      outputTokenCount: 0,
     });
     expect(next.type).toBe("inject");
     expect(onSent).toHaveBeenCalledTimes(1);
@@ -93,6 +96,7 @@ describe("CommentSupervisor", () => {
           kind: "submission",
           inputTokenCount: 0,
           isFirstMessage: false,
+          outputTokenCount: 0,
         })
       ).type,
     ).toBe("none");
