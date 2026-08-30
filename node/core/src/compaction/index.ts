@@ -63,7 +63,6 @@ export async function runSubmission(args: {
       return {
         type: "failed",
         error: new Error(`Compaction failed: ${outcome.message}`),
-        resubmit: undefined,
       } satisfies SendResult;
     }
 

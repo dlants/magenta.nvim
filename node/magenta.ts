@@ -557,7 +557,6 @@ export class Magenta {
         if (!buffers) {
           break;
         }
-        wrapper.thread.core.discardFailedSubmit();
         buffers.inputBuffer
           .setLines({
             start: 0 as Row0Indexed,

@@ -81,8 +81,10 @@ export type SendResult =
   | { type: "completed" }
   | { type: "yielded"; value: YieldValue }
   | { type: "aborted" }
-  /** `resubmit` carries the rolled-back user text, for repopulating an input */
-  | { type: "failed"; error: Error; resubmit: string | undefined }
+  /** The runner exhausted its retries. The agent has already rolled its
+   * message log back to the state before the failed request, so the thread is
+   * coherent and resumable, and any queued submissions are untouched. */
+  | { type: "failed"; error: Error }
   /** A supervisor stopped the submission before a request was issued. The log
    * is coherent and resumable; what to do about it is the owner's business,
    * and the reason is opaque to core's turn loop. */
@@ -111,8 +113,6 @@ export type QueuedMessage = {
  * an action and must not call back into the agent, and every action it can
  * return is a continuation — no hook return value resolves a `send`. */
 export type AgentHooks = {
-  /** The runner stopped without yielding. */
-  onEndTurn?: (ctx: EndTurnContext) => EndTurnAction;
   /** The model called yield_to_parent. Awaited, and consulted before the tool
    * result is written, so a refusal arrives as that call's result rather than
    * as a contradicting message in a fresh turn. */
@@ -125,6 +125,14 @@ export type AgentHooks = {
   onBeforeRequest?: (ctx: RequestContext) => Promise<ComposedRequestActions>;
   /** A file-touching tool (edl, get_files) finished. Fire-and-forget. */
   onToolApplied?: OnToolApplied;
+};
+
+/** What the owning `Thread` answers. A superset of `AgentHooks`: the turn
+ * loop lives in `Thread`, so the end-of-turn question is asked there and the
+ * agent never sees it. */
+export type ThreadHooks = AgentHooks & {
+  /** The runner stopped without yielding. */
+  onEndTurn?: (ctx: EndTurnContext) => EndTurnAction;
 };
 
 /** "Something visible moved." No payload: read `phase`. Called at streaming

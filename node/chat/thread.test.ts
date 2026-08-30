@@ -208,65 +208,40 @@ it("handles errors during streaming response", async () => {
   });
 });
 
-it("folds pending messages into failed-submit on error", async () => {
+it("restores only the failed message, leaving queued messages pending", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
     await driver.inputMagentaText("Original message");
     await driver.send();
-
     const stream = await driver.mockAnthropic.awaitPendingStream();
-
     // Queue an @async message while the request is in flight
     await driver.inputMagentaText("@async Queued pending message");
     await driver.send();
-
     const thread = driver.magenta.chat.getActiveThread();
     expect(thread.core.state.nextRequestQueue).toHaveLength(1);
-
-    const errorMessage = "Simulated error with pending messages";
-    stream.respondWithError(new Error(errorMessage));
-
+    stream.respondWithError(new Error("Simulated error with pending messages"));
     await driver.assertInputBufferContains("Original message");
-    await driver.assertInputBufferContains("Queued pending message");
-
-    expect(thread.core.state.nextRequestQueue).toHaveLength(0);
-    expect(thread.core.state.failedSubmit?.userMessage).toContain(
-      "Original message",
-    );
-    expect(thread.core.state.failedSubmit?.userMessage).toContain(
-      "Queued pending message",
-    );
+    // The queued message was never delivered, so it stays queued and stays
+    // rendered rather than following the failed message into the input.
+    expect(thread.core.state.nextRequestQueue).toHaveLength(1);
+    await driver.assertDisplayBufferContains("Queued pending message");
+    expect(thread.failedSubmit?.text).toBe("Original message");
   });
 });
-
-it("recovers pending messages alone when error arrives after assistant content", async () => {
+it("restores the failed message when the error arrives after assistant content", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
     await driver.inputMagentaText("Original message");
     await driver.send();
-
     const stream = await driver.mockAnthropic.awaitPendingStream();
-
-    // Queue an @async message while the request is in flight
-    await driver.inputMagentaText("@async Queued pending message");
-    await driver.send();
-
-    const thread = driver.magenta.chat.getActiveThread();
-    expect(thread.core.state.nextRequestQueue).toHaveLength(1);
-
-    // Stream assistant content so the last message is an assistant message,
-    // then error. The original user message must not be folded back in, but
-    // the pending message must still be recovered.
     stream.streamText("Partial assistant response");
     await driver.assertDisplayBufferContains("Partial assistant response");
     stream.respondWithError(new Error("Simulated mid-stream error"));
-
-    await driver.assertInputBufferContains("Queued pending message");
-
-    expect(thread.core.state.nextRequestQueue).toHaveLength(0);
-    expect(thread.core.state.failedSubmit?.userMessage).toBe(
-      "Queued pending message",
-    );
+    await driver.assertInputBufferContains("Original message");
+    // The partial turn is rolled back, so a resubmit cannot duplicate it.
+    expect(
+      driver.magenta.chat.getActiveThread().core.getProviderMessages(),
+    ).toHaveLength(0);
   });
 });
 

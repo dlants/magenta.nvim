@@ -542,6 +542,15 @@ export class NvimThread {
   /** The message count when the pending submission was issued, if a send is
    * waiting to be scrolled into view. The scroll belongs to the actor that
    * submitted, and has to wait until the message it is scrolling to exists. */
+  /** The text of the most recent submission, kept so a failure can put it back
+   * in the input buffer. The core thread has no view of the input buffer, so
+   * repopulating it is the root layer's business. */
+  private lastSubmittedText: string | undefined;
+
+  /** Set when a submission fails, cleared when the next one starts. Rendered
+   * as the trailing error block. */
+  failedSubmit: { text: string; error: Error } | undefined;
+
   private scrollAfterMessageCount: number | undefined;
 
   private maybeScrollToSubmission(): void {
@@ -662,6 +671,11 @@ export class NvimThread {
     );
   }
 
+  private beginSubmission(text: string): void {
+    this.lastSubmittedText = text;
+    this.failedSubmit = undefined;
+  }
+
   private handleSendResult(result: ThreadSendResult): void {
     if (result.type === "queued") return;
     this.myDispatch({ type: "turn-ended" });
@@ -671,13 +685,14 @@ export class NvimThread {
         "thread-turn-end",
       );
     }
-    if (result.type === "failed" && result.resubmit !== undefined) {
+    if (result.type === "failed" && this.lastSubmittedText) {
+      this.failedSubmit = { text: this.lastSubmittedText, error: result.error };
       this.context.dispatch({
         type: "sidebar-msg",
         msg: {
           type: "setup-resubmit",
           threadId: this.id,
-          lastUserMessage: result.resubmit,
+          lastUserMessage: this.lastSubmittedText,
         },
       });
     }
@@ -972,6 +987,7 @@ export class NvimThread {
         if (msg.messages.length) {
           this.scrollAfterMessageCount = this.core.getProviderMessages().length;
         }
+        this.beginSubmission(msg.messages.map((m) => m.text).join("\n"));
         // Comment positions are refreshed by `CommentSupervisor.beforeRead`,
         // on every request rather than just this one, so the send stays
         // synchronous and an abort-by-send cannot race the turn it preempts.
@@ -982,6 +998,9 @@ export class NvimThread {
         const { delivery, message } = msg.submission;
         if (delivery === "now") {
           this.rejectPendingSandboxApprovals();
+          // A deferred submission is not the one in flight, so it must not
+          // displace the text a failure would restore.
+          this.beginSubmission(message);
         }
         this.scrollAfterMessageCount = this.core.getProviderMessages().length;
         // A `@compact` in the message surfaces as a suspension out of

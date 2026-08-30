@@ -13,11 +13,6 @@ import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
-import {
-  getRetryDelay,
-  isRetryableError,
-  MAX_RETRY_DURATION,
-} from "./providers/anthropic-runner.ts";
 import type {
   AgentInput,
   AgentPhase,
@@ -42,11 +37,7 @@ import {
   buildSystemReminder,
   type ReminderKind,
 } from "./providers/system-reminders.ts";
-import {
-  type PendingMessage,
-  type ResolveSubmission,
-  renderPending,
-} from "./submission/index.ts";
+import type { PendingMessage, ResolveSubmission } from "./submission/index.ts";
 import type {
   AgentHooks,
   OnUpdate,
@@ -55,8 +46,6 @@ import type {
   YieldValue,
 } from "./thread-api.ts";
 import type {
-  EndTurnAction,
-  EndTurnContext,
   RequestContextKind,
   SuspendReason,
   YieldAction,
@@ -188,15 +177,7 @@ export type AgentAction =
   | { type: "reset-agent-state" }
   | { type: "mark-bash-output-abbreviated" }
   | { type: "activate-reminder"; text: string }
-  | { type: "reset-bash-reminder" }
-  | {
-      type: "set-failed-submit";
-      value: { userMessage: string; error: Error } | undefined;
-    }
-  | {
-      type: "set-pre-submit-native-idx";
-      idx: NativeMessageIdx | undefined;
-    };
+  | { type: "reset-bash-reminder" };
 
 /** A delivery that defers: which queue holds it, and the two actions that
  * move it in and out. Kept in one table so the queue field and the drain
@@ -218,7 +199,7 @@ export type DeferredDelivery = keyof typeof DEFERRED_QUEUES;
 /** The result of draining one deferred queue: content for the next request,
  * or a compaction that the flush ran into. Never both. */
 type QueuedCompaction = { nextPrompt: string | undefined };
-type FlushedQueue = {
+export type FlushedQueue = {
   messages: InputMessage[];
   compact: QueuedCompaction | undefined;
 };
@@ -239,10 +220,8 @@ export type ThreadState = {
   pendingBashReminder: boolean;
   bashTokensSinceLastReminder: number;
   firstBashReminderPending: boolean;
-  failedSubmit: { userMessage: string; error: Error } | undefined;
   /** How the most recent turn ended. Kept for rendering an idle agent. */
   lastTurnResult: TurnResult | undefined;
-  preSubmitNativeIdx: NativeMessageIdx | undefined;
   activeReminders: Set<string>;
   toolSpecs: ProviderToolSpec[];
 };
@@ -250,10 +229,6 @@ export type ThreadState = {
 /** Collaborators the owning `Thread` supplies. An `Agent` is ephemeral —
  * compaction replaces it — so everything durable (identity, the queue, the
  * context managers, the archive) lives on the `Thread` and is handed in. */
-type Continuation =
-  | { type: "messages"; messages: InputMessage[] }
-  /** flush both queues, resolving each entry at delivery */
-  | { type: "queues" };
 
 export interface AgentDeps {
   /** Only used to stamp tool contexts and outgoing events; the agent has no
@@ -293,7 +268,7 @@ export type SubmitOptions = {
 /** Outcome of consulting the before-request hooks. `injections` is non-empty
  * only when the caller asked to receive them (`injections: "return"`) instead
  * of having them appended to the log. */
-type BeforeRequestResult =
+export type BeforeRequestResult =
   | { type: "suspend"; reason: SuspendReason }
   | { type: "proceed"; injections: AgentInput[] };
 
@@ -330,32 +305,6 @@ export class Agent {
 
   private updateThrottleTimer: ReturnType<typeof setTimeout> | undefined;
   private updatePending = false;
-
-  /** Bounded auto-resubmit bookkeeping for non-user-facing threads (subagent/
-   * compact) recovering from a recoverable agent error. undefined means no
-   * retry episode is in progress. Reset whenever the agent successfully
-   * stops (see handleProviderStopped). Kept as a single struct so that
-   * `attempt`/`firstErrorAt`/`timer` can never drift out of sync with each
-   * other. */
-  private errorRetry:
-    | {
-        timer: ReturnType<typeof setTimeout> | undefined;
-        attempt: number;
-        firstErrorAt: number;
-      }
-    | undefined;
-
-  private clearErrorRetryTimer(): void {
-    if (this.errorRetry?.timer) {
-      clearTimeout(this.errorRetry.timer);
-      this.errorRetry.timer = undefined;
-    }
-  }
-
-  private resetErrorRetryState(): void {
-    this.clearErrorRetryTimer();
-    this.errorRetry = undefined;
-  }
 
   private flushUpdate(): void {
     if (this.updatePending) {
@@ -448,12 +397,6 @@ export class Agent {
         this.state.bashTokensSinceLastReminder = 0;
         this.state.firstBashReminderPending = false;
         break;
-      case "set-failed-submit":
-        this.state.failedSubmit = action.value;
-        break;
-      case "set-pre-submit-native-idx":
-        this.state.preSubmitNativeIdx = action.idx;
-        break;
       default:
         assertUnreachable(action);
     }
@@ -539,18 +482,20 @@ export class Agent {
     return this.runner.log.messages;
   }
 
-  /** After a non-retryable error, roll back the agent's history to the
-   * pre-submit snapshot captured by sendMessage. Used by the setup-resubmit
-   * handler when populating the input buffer for the failing thread. */
-  discardFailedSubmit(): void {
-    if (this.state.preSubmitNativeIdx === undefined) {
+  /** Where the log stood before the in-flight request, so a failure can undo
+   * it. Private: rollback is the agent's own business, and it completes
+   * before the failure is reported. */
+  private preSubmitNativeIdx: NativeMessageIdx | undefined;
+
+  /** Roll the agent's history back to the snapshot taken before the in-flight
+   * request. Idempotent: the snapshot is cleared, so a second failure cannot
+   * truncate to a stale index. */
+  private rollbackToPreSubmit(): void {
+    if (this.preSubmitNativeIdx === undefined) {
       return;
     }
-    const idx = this.state.preSubmitNativeIdx;
-    this.update(
-      { type: "set-pre-submit-native-idx", idx: undefined },
-      { silent: true },
-    );
+    const idx = this.preSubmitNativeIdx;
+    this.preSubmitNativeIdx = undefined;
     this.runner.truncateMessages(idx);
     this.deps.onUpdate();
   }
@@ -671,7 +616,7 @@ export class Agent {
         await this.handleSuspend();
         return;
       case "stopped":
-        await this.handleStopped(result.stopReason);
+        this.handleStopped(result.stopReason);
         return;
       default:
         assertUnreachable(result);
@@ -689,10 +634,9 @@ export class Agent {
     await this.handleYield(reason.result, reason.value);
   }
 
-  /** What the agent sends next after a stop. `queues` is deliberately lazy:
-   * resolving a queued message runs its effects, so it must not happen until
-   * we know the request will be issued. */
-  private flushQueue(delivery: DeferredDelivery): Promise<FlushedQueue> {
+  /** Drain one deferred queue, resolving each entry at delivery. Public only
+   * until the queues themselves move to `Thread`. */
+  flushQueue(delivery: DeferredDelivery): Promise<FlushedQueue> {
     const { field, drain } = DEFERRED_QUEUES[delivery];
     const entries = [...this.state[field]];
     this.update({ type: drain }, { silent: true });
@@ -750,47 +694,34 @@ export class Agent {
     );
   }
 
-  /** What the agent sends next after a stop, if anything. Decided *before*
-   * the before-request hooks run: a stop that ends the turn issues no
-   * request, and consulting the context trackers there would drain their
-   * updates into a message nothing is about to send. */
-  private nextContinuation(stopReason: StopReason): Continuation | undefined {
-    if (stopReason === "max_tokens") {
-      return {
-        type: "messages",
-        messages: [
-          {
-            type: "system",
-            text: "Your previous response was truncated due to the output token limit. Please continue where you left off.",
-          },
-        ],
-      };
-    }
+  /** How the turn that just finished stopped, if it stopped at all. Cleared
+   * on every request, so it only ever describes the stop the owner's loop is
+   * currently deciding about. */
+  private lastStopReason: StopReason | undefined;
 
-    if (
-      stopReason === "end_turn" &&
-      (this.state.nextRequestQueue.length || this.state.nextStopQueue.length)
-    ) {
-      // Resolution is deferred until we know the request will actually be
-      // issued — a compaction handoff must leave the queues intact.
-      return { type: "queues" };
-    }
-
-    const action = this.consultEndTurnSupervisors({
-      stopReason,
-      lastAssistantMessage: this.getLastAssistantMessage(),
-    });
-    if (action.type === "send-message") {
-      return {
-        type: "messages",
-        messages: [{ type: "system", text: action.text }],
-      };
-    }
-    return undefined;
+  get stopReason(): StopReason | undefined {
+    return this.lastStopReason;
   }
 
-  private async handleStopped(stopReason: StopReason): Promise<void> {
-    this.resetErrorRetryState();
+  /** Consult the before-request supervisors for the request the owner's loop
+   * is about to issue (or decline to issue). Injections are held as the next
+   * turn's prefix, since a stop is not itself a request. */
+  applyStopHooks(
+    kind: "continuation" | "turn-end",
+    stopReason: StopReason,
+  ): Promise<BeforeRequestResult> {
+    return this.applyBeforeRequestActions({ kind, stopReason }, "prefix");
+  }
+
+  get lastAssistantMessage():
+    | ReadonlyArray<ProviderMessageContent>
+    | undefined {
+    return this.getLastAssistantMessage();
+  }
+
+  /** A stop is the end of the agent's turn loop. Whether anything follows it
+   * is the owner's decision, so the submission settles here. */
+  private handleStopped(stopReason: StopReason): void {
     this.update({ type: "set-mode", mode: { type: "normal" } });
     const deferred = this.deferredCompact;
     this.deferredCompact = undefined;
@@ -801,56 +732,8 @@ export class Agent {
       });
       return;
     }
-
-    const continuation = this.nextContinuation(stopReason);
-
-    const beforeRequest = await this.applyBeforeRequestActions(
-      {
-        kind: continuation !== undefined ? "continuation" : "turn-end",
-        stopReason,
-      },
-      "prefix",
-    );
-    if (beforeRequest.type === "suspend") {
-      // The agent has stopped cleanly; whether the submission is over is the
-      // owner's call.
-      this.settle({ type: "suspended", reason: beforeRequest.reason });
-      return;
-    }
-
-    if (!continuation) {
-      this.settle({ type: "completed" });
-      return;
-    }
-    // Both queues are flushed in full, in insertion order: anything enqueued
-    // while this resolution is running lands in the next flush.
-    let messages: InputMessage[];
-    if (continuation.type === "messages") {
-      messages = continuation.messages;
-    } else {
-      const async = await this.flushQueue("async");
-      if (async.compact) {
-        this.settle({
-          type: "suspended",
-          reason: { kind: "compact", nextPrompt: async.compact.nextPrompt },
-        });
-        return;
-      }
-      const next = await this.flushQueue("next");
-      if (next.compact) {
-        this.settle({
-          type: "suspended",
-          reason: { kind: "compact", nextPrompt: next.compact.nextPrompt },
-        });
-        return;
-      }
-      messages = [...async.messages, ...next.messages];
-    }
-    if (!messages.length) {
-      this.settle({ type: "completed" });
-      return;
-    }
-    await this.submit(messages, { requestKind: "continuation" });
+    this.lastStopReason = stopReason;
+    this.settle({ type: "completed" });
   }
 
   private createToolContext(): CreateToolContext {
@@ -1021,104 +904,14 @@ export class Agent {
     return { type: "continue", results };
   }
 
+  /** The runner has exhausted its retries. Roll the log back to where it stood
+   * before the failed request, so the thread is left coherent and resumable,
+   * and report the failure. Queued submissions are deliberately untouched:
+   * they were never delivered, and they go out with whatever is sent next. */
   private handleErrorState(error: Error): void {
-    const isUserFacing =
-      this.state.threadType === "root" ||
-      this.state.threadType === "docker_root";
-
-    // Roll back to the pre-submit snapshot's user text for every thread
-    // type, not just user-facing ones: subagent/compact threads need the
-    // same text to auto-resubmit with (see maybeAutoResubmitAfterError).
-    const pendingText = [
-      ...this.state.nextRequestQueue,
-      ...this.state.nextStopQueue,
-    ]
-      .map(renderPending)
-      .join("\n");
-    this.update({ type: "drain-next-request-queue" });
-    this.update({ type: "drain-next-stop-queue" });
-
-    const messages = this.getProviderMessages();
-    const lastMessage = messages[messages.length - 1];
-    const baseText =
-      lastMessage?.role === "user"
-        ? lastMessage.content
-            .filter(
-              (c): c is Extract<typeof c, { type: "text" }> =>
-                c.type === "text",
-            )
-            .map((c) => c.text)
-            .join("")
-        : "";
-    const userMessage = pendingText
-      ? baseText
-        ? `${baseText}\n${pendingText}`
-        : pendingText
-      : baseText;
-
-    if (isUserFacing) {
-      if (userMessage) {
-        this.update(
-          {
-            type: "set-failed-submit",
-            value: { userMessage, error },
-          },
-          { silent: true },
-        );
-      }
-    } else {
-      this.maybeAutoResubmitAfterError(error, userMessage);
-    }
+    this.rollbackToPreSubmit();
     this.context.logger.error(error);
-    // A scheduled auto-resubmit means the submission is still going; only a
-    // submission that has come to rest in an error state settles.
-    if (this.errorRetry?.timer === undefined) {
-      this.settle({
-        type: "failed",
-        error,
-        resubmit: isUserFacing && userMessage ? userMessage : undefined,
-      });
-    }
-  }
-
-  /** For subagent/compact threads (no human to manually resubmit), retry a
-   * recoverable error automatically by rolling back the failed submit and
-   * resending the same user message, following the same bounded-backoff
-   * shape as the agent's own mid-stream retries (RETRY_DELAYS, capped by
-   * MAX_RETRY_DURATION). Non-recoverable errors, or errors that persist past
-   * the retry budget, leave the thread parked in its error/pending state —
-   * the same as an aborted thread that is never resumed. */
-  private maybeAutoResubmitAfterError(error: Error, userMessage: string): void {
-    if (!userMessage) {
-      this.resetErrorRetryState();
-      return;
-    }
-
-    const now = Date.now();
-    const firstErrorAt = this.errorRetry?.firstErrorAt ?? now;
-    const elapsed = now - firstErrorAt;
-
-    if (!isRetryableError(error) || elapsed >= MAX_RETRY_DURATION) {
-      this.resetErrorRetryState();
-      return;
-    }
-
-    const attempt = this.errorRetry?.attempt ?? 0;
-    const delay = getRetryDelay(attempt);
-    this.clearErrorRetryTimer();
-    this.errorRetry = {
-      firstErrorAt,
-      attempt: attempt + 1,
-      timer: setTimeout(() => {
-        if (this.errorRetry) {
-          this.errorRetry.timer = undefined;
-        }
-        this.discardFailedSubmit();
-        this.submit([{ type: "user", text: userMessage }]).catch(
-          this.handleSendMessageError.bind(this),
-        );
-      }, delay),
-    };
+    this.settle({ type: "failed", error });
   }
 
   /** The queue drained by the abort in flight, handed to whoever aborted. */
@@ -1137,7 +930,6 @@ export class Agent {
    * tools (ours) — and wait for the turn to unwind. */
   async abortAndWait(): Promise<{ unsent: QueuedMessage[] }> {
     this.unsentOnAbort = [];
-    this.resetErrorRetryState();
     this.abortRequested = true;
 
     if (this.state.mode.type === "tool_use") {
@@ -1202,7 +994,7 @@ export class Agent {
     this.submission = deferred;
     this.submit(inputMessages, opts).catch((error: Error) => {
       this.handleSendMessageError(error);
-      this.settle({ type: "failed", error, resubmit: undefined });
+      this.settle({ type: "failed", error });
     });
     return deferred.promise;
   }
@@ -1223,13 +1015,7 @@ export class Agent {
     inputMessages?: InputMessage[],
     opts: SubmitOptions = {},
   ): Promise<void> {
-    if (this.state.failedSubmit !== undefined) {
-      this.update(
-        { type: "set-failed-submit", value: undefined },
-        { silent: true },
-      );
-    }
-
+    this.lastStopReason = undefined;
     this.state.editedFilesThisTurn = [];
 
     const beforeRequest: BeforeRequestResult =
@@ -1269,13 +1055,7 @@ export class Agent {
     }
     contentToSend.push(...toAgentInput(content));
 
-    this.update(
-      {
-        type: "set-pre-submit-native-idx",
-        idx: this.runner.getNativeMessageIdx(),
-      },
-      { silent: true },
-    );
+    this.preSubmitNativeIdx = this.runner.getNativeMessageIdx();
     this.deps.onUpdate();
     void this.runTurn(contentToSend);
   }
@@ -1495,10 +1275,6 @@ export class Agent {
     };
   }
 
-  private consultEndTurnSupervisors(context: EndTurnContext): EndTurnAction {
-    return this.deps.getHooks().onEndTurn?.(context) ?? { type: "none" };
-  }
-
   private async consultYieldSupervisors(
     value: YieldValue,
   ): Promise<YieldAction> {
@@ -1567,8 +1343,6 @@ export class Agent {
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
-
-    this.clearErrorRetryTimer();
 
     if (this.updateThrottleTimer) {
       clearTimeout(this.updateThrottleTimer);

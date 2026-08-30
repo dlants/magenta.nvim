@@ -198,9 +198,8 @@ it("does not resolve a script's createThread() await on a subagent error", async
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(inv.status).toBe("running");
 
-      // Manually recover the errored subagent (this simulates the
-      // auto-resubmit mechanism that a later stage will add).
-      threadWrapper.thread.core.discardFailedSubmit();
+      // A failed thread is parked, with its log already rolled back, so a
+      // fresh send is all the recovery it needs.
       void threadWrapper.thread.core.send([
         { type: "user", text: "work on thing" },
       ]);

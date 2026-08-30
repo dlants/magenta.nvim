@@ -476,7 +476,7 @@ export const view: View<{
     messages.length === 0 &&
     isIdle &&
     mode.type === "normal" &&
-    thread.core.state.failedSubmit === undefined
+    thread.failedSubmit === undefined
   ) {
     return d`\
 ${titleView}
@@ -733,13 +733,13 @@ ${contentView}`;
       ? d`\n${renderStreamingBlock(thread)}\n`
       : d``;
 
-  const failedSubmit = thread.core.state.failedSubmit;
+  const failedSubmit = thread.failedSubmit;
   const failedSubmitView =
     failedSubmit !== undefined
       ? d`${withExtmark(
           d`${withExtmark(d`# user:\n`, {
             hl_group: "@markup.heading.1.markdown",
-          })}${failedSubmit.userMessage}\n`,
+          })}${failedSubmit.text}\n`,
           { hl_group: "CursorLine", hl_eol: true },
         )}${withExtmark(d`Error: ${failedSubmit.error.message}\n`, {
           hl_group: "ErrorMsg",

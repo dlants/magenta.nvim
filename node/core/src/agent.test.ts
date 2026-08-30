@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ActiveToolEntry, AgentContext } from "./agent.ts";
 import type { ToolApplied } from "./capabilities/context-tracker.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
@@ -37,7 +37,11 @@ import {
   resolveAsText,
 } from "./submission/index.ts";
 import { Thread } from "./thread.ts";
-import type { QueuedMessage, ThreadSendResult } from "./thread-api.ts";
+import type {
+  QueuedMessage,
+  SendResult,
+  ThreadSendResult,
+} from "./thread-api.ts";
 import {
   AutoCompactSupervisor,
   composeSupervisors,
@@ -211,7 +215,6 @@ describe("Thread.phase", () => {
     if (phase.type !== "idle") throw new Error("expected idle");
     expect(phase.lastResult?.type).toBe("failed");
     if (phase.lastResult?.type !== "failed") throw new Error("expected failed");
-    expect(phase.lastResult.resubmit).toContain("find the bug");
     expect(phase.lastResult.error.message).toBe("provider failure");
   });
 
@@ -359,7 +362,7 @@ describe("Thread.send result", () => {
     await core.abort();
     expect(await result).toEqual({ type: "aborted" });
   });
-  it("resolves failed with the resubmit text on a non-retryable error", async () => {
+  it("resolves failed on a non-retryable error", async () => {
     const { core, mockClient } = createAgentWithMock();
     const result = core.send([{ type: "user", text: "find the bug" }]);
     const stream = await mockClient.awaitStream();
@@ -367,7 +370,6 @@ describe("Thread.send result", () => {
     const settled = await result;
     if (settled.type !== "failed") throw new Error("expected failed");
     expect(settled.error.message).toBe("provider failure");
-    expect(settled.resubmit).toContain("find the bug");
   });
   it("resolves completed rather than hanging when there is nothing to send", async () => {
     const { core } = createAgentWithMock();
@@ -2404,389 +2406,181 @@ describe("Agent createFreshAgent thinking effort override", () => {
   });
 });
 
-describe("Agent non-retryable error resubmit flow", () => {
-  it("hands the rolled-back user text back to the submitter", async () => {
+describe("Agent failure rollback", () => {
+  /** Drive a send to a provider error and wait for the agent to come to rest. */
+  const failSend = async (
+    core: Thread,
+    mockClient: MockAnthropicClient,
+    text: string,
+    error = new Error("provider failure"),
+  ) => {
+    const prev = mockClient.streams[mockClient.streams.length - 1];
+    const result = core.send([{ type: "user", text }]);
+    const stream = await awaitNextStream(mockClient, prev);
+    stream.respondWithError(error);
+    return await result;
+  };
+
+  it("rolls the log back so a resubmit does not duplicate the user message", async () => {
     const { core, mockClient } = createAgentWithMock();
-    const sent = core.send([{ type: "user", text: "find the bug" }]);
-    const stream = await mockClient.awaitStream();
-    stream.respondWithError(new Error("provider failure"));
-    const result = await sent;
-    expect(result.type).toBe("failed");
-    if (result.type !== "failed") throw new Error("expected failed");
-    expect(result.resubmit).toContain("find the bug");
-    expect(core.state.failedSubmit?.userMessage).toContain("find the bug");
-    expect(core.state.failedSubmit?.error.message).toBe("provider failure");
+    const failed = await failSend(core, mockClient, "find the bug");
+    expect(failed.type).toBe("failed");
+    expect(core.getProviderMessages()).toHaveLength(0);
+
+    void core.send([{ type: "user", text: "try again" }]);
+    await mockClient.awaitStream();
+    const userTexts = core
+      .getProviderMessages()
+      .filter((m) => m.role === "user")
+      .flatMap((m) => m.content)
+      .filter((c) => c.type === "text")
+      .map((c) => c.text);
+    expect(userTexts.filter((t) => t.includes("find the bug"))).toHaveLength(0);
+    expect(userTexts.filter((t) => t.includes("try again"))).toHaveLength(1);
   });
 
-  it("does not set failedSubmit or offer a resubmit for subagent threads", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-    });
-    void core.send([{ type: "user", text: "subagent task" }]);
-    const stream = await mockClient.awaitStream();
-    stream.respondWithError(new Error("subagent provider failure"));
-
-    await pollUntil(() => {
-      if (core.state.lastTurnResult?.type === "failed") return true;
-      throw new Error("waiting for error state");
-    });
-
-    expect(core.state.failedSubmit).toBeUndefined();
-    expect(core.getProviderMessages().length).toBe(1);
-    expect(core.state.lastTurnResult?.type).toBe("failed");
-  });
-
-  it("captures preSubmitNativeIdx before appending the user message", async () => {
+  it("rolls back to the snapshot, keeping earlier completed exchanges", async () => {
     const { core, mockClient } = createAgentWithMock();
-
-    expect(core.state.preSubmitNativeIdx).toBeUndefined();
-
     void core.send([{ type: "user", text: "first message" }]);
-    const stream = await mockClient.awaitStream();
-    expect(core.state.preSubmitNativeIdx).toBe(-1);
-    stream.streamText("hi");
-    stream.finishResponse("end_turn");
-
+    const first = await mockClient.awaitStream();
+    first.respond({ text: "hi", toolRequests: [], stopReason: "end_turn" });
     await pollUntil(() => {
-      const msgs = core.getProviderMessages();
-      if (msgs.length === 2 && msgs[1].role === "assistant") return true;
-      throw new Error("waiting for assistant message");
+      if (core.getProviderMessages().length === 2) return true;
+      throw new Error("waiting for the first exchange");
     });
 
-    void core.send([{ type: "user", text: "second message" }]);
-    await awaitNextStream(mockClient, stream);
-    expect(core.state.preSubmitNativeIdx).toBe(1);
+    await failSend(core, mockClient, "second message");
+    const messages = core.getProviderMessages();
+    expect(messages).toHaveLength(2);
+    expect(messages[1].role).toBe("assistant");
   });
 
-  it("rolls back queued pending-message text alongside the in-flight user message on error", async () => {
-    const { core, mockClient } = createAgentWithMock();
-
+  it("leaves both queues populated and unresolved, delivering them on the next send", async () => {
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("failure-queues"),
+    );
     void core.send([{ type: "user", text: "find the bug" }]);
     const stream = await mockClient.awaitStream();
-
-    // While the agent is busy streaming, queue an additional async message —
-    // this lands in pendingMessages rather than being sent immediately.
     void core.send([{ type: "user", text: "also check the logs" }], {
       queue: "async",
     });
+    void core.send([{ type: "user", text: "and the config" }], {
+      queue: "next",
+    });
     expect(core.state.nextRequestQueue).toHaveLength(1);
+    expect(core.state.nextStopQueue).toHaveLength(1);
 
     stream.respondWithError(new Error("provider failure"));
-
     await pollUntil(() => {
       if (core.state.lastTurnResult?.type === "failed") return true;
       throw new Error("waiting for error state");
     });
+    // The queued entries were never delivered, so they stay queued.
+    expect(core.state.nextRequestQueue).toHaveLength(1);
+    expect(core.state.nextStopQueue).toHaveLength(1);
 
-    expect(core.state.failedSubmit?.userMessage).toBe(
-      "find the bug\nalso check the logs",
-    );
-    expect(core.state.nextRequestQueue).toEqual([]);
-  });
-
-  it("after non-retryable error, preSubmitNativeIdx remains set and orphan user message remains in history", async () => {
-    const { core, mockClient } = createAgentWithMock();
-
-    void core.send([{ type: "user", text: "find the bug" }]);
-    const stream = await mockClient.awaitStream();
-    stream.respondWithError(new Error("provider failure"));
-
-    await pollUntil(() => {
-      if (core.state.lastTurnResult?.type === "failed") return true;
-      throw new Error("waiting for error state");
-    });
-
-    expect(core.state.preSubmitNativeIdx).toBe(-1);
-    expect(core.state.failedSubmit?.userMessage).toContain("find the bug");
-
-    const messages = core.getProviderMessages();
-    expect(messages.length).toBe(1);
-    expect(messages[0].role).toBe("user");
-  });
-
-  it("discardFailedSubmit truncates agent history back to pre-submit and clears preSubmitNativeIdx but keeps failedSubmit", async () => {
-    const { core, mockClient } = createAgentWithMock();
-
-    void core.send([{ type: "user", text: "find the bug" }]);
-    const stream = await mockClient.awaitStream();
-    stream.respondWithError(new Error("provider failure"));
-
-    await pollUntil(() => {
-      if (core.state.lastTurnResult?.type === "failed") return true;
-      throw new Error("waiting for error state");
-    });
-
-    core.discardFailedSubmit();
-
-    expect(core.getProviderMessages().length).toBe(0);
-    expect(core.state.preSubmitNativeIdx).toBeUndefined();
-    expect(core.state.failedSubmit?.userMessage).toContain("find the bug");
-  });
-
-  it("discardFailedSubmit is a no-op when preSubmitNativeIdx is undefined", () => {
-    const { core } = createAgentWithMock();
-    expect(core.state.preSubmitNativeIdx).toBeUndefined();
-    expect(core.getProviderMessages().length).toBe(0);
-    core.discardFailedSubmit();
-    expect(core.getProviderMessages().length).toBe(0);
-    expect(core.state.preSubmitNativeIdx).toBeUndefined();
-  });
-
-  it("after error + discardFailedSubmit, resubmit does not duplicate the user message and resets state", async () => {
-    const { core, mockClient } = createAgentWithMock();
-
-    void core.send([{ type: "user", text: "find the bug" }]);
-    const firstStream = await mockClient.awaitStream();
-    firstStream.respondWithError(new Error("provider failure"));
-
-    await pollUntil(() => {
-      if (core.state.lastTurnResult?.type === "failed") return true;
-      throw new Error("waiting for error state");
-    });
-
-    expect(core.getProviderMessages().length).toBe(1);
-    expect(core.state.preSubmitNativeIdx).toBe(-1);
-
-    core.discardFailedSubmit();
-    expect(core.getProviderMessages().length).toBe(0);
-    expect(core.state.preSubmitNativeIdx).toBeUndefined();
-    expect(core.state.failedSubmit?.userMessage).toContain("find the bug");
-
-    void core.send([{ type: "user", text: "find the bug" }]);
-    const secondStream = await pollUntil(() => {
-      const s = mockClient.streams[mockClient.streams.length - 1];
-      if (s && s !== firstStream) return s;
-      throw new Error("waiting for resubmit stream");
-    });
-
-    const userMessages = core
-      .getProviderMessages()
-      .filter((m) => m.role === "user");
-    expect(userMessages.length).toBe(1);
-    expect(core.state.failedSubmit).toBeUndefined();
-    expect(core.state.preSubmitNativeIdx).toBe(-1);
-
-    secondStream.respond({
+    void core.send([{ type: "user", text: "retry" }]);
+    const retryStream = await awaitNextStream(mockClient, stream);
+    retryStream.respond({
       text: "ok",
       toolRequests: [],
       stopReason: "end_turn",
     });
+    await pollUntil(() => {
+      const texts = core
+        .getProviderMessages()
+        .flatMap((m) => m.content)
+        .filter((c) => c.type === "text")
+        .map((c) => c.text)
+        .join("\n");
+      if (
+        texts.includes("also check the logs") &&
+        texts.includes("and the config")
+      ) {
+        return true;
+      }
+      throw new Error("waiting for the queues to be delivered");
+    });
   });
-});
-describe("Agent auto-resubmit for non-user-facing threads (Stage 2)", () => {
-  beforeEach(() => {
+
+  it("issues no further requests for a subagent thread after a retryable error", async () => {
     vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("subagent automatically resubmits a recoverable error and eventually yields", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-    });
-
-    void core.send([{ type: "user", text: "flaky task" }]);
-    await vi.advanceTimersByTimeAsync(0);
-    const firstStream = await mockClient.awaitStream();
-
-    // Bypass the agent's own mid-stream retry budget so this error is
-    // surfaced to Agent immediately, as if the connection-level
-    // retries had already been exhausted.
-    vi.setSystemTime(new Date(Date.now() + 300_001));
-    firstStream.respondWithError(new Error("terminated"));
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(core.state.lastTurnResult?.type).toBe("failed");
-    expect(core.state.failedSubmit).toBeUndefined();
-
-    // Advance past the first thread-level retry delay (1000ms).
-    await vi.advanceTimersByTimeAsync(1000);
-
-    const secondStream = await pollUntil(() => {
-      const s = mockClient.streams[mockClient.streams.length - 1];
-      if (s && s !== firstStream) return s;
-      throw new Error("waiting for auto-resubmit stream");
-    });
-
-    secondStream.respond({
-      text: "done",
-      toolRequests: [],
-      stopReason: "end_turn",
-    });
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(core.state.lastTurnResult?.type).toBe("stopped");
-    const userMessages = core
-      .getProviderMessages()
-      .filter((m) => m.role === "user");
-    expect(userMessages.length).toBe(1);
-  });
-
-  it("subagent with a non-recoverable error stays parked and never auto-succeeds", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-    });
-
-    void core.send([{ type: "user", text: "doomed task" }]);
-    await vi.advanceTimersByTimeAsync(0);
-    const stream = await mockClient.awaitStream();
-    stream.respondWithError(new Error("subagent provider failure"));
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(core.state.lastTurnResult?.type).toBe("failed");
-
-    // Advance well past every retry delay; no retry should ever be scheduled.
-    await vi.advanceTimersByTimeAsync(60_000);
-
-    expect(mockClient.streams).toHaveLength(1);
-    expect(core.state.lastTurnResult?.type).toBe("failed");
-    expect(core.state.failedSubmit).toBeUndefined();
-  });
-
-  it("subagent stops auto-resubmitting once the retry budget is exhausted", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-    });
-
-    void core.send([{ type: "user", text: "flaky task" }]);
-    await vi.advanceTimersByTimeAsync(0);
-    let stream = await mockClient.awaitStream();
-
-    // Bypass the agent's own mid-stream retry budget so each error is
-    // surfaced to Agent immediately.
-    const bypassAgentRetryAndFail = () => {
+    try {
+      const { core, mockClient } = createAgentWithMock({
+        threadType: "subagent" as ThreadType,
+      });
+      void core.send([{ type: "user", text: "flaky task" }]);
+      await vi.advanceTimersByTimeAsync(0);
+      const stream = await mockClient.awaitStream();
+      // "terminated" is retryable, so exhaust the runner's own retry budget
+      // first: what reaches the agent is a runner that has already given up.
       vi.setSystemTime(new Date(Date.now() + 300_001));
       stream.respondWithError(new Error("terminated"));
-    };
-
-    bypassAgentRetryAndFail();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(core.state.lastTurnResult?.type).toBe("failed");
-
-    let streamCountBefore = mockClient.streams.length;
-    for (let i = 0; i < 20; i++) {
-      // Advance past the largest possible thread-level retry delay so any
-      // scheduled retry timer fires.
-      await vi.advanceTimersByTimeAsync(40_000);
-      if (mockClient.streams.length === streamCountBefore) {
-        // No new stream was created: the retry budget has been exhausted.
-        break;
-      }
-      stream = mockClient.streams[mockClient.streams.length - 1];
-      streamCountBefore = mockClient.streams.length;
-      bypassAgentRetryAndFail();
       await vi.advanceTimersByTimeAsync(0);
+      expect(core.state.lastTurnResult?.type).toBe("failed");
+      // No thread-level retry: advancing past every former backoff delay
+      // produces no new request.
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(mockClient.streams).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
     }
-
-    expect(core.state.lastTurnResult?.type).toBe("failed");
-    const finalStreamCount = mockClient.streams.length;
-
-    // No further retry should ever be scheduled.
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(mockClient.streams).toHaveLength(finalStreamCount);
-    expect(core.state.lastTurnResult?.type).toBe("failed");
   });
 
-  it("delivers exactly one send result across an auto-resubmit sequence", async () => {
+  it("settles exactly one send result on failure", async () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    const settlements: ThreadSendResult[] = [];
-    const result = core.send([{ type: "user", text: "flaky task" }]);
-    void result.then((r) => settlements.push(r));
-    await vi.advanceTimersByTimeAsync(0);
-    const firstStream = await mockClient.awaitStream();
-    // Bypass the agent's own mid-stream retry budget so the error reaches the
-    // thread-level auto-resubmit immediately.
-    vi.setSystemTime(new Date(Date.now() + 300_001));
-    firstStream.respondWithError(new Error("terminated"));
-    await vi.advanceTimersByTimeAsync(0);
-    // A scheduled retry means the submission is still running.
-    expect(settlements).toEqual([]);
-    await vi.advanceTimersByTimeAsync(1000);
-    const secondStream = await pollUntil(() => {
-      const s = mockClient.streams[mockClient.streams.length - 1];
-      if (s && s !== firstStream) return s;
-      throw new Error("waiting for auto-resubmit stream");
+    const settled: SendResult[] = [];
+    void core
+      .send([{ type: "user", text: "flaky task" }])
+      .then((r) => settled.push(r as SendResult));
+    const stream = await mockClient.awaitStream();
+    stream.respondWithError(new Error("provider failure"));
+    await pollUntil(() => {
+      if (settled.length) return true;
+      throw new Error("waiting for the send result");
     });
-    secondStream.respond({
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(settled).toHaveLength(1);
+    expect(settled[0].type).toBe("failed");
+  });
+
+  it("leaves no orphan tool_use when the request carrying tool results fails", async () => {
+    const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
+    const { core, mockClient } = createAgentWithMock({ fileIO });
+    void core.send([{ type: "user", text: "read it" }]);
+    const stream = await mockClient.awaitStream();
+    stream.respond({
       text: "",
       toolRequests: [
         {
           status: "ok",
           value: {
-            id: "retry-yield" as ToolRequestId,
-            toolName: "yield_to_parent" as ToolName,
-            input: { result: "done" },
+            id: "req-fail" as ToolRequestId,
+            toolName: "get_files" as ToolName,
+            input: { files: [{ filePath: "/tmp/a.txt" }] },
           },
         },
       ],
-      stopReason: "end_turn",
+      stopReason: "tool_use",
     });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(await result).toEqual({
-      type: "yielded",
-      value: { type: "text", text: "done" },
+    const second = await awaitNextStream(mockClient, stream);
+    second.respondWithError(new Error("provider failure"));
+    await pollUntil(() => {
+      if (core.state.lastTurnResult?.type === "failed") return true;
+      throw new Error("waiting for error state");
     });
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(settlements).toHaveLength(1);
-  });
-  it("aborting a subagent cancels a pending auto-resubmit timer", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-    });
-
-    void core.send([{ type: "user", text: "flaky task" }]);
-    await vi.advanceTimersByTimeAsync(0);
-    const stream = await mockClient.awaitStream();
-
-    // Bypass the agent's own mid-stream retry budget so this error is
-    // surfaced to Agent immediately, scheduling an auto-resubmit timer.
-    vi.setSystemTime(new Date(Date.now() + 300_001));
-    stream.respondWithError(new Error("terminated"));
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(core.state.lastTurnResult?.type).toBe("failed");
-    expect(mockClient.streams).toHaveLength(1);
-
-    // Abort before the scheduled retry (1000ms) fires.
-    await core.abort();
-
-    // Advance well past every retry delay; the cancelled retry must never fire.
-    await vi.advanceTimersByTimeAsync(60_000);
-
-    expect(mockClient.streams).toHaveLength(1);
-  });
-
-  it("does not schedule an auto-resubmit when there is no user message to roll back to", async () => {
-    const { core, mockClient } = createAgentWithMock({
-      threadType: "subagent" as ThreadType,
-    });
-
-    // Directly exercise the private auto-resubmit path with an empty
-    // userMessage — the case where an error occurs with no user-authored
-    // text available to roll back to and resubmit (e.g. before any content
-    // was ever produced). This is not reachable through the public
-    // sendMessage API, since every InputMessage (user or system) produces a
-    // plain "text" content block that would populate baseText.
-    (
-      core.agent as unknown as {
-        maybeAutoResubmitAfterError: (
-          error: Error,
-          userMessage: string,
-        ) => void;
+    for (const message of core.getProviderMessages()) {
+      for (const content of message.content) {
+        if (content.type === "tool_use") {
+          throw new Error("expected no orphan tool_use in the rolled-back log");
+        }
       }
-    ).maybeAutoResubmitAfterError(new Error("terminated"), "");
-
-    await vi.advanceTimersByTimeAsync(60_000);
-
-    expect(mockClient.streams).toHaveLength(0);
-    expect(core.state.failedSubmit).toBeUndefined();
+    }
   });
 });
-
 type ParsedEntry = { type: string; [k: string]: unknown };
 
 async function readArchive(threadId: ThreadId): Promise<ParsedEntry[]> {

@@ -8,7 +8,7 @@ import {
   formatSystemInfo,
   type SystemInfo,
 } from "./providers/system-prompt.ts";
-import type { AgentHooks } from "./thread-api.ts";
+import type { ThreadHooks } from "./thread-api.ts";
 
 /** Action returned from the `onEndTurnWithoutYield` hook. */
 export type EndTurnAction =
@@ -62,7 +62,7 @@ export type ComposedRequestActions = {
   suspend: { reason: SuspendReason } | undefined;
 };
 
-/** Fold a list of supervisors into the single `AgentHooks` trio an `Agent`
+/** Fold a list of supervisors into the single `ThreadHooks` set a `Thread`
  * consults. The merge rules are exactly today's: `send-message` texts join
  * with a blank line, and the first `accept`/`reject` wins a yield. Request
  * actions are merged into a single `ComposedRequestActions`: every injection,
@@ -71,7 +71,7 @@ export type ComposedRequestActions = {
  * consumer is free to choose a different one. */
 export function composeSupervisors(
   getSupervisors: () => ReadonlyArray<ThreadSupervisor>,
-): AgentHooks {
+): ThreadHooks {
   return {
     onEndTurn: (context) => {
       const texts: string[] = [];

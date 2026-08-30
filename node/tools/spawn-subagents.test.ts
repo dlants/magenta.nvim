@@ -788,9 +788,8 @@ describe("foreach-style parallel agents", () => {
           ),
         ).toBe(false);
 
-        // Manually recover the errored subagent (this simulates the
-        // auto-resubmit mechanism that a later stage will add).
-        childWrapper.thread.core.discardFailedSubmit();
+        // A failed thread is parked, with its log already rolled back, so a
+        // fresh send is all the recovery it needs.
         void childWrapper.thread.core.send([
           { type: "user", text: "error_task" },
         ]);

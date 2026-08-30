@@ -5,6 +5,7 @@ import {
   DEFERRED_QUEUES,
   type DeferredDelivery,
   type InputMessage,
+  type SubmitOptions,
   type ThreadState,
 } from "./agent.ts";
 import type { ThreadId } from "./chat-types.ts";
@@ -17,6 +18,7 @@ import type {
   ProviderMessage,
   ProviderToolSpec,
   Runner,
+  StopReason,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import {
@@ -27,16 +29,17 @@ import {
   type ResolveSubmission,
 } from "./submission/index.ts";
 import type {
-  AgentHooks,
   OnUpdate,
   QueuedMessage,
   SendOptions,
   SendResult,
+  ThreadHooks,
   ThreadPhase,
   ThreadResult,
   ThreadSendResult,
 } from "./thread-api.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
+import type { SuspendReason } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
@@ -68,7 +71,7 @@ export type ThreadCallbacks = {
 export class Thread {
   public state: ThreadState;
   public agent: Agent;
-  public hooks: AgentHooks = {};
+  public hooks: ThreadHooks = {};
   /** Kept for the lifetime of the thread, so they outlive any one agent. */
   readonly structuredToolResults = new Map<
     ToolRequestId,
@@ -117,9 +120,7 @@ export class Thread {
       pendingBashReminder: false,
       bashTokensSinceLastReminder: 0,
       firstBashReminderPending: true,
-      failedSubmit: undefined,
       lastTurnResult: undefined,
-      preSubmitNativeIdx: undefined,
       activeReminders: new Set(),
       toolSpecs: [],
     };
@@ -169,6 +170,12 @@ export class Thread {
       cloned.structuredToolResults.set(id, structured);
     }
     return cloned;
+  }
+
+  /** Busy from the first request of a submission until the loop comes to
+   * rest, which spans the gaps between turns. */
+  get isBusy(): boolean {
+    return this.looping || this.agent.isBusy;
   }
 
   get runner(): Runner {
@@ -228,13 +235,6 @@ export class Thread {
     if (state.mode.type === "yielded") {
       return { type: "yielded", value: state.mode.value };
     }
-    if (state.failedSubmit) {
-      return {
-        type: "failed",
-        error: state.failedSubmit.error,
-        resubmit: state.failedSubmit.userMessage,
-      };
-    }
     const last = state.lastTurnResult;
     if (!last) return undefined;
     switch (last.type) {
@@ -243,7 +243,7 @@ export class Thread {
       case "aborted":
         return { type: "aborted" };
       case "failed":
-        return { type: "failed", error: last.error, resubmit: undefined };
+        return { type: "failed", error: last.error };
       case "suspended":
         return undefined;
       default:
@@ -307,10 +307,6 @@ export class Thread {
     this.agent.prependToNextTurn(content);
   }
 
-  discardFailedSubmit(): void {
-    this.agent.discardFailedSubmit();
-  }
-
   /** For tests: await pending best-effort archive writes. */
   async awaitArchiveFlush(): Promise<void> {
     await this.threadLogger.flushed();
@@ -340,7 +336,7 @@ export class Thread {
     message: PendingMessage,
     delivery: Delivery = "now",
   ): Promise<ThreadSendResult> {
-    if (delivery !== "now" && this.agent.isBusy) {
+    if (delivery !== "now" && this.isBusy) {
       this.enqueue([message], delivery);
       return { type: "queued" };
     }
@@ -374,10 +370,10 @@ export class Thread {
     // The compact thread's content is composed by its caller, so it bypasses
     // context updates, reminders and the queue entirely.
     if (this.state.threadType === "compact") {
-      return this.followSubmission(this.agent.send(messages));
+      return this.followSubmission(this.runToRest(messages));
     }
 
-    if (this.agent.isBusy) {
+    if (this.isBusy) {
       if (queue === "async" || queue === "next") {
         this.enqueue(
           messages.map((m) => pendingMessage(m.text)),
@@ -388,7 +384,7 @@ export class Thread {
       await this.agent.abortAndWait();
     }
 
-    const result = this.followSubmission(this.agent.send(messages));
+    const result = this.followSubmission(this.runToRest(messages));
 
     if (!this.state.title) {
       this.setThreadTitle(messages.map((m) => m.text).join("\n")).catch(
@@ -407,6 +403,132 @@ export class Thread {
       if (r.type === "yielded") this.settleResult(r);
       return r;
     });
+  }
+
+  /** True from the moment `runToRest` takes over until it settles. The agent
+   * looks idle between turns now that it settles at every stop, so busyness
+   * is the loop's to report. */
+  private looping = false;
+
+  /** Drive the agent until nothing more should be sent. The agent stops at
+   * every turn boundary; deciding whether a stop is really the end — queued
+   * content, a supervisor nudge, a truncated response — is the thread's. */
+  private async runToRest(
+    messages: InputMessage[],
+    opts?: SubmitOptions,
+  ): Promise<SendResult> {
+    this.looping = true;
+    try {
+      let result = await this.agent.send(messages, opts);
+      for (;;) {
+        if (result.type !== "completed") return result;
+        const stopReason = this.agent.stopReason;
+        // No stop reason means the agent settled without running a turn (an
+        // empty submission); there is nothing to continue from.
+        if (stopReason === undefined) return result;
+
+        const next = await this.continuation(stopReason);
+        switch (next.type) {
+          case "rest":
+            return result;
+          case "suspended":
+            return { type: "suspended", reason: next.reason };
+          case "messages":
+            result = await this.agent.send(next.messages, {
+              requestKind: "continuation",
+            });
+            continue;
+          default:
+            assertUnreachable(next);
+        }
+      }
+    } finally {
+      this.looping = false;
+    }
+  }
+
+  /** What follows this stop, if anything. The before-request supervisors are
+   * consulted either way — a turn-end consultation is how auto-compaction
+   * gets to suspend — and their answer can override the plan. */
+  private async continuation(
+    stopReason: StopReason,
+  ): Promise<
+    | { type: "rest" }
+    | { type: "suspended"; reason: SuspendReason }
+    | { type: "messages"; messages: InputMessage[] }
+  > {
+    const planned = this.plannedContinuation(stopReason);
+    const beforeRequest = await this.agent.applyStopHooks(
+      planned ? "continuation" : "turn-end",
+      stopReason,
+    );
+    if (beforeRequest.type === "suspend") {
+      return { type: "suspended", reason: beforeRequest.reason };
+    }
+    if (!planned) return { type: "rest" };
+
+    if (planned.type === "messages") {
+      return { type: "messages", messages: planned.messages };
+    }
+
+    // Both queues are flushed in full, in insertion order: anything enqueued
+    // while this resolution is running lands in the next flush.
+    const messages: InputMessage[] = [];
+    for (const delivery of ["async", "next"] as const) {
+      const flushed = await this.agent.flushQueue(delivery);
+      if (flushed.compact) {
+        return {
+          type: "suspended",
+          reason: { kind: "compact", nextPrompt: flushed.compact.nextPrompt },
+        };
+      }
+      messages.push(...flushed.messages);
+    }
+    if (!messages.length) return { type: "rest" };
+    return { type: "messages", messages };
+  }
+
+  /** Decided *before* the before-request hooks run, because a stop that ends
+   * the turn issues no request and the context trackers must not drain their
+   * updates into a message nothing is about to send. Queue resolution stays
+   * deferred: it runs effects, so it must not happen until we know the
+   * request will be issued. */
+  private plannedContinuation(
+    stopReason: StopReason,
+  ):
+    | { type: "messages"; messages: InputMessage[] }
+    | { type: "queues" }
+    | undefined {
+    if (stopReason === "max_tokens") {
+      return {
+        type: "messages",
+        messages: [
+          {
+            type: "system",
+            text: "Your previous response was truncated due to the output token limit. Please continue where you left off.",
+          },
+        ],
+      };
+    }
+
+    if (
+      stopReason === "end_turn" &&
+      (this.state.nextRequestQueue.length || this.state.nextStopQueue.length)
+    ) {
+      return { type: "queues" };
+    }
+
+    const action = this.hooks.onEndTurn?.({
+      stopReason,
+      lastAssistantMessage: this.agent.lastAssistantMessage,
+    });
+    if (action?.type === "send-message") {
+      return {
+        type: "messages",
+        messages: [{ type: "system", text: action.text }],
+      };
+    }
+    return undefined;
   }
 
   async setThreadTitle(userMessage: string): Promise<void> {
