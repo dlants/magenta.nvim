@@ -476,7 +476,7 @@ export const view: View<{
     messages.length === 0 &&
     isIdle &&
     mode.type === "normal" &&
-    thread.failedSubmit === undefined
+    thread.submission?.type !== "failed"
   ) {
     return d`\
 ${titleView}
@@ -733,7 +733,8 @@ ${contentView}`;
       ? d`\n${renderStreamingBlock(thread)}\n`
       : d``;
 
-  const failedSubmit = thread.failedSubmit;
+  const failedSubmit =
+    thread.submission?.type === "failed" ? thread.submission : undefined;
   const failedSubmitView =
     failedSubmit !== undefined
       ? d`${withExtmark(

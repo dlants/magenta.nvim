@@ -3,6 +3,7 @@ import type { OnToolApplied } from "./capabilities/context-tracker.ts";
 import type {
   RequestedTool,
   RetryStatus,
+  StopReason,
   StreamingBlock,
 } from "./providers/provider-types.ts";
 import type { PendingMessage } from "./submission/index.ts";
@@ -78,13 +79,25 @@ export type SendOptions = {
  * the max_tokens continue-prompt, a compaction handoff) do not produce one:
  * the promise resolves when the thread finally comes to rest. */
 export type SendResult =
-  | { type: "completed" }
+  /** The agent came to rest. `stopReason` is how the turn that just finished
+   * ended, or `undefined` when the submission settled without ever issuing a
+   * request (empty content), so there is nothing to continue from. */
+  | { type: "completed"; stopReason: StopReason | undefined }
   | { type: "yielded"; value: YieldValue }
   | { type: "aborted" }
   /** The runner exhausted its retries. The agent has already rolled its
    * message log back to the state before the failed request, so the thread is
    * coherent and resumable, and any queued submissions are untouched. */
-  | { type: "failed"; error: Error }
+  | {
+      type: "failed";
+      error: Error;
+      /** True when the rollback discarded the submitted content itself, so it
+       * is no longer in the log and an owner may restore it for resubmission.
+       * False when the failure happened on a later request of the same
+       * submission — the submitted content is still in the log, and restoring
+       * it would duplicate it. */
+      discardedSubmission: boolean;
+    }
   /** A supervisor stopped the submission before a request was issued. The log
    * is coherent and resumable; what to do about it is the owner's business,
    * and the reason is opaque to core's turn loop. */

@@ -542,14 +542,14 @@ export class NvimThread {
   /** The message count when the pending submission was issued, if a send is
    * waiting to be scrolled into view. The scroll belongs to the actor that
    * submitted, and has to wait until the message it is scrolling to exists. */
-  /** The text of the most recent submission, kept so a failure can put it back
-   * in the input buffer. The core thread has no view of the input buffer, so
-   * repopulating it is the root layer's business. */
-  private lastSubmittedText: string | undefined;
-
-  /** Set when a submission fails, cleared when the next one starts. Rendered
-   * as the trailing error block. */
-  failedSubmit: { text: string; error: Error } | undefined;
+  /** The most recent submission and how it is doing. One field rather than
+   * two, so "failed" cannot be represented without the text that failed: the
+   * text is kept so a failure can put it back in the input buffer, and the
+   * failed variant is what the trailing error block renders. */
+  submission:
+    | { type: "in-flight"; text: string }
+    | { type: "failed"; text: string; error: Error }
+    | undefined;
 
   private scrollAfterMessageCount: number | undefined;
 
@@ -672,8 +672,7 @@ export class NvimThread {
   }
 
   private beginSubmission(text: string): void {
-    this.lastSubmittedText = text;
-    this.failedSubmit = undefined;
+    this.submission = { type: "in-flight", text };
   }
 
   private handleSendResult(result: ThreadSendResult): void {
@@ -685,14 +684,23 @@ export class NvimThread {
         "thread-turn-end",
       );
     }
-    if (result.type === "failed" && this.lastSubmittedText) {
-      this.failedSubmit = { text: this.lastSubmittedText, error: result.error };
+    const submission = this.submission;
+    if (
+      result.type === "failed" &&
+      result.discardedSubmission &&
+      submission !== undefined
+    ) {
+      this.submission = {
+        type: "failed",
+        text: submission.text,
+        error: result.error,
+      };
       this.context.dispatch({
         type: "sidebar-msg",
         msg: {
           type: "setup-resubmit",
           threadId: this.id,
-          lastUserMessage: this.lastSubmittedText,
+          lastUserMessage: submission.text,
         },
       });
     }

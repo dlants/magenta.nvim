@@ -239,11 +239,15 @@ export class Thread {
     if (!last) return undefined;
     switch (last.type) {
       case "stopped":
-        return { type: "completed" };
+        return { type: "completed", stopReason: last.stopReason };
       case "aborted":
         return { type: "aborted" };
       case "failed":
-        return { type: "failed", error: last.error };
+        return {
+          type: "failed",
+          error: last.error,
+          discardedSubmission: true,
+        };
       case "suspended":
         return undefined;
       default:
@@ -422,22 +426,29 @@ export class Thread {
       let result = await this.agent.send(messages, opts);
       for (;;) {
         if (result.type !== "completed") return result;
-        const stopReason = this.agent.stopReason;
         // No stop reason means the agent settled without running a turn (an
         // empty submission); there is nothing to continue from.
-        if (stopReason === undefined) return result;
+        if (result.stopReason === undefined) return result;
 
-        const next = await this.continuation(stopReason);
+        const next = await this.continuation(result.stopReason);
         switch (next.type) {
           case "rest":
             return result;
           case "suspended":
             return { type: "suspended", reason: next.reason };
-          case "messages":
-            result = await this.agent.send(next.messages, {
+          case "messages": {
+            const continued = await this.agent.send(next.messages, {
               requestKind: "continuation",
             });
+            // A continuation rolls back only as far as its own request, so
+            // the originally submitted content is still in the log and must
+            // not be handed back for resubmission.
+            result =
+              continued.type === "failed"
+                ? { ...continued, discardedSubmission: false }
+                : continued;
             continue;
+          }
           default:
             assertUnreachable(next);
         }
@@ -476,10 +487,10 @@ export class Thread {
     const messages: InputMessage[] = [];
     for (const delivery of ["async", "next"] as const) {
       const flushed = await this.agent.flushQueue(delivery);
-      if (flushed.compact) {
+      if (flushed.type === "compact") {
         return {
           type: "suspended",
-          reason: { kind: "compact", nextPrompt: flushed.compact.nextPrompt },
+          reason: { kind: "compact", nextPrompt: flushed.nextPrompt },
         };
       }
       messages.push(...flushed.messages);

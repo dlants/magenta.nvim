@@ -199,7 +199,7 @@ describe("Thread.phase", () => {
     });
     expect(core.phase).toEqual({
       type: "idle",
-      lastResult: { type: "completed" },
+      lastResult: { type: "completed", stopReason: "end_turn" },
     });
   });
   it("reports a failed submission as idle with the resubmit text", async () => {
@@ -313,7 +313,7 @@ describe("Thread.send result", () => {
     const stream = await mockClient.awaitStream();
     stream.streamText("hi");
     stream.finishResponse("end_turn");
-    expect(await result).toEqual({ type: "completed" });
+    expect(await result).toEqual({ type: "completed", stopReason: "end_turn" });
   });
   it("resolves yielded with the text a plain yield produced", async () => {
     const { core, mockClient } = createAgentWithMock({
@@ -373,13 +373,19 @@ describe("Thread.send result", () => {
   });
   it("resolves completed rather than hanging when there is nothing to send", async () => {
     const { core } = createAgentWithMock();
-    expect(await core.send([])).toEqual({ type: "completed" });
+    expect(await core.send([])).toEqual({
+      type: "completed",
+      stopReason: undefined,
+    });
   });
   it("resolves completed rather than hanging on an empty raw send", async () => {
     const { core } = createAgentWithMock({
       threadType: "compact" as ThreadType,
     });
-    expect(await core.send([])).toEqual({ type: "completed" });
+    expect(await core.send([])).toEqual({
+      type: "completed",
+      stopReason: undefined,
+    });
   });
   it("rejects once the thread's container has been torn down", async () => {
     const { core } = createAgentWithMock({
@@ -410,7 +416,84 @@ describe("Thread.send result", () => {
     const second = await awaitNextStream(mockClient, stream);
     second.streamText("and also hi");
     second.finishResponse("end_turn");
-    expect(await first).toEqual({ type: "completed" });
+    expect(await first).toEqual({ type: "completed", stopReason: "end_turn" });
+  });
+});
+describe("Thread turn loop", () => {
+  it("stays busy while a continuation is being prepared, so a send cannot race it", async () => {
+    let releaseResolve: (() => void) | undefined;
+    let resolveEntered: (() => void) | undefined;
+    const entered = new Promise<void>((r) => {
+      resolveEntered = r;
+    });
+    const gate = new Promise<void>((r) => {
+      releaseResolve = r;
+    });
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("loop-race"),
+      async (message) => {
+        resolveEntered?.();
+        await gate;
+        return {
+          compact: false,
+          messages: [{ type: "user" as const, text: renderPending(message) }],
+          reminders: [],
+        };
+      },
+    );
+    const sent = core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    expect(
+      await core.submit(pendingMessage("queued follow-up"), "next"),
+    ).toEqual({ type: "queued" });
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+    // The agent has settled and is idle; the loop is inside the flush that
+    // will build the continuation. A send arriving now must not start a
+    // concurrent turn.
+    await entered;
+    const streamsBefore = mockClient.streams.length;
+    expect(core.isBusy).toBe(true);
+    expect(await core.submit(pendingMessage("racer"), "async")).toEqual({
+      type: "queued",
+    });
+    expect(mockClient.streams.length).toBe(streamsBefore);
+    releaseResolve?.();
+    const second = await awaitNextStream(mockClient, stream);
+    second.streamText("done");
+    second.finishResponse("end_turn");
+    // The racer was queued, so it goes out as its own continuation.
+    const third = await awaitNextStream(mockClient, second);
+    third.streamText("done again");
+    third.finishResponse("end_turn");
+    expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
+  });
+  it("does not offer the submitted text back when a continuation fails", async () => {
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("continuation-failure"),
+    );
+    const sent = core.send([{ type: "user", text: "original message" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("truncated");
+    stream.finishResponse("max_tokens");
+    const continuation = await awaitNextStream(mockClient, stream);
+    continuation.respondWithError(new Error("continuation failure"));
+    const result = await sent;
+    if (result.type !== "failed") throw new Error("expected failed");
+    // The rollback only reached the continuation request, so the submitted
+    // message is still in the log and must not also be restored for resubmit.
+    expect(result.discardedSubmission).toBe(false);
+    expect(
+      core
+        .getProviderMessages()
+        .some(
+          (m) =>
+            m.role === "user" &&
+            JSON.stringify(m.content).includes("original message"),
+        ),
+    ).toBe(true);
   });
 });
 /** Stand in for the `runSubmission` loop: record the compaction suspensions a
@@ -493,7 +576,10 @@ describe("runSubmission across a compaction handoff", () => {
       expect(JSON.stringify(contStream.messages)).toContain("SUMMARY TEXT");
       contStream.streamText("resumed");
       contStream.finishResponse("end_turn");
-      expect(await result).toEqual({ type: "completed" });
+      expect(await result).toEqual({
+        type: "completed",
+        stopReason: "end_turn",
+      });
     } finally {
       await core.destroy();
       await cleanupArchive(threadId);
@@ -526,7 +612,10 @@ describe("runSubmission across a compaction handoff", () => {
       );
       contStream.streamText("resumed");
       contStream.finishResponse("end_turn");
-      expect(await result).toEqual({ type: "completed" });
+      expect(await result).toEqual({
+        type: "completed",
+        stopReason: "end_turn",
+      });
     } finally {
       await core.destroy();
       await cleanupArchive(threadId);
@@ -595,7 +684,10 @@ describe("runSubmission across a compaction handoff", () => {
       expect(calls).toEqual(prompts);
       stream.streamText("resumed");
       stream.finishResponse("end_turn");
-      expect(await result).toEqual({ type: "completed" });
+      expect(await result).toEqual({
+        type: "completed",
+        stopReason: "end_turn",
+      });
     } finally {
       await core.destroy();
       await cleanupArchive(threadId);
@@ -649,14 +741,17 @@ describe("runSubmission across a compaction handoff", () => {
       const stream = await mockClient.awaitStream();
       stream.streamText("done");
       stream.finishResponse("end_turn");
-      expect(await result).toEqual({ type: "completed" });
+      expect(await result).toEqual({
+        type: "completed",
+        stopReason: undefined,
+      });
       expect(compactor.calls).toEqual([]);
       // The log is coherent and resumable: a fresh send just continues.
       const next = core.send([{ type: "user", text: "again" }]);
       const stream2 = await awaitNextStream(mockClient, stream);
       stream2.streamText("ok");
       stream2.finishResponse("end_turn");
-      expect(await next).toEqual({ type: "completed" });
+      expect(await next).toEqual({ type: "completed", stopReason: "end_turn" });
     } finally {
       await core.destroy();
       await cleanupArchive(threadId);
@@ -1171,7 +1266,7 @@ describe("deferred submissions", () => {
     const streamsBefore = mockClient.streams.length;
     stream.finishResponse("end_turn");
     // The queue emptied into nothing, so there is no request to issue.
-    expect(await sent).toEqual({ type: "completed" });
+    expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
     expect(mockClient.streams.length).toBe(streamsBefore);
     expect(core.state.nextStopQueue).toEqual([]);
   });

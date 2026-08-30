@@ -197,12 +197,10 @@ export const DEFERRED_QUEUES = {
 
 export type DeferredDelivery = keyof typeof DEFERRED_QUEUES;
 /** The result of draining one deferred queue: content for the next request,
- * or a compaction that the flush ran into. Never both. */
-type QueuedCompaction = { nextPrompt: string | undefined };
-export type FlushedQueue = {
-  messages: InputMessage[];
-  compact: QueuedCompaction | undefined;
-};
+ * or a compaction that the flush ran into — never both. */
+export type FlushedQueue =
+  | { type: "messages"; messages: InputMessage[] }
+  | { type: "compact"; nextPrompt: string | undefined };
 
 export type ThreadState = {
   title: string | undefined;
@@ -555,7 +553,7 @@ export class Agent {
   private abortRequested = false;
   /** A `@compact` that the async queue produced mid-turn, already resolved,
    * waiting for the stop where the handoff can actually happen. */
-  private deferredCompact: QueuedCompaction | undefined;
+  private deferredCompact: { nextPrompt: string | undefined } | undefined;
 
   /** Why the executor parked the agent. The agent never learns this; it comes
    * back out here when the turn resolves `suspended`. */
@@ -661,14 +659,12 @@ export class Agent {
         if (resolved.compact) {
           this.requeue(entries.slice(i + 1), delivery);
           return {
-            messages: [],
-            compact: {
-              nextPrompt:
-                [...messages, ...resolved.messages]
-                  .map((m) => m.text)
-                  .join("\n")
-                  .trim() || undefined,
-            },
+            type: "compact",
+            nextPrompt:
+              [...messages, ...resolved.messages]
+                .map((m) => m.text)
+                .join("\n")
+                .trim() || undefined,
           };
         }
         for (const text of resolved.reminders) {
@@ -681,7 +677,7 @@ export class Agent {
         );
       }
     }
-    return { messages, compact: undefined };
+    return { type: "messages", messages };
   }
   private requeue(
     entries: ReadonlyArray<PendingMessage>,
@@ -692,15 +688,6 @@ export class Agent {
       { type: DEFERRED_QUEUES[delivery].enqueue, messages: [...entries] },
       { silent: true },
     );
-  }
-
-  /** How the turn that just finished stopped, if it stopped at all. Cleared
-   * on every request, so it only ever describes the stop the owner's loop is
-   * currently deciding about. */
-  private lastStopReason: StopReason | undefined;
-
-  get stopReason(): StopReason | undefined {
-    return this.lastStopReason;
   }
 
   /** Consult the before-request supervisors for the request the owner's loop
@@ -732,8 +719,7 @@ export class Agent {
       });
       return;
     }
-    this.lastStopReason = stopReason;
-    this.settle({ type: "completed" });
+    this.settle({ type: "completed", stopReason });
   }
 
   private createToolContext(): CreateToolContext {
@@ -911,7 +897,7 @@ export class Agent {
   private handleErrorState(error: Error): void {
     this.rollbackToPreSubmit();
     this.context.logger.error(error);
-    this.settle({ type: "failed", error });
+    this.settle({ type: "failed", error, discardedSubmission: true });
   }
 
   /** The queue drained by the abort in flight, handed to whoever aborted. */
@@ -994,7 +980,7 @@ export class Agent {
     this.submission = deferred;
     this.submit(inputMessages, opts).catch((error: Error) => {
       this.handleSendMessageError(error);
-      this.settle({ type: "failed", error });
+      this.settle({ type: "failed", error, discardedSubmission: true });
     });
     return deferred.promise;
   }
@@ -1015,7 +1001,6 @@ export class Agent {
     inputMessages?: InputMessage[],
     opts: SubmitOptions = {},
   ): Promise<void> {
-    this.lastStopReason = undefined;
     this.state.editedFilesThisTurn = [];
 
     const beforeRequest: BeforeRequestResult =
@@ -1043,7 +1028,7 @@ export class Agent {
     const injections = beforeRequest.injections;
     const hasPrefix = (this.pendingTurnPrefix?.length ?? 0) > 0;
     if (!hasContent && injections.length === 0 && !hasPrefix) {
-      this.settle({ type: "completed" });
+      this.settle({ type: "completed", stopReason: undefined });
       return;
     }
 
@@ -1175,10 +1160,11 @@ export class Agent {
     const asyncFlush = this.state.nextRequestQueue.length
       ? await this.flushQueue("async")
       : undefined;
-    if (asyncFlush?.compact) {
-      this.deferredCompact = asyncFlush.compact;
+    if (asyncFlush?.type === "compact") {
+      this.deferredCompact = { nextPrompt: asyncFlush.nextPrompt };
     }
-    const queuedForThisRequest = asyncFlush?.messages ?? [];
+    const queuedForThisRequest =
+      asyncFlush?.type === "messages" ? asyncFlush.messages : [];
 
     const contentToSend: AgentInput[] = [...this.pendingInjections];
     this.pendingInjections = [];

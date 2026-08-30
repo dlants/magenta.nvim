@@ -49,7 +49,10 @@ export async function runSubmission(args: {
     const reason = result.reason;
     if (reason.kind !== "compact" || !compactor) {
       // A suspension nobody claims is just a stop.
-      return { type: "completed" } satisfies SendResult;
+      return {
+        type: "completed",
+        stopReason: undefined,
+      } satisfies SendResult;
     }
 
     const outcome = await compactor.run(
@@ -63,6 +66,7 @@ export async function runSubmission(args: {
       return {
         type: "failed",
         error: new Error(`Compaction failed: ${outcome.message}`),
+        discardedSubmission: false,
       } satisfies SendResult;
     }
 

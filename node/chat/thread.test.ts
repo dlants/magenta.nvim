@@ -205,6 +205,11 @@ it("handles errors during streaming response", async () => {
     await driver.assertInputBufferContains(
       "Test error handling during response",
     );
+    // The error block is the previous submission's, so it survives until the
+    // next one starts rather than until the next render.
+    await driver.inputMagentaText("Second attempt");
+    await driver.send();
+    await driver.assertDisplayBufferDoesNotContain(errorMessage);
   });
 });
 
@@ -225,7 +230,11 @@ it("restores only the failed message, leaving queued messages pending", async ()
     // rendered rather than following the failed message into the input.
     expect(thread.core.state.nextRequestQueue).toHaveLength(1);
     await driver.assertDisplayBufferContains("Queued pending message");
-    expect(thread.failedSubmit?.text).toBe("Original message");
+    expect(thread.submission).toEqual({
+      type: "failed",
+      text: "Original message",
+      error: expect.any(Error),
+    });
   });
 });
 it("restores the failed message when the error arrives after assistant content", async () => {

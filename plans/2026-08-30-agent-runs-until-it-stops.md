@@ -150,6 +150,16 @@ Done. What was actually built:
   - `lastStopReason` is cleared at the top of `submit`, so a `send` that settles `completed` without running a turn (empty content) reports `undefined` and the loop rests rather than re-consulting supervisors against a stale stop.
   - **`Thread.isBusy` is new** (`looping || agent.isBusy`) and replaces the two `this.agent.isBusy` reads in `Thread`. Necessary, not cosmetic: `Agent.isBusy` is false between turns now, so queued delivery would have raced the loop.
 - Full suite green (`npx tsc -b`, `npx biome check .`, `npx vitest run`). The one failure seen, in `node/comments/comment-input.test.ts`, reproduces on a clean `git stash` and is a pre-existing flake in that file.
+### Review follow-ups (stage 1)
+
+- **The stop reason is part of the outcome, not a side channel.** `SendResult`'s `completed` variant is now `{ type: "completed"; stopReason: StopReason | undefined }`; `Agent.lastStopReason`, the `stopReason` getter and the reset in `submit` are gone. `undefined` still means "settled without ever issuing a request", which the loop reads straight off `result`. The two-variant `completed-without-request` shape the review suggested was passed over — a nullable field carries the same information for a fraction of the assertion churn — but the field is documented so the absent case is explicit.
+- **`FlushedQueue` is a discriminated union**: `{type:"messages"; messages} | {type:"compact"; nextPrompt}`. The "never both" comment is now enforced by the type. `Agent.deferredCompact` holds a bare `{nextPrompt}` rather than the removed `QueuedCompaction` alias.
+- **`failed` carries `discardedSubmission: boolean`.** A failure on a *continuation* rolls back only that request, so the originally submitted content is still in the log; restoring it into the input buffer would duplicate it. `Thread.runToRest` sets the flag false for continuation failures, and `NvimThread.handleSendResult` only renders the failed block / dispatches `setup-resubmit` when it is true. This is a real bug fix, not just representation.
+- **`NvimThread.lastSubmittedText` + `failedSubmit` collapsed into one `submission` field**: `{type:"in-flight"|"failed"; text; error?}`. The view reads a single discriminant, and the truthiness test on the text (which conflated an empty submission with no submission) is gone.
+- New tests:
+  - `Thread turn loop > stays busy while a continuation is being prepared` — holds the loop inside `flushQueue` via a gated `resolve`, asserts `core.isBusy`, that a `send` arriving in that window queues, and that no extra stream is opened.
+  - `Thread turn loop > does not offer the submitted text back when a continuation fails` — max_tokens stop, continuation stream errors; asserts `discardedSubmission === false` and that the original user message survives in the log.
+  - `node/chat/thread.test.ts` — the failure test now also asserts the error block clears only when the next submission starts.
 
 ## max_tokens as a supervisor
 
