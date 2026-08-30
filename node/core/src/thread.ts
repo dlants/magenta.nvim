@@ -186,7 +186,7 @@ export class Thread {
   /** Busy from the first request of a submission until the loop comes to
    * rest, which spans the gaps between turns. */
   get isBusy(): boolean {
-    return this.looping || this.agent.isBusy;
+    return this.loopState.type !== "idle" || this.agent.isBusy;
   }
 
   get runner(): Runner {
@@ -334,7 +334,8 @@ export class Thread {
   /** Abort the in-flight turn and hand back whatever never went out. The
    * queues are the thread's, so the debris is the thread's to report. */
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
-    this.abortRequested = true;
+    if (this.loopState.type === "running")
+      this.loopState = { type: "aborting" };
     await this.agent.abort();
     const unsent = this.drainQueues();
     if (unsent.length) this.handleUpdate();
@@ -569,14 +570,18 @@ export class Thread {
     });
   }
 
-  /** True from the moment `runToRest` takes over until it settles. The agent
-   * looks idle between turns now that it settles at every stop, so busyness
-   * is the loop's to report. */
-  private looping = false;
-
-  /** Set by `abort` so that an abort landing between turns — when the agent
-   * itself is idle and has nothing to interrupt — still stops the loop. */
-  private abortRequested = false;
+  /** The turn loop's lifecycle. Non-idle from the moment `runToRest` takes
+   * over until it settles: the agent looks idle between turns now that it
+   * settles at every stop, so busyness is the loop's to report. `aborting`
+   * is how an abort landing between turns — when the agent itself has
+   * nothing in flight to interrupt — still stops the loop. */
+  private loopState:
+    | { type: "idle" }
+    | { type: "running" }
+    | { type: "aborting" } = { type: "idle" };
+  private isAborting(): boolean {
+    return this.loopState.type === "aborting";
+  }
 
   /** Drive the agent until nothing more should be sent. The agent stops at
    * every turn boundary; deciding whether a stop is really the end — queued
@@ -585,19 +590,23 @@ export class Thread {
     messages: InputMessage[],
     opts?: SubmitOptions,
   ): Promise<SendResult> {
-    this.looping = true;
-    this.abortRequested = false;
+    // An abort can only target a loop that is running, so there is no stale
+    // flag to clear here: `abort` leaves `idle` alone.
+    this.loopState = { type: "running" };
     try {
       let result = await this.agent.send(messages, opts);
       for (;;) {
-        if (this.abortRequested) return { type: "aborted" };
+        // An abort that arrives while a turn is in flight comes back through
+        // the agent as an `aborted` result, so there is no separate check
+        // here: the only window the loop itself owns is the continuation,
+        // guarded below.
         if (result.type !== "completed") return result;
         // No stop reason means the agent settled without running a turn (an
         // empty submission); there is nothing to continue from.
         if (result.stopReason === undefined) return result;
 
         const next = await this.continuation(result.stopReason);
-        if (this.abortRequested) return { type: "aborted" };
+        if (this.isAborting()) return { type: "aborted" };
         switch (next.type) {
           case "rest":
             return result;
@@ -621,7 +630,7 @@ export class Thread {
         }
       }
     } finally {
-      this.looping = false;
+      this.loopState = { type: "idle" };
     }
   }
 

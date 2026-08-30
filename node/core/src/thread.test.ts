@@ -17,7 +17,7 @@ import {
 import type { QueuedMessage } from "./thread-api.ts";
 import { composeSupervisors } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
-import { pollUntil } from "./utils/async.ts";
+import { Defer, pollUntil } from "./utils/async.ts";
 
 describe("deferred submissions", () => {
   it("resolves a queued message at delivery, not when it was queued", async () => {
@@ -336,20 +336,16 @@ describe("Thread.send while busy", () => {
 
 describe("Thread.abort between turns", () => {
   it("stops the loop instead of issuing the continuation", async () => {
-    let releaseResolve: (() => void) | undefined;
-    let resolveEntered: (() => void) | undefined;
-    const entered = new Promise<void>((r) => {
-      resolveEntered = r;
-    });
-    const gate = new Promise<void>((r) => {
-      releaseResolve = r;
-    });
+    const entered = new Defer<void>();
+    const gate = new Defer<void>();
+    const resolved: string[] = [];
     const { core, mockClient } = createAgentWithMock(
       undefined,
       uniqueThreadId("abort-between-turns"),
       async (message) => {
-        resolveEntered?.();
-        await gate;
+        entered.resolve();
+        await gate.promise;
+        resolved.push(renderPending(message));
         return {
           compact: false,
           messages: [{ type: "user" as const, text: renderPending(message) }],
@@ -362,16 +358,57 @@ describe("Thread.abort between turns", () => {
     await core.submit(pendingMessage("queued follow-up"), "next");
     stream.streamText("ok");
     stream.finishResponse("end_turn");
-
     // The agent has settled and has nothing in flight to interrupt; the loop
     // is between turns, preparing the continuation.
-    await entered;
+    await entered.promise;
     const streamsBefore = mockClient.streams.length;
     const aborting = core.abort();
-    releaseResolve?.();
-    await aborting;
-
+    gate.resolve();
+    // Entries the drain already resolved are discarded rather than handed
+    // back: the drain got there first, so there is nothing left to report.
+    expect((await aborting).unsent).toEqual([]);
+    expect(resolved).toEqual(["queued follow-up"]);
     expect(await sent).toEqual({ type: "aborted" });
+    expect(mockClient.streams.length).toBe(streamsBefore);
+  });
+
+  it("issues no continuation when the abort races the stop", async () => {
+    let onUpdate: () => void = () => {};
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("abort-at-stop"),
+      undefined,
+      () => onUpdate(),
+    );
+    const stopConsultations: string[] = [];
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: (ctx) => {
+          if (ctx.kind !== "submission") stopConsultations.push(ctx.kind);
+          return Promise.resolve({ type: "none" as const });
+        },
+      },
+    ]);
+    const sent = core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("ok");
+    const streamsBefore = mockClient.streams.length;
+    let aborting: Promise<unknown> | undefined;
+    let aborted = false;
+    // The abort lands as the turn is finishing, so it is the agent that
+    // reports it — the loop must take that at face value rather than
+    // treating the stop as a turn boundary to continue from.
+    onUpdate = () => {
+      if (aborted || core.phase.type !== "idle") return;
+      aborted = true;
+      aborting = core.abort();
+    };
+    stream.finishResponse("end_turn");
+    await aborting;
+    expect(await sent).toEqual({ type: "aborted" });
+    // No stop was ever presented to the supervisors, so nothing decided to
+    // follow it.
+    expect(stopConsultations).toEqual([]);
     expect(mockClient.streams.length).toBe(streamsBefore);
   });
 });

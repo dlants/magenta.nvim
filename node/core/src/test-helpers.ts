@@ -85,6 +85,7 @@ export function createAgentWithMock(
   overrides?: Partial<AgentContext>,
   threadId: ThreadId = "test-thread" as ThreadId,
   resolve?: ResolveSubmission,
+  onUpdate?: () => void,
 ): {
   core: Thread;
   mockClient: MockAnthropicClient;
@@ -137,7 +138,7 @@ export function createAgentWithMock(
     core: new Thread(
       threadId,
       context,
-      { onUpdate: () => {}, resolve: resolve ?? resolveAsText },
+      { onUpdate: onUpdate ?? (() => {}), resolve: resolve ?? resolveAsText },
       { type: "fresh" },
       {
         baseDir: TEST_ARCHIVE_DIR,
