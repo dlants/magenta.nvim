@@ -184,7 +184,7 @@ describe("agent parity for tagged user input", () => {
   });
 });
 
-describe("onBeforeContinuation", () => {
+describe("onBeforeRequest", () => {
   /** The runner fills a result for every requested tool it isn't handed. */
   const emptyResults = () =>
     Promise.resolve({ type: "continue" as const, results: new Map() });
@@ -201,9 +201,15 @@ describe("onBeforeContinuation", () => {
         skipPostFlightTokenCount: true,
         executeTools: emptyResults,
         onUpdate: () => {},
-        onBeforeContinuation: () => {
+        onBeforeRequest: () => {
           calls++;
-          return Promise.resolve({ type: "suspend" as const, reason: held });
+          // The gate fires on the opening request too; this one holds the
+          // continuation that would carry the tool results.
+          return Promise.resolve(
+            calls === 1
+              ? { type: "proceed" as const }
+              : { type: "suspend" as const, reason: held },
+          );
         },
       },
       client as unknown as Anthropic,
@@ -222,7 +228,7 @@ describe("onBeforeContinuation", () => {
     });
     stream.finishResponse("tool_use", { inputTokens: 1, outputTokens: 1 });
     expect(await turn).toEqual({ type: "suspended", reason: held });
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
     expect(client.streams).toHaveLength(1);
   });
 
@@ -235,9 +241,15 @@ describe("onBeforeContinuation", () => {
         model: "gpt-5.4",
         executeTools: emptyResults,
         onUpdate: () => {},
-        onBeforeContinuation: () => {
+        onBeforeRequest: () => {
           calls++;
-          return Promise.resolve({ type: "suspend" as const, reason: held });
+          // The gate fires on the opening request too; this one holds the
+          // continuation that would carry the tool results.
+          return Promise.resolve(
+            calls === 1
+              ? { type: "proceed" as const }
+              : { type: "suspend" as const, reason: held },
+          );
         },
       },
       client as unknown as OpenAIStreamingClient,
@@ -250,7 +262,7 @@ describe("onBeforeContinuation", () => {
     });
     stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
     expect(await turn).toEqual({ type: "suspended", reason: held });
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
     expect(client.streams).toHaveLength(1);
   });
 });

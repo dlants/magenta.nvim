@@ -305,7 +305,7 @@ describe("deferred submissions", () => {
     expect(core.queued.next).toEqual([pendingMessage("third")]);
   });
 
-  it("leaves the queues intact and unresolved across a compaction handoff", async () => {
+  it("carries a queue flushed for a suspended request onto the handoff", async () => {
     const threadId = uniqueThreadId("deferred-compact");
     const calls: string[] = [];
     const { core, mockClient } = createAgentWithMock(
@@ -359,21 +359,19 @@ describe("deferred submissions", () => {
       await core.submit(pendingMessage("queued"), "next");
       stream.finishResponse("end_turn");
 
-      // The handoff issued no request, so the queue is neither drained nor
-      // resolved: its commands must run against the world as it is at
-      // delivery, on the far side of the swap.
+      // The stop flushed the queue for the request the gate then refused to
+      // issue. Resolution is not repeatable, so rather than being resolved a
+      // second time the content travels on the handoff itself: it becomes the
+      // compaction's follow-up prompt.
       const contStream = await awaitNextStream(mockClient, stream);
-      expect(queueAtHandoff).toBe(1);
-      expect(callsAtHandoff).toBe(0);
-
-      contStream.streamText("resumed");
-      contStream.finishResponse("end_turn");
-
-      const afterStream = await awaitNextStream(mockClient, contStream);
+      expect(queueAtHandoff).toBe(0);
+      expect(callsAtHandoff).toBe(1);
+      // Delivered by the post-compaction request itself, exactly once.
+      expect(userTexts(core)).toContain("queued");
       expect(calls).toEqual(["queued"]);
       expect(core.queued.next).toEqual([]);
-      expect(userTexts(core)).toContain("queued");
-      afterStream.finishResponse("end_turn");
+      contStream.streamText("resumed");
+      contStream.finishResponse("end_turn");
     } finally {
       await core.destroy();
       await cleanupArchive(threadId);

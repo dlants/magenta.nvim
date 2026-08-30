@@ -363,9 +363,9 @@ export type AgentPhase =
 /** How a turn ended. Delivered once, by the promise. */
 export type TurnResult =
   | { type: "stopped"; stopReason: StopReason }
-  /** the executor or the continuation hook returned suspend; history is
+  /** the executor or the before-request gate returned suspend; history is
    * coherent and resumable. `reason` is set when the suspension came from
-   * `onBeforeContinuation`; a tool executor's suspend carries none — the owner
+   * `onBeforeRequest`; a tool executor's suspend carries none — the owner
    * of the executor knows why it suspended. */
   | { type: "suspended"; reason?: SuspendReason | undefined }
   | { type: "aborted" }
@@ -439,16 +439,15 @@ export interface Runner {
   clone(hooks: RunnerHooks): Runner;
 }
 
-/** Optional interception point, supplied by whoever owns the runner. Called
- * once the tool results are in the log and the continuation request is about
- * to be issued, so the owner can append to that request itself. Answers
- * whether the turn should proceed. Not re-fired when the request is retried. */
-export type OnBeforeContinuation = (
-  stopReason: StreamStopReason,
-) => Promise<ContinuationDecision>;
+/** Optional interception point, supplied by whoever owns the runner. Called at
+ * the top of every loop iteration, immediately before the request is issued —
+ * the opening request of a turn included. The owner appends whatever it wants
+ * to carry to the log itself; the answer here is only a gate. Not re-fired
+ * when the request is retried. */
+export type OnBeforeRequest = () => Promise<BeforeRequestDecision>;
 
-export type ContinuationDecision =
-  | { type: "continue" }
+export type BeforeRequestDecision =
+  | { type: "proceed" }
   | { type: "suspend"; reason: SuspendReason };
 
 /** The collaborators a runner is bound to. Supplied wherever the runner is
@@ -457,7 +456,7 @@ export type ContinuationDecision =
 export type RunnerHooks = {
   executeTools: ToolExecutor;
   onUpdate: () => void;
-  onBeforeContinuation?: OnBeforeContinuation | undefined;
+  onBeforeRequest?: OnBeforeRequest | undefined;
 };
 
 export interface AgentOptions {
@@ -467,7 +466,7 @@ export interface AgentOptions {
   executeTools: ToolExecutor;
   /** "Something visible moved, re-render." No payload: read `phase` / `log`.
    * Called at streaming rates; the owner is responsible for throttling. */
-  onBeforeContinuation?: OnBeforeContinuation | undefined;
+  onBeforeRequest?: OnBeforeRequest | undefined;
   onUpdate: () => void;
   thinking?: {
     enabled: boolean;

@@ -256,7 +256,7 @@ Probes available for `hasPendingContent`, all already non-committing:
   in `git-tracker.test.ts`: non-committing peek, no-op change, throw path). Both
   race tests were verified to fail with their guard removed.
 
-## Single gate at the top of the turn loop
+## Single gate at the top of the turn loop — DONE
 
 - Goal: `onBeforeContinuation` becomes `onBeforeRequest`, fired at the top of every
   `runLoop` iteration; `runTurn`'s input append moves past it. `Agent.submit` no
@@ -276,6 +276,54 @@ Probes available for `hasPendingContent`, all already non-committing:
   - Auto-compact suspends at the opening request of a send when already over
     threshold, and at a continuation; in both cases the log is left resumable.
   - A retried request (`streamOneResponse` retry) does not re-fire the hook.
+
+### What was done
+
+- `OnBeforeContinuation` → `OnBeforeRequest` (`provider-types.ts`): no arguments,
+  answers `BeforeRequestDecision` (`proceed` | `suspend`). Both runners fire it at
+  the top of every `runLoop` iteration; `runTurn` no longer appends, `runLoop`
+  takes the input as `pending` and appends it past the gate.
+- `Agent.onBeforeRequest` composes and places everything: the turn's seeded
+  prefix, the supervisors' injections, then the mid-turn submissions.
+  `applyStopHooks`, `onBeforeContinuation` and `BeforeRequestResult` are gone,
+  as is the `prependToNextTurn` in `Thread.continuation`.
+- `executeTools` already suspended only for yield; only its comments changed.
+- Tests: `runner-parity.test.ts`'s gate suite now covers the opening request,
+  and `anthropic-runner-retry.test.ts` gained "does not re-fire the
+  before-request gate on a retried request".
+
+### Deviations
+
+- `SubmitOptions.requestKind` did not simply disappear: it became
+  `continuationOf?: StreamStopReason`. The gate takes no arguments, so the agent
+  has to describe the request to the supervisors itself, and it cannot tell a
+  turn-opening continuation (a `max_tokens` nudge, a queue flush) from a fresh
+  submission. `Thread` states it; later gates in the same turn derive
+  `{kind: "continuation", stopReason}` from the last assistant message. All of
+  this dies with `RequestContextKind` in stage 3.
+- Coalescing is chosen by the agent, not fixed: the opening request of a turn
+  starts a new user message (otherwise the injections fold into whatever the log
+  ended with — an abort marker, a suspended send), a continuation coalesces into
+  the message carrying the tool results. The runner then coalesces the caller's
+  input only if the gate actually appended something, so an opening request with
+  no injections still pushes its own message.
+- The seeded prefix (`prependToNextTurn`) is consumed by the gate rather than by
+  `Agent.runTurn`, which is what keeps it ahead of the injections in one message
+  (the compaction summary, then the system-info preamble, then the prompt).
+- Queue content flushed for a request the gate then suspends is *not* left
+  unresolved, contrary to the invariant as written: `flushAtStop` runs before the
+  request exists, and resolution is not repeatable. Instead the flushed text is
+  folded into the compaction's follow-up prompt, exactly as `flushAtStop` already
+  does for a stop-time `@compact`, so it is resolved once and delivered once on
+  the far side of the swap. `thread.test.ts`'s "carries a queue flushed for a
+  suspended request onto the handoff" covers it.
+- `Agent.submit`'s last-resort empty-request guard is gone: the agent can no
+  longer know whether the request would carry injections, since they are composed
+  inside the turn. `Thread.runToRest`'s probe (stage 1) is the only gate on an
+  empty send.
+- An abort now joins on an in-flight gate, since the gate runs inside the turn.
+  The stage-1 race test was restructured to resolve its gate before awaiting the
+  abort; the race it guarded against is now structurally impossible.
 
 ## Drop the request kind
 

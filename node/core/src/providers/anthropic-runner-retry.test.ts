@@ -171,6 +171,33 @@ describe("AnthropicRunner retry logic", () => {
     expect((result.error as APIError).status).toBe(400);
   });
 
+  it("does not re-fire the before-request gate on a retried request", async () => {
+    const mockClient = new MockAnthropicClient();
+    let calls = 0;
+    const agent = new AnthropicRunner(
+      {
+        ...defaultOptions,
+        onBeforeRequest: () => {
+          calls++;
+          return Promise.resolve({ type: "proceed" as const });
+        },
+      },
+      mockClient as unknown as Anthropic,
+      defaultAnthropicOptions,
+    );
+    const turn = start(agent);
+    await vi.advanceTimersByTimeAsync(0);
+    let stream = await mockClient.awaitStream();
+    stream.respondWithError(make529Error());
+    await vi.advanceTimersByTimeAsync(1000);
+    stream = await mockClient.awaitStream();
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(calls).toBe(1);
+  });
+
   it("retries on 529 with correct delays and succeeds", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);

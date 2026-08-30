@@ -16,7 +16,7 @@ import type { ProviderProfile } from "./provider-options.ts";
 import type {
   AgentInput,
   AgentPhase,
-  ContinuationDecision,
+  BeforeRequestDecision,
   NativeMessageIdx,
   Provider,
   ProviderMessage,
@@ -176,19 +176,16 @@ export interface AgentDeps {
 }
 
 export type SubmitOptions = {
-  requestKind?: "submission" | "continuation";
+  /** This turn opens with a request that continues from `stopReason` rather
+   * than with a fresh submission. Only affects the `RequestContext` the
+   * before-request supervisors see. */
+  continuationOf?: StreamStopReason;
 };
-
-/** The outcome of consulting the before-request hooks when the caller has
- * already disposed of whatever the supervisors produced. */
-export type BeforeRequestResult =
-  | { type: "suspend"; reason: SuspendReason }
-  | { type: "proceed" };
 
 /** What the before-request hooks produced, for a caller that wants to place it
  * itself. */
 type ComposedBeforeRequest =
-  | { type: "suspend"; reason: SuspendReason }
+  | { type: "suspend"; reason: SuspendReason; injections: AgentInput[] }
   | {
       type: "proceed";
       injections: AgentInput[];
@@ -308,8 +305,7 @@ export class Agent {
     return {
       executeTools: (requests) => this.executeTools(requests),
       onUpdate: () => this.scheduleUpdate(),
-      onBeforeContinuation: (stopReason) =>
-        this.onBeforeContinuation(stopReason),
+      onBeforeRequest: () => this.onBeforeRequest(),
     };
   }
 
@@ -431,10 +427,10 @@ export class Agent {
   }
 
   private runTurn(input: AgentInput[]): Promise<void> {
-    const prefix = this.pendingTurnPrefix ?? [];
-    this.pendingTurnPrefix = undefined;
+    // The seeded prefix is not passed in: it leads the request the gate
+    // composes, so the gate is what consumes it.
     const turn = this.runner
-      .runTurn([...prefix, ...input])
+      .runTurn(input)
       .then((result) => {
         this.currentTurn = undefined;
         this.flushUpdateNow();
@@ -476,19 +472,6 @@ export class Agent {
     this.pendingYield = undefined;
     if (!pending) return;
     await this.handleYield(pending.result, pending.value);
-  }
-
-  /** Consulted for a continuation that is actually going to be issued. */
-  async applyStopHooks(
-    stopReason: StreamStopReason,
-  ): Promise<BeforeRequestResult> {
-    const composed = await this.composeBeforeRequest({
-      kind: "continuation",
-      stopReason,
-    });
-    if (composed.type === "suspend") return composed;
-    this.prependToNextTurn(composed.injections);
-    return { type: "proceed" };
   }
 
   get inputTokenCount(): number | undefined {
@@ -730,39 +713,17 @@ export class Agent {
     opts: SubmitOptions = {},
   ): Promise<void> {
     this.state.editedFilesThisTurn = [];
-    // Composition awaits, and an abort landing in that window settles this
-    // submission and hands the agent to whoever sent next. Its request must
-    // not go out on top of theirs.
-    const submission = this.submission;
-
-    const beforeRequest: ComposedBeforeRequest =
-      opts.requestKind === "continuation"
-        ? { type: "proceed", injections: [], submissions: [] }
-        : await this.composeBeforeRequest({ kind: "submission" });
-    if (this.submission !== submission) return;
-    const { content, hasContent } = this.prepareUserContent(inputMessages);
-    if (beforeRequest.type === "suspend") {
-      this.runner.appendUserMessage(toAgentInput(content), { coalesce: true });
-      this.settle({ type: "suspended", reason: beforeRequest.reason });
-      return;
-    }
-
-    const injections = beforeRequest.injections;
-    const hasPrefix = (this.pendingTurnPrefix?.length ?? 0) > 0;
-    // Last-resort guard against a request with no content at all. Whether an
-    // empty send is worth issuing is decided by the owner (`Thread.send`),
-    // which probes its supervisors before it gets here.
-    if (!hasContent && injections.length === 0 && !hasPrefix) {
-      this.settle({ type: "completed", stopReason: undefined });
-      return;
-    }
-
-    const contentToSend: AgentInput[] = [...injections];
-    contentToSend.push(...toAgentInput(content));
+    this.pendingRequestKind = opts.continuationOf
+      ? { kind: "continuation", stopReason: opts.continuationOf }
+      : { kind: "submission" };
+    // Whether a send with no user content is worth a request is the owner's
+    // call: it probes its supervisors before it gets here, and the request it
+    // decides to issue is composed inside the turn, by the gate.
+    const { content } = this.prepareUserContent(inputMessages);
 
     this.preSubmitNativeIdx = this.runner.getNativeMessageIdx();
     this.deps.onUpdate();
-    void this.runTurn(contentToSend);
+    void this.runTurn(toAgentInput(content));
   }
 
   private getLastAssistantMessage():
@@ -820,27 +781,60 @@ export class Agent {
     this.settle({ type: "yielded", value });
   }
 
-  /** The runner has the tool results in the log and is about to issue the
-   * continuation request, so anything the supervisors produce can go straight
-   * into that request. */
-  private async onBeforeContinuation(
-    stopReason: StreamStopReason,
-  ): Promise<ContinuationDecision> {
-    const composed = await this.composeBeforeRequest({
-      kind: "continuation",
-      stopReason,
-    });
+  /** The runner is at the top of a loop iteration, about to issue a request.
+   * Whatever the supervisors produce is appended here, so it rides that
+   * request: on the opening request it lands ahead of the caller's own
+   * content, and on a continuation it folds into the message carrying the
+   * tool results. */
+  private async onBeforeRequest(): Promise<BeforeRequestDecision> {
+    const kind = this.pendingRequestKind ?? this.continuationKind();
+    // The opening request of a turn starts its own user message; a
+    // continuation folds into the one already carrying the tool results.
+    const coalesce = this.pendingRequestKind === undefined;
+    this.pendingRequestKind = undefined;
+    // Content seeded for this turn leads the request, ahead of the
+    // supervisors' own injections.
+    const lead = coalesce ? [] : (this.pendingTurnPrefix ?? []);
+    if (!coalesce) this.pendingTurnPrefix = undefined;
+
+    const composed = await this.composeBeforeRequest(kind);
+    const content = [
+      ...lead,
+      ...composed.injections,
+      ...(composed.type === "proceed"
+        ? toAgentInput(this.prepareUserContent(composed.submissions).content)
+        : []),
+    ];
+    if (content.length) {
+      this.runner.appendUserMessage(
+        content,
+        coalesce ? { coalesce: true } : undefined,
+      );
+    }
     if (composed.type === "suspend") {
       return { type: "suspend", reason: composed.reason };
     }
-    const content = [
-      ...composed.injections,
-      ...toAgentInput(this.prepareUserContent(composed.submissions).content),
-    ];
-    if (content.length) {
-      this.runner.appendUserMessage(content, { coalesce: true });
+    return { type: "proceed" };
+  }
+
+  /** How the first request of the current turn is described to the
+   * supervisors; set by `submit` and consumed by the first gate. Later gates
+   * in the same turn are continuations by construction — the loop only comes
+   * back around after tool results. */
+  private pendingRequestKind: RequestContextKind | undefined;
+
+  private continuationKind(): RequestContextKind {
+    const messages = this.runner.log.messages;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role === "assistant") {
+        return {
+          kind: "continuation",
+          stopReason: message.stopReason ?? "tool_use",
+        };
+      }
     }
-    return { type: "continue" };
+    return { kind: "continuation", stopReason: "tool_use" };
   }
 
   private handleSendMessageError = (error: Error): void => {
@@ -874,6 +868,9 @@ export class Agent {
     return await onYield(value);
   }
 
+  /** Consult the supervisors. Nothing is appended here: placing what they
+   * produce — and ordering it against the turn's own content — belongs to the
+   * one caller, `onBeforeRequest`. */
   private async composeBeforeRequest(
     context: RequestContextKind,
   ): Promise<ComposedBeforeRequest> {
@@ -896,8 +893,7 @@ export class Agent {
         : block,
     );
     if (composed.type === "suspend") {
-      this.runner.appendUserMessage(injections, { coalesce: true });
-      return { type: "suspend", reason: composed.reason };
+      return { type: "suspend", reason: composed.reason, injections };
     }
     return { type: "proceed", injections, submissions: composed.submissions };
   }

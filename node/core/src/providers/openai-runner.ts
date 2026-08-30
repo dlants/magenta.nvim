@@ -21,7 +21,7 @@ import type {
   AgentLog,
   AgentOptions,
   AgentPhase,
-  ContinuationDecision,
+  BeforeRequestDecision,
   NativeMessageIdx,
   ProviderMessage,
   ProviderMessageContent,
@@ -426,7 +426,7 @@ export class OpenAIRunner implements Runner {
 
   clone(hooks: RunnerHooks): OpenAIRunner {
     const cloned = new OpenAIRunner(
-      { ...this.options, onBeforeContinuation: undefined, ...hooks },
+      { ...this.options, onBeforeRequest: undefined, ...hooks },
       this.client,
       this.openaiOptions,
     );
@@ -448,10 +448,9 @@ export class OpenAIRunner implements Runner {
     }
     this.turnInFlight = true;
     this.aborted = false;
-    this.appendUserMessage(input);
     this.startTicker();
     try {
-      return await this.runLoop();
+      return await this.runLoop(input);
     } finally {
       this.turnInFlight = false;
       this.aborted = false;
@@ -462,10 +461,41 @@ export class OpenAIRunner implements Runner {
     }
   }
 
+  /** Cheap "has anything been added to the log" witness: message count plus
+   * the size of the trailing message, which is what a coalescing append
+   * grows. */
+  private logExtent(): string {
+    const last = this.messages[this.messages.length - 1];
+    return `${this.messages.length}:${last?.content.length ?? 0}`;
+  }
+
   /** Alternates between inference and tool execution until something ends the
    * turn. This is the only thing that drives the agent forward. */
-  private async runLoop(): Promise<TurnResult> {
+  private async runLoop(initialInput: AgentInput[]): Promise<TurnResult> {
+    let pending: AgentInput[] | undefined = initialInput;
     while (true) {
+      if (this.aborted) return this.finishAbort();
+
+      // Not `await hook?.()`: with no hook there is nothing to wait for, and
+      // an unconditional await would push the request a tick further out.
+      const before = this.logExtent();
+      const decision: BeforeRequestDecision = this.options.onBeforeRequest
+        ? await this.options.onBeforeRequest()
+        : { type: "proceed" };
+      // After the gate, so the owner's injections sit ahead of the caller's
+      // own content — and in the same user message as them, but not folded
+      // into whatever the log happened to end with otherwise.
+      if (pending) {
+        const injected = this.logExtent() !== before;
+        this.appendUserMessage(
+          pending,
+          injected ? { coalesce: true } : undefined,
+        );
+        pending = undefined;
+      }
+      if (decision.type === "suspend") {
+        return { type: "suspended", reason: decision.reason };
+      }
       if (this.aborted) return this.finishAbort();
 
       const outcome = await this.streamOneResponse();
@@ -518,14 +548,6 @@ export class OpenAIRunner implements Runner {
       }
       if (toolOutcome.type === "suspend") return { type: "suspended" };
       if (this.aborted) return this.finishAbort();
-
-      const decision: ContinuationDecision =
-        (await this.options.onBeforeContinuation?.(outcome.stopReason)) ?? {
-          type: "continue",
-        };
-      if (decision.type === "suspend") {
-        return { type: "suspended", reason: decision.reason };
-      }
     }
   }
 

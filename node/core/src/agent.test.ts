@@ -1805,8 +1805,11 @@ describe("AutoCompactSupervisor integration", () => {
       },
     ]);
     const sent = core.send([{ type: "user", text: "hello" }]);
-    await core.abort();
+    // The gate runs inside the turn, so the abort joins on it: resolve it
+    // before awaiting, or the two wait on each other.
+    const aborted = core.abort();
     gate.resolve();
+    await aborted;
     expect(await sent).toEqual({ type: "aborted" });
     await delay(10);
     expect(mockClient.streams.length).toBe(0);
@@ -2333,13 +2336,20 @@ describe("Agent failure rollback", () => {
     expect(core.getProviderMessages()).toHaveLength(0);
 
     void core.send([{ type: "user", text: "try again" }]);
-    await mockClient.awaitStream();
-    const userTexts = core
-      .getProviderMessages()
-      .filter((m) => m.role === "user")
-      .flatMap((m) => m.content)
-      .filter((c) => c.type === "text")
-      .map((c) => c.text);
+    // The resubmitted content is appended by the turn, past the gate, so poll
+    // for it rather than for the stream.
+    const userTexts = await pollUntil(() => {
+      const texts = core
+        .getProviderMessages()
+        .filter((m) => m.role === "user")
+        .flatMap((m) => m.content)
+        .filter((c) => c.type === "text")
+        .map((c) => c.text);
+      if (!texts.some((t) => t.includes("try again"))) {
+        throw new Error("waiting for the resubmitted message");
+      }
+      return texts;
+    });
     expect(userTexts.filter((t) => t.includes("find the bug"))).toHaveLength(0);
     expect(userTexts.filter((t) => t.includes("try again"))).toHaveLength(1);
   });

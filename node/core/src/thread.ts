@@ -662,7 +662,8 @@ export class Thread {
         // empty submission); there is nothing to continue from.
         if (result.stopReason === undefined) return result;
 
-        const next = await this.continuation(result.stopReason);
+        const stopReason = result.stopReason;
+        const next = await this.continuation(stopReason);
         if (this.isAborting(epoch)) return { type: "aborted" };
         switch (next.type) {
           case "rest":
@@ -671,8 +672,23 @@ export class Thread {
             return { type: "suspended", reason: next.reason };
           case "messages": {
             const continued = await this.agent.send(next.messages, {
-              requestKind: "continuation",
+              continuationOf: stopReason,
             });
+            if (
+              continued.type === "suspended" &&
+              continued.reason.kind === "compact" &&
+              next.carry
+            ) {
+              return {
+                type: "suspended",
+                reason: {
+                  ...continued.reason,
+                  nextPrompt: [continued.reason.nextPrompt, next.carry]
+                    .filter((part): part is string => Boolean(part))
+                    .join("\n\n"),
+                },
+              };
+            }
             // A continuation rolls back only as far as its own request, so
             // the originally submitted content is still in the log and must
             // not be handed back for resubmission.
@@ -699,18 +715,13 @@ export class Thread {
   ): Promise<
     | { type: "rest" }
     | { type: "suspended"; reason: SuspendReason }
-    | { type: "messages"; messages: InputMessage[] }
+    | { type: "messages"; messages: InputMessage[]; carry?: string }
   > {
     const planned = this.plannedContinuation(stopReason);
     if (planned.type === "suspend") {
       return { type: "suspended", reason: planned.reason };
     }
     if (planned.type === "rest") return { type: "rest" };
-
-    const beforeRequest = await this.agent.applyStopHooks(stopReason);
-    if (beforeRequest.type === "suspend") {
-      return { type: "suspended", reason: beforeRequest.reason };
-    }
 
     if (planned.type === "messages") {
       return { type: "messages", messages: planned.messages };
@@ -730,14 +741,24 @@ export class Thread {
       messages.push(...flushed.messages);
     }
     if (!messages.length) return { type: "rest" };
-    return { type: "messages", messages };
+    // Resolved queue content is spent: if the request it was flushed for is
+    // suspended, it has to travel on the handoff rather than be resolved a
+    // second time, so it is handed back for that.
+    return {
+      type: "messages",
+      messages,
+      carry: messages
+        .map((m) => m.text)
+        .join("\n")
+        .trim(),
+    };
   }
 
-  /** Decided *before* the before-request hooks run, because a stop that ends
-   * the turn issues no request and the context trackers must not drain their
-   * updates into a message nothing is about to send. Queue resolution stays
-   * deferred: it runs effects, so it must not happen until we know the
-   * request will be issued. */
+  /** Decided before anything is resolved or drained, because a stop that ends
+   * the turn issues no request and the queues must not run their effects into
+   * a message nothing is about to send. The supervisors' own injections are no
+   * longer a concern here: they are composed by the gate, inside the request
+   * that carries them. */
   private plannedContinuation(
     stopReason: StopReason,
   ):
