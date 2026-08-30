@@ -334,6 +334,7 @@ export class Thread {
   /** Abort the in-flight turn and hand back whatever never went out. The
    * queues are the thread's, so the debris is the thread's to report. */
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
+    this.abortRequested = true;
     await this.agent.abort();
     const unsent = this.drainQueues();
     if (unsent.length) this.handleUpdate();
@@ -573,6 +574,10 @@ export class Thread {
    * is the loop's to report. */
   private looping = false;
 
+  /** Set by `abort` so that an abort landing between turns — when the agent
+   * itself is idle and has nothing to interrupt — still stops the loop. */
+  private abortRequested = false;
+
   /** Drive the agent until nothing more should be sent. The agent stops at
    * every turn boundary; deciding whether a stop is really the end — queued
    * content, a supervisor nudge, a truncated response — is the thread's. */
@@ -581,15 +586,18 @@ export class Thread {
     opts?: SubmitOptions,
   ): Promise<SendResult> {
     this.looping = true;
+    this.abortRequested = false;
     try {
       let result = await this.agent.send(messages, opts);
       for (;;) {
+        if (this.abortRequested) return { type: "aborted" };
         if (result.type !== "completed") return result;
         // No stop reason means the agent settled without running a turn (an
         // empty submission); there is nothing to continue from.
         if (result.stopReason === undefined) return result;
 
         const next = await this.continuation(result.stopReason);
+        if (this.abortRequested) return { type: "aborted" };
         switch (next.type) {
           case "rest":
             return result;

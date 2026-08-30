@@ -132,7 +132,7 @@ export type ComposedRequestActions = {
 
 # Stages
 
-> Status: stages 1 (hoist the loop), 2 (max_tokens as a supervisor) and 3 (queues move to Thread) are **done** and committed. Stage 3 also absorbed the parts of stages 4 and 5 that it forced; see its notes. Stage 4's remaining item is the between-turns abort guard.
+> Status: all stages are **done** and committed. Stage 3 absorbed the parts of stages 4 and 5 that it forced; stage 4 finished with the between-turns abort guard.
 
 ## hoist the loop
 
@@ -220,7 +220,12 @@ Done. What was actually built:
 - Tests: `Thread.abort returns the unsent queue` (`agent.test.ts:1255-1313`) moves to `thread.test.ts`; its cases enqueue via `core.submit(pendingMessage(...), "async")` against a busy thread instead of `core.update({type:"enqueue-next-request"})`, which no longer exists.
 - Add: abort delivered while the loop is between turns settles `aborted` and issues no further request.
 
-Partially done in stage 3, which forced it: the signature change, `Thread.abort`'s drain, and the test move are all in. **Remaining: the between-turns abort guard on `runToRest` and its test.**
+Done. The signature change, `Thread.abort`'s drain and the test move landed in stage 3; this stage added the between-turns guard:
+
+- `Thread.abortRequested` is set by `abort()` and cleared at the top of `runToRest`. The loop checks it in two places: at the top of each iteration (an abort that arrived while the agent was settling) and immediately after `continuation()` returns (an abort that arrived while the continuation was being prepared). Either way the loop returns `{type:"aborted"}` and issues no further request.
+- Decision: an abort landing *during* a continuation drain discards the entries that drain resolved, rather than re-queueing them. That matches the existing abort-then-send-now path, which also drains and discards, and keeps the guard a single check rather than a rollback.
+- No agent change was needed — `Agent.abort`/`abortAndWait` already return `void` as of stage 3.
+- New test: `Thread.abort between turns > stops the loop instead of issuing the continuation` (`node/core/src/thread.test.ts`) gates the queued entry's resolution, aborts while the loop sits in the flush, and asserts the original `send` resolves `{type:"aborted"}` with no new stream opened. Verified to time out when the guards are removed.
 
 ## root layer + cleanup
 

@@ -334,6 +334,48 @@ describe("Thread.send while busy", () => {
   });
 });
 
+describe("Thread.abort between turns", () => {
+  it("stops the loop instead of issuing the continuation", async () => {
+    let releaseResolve: (() => void) | undefined;
+    let resolveEntered: (() => void) | undefined;
+    const entered = new Promise<void>((r) => {
+      resolveEntered = r;
+    });
+    const gate = new Promise<void>((r) => {
+      releaseResolve = r;
+    });
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("abort-between-turns"),
+      async (message) => {
+        resolveEntered?.();
+        await gate;
+        return {
+          compact: false,
+          messages: [{ type: "user" as const, text: renderPending(message) }],
+          reminders: [],
+        };
+      },
+    );
+    const sent = core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    await core.submit(pendingMessage("queued follow-up"), "next");
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+
+    // The agent has settled and has nothing in flight to interrupt; the loop
+    // is between turns, preparing the continuation.
+    await entered;
+    const streamsBefore = mockClient.streams.length;
+    const aborting = core.abort();
+    releaseResolve?.();
+    await aborting;
+
+    expect(await sent).toEqual({ type: "aborted" });
+    expect(mockClient.streams.length).toBe(streamsBefore);
+  });
+});
+
 describe("Thread.abort returns the unsent queue", () => {
   const queuedText = (unsent: ReadonlyArray<QueuedMessage>) =>
     unsent.map((q) => renderPending(q.message)).join("\n");
