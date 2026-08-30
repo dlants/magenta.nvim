@@ -1612,6 +1612,38 @@ describe("AutoCompactSupervisor integration", () => {
     });
     expect(kinds).toEqual(["submission", "continuation"]);
   });
+  it("reports the provider's stop reason on a continuation that carries tool results", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const contexts: string[] = [];
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: (ctx) => {
+          contexts.push(
+            ctx.kind === "continuation"
+              ? `continuation:${ctx.stopReason}`
+              : ctx.kind,
+          );
+          return Promise.resolve({ type: "none" as const });
+        },
+      },
+    ]);
+    void core.send([{ type: "user", text: "hello" }]);
+    const stream = await mockClient.awaitStream();
+    // Tools were requested, but the response was cut short by the token limit:
+    // the continuation carries the results under the provider's own stop
+    // reason, not a hardcoded "tool_use".
+    stream.streamToolUse(
+      "tool-truncated" as ToolRequestId,
+      "get_files" as ToolName,
+      { files: [{ filePath: "/tmp/test.txt" }] },
+    );
+    stream.finishResponse("max_tokens");
+    const nextStream = await awaitNextStream(mockClient, stream);
+    expect(contexts).toEqual(["submission", "continuation:max_tokens"]);
+    nextStream.streamText("done");
+    nextStream.finishResponse("end_turn");
+  });
+
   it("does not consult onBeforeRequest at a stop that issues no request", async () => {
     const { core, mockClient } = createAgentWithMock();
     const kinds: string[] = [];

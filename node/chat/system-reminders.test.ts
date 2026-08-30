@@ -118,20 +118,21 @@ test("auto-respond messages should include system reminder after tool result", a
     expect(toolResultMessage).toBeDefined();
     expect(toolResultMessage!.role).toBe("user");
 
-    // Tool result message should NOT have a system reminder
-    const toolResultReminder = findSystemReminderText(
-      toolResultMessage!.content,
+    // The reminder rides along in the same user message as the tool result,
+    // after the tool_result block.
+    expect(toolResultMessage).toBe(
+      autoRespondRequest.messages[autoRespondRequest.messages.length - 1],
     );
-    expect(toolResultReminder).toBeUndefined();
-
-    // The last message should be a separate user message with the system reminder
-    const lastMessage =
-      autoRespondRequest.messages[autoRespondRequest.messages.length - 1];
-    expect(lastMessage.role).toBe("user");
-
-    const systemReminder = findSystemReminderText(lastMessage.content);
+    const systemReminder = findSystemReminderText(toolResultMessage!.content);
     expect(systemReminder).toBeDefined();
     expect(systemReminder!.text).toContain("<system-reminder>");
+    const blocks = toolResultMessage!.content;
+    if (typeof blocks === "string") throw new Error("expected content blocks");
+    expect(blocks.findIndex((b) => b.type === "tool_result")).toBeLessThan(
+      blocks.findIndex(
+        (b) => b.type === "text" && b.text.includes("<system-reminder>"),
+      ),
+    );
   });
 });
 

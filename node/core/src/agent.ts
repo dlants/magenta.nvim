@@ -16,6 +16,7 @@ import type { ProviderProfile } from "./provider-options.ts";
 import type {
   AgentInput,
   AgentPhase,
+  ContinuationDecision,
   NativeMessageIdx,
   Provider,
   ProviderMessage,
@@ -28,7 +29,6 @@ import type {
   StopReason,
   StreamStopReason,
   ToolOutcome,
-  ToolResults,
   TurnResult,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
@@ -179,9 +179,21 @@ export type SubmitOptions = {
   requestKind?: "submission" | "continuation";
 };
 
+/** The outcome of consulting the before-request hooks when the caller has
+ * already disposed of whatever the supervisors produced. */
 export type BeforeRequestResult =
   | { type: "suspend"; reason: SuspendReason }
-  | { type: "proceed"; injections: AgentInput[] };
+  | { type: "proceed" };
+
+/** What the before-request hooks produced, for a caller that wants to place it
+ * itself. */
+type ComposedBeforeRequest =
+  | { type: "suspend"; reason: SuspendReason }
+  | {
+      type: "proceed";
+      injections: AgentInput[];
+      submissions: InputMessage[];
+    };
 
 export class Agent {
   public state: ThreadState;
@@ -296,7 +308,8 @@ export class Agent {
     return {
       executeTools: (requests) => this.executeTools(requests),
       onUpdate: () => this.scheduleUpdate(),
-      onBeforeToolResponse: (args) => this.buildToolResponseExtras(args),
+      onBeforeContinuation: (stopReason) =>
+        this.onBeforeContinuation(stopReason),
     };
   }
 
@@ -405,10 +418,9 @@ export class Agent {
 
   private abortRequested = false;
 
-  private suspendReason:
-    | { type: "yield"; result: string; value: YieldValue }
-    | { type: "supervisor"; reason: SuspendReason }
-    | undefined;
+  /** Why the tool executor asked to suspend. Only the yield case exists: a
+   * supervisor's suspension travels back on the `TurnResult` itself. */
+  private pendingYield: { result: string; value: YieldValue } | undefined;
 
   private outputTokenCount(): number {
     let total = 0;
@@ -443,7 +455,7 @@ export class Agent {
         this.finishAbort();
         return;
       case "suspended":
-        await this.handleSuspend();
+        await this.handleSuspend(result.reason);
         return;
       case "stopped":
         this.handleStopped(result.stopReason);
@@ -453,23 +465,30 @@ export class Agent {
     }
   }
 
-  private async handleSuspend(): Promise<void> {
-    const reason = this.suspendReason;
-    this.suspendReason = undefined;
-    if (!reason) return;
-    if (reason.type === "supervisor") {
-      this.settle({ type: "suspended", reason: reason.reason });
+  private async handleSuspend(
+    supervisorReason?: SuspendReason | undefined,
+  ): Promise<void> {
+    if (supervisorReason) {
+      this.settle({ type: "suspended", reason: supervisorReason });
       return;
     }
-    await this.handleYield(reason.result, reason.value);
+    const pending = this.pendingYield;
+    this.pendingYield = undefined;
+    if (!pending) return;
+    await this.handleYield(pending.result, pending.value);
   }
 
   /** Consulted for a continuation that is actually going to be issued. */
-  applyStopHooks(stopReason: StreamStopReason): Promise<BeforeRequestResult> {
-    return this.applyBeforeRequestActions(
-      { kind: "continuation", stopReason },
-      "prefix",
-    );
+  async applyStopHooks(
+    stopReason: StreamStopReason,
+  ): Promise<BeforeRequestResult> {
+    const composed = await this.composeBeforeRequest({
+      kind: "continuation",
+      stopReason,
+    });
+    if (composed.type === "suspend") return composed;
+    this.prependToNextTurn(composed.injections);
+    return { type: "proceed" };
   }
 
   get inputTokenCount(): number | undefined {
@@ -628,22 +647,9 @@ export class Agent {
     }
 
     if (yieldResult !== undefined && yieldValue !== undefined) {
-      this.suspendReason = {
-        type: "yield",
+      this.pendingYield = {
         result: yieldResult,
         value: yieldValue,
-      };
-      return { type: "suspend", results };
-    }
-
-    const beforeRequest = await this.applyBeforeRequestActions(
-      { kind: "continuation", stopReason: "tool_use" },
-      "pending",
-    );
-    if (beforeRequest.type === "suspend") {
-      this.suspendReason = {
-        type: "supervisor",
-        reason: beforeRequest.reason,
       };
       return { type: "suspend", results };
     }
@@ -725,13 +731,10 @@ export class Agent {
   ): Promise<void> {
     this.state.editedFilesThisTurn = [];
 
-    const beforeRequest: BeforeRequestResult =
+    const beforeRequest: ComposedBeforeRequest =
       opts.requestKind === "continuation"
-        ? { type: "proceed", injections: [] }
-        : await this.applyBeforeRequestActions(
-            { kind: "submission" },
-            "return",
-          );
+        ? { type: "proceed", injections: [], submissions: [] }
+        : await this.composeBeforeRequest({ kind: "submission" });
     const { content, hasContent } = this.prepareUserContent(inputMessages);
     if (beforeRequest.type === "suspend") {
       this.runner.appendUserMessage(toAgentInput(content), { coalesce: true });
@@ -809,22 +812,27 @@ export class Agent {
     this.settle({ type: "yielded", value });
   }
 
-  private async buildToolResponseExtras(_args: {
-    stopReason: StreamStopReason;
-    results: ToolResults;
-  }): Promise<AgentInput[]> {
-    const queuedForThisRequest = this.pendingSubmissions;
-    this.pendingSubmissions = [];
-
-    const contentToSend: AgentInput[] = [...this.pendingInjections];
-    this.pendingInjections = [];
-
-    if (queuedForThisRequest.length > 0) {
-      const { content } = this.prepareUserContent(queuedForThisRequest);
-      contentToSend.push(...toAgentInput(content));
+  /** The runner has the tool results in the log and is about to issue the
+   * continuation request, so anything the supervisors produce can go straight
+   * into that request. */
+  private async onBeforeContinuation(
+    stopReason: StreamStopReason,
+  ): Promise<ContinuationDecision> {
+    const composed = await this.composeBeforeRequest({
+      kind: "continuation",
+      stopReason,
+    });
+    if (composed.type === "suspend") {
+      return { type: "suspend", reason: composed.reason };
     }
-
-    return contentToSend;
+    const content = [
+      ...composed.injections,
+      ...toAgentInput(this.prepareUserContent(composed.submissions).content),
+    ];
+    if (content.length) {
+      this.runner.appendUserMessage(content, { coalesce: true });
+    }
+    return { type: "continue" };
   }
 
   private handleSendMessageError = (error: Error): void => {
@@ -858,14 +866,12 @@ export class Agent {
     return await onYield(value);
   }
 
-  private pendingInjections: AgentInput[] = [];
-  private pendingSubmissions: InputMessage[] = [];
-  private async applyBeforeRequestActions(
+  private async composeBeforeRequest(
     context: RequestContextKind,
-    mode: "prefix" | "pending" | "return",
-  ): Promise<BeforeRequestResult> {
+  ): Promise<ComposedBeforeRequest> {
     const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
-    if (!onBeforeRequest) return { type: "proceed", injections: [] };
+    if (!onBeforeRequest)
+      return { type: "proceed", injections: [], submissions: [] };
     const composed = await onBeforeRequest({
       ...context,
       inputTokenCount: this.runner.log.inputTokenCount,
@@ -885,17 +891,7 @@ export class Agent {
       this.runner.appendUserMessage(injections, { coalesce: true });
       return { type: "suspend", reason: composed.reason };
     }
-    switch (mode) {
-      case "prefix":
-        this.prependToNextTurn(injections);
-        return { type: "proceed", injections: [] };
-      case "pending":
-        this.pendingInjections.push(...injections);
-        this.pendingSubmissions.push(...composed.submissions);
-        return { type: "proceed", injections: [] };
-      case "return":
-        return { type: "proceed", injections };
-    }
+    return { type: "proceed", injections, submissions: composed.submissions };
   }
 
   private disposed = false;

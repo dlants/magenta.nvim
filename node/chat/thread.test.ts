@@ -159,7 +159,9 @@ it("getMessages correctly interleaves tool requests and responses", async () => 
     const thread = driver.magenta.chat.getActiveThread();
     const messages = thread.getMessages();
 
-    expect(messages.length).toBe(8);
+    // 6, not 8: the continuation's reminder is coalesced into the same user
+    // message as the tool result it rides with.
+    expect(messages.length).toBe(6);
     expect(
       messages.flatMap((m) => m.content.map((b) => `${m.role}:${b.type}`)),
     ).toEqual([

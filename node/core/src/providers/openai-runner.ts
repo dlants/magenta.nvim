@@ -21,6 +21,7 @@ import type {
   AgentLog,
   AgentOptions,
   AgentPhase,
+  ContinuationDecision,
   NativeMessageIdx,
   ProviderMessage,
   ProviderMessageContent,
@@ -425,7 +426,7 @@ export class OpenAIRunner implements Runner {
 
   clone(hooks: RunnerHooks): OpenAIRunner {
     const cloned = new OpenAIRunner(
-      { ...this.options, onBeforeToolResponse: undefined, ...hooks },
+      { ...this.options, onBeforeContinuation: undefined, ...hooks },
       this.client,
       this.openaiOptions,
     );
@@ -518,11 +519,13 @@ export class OpenAIRunner implements Runner {
       if (toolOutcome.type === "suspend") return { type: "suspended" };
       if (this.aborted) return this.finishAbort();
 
-      const extra = await this.options.onBeforeToolResponse?.({
-        stopReason: outcome.stopReason,
-        results: toolOutcome.results,
-      });
-      if (extra?.length) this.appendUserMessage(extra);
+      const decision: ContinuationDecision =
+        (await this.options.onBeforeContinuation?.(outcome.stopReason)) ?? {
+          type: "continue",
+        };
+      if (decision.type === "suspend") {
+        return { type: "suspended", reason: decision.reason };
+      }
     }
   }
 

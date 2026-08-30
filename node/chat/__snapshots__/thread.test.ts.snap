@@ -746,11 +746,6 @@ exit code 0 (<timing>ms)
         "tool_use_id": "bash-tool",
         "type": "tool_result",
       },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
       {
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.

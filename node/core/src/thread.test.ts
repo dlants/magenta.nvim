@@ -166,6 +166,56 @@ describe("deferred submissions", () => {
     expect(core.queued.next).toEqual([]);
   });
 
+  it("delivers a mid-turn queued message on the tool_use continuation", async () => {
+    let resolveStat!: () => void;
+    const statPromise = new Promise<{ mtimeMs: number; size: number }>(
+      (resolve) => {
+        resolveStat = () => resolve({ mtimeMs: 0, size: 100 });
+      },
+    );
+    const { core, mockClient } = createAgentWithMock({
+      fileIO: {
+        readFile: async () => "file contents",
+        writeFile: async () => {},
+        fileExists: async () => true,
+        stat: async () => statPromise,
+      } as unknown as AgentContext["fileIO"],
+    });
+    void core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "tool-midturn" as ToolRequestId,
+      "get_files" as ToolName,
+      { files: [{ filePath: "/tmp/test.txt" }] },
+    );
+    stream.finishResponse("tool_use");
+    await pollUntil(() => {
+      if (core.state.mode.type === "tool_use") return true;
+      throw new Error(`waiting for tool_use, got ${core.state.mode.type}`);
+    });
+    expect(
+      await core.submit(pendingMessage("also check this"), "async"),
+    ).toEqual({ type: "queued" });
+    resolveStat();
+
+    const continuation = await awaitNextStream(mockClient, stream);
+    // The text rides the continuation, coalesced into the same user message as
+    // the tool result and ordered after it.
+    const lastMessage = continuation.messages[continuation.messages.length - 1];
+    expect(lastMessage.role).toBe("user");
+    const blocks = lastMessage.content;
+    if (typeof blocks === "string") throw new Error("expected content blocks");
+    const toolResultIdx = blocks.findIndex((b) => b.type === "tool_result");
+    expect(toolResultIdx).toBeGreaterThanOrEqual(0);
+    expect(
+      blocks.findIndex(
+        (b) => b.type === "text" && b.text.includes("also check this"),
+      ),
+    ).toBeGreaterThan(toolResultIdx);
+    expect(core.queued.async).toEqual([]);
+    continuation.finishResponse("end_turn");
+  });
+
   it("defers an @async @compact past the request it cannot ride on", async () => {
     let resolveStat!: () => void;
     const statPromise = new Promise<{ mtimeMs: number; size: number }>(

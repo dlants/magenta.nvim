@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
+import type { SuspendReason } from "../thread-supervisor.ts";
 import type * as ToolManager from "../tool-types.ts";
 import type { ToolName, ToolRequest } from "../tool-types.ts";
 import type { Result } from "../utils/result.ts";
@@ -362,8 +363,11 @@ export type AgentPhase =
 /** How a turn ended. Delivered once, by the promise. */
 export type TurnResult =
   | { type: "stopped"; stopReason: StopReason }
-  /** the executor returned suspend; history is coherent and resumable */
-  | { type: "suspended" }
+  /** the executor or the continuation hook returned suspend; history is
+   * coherent and resumable. `reason` is set when the suspension came from
+   * `onBeforeContinuation`; a tool executor's suspend carries none — the owner
+   * of the executor knows why it suspended. */
+  | { type: "suspended"; reason?: SuspendReason | undefined }
   | { type: "aborted" }
   | { type: "failed"; error: Error; retryable: boolean };
 
@@ -436,13 +440,16 @@ export interface Runner {
 }
 
 /** Optional interception point, supplied by whoever owns the runner. Called
- * before the continuation request that carries tool results; the returned
- * content is appended to that request. Purely additive, and not re-fired when
- * that request is retried. */
-export type OnBeforeToolResponse = (args: {
-  stopReason: StreamStopReason;
-  results: ToolResults;
-}) => Promise<AgentInput[]>;
+ * once the tool results are in the log and the continuation request is about
+ * to be issued, so the owner can append to that request itself. Answers
+ * whether the turn should proceed. Not re-fired when the request is retried. */
+export type OnBeforeContinuation = (
+  stopReason: StreamStopReason,
+) => Promise<ContinuationDecision>;
+
+export type ContinuationDecision =
+  | { type: "continue" }
+  | { type: "suspend"; reason: SuspendReason };
 
 /** The collaborators a runner is bound to. Supplied wherever the runner is
  * created — construction or `clone` — and never afterwards, so there is no
@@ -450,7 +457,7 @@ export type OnBeforeToolResponse = (args: {
 export type RunnerHooks = {
   executeTools: ToolExecutor;
   onUpdate: () => void;
-  onBeforeToolResponse?: OnBeforeToolResponse | undefined;
+  onBeforeContinuation?: OnBeforeContinuation | undefined;
 };
 
 export interface AgentOptions {
@@ -460,7 +467,7 @@ export interface AgentOptions {
   executeTools: ToolExecutor;
   /** "Something visible moved, re-render." No payload: read `phase` / `log`.
    * Called at streaming rates; the owner is responsible for throttling. */
-  onBeforeToolResponse?: OnBeforeToolResponse | undefined;
+  onBeforeContinuation?: OnBeforeContinuation | undefined;
   onUpdate: () => void;
   thinking?: {
     enabled: boolean;
