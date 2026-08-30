@@ -231,6 +231,45 @@ describe("deferred submissions", () => {
     ).toBe(1);
   });
 
+  it("does not drain the async queue into an agent-internal submission", async () => {
+    const { core, mockClient } = createAgentWithMock(
+      { threadType: "subagent" as ThreadType },
+      uniqueThreadId("deferred-yield-rejection"),
+    );
+    let rejected = false;
+    core.hooks = composeSupervisors(() => [
+      {
+        onYield: async () => {
+          if (rejected) return { type: "none" as const };
+          rejected = true;
+          return { type: "reject" as const, message: "not done yet" };
+        },
+      },
+    ]);
+    void core.send([{ type: "user", text: "do the task" }]);
+    const stream = await mockClient.awaitStream();
+    expect(
+      await core.submit(pendingMessage("also check this"), "async"),
+    ).toEqual({ type: "queued" });
+    stream.streamToolUse(
+      "tool-yield-rejected" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "done" },
+    );
+    stream.finishResponse("end_turn");
+    // The rejection is a submission the agent makes on its own behalf. It is
+    // an opening request like any other, so it does not pick up the queue,
+    // which `flushAtStop` still owns.
+    const rejection = await awaitNextStream(mockClient, stream);
+    expect(userTexts(core)).toContain("not done yet");
+    expect(userTexts(core)).not.toContain("also check this");
+    expect(core.queued.async).toEqual([pendingMessage("also check this")]);
+    rejection.finishResponse("end_turn");
+    const flushed = await awaitNextStream(mockClient, rejection);
+    expect(userTexts(core)).toContain("also check this");
+    expect(core.queued.async).toEqual([]);
+    flushed.finishResponse("end_turn");
+  });
   it("defers an @async @compact past the request it cannot ride on", async () => {
     let resolveStat!: () => void;
     const statPromise = new Promise<{ mtimeMs: number; size: number }>(
@@ -619,7 +658,9 @@ describe("system-info preamble", () => {
     );
     // One instance, not one per consultation: the supervisor's own state is
     // what decides which request carries the preamble.
-    const systemInfo = new SystemInfoSupervisor(core.state.systemInfo);
+    const systemInfo = new SystemInfoSupervisor(core.state.systemInfo, {
+      alreadyInjected: false,
+    });
     core.hooks = composeSupervisors(() => [systemInfo]);
     const first = core.send([{ type: "user", text: "one" }]);
     const stream = await mockClient.awaitStream();

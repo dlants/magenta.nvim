@@ -127,6 +127,16 @@ export type QueuedMessage = {
  * owner's business (see `composeSupervisors`), not the agent's. A hook returns
  * an action and must not call back into the agent, and every action it can
  * return is a continuation — no hook return value resolves a `send`. */
+/** What the agent tells its owner about the request it is about to issue.
+ * `isOpeningRequest` is the agent's own knowledge — which request of a turn
+ * this is — and it is the single source of truth for it; the supervisors
+ * below the owner are not told. */
+export type AgentRequestContext = RequestContext & {
+  /** This is the first request of the turn the agent's caller asked for, as
+   * opposed to a continuation carrying tool results. */
+  isOpeningRequest: boolean;
+};
+
 export type AgentHooks = {
   /** The model called yield_to_parent. Awaited, and consulted before the tool
    * result is written, so a refusal arrives as that call's result rather than
@@ -134,10 +144,11 @@ export type AgentHooks = {
   onYield?: (value: YieldValue) => Promise<YieldAction>;
   /** About to issue a provider request — the opening one of a submission, or a
    * continuation carrying tool results. Not re-fired when a request is
-   * retried. */
-  /** The supervisors' actions, in order. The agent applies every injection
-   * and honours the first `suspend` it scans. */
-  onBeforeRequest?: (ctx: RequestContext) => Promise<ComposedRequestActions>;
+   * retried. The answer is the supervisors' actions, in order: the agent
+   * applies every injection and honours the first `suspend` it scans. */
+  onBeforeRequest?: (
+    ctx: AgentRequestContext,
+  ) => Promise<ComposedRequestActions>;
   /** Every requested tool has settled and its results are about to be
    * written. Fire-and-forget, consulted before `onBeforeRequest` for the
    * continuation that carries them — but it also fires on turns that stop

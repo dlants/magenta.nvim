@@ -134,7 +134,9 @@ describe("SystemInfoSupervisor", () => {
     git: undefined,
   };
   it("injects once, and again after a reset", async () => {
-    const sup = new SystemInfoSupervisor(systemInfo);
+    const sup = new SystemInfoSupervisor(systemInfo, {
+      alreadyInjected: false,
+    });
     expect((await sup.onBeforeRequest()).type).toBe("inject");
     expect((await sup.onBeforeRequest()).type).toBe("none");
     sup.onReset();

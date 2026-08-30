@@ -33,6 +33,7 @@ import {
 } from "./system-reminder-supervisor.ts";
 import type {
   AgentHooks,
+  AgentRequestContext,
   OnUpdate,
   QueuedMessage,
   SendOptions,
@@ -45,7 +46,6 @@ import type {
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type {
   ComposedRequestActions,
-  RequestContext,
   SuspendReason,
 } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
@@ -531,16 +531,10 @@ export class Thread {
     };
   }
 
-  /** Whether the next gate belongs to the opening request of a send the thread
-   * issued. The gate fires uniformly now, so "is this request mid-turn" is the
-   * thread's own bookkeeping rather than something the request describes. Set
-   * around each `agent.send`; a send that never reaches a gate leaves it for
-   * the next one to overwrite. */
-  private openingRequestPending = false;
-
-  private async beforeRequest(
-    ctx: RequestContext,
-  ): Promise<ComposedRequestActions> {
+  private async beforeRequest({
+    isOpeningRequest,
+    ...ctx
+  }: AgentRequestContext): Promise<ComposedRequestActions> {
     let composed = (await this.hooks.onBeforeRequest?.(ctx)) ?? {
       type: "proceed" as const,
       injections: [],
@@ -559,10 +553,10 @@ export class Thread {
     }
     // Only a mid-turn request carries the async queue: at a turn boundary
     // `flushAtStop` owns both queues, and flushing here as well would deliver
-    // the same entries twice.
-    const opening = this.openingRequestPending;
-    this.openingRequestPending = false;
-    if (opening || !this.nextRequestQueue.length) {
+    // the same entries twice. Which request this is comes from the agent —
+    // the only place that knows — rather than from thread-side bookkeeping
+    // that could drift out of step with it.
+    if (isOpeningRequest || !this.nextRequestQueue.length) {
       return { ...composed, submissions: [] };
     }
     return { ...composed, submissions: await this.flushMidTurn() };
@@ -620,11 +614,6 @@ export class Thread {
     return await this.hooks.hasPendingContent();
   }
 
-  private sendToAgent(messages: InputMessage[]): Promise<SendResult> {
-    this.openingRequestPending = true;
-    return this.agent.send(messages);
-  }
-
   /** Bumped for each turn loop as it starts, and carried in `loopState`, so
    * "am I still the current loop" is a property of the state. */
   private sendEpoch = 0;
@@ -660,7 +649,7 @@ export class Thread {
         if (!isCurrentLoop()) return { type: "aborted" };
         if (!pending) return { type: "completed", stopReason: undefined };
       }
-      let result = await this.sendToAgent(messages);
+      let result = await this.agent.send(messages);
       for (;;) {
         // An abort that arrives while a turn is in flight comes back through
         // the agent as an `aborted` result, so there is no separate check
@@ -681,7 +670,7 @@ export class Thread {
             return { type: "suspended", reason: next.reason };
           case "messages":
           case "flushed": {
-            const continued = await this.sendToAgent(next.messages);
+            const continued = await this.agent.send(next.messages);
             if (continued.type === "suspended" && next.type === "flushed") {
               return {
                 type: "suspended",

@@ -202,11 +202,12 @@ function containsYieldTag(
  * get it — the compaction thread, whose content its caller composes exactly,
  * does not. */
 export class SystemInfoSupervisor implements ThreadSupervisor {
-  /** A thread forked from another starts from a log that already carries the
-   * preamble, so it is created already spent. */
+  /** `alreadyInjected` is required rather than defaulted: a thread forked
+   * from another starts from a log that already carries the preamble, and a
+   * new call site that forgets to say so would silently repeat it. */
   constructor(
     private readonly systemInfo: SystemInfo,
-    { alreadyInjected = false }: { alreadyInjected?: boolean } = {},
+    { alreadyInjected }: { alreadyInjected: boolean },
   ) {
     this.injected = alreadyInjected;
   }

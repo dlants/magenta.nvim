@@ -695,7 +695,7 @@ export class Agent {
 
   private async submit(inputMessages?: InputMessage[]): Promise<void> {
     this.state.editedFilesThisTurn = [];
-    this.pendingRequest = { type: "opening" };
+    this.openingRequestPending = true;
     // Whether a send with no user content is worth a request is the owner's
     // call: it probes its supervisors before it gets here, and the request it
     // decides to issue is composed inside the turn, by the gate.
@@ -767,13 +767,13 @@ export class Agent {
    * content, and on a continuation it folds into the message carrying the
    * tool results. */
   private async onBeforeRequest(): Promise<BeforeRequestDecision> {
-    const request = this.pendingRequest ?? { type: "continuation" as const };
-    this.pendingRequest = undefined;
+    const isOpeningRequest = this.openingRequestPending;
+    this.openingRequestPending = false;
     // Content seeded for this turn leads its opening request, ahead of the
     // supervisors' own injections. It is consumed here rather than at
     // `submit`, so a turn that never reaches the gate leaves it for the next.
-    const lead = request.type === "opening" ? this.takeTurnPrefix() : [];
-    const composed = await this.composeBeforeRequest();
+    const lead = isOpeningRequest ? this.takeTurnPrefix() : [];
+    const composed = await this.composeBeforeRequest(isOpeningRequest);
     const content = [...lead, ...composed.injections];
     switch (composed.type) {
       case "proceed":
@@ -793,7 +793,7 @@ export class Agent {
       // continuation folds into the one already carrying the tool results.
       this.runner.appendUserMessage(
         content,
-        request.type === "continuation" ? { coalesce: true } : undefined,
+        isOpeningRequest ? undefined : { coalesce: true },
       );
     }
     if (composed.type === "suspend") {
@@ -803,10 +803,13 @@ export class Agent {
   }
   /** Set by `submit` for the turn's opening request and consumed by the first
    * gate; later gates in the same turn are continuations by construction — the
-   * loop only comes back around after tool results. The distinction is the
-   * agent's own (where the injections go), not something the supervisors are
-   * told about. */
-  private pendingRequest: { type: "opening" } | undefined;
+   * loop only comes back around after tool results. It decides where the
+   * injections go, and it is what the owner is told on `AgentRequestContext`,
+   * so there is one place this is tracked. A turn that never reaches a gate
+   * (disposed, aborted at the guards) leaves it set, which is harmless: every
+   * request begins with a `submit` that sets it, so no continuation can read
+   * a stale one. */
+  private openingRequestPending = false;
   private takeTurnPrefix(): AgentInput[] {
     const prefix = this.pendingTurnPrefix ?? [];
     this.pendingTurnPrefix = undefined;
@@ -847,13 +850,16 @@ export class Agent {
   /** Consult the supervisors. Nothing is appended here: placing what they
    * produce — and ordering it against the turn's own content — belongs to the
    * one caller, `onBeforeRequest`. */
-  private async composeBeforeRequest(): Promise<ComposedBeforeRequest> {
+  private async composeBeforeRequest(
+    isOpeningRequest: boolean,
+  ): Promise<ComposedBeforeRequest> {
     const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
     if (!onBeforeRequest)
       return { type: "proceed", injections: [], submissions: [] };
     const composed = await onBeforeRequest({
       inputTokenCount: this.runner.log.inputTokenCount,
       outputTokenCount: this.outputTokenCount(),
+      isOpeningRequest,
     });
     const injections: AgentInput[] = composed.injections.map((block) =>
       block.type === "text"

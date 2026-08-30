@@ -417,8 +417,24 @@ Probes available for `hasPendingContent`, all already non-committing:
   "reports the provider's stop reason on a continuation that carries tool
   results" is deleted (the stop reason is no longer told to anyone), and the
   request-position tests now count requests instead of listing kinds.
-- An agent-internal `submit` (a yield rejection, a supervisor `send-message`
-  answered inside `Agent`) does not go through `Thread.sendToAgent`, so its
-  request is treated as mid-turn and will carry the async queue. That is a
-  behaviour change from the old `kind: "submission"` and a benign one: the queue
-  asks to ride "the next request that goes out", and this is one.
+### Review follow-ups
+
+- The mirrored flag is gone. `Thread.openingRequestPending` and
+  `Thread.sendToAgent` are removed; the agent, which is the only place that
+  knows, tells the owner on a new `AgentRequestContext = RequestContext &
+  { isOpeningRequest }` (`thread-api.ts`). `Thread.beforeRequest` destructures
+  it off, so the supervisors below still see only `RequestContext`.
+  `Agent.pendingRequest` collapsed to `openingRequestPending: boolean`.
+- That also removes the previous deviation: an agent-internal `submit` (a yield
+  rejection, a supervisor `send-message` answered inside `Agent`) now sets the
+  flag like any other, so its request is an opening one and does not drain the
+  async queue — the old `kind: "submission"` behaviour. `thread.test.ts` "does
+  not drain the async queue into an agent-internal submission" pins it, and was
+  verified to fail with the flag forced false.
+- A turn that never reaches a gate leaves the flag set, which is unreachable as
+  a bug: every request begins with a `submit` that sets it, so no continuation
+  can read a stale value. Documented at the field rather than tested.
+- `SystemInfoSupervisor`'s `alreadyInjected` is a required argument now.
+- `NvimThread.contextSupervisors` is a `ThreadSupervisor[]` field built in the
+  constructor (the compact-thread case is decided there off `threadType`)
+  rather than a method plus a `SystemInfoSupervisor | undefined` field.

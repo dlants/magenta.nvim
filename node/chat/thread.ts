@@ -507,17 +507,25 @@ export class NvimThread {
 
     // The compact thread's content is composed exactly by the compactor, so it
     // gets no preamble; a forked thread starts from a log that already carries
-    // one.
-    if (this.core.state.threadType !== "compact") {
-      this.systemInfoSupervisor = new SystemInfoSupervisor(
-        this.core.state.systemInfo,
-        { alreadyInjected: this.core.getProviderMessages().length > 0 },
-      );
-    }
+    // one. The trackers lead, so no injection can follow a compaction in the
+    // plan. Built once: supervisor state is per-instance, and the composed
+    // list is rebuilt on every hook consultation.
+    this.contextSupervisors = [
+      this.gitSupervisor,
+      this.fileSupervisor,
+      ...(this.comments ? [this.comments.supervisor] : []),
+      ...(this.core.state.threadType === "compact"
+        ? []
+        : [
+            new SystemInfoSupervisor(this.core.state.systemInfo, {
+              alreadyInjected: this.core.getProviderMessages().length > 0,
+            }),
+          ]),
+    ];
 
     this.core.hooks = composeSupervisors(() => [
       new MaxTokensSupervisor(),
-      ...this.contextSupervisors(),
+      ...this.contextSupervisors,
       ...this.supervisors,
     ]);
 
@@ -607,23 +615,7 @@ export class NvimThread {
   /** Built once in the constructor rather than per hook invocation: the
    * supervisor tracks for itself whether it has already injected the preamble,
    * so a fresh instance would inject it on every request. */
-  private systemInfoSupervisor: SystemInfoSupervisor | undefined;
-
-  /** The context trackers, always ahead of the behavioral supervisors so no
-   * injection can follow a compaction in the plan. */
-  private contextSupervisors(): ThreadSupervisor[] {
-    const systemInfo = this.systemInfoSupervisor
-      ? [this.systemInfoSupervisor]
-      : [];
-    return this.comments
-      ? [
-          this.gitSupervisor,
-          this.fileSupervisor,
-          this.comments.supervisor,
-          ...systemInfo,
-        ]
-      : [this.gitSupervisor, this.fileSupervisor, ...systemInfo];
-  }
+  private readonly contextSupervisors: ThreadSupervisor[];
 
   /** Attach a tracker's structured record to the message its injection is
    * about to produce. */
