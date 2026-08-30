@@ -61,7 +61,7 @@ describe("DockerSupervisor", () => {
       ).toBe("none");
     });
 
-    it("does not restart when stop reason is aborted", () => {
+    it("does not restart when the turn did not end normally", () => {
       const supervisor = new DockerSupervisor(
         "test-container",
         "/workspace",
@@ -69,7 +69,7 @@ describe("DockerSupervisor", () => {
       );
 
       const action = supervisor.onEndTurnWithoutYield({
-        stopReason: "aborted",
+        stopReason: "max_tokens",
         lastAssistantMessage: undefined,
       });
       expect(action.type).toBe("none");

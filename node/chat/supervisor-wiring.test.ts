@@ -74,6 +74,22 @@ it("subagent threads get both SubagentSupervisor and AutoCompactSupervisor", asy
   });
 });
 
+it("a truncated response is continued via MaxTokensSupervisor", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("write me a long thing");
+    await driver.send();
+    const stream = await driver.mockAnthropic.awaitPendingStream();
+    stream.respond({
+      stopReason: "max_tokens",
+      text: "Here is the beginning of a long",
+      toolRequests: [],
+    });
+    await driver.mockAnthropic.awaitPendingStreamWithText(
+      "Your previous response was truncated",
+    );
+  });
+});
 const emptyYieldSchema: JSONSchemaType = { type: "object", properties: {} };
 
 it("script-spawned thread honors per-thread autoCompactThreshold override", async () => {

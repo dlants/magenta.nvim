@@ -41,3 +41,7 @@
 {"timestamp":"2026-08-29T21:08:39Z","query":"createThreadWithContext ContextManager child thread context files","commit":"05f3dc2ed19c45065be9b02a35450083621872ef"}
 {"timestamp":"2026-08-29T21:08:39Z","query":"file-deleted context update","commit":"05f3dc2ed19c45065be9b02a35450083621872ef"}
 {"timestamp":"2026-08-29T21:08:43Z","query":"compact threadType context files inherit parent","commit":"05f3dc2ed19c45065be9b02a35450083621872ef"}
+{"timestamp":"2026-08-29T23:31:45Z","query":"subagent thread spawn send -k 10","commit":"468d0055186445116d1174f0fc40ea97317879ee"}
+{"timestamp":"2026-08-29T23:31:49Z","query":"Agent.send failure SendResult -k 10","commit":"468d0055186445116d1174f0fc40ea97317879ee"}
+{"timestamp":"2026-08-29T23:32:10Z","query":"subagent thread start send first turn -k 8","commit":"468d0055186445116d1174f0fc40ea97317879ee"}
+{"timestamp":"2026-08-29T23:32:37Z","query":"compact thread spawn send create -k 8","commit":"468d0055186445116d1174f0fc40ea97317879ee"}

@@ -175,6 +175,12 @@ Done. What was actually built:
 - Tests: the text-only max_tokens case moved out of `Agent.handleProviderStopped` into a new `describe("MaxTokensSupervisor")` in `agent.test.ts`, joined by the new regression test — a max_tokens stop under `[MaxTokensSupervisor, UnsupervisedSupervisor]` produces the continue-prompt alone, and the following `end_turn` still reports `auto-restart 1/5`. The two tool_use-path max_tokens cases stay in `Agent.handleProviderStopped`: they never involved the continue-prompt. Three existing tests that relied on the agent's implicit max_tokens continuation now install `MaxTokensSupervisor` explicitly.
 - Full suite green (`npx tsc -b`, `npx biome check .`, `npx vitest run`) apart from `node/comments/comment-input.test.ts > comments on a visual selection`, re-confirmed as a pre-existing flake: it fails roughly half the time on a clean `git stash` as well.
 
+Review follow-ups (stage 2):
+
+- `EndTurnContext.stopReason` narrowed from `string` to `StopReason`, so the three literal guards are compiler-checked. This immediately caught dead code: `UnsupervisedSupervisor`'s pre-existing `stopReason === "aborted"` check compared against a value that is not a member of `StopReason` and could never fire — a real behavior change, since a genuinely aborted turn now falls through the `!== "end_turn"` guard as intended rather than by accident. The stale `DockerSupervisor` test asserting on `"aborted"` now uses `"max_tokens"`.
+- Wiring coverage: `node/chat/supervisor-wiring.test.ts` gains a `withDriver` case that finishes a response with `max_tokens` and asserts the next request carries the continuation prompt. This is the only test that fails if the `new MaxTokensSupervisor()` line in `NvimThread`'s constructor is dropped.
+- `SubagentSupervisor`'s new guard is covered: a subagent that writes a `<yield>` tag and then hits `max_tokens` gets the continuation prompt alone, not the yield nudge (`agent.test.ts`, `MaxTokensSupervisor` describe).
+
 ## queues move to Thread
 
 - Goal: `nextRequestQueue` / `nextStopQueue` are private on `Thread`; `DEFERRED_QUEUES`, `DeferredDelivery`, `FlushedQueue`, `flushQueue`, `resolveQueued`, `requeue`, `deferredCompact` and `deps.resolve` are gone from the agent. `ComposedRequestActions.submissions` carries the mid-turn drain. `Thread.reset` loses the carry-across. `Thread.queued` exists.

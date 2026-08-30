@@ -2,6 +2,7 @@ import type { OnToolApplied } from "./capabilities/context-tracker.ts";
 import type { CompactSuspendReason } from "./compaction/index.ts";
 import type {
   ProviderMessageContent,
+  StopReason,
   StreamStopReason,
 } from "./providers/provider-types.ts";
 import {
@@ -118,7 +119,7 @@ export function composeSupervisors(
 }
 
 export type EndTurnContext = {
-  stopReason: string;
+  stopReason: StopReason;
   lastAssistantMessage: ReadonlyArray<ProviderMessageContent> | undefined;
 };
 

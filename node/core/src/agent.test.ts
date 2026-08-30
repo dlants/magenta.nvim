@@ -1024,6 +1024,23 @@ describe("MaxTokensSupervisor", () => {
     const restart = await awaitNextStream(mockClient, continuation);
     expect(lastUserText(restart)).toContain("auto-restart 1/5");
   });
+  it("takes precedence over a subagent's yield-tag nudge", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    core.hooks = composeSupervisors(() => [
+      new MaxTokensSupervisor(),
+      new SubagentSupervisor(),
+    ]);
+    void core.send([{ type: "user", text: "do the task" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("<yield>partial resu");
+    stream.finishResponse("max_tokens");
+    const continuation = await awaitNextStream(mockClient, stream);
+    const continuationText = lastUserText(continuation);
+    expect(continuationText).toContain("truncated");
+    expect(continuationText).not.toContain("XML tags in your response");
+  });
 });
 
 describe("Agent.abort on yielded thread", () => {
