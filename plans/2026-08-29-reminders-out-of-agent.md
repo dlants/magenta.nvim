@@ -94,13 +94,31 @@ Review follow-ups (stage 1):
 - `outputTokenCount` stays `number` with a 0 fallback for messages lacking usage: it feeds a monotonic "tokens since the last reminder" gate, where an under-count costs at most one request of delay and an `undefined` would stall the gate. Documented at the definition. Test extended to a second tool turn, asserting the cumulative sum (42 + 8) rather than the last message's usage.
 - Reviewer also suggested turning `ProviderMessage` into a streaming/finished discriminated union to remove the optional `usage`/`stopReason`. Declined for this stage: it touches every provider, runner and snapshot, and is unrelated to pulling reminders out of the agent.
 
-## reminder supervisor
+## reminder supervisor — DONE
 
 - Goal: `SystemReminderSupervisor` implements the full policy; `Thread` owns it, feeds it `onToolResults`, routes resolved-message reminders into it, re-mints it on compaction, and appends its injections in `beforeRequest`. All reminder state and logic deleted from `Agent` and `ThreadState`.
 - Tests:
   - `node/chat/system-reminders.test.ts` (integration, via mock provider), updated for the new policy: no reminder on a user message that is under the token interval, interval-gated reminders during auto-respond and across user turns alike, bash-summary reminder after abbreviated output, get_files-derived reminders, markdown `<system_reminder>` propagation, none for compact threads.
   - `node/core/src/thread.test.ts` reminder assertions move from `state.activeReminders` to `thread.activeReminders`.
   - A unit test that a user submission arriving under the interval emits no reminder, and one arriving over it does.
+
+Notes:
+
+- `SystemReminderSupervisor` (`node/core/src/system-reminder-supervisor.ts`) is deliberately *not* a `ThreadSupervisor`: `Thread.beforeRequest` consults it directly, after `this.hooks.onBeforeRequest`, and appends its injection last. Its `onBeforeRequest` is synchronous.
+- `Thread` wraps `onToolResults` in `agentHooks()` so the external hook still fires alongside the supervisor's.
+- Temporary guard: `beforeRequest` skips the supervisor when `ctx.kind === "turn-end"`, so a stop that issues no request cannot consume reminder state. Stage 3 deletes the case and the guard with it.
+- `Agent` now has no reminder state: `AgentAction` is down to `set-title` / `set-mode` / `set-active-tool-result` / `reset-agent-state`, `prepareUserContent` returns only `{ content, hasContent }`, and `accountUsage` / `usageAccountedCount` are gone (`outputTokenCount()` is computed on demand for the hook).
+- `Thread.activeReminders` replaces `state.activeReminders`.
+
+Test churn from the policy change (no reminder on a thread's opening request):
+
+- `node/chat/system-reminders.test.ts` gained an `armStandingReminder(driver)` helper that drives one 5000-output-token turn before the assertion. "multiple user messages each get their own system reminder" became "the standing reminder is gated by the token interval, not by user turns".
+- "system reminder content appears after context updates" was silently vacuous — it used a nonexistent `add-file` command, so its "context update" block was actually the user's text. Rewritten as "the standing reminder sits after context updates and before the user's text", using `context-files` and asserting the three blocks positionally.
+- `agent.test.ts`'s bash-reminder token-gate test became "fires on every request carrying abbreviated output, and not otherwise", matching the no-token-gate rule.
+- `thread-compact.test.ts`'s reminder test now drives a turn after the handoff before asserting: the replacement agent starts at zero output tokens, so its opening request carries nothing.
+- `script-manager.test.ts`'s `systemReminder` passthrough test now asserts the sentinel arrives on the continuation rather than the opening request.
+- Message-shape assertions in `thread.test.ts`, `thread-abort.test.ts` and `context-manager.test.ts` lost their leading `system_reminder` block; 12 snapshots updated.
+- Pre-existing (also fails on `main`): `node/comments/comment-input.test.ts` is order-flaky.
 
 ## drop the turn-end request context
 

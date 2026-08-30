@@ -1557,8 +1557,22 @@ it("compaction keeps reminders derived from files still tracked in context", asy
       const afterCompactStream = await driver.mockAnthropic.awaitPendingStream({
         message: "after compact continuation",
       });
-      const lastMessage =
-        afterCompactStream.messages[afterCompactStream.messages.length - 1];
+      // The replacement agent starts from an empty log, so its opening request
+      // carries no reminder; one turn arms the token gate again.
+      afterCompactStream.respond({
+        stopReason: "end_turn",
+        text: "all set",
+        toolRequests: [],
+        usage: { inputTokens: 100, outputTokens: 5000 },
+      });
+
+      await driver.inputMagentaText("carry on");
+      await driver.send();
+
+      const nextStream = await driver.mockAnthropic.awaitPendingStream({
+        message: "post-compaction user turn",
+      });
+      const lastMessage = nextStream.messages[nextStream.messages.length - 1];
       if (typeof lastMessage.content === "string") {
         throw new Error("Expected array content");
       }
@@ -1567,17 +1581,17 @@ it("compaction keeps reminders derived from files still tracked in context", asy
       );
       expect(reminder).toBeDefined();
       if (reminder && reminder.type === "text") {
-        // Compaction clears the transient `activeReminders` set, but the
-        // context manager survives the agent swap, so reminders derived from
-        // the files it still tracks (both the explicitly added one and the
-        // one a get_files read pulled in) are re-derived.
+        // Compaction mints a fresh reminder supervisor, so the transient set is
+        // empty; the context manager survives the agent swap, so reminders
+        // derived from the files it still tracks (both the explicitly added one
+        // and the one a get_files read pulled in) are re-derived.
         expect(reminder.text).toContain("context cat reminder");
         expect(reminder.text).toContain("transient cat reminder");
       }
 
-      afterCompactStream.respond({
+      nextStream.respond({
         stopReason: "end_turn",
-        text: "all set",
+        text: "ok",
         toolRequests: [],
       });
     },

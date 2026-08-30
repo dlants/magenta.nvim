@@ -289,7 +289,6 @@ it("inserts error tool results when aborting while stopped waiting for tool use"
 
     expect(messagePattern).toEqual([
       "user:text",
-      "user:text", // system_reminder
       "user:text", // system_info
       "assistant:text",
       "assistant:tool_use",

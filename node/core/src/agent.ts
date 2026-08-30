@@ -1,5 +1,5 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import { type AgentsMap, extractSystemReminderBlock } from "./agents/agents.ts";
+import type { AgentsMap } from "./agents/agents.ts";
 import type { ContextTracker } from "./capabilities/context-tracker.ts";
 import type { FileIO } from "./capabilities/file-io.ts";
 import type { GitClient } from "./capabilities/git-client.ts";
@@ -33,10 +33,6 @@ import type {
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
-import {
-  buildSystemReminder,
-  type ReminderKind,
-} from "./providers/system-reminders.ts";
 import type {
   AgentHooks,
   OnUpdate,
@@ -152,12 +148,6 @@ export interface AgentContext {
   yieldSchema?: JSONSchemaType;
 }
 
-/** Minimum output tokens between system reminders during auto-respond loops */
-const SYSTEM_REMINDER_MIN_TOKEN_INTERVAL = 2000;
-
-/** Minimum output tokens between bash-summary reminders. */
-const BASH_REMINDER_TOKEN_INTERVAL = 5000;
-
 export type AgentAction =
   | { type: "set-title"; title: string }
   | { type: "set-mode"; mode: ThreadMode }
@@ -166,12 +156,7 @@ export type AgentAction =
       id: ToolRequestId;
       result: ProviderToolResult;
     }
-  | { type: "increment-output-tokens"; tokens: number }
-  | { type: "reset-output-tokens" }
-  | { type: "reset-agent-state" }
-  | { type: "mark-bash-output-abbreviated" }
-  | { type: "activate-reminder"; text: string }
-  | { type: "reset-bash-reminder" };
+  | { type: "reset-agent-state" };
 
 export type ThreadState = {
   title: string | undefined;
@@ -180,14 +165,9 @@ export type ThreadState = {
   systemInfo: SystemInfo;
   mode: ThreadMode;
   edlRegisters: EdlRegisters;
-  outputTokensSinceLastReminder: number;
   editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];
-  pendingBashReminder: boolean;
-  bashTokensSinceLastReminder: number;
-  firstBashReminderPending: boolean;
   /** How the most recent turn ended. Kept for rendering an idle agent. */
   lastTurnResult: TurnResult | undefined;
-  activeReminders: Set<string>;
   toolSpecs: ProviderToolSpec[];
 };
 
@@ -259,7 +239,6 @@ export class Agent {
     if (deps.runnerInit.type === "cloned") {
       this.runner = deps.runnerInit.cloneFrom.clone(this.runnerHooks());
       this.runner.truncateMessages(deps.runnerInit.truncateTo);
-      this.usageAccountedCount = this.runner.log.messages.length;
     } else {
       this.runner = this.createRunner();
     }
@@ -320,32 +299,9 @@ export class Agent {
           }
         }
         break;
-      case "increment-output-tokens":
-        this.state.outputTokensSinceLastReminder += action.tokens;
-        this.state.bashTokensSinceLastReminder += action.tokens;
-        break;
-      case "reset-output-tokens":
-        this.state.outputTokensSinceLastReminder = 0;
-        break;
       case "reset-agent-state":
         this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
-        this.state.outputTokensSinceLastReminder = 0;
         this.state.editedFilesThisTurn = [];
-        this.state.pendingBashReminder = false;
-        this.state.bashTokensSinceLastReminder = 0;
-        this.state.firstBashReminderPending = true;
-        this.state.activeReminders = new Set();
-        break;
-      case "mark-bash-output-abbreviated":
-        this.state.pendingBashReminder = true;
-        break;
-      case "activate-reminder":
-        this.state.activeReminders.add(action.text);
-        break;
-      case "reset-bash-reminder":
-        this.state.pendingBashReminder = false;
-        this.state.bashTokensSinceLastReminder = 0;
-        this.state.firstBashReminderPending = false;
         break;
       default:
         assertUnreachable(action);
@@ -420,7 +376,6 @@ export class Agent {
           reasoning: this.context.profile.reasoning,
         }),
     });
-    this.usageAccountedCount = agent.log.messages.length;
     return agent;
   }
 
@@ -511,10 +466,6 @@ export class Agent {
     | { type: "supervisor"; reason: SuspendReason }
     | undefined;
 
-  /** Number of messages whose usage has already been folded into the
-   * reminder token counters. */
-  private usageAccountedCount = 0;
-
   /** Cumulative output tokens across the log. Messages without recorded usage
    * — user messages, and the assistant message still streaming — contribute
    * nothing rather than making the total unknown: this feeds a monotonic
@@ -528,24 +479,6 @@ export class Agent {
     return total;
   }
 
-  private accountUsage(): void {
-    const messages = this.runner.log.messages;
-    if (this.usageAccountedCount > messages.length) {
-      this.usageAccountedCount = messages.length;
-    }
-    let outputTokens = 0;
-    for (let i = this.usageAccountedCount; i < messages.length; i++) {
-      outputTokens += messages[i].usage?.outputTokens ?? 0;
-    }
-    this.usageAccountedCount = messages.length;
-    if (outputTokens > 0) {
-      this.update(
-        { type: "increment-output-tokens", tokens: outputTokens },
-        { silent: true },
-      );
-    }
-  }
-
   /** Drive the agent until it stops, then act on why it stopped. */
   private runTurn(input: AgentInput[]): Promise<void> {
     const prefix = this.pendingTurnPrefix ?? [];
@@ -555,7 +488,6 @@ export class Agent {
       .then((result) => {
         this.currentTurn = undefined;
         this.flushUpdateNow();
-        this.accountUsage();
         return this.handleTurnResult(result);
       })
       .catch(this.handleSendMessageError);
@@ -886,17 +818,11 @@ export class Agent {
             { kind: "submission" },
             "return",
           );
-    // After the hook: the file tracker's update is what refreshes the agent
-    // view the markdown-reminder scan reads.
-    const { content, reminder, hasContent } =
-      this.prepareUserContent(inputMessages);
+    const { content, hasContent } = this.prepareUserContent(inputMessages);
     if (beforeRequest.type === "suspend") {
       // The injections are already in the log; the user's own content has to
       // join them there so the snapshot handed over carries it too.
-      this.runner.appendUserMessage(
-        toAgentInput(reminder ? [reminder, ...content] : content),
-        { coalesce: true },
-      );
+      this.runner.appendUserMessage(toAgentInput(content), { coalesce: true });
       this.settle({ type: "suspended", reason: beforeRequest.reason });
       return;
     }
@@ -911,9 +837,6 @@ export class Agent {
     // The user's own message goes last, so it is the final thing the model
     // reads: everything else in the turn is preamble to it.
     const contentToSend: AgentInput[] = [...injections];
-    if (reminder) {
-      contentToSend.push(...toAgentInput([reminder]));
-    }
     contentToSend.push(...toAgentInput(content));
 
     this.preSubmitNativeIdx = this.runner.getNativeMessageIdx();
@@ -981,58 +904,14 @@ export class Agent {
     this.settle({ type: "yielded", value });
   }
 
-  /** The union of transient get_files-read reminders and reminders derived from
-   * markdown files currently in context, deduped on text. */
-  private getActiveReminders(): string[] {
-    const reminders = new Set(this.state.activeReminders);
-    for (const key of Object.keys(this.context.contextTracker.files)) {
-      const fileInfo = this.context.contextTracker.files[key as AbsFilePath];
-      if (!fileInfo) continue;
-      if (!key.toLowerCase().endsWith(".md")) continue;
-      if (fileInfo.agentView?.type !== "text") continue;
-      const reminder = extractSystemReminderBlock(fileInfo.agentView.content);
-      if (reminder) reminders.add(reminder);
-    }
-    return [...reminders];
-  }
-
   /** The agent's `onBeforeToolResponse` hook: extra content to ride along
    * with the request that carries the tool results. */
-  private async buildToolResponseExtras(args: {
+  private async buildToolResponseExtras(_args: {
     stopReason: StreamStopReason;
     results: ToolResults;
   }): Promise<AgentInput[]> {
-    this.accountUsage();
-
-    for (const result of args.results.values()) {
-      if (result.status === "ok") {
-        const structured = result.structuredResult;
-        if (
-          structured.toolName === "bash_command" &&
-          "wasAbbreviated" in structured &&
-          structured.wasAbbreviated
-        ) {
-          this.update(
-            { type: "mark-bash-output-abbreviated" },
-            { silent: true },
-          );
-        }
-        if (structured.toolName === "get_files" && "files" in structured) {
-          for (const file of structured.files) {
-            if (file.systemReminder) {
-              this.update(
-                { type: "activate-reminder", text: file.systemReminder },
-                { silent: true },
-              );
-            }
-          }
-        }
-      }
-    }
-
     // Whatever the owner drained from its async queue for this request; the
-    // agent orders it last and applies the reminder/token-reset rules to it,
-    // which is why it does not arrive as an injection.
+    // agent orders it last, which is why it does not arrive as an injection.
     const queuedForThisRequest = this.pendingSubmissions;
     this.pendingSubmissions = [];
 
@@ -1040,47 +919,8 @@ export class Agent {
     this.pendingInjections = [];
 
     if (queuedForThisRequest.length > 0) {
-      const { content, reminder } =
-        this.prepareUserContent(queuedForThisRequest);
-      if (reminder) {
-        contentToSend.push(...toAgentInput([reminder]));
-      }
+      const { content } = this.prepareUserContent(queuedForThisRequest);
       contentToSend.push(...toAgentInput(content));
-      return contentToSend;
-    }
-
-    const reminderKinds: ReminderKind[] = [];
-    const subsequentReminderFires =
-      this.state.outputTokensSinceLastReminder >=
-      SYSTEM_REMINDER_MIN_TOKEN_INTERVAL;
-    const bashReminderFires =
-      this.state.pendingBashReminder &&
-      (this.state.firstBashReminderPending ||
-        this.state.bashTokensSinceLastReminder >= BASH_REMINDER_TOKEN_INTERVAL);
-
-    if (subsequentReminderFires) reminderKinds.push("subsequent");
-    if (bashReminderFires) reminderKinds.push("bashSummary");
-
-    if (reminderKinds.length > 0) {
-      const reminder = buildSystemReminder({
-        threadType: this.state.threadType,
-        subagentConfig: this.context.subagentConfig,
-        kinds: reminderKinds,
-        extraReminders: this.getActiveReminders(),
-      });
-      if (reminder) {
-        contentToSend.push({
-          type: "text",
-          text: reminder,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        });
-      }
-      if (subsequentReminderFires) {
-        this.update({ type: "reset-output-tokens" }, { silent: true });
-      }
-      if (bashReminderFires) {
-        this.update({ type: "reset-bash-reminder" }, { silent: true });
-      }
     }
 
     return contentToSend;
@@ -1090,11 +930,8 @@ export class Agent {
     this.context.logger.error(error);
   };
 
-  /** The user's own text is kept separate from the reminder that accompanies
-   * it, so callers can order the turn's blocks with the user's message last. */
   private prepareUserContent(inputMessages?: InputMessage[]): {
     content: ProviderMessageContent[];
-    reminder: ProviderMessageContent | undefined;
     hasContent: boolean;
   } {
     const messageContent: ProviderMessageContent[] = [];
@@ -1106,27 +943,8 @@ export class Agent {
       });
     }
 
-    let reminderContent: ProviderMessageContent | undefined;
-    if (inputMessages?.length) {
-      this.update({ type: "reset-output-tokens" }, { silent: true });
-      const reminder = buildSystemReminder({
-        threadType: this.state.threadType,
-        subagentConfig: this.context.subagentConfig,
-        kinds: ["subsequent"],
-        extraReminders: this.getActiveReminders(),
-      });
-      if (reminder) {
-        reminderContent = {
-          type: "system_reminder",
-          text: reminder,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        };
-      }
-    }
-
     return {
       content: messageContent,
-      reminder: reminderContent,
       hasContent: (inputMessages?.length ?? 0) > 0,
     };
   }

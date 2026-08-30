@@ -278,7 +278,34 @@ it("passes contextFiles and systemReminder through to the spawned thread", async
 
       const serialized = `${stream.systemPrompt ?? ""}${JSON.stringify(stream.messages)}`;
       expect(serialized).toContain("SEED_CONTENT_SENTINEL");
-      expect(serialized).toContain("REMEMBER_SENTINEL_XYZ");
+
+      // The custom reminder rides the standing reminder, which is gated on
+      // output tokens: it goes out on the first request past the interval, not
+      // on the thread's opening one.
+      stream.respond({
+        stopReason: "tool_use",
+        text: "thinking out loud",
+        toolRequests: [
+          {
+            status: "ok",
+            value: {
+              id: "read-seed" as ToolRequestId,
+              toolName: "get_files" as ToolName,
+              input: { files: [{ filePath: "./seed.txt" }] },
+            },
+          },
+        ],
+        usage: { inputTokens: 10, outputTokens: 5000 },
+      });
+
+      const nudged = await driver.mockAnthropic.awaitPendingStream({
+        predicate: (s) =>
+          JSON.stringify(s.messages).includes("REMEMBER_SENTINEL_XYZ"),
+        message: "waiting for the standing reminder to carry the custom text",
+      });
+      expect(JSON.stringify(nudged.messages)).toContain(
+        "REMEMBER_SENTINEL_XYZ",
+      );
     },
   );
 });

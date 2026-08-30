@@ -182,7 +182,6 @@ exports[`followup user message text is visible after tool-use cycle > followup-m
 
 # user:
 🖥️  [System Info]
-📋 [System Reminder]
 Read a file for me
 # assistant:
 I'll read the file for you.
@@ -212,7 +211,6 @@ Context Updates:
 - \`poem.txt\` [ ~39 tok ]
 
 🖥️  [System Info]
-📋 [System Reminder]
 Help me with this poem
 # assistant:
 I can see the poem. What would you like me to do?
@@ -429,24 +427,6 @@ exports[`forks a thread with multiple messages into a new thread > fork-cloned-m
         "type": "text",
       },
       {
-        "text": "<system-reminder>
-Remember the skills in <available-skills> and the learn tool for built-in documentation.
-If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
-When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
-WRONG: \`command 2>&1 | tail -50\`
-WRONG: \`command | head -100\`
-RIGHT: \`command\`
-Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
-When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
-
-Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-Don't spawn sub-agents for things you can do with a single tool call (get_files, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
-
-Do not acknowledge this reminder or mention it to the user.
-</system-reminder>",
-        "type": "text",
-      },
-      {
         "text": "What is the capital of France?",
         "type": "text",
       },
@@ -508,25 +488,6 @@ exports[`forks a thread with multiple messages into a new thread > forked-thread
         "nativeMessageIdx": 0,
         "text": "<system-info><normalized></system-info>",
         "type": "system_info",
-      },
-      {
-        "nativeMessageIdx": 0,
-        "text": "<system-reminder>
-Remember the skills in <available-skills> and the learn tool for built-in documentation.
-If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
-When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
-WRONG: \`command 2>&1 | tail -50\`
-WRONG: \`command | head -100\`
-RIGHT: \`command\`
-Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
-When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
-
-Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-Don't spawn sub-agents for things you can do with a single tool call (get_files, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
-
-Do not acknowledge this reminder or mention it to the user.
-</system-reminder>",
-        "type": "system_reminder",
       },
       {
         "nativeMessageIdx": 0,
@@ -612,24 +573,6 @@ exports[`handles @async messages and sends them on end turn 1`] = `
         "type": "text",
       },
       {
-        "text": "<system-reminder>
-Remember the skills in <available-skills> and the learn tool for built-in documentation.
-If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
-When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
-WRONG: \`command 2>&1 | tail -50\`
-WRONG: \`command | head -100\`
-RIGHT: \`command\`
-Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
-When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
-
-Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-Don't spawn sub-agents for things you can do with a single tool call (get_files, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
-
-Do not acknowledge this reminder or mention it to the user.
-</system-reminder>",
-        "type": "text",
-      },
-      {
         "text": "Tell me about TypeScript",
         "type": "text",
       },
@@ -685,24 +628,6 @@ exports[`handles @async messages by queueing them and sending on next tool respo
     "content": [
       {
         "text": "<system-info><normalized></system-info>",
-        "type": "text",
-      },
-      {
-        "text": "<system-reminder>
-Remember the skills in <available-skills> and the learn tool for built-in documentation.
-If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
-When using bash_command, output is AUTOMATICALLY trimmed and saved. NEVER use head, tail, or 2>&1 - they break output handling.
-WRONG: \`command 2>&1 | tail -50\`
-WRONG: \`command | head -100\`
-RIGHT: \`command\`
-Avoid using large portions of text when using the EDL tool. Large text blocks are fragile and wasteful.
-When making a selection, select the beginning of the text, then extend_forward to the end. To move code around, use registers via cut.
-
-Prefer text/regex patterns over line numbers for selection — line numbers are fragile and error-prone. Use heredoc patterns as the default since they match exactly.
-Don't spawn sub-agents for things you can do with a single tool call (get_files, edl, bash_command). Do not ask subagents "to return the entire contents" of files, tool or skill invocations.
-
-Do not acknowledge this reminder or mention it to the user.
-</system-reminder>",
         "type": "text",
       },
       {
@@ -789,7 +714,6 @@ exports[`renders successive tool uses with single assistant header and inline me
 
 # user:
 🖥️  [System Info]
-📋 [System Reminder]
 Read two files for me
 # assistant:
 I'll read the first file.

@@ -122,11 +122,11 @@ describe("deferred submissions", () => {
     void core.send([{ type: "user", text: "start" }]);
     const stream = await mockClient.awaitStream();
     await core.submit(pendingMessage("queued"), "next");
-    expect(core.state.activeReminders.has("remember the file")).toBe(false);
+    expect(core.activeReminders.has("remember the file")).toBe(false);
     stream.streamText("working");
     stream.finishResponse("end_turn");
     const second = await awaitNextStream(mockClient, stream);
-    expect(core.state.activeReminders.has("remember the file")).toBe(true);
+    expect(core.activeReminders.has("remember the file")).toBe(true);
     second.finishResponse("end_turn");
   });
 

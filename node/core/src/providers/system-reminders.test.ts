@@ -5,7 +5,7 @@ describe("buildSystemReminder", () => {
   it("returns a single combined block when multiple kinds are requested for root", () => {
     const reminder = buildSystemReminder({
       threadType: "root",
-      kinds: ["subsequent", "bashSummary"],
+      kinds: ["standing", "bashSummary"],
     });
     expect(reminder).toBeDefined();
     expect(reminder!.startsWith("<system-reminder>")).toBe(true);
@@ -22,10 +22,10 @@ describe("buildSystemReminder", () => {
     expect(reminder).toContain("log file");
   });
 
-  it("returns just the subsequent reminder for root when only subsequent is requested", () => {
+  it("returns just the standing reminder for root when only standing is requested", () => {
     const reminder = buildSystemReminder({
       threadType: "root",
-      kinds: ["subsequent"],
+      kinds: ["standing"],
     });
     expect(reminder).toBeDefined();
     expect(reminder).toContain("<system-reminder>");
@@ -50,47 +50,47 @@ describe("buildSystemReminder", () => {
     ).toBeUndefined();
   });
 
-  it("root subsequent reminder does not include yield_to_parent", () => {
+  it("root standing reminder does not include yield_to_parent", () => {
     const reminder = buildSystemReminder({
       threadType: "root",
-      kinds: ["subsequent"],
+      kinds: ["standing"],
     });
     expect(reminder).not.toContain("yield_to_parent");
   });
 
-  it("docker_root subsequent reminder includes the docker yield_to_parent instruction", () => {
+  it("docker_root standing reminder includes the docker yield_to_parent instruction", () => {
     const reminder = buildSystemReminder({
       threadType: "docker_root",
-      kinds: ["subsequent"],
+      kinds: ["standing"],
     });
     expect(reminder).toBeDefined();
     expect(reminder).toContain("Docker container");
     expect(reminder).toContain("yield_to_parent");
   });
 
-  it("subagent subsequent reminder includes the subagent yield_to_parent instruction", () => {
+  it("subagent standing reminder includes the subagent yield_to_parent instruction", () => {
     const reminder = buildSystemReminder({
       threadType: "subagent",
-      kinds: ["subsequent"],
+      kinds: ["standing"],
     });
     expect(reminder).toBeDefined();
     expect(reminder).toContain("yield_to_parent");
   });
 
-  it("subagent subsequent reminder appends a custom systemReminder when provided", () => {
+  it("subagent standing reminder appends a custom systemReminder when provided", () => {
     const reminder = buildSystemReminder({
       threadType: "subagent",
       subagentConfig: { systemReminder: "Custom subagent guidance" },
-      kinds: ["subsequent"],
+      kinds: ["standing"],
     });
     expect(reminder).toBeDefined();
     expect(reminder).toContain("Custom subagent guidance");
   });
 
-  it("appends extraReminders to the subsequent body", () => {
+  it("appends extraReminders to the standing body", () => {
     const reminder = buildSystemReminder({
       threadType: "root",
-      kinds: ["subsequent"],
+      kinds: ["standing"],
       extraReminders: ["always pet the cat"],
     });
     expect(reminder).toBeDefined();
@@ -100,7 +100,7 @@ describe("buildSystemReminder", () => {
   it("does not include extraReminders for compact threads", () => {
     const reminder = buildSystemReminder({
       threadType: "compact",
-      kinds: ["subsequent"],
+      kinds: ["standing"],
       extraReminders: ["always pet the cat"],
     });
     expect(reminder).toBeUndefined();
@@ -110,7 +110,7 @@ describe("buildSystemReminder", () => {
     expect(
       buildSystemReminder({
         threadType: "compact",
-        kinds: ["subsequent", "bashSummary"],
+        kinds: ["standing", "bashSummary"],
       }),
     ).toBeUndefined();
   });

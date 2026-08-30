@@ -4,8 +4,24 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { ToolName, ToolRequestId } from "@magenta/core";
 import { expect, test } from "vitest";
 import { MockProvider } from "../providers/mock.ts";
+import type { NvimDriver } from "../test/driver.ts";
 import { withDriver } from "../test/preamble.ts";
 import { pollUntil } from "../utils/async.ts";
+
+/** The standing reminder fires every SYSTEM_REMINDER_MIN_TOKEN_INTERVAL output
+ * tokens, so the opening request of a thread never carries one. Drive a full
+ * turn first to arm the gate for whatever is sent next. */
+async function armStandingReminder(driver: NvimDriver): Promise<void> {
+  await driver.inputMagentaText("warm up");
+  await driver.send();
+  const request = await driver.mockAnthropic.awaitPendingStream();
+  request.respond({
+    stopReason: "end_turn",
+    text: "warmed up",
+    toolRequests: [],
+    usage: { inputTokens: 10, outputTokens: 5000 },
+  });
+}
 
 const SKILL_WITH_REMINDER =
   "# Skill\n\n<system_reminder>\nalways pet the cat\n</system_reminder>\n";
@@ -25,9 +41,23 @@ function findSystemReminderText(
   );
 }
 
-test("user-submitted messages should include system reminder", async () => {
+test("the opening request of a thread carries no system reminder", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
+
+    await driver.inputMagentaText("Hello");
+    await driver.send();
+
+    const request = await driver.mockAnthropic.awaitPendingStream();
+    const userMessage = request.messages[request.messages.length - 1];
+    expect(findSystemReminderText(userMessage.content)).toBeUndefined();
+  });
+});
+
+test("a user message past the token interval includes the standing reminder", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await armStandingReminder(driver);
 
     // Send a user message
     await driver.inputMagentaText("Hello");
@@ -209,6 +239,7 @@ test("auto-respond includes system reminder after accumulating enough output tok
 test("root thread should get base reminder", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
+    await armStandingReminder(driver);
 
     await driver.inputMagentaText("Hello");
     await driver.send();
@@ -230,6 +261,7 @@ test("root thread should get base reminder", async () => {
 test("system reminder should be collapsed by default in UI", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
+    await armStandingReminder(driver);
 
     await driver.inputMagentaText("Hello");
     await driver.send();
@@ -253,6 +285,7 @@ test("system reminder should be collapsed by default in UI", async () => {
 test("system reminder is rendered in UI", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
+    await armStandingReminder(driver);
 
     await driver.inputMagentaText("Hello");
     await driver.send();
@@ -269,14 +302,13 @@ test("system reminder is rendered in UI", async () => {
   });
 });
 
-test("system reminder content appears after context updates", async () => {
+test("the standing reminder sits after context updates and before the user's text", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
+    await armStandingReminder(driver);
 
-    // Add a file to context
-    await driver.magenta.command("add-file ./poem.txt");
+    await driver.magenta.command("context-files ./poem.txt");
 
-    // Send a user message
     await driver.inputMagentaText("Hello");
     await driver.send();
 
@@ -290,24 +322,19 @@ test("system reminder content appears after context updates", async () => {
       throw new Error("Expected array content");
     }
 
-    // Find context update (first text block) and system reminder
-    const contextUpdate = content.find(
-      (c): c is TextBlockParam =>
-        c.type === "text" && !c.text.includes("<system-reminder>"),
-    );
-    const systemReminder = findSystemReminderText(content);
+    const textAt = (i: number) => {
+      const block = content[i];
+      if (block.type !== "text") throw new Error(`block ${i} is not text`);
+      return block.text;
+    };
 
-    expect(contextUpdate).toBeDefined();
-    expect(systemReminder).toBeDefined();
-
-    // System reminder should come after context update
-    const contextIdx = content.indexOf(contextUpdate!);
-    const reminderIdx = content.indexOf(systemReminder!);
-    expect(reminderIdx).toBeGreaterThan(contextIdx);
+    expect(textAt(0)).toContain("poem.txt");
+    expect(textAt(1)).toContain("<system-reminder>");
+    expect(textAt(2)).toBe("Hello");
   });
 });
 
-test("auto-respond combines subsequent and bash reminders into a single system_reminder block", async () => {
+test("auto-respond combines the standing and bash reminders into a single system_reminder block", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
@@ -333,7 +360,7 @@ test("auto-respond combines subsequent and bash reminders into a single system_r
           },
         },
       ],
-      // 5000 outputTokens >= SYSTEM_REMINDER_MIN_TOKEN_INTERVAL fires the subsequent gate.
+      // 5000 outputTokens >= SYSTEM_REMINDER_MIN_TOKEN_INTERVAL fires the standing gate.
       usage: { inputTokens: 1000, outputTokens: 5000 },
     });
 
@@ -362,17 +389,15 @@ test("auto-respond combines subsequent and bash reminders into a single system_r
       toolRequests: [],
     });
 
-    // After rendering the combined reminder, only one collapsed header should
-    // appear for the auto-respond turn (the user-typed message also has its
-    // own header, so total across the buffer is 2).
-    // The auto-respond turn's header appears on a later render than the user
-    // message's, so poll rather than sampling once.
+    // The combined reminder renders as a single collapsed header. The user's
+    // own message carries none (it was the thread's opening request), so this
+    // is the only one in the buffer.
     await pollUntil(async () => {
       const displayText = await driver.getDisplayBufferText();
       const headerCount = (displayText.match(/📋 \[System Reminder\]/g) ?? [])
         .length;
-      if (headerCount !== 2) {
-        throw new Error(`expected 2 reminder headers, got ${headerCount}`);
+      if (headerCount !== 1) {
+        throw new Error(`expected 1 reminder header, got ${headerCount}`);
       }
     });
   });
@@ -438,37 +463,50 @@ test("a user message that mentions tag names still renders as user text", async 
   });
 });
 
-test("multiple user messages each get their own system reminder", async () => {
+test("the standing reminder is gated by the token interval, not by user turns", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
-    // First message
     await driver.inputMagentaText("First message");
     await driver.send();
 
     const request1 = await driver.mockAnthropic.awaitPendingStream();
     const userMessage1 = request1.messages[request1.messages.length - 1];
-    const reminder1 = findSystemReminderText(userMessage1.content);
-    expect(reminder1).toBeDefined();
+    expect(findSystemReminderText(userMessage1.content)).toBeUndefined();
 
+    // Under the interval: the next user message still gets nothing.
     request1.respond({
       stopReason: "end_turn",
       text: "Response 1",
       toolRequests: [],
+      usage: { inputTokens: 10, outputTokens: 100 },
     });
 
-    // Second message
     await driver.inputMagentaText("Second message");
     await driver.send();
 
     const request2 = await driver.mockAnthropic.awaitPendingStream();
     const userMessage2 = request2.messages[request2.messages.length - 1];
-    const reminder2 = findSystemReminderText(userMessage2.content);
-    expect(reminder2).toBeDefined();
+    expect(findSystemReminderText(userMessage2.content)).toBeUndefined();
+
+    // Over the interval: the following user message carries the reminder.
+    request2.respond({
+      stopReason: "end_turn",
+      text: "Response 2",
+      toolRequests: [],
+      usage: { inputTokens: 10, outputTokens: 5000 },
+    });
+
+    await driver.inputMagentaText("Third message");
+    await driver.send();
+
+    const request3 = await driver.mockAnthropic.awaitPendingStream();
+    const userMessage3 = request3.messages[request3.messages.length - 1];
+    expect(findSystemReminderText(userMessage3.content)).toBeDefined();
   });
 });
 
-test("reading a markdown file with a system_reminder block folds it into subsequent reminders", async () => {
+test("reading a markdown file with a system_reminder block folds it into standing reminders", async () => {
   await withDriver(
     {
       setupFiles: async (tmpDir) => {
@@ -516,12 +554,9 @@ test("@implementplan activates a persistent plan-maintenance reminder", async ()
     await driver.send();
 
     const request = await driver.mockAnthropic.awaitPendingStream();
-    const userMessage = request.messages[request.messages.length - 1];
-    const systemReminder = findSystemReminderText(userMessage.content);
-    expect(systemReminder).toBeDefined();
-    expect(systemReminder!.text).toContain("keep the plan file updated");
 
-    // The reminder persists into subsequent turns
+    // The reminder rides the next request the token gate lets through, not the
+    // opening one.
     request.respond({
       stopReason: "tool_use",
       text: "Implementing",
@@ -556,6 +591,7 @@ test("a markdown context file's block is active while in context", async () => {
     },
     async (driver) => {
       await driver.showSidebar();
+      await armStandingReminder(driver);
       await driver.magenta.command("context-files './skill.md'");
 
       await driver.inputMagentaText("Hello");

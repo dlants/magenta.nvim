@@ -1,6 +1,6 @@
 import type { SubagentConfig, ThreadType } from "../chat-types.ts";
 
-export type ReminderKind = "subsequent" | "bashSummary";
+export type ReminderKind = "standing" | "bashSummary";
 
 const SKILLS_REMINDER = `\
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
@@ -25,7 +25,7 @@ Don't spawn sub-agents for things you can do with a single tool call (get_files,
 const BASH_SUMMARY_BODY = `\
 Use the \`bash_summarizer\` subagent to extract information from abbreviated bash output. Pass the log file to the subagent as a contextFile.`;
 
-function getSubsequentReminderBody(
+function getStandingReminderBody(
   threadType: ThreadType,
   subagentConfig?: SubagentConfig | undefined,
 ): string | undefined {
@@ -79,8 +79,8 @@ export function buildSystemReminder({
 }): string | undefined {
   const bodies: string[] = [];
   for (const kind of kinds) {
-    if (kind === "subsequent") {
-      let body = getSubsequentReminderBody(threadType, subagentConfig);
+    if (kind === "standing") {
+      let body = getStandingReminderBody(threadType, subagentConfig);
       if (body !== undefined) {
         if (extraReminders && extraReminders.length > 0) {
           body = `${body}\n${extraReminders.join("\n")}`;
