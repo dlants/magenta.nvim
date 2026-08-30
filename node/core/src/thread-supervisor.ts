@@ -137,6 +137,12 @@ export function composeSupervisors(
         ? { type: "suspend", reason: suspend.reason, injections }
         : { type: "proceed", injections };
     },
+    hasPendingContent: async () => {
+      for (const sup of getSupervisors()) {
+        if (await sup.hasPendingContent?.()) return true;
+      }
+      return false;
+    },
     onToolApplied: (absFilePath, tool, fileTypeInfo) => {
       for (const sup of getSupervisors()) {
         sup.onToolApplied?.(absFilePath, tool, fileTypeInfo);
@@ -176,6 +182,12 @@ export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
   onYield?(result: string): Promise<YieldAction>;
   onBeforeRequest?(context: RequestContext): Promise<SupervisorAction>;
+  /** Would `onBeforeRequest` contribute anything right now? Must not commit
+   * any "sent" state — it answers a question about a request that may never
+   * be issued. A supervisor whose contribution is standing (a reminder, the
+   * system-info preamble) answers `false`: standing content alone is not
+   * worth a request. */
+  hasPendingContent?(): Promise<boolean>;
   onToolApplied?: OnToolApplied;
 }
 

@@ -542,11 +542,7 @@ export class Thread {
     if (composed.type === "suspend") return composed;
     // Last, so the reminder sits after every other injection and immediately
     // before the user's own content.
-    const skipReminder =
-      ctx.kind === "submission" && this.openingSubmissionIsEmpty;
-    const reminder = skipReminder
-      ? undefined
-      : this.systemReminders.onBeforeRequest(ctx);
+    const reminder = this.systemReminders.onBeforeRequest(ctx);
     if (reminder?.type === "inject") {
       composed = {
         ...composed,
@@ -607,9 +603,18 @@ export class Thread {
     });
   }
 
-  /** A send that carried no user content: it only becomes a request if a
-   * hook contributes something, and the standing reminder does not count. */
-  private openingSubmissionIsEmpty = false;
+  /** Whether a send with no user content is worth a request: only if a
+   * supervisor has something to deliver. Standing content — the system
+   * reminder, the system-info preamble — does not count, and the probe must
+   * not consume anything, since the request may never be issued. */
+  private async hasPendingContent(): Promise<boolean> {
+    return (await this.hooks.hasPendingContent?.()) ?? false;
+  }
+
+  /** Claimed by each turn loop as it starts. A loop that finds the epoch
+   * moved on has been superseded by a newer send and must not touch the
+   * agent. */
+  private sendEpoch = 0;
 
   /** The turn loop's lifecycle. Non-idle from the moment `runToRest` takes
    * over until it settles: the agent looks idle between turns now that it
@@ -633,11 +638,16 @@ export class Thread {
   ): Promise<SendResult> {
     // An abort can only target a loop that is running, so there is no stale
     // flag to clear here: `abort` leaves `idle` alone.
+    const epoch = ++this.sendEpoch;
     this.loopState = { type: "running" };
-    // A send with no user content is not worth a request of its own, so the
-    // reminder must not manufacture one out of an empty submission.
-    this.openingSubmissionIsEmpty = messages.length === 0;
     try {
+      if (!messages.length) {
+        const pending = await this.hasPendingContent();
+        // Probing takes time, and a send that arrived while it ran owns the
+        // loop now: this one is over before it touched the agent.
+        if (this.sendEpoch !== epoch) return { type: "aborted" };
+        if (!pending) return { type: "completed", stopReason: undefined };
+      }
       let result = await this.agent.send(messages, opts);
       for (;;) {
         // An abort that arrives while a turn is in flight comes back through
@@ -674,7 +684,7 @@ export class Thread {
         }
       }
     } finally {
-      this.loopState = { type: "idle" };
+      if (this.sendEpoch === epoch) this.loopState = { type: "idle" };
     }
   }
 

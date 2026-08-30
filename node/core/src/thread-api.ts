@@ -160,6 +160,9 @@ export type ThreadHooks = Omit<AgentHooks, "onBeforeRequest"> & {
   /** The supervisors' own decision. It has no `submissions`: queued user
    * content is the thread's, and `Thread` wraps this hook to add it. */
   onBeforeRequest?: (ctx: RequestContext) => Promise<ComposedSupervisorActions>;
+  /** Whether any supervisor would contribute content to a request issued
+   * right now. Must not commit any "sent" state. */
+  hasPendingContent?: () => Promise<boolean>;
 };
 
 /** "Something visible moved." No payload: read `phase`. Called at streaming

@@ -42,6 +42,19 @@ export class GitTracker {
   /** Polls current git state and, if the coarse identity changed since the
    * agent last saw it, commits the new state to the agent view and returns the
    * update. Returns undefined when nothing worth reporting changed. */
+  /** Whether `getUpdate` would report something right now, without committing
+   * the agent view. A probe for a request that may never be issued. */
+  async hasUpdate(): Promise<boolean> {
+    try {
+      return coarseChanged(this.agentView, await this.gitClient.getState());
+    } catch (error) {
+      this.logger.error(
+        `GitTracker failed to read git state: ${String(error)}`,
+      );
+      return false;
+    }
+  }
+
   async getUpdate(): Promise<GitContextUpdate | undefined> {
     let current: GitState | undefined;
     try {

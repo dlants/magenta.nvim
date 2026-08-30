@@ -28,4 +28,8 @@ export class GitSupervisor implements ThreadSupervisor {
     this.onSent?.(update);
     return injectText(gitUpdateToText(update));
   }
+
+  async hasPendingContent(): Promise<boolean> {
+    return this.gitTracker.hasUpdate();
+  }
 }

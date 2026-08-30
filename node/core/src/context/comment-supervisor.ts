@@ -35,4 +35,10 @@ export class CommentSupervisor implements ThreadSupervisor {
     if (entries.length) this.onSent?.(entries);
     return injectText(text);
   }
+
+  /** Deliberately skips `beforeRead`: positions only matter for content that
+   * is actually going out, and the probe must stay cheap. */
+  async hasPendingContent(): Promise<boolean> {
+    return this.store.hasPendingUpdates();
+  }
 }

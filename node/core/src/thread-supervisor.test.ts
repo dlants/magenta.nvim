@@ -73,6 +73,23 @@ describe("composeSupervisors onBeforeRequest", () => {
   });
 });
 
+describe("composeSupervisors hasPendingContent", () => {
+  it("is true when any supervisor has something pending", async () => {
+    const hooks = composeSupervisors(() => [
+      { hasPendingContent: () => Promise.resolve(false) },
+      {},
+      { hasPendingContent: () => Promise.resolve(true) },
+    ]);
+    expect(await hooks.hasPendingContent?.()).toBe(true);
+  });
+  it("is false when no supervisor answers", async () => {
+    const hooks = composeSupervisors(() => [
+      {},
+      { hasPendingContent: () => Promise.resolve(false) },
+    ]);
+    expect(await hooks.hasPendingContent?.()).toBe(false);
+  });
+});
 describe("composeSupervisors onEndTurn", () => {
   const endTurnContext: EndTurnContext = {
     stopReason: "end_turn",

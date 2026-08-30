@@ -730,11 +730,16 @@ export class Agent {
     opts: SubmitOptions = {},
   ): Promise<void> {
     this.state.editedFilesThisTurn = [];
+    // Composition awaits, and an abort landing in that window settles this
+    // submission and hands the agent to whoever sent next. Its request must
+    // not go out on top of theirs.
+    const submission = this.submission;
 
     const beforeRequest: ComposedBeforeRequest =
       opts.requestKind === "continuation"
         ? { type: "proceed", injections: [], submissions: [] }
         : await this.composeBeforeRequest({ kind: "submission" });
+    if (this.submission !== submission) return;
     const { content, hasContent } = this.prepareUserContent(inputMessages);
     if (beforeRequest.type === "suspend") {
       this.runner.appendUserMessage(toAgentInput(content), { coalesce: true });
@@ -744,6 +749,9 @@ export class Agent {
 
     const injections = beforeRequest.injections;
     const hasPrefix = (this.pendingTurnPrefix?.length ?? 0) > 0;
+    // Last-resort guard against a request with no content at all. Whether an
+    // empty send is worth issuing is decided by the owner (`Thread.send`),
+    // which probes its supervisors before it gets here.
     if (!hasContent && injections.length === 0 && !hasPrefix) {
       this.settle({ type: "completed", stopReason: undefined });
       return;

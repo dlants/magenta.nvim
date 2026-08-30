@@ -30,6 +30,10 @@ export class FileContextSupervisor implements ThreadSupervisor {
     return { type: "inject", content };
   }
 
+  async hasPendingContent(): Promise<boolean> {
+    await this.contextManager.refreshPendingUpdates();
+    return Object.keys(this.contextManager.getPendingUpdates()).length > 0;
+  }
   onToolApplied: OnToolApplied = (absFilePath, tool, fileTypeInfo) => {
     this.contextManager.toolApplied(absFilePath, tool, fileTypeInfo);
   };

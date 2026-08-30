@@ -1794,6 +1794,7 @@ describe("AutoCompactSupervisor integration", () => {
     const { core, mockClient } = createAgentWithMock();
     core.hooks = composeSupervisors(() => [
       {
+        hasPendingContent: () => Promise.resolve(true),
         onBeforeRequest: (ctx) =>
           Promise.resolve(
             ctx.kind === "submission"

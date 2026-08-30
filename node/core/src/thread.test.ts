@@ -15,7 +15,7 @@ import {
   userTexts,
 } from "./test-helpers.ts";
 import type { QueuedMessage } from "./thread-api.ts";
-import { composeSupervisors } from "./thread-supervisor.ts";
+import { composeSupervisors, injectText } from "./thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer, pollUntil } from "./utils/async.ts";
 
@@ -542,5 +542,86 @@ describe("Thread.abort returns the unsent queue", () => {
     const { unsent } = await core.abort();
     expect(queuedText(unsent)).toBe("queued");
     expect(core.queued.async).toEqual([]);
+  });
+});
+
+describe("empty send gate", () => {
+  it("issues a request for an empty send when a supervisor has content", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    core.hooks = composeSupervisors(() => [
+      {
+        hasPendingContent: () => Promise.resolve(true),
+        onBeforeRequest: () => Promise.resolve(injectText("# context update")),
+      },
+    ]);
+    const sent = core.send([]);
+    const stream = await mockClient.awaitStream();
+    expect(userTexts(core)).toContain("# context update");
+    stream.finishResponse("end_turn");
+    expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
+  });
+
+  it("issues no request for an empty send when nothing is pending", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    core.hooks = composeSupervisors(() => [
+      { hasPendingContent: () => Promise.resolve(false) },
+    ]);
+    expect(await core.send([])).toEqual({
+      type: "completed",
+      stopReason: undefined,
+    });
+    expect(mockClient.streams.length).toBe(0);
+  });
+
+  it("issues no request for a standing reminder alone, and still delivers it later", async () => {
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("empty-send-reminder"),
+      (message) =>
+        Promise.resolve({
+          compact: false,
+          messages: message ? [{ type: "user" as const, text: message }] : [],
+          reminders: ["stay on task"],
+        }),
+    );
+    core.hooks = composeSupervisors(() => [
+      { hasPendingContent: () => Promise.resolve(false) },
+    ]);
+    expect(await core.submit(pendingMessage(""))).toEqual({
+      type: "completed",
+      stopReason: undefined,
+    });
+    expect(mockClient.streams.length).toBe(0);
+
+    const sent = core.send([{ type: "user", text: "now do it" }]);
+    const stream = await mockClient.awaitStream();
+    const request = stream.messages[stream.messages.length - 1];
+    expect(JSON.stringify(request.content)).toContain("stay on task");
+    stream.finishResponse("end_turn");
+    await sent;
+  });
+
+  it("does not consume pending content when the send is gated off", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    let available = false;
+    const supervisor = {
+      hasPendingContent: () => Promise.resolve(available),
+      onBeforeRequest: () =>
+        Promise.resolve(
+          available
+            ? injectText("# context update")
+            : { type: "none" as const },
+        ),
+    };
+    core.hooks = composeSupervisors(() => [supervisor]);
+    await core.send([]);
+    expect(mockClient.streams.length).toBe(0);
+
+    available = true;
+    const sent = core.send([{ type: "user", text: "go" }]);
+    const stream = await mockClient.awaitStream();
+    expect(userTexts(core)).toContain("# context update");
+    stream.finishResponse("end_turn");
+    await sent;
   });
 });
