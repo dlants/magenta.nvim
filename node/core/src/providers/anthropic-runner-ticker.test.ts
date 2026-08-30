@@ -1,62 +1,12 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Logger } from "../logger.ts";
-import { validateInput } from "../tools/helpers.ts";
-import {
-  AnthropicRunner,
-  type AnthropicRunnerOptions,
-} from "./anthropic-runner.ts";
-import { MockAnthropicClient } from "./mock-anthropic-client.ts";
-import type { ProviderToolSpec } from "./provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
+import type { Agent } from "../agent.ts";
+import { createTestAgent, userInput } from "../test-helpers.ts";
 
-const noopLogger: Logger = {
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  debug: () => {},
-};
-
-let onUpdate = () => {};
-const noopExecuteTools = () =>
-  Promise.reject(new Error("unexpected tool execution"));
-
-const defaultOptions = {
-  model: "claude-sonnet-4-20250514",
-  systemPrompt: "test",
-  tools: [] as ProviderToolSpec[],
-  skipPostFlightTokenCount: true,
-  executeTools: noopExecuteTools,
-  onUpdate: () => onUpdate(),
-};
-
-const defaultAnthropicOptions: AnthropicRunnerOptions = {
-  authType: "key",
-  includeWebSearch: false,
-  disableParallelToolUseFlag: true,
-  logger: noopLogger,
-  validateInput,
-};
-
-function createAgent(mockClient: MockAnthropicClient) {
-  return new AnthropicRunner(
-    defaultOptions,
-    mockClient as unknown as Anthropic,
-    defaultAnthropicOptions,
-  );
+function start(agent: Agent) {
+  return agent.runTurnLoop(userInput("hello"));
 }
 
-function start(agent: AnthropicRunner) {
-  return agent.runTurn([
-    {
-      type: "text",
-      text: "hello",
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    },
-  ]);
-}
-
-describe("AnthropicRunner streaming ticker", () => {
+describe("Agent streaming ticker", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -66,14 +16,17 @@ describe("AnthropicRunner streaming ticker", () => {
   });
 
   it("emits updates ~1/sec while waiting and stops after the turn settles", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
     let didUpdate = 0;
-    onUpdate = () => {
-      didUpdate++;
-    };
+    const { agent, mockClient } = createTestAgent({
+      onUpdate: () => {
+        didUpdate++;
+      },
+    });
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
     const stream = await mockClient.awaitStream();
 
     // Dead air: no stream events, only the heartbeat should fire.
@@ -93,18 +46,21 @@ describe("AnthropicRunner streaming ticker", () => {
   });
 
   it("clears the ticker on abort", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
     let didUpdate = 0;
-    onUpdate = () => {
-      didUpdate++;
-    };
+    const { agent, mockClient } = createTestAgent({
+      onUpdate: () => {
+        didUpdate++;
+      },
+    });
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
     await mockClient.awaitStream();
 
     await vi.advanceTimersByTimeAsync(2000);
-    agent.abort();
+    void agent.abort();
     expect(await turn).toEqual({ type: "aborted" });
     await vi.advanceTimersByTimeAsync(0);
 
@@ -114,10 +70,12 @@ describe("AnthropicRunner streaming ticker", () => {
   });
 
   it("advances lastEventTime on each stream event", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const { agent, mockClient } = createTestAgent();
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
     const stream = await mockClient.awaitStream();
 
     const initial = agent.phase;

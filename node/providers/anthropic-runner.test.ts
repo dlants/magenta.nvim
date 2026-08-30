@@ -6,24 +6,180 @@ import winston from "winston";
 import { delay, pollUntil } from "../utils/async.ts";
 import {
   ABORT_MARKER_TEXT,
-  AnthropicRunner,
+  AnthropicInferenceManager,
   type AnthropicRunnerOptions,
 } from "./anthropic-runner.ts";
 import { MockAnthropicClient } from "./mock-anthropic-client.ts";
 import type {
   AgentInput,
+  AgentPhase,
+  BeforeRequestDecision,
   NativeMessageIdx,
   ProviderToolSpec,
   RequestedTool,
-  RunnerHooks,
   StreamingBlock,
   ToolExecutor,
+  ToolOutcome,
   ToolResults,
+  TurnResult,
 } from "./provider-types.ts";
+
+type LoopHooks = {
+  executeTools: ToolExecutor;
+  onUpdate: () => void;
+  onBeforeRequest?: () => Promise<BeforeRequestDecision>;
+};
+
+/** Stands in for `Agent` for tests that are about what the manager puts on the
+ * wire. It drives the same sequence the agent's loop does — gate, request,
+ * tool results — without the agent's context, tools or supervisors. Loop
+ * policy itself is tested against the real `Agent`, in core. */
+class TestAgent {
+  phase: AgentPhase = { type: "idle" };
+  private abortRequested = false;
+  private turnInFlight = false;
+
+  constructor(
+    readonly manager: AnthropicInferenceManager,
+    private hooks: LoopHooks,
+  ) {}
+
+  get log() {
+    return this.manager.log;
+  }
+
+  getNativeMessageIdx(): NativeMessageIdx {
+    return this.manager.getNativeMessageIdx();
+  }
+
+  truncateMessages(idx: NativeMessageIdx): void {
+    this.manager.truncateMessages(idx);
+  }
+
+  appendUserMessage(
+    ...args: Parameters<AnthropicInferenceManager["appendUserMessage"]>
+  ): void {
+    this.manager.appendUserMessage(...args);
+  }
+
+  clone(hooks: LoopHooks): TestAgent {
+    return new TestAgent(this.manager.clone(), hooks);
+  }
+
+  abort(): void {
+    if (!this.turnInFlight) return;
+    this.abortRequested = true;
+    this.manager.abort();
+  }
+
+  async runTurn(input: AgentInput[]): Promise<TurnResult> {
+    if (this.turnInFlight) {
+      throw new Error("runTurn called while a turn is already in flight");
+    }
+    this.turnInFlight = true;
+    this.abortRequested = false;
+    try {
+      return await this.runLoop(input);
+    } finally {
+      this.turnInFlight = false;
+      this.abortRequested = false;
+      this.phase = { type: "idle" };
+      this.hooks.onUpdate();
+    }
+  }
+
+  private async runLoop(initialInput: AgentInput[]): Promise<TurnResult> {
+    let pending: AgentInput[] | undefined = initialInput;
+    while (true) {
+      if (this.abortRequested) return this.finishAbort();
+      const decision: BeforeRequestDecision = this.hooks.onBeforeRequest
+        ? await this.hooks.onBeforeRequest()
+        : { type: "proceed" };
+      if (pending) {
+        this.manager.appendUserMessage(pending);
+        pending = undefined;
+      }
+      if (decision.type === "suspend") {
+        return { type: "suspended", reason: decision.reason };
+      }
+      if (this.abortRequested) return this.finishAbort();
+
+      this.phase = {
+        type: "streaming",
+        startedAt: new Date(),
+        lastEventTime: new Date(),
+        block: undefined,
+        retry: undefined,
+      };
+      const outcome = await this.manager.sendRequest((update) => {
+        if (this.phase.type !== "streaming") return;
+        this.phase.lastEventTime = new Date();
+        if (update.type === "streaming-block") {
+          this.phase.block = update.streamingBlock;
+        } else if (update.type === "block-finished") {
+          this.phase.block = undefined;
+        } else {
+          this.phase.retry = update.retry;
+        }
+        this.hooks.onUpdate();
+      });
+
+      if (outcome.type === "aborted") return this.finishAbort();
+      if (outcome.type === "error") {
+        this.manager.finalize({ type: "error", error: outcome.error });
+        return { type: "failed", error: outcome.error };
+      }
+
+      const requested = outcome.requested;
+      if (requested.length === 0) {
+        return {
+          type: "stopped",
+          stopReason:
+            outcome.stopReason === "tool_use" ? "end_turn" : outcome.stopReason,
+        };
+      }
+      if (this.abortRequested) return this.finishAbort();
+
+      this.phase = {
+        type: "running_tools",
+        requested,
+        truncated: outcome.stopReason === "max_tokens",
+      };
+
+      let toolOutcome: ToolOutcome;
+      try {
+        toolOutcome = await this.hooks.executeTools(requested);
+      } catch {
+        toolOutcome = { type: "continue", results: new Map() };
+      }
+      this.manager.appendToolResults(requested, toolOutcome.results);
+
+      if (toolOutcome.type === "aborted") {
+        this.abortRequested = true;
+        return this.finishAbort();
+      }
+      if (toolOutcome.type === "suspend") return { type: "suspended" };
+      if (this.abortRequested) return this.finishAbort();
+    }
+  }
+
+  private finishAbort(): TurnResult {
+    this.phase = { type: "aborting" };
+    this.manager.finalize({ type: "aborted" });
+    this.manager.appendUserMessage([
+      {
+        type: "text",
+        text: ABORT_MARKER_TEXT,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ]);
+    return { type: "aborted" };
+  }
+}
 
 /** Hooks for a cloned runner: no test clones a runner and then runs tools
  * through it. */
-const cloneHooks: RunnerHooks = {
+const cloneHooks: LoopHooks = {
   executeTools: () => Promise.resolve({ type: "continue", results: new Map() }),
   onUpdate: () => {},
 };
@@ -50,19 +206,20 @@ function createAgent(
     };
   },
   tracked?: Tracked,
-): AnthropicRunner {
-  return new AnthropicRunner(
-    {
-      ...defaultOptions,
-      ...options,
-      ...(tracked && {
-        onUpdate: () => {
-          tracked.updates++;
-        },
-      }),
-    },
-    mockClient as unknown as Anthropic,
-    defaultAnthropicOptions,
+): TestAgent {
+  const merged = { ...defaultOptions, ...options };
+  const onUpdate = tracked
+    ? () => {
+        tracked.updates++;
+      }
+    : merged.onUpdate;
+  return new TestAgent(
+    new AnthropicInferenceManager(
+      { ...merged, onUpdate },
+      mockClient as unknown as Anthropic,
+      defaultAnthropicOptions,
+    ),
+    { executeTools: merged.executeTools, onUpdate },
   );
 }
 
@@ -76,7 +233,7 @@ function awaitNextStream(mockClient: MockAnthropicClient, seen: number) {
   });
 }
 
-function streamingBlock(agent: AnthropicRunner): StreamingBlock | undefined {
+function streamingBlock(agent: TestAgent): StreamingBlock | undefined {
   return agent.phase.type === "streaming" ? agent.phase.block : undefined;
 }
 
@@ -156,17 +313,19 @@ describe("thinking.effort", () => {
       return logger;
     }) as typeof logger.warn;
 
-    const agent = new AnthropicRunner(
-      {
-        model: "claude-sonnet-4-5",
-        systemPrompt: "You are a helpful assistant.",
-        tools: [] as ProviderToolSpec[],
-        thinking: { enabled: true, effort: "max" },
-        executeTools: rejectingExecutor,
-        onUpdate: () => {},
-      },
-      mockClient as unknown as Anthropic,
-      { ...defaultAnthropicOptions, logger },
+    const agent = new TestAgent(
+      new AnthropicInferenceManager(
+        {
+          model: "claude-sonnet-4-5",
+          systemPrompt: "You are a helpful assistant.",
+          tools: [] as ProviderToolSpec[],
+          thinking: { enabled: true, effort: "max" },
+          onUpdate: () => {},
+        },
+        mockClient as unknown as Anthropic,
+        { ...defaultAnthropicOptions, logger },
+      ),
+      { executeTools: rejectingExecutor, onUpdate: () => {} },
     );
 
     const turn = agent.runTurn([

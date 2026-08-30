@@ -11,10 +11,10 @@ import type { ProviderProfile } from "./provider-options.ts";
 import type {
   AgentInput,
   AgentPhase,
+  NativeInferenceManager,
   NativeMessageIdx,
   ProviderMessage,
   ProviderToolSpec,
-  Runner,
   StopReason,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
@@ -62,7 +62,7 @@ export type ThreadInit =
   | { type: "fresh" }
   | {
       type: "clone";
-      sourceRunner: Runner;
+      sourceRunner: NativeInferenceManager;
       nativeMessageIdx: NativeMessageIdx;
       provenance: ForkProvenance;
       edlRegisters: EdlRegisters;
@@ -171,7 +171,7 @@ export class Thread {
       callbacks,
       {
         type: "clone",
-        sourceRunner: sourceThread.runner,
+        sourceRunner: sourceThread.inferenceManager,
         nativeMessageIdx,
         provenance: {
           fromThreadId: sourceThread.id,
@@ -210,15 +210,15 @@ export class Thread {
     return this.loopState.type !== "idle" || this.agent.isBusy;
   }
 
-  get runner(): Runner {
-    return this.agent.runner;
+  get inferenceManager(): NativeInferenceManager {
+    return this.agent.manager;
   }
 
   /** Derived on read rather than stored: everything in `TurnActivity` moves
    * between renders, so a mirror would be stale by construction. */
   get phase(): ThreadPhase {
     const mode = this.state.mode;
-    const runnerPhase = this.runner.phase;
+    const runnerPhase = this.agent.phase;
     switch (runnerPhase.type) {
       case "aborting":
         return { type: "aborting" };

@@ -1,7 +1,7 @@
 export type { AnthropicRunnerOptions } from "@magenta/core";
 export {
   ABORT_MARKER_TEXT,
-  AnthropicRunner,
+  AnthropicInferenceManager,
   CLAUDE_CODE_SPOOF_PROMPT,
   convertAnthropicMessagesToProvider,
   getContextWindowForModel,

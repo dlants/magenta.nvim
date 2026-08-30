@@ -1,19 +1,12 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Agent } from "../agent.ts";
 import type { Logger } from "../logger.ts";
-import { validateInput } from "../tools/helpers.ts";
-import {
-  AnthropicRunner,
-  type AnthropicRunnerOptions,
-} from "./anthropic-runner.ts";
+import { createTestAgent, userInput } from "../test-helpers.ts";
 import {
   makeRefreshAuth,
   type RefreshAuth,
   type RunCommand,
 } from "./auth-refresh.ts";
-import { MockAnthropicClient } from "./mock-anthropic-client.ts";
-import type { ProviderToolSpec } from "./provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 
 const noopLogger: Logger = {
   info: () => {},
@@ -22,32 +15,8 @@ const noopLogger: Logger = {
   debug: () => {},
 };
 
-const defaultOptions = {
-  model: "claude-sonnet-4-20250514",
-  systemPrompt: "test",
-  tools: [] as ProviderToolSpec[],
-  skipPostFlightTokenCount: true,
-  executeTools: () => Promise.reject(new Error("unexpected tool execution")),
-  onUpdate: () => {},
-};
-
-function createAgent(
-  mockClient: MockAnthropicClient,
-  refreshAuth: RefreshAuth | undefined,
-): AnthropicRunner {
-  const opts: AnthropicRunnerOptions = {
-    authType: "key",
-    includeWebSearch: false,
-    disableParallelToolUseFlag: true,
-    logger: noopLogger,
-    validateInput,
-    refreshAuth,
-  };
-  return new AnthropicRunner(
-    defaultOptions,
-    mockClient as unknown as Anthropic,
-    opts,
-  );
+function createAgent(refreshAuth: RefreshAuth | undefined) {
+  return createTestAgent({ anthropicOptions: { refreshAuth } });
 }
 
 function makeTokenExpiredError(): Error {
@@ -58,17 +27,11 @@ function makeTokenExpiredError(): Error {
   return err;
 }
 
-function start(agent: AnthropicRunner) {
-  return agent.runTurn([
-    {
-      type: "text",
-      text: "hello",
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    },
-  ]);
+function start(agent: Agent) {
+  return agent.runTurnLoop(userInput("hello"));
 }
 
-describe("AnthropicRunner auth refresh", () => {
+describe("Agent auth refresh", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -78,11 +41,13 @@ describe("AnthropicRunner auth refresh", () => {
   });
 
   it("refreshes auth on TokenProviderError and retries successfully", async () => {
-    const mockClient = new MockAnthropicClient();
     const refreshAuth = vi.fn().mockResolvedValue(undefined);
-    const agent = createAgent(mockClient, refreshAuth);
+    const { agent, mockClient } = createAgent(refreshAuth);
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
 
     let stream = await mockClient.awaitStream();
     stream.respondWithError(makeTokenExpiredError());
@@ -100,13 +65,15 @@ describe("AnthropicRunner auth refresh", () => {
   });
 
   it("surfaces a combined error when refresh fails", async () => {
-    const mockClient = new MockAnthropicClient();
     const refreshAuth = vi
       .fn()
       .mockRejectedValue(new Error("aws sso login failed: bad config"));
-    const agent = createAgent(mockClient, refreshAuth);
+    const { agent, mockClient } = createAgent(refreshAuth);
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
 
     const stream = await mockClient.awaitStream();
     stream.respondWithError(makeTokenExpiredError());
@@ -120,7 +87,6 @@ describe("AnthropicRunner auth refresh", () => {
   });
 
   it("30s window prevents a second refresh after a repeated auth error", async () => {
-    const mockClient = new MockAnthropicClient();
     const runCommand = vi
       .fn<RunCommand>()
       .mockResolvedValue({ stdout: "", stderr: "" });
@@ -129,9 +95,12 @@ describe("AnthropicRunner auth refresh", () => {
       noopLogger,
       runCommand,
     );
-    const agent = createAgent(mockClient, refreshAuth);
+    const { agent, mockClient } = createAgent(refreshAuth);
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
 
     let stream = await mockClient.awaitStream();
     stream.respondWithError(makeTokenExpiredError());

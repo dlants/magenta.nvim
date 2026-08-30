@@ -200,7 +200,7 @@ it("source agent is unaffected by clone", async () => {
     const sourceThreadId = driver.magenta.chat.state.activeThreadId!;
     const sourceThread = driver.magenta.chat.getActiveThread();
     const messagesBefore = sourceThread.agent.log.messages.length;
-    const statusBefore = sourceThread.agent.phase;
+    const statusBefore = sourceThread.getProviderStatus();
     const turnResultBefore = sourceThread.core.state.lastTurnResult;
 
     const idx = sourceThread.agent.getNativeMessageIdx();
@@ -210,7 +210,7 @@ it("source agent is unaffected by clone", async () => {
     );
 
     const messagesAfter = sourceThread.agent.log.messages.length;
-    const statusAfter = sourceThread.agent.phase;
+    const statusAfter = sourceThread.getProviderStatus();
 
     expect(messagesAfter).toBe(messagesBefore);
     expect(statusAfter.type).toBe(statusBefore.type);

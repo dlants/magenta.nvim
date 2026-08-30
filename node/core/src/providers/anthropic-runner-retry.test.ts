@@ -1,48 +1,8 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { AnthropicError, APIError } from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Logger } from "../logger.ts";
-import { validateInput } from "../tools/helpers.ts";
-import {
-  AnthropicRunner,
-  type AnthropicRunnerOptions,
-  isRetryableError,
-} from "./anthropic-runner.ts";
-import { MockAnthropicClient } from "./mock-anthropic-client.ts";
-import type { ProviderToolSpec } from "./provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
-
-const noopLogger: Logger = {
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  debug: () => {},
-};
-
-const defaultOptions = {
-  model: "claude-sonnet-4-20250514",
-  systemPrompt: "test",
-  tools: [] as ProviderToolSpec[],
-  skipPostFlightTokenCount: true,
-  executeTools: () => Promise.reject(new Error("unexpected tool execution")),
-  onUpdate: () => {},
-};
-
-const defaultAnthropicOptions: AnthropicRunnerOptions = {
-  authType: "key",
-  includeWebSearch: false,
-  disableParallelToolUseFlag: true,
-  logger: noopLogger,
-  validateInput,
-};
-
-function createAgent(mockClient: MockAnthropicClient) {
-  return new AnthropicRunner(
-    defaultOptions,
-    mockClient as unknown as Anthropic,
-    defaultAnthropicOptions,
-  );
-}
+import type { Agent } from "../agent.ts";
+import { createTestAgent, userInput } from "../test-helpers.ts";
+import { isRetryableError } from "./anthropic-runner.ts";
 
 function make529Error(): APIError {
   return new APIError(
@@ -71,14 +31,8 @@ function make400Error(): APIError {
   );
 }
 
-function start(agent: AnthropicRunner) {
-  return agent.runTurn([
-    {
-      type: "text",
-      text: "hello",
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    },
-  ]);
+function start(agent: Agent) {
+  return agent.runTurnLoop(userInput("hello"));
 }
 
 describe("isRetryableError", () => {
@@ -144,7 +98,7 @@ describe("isRetryableError", () => {
   });
 });
 
-describe("AnthropicRunner retry logic", () => {
+describe("Agent retry logic", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -154,10 +108,12 @@ describe("AnthropicRunner retry logic", () => {
   });
 
   it("non-retryable errors pass through immediately", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const { agent, mockClient } = createTestAgent();
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
 
     const stream = await mockClient.awaitStream();
     stream.respondWithError(make400Error());
@@ -172,19 +128,19 @@ describe("AnthropicRunner retry logic", () => {
   });
 
   it("does not re-fire the before-request gate on a retried request", async () => {
-    const mockClient = new MockAnthropicClient();
     let calls = 0;
-    const agent = new AnthropicRunner(
-      {
-        ...defaultOptions,
+    const { agent, mockClient } = createTestAgent({
+      getHooks: () => ({
         onBeforeRequest: () => {
           calls++;
-          return Promise.resolve({ type: "proceed" as const });
+          return Promise.resolve({
+            type: "proceed" as const,
+            injections: [],
+            submissions: [],
+          });
         },
-      },
-      mockClient as unknown as Anthropic,
-      defaultAnthropicOptions,
-    );
+      }),
+    });
     const turn = start(agent);
     await vi.advanceTimersByTimeAsync(0);
     let stream = await mockClient.awaitStream();
@@ -199,10 +155,12 @@ describe("AnthropicRunner retry logic", () => {
   });
 
   it("retries on 529 with correct delays and succeeds", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const { agent, mockClient } = createTestAgent();
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
 
     // First attempt: fail with 529
     let stream = await mockClient.awaitStream();
@@ -248,10 +206,12 @@ describe("AnthropicRunner retry logic", () => {
   });
 
   it("retries on transient SSE JSON parse errors", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const { agent, mockClient } = createTestAgent();
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
 
     // First attempt: SDK surfaces a malformed SSE frame as an AnthropicError
     let stream = await mockClient.awaitStream();
@@ -278,10 +238,12 @@ describe("AnthropicRunner retry logic", () => {
   });
 
   it("retries on 429", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const { agent, mockClient } = createTestAgent();
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
 
     // First attempt: fail with 429
     let stream = await mockClient.awaitStream();
@@ -306,10 +268,12 @@ describe("AnthropicRunner retry logic", () => {
   });
 
   it("gives up after max duration", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const { agent, mockClient } = createTestAgent();
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
 
     // Simulate time passing beyond MAX_RETRY_DURATION (300s)
     // Fast-forward through multiple retries
@@ -354,10 +318,12 @@ describe("AnthropicRunner retry logic", () => {
     // block (but before closing it) used to leave currentBlockIndex set, so
     // the next attempt's content_block_start collided with the still-open
     // block and threw "content_block_start ... while block N is still open".
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const { agent, mockClient } = createTestAgent();
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
 
     // First attempt: open block 0, then error mid-block with a retryable status
     let stream = await mockClient.awaitStream();
@@ -386,10 +352,12 @@ describe("AnthropicRunner retry logic", () => {
   });
 
   it("abort during retry wait cancels immediately", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const { agent, mockClient } = createTestAgent();
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
 
     // First attempt: fail with 529
     const stream = await mockClient.awaitStream();
@@ -404,17 +372,19 @@ describe("AnthropicRunner retry logic", () => {
     }
 
     // Abort during the retry wait
-    agent.abort();
+    void agent.abort();
     await vi.advanceTimersByTimeAsync(0);
 
     expect(await turn).toEqual({ type: "aborted" });
   });
 
   it("status shows retry during wait and clears on retry attempt", async () => {
-    const mockClient = new MockAnthropicClient();
-    const agent = createAgent(mockClient);
+    const { agent, mockClient } = createTestAgent();
 
     const turn = start(agent);
+    // The loop reaches the request after a few awaits; let them run before
+    // polling for the stream (the poll's own retry uses faked timers).
+    await vi.advanceTimersByTimeAsync(0);
 
     // First attempt: fail with 529
     let stream = await mockClient.awaitStream();

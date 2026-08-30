@@ -7,7 +7,11 @@ import {
   MockOpenAIClient,
   type MockResponseStream,
 } from "./mock-openai-client.ts";
-import { OpenAIRunner, type OpenAIStreamingClient } from "./openai-runner.ts";
+import {
+  type LegacyRunnerHooks,
+  OpenAIRunner,
+  type OpenAIStreamingClient,
+} from "./openai-runner.ts";
 import {
   type NativeMessageIdx,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -15,8 +19,6 @@ import {
   type ProviderToolResult,
   type ProviderToolSpec,
   type RequestedTool,
-  type Runner,
-  type RunnerHooks,
   type ToolExecutor,
   type ToolResults,
   type TurnResult,
@@ -24,7 +26,7 @@ import {
 
 /** Hooks for a cloned runner: no test clones a runner and then runs tools
  * through it. */
-const cloneHooks: RunnerHooks = {
+const cloneHooks: LegacyRunnerHooks = {
   executeTools: () => Promise.resolve({ type: "continue", results: new Map() }),
   onUpdate: () => {},
 };
@@ -113,7 +115,7 @@ function setup(
  * stream that serves it are both available immediately. */
 async function startTurn(
   client: MockOpenAIClient,
-  agent: Runner,
+  agent: OpenAIRunner,
   text = "hello",
 ): Promise<{ turn: Promise<TurnResult>; stream: MockResponseStream }> {
   const turn = agent.runTurn([userText(text)]);
@@ -121,7 +123,7 @@ async function startTurn(
   return { turn, stream };
 }
 
-function assistant(agent: Runner): ProviderMessage {
+function assistant(agent: OpenAIRunner): ProviderMessage {
   const messages = agent.log.messages;
   const last = messages[messages.length - 1];
   expect(last.role).toBe("assistant");
@@ -130,7 +132,7 @@ function assistant(agent: Runner): ProviderMessage {
 
 /** The last assistant message, which an aborted turn leaves behind its own
  * user-role abort marker. */
-function lastAssistant(agent: Runner): ProviderMessage {
+function lastAssistant(agent: OpenAIRunner): ProviderMessage {
   const messages = agent.log.messages;
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === "assistant") return messages[i];
@@ -138,12 +140,12 @@ function lastAssistant(agent: Runner): ProviderMessage {
   throw new Error("no assistant message");
 }
 
-function streamingBlock(agent: Runner) {
+function streamingBlock(agent: OpenAIRunner) {
   const phase = agent.phase;
   return phase.type === "streaming" ? phase.block : undefined;
 }
 
-function toolUseBlocks(agent: Runner) {
+function toolUseBlocks(agent: OpenAIRunner) {
   return agent.log.messages.flatMap((message) =>
     message.content.filter((content) => content.type === "tool_use"),
   );
@@ -635,7 +637,7 @@ describe("OpenAIRunner clone", () => {
   it("drops an unanswered tool call in the clone", async () => {
     // Cloning mid-tool-execution is the one moment a tool_use has no result
     // yet, which is exactly when a fork can happen.
-    let midToolClone: Runner | undefined;
+    let midToolClone: OpenAIRunner | undefined;
     const { client, agent } = setup({
       executeTools: (requests) => {
         midToolClone = agent.clone(cloneHooks);

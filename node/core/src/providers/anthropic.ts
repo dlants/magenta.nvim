@@ -18,7 +18,7 @@ import {
   resolveOutputConfig,
 } from "./anthropic-models.ts";
 import {
-  AnthropicRunner,
+  AnthropicInferenceManager,
   getRetryDelay,
   isRetryableError,
   MAX_RETRY_DURATION,
@@ -27,12 +27,12 @@ import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
 import type {
   AgentInput,
   AgentOptions,
+  NativeInferenceManager,
   Provider,
   ProviderMessage,
   ProviderTextContent,
   ProviderToolSpec,
   ProviderToolUseRequest,
-  Runner,
   Usage,
 } from "./provider-types.ts";
 
@@ -481,7 +481,7 @@ export class AnthropicProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: Runner;
+    contextAgent?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -523,7 +523,7 @@ export class AnthropicProvider implements Provider {
 
     // Extract native messages from context agent if provided
     let contextMessages: Anthropic.MessageParam[] = [];
-    if (contextAgent && contextAgent instanceof AnthropicRunner) {
+    if (contextAgent && contextAgent instanceof AnthropicInferenceManager) {
       contextMessages = contextAgent.getNativeMessages();
     }
 
@@ -757,8 +757,8 @@ export class AnthropicProvider implements Provider {
     };
   }
 
-  createAgent(options: AgentOptions): Runner {
-    return new AnthropicRunner(options, this.client, {
+  createAgent(options: AgentOptions): NativeInferenceManager {
+    return new AnthropicInferenceManager(options, this.client, {
       authType: this.authType,
       includeWebSearch: this.includeWebSearch,
       disableParallelToolUseFlag: this.disableParallelToolUseFlag,

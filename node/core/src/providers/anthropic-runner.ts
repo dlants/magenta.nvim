@@ -24,18 +24,15 @@ import type {
   AgentInput,
   AgentLog,
   AgentOptions,
-  AgentPhase,
-  BeforeRequestDecision,
+  NativeInferenceManager,
   NativeMessageIdx,
+  OnRequestUpdate,
   ProviderMessage,
   ProviderToolResult,
   RequestedTool,
-  Runner,
-  RunnerHooks,
+  RequestResult,
   StreamStopReason,
-  ToolOutcome,
   ToolResults,
-  TurnResult,
 } from "./provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 
@@ -189,9 +186,7 @@ export function getRetryDelay(attempt: number): number {
 type NativeMessage = Omit<Anthropic.MessageParam, "content"> & {
   content: Anthropic.Messages.ContentBlockParam[];
 };
-export class AnthropicRunner implements Runner {
-  phase: AgentPhase = { type: "idle" };
-
+export class AnthropicInferenceManager implements NativeInferenceManager {
   private messages: NativeMessage[] = [];
   private currentRequest: MessageStream | undefined;
   private params: Omit<Anthropic.Messages.MessageStreamParams, "messages">;
@@ -210,14 +205,11 @@ export class AnthropicRunner implements Runner {
   /** Token count for the full conversation, updated after each streaming completion */
   private inputTokenCount: number | undefined;
   private retryAbortController: AbortController | undefined;
-  /** True between the start and the settling of a `runTurn` call. */
-  private turnInFlight = false;
-  /** Set by `abort()`; checked at every boundary in the turn loop so that an
-   * abort landing between two awaits still unwinds exactly once. */
-  private abortRequested = false;
-  /** Heartbeat that forces a re-render ~1/sec while a turn is in flight, so
-   * time-based status (waiting timer, retry countdown) updates during dead air. */
-  private tickInterval: ReturnType<typeof setInterval> | undefined;
+  /** True between the start and the settling of a `sendRequest` call; the only
+   * externally-visible state this class has. */
+  private requestInFlight = false;
+  /** Where stream progress goes while a request is in flight. */
+  private onRequestUpdate: OnRequestUpdate | undefined;
 
   constructor(
     private options: AgentOptions,
@@ -241,14 +233,6 @@ export class AnthropicRunner implements Runner {
   }
 
   private update(action: Action): void {
-    if (
-      (action.type === "block-started" ||
-        action.type === "block-delta" ||
-        action.type === "block-finished") &&
-      this.phase.type === "streaming"
-    ) {
-      this.phase.lastEventTime = new Date();
-    }
     switch (action.type) {
       case "reset-attempt": {
         // A previous streaming attempt may have errored mid-block, leaving a
@@ -376,26 +360,48 @@ export class AnthropicRunner implements Runner {
         assertUnreachable(action);
     }
 
-    this.syncStreamingBlock();
+    this.reportStreamingBlock();
     this.notify();
   }
-
-  /** Mirror the in-progress native block onto `phase`, which is the only way
-   * callers observe it. */
-  private syncStreamingBlock(): void {
-    if (this.phase.type !== "streaming") return;
+  /** Report the in-progress block, which is the only way callers observe it.
+   * The `StreamingBlock` is constructed here rather than aliased: nothing
+   * native may escape this class. */
+  private reportStreamingBlock(): void {
+    const report = this.onRequestUpdate;
+    if (!report) return;
     const block = this.currentAnthropicBlock;
     switch (block?.type) {
       case "text":
+        report({
+          type: "streaming-block",
+          streamingBlock: { type: "text", text: block.text },
+        });
+        break;
       case "thinking":
+        report({
+          type: "streaming-block",
+          streamingBlock: {
+            type: "thinking",
+            thinking: block.thinking,
+            signature: block.signature,
+          },
+        });
+        break;
       case "tool_use":
-        this.phase.block = block;
+        report({
+          type: "streaming-block",
+          streamingBlock: {
+            type: "tool_use",
+            id: block.id,
+            name: block.name,
+            inputJson: block.inputJson,
+          },
+        });
         break;
       default:
-        this.phase.block = undefined;
+        report({ type: "block-finished" });
     }
   }
-
   /** Get a copy of the native Anthropic messages for use in context piping */
   getNativeMessages(): Anthropic.MessageParam[] {
     return [...this.messages];
@@ -406,12 +412,9 @@ export class AnthropicRunner implements Runner {
   }
 
   abort(): void {
-    if (!this.turnInFlight) return;
-    this.abortRequested = true;
-    // Cancel a pending retry wait and/or the in-flight request. When neither
-    // exists — e.g. we are in `running_tools` — the flag alone is enough: the
-    // executor reports the abort through its outcome and the loop unwinds at
-    // the next boundary.
+    if (!this.requestInFlight) return;
+    // Cancel a pending retry wait and/or the in-flight request. Whether the
+    // turn unwinds is `Agent`'s business, not ours.
     this.retryAbortController?.abort();
     this.currentRequest?.abort();
   }
@@ -428,134 +431,38 @@ export class AnthropicRunner implements Runner {
     this.updateCachedProviderMessages();
   }
 
-  /** Cheap "has anything been added to the log" witness: message count plus
-   * the size of the trailing message, which is what a coalescing append
-   * grows. */
-  private logExtent(): string {
-    const last = this.messages[this.messages.length - 1];
-    return `${this.messages.length}:${last?.content.length ?? 0}`;
-  }
-
-  private startTicker(): void {
-    // Clear any existing ticker first so we can never overlap two intervals.
-    this.stopTicker();
-    this.tickInterval = setInterval(() => this.options.onUpdate(), 1000);
-  }
-
-  private stopTicker(): void {
-    if (this.tickInterval !== undefined) {
-      clearInterval(this.tickInterval);
-      this.tickInterval = undefined;
+  /** One provider request: everything from placing it to accumulating its
+   * stream, including the retry budget. Retries are invisible to the caller
+   * apart from the `retry` updates. */
+  async sendRequest(onUpdate: OnRequestUpdate): Promise<RequestResult> {
+    if (this.requestInFlight) {
+      throw new Error(
+        "sendRequest called while a request is already in flight",
+      );
     }
-  }
-
-  async runTurn(input: AgentInput[]): Promise<TurnResult> {
-    if (this.turnInFlight) {
-      throw new Error("runTurn called while a turn is already in flight");
-    }
-    this.turnInFlight = true;
-    this.abortRequested = false;
-    this.startTicker();
+    this.requestInFlight = true;
+    this.onRequestUpdate = onUpdate;
     try {
-      return await this.runLoop(input);
-    } finally {
-      this.turnInFlight = false;
-      this.abortRequested = false;
-      this.currentRequest = undefined;
-      this.phase = { type: "idle" };
-      this.stopTicker();
-      this.notify();
-    }
-  }
-
-  /** Alternates between inference and tool execution until something ends the
-   * turn. This is the only thing that drives the agent forward. */
-  private async runLoop(initialInput: AgentInput[]): Promise<TurnResult> {
-    let pending: AgentInput[] | undefined = initialInput;
-    while (true) {
-      if (this.abortRequested) return this.finishAbort();
-
-      // Not `await hook?.()`: with no hook there is nothing to wait for, and
-      // an unconditional await would push the request a tick further out.
-      const before = this.logExtent();
-      const decision: BeforeRequestDecision = this.options.onBeforeRequest
-        ? await this.options.onBeforeRequest()
-        : { type: "proceed" };
-      // After the gate, so the owner's injections sit ahead of the caller's
-      // own content — and in the same user message as them, but not folded
-      // into whatever the log happened to end with otherwise.
-      if (pending) {
-        const injected = this.logExtent() !== before;
-        this.appendUserMessage(
-          pending,
-          injected ? { coalesce: true } : undefined,
-        );
-        pending = undefined;
-      }
-      if (decision.type === "suspend") {
-        return { type: "suspended", reason: decision.reason };
-      }
-      if (this.abortRequested) return this.finishAbort();
-
       const outcome = await this.streamOneResponse();
       this.countTokensPostFlight();
-
-      if (outcome.type === "aborted") return this.finishAbort();
-      if (outcome.type === "error") {
-        this.cleanup({ type: "error", error: outcome.error });
-        this.currentAssistantMessage = undefined;
+      if (outcome.type === "completed") {
         return {
-          type: "failed",
-          error: outcome.error,
-          retryable: isRetryableError(outcome.error),
+          type: "completed",
+          stopReason: outcome.stopReason,
+          requested: this.collectRequestedTools(),
         };
       }
-
-      const requested = this.collectRequestedTools();
-      if (requested.length === 0) {
-        // Without tool_use blocks the provider's reason is the turn's reason.
-        return {
-          type: "stopped",
-          stopReason:
-            outcome.stopReason === "tool_use" ? "end_turn" : outcome.stopReason,
-        };
-      }
-
-      if (this.abortRequested) return this.finishAbort();
-
-      this.phase = {
-        type: "running_tools",
-        requested,
-        truncated: outcome.stopReason === "max_tokens",
-      };
-      this.options.onUpdate();
-
-      let toolOutcome: ToolOutcome;
-      try {
-        toolOutcome = await this.options.executeTools(requested);
-      } catch (error) {
-        // A rejecting executor is still a turn that must leave every tool_use
-        // answered, so fall through with no results and let the fill do it.
-        this.anthropicOptions.logger.error(
-          `executeTools rejected: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        toolOutcome = { type: "continue", results: new Map() };
-      }
-
-      this.appendToolResults(requested, toolOutcome.results);
-
-      if (toolOutcome.type === "aborted") {
-        this.abortRequested = true;
-        return this.finishAbort();
-      }
-      if (toolOutcome.type === "suspend") return { type: "suspended" };
-      if (this.abortRequested) return this.finishAbort();
+      return outcome;
+    } finally {
+      this.requestInFlight = false;
+      this.onRequestUpdate = undefined;
+      this.currentRequest = undefined;
     }
   }
 
   /** Every requested tool gets exactly one result block. Ids the executor
    * omitted are answered here rather than trusted to the executor. */
-  private appendToolResults(
+  appendToolResults(
     requested: ReadonlyArray<RequestedTool>,
     results: ToolResults,
   ): void {
@@ -583,22 +490,12 @@ export class AnthropicRunner implements Runner {
       .map((block) => ({ id: block.id, request: block.request }));
   }
 
-  /** The single terminal abort transition: leave the history well-formed and
-   * mark why it stops here. */
-  private finishAbort(): TurnResult {
-    this.phase = { type: "aborting" };
-    this.options.onUpdate();
+  finalize(
+    reason: { type: "aborted" } | { type: "error"; error: Error },
+  ): void {
     this.currentRequest = undefined;
-    this.cleanup({ type: "aborted" });
+    this.cleanup(reason);
     this.currentAssistantMessage = undefined;
-    this.appendUserMessage([
-      {
-        type: "text",
-        text: ABORT_MARKER_TEXT,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    return { type: "aborted" };
   }
 
   /** One provider response, including the retry/backoff budget. Retries stay
@@ -611,14 +508,6 @@ export class AnthropicRunner implements Runner {
     const startTime = new Date();
     this.currentBlockIndex = -1;
     this.currentAssistantMessage = undefined;
-    this.phase = {
-      type: "streaming",
-      startedAt: startTime,
-      lastEventTime: new Date(),
-      block: undefined,
-      retry: undefined,
-    };
-    this.options.onUpdate();
 
     const attemptStream = (): Promise<
       | { type: "completed"; response: Anthropic.Message }
@@ -672,16 +561,9 @@ export class AnthropicRunner implements Runner {
     let attempt = 0;
     while (true) {
       // Clear retry status when starting a new attempt
-      this.phase = {
-        type: "streaming",
-        startedAt: startTime,
-        lastEventTime: new Date(),
-        block: undefined,
-        retry: undefined,
-      };
+      this.onRequestUpdate?.({ type: "retry", retry: undefined });
       if (attempt > 0) {
         this.update({ type: "reset-attempt" });
-        this.options.onUpdate();
       }
 
       const result = await attemptStream();
@@ -727,18 +609,14 @@ export class AnthropicRunner implements Runner {
       }
 
       const delay = getRetryDelay(attempt);
-      this.phase = {
-        type: "streaming",
-        startedAt: startTime,
-        lastEventTime: new Date(),
-        block: undefined,
+      this.onRequestUpdate?.({
+        type: "retry",
         retry: {
           attempt: attempt + 1,
           nextRetryAt: new Date(Date.now() + delay),
           error: result.error,
         },
-      };
-      this.options.onUpdate();
+      });
 
       // Wait for the delay, but allow abort to cancel
       this.retryAbortController = new AbortController();
@@ -896,9 +774,9 @@ export class AnthropicRunner implements Runner {
     return messageIdx;
   }
 
-  clone(hooks: RunnerHooks): AnthropicRunner {
-    const cloned = new AnthropicRunner(
-      { ...this.options, onBeforeRequest: undefined, ...hooks },
+  clone(): AnthropicInferenceManager {
+    const cloned = new AnthropicInferenceManager(
+      { ...this.options, onBeforeRequest: undefined },
       this.client,
       this.anthropicOptions,
     );
@@ -909,7 +787,7 @@ export class AnthropicRunner implements Runner {
     cloned.messages = JSON.parse(JSON.stringify(this.messages));
 
     // Clean up the cloned messages to handle incomplete state
-    AnthropicRunner.cleanupClonedMessages(cloned.messages);
+    AnthropicInferenceManager.cleanupClonedMessages(cloned.messages);
 
     // Deep copy messageStopInfo
     cloned.messageStopInfo = new Map(

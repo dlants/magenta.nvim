@@ -1,0 +1,324 @@
+# Objective and Context
+
+> I'm thinking that runTurn / runLoop are extremely similar here, and are sort of provider agnostic logic. And putting these in the runner means that we have to pipe hooks into the runner.
+>
+> Instead, I think maybe we just pull that out?
+>
+> I think then the runner is no longer a "runner" per se... in particular, I think the idle/streaming/running_tools state leaves the runner, and the loop does too.
+>
+> What remains is an interface for dealing with the context - native messages, machinery to convert them to providerMessages, the log, and the ability to send a single request to the provider. The entire state is "is there a request in flight?". The rest moves up to the agent. So maybe `NativeContextManager`?
+>
+> [...] the streaming all stays in the context manager. I think when the agent triggers a provider request, it gets a promise for completion, but it should also pass along a streaming callback that the inference manager reports streaming results on.
+
+## Entities
+
+- `Runner` (`provider-types.ts:342`) — the interface implemented by both runners today: `phase`, `log`, `runTurn`, `appendUserMessage`, `abort`, `getNativeMessageIdx`, `truncateMessages`, `clone(hooks)`.
+- `RunnerHooks` (`provider-types.ts:359`) — `{ executeTools, onUpdate, onBeforeRequest? }`. Piped into the runner today; this is what the refactor eliminates from the provider layer.
+- `AgentOptions` (`provider-types.ts:365`) — inference config (`model`, `systemPrompt`, `tools`, `thinking`, `reasoning`, `skipPostFlightTokenCount`) _plus_ the three hooks, mixed into one bag.
+- `AgentPhase` (`provider-types.ts:314`) — `idle | streaming | running_tools{requested, truncated} | aborting`. Owned by the runner today; moves up.
+- `ThreadMode` (`agent.ts:93`) — `normal | tool_use{activeTools} | yielded{response, value, tornDown?}`, on `ThreadState.mode`. The agent's own state representation, and largely the same fact as `AgentPhase`. Not persisted; only ever constructed as `normal` in `thread.ts:134`.
+- `StreamingBlock` (`provider-types.ts:297`) — the already-generalized `text | thinking | tool_use` union. `AnthropicStreamingBlock` / `OpenAIStreamingBlock` are the native counterparts and must not escape.
+- `TurnResult`, `ToolOutcome`, `ToolResults`, `RequestedTool`, `BeforeRequestDecision`, `AgentLog` — unchanged.
+- `Provider.createAgent(options: AgentOptions): Runner` (`provider-types.ts:229`) — the construction seam.
+
+## Files
+
+- `node/core/src/providers/provider-types.ts` — all the shared types above.
+- `node/core/src/providers/anthropic-runner.ts` — `AnthropicRunner`; ~1380 lines, of which the loop/retry/phase machinery is the part being extracted.
+- `node/core/src/providers/openai-runner.ts` — `OpenAIRunner`; same loop, near-verbatim.
+- `node/core/src/agent.ts` — owns hooks, `executeTools`, `onBeforeRequest`, and consumes `runner.phase` / `runner.log`.
+- `node/core/src/thread.ts` — constructs `Agent` with `runnerInit: {type:"new"} | {type:"cloned", cloneFrom, truncateTo}`.
+- `node/core/src/providers/anthropic.ts` / `openai.ts` — providers; `forceToolUse` takes `contextAgent?: Runner` purely to read prior context — it issues one request and returns one tool invocation, never feeding results back. It only ever needed the conversation, so it becomes `context?: NativeInferenceManager`.
+- `node/providers/mock.ts` — root-layer mock provider implementing `createAgent`.
+- `node/chat/thread.ts`, `node/chat/thread-view.ts` — root layer; read `phase` for rendering.
+
+# Design
+
+Split each runner along the line the user drew:
+
+- **`NativeInferenceManager`** (provider-specific) — owns the native message array, the native→`ProviderMessage` conversion, the `AgentLog`, and _one_ provider request at a time including all stream accumulation. Its entire externally-visible state is "is a request in flight". It reports streaming progress through a per-request callback, normalized to `StreamingBlock`.
+- **`Agent`** — absorbs the loop: the before-request gate, placement of pending input, the abort checks at each boundary, `executeTools`, the 1s ticker, and `AgentPhase`.
+
+The `Runner` interface and `RunnerHooks` are deleted. `Agent` holds a `NativeInferenceManager` instead of a `Runner` and calls it directly; there is no indirection and no hooks object, because the loop and the executor now live in the same class. This is the whole point: the hooks existed only to reach back from the provider layer into `Agent`.
+
+## Why a per-request callback rather than an emitter
+
+The callback's lifetime is exactly the request's, so `Agent` never subscribes/unsubscribes and `phase.streaming` cannot outlive or lag the request it describes. It fires on every content event; `Agent` stamps `lastEventTime` on each — the same three events that set `lastEventTime` today — and mirrors the block into `phase`, clearing it on `block-finished`.
+
+This is the manager's only outbound channel: `onUpdate` disappears from `AgentOptions` and from provider code entirely. The other current `notify()` sites (`appendUserMessage`, `appendToolResults`, `truncateMessages`) are all called *by* `Agent`, which notifies at the call site instead; `countTokensPostFlight` resolves a promise rather than notifying.
+## Division of the provider-specific residue
+
+The loop's remaining provider-specific behaviour is small and becomes methods on the manager:
+
+- retryability predicate and the backoff budget → stay inside `sendRequest`. Retrying is part of making one request happen, not part of the turn loop, so `RequestResult.error` means *permanently* failed. The shared `RETRY_DELAYS` / `MAX_RETRY_DURATION` / `getRetryDelay` helpers are used by both managers.
+- unwinding a failed attempt (`{type:"reset-attempt"}` in both) → also internal to `sendRequest`, since nothing outside it can observe an attempt.
+- leaving history well-formed after abort/error (anthropic `cleanup(reason)`, openai `commitAssistantMessage("aborted")` + `dropDanglingToolUses`) → `finalize(reason)`.
+- the abort marker append → `Agent` calls `appendUserMessage([ABORT_MARKER_TEXT])`, which both already do identically.
+- anthropic's `countTokensPostFlight` → becomes an optional `countTokens()` on the manager, issued *before* a request rather than after it (see below).
+- `appendToolResults` stays on the manager: anthropic's one-message-per-result vs openai's coalescing is genuine wire shape.
+
+## Interfaces
+
+```ts
+export type RequestResult =
+  | {
+      type: "completed";
+      stopReason: StreamStopReason;
+      /** tool_use blocks accumulated during this request. */
+      requested: RequestedTool[];
+    }
+  | { type: "aborted" }
+  | { type: "error"; error: Error };
+
+/** What the manager reports while a request is in flight. Deliberately
+ * narrow: the finished content is read off `log.messages`, so completion
+ * only needs to say that it happened. */
+export type RequestUpdate =
+  | { type: "streaming-block"; streamingBlock: StreamingBlock }
+  | { type: "block-finished" }
+  /** A retryable failure; the manager is backing off and will try again.
+   * `undefined` when a fresh attempt starts, which clears the countdown. */
+  | { type: "retry"; retry: RetryStatus | undefined };
+
+export type OnUpdate = (update: RequestUpdate) => void;
+
+export interface NativeInferenceManager {
+  readonly log: AgentLog;
+
+  appendUserMessage(content: AgentInput[], opts?: { coalesce?: true }): void;
+  appendToolResults(
+    requested: ReadonlyArray<RequestedTool>,
+    results: ToolResults,
+  ): void;
+  getNativeMessageIdx(): NativeMessageIdx;
+  truncateMessages(messageIdx: NativeMessageIdx): void;
+  clone(): NativeInferenceManager;
+
+  /** Count the conversation as it would be sent right now. Only providers
+   * that support it implement this. */
+  countTokens?(): Promise<number>;
+  sendRequest(onUpdate: OnUpdate): Promise<RequestResult>;
+  abort(): void;
+
+  // Leave the history in a shape the provider will accept: no dangling tool_ues or thinking blocks, etc...
+  finalize(reason: { type: "aborted" } | { type: "error"; error: Error }): void;
+}
+```
+
+`Agent` gains the loop's state and methods (all private except `phase`):
+
+```ts
+class Agent {
+  private manager: NativeInferenceManager;
+  phase: AgentPhase;                       // was runner.phase + state.mode
+  private turnInFlight: boolean;
+  private tickInterval: ReturnType<typeof setInterval> | undefined;
+
+  private runLoop(input: AgentInput[]): Promise<TurnResult>;
+  private streamOneResponse(): Promise<RequestResult>;
+  private finishTurnAbort(): TurnResult;
+}
+```
+
+`Agent.abortRequested` already exists and subsumes the runners' duplicate flag; `Agent.currentTurn` subsumes `turnInFlight`. `executeTools` is called directly rather than through a hook, and `onBeforeRequest`/`composeBeforeRequest` stay exactly where they are — the gate is simply called from `runLoop` now.
+
+## Hooks become an array, and the preflight token count
+
+`AgentHooks` becomes one array per hook point, each with its own type — there is no shared `Hook`, since the points answer different questions:
+
+```ts
+export type BeforeRequestHook = {
+  /** Read without invoking, so `Agent` knows whether to count first. */
+  requestPreflightTokenCount?: boolean;
+  run(ctx: AgentRequestContext): Promise<RequestAction>;
+};
+
+export type AgentHooks = {
+  onBeforeRequest: BeforeRequestHook[];
+  onToolResults: ToolResultsHook[];
+  onYield: YieldHook[];
+};
+```
+
+`Agent` iterates each array and applies that point's composition rule — the rules `combineSupervisors` (`thread-supervisor.ts:110`) applies today, which differ per point: for `onBeforeRequest` every injection is applied and the first `suspend` wins; for `onYield` the first `accept`/`reject` wins and `send-message` texts concatenate.
+
+`onToolApplied` is not among them. It is not a turn-loop question: it fires from inside a file-touching tool (`edl.ts:100`, `getFile.ts:301`), per file, and its only consumer is `file-context-supervisor`. The owner already supplies the rest of the tool-execution machinery on `AgentContext` (`fileIO`, `shell`, `contextTracker`), and owns the `ContextManager`, so it passes `onToolApplied` there and routes it itself. `Agent` still wraps it to keep its own `editedFilesThisTurn` bookkeeping (`agent.ts:491`); only the supervisor fan-out leaves.
+
+`Agent` never learns what a `Supervisor` is. The owner flattens its supervisor list into these arrays at registration — one supervisor contributes an entry to each point it implements — and the two contributions `Thread.beforeRequest` (`thread.ts:532`) currently bolts on afterwards become entries in `onBeforeRequest` like any other:
+
+- the system reminder, registered last so it still sits immediately before the user's own content;
+- the mid-turn queue flush, which is the one that needs the before-request action type to carry `submissions`. It also wants `isOpeningRequest`, which is `Agent`'s own knowledge and is currently handed down to `Thread` solely so `Thread` can hand a decision back up.
+
+The only consumer of `inputTokenCount` is the compaction supervisor, and it needs it at exactly one moment: when `onBeforeRequest` runs. With the array in `Agent`, the count can be issued lazily and exactly once, without any aggregation:
+
+- walking `onBeforeRequest`, `Agent` awaits `manager.countTokens?.()` immediately before the first entry whose `requestPreflightTokenCount` is set, memoizes the result for the rest of the request, and puts the *number* on `AgentRequestContext`. Hooks stay synchronous in their use of it.
+
+Consequences: no count when nobody asks; none for a turn that never reaches the gate; none when an earlier hook suspends first; and retries don't re-count, since the gate is not re-fired on retry.  `skipPostFlightTokenCount` becomes unnecessary — not declaring the flag is the opt-out.
+
+`AgentLog.inputTokenCount` therefore stops being the manager's state: `Agent` keeps the most recent preflight count and serves `Agent.inputTokenCount` (read by the view) from there.
+
+## Streaming pathway
+
+The value is pulled, not pushed: only "something changed" travels, and the block itself is read off `phase` at render time. That stays true; only the top of the chain changes owner.
+
+1. SSE event arrives in the manager. It accumulates into its *native* block, then constructs a `StreamingBlock` and reports `{type: "streaming-block", streamingBlock}`. When the block closes it reports `{type: "block-finished"}` and the finished content is available on `log.messages`.
+2. `Agent`'s handler stamps `phase.lastEventTime`, sets or clears `phase.block`, and calls `scheduleUpdate()` (the existing 32ms throttle).3. `scheduleUpdate` → `deps.onUpdate` → core `Thread`'s update → `NvimThread`'s `core.on("update")` → `dispatch({type:"tool-progress"})` → root re-render.
+4. The view reads `thread.core.phase`, which derives `ThreadPhase`/`TurnActivity` on read (`thread.ts:218`), and renders `activity.streaming.block`.
+
+Step 4 is where the `ThreadMode` merge pays off a second time: `TurnActivity` currently has both `running_tools` and `awaiting_tools`, the latter existing only because "the runner has handed the turn off and is idle while the executor runs" — with one owner and `activeTools` on `running_tools`, those two variants collapse into one.
+
+## Collapsing `ThreadMode` into `AgentPhase`
+
+`mode: "tool_use"` and `phase: "running_tools"` are the same instant described twice: the runner sets `running_tools` immediately before calling `executeTools`, and `executeTools` sets `mode.tool_use` as its first act. They are kept in sync purely by convention, and `thread.ts`'s `get phase()` already has to read both to produce one `ThreadPhase`. Once the loop is inside `Agent`, keeping both is indefensible.
+
+```ts
+/** The intra-turn detail. Both variants describe a turn in progress; which
+ * one it is says whether a request is in flight. */
+export type TurnActivity =
+  | {
+      type: "streaming";
+      /** Of this request, not of the turn: a retry restarts it. */
+      startedAt: Date;
+      /** Most recent sign of life from the server; drives the dead-air
+       * "waiting Ns" counter. */
+      lastEventTime: Date;
+      block: StreamingBlock | undefined;
+      /** Set while the manager is backing off between attempts. */
+      retry: RetryStatus | undefined;
+    }
+  | {
+      type: "running_tools";
+      /** As the model asked for them, including malformed requests that never
+       * became an `activeTools` entry. */
+      requested: ReadonlyArray<RequestedTool>;
+      /** the turn was cut short by the output token limit mid-tool-use */
+      truncated: boolean;
+      activeTools: Map<ToolRequestId, ActiveToolEntry>;
+    }
+  /** Unwinding: the tools have been told to stop and the history is being
+   * left well-formed. Only reachable from a turn in flight. */
+  | { type: "aborting" };
+
+export type AgentPhase =
+  | { type: "idle" }
+  | { type: "running"; activity: TurnActivity }
+  /** Terminal. The model called `yield_to_parent` and the supervisors
+   * accepted; the thread never leaves this state. */
+  | {
+      type: "yielded";
+      response: string;
+      value: YieldValue;
+      tornDown?: boolean;
+    };
+```
+
+`running_tools` and `aborting` are details of a turn, not peers of `idle`: the top level answers "is this thread working", and `activity` answers "on what". This is `ThreadPhase`/`TurnActivity` (`thread-api.ts:36`) almost exactly, which is the point — `thread.ts`'s `get phase()` currently exists to reconcile two representations into that shape, and it collapses to adding `idle.lastResult`.
+
+The merge:
+
+- `running_tools` moves under a `running` variant and absorbs `activeTools: Map<ToolRequestId, ActiveToolEntry>` alongside `requested` and `truncated`. `set-active-tool-result` writes into it.
+- `TurnActivity.awaiting_tools` disappears with it: it exists only because the runner goes idle while the executor runs, which is no longer true of a single owner.
+- `mode: "normal"` disappears — it means "not executing tools", which is exactly `idle | streaming`.
+- `yielded` becomes a phase variant. It is terminal: a yielded thread never leaves it, so `phase` being the only state is consistent. `isBusy` becomes "phase is not `idle` and not `yielded`".
+
+This is a behaviour change in one place worth calling out: `shouldShowContextFiles` (`thread-view.ts:193`) tests `phase.idle && mode.normal`; after the merge a yielded thread is no longer `idle`, so context files stop showing for it. That looks like the intended behaviour rather than a regression, but it should be a deliberate choice.
+
+`AgentOptions` loses its three hook fields and becomes `InferenceOptions` (model, systemPrompt, tools, thinking, reasoning, skipPostFlightTokenCount). `Provider.createAgent` becomes `createInferenceManager(options: InferenceOptions): NativeInferenceManager`.
+
+## Invariants
+
+- Nothing native escapes the manager. In particular `syncStreamingBlock` in the anthropic runner currently assigns the _native_ block object onto `phase.block` and relies on structural compatibility; the extracted version must construct a `StreamingBlock` explicitly, as the openai one does.
+- Every `tool_use` is answered by exactly one result block, including ids the executor omitted and including the abort/error paths. Currently guaranteed by `appendToolResults` + `cleanup`; must remain guaranteed after the split.
+- The token count is preflight and deterministic at the point of use. Today it is post-flight and fire-and-forget, so `composeBeforeRequest` can hand the auto-compact supervisor a count from the *previous* request, or none at all on the first. After the change, a supervisor that needs it always sees the count for the conversation it is actually deciding about.
+- Retries are invisible to the loop: they stay inside one `sendRequest` and inside the `streaming` phase, and never surface as a phase transition or as a `TurnResult`. `Agent` learns about them only through `{type:"retry"}`, which it mirrors onto `phase.retry` for the countdown.
+- `TurnResult.failed.retryable` loses its meaning once the budget is spent inside `sendRequest`, and has no production consumer today — only test assertions. Drop it.
+- Auth refresh (anthropic) retries immediately and independently of the 429/529 budget. It lives inside `sendRequest`, so `Agent`'s retry loop never sees it.
+- An abort landing between two awaits unwinds exactly once. The single `abortRequested` flag lives on `Agent`; the manager's `abort()` only cancels the in-flight request.
+- A second turn cannot start while one is in flight; `abort()` before a turn starts is a no-op. `Agent.isBusy` / `Agent.currentTurn` are the existing witnesses and must keep their meaning.
+- `openingRequestPending` / injection ordering in `Agent.onBeforeRequest` is unchanged — the gate is called at the same point in the loop, before pending input is appended.
+- The ticker fires ~1/s only while a turn is in flight, and is cleared on every exit path.
+- `clone()` drops `onBeforeRequest` and half-finished tool calls; the cloned conversation must still be well-formed.
+
+# Stages
+
+## Move the loop into Agent, against Anthropic — DONE
+
+Implemented as described: `Agent` owns `phase`, the turn loop, the ticker and
+the abort flag; `AnthropicRunner` is `AnthropicInferenceManager` (file rename
+deferred to stage 5) with `sendRequest`/`finalize`/public `appendToolResults`
+and no phase, loop or hooks. `Runner`/`RunnerHooks` are gone, `Provider.createAgent`
+returns a `NativeInferenceManager`, and `TurnResult.failed.retryable` is dropped.
+
+Deviations worth recording:
+
+- `logExtent` is gone. The gate is now `Agent`'s own method, so it reports
+  `appended` directly instead of the loop sniffing the log for a change.
+- The post-flight token count stays inside `sendRequest` for now and still
+  notifies through `AgentOptions.onUpdate`, which therefore survives this stage
+  (as do `executeTools`/`onBeforeRequest`, now optional, read only by the
+  OpenAI loop). Stage 3 makes the count preflight and stage 5 drops the rest.
+- `OpenAIRunner` implements `NativeInferenceManager` (reporting streaming
+  blocks and retries through the request callback) while keeping its own loop,
+  phase and `runTurn` for its existing tests. `RunnerHooks` survives there as a
+  local `LegacyRunnerHooks`; stage 2 deletes all of it.
+- `Thread.runner` is `Thread.inferenceManager`; the root `NvimThread.agent`
+  still returns the manager, and the root's `.phase` reads go through
+  `getProviderStatus()`.
+- Test seam: `createTestAgent`/`userInput` in `test-helpers.ts` build an `Agent`
+  on a mock client, and the anthropic retry/ticker/auth-refresh suites plus the
+  anthropic half of `runner-parity` now drive that. The root
+  `node/providers/anthropic-runner.test.ts` keeps a small `TestAgent` harness in
+  the file: those tests are about what the manager puts on the wire, and the
+  harness stands in for the agent's loop rather than importing core's context.
+  Loop policy is asserted against the real `Agent` in `agent.test.ts`.
+- These suites need an explicit `await vi.advanceTimersByTimeAsync(0)` before
+  polling for the first stream: the loop now reaches the request after a few
+  awaits, and `pollUntil`'s retry runs on faked timers.
+- `runTurnLoop` flushes the throttled update before its final notification, so
+  a settled turn leaves nothing queued.
+
+
+- Goal: the loop, retry budget, ticker and `AgentPhase` live in `Agent`. `AnthropicRunner` becomes `AnthropicInferenceManager` (no phase, no loop, no hooks). `Runner` / `RunnerHooks` are gone; `Agent` holds a manager. Because `Agent` changes in this stage, the openai runner has to keep working — during this stage `OpenAIRunner` is adapted to the `NativeInferenceManager` interface with its own loop code left dead/unreachable, and stage 2 deletes it.
+- Tests:
+  - The existing anthropic suites are the primary net: `anthropic-runner.test.ts`, `-retry`, `-ticker`, `-auth-refresh`, plus root `node/providers/anthropic-runner.test.ts`. These construct runners directly and will need to construct an `Agent` (or the manager, for the pure-context assertions) instead — splitting each file along the same seam as the code is the check that the seam is in the right place.
+  - `agent.test.ts` grows the loop tests, since that is now where the loop lives: an abort arriving during `running_tools` produces exactly one `finalize({type:"aborted"})` and one abort marker; an executor that rejects still leaves every requested id answered; `suspend` from the gate returns without issuing a request.
+  - The retry tests stay with the managers, where retry stays: `anthropic-runner-retry.test.ts` / `openai-runner-retry.test.ts` should need only mechanical changes, plus an assertion that a retried request emits `{type:"retry"}` and clears it on the next attempt, and that `Agent` never re-enters the gate across a retry.
+  - Assert `phase.block` is not reference-identical to the manager's internal block (the aliasing invariant).
+
+## Convert OpenAI
+
+- Goal: `OpenAIRunner` becomes `OpenAIInferenceManager`; the duplicated loop, retry, ticker and phase code is deleted. Both providers are now driven by `Agent`'s single loop.
+- Tests:
+  - `openai-runner.test.ts`, `openai-runner-retry.test.ts`, `openai-wiring.test.ts`, `openai.test.ts` pass untouched.
+  - `runner-parity.test.ts` is the real integration check here — it already asserts identical provider content, identical phase sequences and identical executor calls across the two. It should now be _more_ likely to hold by construction; keep it and extend it with an abort case.
+
+## Hooks array and preflight token count
+
+- Goal: `AgentHooks` becomes one typed array per hook point; `Agent` iterates and composes. `combineSupervisors` and `Thread.beforeRequest`'s wrapping collapse into registration. `countTokens` is issued from the gate, lazily, at most once per request.
+- Tests:
+  - The compaction supervisor is the whole point, so test it end to end: a thread whose count crosses the threshold compacts on the *next* request rather than one request late, which is the bug the current post-flight count allows. `thread-compact.test.ts` and `2026-07-13-auto-compact-supervisor` behaviour.
+  - No supervisor declares the flag → `countTokens` is never called (spy on the mock client).
+  - A hook that suspends before the counting hook is reached → no count at all.
+  - Composition parity: injections from several hooks arrive in registration order, the first `suspend` wins, and the system reminder is still last. `system-reminders.test.ts` and the supervisor tests cover this and should need no behavioural change.
+  - Retries do not re-count.
+
+## Collapse ThreadMode into AgentPhase
+
+- Goal: one state representation on `Agent`. `ThreadMode` is deleted; `running_tools` carries `activeTools`; `yielded` is a phase.
+- Tests:
+  - The complexity here is in the root layer's reads, so verify there: `thread-view.ts` renders active tools from `mode.activeTools` (`:944`) and `renderStatus` branches on both (`:96`); `chat.ts` gates on `mode.yielded` in three places (`:264`, `:966`, `:1533`).
+  - `thread.ts`'s `get phase(): ThreadPhase` should get materially simpler — it currently reconciles the two. Existing `thread.test.ts` phase assertions cover it.
+  - Subagent yield paths: `fork-thread.test.ts`, plus the `tornDown` guard in `send` (sending to a torn-down thread must still reject).
+
+## Settle the construction seam
+
+- Goal: `AgentOptions` drops its hook fields and becomes `InferenceOptions`; `Provider.createAgent` becomes `createInferenceManager`. No hook type appears in any provider file.
+- Tests:
+  - `agent.test.ts` and `thread.test.ts` cover construction and cloning; `fork-thread.test.ts` covers `clone` + `truncateMessages` at the root.
+  - `forceToolUse`'s `contextAgent?: Runner` becomes `context?: NativeInferenceManager` — it is single-shot and never needed the loop. Verify the anthropic `instanceof` path still finds native messages (compaction / title generation paths in `thread.test.ts`).
+  - `node/providers/mock.ts` must implement the new seam; `thread-abort.test.ts` and `thread-compact.test.ts` exercise it.
+
+## Naming and cleanup
+
+- Goal: settle the names (`NativeInferenceManager`, files `anthropic-inference.ts`, `openai-inference.ts`), move `ABORT_MARKER_TEXT` / `ABORT_TOOL_RESULT_TEXT` out of `anthropic-runner.ts` so openai no longer cross-imports from it, and update `context.md`'s architecture section, which currently documents `Runner` as "the provider-specific turn loop" and describes `Agent` as subscribing to runner events.
+- Tests: `npx tsc -b`, `npx vitest run`, `npx biome check .`.

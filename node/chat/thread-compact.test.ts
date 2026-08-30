@@ -332,7 +332,7 @@ it("compact flow without continuation: @compact with no next prompt", async () =
 
     await pollUntil(
       () => {
-        const agentPhase = thread.agent.phase;
+        const agentPhase = thread.getProviderStatus();
         if (agentPhase.type !== "idle")
           throw new Error(`expected idle but got ${agentPhase.type}`);
         const turnResult = thread.core.state.lastTurnResult;
@@ -390,7 +390,7 @@ it("lets the user rescue a chunk thread whose turn failed", async () => {
       () => {
         const wrapper = driver.magenta.chat.threadWrappers[chunkThreadId];
         if (wrapper?.state !== "initialized") throw new Error("waiting");
-        if (wrapper.thread.agent.phase.type !== "idle")
+        if (wrapper.thread.getProviderStatus().type !== "idle")
           throw new Error("waiting for the failed chunk thread to settle");
       },
       { timeout: 5000, message: "chunk thread should settle after the error" },
@@ -714,7 +714,7 @@ it("auto-compact threshold from options wires into the thread's supervisor", asy
       await pollUntil(
         () => {
           const state = originalThread.agent.log;
-          if (originalThread.agent.phase.type !== "idle")
+          if (originalThread.getProviderStatus().type !== "idle")
             throw new Error("waiting for stop");
           if (
             state.inputTokenCount === undefined ||
@@ -782,7 +782,7 @@ it("auto-compact triggers when inputTokenCount breaches the supervisor threshold
     await pollUntil(
       () => {
         const state = originalThread.agent.log;
-        if (originalThread.agent.phase.type !== "idle")
+        if (originalThread.getProviderStatus().type !== "idle")
           throw new Error("waiting for stop");
         if (
           state.inputTokenCount === undefined ||
@@ -1642,7 +1642,7 @@ it("deleting the compact child thread aborts the parked submission", async () =>
     );
     // The parent is idle again: nothing is waiting on the deleted thread.
     expect(isCompacting(thread)).toBe(false);
-    expect(thread.agent.phase.type).toBe("idle");
+    expect(thread.getProviderStatus().type).toBe("idle");
   });
 });
 
@@ -1685,7 +1685,7 @@ it("fails the parked submission when the chunk thread yields an empty summary", 
     expect(isCompacting(thread)).toBe(false);
     await pollUntil(
       () => {
-        if (thread.agent.phase.type !== "idle")
+        if (thread.getProviderStatus().type !== "idle")
           throw new Error("waiting for the parent thread to settle");
       },
       { timeout: 2000, message: "parent thread should settle" },
@@ -1776,7 +1776,7 @@ it("delivers @compact typed into a compact thread as ordinary text", async () =>
       () => {
         const wrapper = driver.magenta.chat.threadWrappers[chunkThreadId];
         if (wrapper?.state !== "initialized") throw new Error("waiting");
-        if (wrapper.thread.agent.phase.type !== "idle")
+        if (wrapper.thread.getProviderStatus().type !== "idle")
           throw new Error("waiting for the chunk thread to settle");
       },
       { timeout: 5000, message: "chunk thread should settle" },

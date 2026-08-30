@@ -30,6 +30,7 @@ import { OpenAIRunner } from "./openai-runner.ts";
 import {
   type AgentInput,
   type AgentOptions,
+  type NativeInferenceManager,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type Provider,
   type ProviderMessage,
@@ -42,7 +43,6 @@ import {
   type ProviderToolUseRequest,
   type ProviderToolUseResponse,
   type ProviderWebSearchCitation,
-  type Runner,
   type StopReason,
   type Usage,
 } from "./provider-types.ts";
@@ -1070,7 +1070,7 @@ export class OpenAIProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: Runner;
+    contextAgent?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -1214,7 +1214,7 @@ export class OpenAIProvider implements Provider {
     };
   }
 
-  createAgent(options: AgentOptions): Runner {
+  createAgent(options: AgentOptions): NativeInferenceManager {
     if (this.authType === "chatgpt") {
       assertChatGPTModelSupported(options.model);
     }

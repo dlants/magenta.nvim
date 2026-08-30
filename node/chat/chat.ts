@@ -1531,7 +1531,7 @@ ${rows}${loadMore}`;
       case "initialized": {
         const thread = threadWrapper.thread;
         const mode = thread.core.state.mode;
-        const agentPhase = thread.agent.phase;
+        const agentPhase = thread.getProviderStatus();
         const lastTurnResult = thread.core.state.lastTurnResult;
 
         const summary = {

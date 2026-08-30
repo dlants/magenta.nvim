@@ -158,7 +158,7 @@ export {
 export type { AnthropicRunnerOptions } from "./providers/anthropic-runner.ts";
 export {
   ABORT_MARKER_TEXT,
-  AnthropicRunner,
+  AnthropicInferenceManager,
 } from "./providers/anthropic-runner.ts";
 export type { BedrockProviderOptions } from "./providers/bedrock.ts";
 export { BedrockProvider } from "./providers/bedrock.ts";
@@ -182,7 +182,10 @@ export type {
   AgentLog,
   AgentOptions,
   AgentPhase,
+  BeforeRequestDecision,
+  NativeInferenceManager,
   NativeMessageIdx,
+  OnRequestUpdate,
   Provider,
   ProviderBlockDeltaEvent,
   ProviderBlockStartEvent,
@@ -210,9 +213,9 @@ export type {
   ProviderWebSearchCitation,
   ProviderWebSearchToolResult,
   RequestedTool,
+  RequestResult,
+  RequestUpdate,
   RetryStatus,
-  Runner,
-  RunnerHooks,
   StopReason,
   StreamingBlock,
   StreamStopReason,

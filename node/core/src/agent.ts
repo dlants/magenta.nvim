@@ -13,10 +13,12 @@ import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
+import { ABORT_MARKER_TEXT } from "./providers/anthropic-runner.ts";
 import type {
   AgentInput,
   AgentPhase,
   BeforeRequestDecision,
+  NativeInferenceManager,
   NativeMessageIdx,
   Provider,
   ProviderMessage,
@@ -24,8 +26,8 @@ import type {
   ProviderToolResult,
   ProviderToolSpec,
   RequestedTool,
-  Runner,
-  RunnerHooks,
+  RequestResult,
+  RequestUpdate,
   StopReason,
   ToolOutcome,
   TurnResult,
@@ -165,7 +167,7 @@ export interface AgentDeps {
     | { type: "new" }
     | {
         type: "cloned";
-        cloneFrom: Runner;
+        cloneFrom: NativeInferenceManager;
         truncateTo: NativeMessageIdx;
       };
 }
@@ -182,7 +184,10 @@ type ComposedBeforeRequest =
 
 export class Agent {
   public state: ThreadState;
-  public runner: Runner;
+  /** The provider-specific conversation. `Agent` owns the loop that drives it. */
+  public manager: NativeInferenceManager;
+  /** The turn loop's state, and the only thing callers observe about it. */
+  public phase: AgentPhase = { type: "idle" };
   public readonly structuredToolResults: Map<
     ToolRequestId,
     ToolStructuredResult
@@ -199,10 +204,10 @@ export class Agent {
     this.refreshToolSpecs();
 
     if (deps.runnerInit.type === "cloned") {
-      this.runner = deps.runnerInit.cloneFrom.clone(this.runnerHooks());
-      this.runner.truncateMessages(deps.runnerInit.truncateTo);
+      this.manager = deps.runnerInit.cloneFrom.clone();
+      this.manager.truncateMessages(deps.runnerInit.truncateTo);
     } else {
-      this.runner = this.createRunner();
+      this.manager = this.createManager();
     }
   }
 
@@ -288,22 +293,13 @@ export class Agent {
     return this.state.toolSpecs;
   }
 
-  /** The collaborators every runner this agent creates is bound to. */
-  private runnerHooks(): RunnerHooks {
-    return {
-      executeTools: (requests) => this.executeTools(requests),
-      onUpdate: () => this.scheduleUpdate(),
-      onBeforeRequest: () => this.onBeforeRequest(),
-    };
-  }
-
-  private createRunner(): Runner {
+  private createManager(): NativeInferenceManager {
     this.refreshToolSpecs();
     const provider = this.context.getProvider(this.context.profile);
     const agent = provider.createAgent({
       model: this.context.profile.model,
       systemPrompt: this.state.systemPrompt,
-      ...this.runnerHooks(),
+      onUpdate: () => this.scheduleUpdate(),
       tools: this.getToolSpecs(),
       ...((this.context.profile.provider === "anthropic" ||
         this.context.profile.provider === "bedrock" ||
@@ -340,11 +336,11 @@ export class Agent {
   }
 
   getProviderStatus(): AgentPhase {
-    return this.runner.phase;
+    return this.phase;
   }
 
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
-    return this.runner.log.messages;
+    return this.manager.log.messages;
   }
 
   private preSubmitNativeIdx: NativeMessageIdx | undefined;
@@ -355,7 +351,7 @@ export class Agent {
     }
     const idx = this.preSubmitNativeIdx;
     this.preSubmitNativeIdx = undefined;
-    this.runner.truncateMessages(idx);
+    this.manager.truncateMessages(idx);
     this.deps.onUpdate();
   }
 
@@ -364,7 +360,7 @@ export class Agent {
   }
 
   getLastStopTokenCount(): number {
-    const state = this.runner.log;
+    const state = this.manager.log;
     if (state.inputTokenCount !== undefined) {
       return state.inputTokenCount;
     }
@@ -408,7 +404,7 @@ export class Agent {
 
   private outputTokenCount(): number {
     let total = 0;
-    for (const message of this.runner.log.messages) {
+    for (const message of this.manager.log.messages) {
       total += message.usage?.outputTokens ?? 0;
     }
     return total;
@@ -417,8 +413,7 @@ export class Agent {
   private runTurn(input: AgentInput[]): Promise<void> {
     // The seeded prefix is not passed in: it leads the request the gate
     // composes, so the gate is what consumes it.
-    const turn = this.runner
-      .runTurn(input)
+    const turn = this.runTurnLoop(input)
       .then((result) => {
         this.currentTurn = undefined;
         this.flushUpdateNow();
@@ -427,6 +422,170 @@ export class Agent {
       .catch(this.handleSendMessageError);
     this.currentTurn = turn;
     return turn;
+  }
+  /** True between the start and the settling of a turn. */
+  private turnInFlight = false;
+  /** Heartbeat that forces a re-render ~1/sec while a turn is in flight, so
+   * time-based status (waiting timer, retry countdown) updates during dead
+   * air. */
+  private tickInterval: ReturnType<typeof setInterval> | undefined;
+  private startTicker(): void {
+    this.stopTicker();
+    this.tickInterval = setInterval(() => this.deps.onUpdate(), 1000);
+  }
+  private stopTicker(): void {
+    if (this.tickInterval !== undefined) {
+      clearInterval(this.tickInterval);
+      this.tickInterval = undefined;
+    }
+  }
+  /** Drive one turn to completion. `send` is the ordinary entry point; this is
+   * public so a caller (and the loop's tests) can drive a turn directly. */
+  async runTurnLoop(input: AgentInput[]): Promise<TurnResult> {
+    if (this.turnInFlight) {
+      throw new Error("runTurn called while a turn is already in flight");
+    }
+    this.turnInFlight = true;
+    this.abortRequested = false;
+    this.startTicker();
+    try {
+      return await this.runLoop(input);
+    } finally {
+      this.turnInFlight = false;
+      this.abortRequested = false;
+      this.phase = { type: "idle" };
+      this.stopTicker();
+      // At rest there must be no update still queued behind the throttle: the
+      // final notification is this one.
+      this.flushUpdateNow();
+      this.deps.onUpdate();
+    }
+  }
+  /** Alternates between inference and tool execution until something ends the
+   * turn. This is the only thing that drives the agent forward. */
+  private async runLoop(initialInput: AgentInput[]): Promise<TurnResult> {
+    let pending: AgentInput[] | undefined = initialInput;
+    while (true) {
+      if (this.abortRequested) return this.finishTurnAbort();
+
+      const gate = await this.onBeforeRequest();
+      // After the gate, so the owner's injections sit ahead of the caller's
+      // own content — and in the same user message as them, but not folded
+      // into whatever the log happened to end with otherwise.
+      if (pending) {
+        this.manager.appendUserMessage(
+          pending,
+          gate.appended ? { coalesce: true } : undefined,
+        );
+        this.scheduleUpdate();
+        pending = undefined;
+      }
+      if (gate.type === "suspend") {
+        return { type: "suspended", reason: gate.reason };
+      }
+      if (this.abortRequested) return this.finishTurnAbort();
+
+      const outcome = await this.streamOneResponse();
+
+      if (outcome.type === "aborted") return this.finishTurnAbort();
+      if (outcome.type === "error") {
+        this.manager.finalize({ type: "error", error: outcome.error });
+        return { type: "failed", error: outcome.error };
+      }
+
+      const requested = outcome.requested;
+      if (requested.length === 0) {
+        // Without tool_use blocks the provider's reason is the turn's reason.
+        return {
+          type: "stopped",
+          stopReason:
+            outcome.stopReason === "tool_use" ? "end_turn" : outcome.stopReason,
+        };
+      }
+
+      if (this.abortRequested) return this.finishTurnAbort();
+
+      this.phase = {
+        type: "running_tools",
+        requested,
+        truncated: outcome.stopReason === "max_tokens",
+      };
+      this.deps.onUpdate();
+
+      let toolOutcome: ToolOutcome;
+      try {
+        toolOutcome = await this.executeTools(requested);
+      } catch (error) {
+        // A rejecting executor is still a turn that must leave every tool_use
+        // answered, so fall through with no results and let the fill do it.
+        this.context.logger.error(
+          `executeTools rejected: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        toolOutcome = { type: "continue", results: new Map() };
+      }
+
+      this.manager.appendToolResults(requested, toolOutcome.results);
+      this.scheduleUpdate();
+
+      if (toolOutcome.type === "aborted") {
+        this.abortRequested = true;
+        return this.finishTurnAbort();
+      }
+      if (toolOutcome.type === "suspend") return { type: "suspended" };
+      if (this.abortRequested) return this.finishTurnAbort();
+    }
+  }
+  /** One provider request. Retries live inside it and stay inside the
+   * `streaming` phase, so they are never observable as a transition. */
+  private async streamOneResponse(): Promise<RequestResult> {
+    this.phase = {
+      type: "streaming",
+      startedAt: new Date(),
+      lastEventTime: new Date(),
+      block: undefined,
+      retry: undefined,
+    };
+    this.deps.onUpdate();
+    return await this.manager.sendRequest((update) =>
+      this.handleRequestUpdate(update),
+    );
+  }
+  /** Every update is a sign of life from the server, so each stamps
+   * `lastEventTime`; the block itself is mirrored onto the phase and read at
+   * render time. */
+  private handleRequestUpdate(update: RequestUpdate): void {
+    if (this.phase.type !== "streaming") return;
+    this.phase.lastEventTime = new Date();
+    switch (update.type) {
+      case "streaming-block":
+        this.phase.block = update.streamingBlock;
+        break;
+      case "block-finished":
+        this.phase.block = undefined;
+        break;
+      case "retry":
+        this.phase.retry = update.retry;
+        this.phase.block = undefined;
+        break;
+      default:
+        assertUnreachable(update);
+    }
+    this.scheduleUpdate();
+  }
+  /** The single terminal abort transition: leave the history well-formed and
+   * mark why it stops here. */
+  private finishTurnAbort(): TurnResult {
+    this.phase = { type: "aborting" };
+    this.deps.onUpdate();
+    this.manager.finalize({ type: "aborted" });
+    this.manager.appendUserMessage([
+      {
+        type: "text",
+        text: ABORT_MARKER_TEXT,
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ]);
+    return { type: "aborted" };
   }
 
   private async handleTurnResult(result: TurnResult): Promise<void> {
@@ -463,7 +622,7 @@ export class Agent {
   }
 
   get inputTokenCount(): number | undefined {
-    return this.runner.log.inputTokenCount;
+    return this.manager.log.inputTokenCount;
   }
 
   get lastAssistantMessage():
@@ -650,7 +809,7 @@ export class Agent {
         entry.handle.abort();
       }
     }
-    this.runner.abort();
+    if (this.turnInFlight) this.manager.abort();
 
     const turn = this.currentTurn;
     if (turn) {
@@ -701,7 +860,7 @@ export class Agent {
     // decides to issue is composed inside the turn, by the gate.
     const { content } = this.prepareUserContent(inputMessages);
 
-    this.preSubmitNativeIdx = this.runner.getNativeMessageIdx();
+    this.preSubmitNativeIdx = this.manager.getNativeMessageIdx();
     this.deps.onUpdate();
     void this.runTurn(toAgentInput(content));
   }
@@ -709,7 +868,7 @@ export class Agent {
   private getLastAssistantMessage():
     | ReadonlyArray<ProviderMessageContent>
     | undefined {
-    const messages = this.runner.log.messages;
+    const messages = this.manager.log.messages;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "assistant") {
         return messages[i].content;
@@ -766,7 +925,9 @@ export class Agent {
    * request: on the opening request it lands ahead of the caller's own
    * content, and on a continuation it folds into the message carrying the
    * tool results. */
-  private async onBeforeRequest(): Promise<BeforeRequestDecision> {
+  private async onBeforeRequest(): Promise<
+    BeforeRequestDecision & { appended: boolean }
+  > {
     const isOpeningRequest = this.openingRequestPending;
     this.openingRequestPending = false;
     // Content seeded for this turn leads its opening request, ahead of the
@@ -788,18 +949,19 @@ export class Agent {
       default:
         assertUnreachable(composed);
     }
-    if (content.length) {
+    const appended = content.length > 0;
+    if (appended) {
       // The opening request of a turn starts its own user message; a
       // continuation folds into the one already carrying the tool results.
-      this.runner.appendUserMessage(
+      this.manager.appendUserMessage(
         content,
         isOpeningRequest ? undefined : { coalesce: true },
       );
     }
     if (composed.type === "suspend") {
-      return { type: "suspend", reason: composed.reason };
+      return { type: "suspend", reason: composed.reason, appended };
     }
-    return { type: "proceed" };
+    return { type: "proceed", appended };
   }
   /** Set by `submit` for the turn's opening request and consumed by the first
    * gate; later gates in the same turn are continuations by construction — the
@@ -857,7 +1019,7 @@ export class Agent {
     if (!onBeforeRequest)
       return { type: "proceed", injections: [], submissions: [] };
     const composed = await onBeforeRequest({
-      inputTokenCount: this.runner.log.inputTokenCount,
+      inputTokenCount: this.manager.log.inputTokenCount,
       outputTokenCount: this.outputTokenCount(),
       isOpeningRequest,
     });

@@ -2,12 +2,12 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
-import type { AgentContext } from "./agent.ts";
+import { Agent, type AgentContext, type ThreadState } from "./agent.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import {
-  AnthropicRunner,
+  AnthropicInferenceManager,
   type AnthropicRunnerOptions,
 } from "./providers/anthropic-runner.ts";
 import {
@@ -15,13 +15,16 @@ import {
   type MockStream,
 } from "./providers/mock-anthropic-client.ts";
 import type {
+  AgentInput,
   AgentOptions,
+  NativeInferenceManager,
   Provider,
-  Runner,
 } from "./providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import { Thread } from "./thread.ts";
+import type { AgentHooks } from "./thread-api.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import { pollUntil } from "./utils/async.ts";
@@ -45,13 +48,16 @@ export const defaultAnthropicOptions: AnthropicRunnerOptions = {
   validateInput,
 };
 
-export function createMockProvider(mockClient: MockAnthropicClient): Provider {
+export function createMockProvider(
+  mockClient: MockAnthropicClient,
+  anthropicOptions?: Partial<AnthropicRunnerOptions>,
+): Provider {
   return {
-    createAgent(options: AgentOptions): Runner {
-      return new AnthropicRunner(
+    createAgent(options: AgentOptions): NativeInferenceManager {
+      return new AnthropicInferenceManager(
         options,
         mockClient as unknown as Anthropic,
-        defaultAnthropicOptions,
+        { ...defaultAnthropicOptions, ...anthropicOptions },
       );
     },
     forceToolUse() {
@@ -81,19 +87,9 @@ function stub<T>(partial: Partial<T>): T {
   return partial as T;
 }
 
-export function createAgentWithMock(
-  overrides?: Partial<AgentContext>,
-  threadId: ThreadId = "test-thread" as ThreadId,
-  resolve?: ResolveSubmission,
-  onUpdate?: () => void,
-): {
-  core: Thread;
-  mockClient: MockAnthropicClient;
-  context: AgentContext;
-} {
-  const mockClient = new MockAnthropicClient();
-  const provider = createMockProvider(mockClient);
-  const context: AgentContext = {
+/** The stubbed context every test agent shares. */
+function baseTestContext(provider: Provider): AgentContext {
+  return {
     logger: noopLogger,
     profile: {
       provider: "mock",
@@ -131,6 +127,23 @@ export function createAgentWithMock(
     getAgents: () => ({}),
     getProvider: () => provider,
     contextTracker: { files: {} },
+  };
+}
+
+export function createAgentWithMock(
+  overrides?: Partial<AgentContext>,
+  threadId: ThreadId = "test-thread" as ThreadId,
+  resolve?: ResolveSubmission,
+  onUpdate?: () => void,
+): {
+  core: Thread;
+  mockClient: MockAnthropicClient;
+  context: AgentContext;
+} {
+  const mockClient = new MockAnthropicClient();
+  const provider = createMockProvider(mockClient);
+  const context: AgentContext = {
+    ...baseTestContext(provider),
     ...overrides,
   };
 
@@ -148,6 +161,47 @@ export function createAgentWithMock(
     context,
   };
 }
+
+/** An `Agent` on a mock client, with no thread around it: the harness for the
+ * turn loop itself. */
+export function createTestAgent(opts?: {
+  onUpdate?: () => void;
+  getHooks?: () => AgentHooks;
+  context?: Partial<AgentContext>;
+  anthropicOptions?: Partial<AnthropicRunnerOptions>;
+}): { agent: Agent; mockClient: MockAnthropicClient } {
+  const mockClient = new MockAnthropicClient();
+  const provider = createMockProvider(mockClient, opts?.anthropicOptions);
+  const context: AgentContext = {
+    ...baseTestContext(provider),
+    ...opts?.context,
+  };
+  const state: ThreadState = {
+    title: undefined,
+    threadType: context.threadType,
+    systemPrompt: context.systemPrompt,
+    systemInfo: context.systemInfo,
+    mode: { type: "normal" },
+    edlRegisters: { registers: new Map(), nextSavedId: 0 },
+    editedFilesThisTurn: [],
+    lastTurnResult: undefined,
+    toolSpecs: [],
+  };
+  const agent = new Agent(context, {
+    threadId: "test-agent" as ThreadId,
+    state,
+    structuredToolResults: new Map(),
+    getHooks: opts?.getHooks ?? (() => ({})),
+    onUpdate: opts?.onUpdate ?? (() => {}),
+    runnerInit: { type: "new" },
+  });
+  return { agent, mockClient };
+}
+
+/** One turn's worth of user input. */
+export const userInput = (text: string): AgentInput[] => [
+  { type: "text", text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
+];
 
 export async function cleanupArchive(threadId: ThreadId): Promise<void> {
   const dir = path.dirname(

@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import type {
   GitContextUpdate,
   GitState,
+  NativeInferenceManager,
   ProviderToolResult,
   SubagentConfig,
   ThreadSupervisor,
@@ -60,7 +61,6 @@ import {
   type AgentPhase,
   getProvider,
   type ProviderMessage,
-  type Runner,
 } from "../providers/provider.ts";
 import type { SystemInfo, SystemPrompt } from "../providers/system-prompt.ts";
 import type { RootMsg } from "../root-msg.ts";
@@ -300,8 +300,8 @@ export class NvimThread {
     return this.fileSupervisor.contextManager;
   }
 
-  get agent(): Runner {
-    return this.core.runner;
+  get agent(): NativeInferenceManager {
+    return this.core.inferenceManager;
   }
 
   /** The supervisor list this thread's hooks were composed from. Kept so the
@@ -598,10 +598,8 @@ export class NvimThread {
     if (this.core.phase.type === "idle") {
       return undefined;
     }
-    const block =
-      this.agent.phase.type === "streaming"
-        ? this.agent.phase.block
-        : undefined;
+    const phase = this.core.getProviderStatus();
+    const block = phase.type === "streaming" ? phase.block : undefined;
     if (block?.type === "tool_use" && block.name === "reply") {
       const replies: { [id: CommentId]: string } = {};
       for (const reply of extractPartialReplies(block.inputJson)) {

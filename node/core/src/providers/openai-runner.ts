@@ -22,14 +22,17 @@ import type {
   AgentOptions,
   AgentPhase,
   BeforeRequestDecision,
+  NativeInferenceManager,
   NativeMessageIdx,
+  OnBeforeRequest,
+  OnRequestUpdate,
   ProviderMessage,
   ProviderMessageContent,
   ProviderToolResult,
   RequestedTool,
-  Runner,
-  RunnerHooks,
+  RequestResult,
   StreamStopReason,
+  ToolExecutor,
   ToolOutcome,
   ToolResults,
   TurnResult,
@@ -95,8 +98,19 @@ type AttemptResult =
   | { type: "aborted" }
   | { type: "error"; error: Error };
 
-export class OpenAIRunner implements Runner {
+/** Temporary: the loop still living in this class takes its collaborators as
+ * hooks. It goes away when the loop does; `Agent` never supplies these. */
+export type LegacyRunnerHooks = {
+  executeTools: ToolExecutor;
+  onUpdate: () => void;
+  onBeforeRequest?: OnBeforeRequest | undefined;
+};
+
+export class OpenAIRunner implements NativeInferenceManager {
+  /** Legacy: mirrored for the loop below. `Agent` reads its own phase. */
   phase: AgentPhase = { type: "idle" };
+  private requestInFlight = false;
+  private onRequestUpdate: OnRequestUpdate | undefined;
   /** ProviderMessage[] is the single source of truth; the request body is
    * derived from it on every turn (see `createStreamParameters`). */
   private messages: ProviderMessage[] = [];
@@ -202,6 +216,7 @@ export class OpenAIRunner implements Runner {
    * observe it. */
   private syncStreamingBlock(): void {
     if (this.phase.type !== "streaming") return;
+    const report = this.onRequestUpdate;
     const block =
       this.openIndex === undefined
         ? undefined
@@ -227,6 +242,13 @@ export class OpenAIRunner implements Runner {
         break;
       default:
         this.phase.block = undefined;
+    }
+    if (report) {
+      report(
+        this.phase.block
+          ? { type: "streaming-block", streamingBlock: this.phase.block }
+          : { type: "block-finished" },
+      );
     }
   }
 
@@ -382,7 +404,7 @@ export class OpenAIRunner implements Runner {
    * omitted are answered here rather than trusted to the executor. Parallel
    * tool calls produce several results for one assistant message; they
    * accumulate into a single trailing user message. */
-  private appendToolResults(
+  appendToolResults(
     requested: ReadonlyArray<RequestedTool>,
     results: ToolResults,
   ): void {
@@ -408,7 +430,7 @@ export class OpenAIRunner implements Runner {
   }
 
   abort(): void {
-    if (!this.turnInFlight) return;
+    if (!this.turnInFlight && !this.requestInFlight) return;
     this.aborted = true;
     this.retryAbortController?.abort();
     this.stream?.controller.abort();
@@ -424,9 +446,9 @@ export class OpenAIRunner implements Runner {
     this.notify();
   }
 
-  clone(hooks: RunnerHooks): OpenAIRunner {
+  clone(hooks?: LegacyRunnerHooks): OpenAIRunner {
     const cloned = new OpenAIRunner(
-      { ...this.options, onBeforeRequest: undefined, ...hooks },
+      { ...this.options, onBeforeRequest: undefined, ...(hooks ?? {}) },
       this.client,
       this.openaiOptions,
     );
@@ -506,7 +528,6 @@ export class OpenAIRunner implements Runner {
         return {
           type: "failed",
           error: outcome.error,
-          retryable: isRetryableOpenAIError(outcome.error),
         };
       }
 
@@ -528,9 +549,13 @@ export class OpenAIRunner implements Runner {
       };
       this.options.onUpdate();
 
+      const executeTools = this.options.executeTools;
+      if (!executeTools) {
+        throw new Error("legacy runLoop requires an executeTools hook");
+      }
       let toolOutcome: ToolOutcome;
       try {
-        toolOutcome = await this.options.executeTools(requested);
+        toolOutcome = await executeTools(requested);
       } catch (error) {
         // A rejecting executor is still a turn that must leave every tool_use
         // answered, so fall through with no results and let the fill do it.
@@ -574,6 +599,44 @@ export class OpenAIRunner implements Runner {
       },
     ]);
     return { type: "aborted" };
+  }
+
+  /** One provider request, including the retry/backoff budget. */
+  async sendRequest(onUpdate: OnRequestUpdate): Promise<RequestResult> {
+    if (this.requestInFlight) {
+      throw new Error(
+        "sendRequest called while a request is already in flight",
+      );
+    }
+    this.requestInFlight = true;
+    this.aborted = false;
+    this.onRequestUpdate = onUpdate;
+    try {
+      const outcome = await this.streamOneResponse();
+      if (outcome.type === "completed") {
+        return {
+          type: "completed",
+          stopReason: outcome.stopReason,
+          requested: this.collectRequestedTools(),
+        };
+      }
+      return outcome;
+    } finally {
+      this.requestInFlight = false;
+      this.onRequestUpdate = undefined;
+      this.stream = undefined;
+      this.phase = { type: "idle" };
+    }
+  }
+
+  finalize(
+    reason: { type: "aborted" } | { type: "error"; error: Error },
+  ): void {
+    if (reason.type === "aborted") {
+      this.update({ type: "stream-aborted" });
+    } else {
+      this.update({ type: "stream-error", error: reason.error });
+    }
   }
 
   /** One provider response, including the retry/backoff budget. Retries stay
@@ -652,6 +715,7 @@ export class OpenAIRunner implements Runner {
         block: undefined,
         retry: undefined,
       };
+      this.onRequestUpdate?.({ type: "retry", retry: undefined });
       this.options.onUpdate();
 
       const result = await attempt();
@@ -687,6 +751,9 @@ export class OpenAIRunner implements Runner {
           error: result.error,
         },
       };
+      if (this.phase.type === "streaming") {
+        this.onRequestUpdate?.({ type: "retry", retry: this.phase.retry });
+      }
       this.options.onUpdate();
 
       this.retryAbortController = new AbortController();

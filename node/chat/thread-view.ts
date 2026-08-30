@@ -454,7 +454,7 @@ export const view: View<{
   );
 
   const messages = thread.getProviderMessages();
-  const agentPhase = thread.agent.phase;
+  const agentPhase = thread.getProviderStatus();
   const mode = thread.core.state.mode;
 
   const pendingComments = thread.comments?.store.getPendingEntries() ?? [];
@@ -1212,7 +1212,7 @@ export function findToolResult(
 }
 
 function renderStreamingBlock(thread: NvimThread): string | VDOMNode {
-  const phase = thread.agent.phase;
+  const phase = thread.getProviderStatus();
   const block = phase.type === "streaming" ? phase.block : undefined;
   if (!block) return d``;
 

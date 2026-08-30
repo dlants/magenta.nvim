@@ -150,9 +150,6 @@ describe("OpenAIRunner retry", () => {
 
     const result = await turn;
     expect(result.type).toBe("failed");
-    if (result.type === "failed") {
-      expect(result.retryable).toBe(false);
-    }
     expect(client.streams).toHaveLength(1);
   });
 

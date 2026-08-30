@@ -12,12 +12,12 @@ import {
 } from "./compaction/index.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { ProviderProfile } from "./provider-options.ts";
-import { AnthropicRunner } from "./providers/anthropic-runner.ts";
+import { AnthropicInferenceManager } from "./providers/anthropic-runner.ts";
 import { MockAnthropicClient } from "./providers/mock-anthropic-client.ts";
 import type {
   AgentOptions,
+  NativeInferenceManager,
   Provider,
-  Runner,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import {
@@ -29,9 +29,11 @@ import {
   awaitNextStream,
   cleanupArchive,
   createAgentWithMock,
+  createTestAgent,
   defaultAnthropicOptions,
   TEST_ARCHIVE_DIR,
   uniqueThreadId,
+  userInput,
 } from "./test-helpers.ts";
 import { Thread } from "./thread.ts";
 import type { SendResult, ThreadSendResult } from "./thread-api.ts";
@@ -1151,7 +1153,7 @@ describe("AutoCompactSupervisor integration", () => {
     // inputTokenCount is populated post-flight, so it lags one turn. Drive a
     // second turn; the handoff at its end sees the over-threshold count.
     await pollUntil(() => {
-      if (core.runner.log.inputTokenCount === 50) return true;
+      if (core.agent.manager.log.inputTokenCount === 50) return true;
       throw new Error("waiting for token count");
     });
     mockClient.mockInputTokenCount = 200;
@@ -1184,7 +1186,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.finishResponse("end_turn", { inputTokens: 50, outputTokens: 5 });
 
     await pollUntil(() => {
-      if (core.runner.phase.type !== "idle") throw new Error("waiting");
+      if (core.agent.phase.type !== "idle") throw new Error("waiting");
       return true;
     });
 
@@ -1209,7 +1211,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.streamText("done");
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.runner.log.inputTokenCount === 50) return true;
+      if (core.agent.manager.log.inputTokenCount === 50) return true;
       throw new Error("waiting for token count");
     });
     mockClient.mockInputTokenCount = 200;
@@ -1245,7 +1247,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.streamText("done");
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.runner.log.inputTokenCount === 50) return true;
+      if (core.agent.manager.log.inputTokenCount === 50) return true;
       throw new Error("waiting for token count");
     });
     mockClient.mockInputTokenCount = 200;
@@ -2188,10 +2190,10 @@ describe("Agent createFreshAgent thinking effort override", () => {
   it("applies subagentConfig.effort to thinking when creating agent", () => {
     const captured: AgentOptions[] = [];
     const spyProvider: Provider = {
-      createAgent(options: AgentOptions): Runner {
+      createAgent(options: AgentOptions): NativeInferenceManager {
         captured.push(options);
         const mockClient = new MockAnthropicClient();
-        return new AnthropicRunner(
+        return new AnthropicInferenceManager(
           options,
           mockClient as unknown as Anthropic,
           defaultAnthropicOptions,
@@ -2221,10 +2223,10 @@ describe("Agent createFreshAgent thinking effort override", () => {
   it("force-enables thinking when profile.thinking is unset but subagent has effort", () => {
     const captured: AgentOptions[] = [];
     const spyProvider: Provider = {
-      createAgent(options: AgentOptions): Runner {
+      createAgent(options: AgentOptions): NativeInferenceManager {
         captured.push(options);
         const mockClient = new MockAnthropicClient();
-        return new AnthropicRunner(
+        return new AnthropicInferenceManager(
           options,
           mockClient as unknown as Anthropic,
           defaultAnthropicOptions,
@@ -2251,10 +2253,10 @@ describe("Agent createFreshAgent thinking effort override", () => {
   it("uses profile.thinking unchanged when no subagentConfig.effort override", () => {
     const captured: AgentOptions[] = [];
     const spyProvider: Provider = {
-      createAgent(options: AgentOptions): Runner {
+      createAgent(options: AgentOptions): NativeInferenceManager {
         captured.push(options);
         const mockClient = new MockAnthropicClient();
-        return new AnthropicRunner(
+        return new AnthropicInferenceManager(
           options,
           mockClient as unknown as Anthropic,
           defaultAnthropicOptions,
@@ -2493,7 +2495,7 @@ describe("Agent conversation archive", () => {
       nextStream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (core.runner.phase.type !== "idle") throw new Error("waiting");
+        if (core.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -2543,7 +2545,7 @@ describe("Agent conversation archive", () => {
 
       nextStream.finishResponse("end_turn");
       await pollUntil(() => {
-        if (core.runner.phase.type !== "idle") throw new Error("waiting");
+        if (core.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -2570,7 +2572,7 @@ describe("Agent conversation archive", () => {
       stream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (core.runner.phase.type !== "idle") throw new Error("waiting");
+        if (core.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -2600,7 +2602,7 @@ describe("Agent conversation archive", () => {
       contStream.finishResponse("end_turn");
       await compactPromise;
       await pollUntil(() => {
-        if (core.runner.phase.type !== "idle") throw new Error("waiting");
+        if (core.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -2638,11 +2640,11 @@ describe("Agent conversation archive", () => {
       stream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (parent.runner.phase.type !== "idle") throw new Error("waiting");
+        if (parent.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
 
-      const nativeMessageIdx = parent.runner.getNativeMessageIdx();
+      const nativeMessageIdx = parent.agent.manager.getNativeMessageIdx();
       child = await Thread.clone({
         sourceThread: parent,
         newId: childId,
@@ -2661,7 +2663,7 @@ describe("Agent conversation archive", () => {
       childStream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (child!.runner.phase.type !== "idle") throw new Error("waiting");
+        if (child!.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
       await child.awaitArchiveFlush();
@@ -2706,14 +2708,14 @@ describe("Agent thread state", () => {
       stream.streamText("parent response");
       stream.finishResponse("end_turn");
       await pollUntil(() => {
-        if (parent.runner.phase.type !== "idle") throw new Error("waiting");
+        if (parent.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
 
       parent.state.edlRegisters.registers.set("r", "regval");
       parent.state.edlRegisters.nextSavedId = 3;
 
-      const nativeMessageIdx = parent.runner.getNativeMessageIdx();
+      const nativeMessageIdx = parent.agent.manager.getNativeMessageIdx();
       child = await Thread.clone({
         sourceThread: parent,
         newId: childId,
@@ -2770,7 +2772,7 @@ describe("Thread survives the compaction agent swap", () => {
     contStream.finishResponse("end_turn");
     await compactPromise;
     await pollUntil(() => {
-      if (core.runner.phase.type !== "idle") throw new Error("waiting");
+      if (core.agent.phase.type !== "idle") throw new Error("waiting");
       return true;
     });
   }
@@ -2853,12 +2855,88 @@ describe("Thread survives the compaction agent swap", () => {
       contStream.finishResponse("end_turn");
       await compactPromise;
       await pollUntil(() => {
-        if (core.runner.phase.type !== "idle") throw new Error("waiting");
+        if (core.agent.phase.type !== "idle") throw new Error("waiting");
         return true;
       });
     } finally {
       await core.destroy();
       await cleanupArchive(threadId);
     }
+  });
+});
+
+describe("Agent turn loop", () => {
+  it("suspending at the gate issues no request", async () => {
+    const { agent, mockClient } = createTestAgent({
+      getHooks: () => ({
+        onBeforeRequest: () =>
+          Promise.resolve({
+            type: "suspend" as const,
+            reason: { kind: "stop" as const, message: "held" },
+            injections: [],
+          }),
+      }),
+    });
+
+    expect(await agent.runTurnLoop(userInput("hello"))).toEqual({
+      type: "suspended",
+      reason: { kind: "stop", message: "held" },
+    });
+    expect(mockClient.streams).toHaveLength(0);
+    // The caller's content still lands, so the next request carries it.
+    expect(agent.getProviderMessages()).toHaveLength(1);
+  });
+
+  it("an abort mid-stream unwinds once, leaving one abort marker", async () => {
+    const { agent, mockClient } = createTestAgent();
+    const turn = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    stream.streamText("partial");
+
+    void agent.abort();
+    void agent.abort();
+    expect(await turn).toEqual({ type: "aborted" });
+
+    const texts = agent
+      .getProviderMessages()
+      .flatMap((m) => m.content)
+      .filter((c) => c.type === "text")
+      .map((c) => (c as { text: string }).text);
+    expect(
+      texts.filter((text) => text.includes("aborted the previous")),
+    ).toHaveLength(1);
+    expect(agent.phase).toEqual({ type: "idle" });
+  });
+
+  it("the streaming block on the phase is a copy, not the manager's own", async () => {
+    const { agent, mockClient } = createTestAgent();
+    const turn = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+
+    stream.emitEvent({
+      type: "content_block_start",
+      index: stream.nextBlockIndex(),
+      content_block: { type: "text", text: "", citations: null },
+    });
+    await stream.settle();
+    const phase = agent.phase;
+    if (phase.type !== "streaming") throw new Error("expected streaming");
+    const first = phase.block;
+
+    stream.emitEvent({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: "more" },
+    });
+    await stream.settle();
+
+    // The block the view already read must not have changed under it.
+    expect(first).toEqual({ type: "text", text: "" });
+    expect(agent.phase.type === "streaming" && agent.phase.block).not.toBe(
+      first,
+    );
+
+    void agent.abort();
+    await turn;
   });
 });

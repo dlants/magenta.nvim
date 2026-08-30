@@ -29,10 +29,6 @@ export type ProviderSetting = {
   promptCaching?: boolean;
 };
 
-/** What the provider said when it ended a response. `tool_use` is deliberately
- * absent: it is consumed by the agent's turn loop and never surfaces as a turn
- * outcome. So is `aborted`, which was never the provider's word to begin with —
- * see `TurnResult`. */
 export type StopReason =
   | "end_turn"
   | "max_tokens"
@@ -42,8 +38,6 @@ export type StopReason =
   | "model_context_window_exceeded"
   | "stop_sequence";
 
-/** What a single provider stream can terminate with. Internal to the agent's
- * loop, plus the per-message record in `ProviderMessage.stopReason`. */
 export type StreamStopReason = StopReason | "tool_use";
 
 export type Usage = {
@@ -223,7 +217,7 @@ export interface Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: Runner;
+    contextAgent?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -232,16 +226,11 @@ export interface Provider {
     };
   }): ProviderToolUseRequest;
 
-  createAgent(options: AgentOptions): Runner;
+  createAgent(options: AgentOptions): NativeInferenceManager;
 }
 
-/** Presence of this value implies a usable provider-native item id; there is
- * no encoding for "present but empty". */
 export type ProviderMetadata = { provider: "openai"; itemId: string };
 
-/** OpenAI's function calls carry no Anthropic `caller`, so they cannot be
- * expressed as `Anthropic.ToolUseBlock`. The start event's block is therefore
- * a provider-agnostic union rather than the Anthropic one alone. */
 export type ProviderToolUseBlockStart = {
   type: "tool_use";
   id: string;
@@ -295,25 +284,14 @@ export interface ProviderToolUseRequest {
   promise: Promise<ProviderToolUseResponse>;
 }
 
-// ============================================================================
-// Runner - Stateful conversation agent interface
-// ============================================================================
-
 export type RetryStatus = {
   attempt: number;
   nextRetryAt: Date;
   error: Error;
 };
 
-/** Branded type for native message index within an Runner.
- * This is opaque to external code - only the Runner knows how to use it.
- */
 export type NativeMessageIdx = number & { __nativeMessageIdx: true };
 
-/** Placeholder used when constructing content blocks before they are attached
- * to a native message array (e.g. tool results, AgentInput). The actual
- * `nativeMessageIdx` is stamped by `convertAnthropicMessagesToProvider` on the
- * agent's `cachedProviderMessages`, so the input value is discarded. */
 export const PLACEHOLDER_NATIVE_MESSAGE_IDX = -1 as NativeMessageIdx;
 
 export type StreamingBlock =
@@ -333,21 +311,14 @@ export type AgentInput =
 
 export type RequestedTool = {
   id: ToolManager.ToolRequestId;
-  /** err when the model emitted unparseable input for this call */
   request: Result<ToolRequest, { rawRequest: unknown }>;
 };
 
-/** The states a turn passes through. Progress, not outcome: how a turn ended
- * is delivered exactly once, by the promise `runTurn` returns. */
 export type AgentPhase =
   | { type: "idle" }
   | {
       type: "streaming";
       startedAt: Date;
-      /** Timestamp of the most recent sign of life from the server during the
-       * current turn: set when each attempt's request is sent, and advanced on
-       * every received stream event. Used to show a "waiting" timer during dead
-       * air (no events for >3s). */
       lastEventTime: Date;
       block: StreamingBlock | undefined;
       retry: RetryStatus | undefined;
@@ -360,112 +331,90 @@ export type AgentPhase =
     }
   | { type: "aborting" };
 
-/** How a turn ended. Delivered once, by the promise. */
 export type TurnResult =
   | { type: "stopped"; stopReason: StopReason }
-  /** the executor or the before-request gate returned suspend; history is
-   * coherent and resumable. `reason` is set when the suspension came from
-   * `onBeforeRequest`; a tool executor's suspend carries none — the owner
-   * of the executor knows why it suspended. */
   | { type: "suspended"; reason?: SuspendReason | undefined }
   | { type: "aborted" }
-  | { type: "failed"; error: Error; retryable: boolean };
-
+  | { type: "failed"; error: Error };
 export type ToolResults = ReadonlyMap<
   ToolManager.ToolRequestId,
   ProviderToolResult["result"]
 >;
 
+/** ToolResults are always inserted into the runner, so we always end in a valid state.
+ * This means we can later send another request, or append more messages.
+ */
 export type ToolOutcome =
   | { type: "continue"; results: ToolResults }
-  /** record the results, then park the agent */
   | { type: "suspend"; results: ToolResults }
-  /** the caller aborted its tool handles; unwind the turn */
   | { type: "aborted"; results: ToolResults };
 
-/** "Please run these for me." Must settle; a rejection is converted into
- * error results for every requested id. No abort signal is passed in: the
- * caller owns the tool invocations, so on abort it cancels them itself and
- * settles with `{type: "aborted"}` carrying whatever results it has. */
 export type ToolExecutor = (
   requests: ReadonlyArray<RequestedTool>,
 ) => Promise<ToolOutcome>;
 
-/** Append-only render view of the conversation. Distinct from `phase`, which
- * is the machine. */
 export type AgentLog = {
   readonly messages: ReadonlyArray<ProviderMessage>;
   readonly latestUsage: Usage | undefined;
   readonly inputTokenCount: number | undefined;
 };
 
-export interface Runner {
-  readonly phase: AgentPhase;
+/** What one provider request produced. Retries are internal to the request, so
+ * `error` means permanently failed. */
+export type RequestResult =
+  | {
+      type: "completed";
+      stopReason: StreamStopReason;
+      /** tool_use blocks accumulated during this request. */
+      requested: RequestedTool[];
+    }
+  | { type: "aborted" }
+  | { type: "error"; error: Error };
+
+/** What the manager reports while a request is in flight. Deliberately narrow:
+ * the finished content is read off `log.messages`. */
+export type RequestUpdate =
+  | { type: "streaming-block"; streamingBlock: StreamingBlock }
+  | { type: "block-finished" }
+  /** A retryable failure; the manager is backing off and will try again.
+   * `undefined` when a fresh attempt starts, which clears the countdown. */
+  | { type: "retry"; retry: RetryStatus | undefined };
+
+export type OnRequestUpdate = (update: RequestUpdate) => void;
+
+/** The provider-specific half of a conversation: the native message array, its
+ * conversion to `ProviderMessage`, and one request at a time. The turn loop
+ * lives in `Agent`, not here. */
+export interface NativeInferenceManager {
   readonly log: AgentLog;
-
-  /** Run until stop. Resolves once, with why it stopped. Does not reject for
-   * provider errors — those are `failed` results. Rejects only on misuse: a
-   * turn is already in flight. */
-  runTurn(input: AgentInput[]): Promise<TurnResult>;
-
-  /** Append content to the message log as user input, without issuing a
-   * request. With `coalesce`, folds into a trailing user message rather than
-   * pushing a new one — how supervisor injections land next to the content
-   * that follows them. */
   appendUserMessage(content: AgentInput[], opts?: { coalesce?: true }): void;
-
-  /** Cancels the in-flight inference request (and any retry backoff) and
-   * unwinds the loop: fills results for any unanswered tool_use and appends
-   * the abort marker. The in-flight `runTurn` resolves with
-   * `{type: "aborted"}` — that promise is the join point, so this returns void
-   * rather than offering a second one to await. A no-op when idle, and also
-   * when in `running_tools`: there the caller aborts its own tool handles and
-   * the executor reports it via `{type: "aborted"}`. */
-  abort(): void;
-
-  /** Get the current native message index. Use this to capture a position
-   * that can later be passed to truncateMessages.
-   */
+  /** Every requested tool gets exactly one result block, including ids the
+   * executor omitted. */
+  appendToolResults(
+    requested: ReadonlyArray<RequestedTool>,
+    results: ToolResults,
+  ): void;
   getNativeMessageIdx(): NativeMessageIdx;
-
-  /** Truncate messages to keep only messages 0..messageIdx (inclusive). */
   truncateMessages(messageIdx: NativeMessageIdx): void;
-
-  /** Create a deep copy of this agent. Can be called in any phase; the clone
-   * is `idle`, with incomplete blocks and unanswered tool_use cleaned up.
-   * The new owner supplies its own hooks; none of the source's collaborators
-   * cross over.
-   */
-  clone(hooks: RunnerHooks): Runner;
+  clone(): NativeInferenceManager;
+  sendRequest(onUpdate: OnRequestUpdate): Promise<RequestResult>;
+  /** Cancels an in-flight request or a pending retry wait; a no-op otherwise. */
+  abort(): void;
+  /** Leave the history in a shape the provider will accept: no dangling
+   * tool_use or half-streamed blocks. */
+  finalize(reason: { type: "aborted" } | { type: "error"; error: Error }): void;
 }
-
-/** Optional interception point, supplied by whoever owns the runner. Called at
- * the top of every loop iteration, immediately before the request is issued —
- * the opening request of a turn included. The owner appends whatever it wants
- * to carry to the log itself; the answer here is only a gate. Not re-fired
- * when the request is retried. */
 export type OnBeforeRequest = () => Promise<BeforeRequestDecision>;
-
 export type BeforeRequestDecision =
   | { type: "proceed" }
   | { type: "suspend"; reason: SuspendReason };
-
-/** The collaborators a runner is bound to. Supplied wherever the runner is
- * created — construction or `clone` — and never afterwards, so there is no
- * moment at which a runner exists pointing at the wrong owner. */
-export type RunnerHooks = {
-  executeTools: ToolExecutor;
-  onUpdate: () => void;
-  onBeforeRequest?: OnBeforeRequest | undefined;
-};
-
 export interface AgentOptions {
   model: string;
   systemPrompt: string;
   tools: ProviderToolSpec[];
-  executeTools: ToolExecutor;
-  /** "Something visible moved, re-render." No payload: read `phase` / `log`.
-   * Called at streaming rates; the owner is responsible for throttling. */
+  /** Only the OpenAI manager's not-yet-extracted loop still reads these; they
+   * go away with it. `onUpdate` survives until the token count is preflight. */
+  executeTools?: ToolExecutor | undefined;
   onBeforeRequest?: OnBeforeRequest | undefined;
   onUpdate: () => void;
   thinking?: {

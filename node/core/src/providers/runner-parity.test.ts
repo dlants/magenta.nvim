@@ -1,10 +1,8 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import type { Logger } from "../logger.ts";
+import { createTestAgent } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
-import { AnthropicRunner } from "./anthropic-runner.ts";
-import { MockAnthropicClient } from "./mock-anthropic-client.ts";
 import { MockOpenAIClient } from "./mock-openai-client.ts";
 import { OpenAIRunner, type OpenAIStreamingClient } from "./openai-runner.ts";
 import {
@@ -75,32 +73,14 @@ type TurnSnapshot = {
 };
 
 async function anthropicContent(): Promise<TurnSnapshot> {
-  const client = new MockAnthropicClient();
-  let executorCalls = 0;
-  const agent = new AnthropicRunner(
-    {
-      ...sharedOptions,
-      model: "claude-sonnet-4-20250514",
-      skipPostFlightTokenCount: true,
-      executeTools: () => {
-        executorCalls++;
-        return noExecutor();
-      },
-      onUpdate: () => {},
-    },
-    client as unknown as Anthropic,
-    {
-      authType: "key",
-      includeWebSearch: false,
-      disableParallelToolUseFlag: true,
-      logger: noopLogger,
-      validateInput,
-    },
-  );
-  const turn = agent.runTurn(input);
-  const stream = await client.awaitStream();
+  // The agent executes tools itself; a turn with no tool_use never reaches
+  // that code, which is what the openai side counts.
+  const executorCalls = 0;
+  const { agent, mockClient } = createTestAgent();
+  const turn = agent.runTurnLoop(input);
+  const stream = await mockClient.awaitStream();
   const phaseDuringTurn = agent.phase.type;
-  const messages = snapshot(agent.log.messages);
+  const messages = snapshot(agent.getProviderMessages());
   stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
   const turnResult = await turn;
   return {
@@ -192,44 +172,38 @@ describe("onBeforeRequest", () => {
   const held = { kind: "stop" as const, message: "held" };
 
   it("stops the anthropic turn without issuing the continuation", async () => {
-    const client = new MockAnthropicClient();
     let calls = 0;
-    const runner = new AnthropicRunner(
-      {
-        ...sharedOptions,
-        model: "claude-sonnet-4-20250514",
-        skipPostFlightTokenCount: true,
-        executeTools: emptyResults,
-        onUpdate: () => {},
+    const { agent, mockClient } = createTestAgent({
+      getHooks: () => ({
         onBeforeRequest: () => {
           calls++;
           // The gate fires on the opening request too; this one holds the
           // continuation that would carry the tool results.
           return Promise.resolve(
             calls === 1
-              ? { type: "proceed" as const }
-              : { type: "suspend" as const, reason: held },
+              ? {
+                  type: "proceed" as const,
+                  injections: [],
+                  submissions: [],
+                }
+              : {
+                  type: "suspend" as const,
+                  reason: held,
+                  injections: [],
+                },
           );
         },
-      },
-      client as unknown as Anthropic,
-      {
-        authType: "key",
-        includeWebSearch: false,
-        disableParallelToolUseFlag: true,
-        logger: noopLogger,
-        validateInput,
-      },
-    );
-    const turn = runner.runTurn([text("go")]);
-    const stream = await client.awaitStream();
+      }),
+    });
+    const turn = agent.runTurnLoop([text("go")]);
+    const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
     });
     stream.finishResponse("tool_use", { inputTokens: 1, outputTokens: 1 });
     expect(await turn).toEqual({ type: "suspended", reason: held });
     expect(calls).toBe(2);
-    expect(client.streams).toHaveLength(1);
+    expect(mockClient.streams).toHaveLength(1);
   });
 
   it("stops the openai turn without issuing the continuation", async () => {
@@ -268,24 +242,7 @@ describe("onBeforeRequest", () => {
 });
 
 describe("appendUserMessage coalescing", () => {
-  const makeAnthropic = () =>
-    new AnthropicRunner(
-      {
-        ...sharedOptions,
-        model: "claude-sonnet-4-20250514",
-        skipPostFlightTokenCount: true,
-        executeTools: noExecutor,
-        onUpdate: () => {},
-      },
-      new MockAnthropicClient() as unknown as Anthropic,
-      {
-        authType: "key",
-        includeWebSearch: false,
-        disableParallelToolUseFlag: true,
-        logger: noopLogger,
-        validateInput,
-      },
-    );
+  const makeAnthropic = () => createTestAgent().agent.manager;
 
   const makeOpenAI = () =>
     new OpenAIRunner(

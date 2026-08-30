@@ -9,7 +9,7 @@ import {
 import winston from "winston";
 import { Defer, pollUntil } from "../utils/async.ts";
 import type { Result } from "../utils/result.ts";
-import { AnthropicRunner } from "./anthropic-runner.ts";
+import { AnthropicInferenceManager } from "./anthropic-runner.ts";
 import {
   MockAnthropicClient,
   type MockStream,
@@ -18,13 +18,13 @@ import { setMockProvider } from "./provider.ts";
 import type {
   AgentInput,
   AgentOptions,
+  NativeInferenceManager,
   Provider,
   ProviderMessage,
   ProviderStreamEvent,
   ProviderStreamRequest,
   ProviderToolSpec,
   ProviderToolUseRequest,
-  Runner,
   StreamStopReason,
   Usage,
 } from "./provider-types.ts";
@@ -60,7 +60,7 @@ type MockForceToolUseRequest = {
   input: AgentInput[];
   spec: ProviderToolSpec;
   systemPrompt?: string | undefined;
-  contextAgent?: Runner | undefined;
+  contextAgent?: NativeInferenceManager | undefined;
   defer: Defer<{
     toolRequest: Result<ToolRequest, { rawRequest: unknown }>;
     stopReason: StreamStopReason;
@@ -113,7 +113,7 @@ export class MockProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: Runner;
+    contextAgent?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -372,7 +372,7 @@ Streams: ${this.mockClient.streams.length}`);
     });
   }
 
-  createAgent(options: AgentOptions): Runner {
+  createAgent(options: AgentOptions): NativeInferenceManager {
     if (this.agentKind === "openai") {
       return new OpenAIRunner(
         options,
@@ -384,7 +384,7 @@ Streams: ${this.mockClient.streams.length}`);
         },
       );
     }
-    return new AnthropicRunner(
+    return new AnthropicInferenceManager(
       options,
       this.mockClient as unknown as Anthropic,
       {
