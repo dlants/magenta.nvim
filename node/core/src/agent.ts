@@ -38,6 +38,7 @@ import type {
   AgentHooks,
   OnUpdate,
   SendResult,
+  ToolInvocationState,
   TurnActivity,
   YieldValue,
 } from "./thread-api.ts";
@@ -93,15 +94,13 @@ export type ActiveToolEntry = {
   result?: ProviderToolResult;
 };
 
-/** What the agent is doing right now, and the only state representation of it.
- * `aborting` is an activity rather than a peer of `idle` because it is only
- * reachable from a turn in flight; the thread-facing `ThreadPhase` surfaces it
- * at the top level instead. */
-export type AgentActivity = TurnActivity | { type: "aborting" };
 /** The phase as one flat label, for logging and test assertions. */
 export function phaseLabel(phase: AgentPhase): string {
   return phase.type === "running" ? phase.activity.type : phase.type;
 }
+/** The live tool invocations, when tools are actually running. `undefined`
+ * covers both "not a tool-running phase" and "the invocations have settled";
+ * a caller that needs to tell those apart narrows `phase` itself. */
 
 /** The block currently being streamed, if a request is in flight. */
 export function phaseStreamingBlock(
@@ -111,24 +110,28 @@ export function phaseStreamingBlock(
     ? phase.activity.block
     : undefined;
 }
-/** The live tool invocations for a phase, when tools are running. */
 export function phaseActiveTools(
   phase: AgentPhase,
 ): ReadonlyMap<ToolRequestId, ActiveToolEntry> | undefined {
-  return phase.type === "running" && phase.activity.type === "running_tools"
-    ? phase.activity.activeTools
+  return phase.type === "running" &&
+    phase.activity.type === "running_tools" &&
+    phase.activity.tools.type === "running"
+    ? phase.activity.tools.activeTools
     : undefined;
 }
 export type AgentPhase =
   | { type: "idle" }
-  | { type: "running"; activity: AgentActivity }
+  | { type: "running"; activity: TurnActivity }
+  /** Unwinding: the tools have been told to stop and the history is being left
+   * well-formed. Only reachable from a turn in flight. */
+  | { type: "aborting" }
   /** Terminal for practical purposes: the model called `yield_to_parent` and
    * the supervisors accepted. */
   | {
       type: "yielded";
       response: string;
       value: YieldValue;
-      tornDown?: boolean;
+      tornDown: boolean;
     };
 
 export type EnvironmentConfig =
@@ -217,7 +220,7 @@ export class Agent {
   /** The provider-specific conversation. `Agent` owns the loop that drives it. */
   public manager: NativeInferenceManager;
   /** The turn loop's state, and the only thing callers observe about it. Only
-   * the loop writes it; callers read it through `getProviderStatus`. */
+   * the loop writes it; callers read it through `phase`. */
   private currentPhase: AgentPhase = { type: "idle" };
   get phase(): AgentPhase {
     return this.currentPhase;
@@ -226,13 +229,18 @@ export class Agent {
     this.currentPhase = phase;
     this.deps.onUpdate();
   }
-  /** The live tool entries, when tools are running. Written into by the
-   * executor and read by anything that has to reach a running tool. */
-  private clearActiveTools(): void {
+  /** Where the turn's tool invocations are. Written by the executor and read
+   * by anything that has to reach a running tool. Replaces the phase rather
+   * than mutating it, so `TurnActivity` stays a value. */
+  private setToolInvocationState(tools: ToolInvocationState): void {
     const phase = this.currentPhase;
-    if (phase.type === "running" && phase.activity.type === "running_tools") {
-      phase.activity.activeTools = new Map();
+    if (phase.type !== "running" || phase.activity.type !== "running_tools") {
+      return;
     }
+    this.setPhase({
+      type: "running",
+      activity: { ...phase.activity, tools },
+    });
   }
   private get activeTools():
     | ReadonlyMap<ToolRequestId, ActiveToolEntry>
@@ -383,10 +391,6 @@ export class Agent {
         }),
     });
     return agent;
-  }
-
-  getProviderStatus(): AgentPhase {
-    return this.currentPhase;
   }
 
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
@@ -560,7 +564,7 @@ export class Agent {
           type: "running_tools",
           requested,
           truncated: outcome.stopReason === "max_tokens",
-          activeTools: new Map(),
+          tools: { type: "pending" },
         },
       };
       this.deps.onUpdate();
@@ -640,7 +644,7 @@ export class Agent {
   /** The single terminal abort transition: leave the history well-formed and
    * mark why it stops here. */
   private finishTurnAbort(): TurnResult {
-    this.currentPhase = { type: "running", activity: { type: "aborting" } };
+    this.currentPhase = { type: "aborting" };
     this.deps.onUpdate();
     this.manager.finalize({ type: "aborted" });
     this.manager.appendUserMessage([
@@ -801,11 +805,12 @@ export class Agent {
       });
     }
 
-    const phase = this.currentPhase;
-    if (phase.type === "running" && phase.activity.type === "running_tools") {
-      phase.activity.activeTools = activeTools;
+    // An abort can land while the invocations are being created, before they
+    // are reachable from the phase; abort them here so none is left running.
+    if (this.abortRequested) {
+      for (const [, entry] of activeTools) entry.handle.abort();
     }
-    this.deps.onUpdate();
+    this.setToolInvocationState({ type: "running", activeTools });
 
     await Promise.all(
       [...activeTools].map(([id, entry]) =>
@@ -868,8 +873,7 @@ export class Agent {
     }
     // Nothing is running any more: `activeTools` means *live* invocations, and
     // the view switches from tool progress to results the moment it empties.
-    this.clearActiveTools();
-    this.deps.onUpdate();
+    this.setToolInvocationState({ type: "settled" });
 
     if (this.abortRequested) {
       return { type: "aborted", results };
@@ -1004,6 +1008,7 @@ export class Agent {
           type: "yielded",
           response: yieldResult,
           value: yieldValue,
+          tornDown: false,
         });
         this.settleYield(yieldValue);
         break;

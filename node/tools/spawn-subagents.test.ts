@@ -313,13 +313,13 @@ describe("yield behavior", () => {
       const childWrapper = findChildThread(driver.magenta.chat);
 
       await pollUntil(() => {
-        const mode = childWrapper.thread.core.getProviderStatus();
+        const mode = childWrapper.thread.core.phase;
         if (mode.type !== "yielded") {
           throw new Error("yieldedResponse not set yet");
         }
         return mode.response;
       });
-      const mode = childWrapper.thread.core.getProviderStatus();
+      const mode = childWrapper.thread.core.phase;
       expect(mode.type).toBe("yielded");
       if (mode.type === "yielded") {
         expect(mode.response).toBe("Task result: success");
@@ -402,7 +402,7 @@ describe("yield behavior", () => {
       });
 
       const mode = await pollUntil(() => {
-        const m = childWrapper.thread.core.getProviderStatus();
+        const m = childWrapper.thread.core.phase;
         if (m.type !== "yielded") {
           throw new Error("not yielded yet");
         }

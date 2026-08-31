@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentContext, AgentPhase } from "./agent.ts";
-import { phaseLabel } from "./agent.ts";
+import { phaseActiveTools, phaseLabel } from "./agent.ts";
 import type { ToolApplied } from "./capabilities/context-tracker.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
@@ -61,7 +61,8 @@ import { threadConversationLogPath } from "./utils/files.ts";
 describe("Thread.phase", () => {
   it("is idle with no result before anything is sent", () => {
     const { core } = createAgentWithMock();
-    expect(core.phase).toEqual({ type: "idle", lastResult: undefined });
+    expect(core.phase).toEqual({ type: "idle" });
+    expect(core.lastResult()).toBeUndefined();
   });
   it("is running/streaming during a turn and idle/completed after it", async () => {
     const { core, mockClient } = createAgentWithMock();
@@ -80,9 +81,10 @@ describe("Thread.phase", () => {
       if (core.phase.type === "idle") return true;
       throw new Error(`waiting for idle, currently: ${core.phase.type}`);
     });
-    expect(core.phase).toEqual({
-      type: "idle",
-      lastResult: { type: "completed", stopReason: "end_turn" },
+    expect(core.phase).toEqual({ type: "idle" });
+    expect(core.lastResult()).toEqual({
+      type: "completed",
+      stopReason: "end_turn",
     });
   });
   it("reports a failed submission as idle with the resubmit text", async () => {
@@ -94,11 +96,10 @@ describe("Thread.phase", () => {
       if (core.phase.type === "idle") return true;
       throw new Error(`waiting for idle, currently: ${core.phase.type}`);
     });
-    const phase = core.phase;
-    if (phase.type !== "idle") throw new Error("expected idle");
-    expect(phase.lastResult?.type).toBe("failed");
-    if (phase.lastResult?.type !== "failed") throw new Error("expected failed");
-    expect(phase.lastResult.error.message).toBe("provider failure");
+    expect(core.phase.type).toBe("idle");
+    const lastResult = core.lastResult();
+    if (lastResult?.type !== "failed") throw new Error("expected failed");
+    expect(lastResult.error.message).toBe("provider failure");
   });
 
   it("reports an aborted turn as idle with an aborted result", async () => {
@@ -111,10 +112,8 @@ describe("Thread.phase", () => {
       if (core.phase.type === "idle") return true;
       throw new Error(`waiting for idle, currently: ${core.phase.type}`);
     });
-    expect(core.phase).toEqual({
-      type: "idle",
-      lastResult: { type: "aborted" },
-    });
+    expect(core.phase).toEqual({ type: "idle" });
+    expect(core.lastResult()).toEqual({ type: "aborted" });
   });
 
   it("surfaces a structured yield as a structured result", async () => {
@@ -135,15 +134,13 @@ describe("Thread.phase", () => {
     );
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.getProviderStatus().type === "yielded") return true;
+      if (core.phase.type === "yielded") return true;
       throw new Error("waiting for yield");
     });
-    expect(core.phase).toEqual({
-      type: "idle",
-      lastResult: {
-        type: "yielded",
-        value: { type: "structured", value: { count: 3 } },
-      },
+    expect(core.phase.type).toBe("yielded");
+    expect(core.lastResult()).toEqual({
+      type: "yielded",
+      value: { type: "structured", value: { count: 3 } },
     });
   });
 
@@ -160,12 +157,13 @@ describe("Thread.phase", () => {
     );
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.getProviderStatus().type === "yielded") return true;
+      if (core.phase.type === "yielded") return true;
       throw new Error("waiting for yield");
     });
-    expect(core.phase).toEqual({
-      type: "idle",
-      lastResult: { type: "yielded", value: { type: "text", text: "done" } },
+    expect(core.phase.type).toBe("yielded");
+    expect(core.lastResult()).toEqual({
+      type: "yielded",
+      value: { type: "text", text: "done" },
     });
   });
 });
@@ -753,13 +751,13 @@ describe("Agent.handleProviderStopped", () => {
     // Agent should route to handleProviderStoppedWithToolUse,
     // which executes the yield tool, and maybeAutoRespond transitions to yielded mode
     await pollUntil(() => {
-      if (core.getProviderStatus().type === "yielded") return true;
+      if (core.phase.type === "yielded") return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${phaseLabel(core.getProviderStatus())}`,
+        `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
       );
     });
 
-    const yielded = core.getProviderStatus();
+    const yielded = core.phase;
     expect(yielded.type).toBe("yielded");
     if (yielded.type === "yielded") {
       expect(yielded.response).toBe("Here is the result of my work");
@@ -786,13 +784,13 @@ describe("Agent.handleProviderStopped", () => {
     stream.finishResponse("max_tokens");
 
     await pollUntil(() => {
-      if (core.getProviderStatus().type === "yielded") return true;
+      if (core.phase.type === "yielded") return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${phaseLabel(core.getProviderStatus())}`,
+        `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
       );
     });
 
-    const yielded = core.getProviderStatus();
+    const yielded = core.phase;
     expect(yielded.type).toBe("yielded");
     if (yielded.type === "yielded") {
       expect(JSON.parse(yielded.response)).toEqual({ count: 3 });
@@ -954,23 +952,53 @@ describe("Agent.abort on yielded thread", () => {
     stream.finishResponse("tool_use");
 
     await pollUntil(() => {
-      if (core.getProviderStatus().type === "yielded") return true;
+      if (core.phase.type === "yielded") return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${phaseLabel(core.getProviderStatus())}`,
+        `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
       );
     });
 
-    expect(core.getProviderStatus().type).toBe("yielded");
+    expect(core.phase.type).toBe("yielded");
 
     // Now abort — should be a no-op
     await core.abort();
 
     // Mode should still be yielded with the original response
-    const yielded = core.getProviderStatus();
+    const yielded = core.phase;
     expect(yielded.type).toBe("yielded");
     if (yielded.type === "yielded") {
       expect(yielded.response).toBe("Here is the result of my work");
     }
+  });
+
+  it("abortAndWait leaves the yield in place", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    void core.send([{ type: "user", text: "do the task" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "tool-yield-2" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      {
+        result: "all done",
+      },
+    );
+    stream.finishResponse("tool_use");
+    await pollUntil(() => {
+      if (core.phase.type === "yielded") return true;
+      throw new Error(
+        `waiting for yielded, currently: ${phaseLabel(core.phase)}`,
+      );
+    });
+    // `abort()` short-circuits on a yielded agent, but the preempting-send path
+    // calls `abortAndWait` directly: it must not erase the yield either.
+    await core.agent.abortAndWait();
+    expect(core.phase.type).toBe("yielded");
+    expect(core.lastResult()).toEqual({
+      type: "yielded",
+      value: { type: "text", text: "all done" },
+    });
   });
 });
 
@@ -1031,9 +1059,9 @@ describe("Agent.abort appends user abort message", () => {
 
     // Wait for tool_use mode
     await pollUntil(() => {
-      if (phaseLabel(core.getProviderStatus()) === "running_tools") return true;
+      if (phaseLabel(core.phase) === "running_tools") return true;
       throw new Error(
-        `waiting for tool_use mode, currently: ${phaseLabel(core.getProviderStatus())}`,
+        `waiting for tool_use mode, currently: ${phaseLabel(core.phase)}`,
       );
     });
 
@@ -1706,9 +1734,9 @@ describe("AutoCompactSupervisor integration", () => {
     });
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (phaseLabel(core.getProviderStatus()) === "running_tools") return true;
+      if (phaseLabel(core.phase) === "running_tools") return true;
       throw new Error(
-        `waiting for tool_use mode, currently: ${phaseLabel(core.getProviderStatus())}`,
+        `waiting for tool_use mode, currently: ${phaseLabel(core.phase)}`,
       );
     });
     const abortPromise = core.abort();
@@ -1749,9 +1777,9 @@ describe("AutoCompactSupervisor integration", () => {
     );
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (core.getProviderStatus().type === "yielded") return true;
+      if (core.phase.type === "yielded") return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${phaseLabel(core.getProviderStatus())}`,
+        `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
       );
     });
     expect(events).toEqual(["request", "results:1"]);
@@ -3114,6 +3142,74 @@ describe("Agent turn loop", () => {
       texts.filter((text) => text.includes("aborted the previous")),
     ).toHaveLength(1);
     expect(mockClient.streams).toHaveLength(1);
+  });
+
+  it("clears the live invocations before the results land in the log", async () => {
+    const snapshots: { hasActive: boolean; results: number }[] = [];
+    const { agent, mockClient } = createTestAgent({
+      onUpdate: () => {
+        snapshots.push({
+          hasActive: phaseActiveTools(agent.phase) !== undefined,
+          results: agent
+            .getProviderMessages()
+            .flatMap((m) => m.content)
+            .filter((c) => c.type === "tool_result").length,
+        });
+      },
+    });
+    const turn = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/a.txt" }],
+    });
+    stream.finishResponse("tool_use");
+    const second = await awaitNextStream(mockClient, stream);
+    second.finishResponse("end_turn");
+    await turn;
+    // The view switches from tool progress to results the moment the map
+    // empties, so no frame may show both.
+    expect(snapshots.filter((s) => s.hasActive && s.results > 0)).toHaveLength(
+      0,
+    );
+    expect(snapshots.some((s) => s.hasActive)).toBe(true);
+  });
+
+  it("aborts the live invocations when the abort lands while tools run", async () => {
+    let resolveStat!: () => void;
+    const statPromise = new Promise<{ mtimeMs: number; size: number }>(
+      (resolve) => {
+        resolveStat = () => resolve({ mtimeMs: 0, size: 100 });
+      },
+    );
+    const { agent, mockClient } = createTestAgent({
+      context: {
+        fileIO: {
+          readFile: async () => "file contents",
+          writeFile: async () => {},
+          fileExists: async () => true,
+          stat: async () => statPromise,
+        } as unknown as AgentContext["fileIO"],
+      },
+    });
+    const turn = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/a.txt" }],
+    });
+    stream.finishResponse("tool_use");
+    const active = await pollUntil(() => {
+      const tools = phaseActiveTools(agent.phase);
+      if (!tools?.size) throw new Error("waiting for live invocations");
+      return tools;
+    });
+    const abortSpies = [...active.values()].map((entry) =>
+      vi.spyOn(entry.handle, "abort"),
+    );
+    const abortPromise = agent.abortAndWait();
+    resolveStat();
+    await abortPromise;
+    for (const spy of abortSpies) expect(spy).toHaveBeenCalled();
+    expect(await turn).toEqual({ type: "aborted" });
   });
 
   it("a failed request finalizes the log and fails the turn", async () => {

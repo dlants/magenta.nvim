@@ -39,7 +39,6 @@ import type {
   SendOptions,
   SendResult,
   ThreadHooks,
-  ThreadPhase,
   ThreadResult,
   ThreadSendResult,
 } from "./thread-api.ts";
@@ -213,23 +212,16 @@ export class Thread {
     return this.agent.manager;
   }
 
-  /** Derived on read rather than stored: everything in `TurnActivity` moves
-   * between renders, so a mirror would be stale by construction. */
-  get phase(): ThreadPhase {
-    const phase = this.agent.phase;
-    if (phase.type === "running") {
-      // `aborting` is an activity on the agent but a top-level phase here: an
-      // unwinding thread is not doing work a consumer can render.
-      return phase.activity.type === "aborting"
-        ? { type: "aborting" }
-        : { type: "running", activity: phase.activity };
-    }
-    // idle and yielded are both at rest; how the last submission ended is what
-    // distinguishes them, and that travels on `lastResult`.
-    return { type: "idle", lastResult: this.lastSendResult() };
+  /** The agent's own phase — there is one representation of this state, and
+   * the thread does not re-encode it. How the last submission ended travels
+   * separately, on `lastResult()`. */
+  get phase(): AgentPhase {
+    return this.agent.phase;
   }
 
-  private lastSendResult(): SendResult | undefined {
+  /** A render-only view of how the most recent submission ended. Nothing may
+   * branch on it for control flow. */
+  lastResult(): SendResult | undefined {
     const state = this.state;
     const phase = this.agent.phase;
     if (phase.type === "yielded") {
@@ -269,7 +261,7 @@ export class Thread {
   private handleUpdate(): void {
     if (this.destroyed) return;
     this.threadLogger.record(
-      this.phase.type === "idle" ? "at-rest" : "streaming",
+      this.phase.type === "running" ? "streaming" : "at-rest",
     );
     this.callbacks.onUpdate();
   }
@@ -284,10 +276,6 @@ export class Thread {
 
   getToolSpecs(): ProviderToolSpec[] {
     return this.agent.getToolSpecs();
-  }
-
-  getProviderStatus(): AgentPhase {
-    return this.agent.getProviderStatus();
   }
 
   getProviderMessages(): ReadonlyArray<ProviderMessage> {

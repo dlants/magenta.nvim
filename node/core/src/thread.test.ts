@@ -196,10 +196,8 @@ describe("deferred submissions", () => {
     );
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (phaseLabel(core.getProviderStatus()) === "running_tools") return true;
-      throw new Error(
-        `waiting for tool_use, got ${phaseLabel(core.getProviderStatus())}`,
-      );
+      if (phaseLabel(core.phase) === "running_tools") return true;
+      throw new Error(`waiting for tool_use, got ${phaseLabel(core.phase)}`);
     });
     expect(
       await core.submit(pendingMessage("also check this"), "async"),
@@ -308,10 +306,8 @@ describe("deferred submissions", () => {
     );
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (phaseLabel(core.getProviderStatus()) === "running_tools") return true;
-      throw new Error(
-        `waiting for tool_use, got ${phaseLabel(core.getProviderStatus())}`,
-      );
+      if (phaseLabel(core.phase) === "running_tools") return true;
+      throw new Error(`waiting for tool_use, got ${phaseLabel(core.phase)}`);
     });
     expect(
       await core.submit(pendingMessage("@compact wrap it up"), "async"),

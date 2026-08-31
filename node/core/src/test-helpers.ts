@@ -4,7 +4,6 @@ import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
   Agent,
-  type AgentActivity,
   type AgentContext,
   type AgentPhase,
   type ThreadState,
@@ -40,7 +39,7 @@ import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import { Thread } from "./thread.ts";
-import type { AgentHooks } from "./thread-api.ts";
+import type { AgentHooks, TurnActivity } from "./thread-api.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import { pollUntil } from "./utils/async.ts";
@@ -68,7 +67,7 @@ export const defaultAnthropicOptions: AnthropicRunnerOptions = {
  * nesting itself is asserted directly in `agent.test.ts`. */
 export function flatPhase(agent: {
   phase: AgentPhase;
-}): AgentActivity | Exclude<AgentPhase, { type: "running" }> {
+}): TurnActivity | Exclude<AgentPhase, { type: "running" }> {
   const phase = agent.phase;
   return phase.type === "running" ? phase.activity : phase;
 }

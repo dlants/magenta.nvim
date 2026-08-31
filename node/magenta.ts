@@ -334,10 +334,10 @@ export class Magenta {
           return "";
         }
         const phase = wrapper.thread.core.phase;
-        if (phase.type !== "idle") {
+        if (phase.type === "running" || phase.type === "aborting") {
           return "⏳";
         }
-        return phase.lastResult?.type === "failed" ? "✗" : "✓";
+        return wrapper.thread.core.lastResult()?.type === "failed" ? "✗" : "✓";
       },
       this.bufferManager,
       () => this.getActiveKey(),

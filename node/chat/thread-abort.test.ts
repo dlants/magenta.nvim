@@ -35,7 +35,7 @@ it("forks a thread while streaming without aborting source", async () => {
     // Per the plan, fork no longer aborts the source. Confirm the streaming
     // request is still live and the source agent is still streaming.
     expect(streamingRequest.aborted).toBe(false);
-    expect(phaseLabel(originalThread.getProviderStatus())).toBe("streaming");
+    expect(phaseLabel(originalThread.phase)).toBe("streaming");
 
     // Wait for the new thread to become active
     await pollUntil(() => {
@@ -107,9 +107,7 @@ it("forks a thread while waiting for tool use without aborting source", async ()
     const originalThreadId = originalThread.id;
 
     // Verify we're in tool_use mode
-    expect(phaseLabel(originalThread.core.getProviderStatus())).toBe(
-      "running_tools",
-    );
+    expect(phaseLabel(originalThread.core.phase)).toBe("running_tools");
 
     // Fork by pressing F on the assistant's tool-use message text.
     await driver.pressOnDisplayMessage("I'll read your secret file.", "F");
@@ -141,12 +139,8 @@ it("forks a thread while waiting for tool use without aborting source", async ()
 
     // Per the plan, fork no longer aborts the source. The original thread
     // is still in tool_use mode awaiting approval.
-    expect(phaseLabel(originalThread.core.getProviderStatus())).toBe(
-      "running_tools",
-    );
-    expect(phaseLabel(originalThread.getProviderStatus())).toBe(
-      "running_tools",
-    );
+    expect(phaseLabel(originalThread.core.phase)).toBe("running_tools");
+    expect(phaseLabel(originalThread.phase)).toBe("running_tools");
   });
 });
 

@@ -600,7 +600,7 @@ export class NvimThread {
     if (this.core.phase.type === "idle") {
       return undefined;
     }
-    const block = phaseStreamingBlock(this.core.getProviderStatus());
+    const block = phaseStreamingBlock(this.core.phase);
     if (block?.type === "tool_use" && block.name === "reply") {
       const replies: { [id: CommentId]: string } = {};
       for (const reply of extractPartialReplies(block.inputJson)) {
@@ -737,7 +737,7 @@ export class NvimThread {
     // submitted back to the agent (e.g. mid tool_use turn while other tools
     // are still running). The rendering layer needs these to display custom
     // result summaries as soon as the tool completes.
-    const active = phaseActiveTools(this.core.getProviderStatus());
+    const active = phaseActiveTools(this.core.phase);
     if (active) {
       for (const entry of active.values()) {
         if (entry.result && !next.has(entry.request.id)) {
@@ -948,8 +948,8 @@ export class NvimThread {
     this.fileSupervisor.destroy();
   }
 
-  getProviderStatus(): AgentPhase {
-    return this.core.getProviderStatus();
+  get phase(): AgentPhase {
+    return this.core.phase;
   }
 
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
@@ -1024,9 +1024,7 @@ export class NvimThread {
       }
 
       case "abort": {
-        for (const entry of phaseActiveTools(
-          this.core.getProviderStatus(),
-        )?.values() ?? []) {
+        for (const entry of phaseActiveTools(this.core.phase)?.values() ?? []) {
           entry.handle.abort();
         }
         this.abortAndWait().catch((e: Error) => {

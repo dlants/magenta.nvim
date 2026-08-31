@@ -27,8 +27,7 @@ export type YieldValue =
   /** conforms to the `yieldSchema` this thread was constructed with */
   | { type: "structured"; value: unknown };
 
-/** The intra-turn detail, surfaced on `ThreadPhase` so consumers never read
- * the runner's phase themselves. It is a read-through projection of the
+/** The intra-turn detail of `AgentPhase.running`. It is a read-through projection of the
  * runner rather than a stored mirror: everything in it (the streaming block,
  * the retry countdown, the active tool list) moves between renders, so a copy
  * would be stale by construction. */
@@ -49,23 +48,20 @@ export type TurnActivity =
       requested: ReadonlyArray<RequestedTool>;
       /** the turn was cut short by the output token limit mid-tool-use */
       truncated: boolean;
-      /** The live tool invocations, keyed by request id. Malformed requests
-       * have no entry. */
-      activeTools: ReadonlyMap<ToolRequestId, ActiveToolEntry>;
+      /** Where the invocations are: not created yet, live, or settled (their
+       * results are in the log). Keeping the three apart means an empty map is
+       * never overloaded to mean "done". */
+      tools: ToolInvocationState;
     };
-
-/** Where a thread is right now. Observational, for rendering — outcomes travel
- * by promise, which is why there is no `yielded` variant: a thread that
- * yielded is `idle` with a `yielded` `lastResult`. */
-export type ThreadPhase =
+/** Malformed requests never become an `activeTools` entry, so the map can be
+ * smaller than `requested`. */
+export type ToolInvocationState =
+  | { type: "pending" }
   | {
-      type: "idle";
-      /** A render-only copy of the most recent `SendResult`. Nothing may
-       * branch on it for control flow. */
-      lastResult: SendResult | undefined;
+      type: "running";
+      activeTools: ReadonlyMap<ToolRequestId, ActiveToolEntry>;
     }
-  | { type: "running"; activity: TurnActivity }
-  | { type: "aborting" };
+  | { type: "settled" };
 
 export type SendOptions = {
   /** async: run after the current turn. next: run at the next stop.

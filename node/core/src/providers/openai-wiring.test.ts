@@ -123,12 +123,10 @@ describe("OpenAI provider wiring", () => {
     stream.finishResponse();
 
     await pollUntil(() => {
-      if (core.getProviderStatus().type === "yielded") return true;
-      throw new Error(
-        `waiting for yielded, got ${phaseLabel(core.getProviderStatus())}`,
-      );
+      if (core.phase.type === "yielded") return true;
+      throw new Error(`waiting for yielded, got ${phaseLabel(core.phase)}`);
     });
-    const yielded = core.getProviderStatus();
+    const yielded = core.phase;
     expect(yielded.type).toBe("yielded");
     if (yielded.type === "yielded") {
       expect(yielded.response).toBe("all done");

@@ -116,14 +116,14 @@ export const renderStatus = (
       switch (activity.type) {
         case "running_tools":
           return d`Executing tools...`;
-        case "aborting":
-          return d`Aborting...`;
         case "streaming":
           return renderStreaming(activity);
         default:
           return assertUnreachable(activity);
       }
     }
+    case "aborting":
+      return d`Aborting...`;
     case "idle":
       return renderTurnResult(lastTurnResult, latestUsage);
     default:
@@ -455,7 +455,7 @@ export const view: View<{
   );
 
   const messages = thread.getProviderMessages();
-  const agentPhase = thread.getProviderStatus();
+  const agentPhase = thread.phase;
 
   const pendingComments = thread.comments?.store.getPendingEntries() ?? [];
   const pendingCommentsNode = pendingComments.length
@@ -932,11 +932,12 @@ function renderMessageContentBlock(
       };
 
       // Check if tool is active (still running)
-      const phase = thread.getProviderStatus();
+      const phase = thread.phase;
       const activeEntry =
         phase.type === "running" &&
         phase.activity.type === "running_tools" &&
-        phase.activity.activeTools.get(request.id);
+        phase.activity.tools.type === "running" &&
+        phase.activity.tools.activeTools.get(request.id);
 
       const isActive = !!activeEntry;
       const abortBinding = isActive
@@ -1206,7 +1207,7 @@ export function findToolResult(
 }
 
 function renderStreamingBlock(thread: NvimThread): string | VDOMNode {
-  const block = phaseStreamingBlock(thread.getProviderStatus());
+  const block = phaseStreamingBlock(thread.phase);
   if (!block) return d``;
 
   switch (block.type) {

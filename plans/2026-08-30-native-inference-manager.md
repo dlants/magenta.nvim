@@ -508,6 +508,32 @@ Notes and deviations:
   through a cast rather than driving a whole yield plus teardown; it used to
   assign `state.mode` the same way.
 
+### Review follow-up (stage 4)
+
+- One phase union, not two. `ThreadPhase` is deleted: `Thread.phase` (and the
+  root's `NvimThread.phase`) returns `AgentPhase` directly, and how the last
+  submission ended moved to `Thread.lastResult()`. `getProviderStatus()` is gone
+  from `Agent`, `Thread` and `NvimThread` — there is one accessor, so a caller
+  can no longer check `"yielded"` against a type where it is unrepresentable.
+- `aborting` is a peer of `running` on `AgentPhase` rather than an activity, so
+  `AgentActivity` and the lift in `Thread.phase` are both gone. `AgentPhase.running`
+  carries a plain `TurnActivity`.
+- `TurnActivity.running_tools` no longer holds a map that is overloaded to mean
+  three things. It carries `tools: ToolInvocationState`
+  (`pending | running{activeTools} | settled`), so "not created yet" and "all
+  settled" are distinct. `phaseActiveTools` returns the map only in `running`.
+  `Agent.setToolInvocationState` replaces the phase through `setPhase` rather
+  than mutating the activity in place, so `TurnActivity` stays a value.
+- `AgentPhase.yielded.tornDown` is a required boolean.
+- `Agent.executeTools` aborts the invocations it just created if an abort landed
+  while it was creating them, rather than relying on the phase write to make
+  them reachable.
+- New tests in `agent.test.ts`: `abortAndWait` on a yielded agent leaves the
+  yield in place (the `abort()` entry point short-circuits, so only this one
+  reaches the guard); aborting while tools run calls `abort()` on every live
+  handle; and no update frame ever shows live invocations *and* tool results
+  together, which is the invariant the root's `activeToolResults` merge relies on.
+
 - Goal: one state representation on `Agent`. `ThreadMode` is deleted; `running_tools` carries `activeTools`; `yielded` is a phase.
 - Tests:
   - The complexity here is in the root layer's reads, so verify there: `thread-view.ts` renders active tools from `mode.activeTools` (`:944`) and `renderStatus` branches on both (`:96`); `chat.ts` gates on `mode.yielded` in three places (`:264`, `:966`, `:1533`).
