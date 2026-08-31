@@ -39,18 +39,10 @@ import {
   type AgentInput,
   type InferenceOptions,
   type NativeInferenceManager,
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type Provider,
-  type ProviderMessage,
-  type ProviderMessageContent,
-  type ProviderMetadata,
-  type ProviderServerToolUseBlockStart,
-  type ProviderStreamEvent,
   type ProviderToolSpec,
-  type ProviderToolUseBlockStart,
   type ProviderToolUseRequest,
   type ProviderToolUseResponse,
-  type ProviderWebSearchCitation,
   reasoningConfig,
   type StopReason,
   type Usage,
@@ -191,254 +183,48 @@ function toOpenAITool(spec: ProviderToolSpec): OpenAI.Responses.Tool {
 }
 
 // ---------------------------------------------------------------------------
-// ProviderMessage[] -> Responses request
+// AgentInput -> Responses input items
 // ---------------------------------------------------------------------------
 
-type ReasoningItem = OpenAI.Responses.ResponseReasoningItem;
-
-function itemIdOf(content: {
-  providerMetadata?: ProviderMetadata | undefined;
-}): string | undefined {
-  return content.providerMetadata?.provider === "openai"
-    ? content.providerMetadata.itemId
-    : undefined;
-}
-
-export function convertProviderMessagesToInput(
-  messages: ProviderMessage[],
+/** The one-shot conversion of caller-supplied content into wire items. Used by
+ * `appendUserMessage` and `forceToolUse`; nothing converts a `ProviderMessage`
+ * back into an item, by design. */
+export function convertInputToNativeItems(
+  content: ReadonlyArray<AgentInput>,
 ): OpenAI.Responses.ResponseInputItem[] {
-  const input: OpenAI.Responses.ResponseInputItem[] = [];
-
-  let pendingUser: OpenAI.Responses.ResponseInputItem.Message | undefined;
-
-  const flushUser = () => {
-    if (pendingUser && pendingUser.content.length > 0) {
-      input.push(pendingUser);
+  const parts: OpenAI.Responses.ResponseInputContent[] = [];
+  for (const item of content) {
+    switch (item.type) {
+      case "text":
+        if (!item.text.trim()) break;
+        parts.push({ type: "input_text", text: item.text });
+        break;
+      case "image":
+        parts.push({
+          type: "input_image",
+          detail: "auto",
+          image_url: `data:${item.source.media_type};base64,${item.source.data}`,
+        });
+        break;
+      case "document":
+        parts.push({
+          type: "input_file",
+          filename: item.title || "untitled.pdf",
+          file_data: `data:${item.source.media_type};base64,${item.source.data}`,
+        });
+        break;
+      default:
+        assertUnreachable(item);
     }
-    pendingUser = undefined;
-  };
-
-  const pushUserContent = (content: OpenAI.Responses.ResponseInputContent) => {
-    if (!pendingUser) {
-      pendingUser = { type: "message", role: "user", content: [] };
-    }
-    pendingUser.content.push(content);
-  };
-
-  const pushItem = (item: OpenAI.Responses.ResponseInputItem) => {
-    flushUser();
-    input.push(item);
-  };
-
-  for (const message of messages) {
-    // Reasoning summary parts of the same item must coalesce back into the
-    // single item the server sent, keyed by item id.
-    const reasoningItems: Record<string, ReasoningItem> = {};
-
-    for (const content of message.content) {
-      switch (content.type) {
-        case "text": {
-          if (!content.text.trim()) break;
-          if (message.role === "user") {
-            pushUserContent({ type: "input_text", text: content.text });
-            break;
-          }
-
-          const annotations: OpenAI.Responses.ResponseOutputText.URLCitation[] =
-            (content.citations || []).map((c) => ({
-              type: "url_citation",
-              start_index: 0,
-              end_index: 0,
-              title: c.title,
-              url: c.url,
-            }));
-
-          const itemId = itemIdOf(content);
-          if (itemId) {
-            pushItem({
-              type: "message",
-              id: itemId,
-              role: "assistant",
-              status: "completed",
-              content: [
-                { type: "output_text", text: content.text, annotations },
-              ],
-            } as OpenAI.Responses.ResponseOutputMessage);
-          } else {
-            // History from another provider (or a compacted thread) has no
-            // item id; an easy message is still accepted.
-            pushItem({ role: "assistant", content: content.text });
-          }
-          break;
-        }
-
-        case "system_reminder":
-        case "system_info":
-        case "comment_update":
-        case "context_update":
-        case "fork_notification":
-          if (message.role === "user") {
-            pushUserContent({ type: "input_text", text: content.text });
-          } else {
-            pushItem({ role: "assistant", content: content.text });
-          }
-          break;
-
-        case "image":
-          pushUserContent({
-            type: "input_image",
-            detail: "auto",
-            image_url: `data:${content.source.media_type};base64,${content.source.data}`,
-          });
-          break;
-
-        case "document":
-          pushUserContent({
-            type: "input_file",
-            filename: content.title || "untitled.pdf",
-            file_data: `data:${content.source.media_type};base64,${content.source.data}`,
-          });
-          break;
-
-        case "tool_use":
-          pushItem({
-            type: "function_call",
-            call_id: content.id,
-            name: content.name,
-            arguments: JSON.stringify(
-              content.request.status === "ok"
-                ? content.request.value.input
-                : content.request.rawRequest,
-            ),
-          });
-          break;
-
-        case "server_tool_use": {
-          const itemId = itemIdOf(content) ?? content.id;
-          // Dropping this item makes the model re-run the search, which costs
-          // far more than echoing it back.
-          pushItem({
-            type: "web_search_call",
-            id: itemId,
-            status: "completed",
-            action: { type: "search", query: content.input.query },
-          } as OpenAI.Responses.ResponseInputItem);
-          break;
-        }
-
-        case "web_search_tool_result":
-          // Only produced by Anthropic histories: OpenAI carries results as
-          // annotations on the following message, so fold them into text.
-          if (Array.isArray(content.content)) {
-            const results = content.content
-              .map(
-                (result) =>
-                  `Title: ${result.title}\nURL: ${result.url}\nContent: ${result.encrypted_content}`,
-              )
-              .join("\n\n");
-            pushUserContent({
-              type: "input_text",
-              text: `Web search results:\n\n${results}`,
-            });
-          }
-          break;
-
-        case "tool_result":
-          if (content.result.status === "ok") {
-            const textParts: string[] = [];
-            const trailing: OpenAI.Responses.ResponseInputContent[] = [];
-            for (const resultContent of content.result.value) {
-              switch (resultContent.type) {
-                case "text":
-                  textParts.push(resultContent.text);
-                  break;
-                case "image":
-                  trailing.push({
-                    type: "input_image",
-                    detail: "auto",
-                    image_url: `data:${resultContent.source.media_type};base64,${resultContent.source.data}`,
-                  });
-                  break;
-                case "document":
-                  trailing.push({
-                    type: "input_file",
-                    filename: resultContent.title || "untitled.pdf",
-                    file_data: `data:${resultContent.source.media_type};base64,${resultContent.source.data}`,
-                  });
-                  break;
-                default:
-                  assertUnreachable(resultContent);
-              }
-            }
-            pushItem({
-              type: "function_call_output",
-              call_id: content.id,
-              output:
-                textParts.join("\n") ||
-                (trailing.length ? "Attachment follows:" : ""),
-            });
-            for (const attachment of trailing) {
-              pushUserContent(attachment);
-            }
-          } else {
-            pushItem({
-              type: "function_call_output",
-              call_id: content.id,
-              output: content.result.error,
-            });
-          }
-          break;
-
-        case "thinking":
-        case "redacted_thinking": {
-          const itemId = itemIdOf(content);
-          // Reasoning items cannot be reconstructed without their server id,
-          // and the backend tolerates their absence, so drop rather than throw.
-          if (!itemId) break;
-
-          let item = reasoningItems[itemId];
-          if (!item) {
-            item = {
-              type: "reasoning",
-              id: itemId,
-              encrypted_content: null,
-              summary: [],
-            };
-            reasoningItems[itemId] = item;
-            pushItem(item);
-          }
-
-          if (content.type === "thinking") {
-            if (content.thinking.trim()) {
-              item.summary.push({
-                type: "summary_text",
-                text: content.thinking,
-              });
-            }
-            if (content.signature) {
-              item.encrypted_content = content.signature;
-            }
-          } else {
-            item.encrypted_content = content.data;
-          }
-          break;
-        }
-
-        default:
-          assertUnreachable(content);
-      }
-    }
-
-    flushUser();
   }
-
-  flushUser();
-  return input;
+  return parts.length
+    ? [{ type: "message", role: "user", content: parts }]
+    : [];
 }
 
 export type CreateStreamParametersOptions = {
   model: string;
-  messages: ProviderMessage[];
+  input: OpenAI.Responses.ResponseInputItem[];
   tools: ProviderToolSpec[];
   systemPrompt?: string | undefined;
   promptCacheKey?: string | undefined;
@@ -469,7 +255,7 @@ function toOpenAIReasoningEffort(
 
 export function createStreamParameters({
   model,
-  messages,
+  input,
   tools,
   systemPrompt,
   includeWebSearch,
@@ -488,7 +274,7 @@ export function createStreamParameters({
   const params: OpenAI.Responses.ResponseCreateParamsStreaming = {
     model,
     instructions: systemPrompt || DEFAULT_OPENAI_SYSTEM_PROMPT,
-    input: convertProviderMessagesToInput(messages),
+    input,
     tools: openaiTools,
     parallel_tool_calls: true,
     store: false,
@@ -527,9 +313,8 @@ export function createStreamParameters({
 // Responses stream events -> ProviderStreamEvent
 // ---------------------------------------------------------------------------
 
-/** The installed SDK (5.23.2) omits `action` from `ResponseFunctionWebSearch`
- * and types stream annotations as `unknown`, though the API sends both. These
- * two helpers are the only places those payloads are narrowed. */
+/** The installed SDK (5.23.2) omits `action` from `ResponseFunctionWebSearch`,
+ * though the API sends it. This is the only place that payload is narrowed. */
 type WebSearchAction =
   | OpenAI.Responses.ResponseFunctionWebSearch.Search
   | OpenAI.Responses.ResponseFunctionWebSearch.OpenPage
@@ -541,187 +326,6 @@ export function webSearchQuery(item: {
 }): string | undefined {
   const { action } = item;
   return action?.type === "search" ? action.query : undefined;
-}
-
-function urlCitationOf(
-  annotation: unknown,
-): OpenAI.Responses.ResponseOutputText.URLCitation | undefined {
-  const candidate = annotation as
-    | Partial<OpenAI.Responses.ResponseOutputText.URLCitation>
-    | null
-    | undefined;
-  if (candidate?.type !== "url_citation") return undefined;
-  if (
-    typeof candidate.url !== "string" ||
-    typeof candidate.title !== "string"
-  ) {
-    return undefined;
-  }
-  return candidate as OpenAI.Responses.ResponseOutputText.URLCitation;
-}
-
-function withItemId(itemId: string | undefined) {
-  return itemId
-    ? { providerMetadata: { provider: "openai", itemId } as ProviderMetadata }
-    : {};
-}
-
-/** Translate one native Responses event into zero or more provider stream
- * events. Blocks are keyed by `output_index`; reasoning summary parts are
- * indexed independently (`summary_index`) and accumulate into the single
- * thinking block opened for their item. */
-export function mapResponseStreamEvent(
-  event: OpenAI.Responses.ResponseStreamEvent,
-): ProviderStreamEvent[] {
-  switch (event.type) {
-    case "response.output_item.added":
-      switch (event.item.type) {
-        case "message":
-          return [
-            {
-              type: "content_block_start",
-              index: event.output_index,
-              content_block: { type: "text", text: "", citations: null },
-              ...withItemId(event.item.id),
-            },
-          ];
-        case "function_call":
-          return [
-            {
-              type: "content_block_start",
-              index: event.output_index,
-              content_block: {
-                type: "tool_use",
-                id: event.item.call_id,
-                name: event.item.name,
-                input: {},
-              } satisfies ProviderToolUseBlockStart,
-              ...withItemId(event.item.id),
-            },
-          ];
-        case "web_search_call":
-          return [
-            {
-              type: "content_block_start",
-              index: event.output_index,
-              content_block: {
-                type: "server_tool_use",
-                id: event.item.id,
-                name: "web_search",
-                input: {},
-              } satisfies ProviderServerToolUseBlockStart,
-              ...withItemId(event.item.id),
-            },
-          ];
-        case "reasoning":
-          return [
-            {
-              type: "content_block_start",
-              index: event.output_index,
-              content_block: { type: "thinking", thinking: "", signature: "" },
-              ...withItemId(event.item.id),
-            },
-          ];
-        default:
-          return [];
-      }
-
-    case "response.output_text.delta":
-      return [
-        {
-          type: "content_block_delta",
-          index: event.output_index,
-          delta: { type: "text_delta", text: event.delta },
-        },
-      ];
-
-    case "response.function_call_arguments.delta":
-      return [
-        {
-          type: "content_block_delta",
-          index: event.output_index,
-          delta: { type: "input_json_delta", partial_json: event.delta },
-        },
-      ];
-
-    case "response.reasoning_summary_part.added":
-      // A second part continues the same block; separate it visually rather
-      // than opening a new one.
-      return event.summary_index > 0
-        ? [
-            {
-              type: "content_block_delta",
-              index: event.output_index,
-              delta: { type: "thinking_delta", thinking: "\n\n" },
-            },
-          ]
-        : [];
-
-    case "response.reasoning_summary_text.delta":
-      return [
-        {
-          type: "content_block_delta",
-          index: event.output_index,
-          delta: { type: "thinking_delta", thinking: event.delta },
-        },
-      ];
-
-    case "response.output_text.annotation.added": {
-      const annotation = urlCitationOf(event.annotation);
-      if (!annotation) return [];
-      return [
-        {
-          type: "content_block_delta",
-          index: event.output_index,
-          delta: {
-            type: "citations_delta",
-            citation: {
-              type: "web_search_result_location",
-              cited_text: "",
-              encrypted_index: "",
-              title: annotation.title,
-              url: annotation.url,
-            },
-          },
-        },
-      ];
-    }
-
-    case "response.output_item.done": {
-      const events: ProviderStreamEvent[] = [];
-      if (event.item.type === "reasoning") {
-        // encrypted_content only exists on the completed item; carry it in the
-        // thinking block's signature so it round-trips.
-        if (event.item.encrypted_content) {
-          events.push({
-            type: "content_block_delta",
-            index: event.output_index,
-            delta: {
-              type: "signature_delta",
-              signature: event.item.encrypted_content,
-            },
-          });
-        }
-      } else if (event.item.type === "web_search_call") {
-        const query = webSearchQuery(event.item);
-        if (query !== undefined) {
-          events.push({
-            type: "content_block_delta",
-            index: event.output_index,
-            delta: {
-              type: "input_json_delta",
-              partial_json: JSON.stringify({ query }),
-            },
-          });
-        }
-      }
-      events.push({ type: "content_block_stop", index: event.output_index });
-      return events;
-    }
-
-    default:
-      return [];
-  }
 }
 
 export function usageFromResponse(response: OpenAI.Responses.Response): Usage {
@@ -737,93 +341,6 @@ export function usageFromResponse(response: OpenAI.Responses.Response): Usage {
     usage.cacheHits = cached;
   }
   return usage;
-}
-
-// ---------------------------------------------------------------------------
-// Completed output items -> ProviderMessageContent (used for round-tripping)
-// ---------------------------------------------------------------------------
-
-export function convertResponseOutputToProviderContent(
-  validateInput: ValidateInput,
-  items: OpenAI.Responses.ResponseOutputItem[],
-): ProviderMessageContent[] {
-  const content: ProviderMessageContent[] = [];
-
-  for (const item of items) {
-    switch (item.type) {
-      case "message":
-        for (const part of item.content) {
-          if (part.type !== "output_text") continue;
-          const citations: ProviderWebSearchCitation[] = (
-            part.annotations ?? []
-          )
-            .filter(
-              (a): a is OpenAI.Responses.ResponseOutputText.URLCitation =>
-                a.type === "url_citation",
-            )
-            .map((a) => ({
-              type: "web_search_citation",
-              cited_text: "",
-              encrypted_index: "",
-              title: a.title,
-              url: a.url,
-            }));
-          content.push({
-            type: "text",
-            text: part.text,
-            ...(citations.length ? { citations } : {}),
-            providerMetadata: { provider: "openai", itemId: item.id },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          });
-        }
-        break;
-
-      case "reasoning":
-        content.push({
-          type: "thinking",
-          thinking: item.summary.map((s) => s.text).join("\n\n"),
-          ...(item.encrypted_content
-            ? { signature: item.encrypted_content }
-            : {}),
-          providerMetadata: { provider: "openai", itemId: item.id },
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        });
-        break;
-
-      case "function_call": {
-        content.push({
-          type: "tool_use",
-          id: item.call_id as ToolRequestId,
-          name: item.name as ToolName,
-          request: parseToolRequest(validateInput, item),
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        });
-        break;
-      }
-
-      case "web_search_call": {
-        // Only `search` actions carry a query; `open_page` / `find` have no
-        // representation in ProviderServerToolUseContent, so they are dropped.
-        const query = webSearchQuery(item);
-        if (query !== undefined) {
-          content.push({
-            type: "server_tool_use",
-            id: item.id,
-            name: "web_search",
-            input: { query },
-            providerMetadata: { provider: "openai", itemId: item.id },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          });
-        }
-        break;
-      }
-
-      default:
-        break;
-    }
-  }
-
-  return content;
 }
 
 export function parseToolRequest(
@@ -1114,16 +631,9 @@ export class OpenAIProvider implements Provider {
     let retryAbortController: AbortController | undefined;
     const abortController = new AbortController();
 
-    const messages: ProviderMessage[] = [
-      {
-        role: "user",
-        content: input,
-      },
-    ];
-
     const streamParams = createStreamParameters({
       model,
-      messages,
+      input: convertInputToNativeItems(input),
       tools: [spec],
       systemPrompt,
     });

@@ -1,84 +1,60 @@
 {
-  "blobSha": "85b2b0ef14c750373c3547cd5f410c44e1d637d8",
+  "blobSha": "b3a012acd16c294d09cca0396d7a75fd94fd11bc",
   "modelName": "voyage-context-4@256",
   "version": 11,
   "chunking": "auto",
   "chunks": [
     {
       "start": 0,
-      "end": 2181
+      "end": 2050
     },
     {
-      "start": 2183,
-      "end": 3981
+      "start": 2052,
+      "end": 4035
     },
     {
-      "start": 3985,
-      "end": 6414
+      "start": 4037,
+      "end": 5623
     },
     {
-      "start": 6418,
-      "end": 8762
+      "start": 5625,
+      "end": 7565
     },
     {
-      "start": 8772,
-      "end": 10750
+      "start": 7567,
+      "end": 9564
     },
     {
-      "start": 10760,
-      "end": 13610
+      "start": 9566,
+      "end": 11689
     },
     {
-      "start": 13614,
-      "end": 15663
+      "start": 11691,
+      "end": 13274
     },
     {
-      "start": 15667,
-      "end": 17738
+      "start": 13276,
+      "end": 14770
     },
     {
-      "start": 17740,
-      "end": 20206
+      "start": 14776,
+      "end": 17017
     },
     {
-      "start": 20212,
-      "end": 22556
+      "start": 17023,
+      "end": 19130
     },
     {
-      "start": 22558,
-      "end": 24970
+      "start": 19134,
+      "end": 20970
     },
     {
-      "start": 24978,
-      "end": 27159
+      "start": 20976,
+      "end": 23043
     },
     {
-      "start": 27161,
-      "end": 28481
-    },
-    {
-      "start": 28483,
-      "end": 29977
-    },
-    {
-      "start": 29983,
-      "end": 32224
-    },
-    {
-      "start": 32230,
-      "end": 34337
-    },
-    {
-      "start": 34341,
-      "end": 36259
-    },
-    {
-      "start": 36265,
-      "end": 38332
-    },
-    {
-      "start": 38344,
-      "end": 40789
+      "start": 23055,
+      "end": 25500
     }
   ]
 }

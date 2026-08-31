@@ -382,7 +382,6 @@ describe("OpenAIInferenceManager reasoning", () => {
     expect(thinking[0]).toMatchObject({
       thinking: "first\n\nsecond\n\nthird",
       signature: "enc-1",
-      providerMetadata: { provider: "openai", itemId: "rs_1" },
     });
 
     const next = await startTurn(client, agent, "more");
@@ -391,6 +390,31 @@ describe("OpenAIInferenceManager reasoning", () => {
     expect(reasoning[0].encrypted_content).toBe("enc-1");
     next.stream.finishResponse();
     await next.turn;
+  });
+
+  it("echoes the turn's reasoning and function_call items byte-for-byte", async () => {
+    const { client, agent } = setup();
+    const { turn, stream } = await startTurn(client, agent);
+    stream.streamReasoningSummary(["weighing it up"], {
+      itemId: "rs_wire",
+      encryptedContent: "enc-wire",
+    });
+    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    await stream.settle();
+    const sent = stream.getOutputItems();
+    stream.finishResponse();
+
+    const followup = await client.awaitStreamAt(1);
+    // The native items are the source of truth, so the next request carries
+    // exactly what the stream delivered rather than a reconstruction.
+    expect(followup.inputItemsOfType("reasoning")).toEqual(
+      sent.filter((item) => item.type === "reasoning"),
+    );
+    expect(followup.inputItemsOfType("function_call")).toEqual(
+      sent.filter((item) => item.type === "function_call"),
+    );
+    followup.finishResponse();
+    await turn;
   });
 
   it("round-trips an empty-summary reasoning item", async () => {
@@ -510,6 +534,29 @@ describe("OpenAIInferenceManager abort", () => {
     expect(toolUseBlocks(agent)).toHaveLength(0);
   });
 
+  it("drops the reasoning stranded by an undispatched tool call", async () => {
+    const { client, agent } = setup();
+    const { turn, stream } = await startTurn(client, agent);
+    stream.streamReasoningSummary(["about to call a tool"], {
+      itemId: "rs_1",
+      encryptedContent: "enc-1",
+    });
+    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    await stream.settle();
+
+    agent.abort();
+    stream.abortMidstream();
+    expect(await turn).toEqual({ type: "aborted" });
+
+    // The backend rejects a reasoning item that is not followed by the output
+    // it reasons about, so dropping the call must drop the reasoning too.
+    const next = await startTurn(client, agent, "carry on");
+    expect(next.stream.inputItemsOfType("function_call")).toHaveLength(0);
+    expect(next.stream.inputItemsOfType("reasoning")).toHaveLength(0);
+    next.stream.finishResponse();
+    await next.turn;
+  });
+
   it("unwinds when the executor reports that it aborted its tools", async () => {
     const { client, agent } = setup({
       executeTools: () =>
@@ -528,9 +575,12 @@ describe("OpenAIInferenceManager abort", () => {
       message.content.filter((content) => content.type === "tool_result"),
     );
     expect(results).toHaveLength(1);
-    expect(results[0].result).toEqual({
-      status: "error",
-      error: ABORT_TOOL_RESULT_TEXT,
+    // The wire format has no error flag on a function_call_output, so the
+    // ok/error distinction is not recoverable from the native items; only the
+    // text survives.
+    expect(results[0].result).toMatchObject({
+      status: "ok",
+      value: [{ type: "text", text: ABORT_TOOL_RESULT_TEXT }],
     });
   });
 });

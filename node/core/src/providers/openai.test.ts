@@ -4,11 +4,7 @@ import { fileURLToPath } from "node:url";
 import type OpenAI from "openai";
 import { APIError } from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  ToolName,
-  ToolRequestId,
-  ToolStructuredResult,
-} from "../tool-types.ts";
+import type { ToolName } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
 import { RETRY_DELAYS } from "./inference-shared.ts";
 import {
@@ -16,11 +12,10 @@ import {
   type MockResponseStream,
 } from "./mock-openai-client.ts";
 import {
-  convertResponseOutputToProviderContent,
+  convertInputToNativeItems,
   createStreamParameters,
   isReasoningModel,
   makeOpenAICompatible,
-  mapResponseStreamEvent,
   OpenAIProvider,
   type OpenAIProviderOptions,
   sanitizeSchemaForOpenAI,
@@ -28,10 +23,6 @@ import {
 } from "./openai.ts";
 import {
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderMessage,
-  type ProviderMessageContent,
-  type ProviderStreamEvent,
-  type ProviderToolResultContent,
   type ProviderToolSpec,
 } from "./provider-types.ts";
 
@@ -57,21 +48,10 @@ const tool = (name: string): ProviderToolSpec => ({
   } as ProviderToolSpec["input_schema"],
 });
 
-function userMessage(text: string): ProviderMessage {
-  return {
-    role: "user",
-    content: [
-      {
-        type: "text",
-        text,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ],
-  };
-}
-
-function assistantMessage(content: ProviderMessageContent[]): ProviderMessage {
-  return { role: "assistant", content };
+function userItem(text: string): OpenAI.Responses.ResponseInputItem {
+  return convertInputToNativeItems([
+    { type: "text", text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
+  ])[0];
 }
 
 describe("model capability helpers", () => {
@@ -146,7 +126,7 @@ describe("createStreamParameters", () => {
   it("produces the request shape the codex backend requires", () => {
     const params = createStreamParameters({
       model: "gpt-5.4",
-      messages: [userMessage("hi")],
+      input: [userItem("hi")],
       tools: [tool("get_file")],
       systemPrompt: "be terse",
     });
@@ -174,7 +154,7 @@ describe("createStreamParameters", () => {
     expect(
       createStreamParameters({
         model: "gpt-5.4",
-        messages: [userMessage("hi")],
+        input: [userItem("hi")],
         tools: [],
         reasoning,
       }).reasoning,
@@ -182,7 +162,7 @@ describe("createStreamParameters", () => {
 
     const nonReasoning = createStreamParameters({
       model: "gpt-4o",
-      messages: [userMessage("hi")],
+      input: [userItem("hi")],
       tools: [],
       reasoning,
     });
@@ -193,7 +173,7 @@ describe("createStreamParameters", () => {
   it("only adds web search when the model supports it and it is enabled", () => {
     const withSearch = createStreamParameters({
       model: "gpt-5.4",
-      messages: [userMessage("hi")],
+      input: [userItem("hi")],
       tools: [],
       includeWebSearch: true,
     });
@@ -202,7 +182,7 @@ describe("createStreamParameters", () => {
     expect(
       createStreamParameters({
         model: "gpt-5.4",
-        messages: [userMessage("hi")],
+        input: [userItem("hi")],
         tools: [],
       }).tools,
     ).toEqual([]);
@@ -210,7 +190,7 @@ describe("createStreamParameters", () => {
     expect(
       createStreamParameters({
         model: "gpt-3.5-turbo",
-        messages: [userMessage("hi")],
+        input: [userItem("hi")],
         tools: [],
         includeWebSearch: true,
       }).tools,
@@ -226,20 +206,20 @@ describe("serialization determinism", () => {
   };
 
   it("serializes the same history identically twice", () => {
-    const messages = [userMessage("one"), userMessage("two")];
-    expect(JSON.stringify(createStreamParameters({ ...base, messages }))).toBe(
-      JSON.stringify(createStreamParameters({ ...base, messages })),
+    const input = [userItem("one"), userItem("two")];
+    expect(JSON.stringify(createStreamParameters({ ...base, input }))).toBe(
+      JSON.stringify(createStreamParameters({ ...base, input })),
     );
   });
 
   it("appending a message changes only the tail of the serialization", () => {
     const first = JSON.stringify(
-      createStreamParameters({ ...base, messages: [userMessage("one")] }).input,
+      createStreamParameters({ ...base, input: [userItem("one")] }).input,
     );
     const second = JSON.stringify(
       createStreamParameters({
         ...base,
-        messages: [userMessage("one"), userMessage("two")],
+        input: [userItem("one"), userItem("two")],
       }).input,
     );
     // The cached prefix is the leading input items; the shared prefix must
@@ -251,190 +231,18 @@ describe("serialization determinism", () => {
     const a = createStreamParameters({
       ...base,
       tools: [tool("get_file"), tool("bash")],
-      messages: [userMessage("one")],
+      input: [userItem("one")],
     });
     const b = createStreamParameters({
       ...base,
       tools: [tool("bash"), tool("get_file")],
-      messages: [userMessage("one")],
+      input: [userItem("one")],
     });
     expect(JSON.stringify(a.tools)).toBe(JSON.stringify(b.tools));
     expect(a.tools?.map((t) => (t as { name: string }).name)).toEqual([
       "bash",
       "get_file",
     ]);
-  });
-});
-
-describe("round-tripping server-generated content", () => {
-  async function runTurn(drive: (stream: MockResponseStream) => void): Promise<{
-    events: ProviderStreamEvent[];
-    content: ProviderMessageContent[];
-    nativeEventTypes: string[];
-  }> {
-    const client = new MockOpenAIClient();
-    const stream = await client.responses.create({
-      model: "gpt-5.4",
-      input: [],
-      stream: true,
-    });
-    drive(stream);
-    stream.finishResponse("end_turn");
-
-    const events: ProviderStreamEvent[] = [];
-    const nativeEventTypes: string[] = [];
-    for await (const event of stream) {
-      nativeEventTypes.push(event.type);
-      events.push(...mapResponseStreamEvent(event));
-    }
-
-    return {
-      events,
-      content: convertResponseOutputToProviderContent(
-        validateInput,
-        stream.getOutputItems(),
-      ),
-      nativeEventTypes,
-    };
-  }
-
-  it("carries reasoning encrypted_content through to the next request", async () => {
-    const { content, events } = await runTurn((s) => {
-      s.streamReasoningSummary(["**Thinking**", "**More**"], {
-        itemId: "rs_1",
-        encryptedContent: "ENCRYPTED",
-      });
-      s.streamText("done", { itemId: "msg_1" });
-    });
-
-    // Many summary parts accumulate into one thinking block.
-    const thinkingStarts = events.filter(
-      (e) =>
-        e.type === "content_block_start" && e.content_block.type === "thinking",
-    );
-    expect(thinkingStarts).toHaveLength(1);
-
-    const thinking = content.find((c) => c.type === "thinking");
-    expect(thinking).toMatchObject({
-      signature: "ENCRYPTED",
-      providerMetadata: { provider: "openai", itemId: "rs_1" },
-    });
-
-    const params = createStreamParameters({
-      model: "gpt-5.4",
-      messages: [userMessage("hi"), assistantMessage(content)],
-      tools: [],
-    });
-    const reasoningItem = (
-      params.input as unknown as Record<string, unknown>[]
-    ).find((item) => item.type === "reasoning");
-    expect(reasoningItem).toMatchObject({
-      id: "rs_1",
-      encrypted_content: "ENCRYPTED",
-    });
-  });
-
-  it("keeps an empty-summary reasoning item and its encrypted content", async () => {
-    const { content } = await runTurn((s) => {
-      s.streamEmptyReasoning("ENC", "rs_empty");
-      s.streamText("4");
-    });
-
-    const thinking = content.find((c) => c.type === "thinking");
-    expect(thinking).toMatchObject({ thinking: "", signature: "ENC" });
-
-    const params = createStreamParameters({
-      model: "gpt-5.4",
-      messages: [assistantMessage(content)],
-      tools: [],
-    });
-    expect(
-      (params.input as unknown as Record<string, unknown>[]).find(
-        (item) => item.type === "reasoning",
-      ),
-    ).toMatchObject({ id: "rs_empty", encrypted_content: "ENC", summary: [] });
-  });
-
-  it("echoes web_search_call items and preserves annotations", async () => {
-    const annotation: OpenAI.Responses.ResponseOutputText.URLCitation = {
-      type: "url_citation",
-      start_index: 0,
-      end_index: 3,
-      title: "Result",
-      url: "https://example.com",
-    };
-    const { content } = await runTurn((s) => {
-      s.streamWebSearchCall("who won", { itemId: "ws_1" });
-      s.streamAnnotatedText("they did", [annotation]);
-    });
-
-    expect(content.find((c) => c.type === "server_tool_use")).toMatchObject({
-      id: "ws_1",
-      input: { query: "who won" },
-    });
-    const text = content.find((c) => c.type === "text");
-    expect(text).toMatchObject({
-      citations: [{ title: "Result", url: "https://example.com" }],
-    });
-
-    const params = createStreamParameters({
-      model: "gpt-5.4",
-      messages: [assistantMessage(content)],
-      tools: [],
-    });
-    const items = params.input as unknown as Record<string, unknown>[];
-    // Dropping the search item makes the model search again, so it must survive.
-    expect(items.find((item) => item.type === "web_search_call")).toMatchObject(
-      {
-        id: "ws_1",
-        action: { type: "search", query: "who won" },
-      },
-    );
-    const message = items.find((item) => item.type === "message") as {
-      content: { annotations: unknown[] }[];
-    };
-    expect(message.content[0].annotations).toHaveLength(1);
-  });
-
-  it("surfaces parallel tool calls as distinct blocks keyed by output_index", async () => {
-    const { events, content } = await runTurn((s) => {
-      s.streamToolCall("call_1", "get_file", { path: "a" });
-      s.streamToolCall("call_2", "get_file", { path: "b" });
-    });
-
-    const starts = events.filter(
-      (e) =>
-        e.type === "content_block_start" && e.content_block.type === "tool_use",
-    );
-    expect(starts.map((e) => e.index)).toEqual([0, 1]);
-    expect(content.filter((c) => c.type === "tool_use")).toHaveLength(2);
-  });
-
-  it("serializes a history whose reasoning items were dropped", () => {
-    const content: ProviderMessageContent[] = [
-      {
-        type: "thinking",
-        thinking: "orphan",
-        signature: "",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ];
-
-    const params = createStreamParameters({
-      model: "gpt-5.4",
-      messages: [assistantMessage(content)],
-      tools: [],
-    });
-    const items = params.input as unknown as Record<string, unknown>[];
-    // The backend tolerates missing reasoning items, so an id-less thinking
-    // block is dropped rather than throwing.
-    expect(items.some((item) => item.type === "reasoning")).toBe(false);
-    expect(items).toHaveLength(1);
   });
 });
 
@@ -524,140 +332,6 @@ describe("mock fidelity against captured fixtures", () => {
       types.push(event.type);
     }
     expect(types).not.toContain("response.completed");
-  });
-});
-
-describe("tool results", () => {
-  const toolResult = (value: ProviderToolResultContent[]): ProviderMessage => ({
-    role: "user",
-    content: [
-      {
-        type: "tool_result",
-        id: "call_1" as ToolRequestId,
-        result: {
-          status: "ok",
-          value,
-          structuredResult: {
-            status: "ok",
-            value: "",
-          } as unknown as ToolStructuredResult,
-        },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ],
-  });
-
-  it("sends a text result as the function_call_output", () => {
-    const params = createStreamParameters({
-      model: "gpt-5.4",
-      messages: [
-        toolResult([
-          {
-            type: "text",
-            text: "file contents",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          },
-        ]),
-      ],
-      tools: [],
-    });
-    expect(params.input).toEqual([
-      {
-        type: "function_call_output",
-        call_id: "call_1",
-        output: "file contents",
-      },
-    ]);
-  });
-
-  it("sends an image-only result as a trailing user message with a non-empty output", () => {
-    const params = createStreamParameters({
-      model: "gpt-5.4",
-      messages: [
-        toolResult([
-          {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: "image/png",
-              data: "AAAA",
-            },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          },
-        ]),
-      ],
-      tools: [],
-    });
-    const input = params.input as OpenAI.Responses.ResponseInput;
-    expect(input[0]).toMatchObject({
-      type: "function_call_output",
-      output: "Attachment follows:",
-    });
-    expect(input[1]).toMatchObject({
-      type: "message",
-      role: "user",
-      content: [
-        { type: "input_image", image_url: "data:image/png;base64,AAAA" },
-      ],
-    });
-  });
-
-  it("sends an error result as the function_call_output", () => {
-    const params = createStreamParameters({
-      model: "gpt-5.4",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              id: "call_1" as ToolRequestId,
-              result: { status: "error", error: "boom" },
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            },
-          ],
-        },
-      ],
-      tools: [],
-    });
-    expect(params.input).toEqual([
-      { type: "function_call_output", call_id: "call_1", output: "boom" },
-    ]);
-  });
-});
-
-describe("reasoning item coalescing", () => {
-  it("folds thinking blocks sharing an item id into one ordered reasoning item", () => {
-    const thinkingBlock = (text: string): ProviderMessageContent => ({
-      type: "thinking",
-      thinking: text,
-      signature: "ENCRYPTED",
-      providerMetadata: { provider: "openai", itemId: "rs_1" },
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    });
-    const params = createStreamParameters({
-      model: "gpt-5.4",
-      messages: [
-        assistantMessage([
-          thinkingBlock("first"),
-          thinkingBlock("second"),
-          thinkingBlock("third"),
-        ]),
-      ],
-      tools: [],
-    });
-    const input = params.input as OpenAI.Responses.ResponseInput;
-    expect(input).toHaveLength(1);
-    expect(input[0]).toMatchObject({
-      type: "reasoning",
-      id: "rs_1",
-      encrypted_content: "ENCRYPTED",
-      summary: [
-        { type: "summary_text", text: "first" },
-        { type: "summary_text", text: "second" },
-        { type: "summary_text", text: "third" },
-      ],
-    });
   });
 });
 

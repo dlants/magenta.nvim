@@ -16,7 +16,7 @@ import { classifyTextContent } from "./tagged-content.ts";
  * turn's last item. The native item array has no field for it. */
 export type ItemStopInfo = {
   stopReason: StreamStopReason;
-  usage: Usage;
+  usage?: Usage | undefined;
 };
 
 type Item = OpenAI.Responses.ResponseInputItem;
@@ -61,7 +61,7 @@ export function convertOpenAIItemsToProvider(
     if (info && role === "assistant") {
       const target = messages[messages.length - 1];
       target.stopReason = info.stopReason;
-      target.usage = info.usage;
+      if (info.usage) target.usage = info.usage;
     }
   });
 
@@ -82,7 +82,7 @@ function toolNamesByCallId(items: ReadonlyArray<Item>): Map<string, ToolName> {
 
 /** Which side of the conversation an item belongs to. `undefined` for item
  * kinds with no display representation at all. */
-function roleOf(item: Item): "user" | "assistant" | undefined {
+export function roleOf(item: Item): "user" | "assistant" | undefined {
   if ("role" in item && item.role) {
     return item.role === "assistant" ? "assistant" : "user";
   }

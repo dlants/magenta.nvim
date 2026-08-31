@@ -270,7 +270,7 @@ Review follow-ups (stage 1):
   - A web_search_call item plus an annotated message item produce `server_tool_use` content and
     text with url citations.
 
-## Manager storage swap
+## Manager storage swap — DONE
 
 - Goal: `OpenAIInferenceManager` stores `ResponseInputItem[]`; `log.messages` is derived. The request
   body is built from the items directly. `createStreamParameters` takes `input`;
@@ -280,6 +280,39 @@ Review follow-ups (stage 1):
   append-item, `commitAssistantMessage`, `attachStopInfo`, `restamp`, `appendUserMessage`,
   `appendToolResults`, `truncateMessages`, `clone`, `collectRequestedTools`, `deriveStopReason` and
   `dropDanglingToolUses` all move to the item level.
+Decisions/deviations:
+
+- `roleOf` is now exported from `openai-conversion.ts`; the manager's item pruning needs the same
+  notion of which side an item belongs to.
+- `ItemStopInfo.usage` became optional. `attachStopInfo` is the only writer and it has a `Usage |
+  undefined`; inventing a zero usage would have been a lie.
+- `dropDanglingToolUses` (message-level) became `OpenAIInferenceManager.pruneItems` (item-level).
+  It computes a keep-mask rather than splicing, so `stopInfo` keys are **remapped** to the new
+  indices instead of merely pruned; a stop-info entry whose own item is dropped is dropped with it.
+  The stranded-reasoning rule is "a `reasoning` item with no surviving assistant item after it and
+  before the next user item".
+- `convertResponseOutputToProviderContent` was deleted too (not just the three functions the plan
+  named): with the manager appending items verbatim it had no callers left, and it was the other
+  writer of `providerMetadata`.
+- `appendToolResults` builds `function_call_output` items and, when a result carries an image or
+  document, a following user message holding them — the same shape the deleted reverse conversion
+  produced. Display therefore shows the attachments as sibling blocks of the `tool_result` rather
+  than nested inside it.
+- **Accepted display regression** (as the plan anticipated): an error tool result converts back as
+  `{ status: "ok", value: [text] }`, because `function_call_output` has no error flag on the wire.
+  The assertion in `openai-inference.test.ts` ("unwinds when the executor reports that it aborted
+  its tools") was changed to match, with a comment explaining why. `structuredResult` was already
+  lost this way and is re-attached by `NvimThread.rebuildToolResultMap`.
+- The reasoning assertion in `openai-inference.test.ts` lost its `providerMetadata` expectation;
+  nothing produces that field for OpenAI any more. The type itself goes in stage 3.
+- `openai.test.ts`: `createStreamParameters` tests now pass `input` items (built through
+  `convertInputToNativeItems`). Three describes were deleted outright because they tested the
+  reverse conversion that no longer exists — "round-tripping server-generated content",
+  "tool results" and "reasoning item coalescing". Their behaviour is covered end-to-end by
+  `openai-inference.test.ts` (reasoning/web-search/tool-call round-trips through a real stream) and
+  by `openai-conversion.test.ts`.
+- `inference-parity.test.ts` and `node/chat/openai-streaming-view.test.ts` passed untouched.
+
 - Tests:
   - `openai-inference.test.ts` and `openai-inference-retry.test.ts` pass with only mechanical
     changes; any assertion that has to change shape is a finding to explain, not to paper over.

@@ -16,11 +16,16 @@ import {
   MAX_RETRY_DURATION,
 } from "./inference-shared.ts";
 import {
-  convertResponseOutputToProviderContent,
+  convertInputToNativeItems,
   createStreamParameters,
   isRetryableOpenAIError,
   usageFromResponse,
 } from "./openai.ts";
+import {
+  convertOpenAIItemsToProvider,
+  type ItemStopInfo,
+  roleOf,
+} from "./openai-conversion.ts";
 import type {
   AgentInput,
   AgentLog,
@@ -30,7 +35,6 @@ import type {
   NativeMessageIdx,
   OnRequestUpdate,
   ProviderMessage,
-  ProviderMessageContent,
   ProviderToolResult,
   RequestedTool,
   RequestResult,
@@ -40,8 +44,8 @@ import type {
   ToolResults,
   Usage,
 } from "./provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
-import { classifyTextContent } from "./tagged-content.ts";
+
+type Item = OpenAI.Responses.ResponseInputItem;
 
 type ResponseStreamEvent = OpenAI.Responses.ResponseStreamEvent;
 type ResponseIncompleteReason = NonNullable<
@@ -110,9 +114,14 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     type: "idle",
   };
   private onRequestUpdate: OnRequestUpdate | undefined;
-  /** ProviderMessage[] is the single source of truth; the request body is
-   * derived from it on every turn (see `createStreamParameters`). */
-  private messages: ProviderMessage[] = [];
+  /** The native Responses input items are the single source of truth. The
+   * request body is these items verbatim; `ProviderMessage[]` is derived from
+   * them and never converted back. */
+  private items: Item[] = [];
+  private cachedProviderMessages: ProviderMessage[] = [];
+  /** Stop reason and usage for an assistant turn, keyed by the index of the
+   * turn's last item. The wire format has no field for it. */
+  private stopInfo = new Map<NativeMessageIdx, ItemStopInfo>();
   private latestUsage: Usage | undefined;
 
   /** Blocks in flight, keyed by `output_index`. The fixtures show items
@@ -120,11 +129,8 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
    * server supplies is free and removes the assumption. */
   private blocks = new Map<number, OpenAIStreamingBlock>();
   private openIndex: number | undefined;
-  /** Completed items of the current turn, in arrival order. */
-  private turnItems: OpenAI.Responses.ResponseOutputItem[] = [];
-  /** Index in `messages` of the assistant message this turn is accumulating
-   * into, once the first item has completed. */
-  private turnMessageIdx: number | undefined;
+  /** Index in `items` of the first item of the turn being accumulated. */
+  private turnStartIdx = 0;
 
   private stream:
     | (AsyncIterable<ResponseStreamEvent> & { controller: AbortController })
@@ -143,7 +149,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
 
   get log(): AgentLog {
     return {
-      messages: this.messages,
+      messages: this.cachedProviderMessages,
       latestUsage: this.latestUsage,
     };
   }
@@ -159,11 +165,9 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
         // retry re-sends the same history, so drop them.
         this.blocks.clear();
         this.openIndex = undefined;
-        this.turnItems = [];
-        if (this.turnMessageIdx !== undefined) {
-          this.messages.splice(this.turnMessageIdx);
-          this.turnMessageIdx = undefined;
-        }
+        this.items.length = this.turnStartIdx;
+        this.pruneStopInfo();
+        this.updateCache();
         break;
 
       case "stream-event":
@@ -276,15 +280,12 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       }
 
       case "response.output_item.done": {
-        this.turnItems.push(event.item);
-        // Committing each item as it completes is what makes the turn render
-        // incrementally; otherwise nothing is visible until the stream ends.
-        this.appendTurnContent(
-          convertResponseOutputToProviderContent(
-            this.openaiOptions.validateInput,
-            [event.item],
-          ),
-        );
+        // A completed output item is assignable to an input item, so it is
+        // appended verbatim: ids, encrypted_content and summary parts survive
+        // byte-for-byte into the next request. Committing each item as it
+        // completes is also what makes the turn render incrementally.
+        this.items.push(event.item);
+        this.updateCache();
         this.blocks.delete(event.output_index);
         if (this.openIndex === event.output_index) {
           this.openIndex = undefined;
@@ -297,63 +298,94 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     }
   }
 
-  private appendTurnContent(content: ProviderMessageContent[]): void {
-    if (content.length === 0) return;
-    if (this.turnMessageIdx === undefined) {
-      this.messages.push({ role: "assistant", content });
-      this.turnMessageIdx = this.messages.length - 1;
-    } else {
-      this.messages[this.turnMessageIdx].content.push(...content);
-    }
-    this.restamp();
-  }
   /** Close out the turn, folding in any partial block left by an abort. */
   private commitAssistantMessage(mode: "normal" | "aborted"): void {
     // An aborted stream leaves the open item without its `done` event, so the
-    // partial text is only available from the live block.
+    // partial text is only available from the live block. It has no server id,
+    // so it goes back as an easy assistant message.
     const openBlock =
       this.openIndex === undefined
         ? undefined
         : this.blocks.get(this.openIndex);
     if (openBlock?.type === "text" && openBlock.text) {
-      this.appendTurnContent([
-        {
-          type: "text",
-          text: openBlock.text,
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        },
-      ]);
+      this.items.push({ role: "assistant", content: openBlock.text });
     }
     this.blocks.clear();
     this.openIndex = undefined;
-    this.turnItems = [];
-    this.turnMessageIdx = undefined;
     if (mode === "aborted") {
       // Tool calls interrupted mid-stream are never dispatched, so they would
       // be left without a function_call_output.
-      dropDanglingToolUses(this.messages);
-      this.restamp();
+      this.pruneItems();
     }
+    this.updateCache();
   }
 
   private attachStopInfo(
     stopReason: StreamStopReason,
     usage: Usage | undefined,
   ) {
-    const last = this.messages[this.messages.length - 1];
-    if (last && last.role === "assistant") {
-      last.stopReason = stopReason;
-      if (usage) last.usage = usage;
+    const idx = (this.items.length - 1) as NativeMessageIdx;
+    if (idx < this.turnStartIdx) return;
+    this.stopInfo.set(idx, { stopReason, usage });
+    this.updateCache();
+  }
+
+  private updateCache(): void {
+    this.cachedProviderMessages = convertOpenAIItemsToProvider(
+      this.openaiOptions.validateInput,
+      this.items,
+      this.stopInfo,
+    );
+  }
+
+  private pruneStopInfo(): void {
+    for (const idx of this.stopInfo.keys()) {
+      if (idx >= this.items.length) this.stopInfo.delete(idx);
     }
   }
 
-  /** `nativeMessageIdx` is the index of the owning message. */
-  private restamp(): void {
-    this.messages.forEach((message, idx) => {
-      for (const content of message.content) {
-        content.nativeMessageIdx = idx as NativeMessageIdx;
+  /** Enforce the two shapes the backend rejects: a `function_call` with no
+   * matching `function_call_output`, and a `reasoning` item left stranded by
+   * that removal (reasoning must be followed by the output it reasons about).
+   * Indices shift, so `stopInfo` is remapped rather than pruned. */
+  private pruneItems(): void {
+    const answered = new Set<string>();
+    for (const item of this.items) {
+      if (item.type === "function_call_output") answered.add(item.call_id);
+    }
+
+    const keep = this.items.map(() => true);
+    let assistantFollows = false;
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const item = this.items[i];
+      if (item.type === "function_call" && !answered.has(item.call_id)) {
+        keep[i] = false;
+        continue;
       }
+      if (item.type === "reasoning" && !assistantFollows) {
+        keep[i] = false;
+        continue;
+      }
+      const role = roleOf(item);
+      if (role === "assistant") assistantFollows = true;
+      else if (role === "user") assistantFollows = false;
+    }
+    if (keep.every(Boolean)) return;
+
+    const remap = new Map<NativeMessageIdx, NativeMessageIdx>();
+    const next: Item[] = [];
+    this.items.forEach((item, i) => {
+      if (!keep[i]) return;
+      remap.set(i as NativeMessageIdx, next.length as NativeMessageIdx);
+      next.push(item);
     });
+    this.items = next;
+    this.stopInfo = new Map(
+      [...this.stopInfo].flatMap(([idx, info]) => {
+        const moved = remap.get(idx);
+        return moved === undefined ? [] : [[moved, info] as const];
+      }),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -361,26 +393,29 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
   // -------------------------------------------------------------------------
 
   getNativeMessageIdx(): NativeMessageIdx {
-    return (this.messages.length - 1) as NativeMessageIdx;
+    return (this.items.length - 1) as NativeMessageIdx;
   }
 
   appendUserMessage(content: AgentInput[], opts?: { coalesce?: true }): void {
     if (content.length === 0) return;
-    // Tagged text has to be re-tagged into its structured content type, exactly
-    // as the anthropic agent does, or the view renders it as raw text.
-    const classified = content.map(
-      (item) =>
-        (item.type === "text"
-          ? classifyTextContent(item.text, item.nativeMessageIdx)
-          : undefined) ?? item,
-    );
-    const last = this.messages[this.messages.length - 1];
-    if (opts?.coalesce && last && last.role === "user") {
-      last.content = [...last.content, ...classified];
+    // Tagged text is stored on the wire as plain input_text and re-tagged by
+    // the display conversion, so nothing is classified here.
+    const native = convertInputToNativeItems(content);
+    if (native.length === 0) return;
+    const last = this.items[this.items.length - 1];
+    const lastUser =
+      last && last.type === "message" && last.role === "user"
+        ? (last as OpenAI.Responses.ResponseInputItem.Message)
+        : undefined;
+    const [first, ...rest] =
+      native as OpenAI.Responses.ResponseInputItem.Message[];
+    if (opts?.coalesce && lastUser) {
+      lastUser.content.push(...first.content);
+      this.items.push(...rest);
     } else {
-      this.messages.push({ role: "user", content: classified });
+      this.items.push(...native);
     }
-    this.restamp();
+    this.updateCache();
   }
 
   /** Every requested tool gets exactly one result block. Ids the executor
@@ -391,24 +426,24 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     requested: ReadonlyArray<RequestedTool>,
     results: ToolResults,
   ): void {
+    const attachments: OpenAI.Responses.ResponseInputContent[] = [];
     for (const { id } of requested) {
-      const result: ProviderToolResult = {
-        type: "tool_result",
-        id,
-        result: results.get(id) ?? {
-          status: "error",
-          error: ABORT_TOOL_RESULT_TEXT,
-        },
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      const result = results.get(id) ?? {
+        status: "error" as const,
+        error: ABORT_TOOL_RESULT_TEXT,
       };
-      const last = this.messages[this.messages.length - 1];
-      if (last && last.role === "user") {
-        last.content.push(result);
-      } else {
-        this.messages.push({ role: "user", content: [result] });
-      }
+      this.items.push({
+        type: "function_call_output",
+        call_id: id,
+        output: toolResultOutput(result, attachments),
+      });
     }
-    this.restamp();
+    // Images and documents cannot ride inside a function_call_output, so they
+    // follow it as a user message.
+    if (attachments.length) {
+      this.items.push({ type: "message", role: "user", content: attachments });
+    }
+    this.updateCache();
   }
 
   private get isAborted(): boolean {
@@ -423,12 +458,13 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
   }
 
   truncateMessages(messageIdx: NativeMessageIdx): void {
-    this.messages.length = Math.max(
+    this.items.length = Math.max(
       0,
-      Math.min(messageIdx + 1, this.messages.length),
+      Math.min(messageIdx + 1, this.items.length),
     );
-    dropDanglingToolUses(this.messages);
-    this.restamp();
+    this.pruneStopInfo();
+    this.pruneItems();
+    this.updateCache();
   }
 
   clone(): OpenAIInferenceManager {
@@ -438,9 +474,10 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       this.openaiOptions,
     );
     cloned.promptCacheKey = this.promptCacheKey;
-    cloned.messages = structuredClone(this.messages);
-    dropDanglingToolUses(cloned.messages);
-    cloned.restamp();
+    cloned.items = structuredClone(this.items) as Item[];
+    cloned.stopInfo = new Map(this.stopInfo);
+    cloned.pruneItems();
+    cloned.updateCache();
     cloned.latestUsage = this.latestUsage ? { ...this.latestUsage } : undefined;
     return cloned;
   }
@@ -451,7 +488,8 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
 
   /** The tool_use blocks of the assistant message we just finished streaming. */
   private collectRequestedTools(): RequestedTool[] {
-    const last = this.messages[this.messages.length - 1];
+    const last =
+      this.cachedProviderMessages[this.cachedProviderMessages.length - 1];
     if (!last || last.role !== "assistant") return [];
     return last.content
       .filter((block) => block.type === "tool_use")
@@ -502,14 +540,13 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
   private async streamOneResponse(): Promise<AttemptResult> {
     const startTime = new Date();
     this.blocks.clear();
-    this.turnMessageIdx = undefined;
     this.openIndex = undefined;
-    this.turnItems = [];
+    this.turnStartIdx = this.items.length;
 
     const attempt = async (): Promise<AttemptResult> => {
       const params = createStreamParameters({
         model: this.options.model,
-        messages: this.messages,
+        input: this.items,
         tools: this.options.tools,
         systemPrompt: this.options.systemPrompt,
         includeWebSearch: this.openaiOptions.includeWebSearch,
@@ -650,7 +687,11 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
   ): StreamStopReason {
     if (incompleteReason === "max_output_tokens") return "max_tokens";
     if (incompleteReason === "content_filter") return "content";
-    if (this.turnItems.some((item) => item.type === "function_call")) {
+    if (
+      this.items
+        .slice(this.turnStartIdx)
+        .some((item) => item.type === "function_call")
+    ) {
       return "tool_use";
     }
     return "end_turn";
@@ -679,21 +720,38 @@ function startBlock(
   }
 }
 
-/** Remove tool_use blocks with no matching tool_result. The backend rejects a
- * `function_call` that is not answered by a `function_call_output`. */
-function dropDanglingToolUses(messages: ProviderMessage[]): void {
-  const answered = new Set<string>();
-  for (const message of messages) {
-    for (const content of message.content) {
-      if (content.type === "tool_result") answered.add(content.id);
+/** A `function_call_output` carries text only; attachments are collected into
+ * `attachments` to be sent as the user message that follows it. */
+function toolResultOutput(
+  result: ProviderToolResult["result"],
+  attachments: OpenAI.Responses.ResponseInputContent[],
+): string {
+  if (result.status === "error") return result.error;
+  const textParts: string[] = [];
+  for (const content of result.value) {
+    switch (content.type) {
+      case "text":
+        textParts.push(content.text);
+        break;
+      case "image":
+        attachments.push({
+          type: "input_image",
+          detail: "auto",
+          image_url: `data:${content.source.media_type};base64,${content.source.data}`,
+        });
+        break;
+      case "document":
+        attachments.push({
+          type: "input_file",
+          filename: content.title || "untitled.pdf",
+          file_data: `data:${content.source.media_type};base64,${content.source.data}`,
+        });
+        break;
+      default:
+        assertUnreachable(content);
     }
   }
-
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i];
-    message.content = message.content.filter(
-      (content) => content.type !== "tool_use" || answered.has(content.id),
-    );
-    if (message.content.length === 0) messages.splice(i, 1);
-  }
+  return (
+    textParts.join("\n") || (attachments.length ? "Attachment follows:" : "")
+  );
 }
