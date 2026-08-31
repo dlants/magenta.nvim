@@ -4,12 +4,15 @@ export {
   type AgentAction,
   type AgentContext,
   type AgentPhase,
+  type BeforeRequestDecision,
   type EnvironmentConfig,
   type InputMessage,
   phaseActiveTools,
   phaseLabel,
   phaseStreamingBlock,
   type ThreadState,
+  type ToolExecutor,
+  type ToolOutcome,
 } from "./agent.ts";
 export type { AgentInfo, AgentsMap } from "./agents/agents.ts";
 export { loadAgents } from "./agents/agents.ts";
@@ -183,9 +186,8 @@ export { getProvider, setMockProvider } from "./providers/provider.ts";
 export type {
   AgentInput,
   AgentLog,
-  AgentOptions,
-  BeforeRequestDecision,
   FinalizeReason,
+  InferenceOptions,
   NativeInferenceManager,
   NativeMessageIdx,
   OnRequestUpdate,
@@ -222,8 +224,6 @@ export type {
   StopReason,
   StreamingBlock,
   StreamStopReason,
-  ToolExecutor,
-  ToolOutcome,
   ToolResults,
   TurnResult,
   Usage,

@@ -371,11 +371,10 @@ describe("OpenAI provider wiring", () => {
       });
 
       expect(() =>
-        provider.createAgent({
+        provider.createInferenceManager({
           model: "gpt-5.1-codex",
           systemPrompt: "hi",
           tools: [],
-          onUpdate: () => {},
         }),
       ).toThrow(/gpt-5\.4/);
     });

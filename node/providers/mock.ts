@@ -16,7 +16,7 @@ import {
 import { setMockProvider } from "./provider.ts";
 import type {
   AgentInput,
-  AgentOptions,
+  InferenceOptions,
   NativeInferenceManager,
   Provider,
   ProviderMessage,
@@ -59,7 +59,7 @@ type MockForceToolUseRequest = {
   input: AgentInput[];
   spec: ProviderToolSpec;
   systemPrompt?: string | undefined;
-  contextAgent?: NativeInferenceManager | undefined;
+  context?: NativeInferenceManager | undefined;
   defer: Defer<{
     toolRequest: Result<ToolRequest, { rawRequest: unknown }>;
     stopReason: StreamStopReason;
@@ -112,7 +112,7 @@ export class MockProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: NativeInferenceManager;
+    context?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -120,13 +120,13 @@ export class MockProvider implements Provider {
       effort?: "low" | "medium" | "high" | "xhigh" | "max";
     };
   }): ProviderToolUseRequest {
-    const { model, input, spec, systemPrompt, contextAgent } = options;
+    const { model, input, spec, systemPrompt, context } = options;
     const request: MockForceToolUseRequest = {
       model,
       input,
       spec,
       systemPrompt,
-      contextAgent,
+      context,
       defer: new Defer(),
       aborted: false,
     };
@@ -156,7 +156,7 @@ export class MockProvider implements Provider {
     };
   }): ProviderStreamRequest {
     throw new Error(
-      "sendMessage is deprecated - use createAgent instead. Tests should use mockAnthropic.awaitPendingStream()",
+      "sendMessage is deprecated - use createInferenceManager instead. Tests should use mockAnthropic.awaitPendingStream()",
     );
   }
 
@@ -371,7 +371,7 @@ Streams: ${this.mockClient.streams.length}`);
     });
   }
 
-  createAgent(options: AgentOptions): NativeInferenceManager {
+  createInferenceManager(options: InferenceOptions): NativeInferenceManager {
     if (this.agentKind === "openai") {
       return new OpenAIInferenceManager(options, this.mockOpenAIClient, {
         includeWebSearch: true,

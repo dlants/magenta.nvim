@@ -1,10 +1,9 @@
 export type {
   AgentInput,
   AgentLog,
-  AgentOptions,
   AgentPhase,
-  BeforeRequestDecision,
   FinalizeReason,
+  InferenceOptions,
   NativeInferenceManager,
   NativeMessageIdx,
   OnRequestUpdate,

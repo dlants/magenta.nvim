@@ -7,6 +7,8 @@ import {
   type AgentContext,
   type AgentPhase,
   type ThreadState,
+  type ToolExecutor,
+  type ToolOutcome,
 } from "./agent.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { Logger } from "./logger.ts";
@@ -26,14 +28,12 @@ import {
 } from "./providers/openai-runner.ts";
 import type {
   AgentInput,
-  AgentOptions,
+  InferenceOptions,
   NativeInferenceManager,
   NativeMessageIdx,
   Provider,
   ProviderToolSpec,
   RequestedTool,
-  ToolExecutor,
-  ToolOutcome,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
@@ -77,7 +77,7 @@ export function createMockProvider(
   anthropicOptions?: Partial<AnthropicRunnerOptions>,
 ): Provider {
   return {
-    createAgent(options: AgentOptions): NativeInferenceManager {
+    createInferenceManager(options: InferenceOptions): NativeInferenceManager {
       return new AnthropicInferenceManager(
         options,
         mockClient as unknown as Anthropic,
@@ -283,7 +283,7 @@ export function createTestOpenAIAgent(
   const mockClient = opts?.mockClient ?? new MockOpenAIClient();
   const tools = opts?.tools;
   const provider: Provider = {
-    createAgent(options: AgentOptions): NativeInferenceManager {
+    createInferenceManager(options: InferenceOptions): NativeInferenceManager {
       return new OpenAIInferenceManager(
         tools ? { ...options, tools } : options,
         mockClient,

@@ -23,8 +23,8 @@ import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
 import type {
   AgentInput,
   AgentLog,
-  AgentOptions,
   FinalizeReason,
+  InferenceOptions,
   NativeInferenceManager,
   NativeMessageIdx,
   OnRequestUpdate,
@@ -211,7 +211,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
   private onRequestUpdate: OnRequestUpdate | undefined;
 
   constructor(
-    private options: AgentOptions,
+    private options: InferenceOptions,
     private client: Anthropic,
     anthropicOptions: AnthropicRunnerOptions,
   ) {
@@ -224,10 +224,6 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       messages: this.cachedProviderMessages,
       latestUsage: this.latestUsage,
     };
-  }
-
-  private notify(): void {
-    queueMicrotask(() => this.options.onUpdate());
   }
 
   private update(action: Action): void {
@@ -359,7 +355,6 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     }
 
     this.reportStreamingBlock();
-    this.notify();
   }
   /** Report the in-progress block, which is the only way callers observe it.
    * The `StreamingBlock` is constructed here rather than aliased: nothing
@@ -1236,6 +1231,5 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       this.messages,
       this.messageStopInfo,
     );
-    this.notify();
   }
 }

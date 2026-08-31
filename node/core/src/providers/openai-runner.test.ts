@@ -1,6 +1,6 @@
 import type OpenAI from "openai";
 import { describe, expect, it } from "vitest";
-import type { Agent } from "../agent.ts";
+import type { Agent, ToolExecutor } from "../agent.ts";
 import { createTestOpenAIAgent, flatPhase } from "../test-helpers.ts";
 import type { ToolName, ToolStructuredResult } from "../tool-types.ts";
 import { ABORT_TOOL_RESULT_TEXT } from "./anthropic-runner.ts";
@@ -16,7 +16,6 @@ import {
   type ProviderToolResult,
   type ProviderToolSpec,
   type RequestedTool,
-  type ToolExecutor,
   type ToolResults,
   type TurnResult,
 } from "./provider-types.ts";

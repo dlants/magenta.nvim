@@ -16,7 +16,6 @@ import type { ProviderProfile } from "./provider-options.ts";
 import { ABORT_MARKER_TEXT } from "./providers/anthropic-runner.ts";
 import type {
   AgentInput,
-  BeforeRequestDecision,
   NativeInferenceManager,
   NativeMessageIdx,
   Provider,
@@ -29,7 +28,7 @@ import type {
   RequestUpdate,
   StopReason,
   StreamingBlock,
-  ToolOutcome,
+  ToolResults,
   TurnResult,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
@@ -202,6 +201,20 @@ export interface AgentDeps {
       };
 }
 
+/** ToolResults are always inserted into the runner, so we always end in a valid state.
+ * This means we can later send another request, or append more messages.
+ */
+export type ToolOutcome =
+  | { type: "continue"; results: ToolResults }
+  | { type: "suspend"; results: ToolResults }
+  | { type: "aborted"; results: ToolResults };
+
+export type ToolExecutor = (
+  requests: ReadonlyArray<RequestedTool>,
+) => Promise<ToolOutcome>;
+export type BeforeRequestDecision =
+  | { type: "proceed" }
+  | { type: "suspend"; reason: SuspendReason };
 /** What the gate decided, plus whether it put anything in the log. */
 type GateOutcome = {
   decision: BeforeRequestDecision;
@@ -354,10 +367,9 @@ export class Agent {
   private createManager(): NativeInferenceManager {
     this.refreshToolSpecs();
     const provider = this.context.getProvider(this.context.profile);
-    const agent = provider.createAgent({
+    const agent = provider.createInferenceManager({
       model: this.context.profile.model,
       systemPrompt: this.state.systemPrompt,
-      onUpdate: () => this.scheduleUpdate(),
       tools: this.getToolSpecs(),
       ...((this.context.profile.provider === "anthropic" ||
         this.context.profile.provider === "bedrock" ||
@@ -654,6 +666,7 @@ export class Agent {
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
+    this.scheduleUpdate();
     return { type: "aborted" };
   }
 
@@ -1059,6 +1072,7 @@ export class Agent {
         content,
         isOpeningRequest ? undefined : { coalesce: true },
       );
+      this.scheduleUpdate();
     }
     if (composed.type === "suspend") {
       return {

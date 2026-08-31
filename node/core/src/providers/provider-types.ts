@@ -217,7 +217,9 @@ export interface Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: NativeInferenceManager;
+    /** Prior conversation to condition on. Single-shot: `forceToolUse` issues
+     * one request and never feeds results back, so it only needs the context. */
+    context?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -226,7 +228,7 @@ export interface Provider {
     };
   }): ProviderToolUseRequest;
 
-  createAgent(options: AgentOptions): NativeInferenceManager;
+  createInferenceManager(options: InferenceOptions): NativeInferenceManager;
 }
 
 export type ProviderMetadata = { provider: "openai"; itemId: string };
@@ -324,18 +326,6 @@ export type ToolResults = ReadonlyMap<
   ProviderToolResult["result"]
 >;
 
-/** ToolResults are always inserted into the runner, so we always end in a valid state.
- * This means we can later send another request, or append more messages.
- */
-export type ToolOutcome =
-  | { type: "continue"; results: ToolResults }
-  | { type: "suspend"; results: ToolResults }
-  | { type: "aborted"; results: ToolResults };
-
-export type ToolExecutor = (
-  requests: ReadonlyArray<RequestedTool>,
-) => Promise<ToolOutcome>;
-
 export type AgentLog = {
   readonly messages: ReadonlyArray<ProviderMessage>;
   readonly latestUsage: Usage | undefined;
@@ -396,16 +386,13 @@ export interface NativeInferenceManager {
 export type FinalizeReason =
   | { type: "aborted" }
   | { type: "error"; error: Error };
-export type OnBeforeRequest = () => Promise<BeforeRequestDecision>;
-export type BeforeRequestDecision =
-  | { type: "proceed" }
-  | { type: "suspend"; reason: SuspendReason };
-export interface AgentOptions {
+/** Inference configuration for one conversation. No hook or loop concern
+ * appears here: the manager's only outbound channel is the per-request
+ * `OnRequestUpdate` callback. */
+export interface InferenceOptions {
   model: string;
   systemPrompt: string;
   tools: ProviderToolSpec[];
-  /** Survives until the token count is preflight (stage 3). */
-  onUpdate: () => void;
   thinking?: {
     enabled: boolean;
     budgetTokens?: number;

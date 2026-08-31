@@ -540,13 +540,39 @@ Notes and deviations:
   - `thread.ts`'s `get phase(): ThreadPhase` should get materially simpler — it currently reconciles the two. Existing `thread.test.ts` phase assertions cover it.
   - Subagent yield paths: `fork-thread.test.ts`, plus the `tornDown` guard in `send` (sending to a torn-down thread must still reject).
 
-## Settle the construction seam
+## Settle the construction seam — DONE
 
 - Goal: `AgentOptions` drops its hook fields and becomes `InferenceOptions`; `Provider.createAgent` becomes `createInferenceManager`. No hook type appears in any provider file.
 - Tests:
   - `agent.test.ts` and `thread.test.ts` cover construction and cloning; `fork-thread.test.ts` covers `clone` + `truncateMessages` at the root.
   - `forceToolUse`'s `contextAgent?: Runner` becomes `context?: NativeInferenceManager` — it is single-shot and never needed the loop. Verify the anthropic `instanceof` path still finds native messages (compaction / title generation paths in `thread.test.ts`).
   - `node/providers/mock.ts` must implement the new seam; `thread-abort.test.ts` and `thread-compact.test.ts` exercise it.
+
+Done. `AgentOptions` is `InferenceOptions` and carries only inference config
+(model, systemPrompt, tools, thinking, reasoning); `Provider.createAgent` is
+`Provider.createInferenceManager`; `forceToolUse`'s `contextAgent` is `context`.
+No hook type is left in any provider file.
+
+Notes and deviations:
+
+- `AgentOptions.onUpdate` — the last survivor of the hook fields — is gone, and
+  with it both managers' `notify()`. The manager's only outbound channel is now
+  the per-request `OnRequestUpdate` callback, as the design says. `Agent`
+  notifies at the mutation call sites instead; two were missing and were added:
+  after the gate's own `appendUserMessage` (previously only notified when the
+  caller also had pending content) and after the abort marker in
+  `finishTurnAbort`.
+- `ToolExecutor` and `ToolOutcome` moved from `provider-types.ts` to `agent.ts`:
+  they describe the loop's executor, which no provider file mentions.
+  `BeforeRequestDecision` moved with them, and the unused `OnBeforeRequest`
+  alias was deleted. `ToolResults` stays in `provider-types.ts` — it is
+  `appendToolResults`'s parameter, so the manager genuinely needs it.
+- `forceToolUse`'s `context` has no production caller today (compaction and
+  title generation both pass plain `input`), so the anthropic `instanceof`
+  path is exercised only by its type. Left as-is rather than inventing a
+  caller.
+- File renames (`anthropic-inference.ts` / `openai-inference.ts`) and moving
+  `ABORT_MARKER_TEXT` out of `anthropic-runner.ts` remain stage 6.
 
 ## Naming and cleanup
 

@@ -29,7 +29,7 @@ import { CodexAuthError, type CodexCredentials } from "./codex-auth.ts";
 import { OpenAIInferenceManager } from "./openai-runner.ts";
 import {
   type AgentInput,
-  type AgentOptions,
+  type InferenceOptions,
   type NativeInferenceManager,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type Provider,
@@ -1070,7 +1070,7 @@ export class OpenAIProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: NativeInferenceManager;
+    context?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -1078,7 +1078,7 @@ export class OpenAIProvider implements Provider {
       effort?: ThinkingEffort;
     };
   }): ProviderToolUseRequest {
-    const { model, input, spec, systemPrompt, contextAgent } = options;
+    const { model, input, spec, systemPrompt, context } = options;
     if (this.authType === "chatgpt") {
       assertChatGPTModelSupported(model);
     }
@@ -1087,7 +1087,7 @@ export class OpenAIProvider implements Provider {
     const abortController = new AbortController();
 
     const messages: ProviderMessage[] = [
-      ...(contextAgent ? contextAgent.log.messages : []),
+      ...(context ? context.log.messages : []),
       {
         role: "user",
         content: input,
@@ -1214,7 +1214,7 @@ export class OpenAIProvider implements Provider {
     };
   }
 
-  createAgent(options: AgentOptions): NativeInferenceManager {
+  createInferenceManager(options: InferenceOptions): NativeInferenceManager {
     if (this.authType === "chatgpt") {
       assertChatGPTModelSupported(options.model);
     }

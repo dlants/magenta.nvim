@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
-import type { Agent } from "../agent.ts";
+import type { Agent, ToolExecutor } from "../agent.ts";
 import type { Logger } from "../logger.ts";
 import type { ProviderProfile } from "../provider-options.ts";
 import { createTestAgent, flatPhase, noopLogger } from "../test-helpers.ts";
@@ -16,7 +16,6 @@ import type {
   NativeMessageIdx,
   RequestedTool,
   StreamingBlock,
-  ToolExecutor,
   ToolResults,
   TurnResult,
 } from "./provider-types.ts";

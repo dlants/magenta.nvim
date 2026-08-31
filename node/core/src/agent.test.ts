@@ -16,7 +16,7 @@ import type { ProviderProfile } from "./provider-options.ts";
 import { AnthropicInferenceManager } from "./providers/anthropic-runner.ts";
 import { MockAnthropicClient } from "./providers/mock-anthropic-client.ts";
 import type {
-  AgentOptions,
+  InferenceOptions,
   NativeInferenceManager,
   Provider,
 } from "./providers/provider-types.ts";
@@ -2198,9 +2198,11 @@ describe("Agent bash summary reminder", () => {
 
 describe("Agent createFreshAgent thinking effort override", () => {
   it("applies subagentConfig.effort to thinking when creating agent", () => {
-    const captured: AgentOptions[] = [];
+    const captured: InferenceOptions[] = [];
     const spyProvider: Provider = {
-      createAgent(options: AgentOptions): NativeInferenceManager {
+      createInferenceManager(
+        options: InferenceOptions,
+      ): NativeInferenceManager {
         captured.push(options);
         const mockClient = new MockAnthropicClient();
         return new AnthropicInferenceManager(
@@ -2231,9 +2233,11 @@ describe("Agent createFreshAgent thinking effort override", () => {
   });
 
   it("force-enables thinking when profile.thinking is unset but subagent has effort", () => {
-    const captured: AgentOptions[] = [];
+    const captured: InferenceOptions[] = [];
     const spyProvider: Provider = {
-      createAgent(options: AgentOptions): NativeInferenceManager {
+      createInferenceManager(
+        options: InferenceOptions,
+      ): NativeInferenceManager {
         captured.push(options);
         const mockClient = new MockAnthropicClient();
         return new AnthropicInferenceManager(
@@ -2261,9 +2265,11 @@ describe("Agent createFreshAgent thinking effort override", () => {
   });
 
   it("uses profile.thinking unchanged when no subagentConfig.effort override", () => {
-    const captured: AgentOptions[] = [];
+    const captured: InferenceOptions[] = [];
     const spyProvider: Provider = {
-      createAgent(options: AgentOptions): NativeInferenceManager {
+      createInferenceManager(
+        options: InferenceOptions,
+      ): NativeInferenceManager {
         captured.push(options);
         const mockClient = new MockAnthropicClient();
         return new AnthropicInferenceManager(

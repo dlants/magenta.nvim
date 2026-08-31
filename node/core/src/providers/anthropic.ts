@@ -26,7 +26,7 @@ import {
 import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
 import type {
   AgentInput,
-  AgentOptions,
+  InferenceOptions,
   NativeInferenceManager,
   Provider,
   ProviderMessage,
@@ -481,7 +481,7 @@ export class AnthropicProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    contextAgent?: NativeInferenceManager;
+    context?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -495,7 +495,7 @@ export class AnthropicProvider implements Provider {
       spec,
       systemPrompt,
       disableCaching,
-      contextAgent,
+      context,
       thinking,
     } = options;
     let aborted = false;
@@ -523,8 +523,8 @@ export class AnthropicProvider implements Provider {
 
     // Extract native messages from context agent if provided
     let contextMessages: Anthropic.MessageParam[] = [];
-    if (contextAgent && contextAgent instanceof AnthropicInferenceManager) {
-      contextMessages = contextAgent.getNativeMessages();
+    if (context && context instanceof AnthropicInferenceManager) {
+      contextMessages = context.getNativeMessages();
     }
 
     // Build messages: optional context + new user message
@@ -757,7 +757,7 @@ export class AnthropicProvider implements Provider {
     };
   }
 
-  createAgent(options: AgentOptions): NativeInferenceManager {
+  createInferenceManager(options: InferenceOptions): NativeInferenceManager {
     return new AnthropicInferenceManager(options, this.client, {
       authType: this.authType,
       includeWebSearch: this.includeWebSearch,

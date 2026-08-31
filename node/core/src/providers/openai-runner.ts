@@ -18,8 +18,8 @@ import {
 import type {
   AgentInput,
   AgentLog,
-  AgentOptions,
   FinalizeReason,
+  InferenceOptions,
   NativeInferenceManager,
   NativeMessageIdx,
   OnRequestUpdate,
@@ -128,7 +128,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
   private promptCacheKey = randomUUID();
 
   constructor(
-    private options: AgentOptions,
+    private options: InferenceOptions,
     private client: OpenAIStreamingClient,
     private openaiOptions: OpenAIRunnerOptions,
   ) {}
@@ -138,10 +138,6 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       messages: this.messages,
       latestUsage: this.latestUsage,
     };
-  }
-
-  private notify(): void {
-    queueMicrotask(() => this.options.onUpdate());
   }
 
   // -------------------------------------------------------------------------
@@ -191,7 +187,6 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     }
 
     this.syncStreamingBlock();
-    this.notify();
   }
 
   /** Report the in-progress block, normalized away from the native shape: a
@@ -378,7 +373,6 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       this.messages.push({ role: "user", content: classified });
     }
     this.restamp();
-    this.notify();
   }
 
   /** Every requested tool gets exactly one result block. Ids the executor
@@ -407,7 +401,6 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       }
     }
     this.restamp();
-    this.notify();
   }
 
   private get isAborted(): boolean {
@@ -428,7 +421,6 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     );
     dropDanglingToolUses(this.messages);
     this.restamp();
-    this.notify();
   }
 
   clone(): OpenAIInferenceManager {
