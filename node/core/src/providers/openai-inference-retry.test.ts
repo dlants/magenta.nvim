@@ -133,6 +133,28 @@ describe("OpenAIInferenceManager retry", () => {
     });
   });
 
+  it("re-sends the pre-turn items verbatim after a retry", async () => {
+    const { client, agent } = setup();
+    const { turn, stream } = await start(client, agent);
+    const originalInput = structuredClone(stream.input);
+    stream.streamReasoningSummary(["let me think"], {
+      itemId: "rs_1",
+      encryptedContent: "enc-1",
+    });
+    stream.streamText("half an answer");
+    await tick();
+    stream.respondWithError(apiError(429));
+    await tick();
+    await vi.advanceTimersByTimeAsync(1000);
+    const retry = streamAt(client, 1);
+    // Items committed by the failed attempt must not be resent alongside the
+    // history they were meant to extend.
+    expect(retry.input).toEqual(originalInput);
+    retry.finishResponse();
+    await tick();
+    await turn;
+  });
+
   it("surfaces a non-retryable error without retrying", async () => {
     const { client, agent } = setup();
     const { turn, stream } = await start(client, agent);

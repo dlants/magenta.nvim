@@ -10,7 +10,6 @@ import type {
 } from "./mock-openai-client.ts";
 import {
   type NativeInferenceManager,
-  type NativeMessageIdx,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ProviderMessage,
   type ProviderToolResult,
@@ -700,6 +699,126 @@ describe("OpenAIInferenceManager clone", () => {
   });
 });
 
+describe("OpenAIInferenceManager tool result attachments", () => {
+  const image = {
+    type: "image" as const,
+    source: {
+      type: "base64" as const,
+      media_type: "image/png" as const,
+      data: "aW1n",
+    },
+    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+  };
+  const document = {
+    type: "document" as const,
+    source: {
+      type: "base64" as const,
+      media_type: "application/pdf" as const,
+      data: "cGRm",
+    },
+    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+  };
+
+  async function runWithResult(
+    value: Extract<ProviderToolResult["result"], { status: "ok" }>["value"],
+  ) {
+    const { client, agent } = setup({
+      executeTools: (requests) =>
+        Promise.resolve({
+          type: "continue" as const,
+          results: new Map(
+            requests.map((request) => [
+              request.id,
+              {
+                status: "ok" as const,
+                value,
+                structuredResult: {
+                  status: "ok",
+                  value: "",
+                } as unknown as ToolStructuredResult,
+              },
+            ]),
+          ),
+        }),
+    });
+    const { turn, stream } = await startTurn(client, agent);
+    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    await stream.settle();
+    stream.finishResponse();
+    const followup = await client.awaitStreamAt(1);
+    followup.finishResponse();
+    await turn;
+    return followup;
+  }
+
+  it("sends attachments as the user message following the tool output", async () => {
+    const followup = await runWithResult([
+      userText("here it is"),
+      image,
+      {
+        ...document,
+        title: "spec.pdf",
+      },
+    ]);
+    const outputs = followup.inputItemsOfType("function_call_output");
+    expect(outputs).toHaveLength(1);
+    // Images and documents cannot ride inside a function_call_output.
+    expect(outputs[0].output).toBe("here it is");
+    const messages = followup.inputItemsOfType("message");
+    const attachments = messages[messages.length - 1];
+    expect(attachments.role).toBe("user");
+    expect(attachments.content).toMatchObject([
+      { type: "input_image", image_url: "data:image/png;base64,aW1n" },
+      { type: "input_file", filename: "spec.pdf" },
+    ]);
+  });
+
+  it("labels an attachment-only result, since an empty output is rejected", async () => {
+    const followup = await runWithResult([image, document]);
+    const outputs = followup.inputItemsOfType("function_call_output");
+    expect(outputs[0].output).toBe("Attachment follows:");
+    const messages = followup.inputItemsOfType("message");
+    expect(messages[messages.length - 1].content).toMatchObject([
+      { type: "input_image" },
+      // A document with no title still needs a filename on the wire.
+      { type: "input_file", filename: "untitled.pdf" },
+    ]);
+  });
+});
+
+describe("OpenAIInferenceManager stop info", () => {
+  it("keeps an earlier turn's stop info when a later turn is pruned", async () => {
+    const { client, agent } = setup();
+    const first = await startTurn(client, agent);
+    first.stream.streamText("first");
+    await first.stream.settle();
+    first.stream.finishResponse("end_turn", {
+      inputTokens: 10,
+      outputTokens: 2,
+      cacheHits: 0,
+    });
+    await first.turn;
+
+    const second = await startTurn(client, agent, "second");
+    second.stream.streamReasoningSummary(["about to call a tool"], {
+      itemId: "rs_1",
+      encryptedContent: "enc-1",
+    });
+    second.stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    await second.stream.settle();
+    agent.abort();
+    second.stream.abortMidstream();
+    await second.turn;
+
+    // Pruning renumbers the native items, so the surviving turn's stop info
+    // has to be remapped rather than dropped along with them.
+    expect(lastAssistant(agent)).toMatchObject({
+      stopReason: "end_turn",
+      usage: { inputTokens: 10, outputTokens: 2, cacheHits: 0 },
+    });
+  });
+});
+
 describe("OpenAIInferenceManager truncation", () => {
   it("keeps messages up to the given index", async () => {
     const { client, agent } = setup();
@@ -732,9 +851,10 @@ describe("OpenAIInferenceManager truncation", () => {
     followup.finishResponse();
     await turn;
 
-    const assistantIdx = agent.manager.log.messages.findIndex((message) =>
-      message.content.some((content) => content.type === "tool_use"),
-    ) as NativeMessageIdx;
+    // NativeMessageIdx indexes the native item array, so it must be read off
+    // the content block the conversion stamped, not off the message list.
+    const toolUse = toolUseBlocks(agent)[0];
+    const assistantIdx = toolUse.nativeMessageIdx;
 
     // Truncating back to the assistant message severs the tool_use from its
     // result; the backend rejects such a request, so it must be dropped.

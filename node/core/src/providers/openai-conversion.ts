@@ -16,7 +16,7 @@ import { classifyTextContent } from "./tagged-content.ts";
  * turn's last item. The native item array has no field for it. */
 export type ItemStopInfo = {
   stopReason: StreamStopReason;
-  usage?: Usage | undefined;
+  usage: Usage;
 };
 
 type Item = OpenAI.Responses.ResponseInputItem;
@@ -61,7 +61,7 @@ export function convertOpenAIItemsToProvider(
     if (info && role === "assistant") {
       const target = messages[messages.length - 1];
       target.stopReason = info.stopReason;
-      if (info.usage) target.usage = info.usage;
+      target.usage = info.usage;
     }
   });
 

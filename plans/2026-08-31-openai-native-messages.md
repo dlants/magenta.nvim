@@ -313,6 +313,36 @@ Decisions/deviations:
   by `openai-conversion.test.ts`.
 - `inference-parity.test.ts` and `node/chat/openai-streaming-view.test.ts` passed untouched.
 
+Review follow-ups (stage 2):
+
+- `convertInputToNativeItems` now returns `[] | [ResponseInputItem.Message]`, which is what it has
+  always produced. Both unchecked casts in `appendUserMessage` are gone; the trailing-user-message
+  lookup is a narrowing helper `userMessageContent` that also handles the `string` content shape of
+  `EasyInputMessage`.
+- `AttemptResult["completed"].usage`, `Action["stream-completed"].usage`, `attachStopInfo`'s
+  parameter and `ItemStopInfo.usage` are all a required `Usage` again — `attempt()` returns
+  `aborted` when usage is missing, so a completed attempt always has it. The runtime guard in
+  `convertOpenAIItemsToProvider` is gone.
+- `getNativeMessageIdx`'s `-1` on an empty log is left as is: `NativeInferenceManager` declares the
+  return as `NativeMessageIdx` and `AnthropicInferenceManager` has the identical shape, so changing
+  it is an interface-wide change for a sentinel that behaves correctly (`truncateMessages(-1)`
+  clamps to an empty log). Deliberately deferred.
+- New tests:
+  - `openai-inference.test.ts` "OpenAIInferenceManager tool result attachments" — a mixed
+    text+image+document result puts the text in the `function_call_output` and the attachments in
+    the user message that follows it; an attachment-only result gets the `"Attachment follows:"`
+    output (an empty output is rejected by the API) and a titleless document gets
+    `untitled.pdf`.
+  - `openai-inference.test.ts` "OpenAIInferenceManager stop info" — an earlier turn keeps its
+    `stopReason`/`usage` after a later turn is pruned, covering the `stopInfo` remap in
+    `pruneItems`. Note that with the current public API drops are always trailing, so the remap is
+    identity here; the test guards against losing the entries outright.
+  - `openai-inference-retry.test.ts` "re-sends the pre-turn items verbatim after a retry" — a retry
+    after a reasoning item and partial text were already committed re-issues byte-identical input.
+- The truncation test now reads `nativeMessageIdx` off a `tool_use` content block instead of
+  deriving it from `log.messages.findIndex`, which is only coincidentally correct now that the
+  index space is the item array.
+
 - Tests:
   - `openai-inference.test.ts` and `openai-inference-retry.test.ts` pass with only mechanical
     changes; any assertion that has to change shape is a finding to explain, not to paper over.

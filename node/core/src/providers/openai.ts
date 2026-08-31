@@ -191,7 +191,7 @@ function toOpenAITool(spec: ProviderToolSpec): OpenAI.Responses.Tool {
  * back into an item, by design. */
 export function convertInputToNativeItems(
   content: ReadonlyArray<AgentInput>,
-): OpenAI.Responses.ResponseInputItem[] {
+): [] | [OpenAI.Responses.ResponseInputItem.Message] {
   const parts: OpenAI.Responses.ResponseInputContent[] = [];
   for (const item of content) {
     switch (item.type) {

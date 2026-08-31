@@ -51,7 +51,7 @@ const tool = (name: string): ProviderToolSpec => ({
 function userItem(text: string): OpenAI.Responses.ResponseInputItem {
   return convertInputToNativeItems([
     { type: "text", text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
-  ])[0];
+  ])[0] as OpenAI.Responses.ResponseInputItem;
 }
 
 describe("model capability helpers", () => {

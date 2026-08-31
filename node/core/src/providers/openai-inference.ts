@@ -92,7 +92,7 @@ type Action =
   | {
       type: "stream-completed";
       stopReason: StreamStopReason;
-      usage: Usage | undefined;
+      usage: Usage;
     }
   | { type: "stream-error"; error: Error }
   | { type: "stream-aborted" };
@@ -101,7 +101,7 @@ type AttemptResult =
   | {
       type: "completed";
       stopReason: StreamStopReason;
-      usage: Usage | undefined;
+      usage: Usage;
     }
   | { type: "aborted" }
   | { type: "error"; error: Error };
@@ -320,10 +320,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     this.updateCache();
   }
 
-  private attachStopInfo(
-    stopReason: StreamStopReason,
-    usage: Usage | undefined,
-  ) {
+  private attachStopInfo(stopReason: StreamStopReason, usage: Usage) {
     const idx = (this.items.length - 1) as NativeMessageIdx;
     if (idx < this.turnStartIdx) return;
     this.stopInfo.set(idx, { stopReason, usage });
@@ -402,16 +399,9 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     // the display conversion, so nothing is classified here.
     const native = convertInputToNativeItems(content);
     if (native.length === 0) return;
-    const last = this.items[this.items.length - 1];
-    const lastUser =
-      last && last.type === "message" && last.role === "user"
-        ? (last as OpenAI.Responses.ResponseInputItem.Message)
-        : undefined;
-    const [first, ...rest] =
-      native as OpenAI.Responses.ResponseInputItem.Message[];
+    const lastUser = userMessageContent(this.items[this.items.length - 1]);
     if (opts?.coalesce && lastUser) {
-      lastUser.content.push(...first.content);
-      this.items.push(...rest);
+      lastUser.push(...native[0].content);
     } else {
       this.items.push(...native);
     }
@@ -696,6 +686,17 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     }
     return "end_turn";
   }
+}
+
+/** The content list of a trailing user message, which is where a coalescing
+ * append adds its parts. */
+function userMessageContent(
+  item: Item | undefined,
+): OpenAI.Responses.ResponseInputContent[] | undefined {
+  if (!item || item.type !== "message" || item.role !== "user") {
+    return undefined;
+  }
+  return Array.isArray(item.content) ? item.content : undefined;
 }
 
 function startBlock(
