@@ -2,6 +2,8 @@ import { APIError } from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Logger } from "../logger.ts";
 import {
+  describeError,
+  flattenError,
   isAuthError,
   makeRefreshAuth,
   REFRESH_WINDOW_MS,
@@ -77,6 +79,35 @@ describe("isAuthError", () => {
     expect(isAuthError(apiErr)).toBe(false);
     expect(isAuthError("not an error")).toBe(false);
     expect(isAuthError(null)).toBe(false);
+  });
+});
+
+describe("cause chains", () => {
+  function wrapped(): Error {
+    const cause = new Error("Token is expired. Run 'aws sso login'.");
+    cause.name = "TokenProviderError";
+    return new Error("Connection error.", { cause });
+  }
+
+  it("detects an auth error wrapped as a cause", () => {
+    expect(isAuthError(wrapped())).toBe(true);
+  });
+
+  it("describeError appends the wrapped cause", () => {
+    expect(describeError(wrapped())).toBe(
+      "Connection error. Cause: Token is expired. Run 'aws sso login'.",
+    );
+  });
+
+  it("flattenError keeps the original as the cause so detection still works", () => {
+    const flattened = flattenError(wrapped());
+    expect(flattened.message).toContain("Token is expired");
+    expect(isAuthError(flattened)).toBe(true);
+  });
+
+  it("flattenError returns the error itself when there is nothing to add", () => {
+    const plain = new Error("plain");
+    expect(flattenError(plain)).toBe(plain);
   });
 });
 

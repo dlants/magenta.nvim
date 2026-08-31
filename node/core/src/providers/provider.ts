@@ -103,6 +103,7 @@ function openAIProviderOptions(
         baseUrl: profile.baseUrl,
         authType: "bedrock",
         env: profile.env,
+        tokenRefreshCommand: profile.tokenRefreshCommand,
       };
     default:
       return {

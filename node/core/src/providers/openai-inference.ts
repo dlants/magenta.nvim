@@ -5,6 +5,12 @@ import type { ReasoningEffort, ReasoningSummary } from "../provider-options.ts";
 import type { ToolName, ToolRequestId, ValidateInput } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import {
+  describeError,
+  flattenError,
+  isAuthError,
+  type RefreshAuth,
+} from "./auth-refresh.ts";
+import {
   ABORT_TOOL_RESULT_TEXT,
   getRetryDelay,
   MAX_RETRY_DURATION,
@@ -59,6 +65,8 @@ export type OpenAIInferenceOptions = {
   includeWebSearch: boolean;
   logger: Logger;
   validateInput: ValidateInput;
+  /** Bedrock-only: refreshes AWS credentials after an auth error. */
+  refreshAuth?: RefreshAuth | undefined;
   reasoning?:
     | {
         effort?: ReasoningEffort | undefined;
@@ -572,12 +580,37 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
 
       if (result.type === "aborted") return result;
 
+      // Auth-error path: refresh credentials and retry immediately, outside the
+      // 429/5xx retry budget. The 30s guard inside refreshAuth prevents tight
+      // loops.
+      const refreshAuth = this.openaiOptions.refreshAuth;
+      if (refreshAuth && isAuthError(result.error)) {
+        try {
+          await refreshAuth();
+          this.update({ type: "reset-attempt" });
+          continue;
+        } catch (refreshErr) {
+          const refreshMessage =
+            refreshErr instanceof Error
+              ? refreshErr.message
+              : String(refreshErr);
+          return {
+            type: "error",
+            error: new Error(
+              `Auth refresh failed: ${refreshMessage}. Original error: ${describeError(result.error)}`,
+            ),
+          };
+        }
+      }
+
       const elapsed = Date.now() - startTime.getTime();
       if (
         !isRetryableOpenAIError(result.error) ||
         elapsed >= MAX_RETRY_DURATION
       ) {
-        return result;
+        // The surfaced error carries any wrapped cause in its message, since
+        // the SDK collapses fetch-layer failures into "Connection error.".
+        return { type: "error", error: flattenError(result.error) };
       }
 
       const delay = getRetryDelay(attemptNum);

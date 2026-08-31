@@ -193,7 +193,13 @@ How it works:~
     so the credentials cached by `aws sso login` work directly and no
     Bedrock API key is needed.
   - `env.AWS_PROFILE` selects the profile; `env.AWS_REGION` defaults to
-    `us-west-2`.
+    `us-west-2`. Static `env.AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+    (plus optional `AWS_SESSION_TOKEN`) are used instead when set.
+  - `tokenRefreshCommand` works here just as it does for |magenta-bedrock|:
+    when a request fails because the SSO session lapsed, the command is run
+    and the request retried once. Note that credential failures surface from
+    the OpenAI SDK as `Connection error.`; magenta appends the underlying
+    cause to the message it reports.
   - The base URL defaults to
     `https://bedrock-mantle.<region>.api.aws/openai/v1`. Note the `openai/`
     prefix: the frontier models live on that path, while the openly-licensed

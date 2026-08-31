@@ -20,6 +20,14 @@ import type {
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Result } from "../utils/result.ts";
 import {
+  describeError,
+  flattenError,
+  isAuthError,
+  makeRefreshAuth,
+  type RefreshAuth,
+} from "./auth-refresh.ts";
+import { AwsCredentials, resolveAwsRegion } from "./aws-credentials.ts";
+import {
   bedrockMantleBaseUrl,
   createSigV4Fetch,
   DEFAULT_BEDROCK_MANTLE_REGION,
@@ -903,7 +911,11 @@ export type OpenAIProviderOptions = {
 } & (
   | { authType?: "key" | undefined; apiKeyEnvVar?: string | undefined }
   | { authType: "chatgpt"; auth: OpenAIAuth; authUI?: AuthUI | undefined }
-  | { authType: "bedrock"; env?: Record<string, string> | undefined }
+  | {
+      authType: "bedrock";
+      env?: Record<string, string> | undefined;
+      tokenRefreshCommand?: string | undefined;
+    }
 );
 
 export class OpenAIProvider implements Provider {
@@ -911,6 +923,10 @@ export class OpenAIProvider implements Provider {
   public client: OpenAI;
   readonly includeWebSearch: boolean;
   private authType: "key" | "chatgpt" | "bedrock";
+  /** Bedrock-only: runs the profile's `tokenRefreshCommand` and discards the
+   * memoized AWS credentials, so an expired SSO session can be recovered
+   * without restarting. */
+  private refreshAuth: RefreshAuth | undefined;
 
   constructor(
     protected logger: Logger,
@@ -926,14 +942,25 @@ export class OpenAIProvider implements Provider {
       (!options?.baseUrl && this.authType !== "bedrock");
 
     if (options?.authType === "bedrock") {
-      const region = options.env?.AWS_REGION || DEFAULT_BEDROCK_MANTLE_REGION;
+      const region = resolveAwsRegion(
+        options.env,
+        DEFAULT_BEDROCK_MANTLE_REGION,
+      );
+      const credentials = new AwsCredentials(options.env);
       this.client = new OpenAI({
         // SigV4 signing supplies the credentials; the SDK still requires an
         // api key to be set.
         apiKey: "dummy-key-for-bedrock-auth",
         baseURL: options.baseUrl || bedrockMantleBaseUrl(region),
-        fetch: createSigV4Fetch(region, options.env?.AWS_PROFILE),
+        fetch: createSigV4Fetch(region, credentials),
       });
+      if (options.tokenRefreshCommand) {
+        const refresh = makeRefreshAuth(options.tokenRefreshCommand, logger);
+        this.refreshAuth = async () => {
+          await refresh();
+          credentials.reset();
+        };
+      }
       return;
     }
 
@@ -1171,11 +1198,27 @@ export class OpenAIProvider implements Provider {
           if (aborted || !(error instanceof Error)) {
             throw error;
           }
+          // Auth errors are retried outside the 429/5xx budget; the 30s guard
+          // inside refreshAuth prevents tight loops.
+          if (this.refreshAuth && isAuthError(error)) {
+            try {
+              await this.refreshAuth();
+              continue;
+            } catch (refreshErr) {
+              const refreshMessage =
+                refreshErr instanceof Error
+                  ? refreshErr.message
+                  : String(refreshErr);
+              throw new Error(
+                `Auth refresh failed: ${refreshMessage}. Original error: ${describeError(error)}`,
+              );
+            }
+          }
           if (
             !isRetryableOpenAIError(error) ||
             Date.now() - retryStart >= MAX_RETRY_DURATION
           ) {
-            throw error;
+            throw flattenError(error);
           }
 
           const delay = getRetryDelay(attempt);
@@ -1222,6 +1265,7 @@ export class OpenAIProvider implements Provider {
       logger: this.logger,
       validateInput: this.validateInput,
       reasoning: reasoningConfig(options),
+      refreshAuth: this.refreshAuth,
     });
   }
 }

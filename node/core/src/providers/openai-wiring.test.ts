@@ -318,15 +318,14 @@ describe("OpenAI provider wiring", () => {
         auth,
       });
 
-      // The SDK wraps a fetch-layer throw in an APIConnectionError, so the
-      // actionable message only survives on the cause.
+      // The SDK wraps a fetch-layer throw in an APIConnectionError whose
+      // message is a bare "Connection error."; the provider flattens the cause
+      // back into the message it surfaces.
       const error = await titleRequest(provider).promise.then(
         () => undefined,
         (e: Error) => e,
       );
-      expect((error?.cause as Error | undefined)?.message).toMatch(
-        /codex login/,
-      );
+      expect(error?.message).toMatch(/codex login/);
       expect(auth.loginCalls.length).toBe(0);
     });
 

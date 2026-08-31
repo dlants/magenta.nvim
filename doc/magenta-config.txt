@@ -46,7 +46,8 @@ Each profile specifies:
     ChatGPT subscription auth (see |magenta-openai-chatgpt|)
   - `apiKeyEnvVar`: environment variable containing the API key
   - `baseUrl`: (optional) custom API endpoint
-  - `tokenRefreshCommand`: (optional, Bedrock-only) shell command to run
+  - `tokenRefreshCommand`: (optional, Bedrock-only, including
+    `authType = "bedrock"` openai profiles) shell command to run
     when a request fails with an auth/credentials error. Used to refresh
     AWS SSO tokens. The command is re-run at most once per 30 seconds.
     Example: "aws sso login --profile myprofile"

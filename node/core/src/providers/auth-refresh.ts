@@ -14,11 +14,48 @@ export const REFRESH_WINDOW_MS = 30_000;
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
-/** Detects auth/credentials errors from the AWS SDK provider chain or the
- *  Anthropic SDK. */
-export function isAuthError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
+/** Walks the `cause` chain, which is where the real failure lives when an SDK
+ *  wraps it: the OpenAI SDK turns any throw from its `fetch` (including AWS
+ *  credential resolution) into `APIConnectionError("Connection error.")` with
+ *  the original error as `cause`. */
+function causeChain(error: unknown): Error[] {
+  const chain: Error[] = [];
+  let current: unknown = error;
+  while (current instanceof Error && chain.length < 5) {
+    chain.push(current);
+    current = (current as Error & { cause?: unknown }).cause;
+  }
+  return chain;
+}
 
+/** The message a user should see: the outermost message plus any wrapped cause
+ *  messages, since the outermost one is often a useless "Connection error.". */
+export function describeError(error: Error): string {
+  const messages = causeChain(error)
+    .map((err) => err.message)
+    .filter((message, idx, all) => message && all.indexOf(message) === idx);
+  const [outer, ...causes] = messages;
+  return causes.length ? `${outer} Cause: ${causes.join(" Cause: ")}` : outer;
+}
+
+/** Replaces an SDK wrapper error with one whose message includes the wrapped
+ *  cause, so the user sees the real failure rather than "Connection error.".
+ *  The original is kept as `cause`, so error classification still works. */
+export function flattenError(error: Error): Error {
+  const message = describeError(error);
+  if (message === error.message) return error;
+  const flattened = new Error(message, { cause: error });
+  flattened.name = error.name;
+  return flattened;
+}
+
+/** Detects auth/credentials errors from the AWS SDK provider chain or the
+ *  Anthropic SDK, including errors wrapped as a `cause`. */
+export function isAuthError(error: unknown): boolean {
+  return causeChain(error).some(isAuthErrorShallow);
+}
+
+function isAuthErrorShallow(error: Error): boolean {
   if (error instanceof APIError) {
     if (error.status === 401 || error.status === 403) return true;
   }

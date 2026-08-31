@@ -1,6 +1,6 @@
 import { Sha256 } from "@aws-crypto/sha256-js";
-import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { SignatureV4 } from "@smithy/signature-v4";
+import type { AwsCredentials } from "./aws-credentials.ts";
 
 export const DEFAULT_BEDROCK_MANTLE_REGION = "us-west-2";
 
@@ -12,15 +12,20 @@ export function bedrockMantleBaseUrl(region: string): string {
 
 /** Signs each request with SigV4 so that the standard AWS credential chain
  * (including the SSO cache populated by `aws sso login`) can be used instead
- * of a static Bedrock API key. */
+ * of a static Bedrock API key.
+ *
+ * Credential resolution happens per request, inside `fetch`, so an expired SSO
+ * token surfaces as a throw from `fetch` rather than an HTTP error — the OpenAI
+ * SDK then reports it as `APIConnectionError("Connection error.")` with the
+ * real error as `cause` (see `isAuthError`). */
 export function createSigV4Fetch(
   region: string,
-  profile: string | undefined,
+  credentials: AwsCredentials,
 ): typeof fetch {
   const signer = new SignatureV4({
     service: "bedrock",
     region,
-    credentials: fromNodeProviderChain(profile ? { profile } : {}),
+    credentials: credentials.resolve,
     sha256: Sha256,
   });
 
