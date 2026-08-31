@@ -54,9 +54,7 @@ export class Sidebar {
     nvim: Nvim,
   ): Promise<{
     inputHeight: number;
-    inputWidth: number;
     displayHeight: number;
-    displayWidth: number;
   }> {
     const totalHeight = (await getOption("lines", nvim)) as number;
     const cmdHeight = (await getOption("cmdheight", nvim)) as number;
@@ -71,9 +69,7 @@ export class Sidebar {
     );
 
     let inputHeight;
-    let inputWidth;
     let displayHeight;
-    let displayWidth;
 
     switch (resolvedPosition) {
       case "left":
@@ -81,20 +77,12 @@ export class Sidebar {
           windowHeight * sidebarPositionOpts.left.displayHeightPercentage,
         );
         inputHeight = totalHeight - displayHeight - 2;
-        inputWidth = Math.floor(
-          totalWidth * sidebarPositionOpts.left.widthPercentage,
-        );
-        displayWidth = inputWidth;
         break;
       case "right":
         displayHeight = Math.floor(
           windowHeight * sidebarPositionOpts.right.displayHeightPercentage,
         );
         inputHeight = totalHeight - displayHeight - 2;
-        inputWidth = Math.floor(
-          totalWidth * sidebarPositionOpts.right.widthPercentage,
-        );
-        displayWidth = inputWidth;
         break;
       case "above":
         displayHeight = Math.floor(
@@ -103,8 +91,6 @@ export class Sidebar {
         inputHeight = Math.floor(
           windowHeight * sidebarPositionOpts.above.inputHeightPercentage,
         );
-        inputWidth = totalWidth;
-        displayWidth = totalWidth;
         break;
       case "below":
         displayHeight = Math.floor(
@@ -113,23 +99,19 @@ export class Sidebar {
         inputHeight = Math.floor(
           windowHeight * sidebarPositionOpts.below.inputHeightPercentage,
         );
-        inputWidth = totalWidth;
-        displayWidth = totalWidth;
         break;
       case "tab":
         displayHeight = Math.floor(
           windowHeight * sidebarPositionOpts.tab.displayHeightPercentage,
         );
         inputHeight = totalHeight - displayHeight - 2;
-        inputWidth = totalWidth;
-        displayWidth = totalWidth;
         break;
       default:
         // This should never happen since resolveResponsivePosition always returns a base position
         throw new Error(`Unexpected resolved position: ${resolvedPosition}`);
     }
 
-    return { inputHeight, inputWidth, displayHeight, displayWidth };
+    return { inputHeight, displayHeight };
   }
 
   public state:
@@ -214,7 +196,7 @@ export class Sidebar {
 
     const { displayBuffer, inputBuffer } =
       await this.bufferManager.ensureActiveIsMounted(this.getActiveKey());
-    const { inputHeight, inputWidth, displayHeight, displayWidth } =
+    const { inputHeight, displayHeight } =
       await Sidebar.calculateWindowDimensions(
         sidebarPosition,
         sidebarPositionOpts,
@@ -250,7 +232,6 @@ export class Sidebar {
           win: -1, // global split
           split: resolvedPosition,
           height: displayHeight,
-          width: displayWidth,
         },
       ])) as WindowId;
     }
@@ -263,7 +244,6 @@ export class Sidebar {
         win: displayWindow.id, // split inside this window
         split: "below",
         height: inputHeight,
-        width: inputWidth,
       },
     ])) as WindowId;
 
@@ -288,6 +268,10 @@ export class Sidebar {
     // set var so we can avoid closing this window when displaying a diff
     await inputWindow.setVar("magenta", true);
     await inputWindow.setOption("winfixheight", true);
+
+    const displayWidth = (await this.nvim.call("nvim_win_get_width", [
+      displayWindow.id,
+    ])) as number;
 
     this.nvim.logger.debug(`sidebar.create setting state`);
     this.state = {

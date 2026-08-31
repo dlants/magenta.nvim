@@ -75,8 +75,6 @@ export type ProviderTextContent = {
 export type ProviderThinkingContent = {
   type: "thinking";
   thinking: string;
-  /** Anthropic's thinking signature, or OpenAI's `encrypted_content`. Absent
-   * when the provider did not supply one. */
   signature?: string | undefined;
   providerMetadata?: ProviderMetadata | undefined;
   nativeMessageIdx: NativeMessageIdx;
@@ -107,10 +105,6 @@ export type ProviderContextUpdateContent = {
   nativeMessageIdx: NativeMessageIdx;
 };
 
-/** Like `context_update`, this is only ever *constructed* by
- * `classifyTextContent`: the block leaves as plain text (the wire format has
- * nothing else), and is re-tagged on the way back into `ProviderMessage[]` so
- * the view can suppress it rather than render it verbatim. */
 export type ProviderCommentUpdateContent = {
   type: "comment_update";
   text: string;
@@ -318,6 +312,7 @@ export type TurnResult =
   | { type: "suspended"; reason?: SuspendReason | undefined }
   | { type: "aborted" }
   | { type: "failed"; error: Error };
+
 export type ToolResults = ReadonlyMap<
   ToolManager.ToolRequestId,
   ProviderToolResult["result"]
@@ -334,26 +329,17 @@ export type RequestResult =
   | { type: "aborted" }
   | { type: "error"; error: Error };
 
-/** What the manager reports while a request is in flight. Deliberately narrow:
- * the finished content is read off `log.messages`. */
 export type RequestUpdate =
   | { type: "streaming-block"; streamingBlock: StreamingBlock }
   | { type: "block-finished" }
-  /** A retryable failure; the manager is backing off and will try again. */
   | { type: "retry-scheduled"; retry: RetryStatus }
-  /** A fresh attempt is going out, which clears any retry countdown. */
   | { type: "attempt-started" };
 
 export type OnRequestUpdate = (update: RequestUpdate) => void;
 
-/** The provider-specific half of a conversation: the native message array, its
- * conversion to `ProviderMessage`, and one request at a time. The turn loop
- * lives in `Agent`, not here. */
 export interface NativeInferenceManager {
   readonly log: AgentLog;
   appendUserMessage(content: AgentInput[], opts?: { coalesce?: true }): void;
-  /** Every requested tool gets exactly one result block, including ids the
-   * executor omitted. */
   appendToolResults(
     requested: ReadonlyArray<RequestedTool>,
     results: ToolResults,
@@ -361,30 +347,21 @@ export interface NativeInferenceManager {
   getNativeMessageIdx(): NativeMessageIdx;
   truncateMessages(messageIdx: NativeMessageIdx): void;
   clone(): NativeInferenceManager;
-  /** Count the conversation as it would be sent right now. Only providers
-   * that support it implement it; `Agent` issues it lazily, at most once per
-   * request, and only when a before-request hook asks for it. */
   countTokens?(): Promise<number>;
   sendRequest(onUpdate: OnRequestUpdate): Promise<RequestResult>;
-  /** Cancels an in-flight request or a pending retry wait; a no-op otherwise. */
   abort(): void;
+
   /** Leave the history in a shape the provider will accept: no dangling
    * tool_use or half-streamed blocks. */
   finalize(reason: FinalizeReason): void;
 }
 
-/** Why a request stopped short of a completed response. */
 export type FinalizeReason =
   | { type: "aborted" }
   | { type: "error"; error: Error };
-/** Inference configuration for one conversation. No hook or loop concern
- * appears here: the manager's only outbound channel is the per-request
- * `OnRequestUpdate` callback. */
+
 export type ThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
-/** Extended thinking configuration. Disabled thinking carries no other
- * fields, so a budget or effort that can never be acted on is not
- * representable. */
 export type ThinkingConfig =
   | { enabled: false }
   | {
@@ -399,8 +376,6 @@ export type ReasoningConfig = {
   summary?: ReasoningSummary;
 };
 
-/** Provider-specific inference config. Exactly one shape is present, so a
- * manager can never be handed configuration it cannot act on. */
 export type ProviderInferenceConfig =
   | { type: "thinking"; thinking: ThinkingConfig }
   | { type: "reasoning"; reasoning: ReasoningConfig };

@@ -124,7 +124,6 @@ export type HSplitWindowDimensions = {
 };
 
 export type VSplitWindowDimensions = {
-  widthPercentage: number;
   displayHeightPercentage: number;
 };
 
@@ -803,17 +802,13 @@ function parseSidebarPositionOpts(
       const sideOpts = opts[side];
       if (typeof sideOpts === "object" && sideOpts !== null) {
         const sideOptsObj = sideOpts as { [key: string]: unknown };
-        if (
-          typeof sideOptsObj.widthPercentage === "number" &&
-          typeof sideOptsObj.displayHeightPercentage === "number"
-        ) {
+        if (typeof sideOptsObj.displayHeightPercentage === "number") {
           result[side] = {
-            widthPercentage: sideOptsObj.widthPercentage,
             displayHeightPercentage: sideOptsObj.displayHeightPercentage,
           };
         } else {
           logger?.warn(
-            `sidebarPositionOpts.${side} must have widthPercentage and displayHeightPercentage`,
+            `sidebarPositionOpts.${side} must have displayHeightPercentage`,
           );
         }
       } else {
@@ -1070,11 +1065,9 @@ export function parseOptions(
         displayHeightPercentage: 0.8,
       },
       left: {
-        widthPercentage: 0.4,
         displayHeightPercentage: 0.8,
       },
       right: {
-        widthPercentage: 0.4,
         displayHeightPercentage: 0.8,
       },
     },
