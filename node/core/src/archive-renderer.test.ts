@@ -22,7 +22,6 @@ describe("renderThreadLogToMarkdown", () => {
             {
               type: "thinking",
               thinking: "secret reasoning",
-              signature: "sig",
               nativeMessageIdx: idx,
             },
             {

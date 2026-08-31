@@ -44,7 +44,6 @@ describe("renderThreadToMarkdown", () => {
           {
             type: "thinking",
             thinking: "Let me think...",
-            signature: "sig",
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
           {

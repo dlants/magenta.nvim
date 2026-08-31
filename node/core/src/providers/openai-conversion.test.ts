@@ -117,7 +117,6 @@ describe("convertOpenAIItemsToProvider", () => {
     expect(block).toMatchObject({
       type: "thinking",
       thinking: "first\n\nsecond",
-      signature: "enc",
     });
     expect(
       (item as OpenAI.Responses.ResponseReasoningItem).summary,

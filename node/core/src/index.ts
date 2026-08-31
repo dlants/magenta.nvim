@@ -198,7 +198,6 @@ export type {
   ProviderImageContent,
   ProviderMessage,
   ProviderMessageContent,
-  ProviderMetadata,
   ProviderRedactedThinkingContent,
   ProviderServerToolUseContent,
   ProviderSetting,

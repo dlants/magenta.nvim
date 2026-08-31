@@ -68,22 +68,18 @@ export type ProviderTextContent = {
   type: "text";
   text: string;
   citations?: ProviderWebSearchCitation[] | undefined;
-  providerMetadata?: ProviderMetadata | undefined;
   nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderThinkingContent = {
   type: "thinking";
   thinking: string;
-  signature?: string | undefined;
-  providerMetadata?: ProviderMetadata | undefined;
   nativeMessageIdx: NativeMessageIdx;
 };
 
 export type ProviderRedactedThinkingContent = {
   type: "redacted_thinking";
   data: string;
-  providerMetadata?: ProviderMetadata | undefined;
   nativeMessageIdx: NativeMessageIdx;
 };
 
@@ -153,7 +149,6 @@ export type ProviderServerToolUseContent = {
   input: {
     query: string;
   };
-  providerMetadata?: ProviderMetadata | undefined;
   nativeMessageIdx: NativeMessageIdx;
 };
 
@@ -222,8 +217,6 @@ export interface Provider {
   createInferenceManager(options: InferenceOptions): NativeInferenceManager;
 }
 
-export type ProviderMetadata = { provider: "openai"; itemId: string };
-
 export type ProviderToolUseBlockStart = {
   type: "tool_use";
   id: string;
@@ -244,7 +237,6 @@ export type ProviderBlockStartEvent = {
   type: "content_block_start";
   index: number;
   content_block: ProviderContentBlockStart;
-  providerMetadata?: ProviderMetadata;
 };
 
 export type ProviderBlockDeltaEvent = Anthropic.RawContentBlockDeltaEvent;
@@ -289,7 +281,7 @@ export const PLACEHOLDER_NATIVE_MESSAGE_IDX = -1 as NativeMessageIdx;
 
 export type StreamingBlock =
   | { type: "text"; text: string }
-  | { type: "thinking"; thinking: string; signature: string }
+  | { type: "thinking"; thinking: string }
   | {
       type: "tool_use";
       id: ToolManager.ToolRequestId;

@@ -357,7 +357,7 @@ Review follow-ups (stage 2):
   - `node/chat/openai-streaming-view.test.ts` passes untouched — incremental render still works,
     i.e. the cache is refreshed per completed item, not per turn.
 
-## Drop the smuggled fields
+## Drop the smuggled fields — DONE
 
 - Goal: `ProviderMetadata`, `providerMetadata`, `ProviderThinkingContent.signature` and
   `StreamingBlock.signature` are gone from `provider-types.ts` and every writer.
@@ -369,6 +369,28 @@ Review follow-ups (stage 2):
   - Archive and compaction renderers still produce the same markdown for a thread containing
     thinking blocks (existing snapshot-ish tests in `archive-renderer.test.ts` /
     `compact-renderer.test.ts`).
+
+Decisions/deviations:
+
+- `ProviderMetadata` also removed from the two re-export lists (`node/core/src/index.ts`,
+  `node/providers/provider-types.ts`).
+- `AnthropicProvider.createStreamParameters` (`anthropic.ts`) now writes `signature: ""` for
+  thinking blocks. It is a `ProviderMessage`-based path with no callers left (the inference manager
+  builds requests from native messages), so there is nothing to recover a signature from and
+  nothing that sends the result.
+- `OpenAIStreamingBlock`'s internal `signature` field was dropped too: with
+  `StreamingBlock.signature` gone it was written and never read.
+- `openai-conversion.ts` no longer spreads `encrypted_content` into the thinking block; the
+  encrypted content lives only on the native `reasoning` item, which is what the second-turn
+  request assertions in `openai-inference.test.ts` already check.
+- Anthropic display-signature assertions in `anthropic-inference.test.ts` (5 sites) were removed.
+  An attempt to replace the strongest of them with a wire-level assertion on the next request's
+  `params.messages` was abandoned: a thinking-only assistant message does not survive into the next
+  request in that fixture. Native signature accumulation remains covered by the
+  `signature_delta` handling in `anthropic-inference.ts` exercised through those same streams, but
+  the display-level coverage is genuinely gone.
+- Full `vitest run` has two pre-existing flakes in `node/comments/comment-input.test.ts` (spinner
+  virt-line timing); the file passes in isolation.
 
 ## Docs
 

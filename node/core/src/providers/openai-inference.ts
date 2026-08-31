@@ -82,7 +82,7 @@ export type OpenAIInferenceOptions = {
 /** Live accumulation state for one `output_index`. */
 type OpenAIStreamingBlock =
   | { type: "text"; text: string }
-  | { type: "thinking"; thinking: string; signature: string }
+  | { type: "thinking"; thinking: string }
   | { type: "tool_use"; id: ToolRequestId; name: ToolName; inputJson: string }
   | { type: "server_tool_use"; id: string };
 
@@ -219,7 +219,6 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
         streamingBlock = {
           type: "thinking",
           thinking: block.thinking,
-          signature: block.signature,
         };
         break;
       case "tool_use":
@@ -713,7 +712,7 @@ function startBlock(
         inputJson: "",
       };
     case "reasoning":
-      return { type: "thinking", thinking: "", signature: "" };
+      return { type: "thinking", thinking: "" };
     case "web_search_call":
       return { type: "server_tool_use", id: item.id };
     default:

@@ -215,7 +215,6 @@ function convertBlockToProvider(
       return {
         type: "thinking",
         thinking: block.thinking,
-        signature: block.signature,
         nativeMessageIdx,
       };
 

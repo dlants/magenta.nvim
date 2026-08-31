@@ -831,7 +831,6 @@ describe("thinking blocks", () => {
     expect(block?.type).toBe("thinking");
     if (block?.type === "thinking") {
       expect(block.thinking).toBe("Let me think about this...");
-      expect(block.signature).toBe("");
     }
 
     // Add signature
@@ -848,7 +847,6 @@ describe("thinking blocks", () => {
     block = streamingBlock(agent);
     if (block?.type === "thinking") {
       expect(block.thinking).toBe("Let me think about this...");
-      expect(block.signature).toBe("EqQBCgIYAhIM1gbcDa9GJwZA2b3h");
     }
 
     // Stop the block
@@ -867,9 +865,6 @@ describe("thinking blocks", () => {
     expect(assistantContent[0].type).toBe("thinking");
     if (assistantContent[0].type === "thinking") {
       expect(assistantContent[0].thinking).toBe("Let me think about this...");
-      expect(assistantContent[0].signature).toBe(
-        "EqQBCgIYAhIM1gbcDa9GJwZA2b3h",
-      );
     }
 
     // Abort to clean up (since we manually streamed, finishResponse would replace content)
@@ -933,7 +928,6 @@ describe("thinking blocks", () => {
     const block = streamingBlock(agent);
     if (block?.type === "thinking") {
       expect(block.thinking).toBe("Part 1 Part 2");
-      expect(block.signature).toBe("ABCDEF");
     }
 
     stream.emitEvent({
@@ -975,7 +969,6 @@ describe("thinking blocks", () => {
     expect(assistantContent[0].type).toBe("thinking");
     if (assistantContent[0].type === "thinking") {
       expect(assistantContent[0].thinking).toBe("Deep thoughts here");
-      expect(assistantContent[0].signature).toBe("signature123");
     }
 
     expect(assistantContent[1].type).toBe("text");

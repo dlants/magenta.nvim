@@ -355,7 +355,7 @@ export class AnthropicProvider implements Provider {
               content.push({
                 type: "thinking",
                 thinking: c.thinking,
-                signature: c.signature ?? "",
+                signature: "",
               });
               break;
 

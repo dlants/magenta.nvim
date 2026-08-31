@@ -116,9 +116,6 @@ function convertItem(
           // The parts survive verbatim in the native item; the join is a
           // display concern only.
           thinking: item.summary.map((s) => s.text).join("\n\n"),
-          ...(item.encrypted_content
-            ? { signature: item.encrypted_content }
-            : {}),
           nativeMessageIdx,
         },
       ];

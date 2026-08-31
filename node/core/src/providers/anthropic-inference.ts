@@ -364,7 +364,6 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
           streamingBlock: {
             type: "thinking",
             thinking: block.thinking,
-            signature: block.signature,
           },
         });
         break;

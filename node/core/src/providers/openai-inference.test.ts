@@ -380,7 +380,6 @@ describe("OpenAIInferenceManager reasoning", () => {
     expect(thinking).toHaveLength(1);
     expect(thinking[0]).toMatchObject({
       thinking: "first\n\nsecond\n\nthird",
-      signature: "enc-1",
     });
 
     const next = await startTurn(client, agent, "more");
@@ -429,7 +428,7 @@ describe("OpenAIInferenceManager reasoning", () => {
     const thinking = assistant(agent).content.find(
       (c) => c.type === "thinking",
     );
-    expect(thinking).toMatchObject({ thinking: "", signature: "enc-empty" });
+    expect(thinking).toMatchObject({ thinking: "" });
 
     const next = await startTurn(client, agent, "again");
     expect(next.stream.inputItemsOfType("reasoning")[0]).toMatchObject({
