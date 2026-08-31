@@ -66,6 +66,14 @@ The start function in [magenta.ts](https://github.com/dlants/magenta.nvim/blob/m
 
 Most commands are defined in `init.lua`, though some are defined on the node side, like [sidebar.ts](https://github.com/dlants/magenta.nvim/blob/main/node/sidebar.ts).
 
+## losing the connection to neovim
+
+The lua and node halves are joined by two independent things: the job (`M.job_id`, from `jobstart`) and the rpc channel (`M.channel_id`, the socket connection node makes back to `$NVIM`). Either can die without the other.
+
+If neovim drops the channel (it does this if it hits an error decoding a message we wrote, and of course when it exits), the symptom on the lua side is that every autocmd/command calling `safe_rpcnotify` fails with `Invalid channel: N`. `teardown_bridge` then removes the `MagentaBridge` autocmds and the `:Magenta` command so we don't spam errors, which shows up as `E492: Not an editor command: Magenta ...`.
+
+On the node side, the socket handlers in [nvim-node/attach.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvim/nvim-node/attach.ts) record this: a FIN from neovim logs a warning, and the socket closing (when we did not call `detach()`) logs an error and exits the process. Without that exit you get an orphaned node process — alive, burning tokens, unable to talk to nvim. So if you see `lost connection to neovim` in `/tmp/magenta.log`, that is the node side reporting nvim hung up on it; look just above it for a write/pack error, which is the usual cause.
+
 ## testing setup
 
 The startup for tests is a little different, handled in [test/preamble.ts](https://github.com/dlants/magenta.nvim/blob/main/node/test/preamble.ts). Here, the node process starts first. In every tests, it creates an nvim socket, and then starts nvim with the `--listen` flag to attach to that socket. It then proceeds to init the magenta plugin against that socket, as in the normal startup sequence.

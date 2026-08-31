@@ -44,6 +44,9 @@ export async function attach<ApiInfo extends BaseEvents = BaseEvents>({
   let lastReqId = 0;
   let handlerId = 0;
 
+  // Set by `detach()` so we can distinguish a deliberate disconnect from
+  // neovim dropping the rpc channel out from under us.
+  let detached = false;
   const unpackrStream = new UnpackrStream({ useRecords: false });
   const nvimSocket = await new Promise<net.Socket>((resolve, reject) => {
     const client = new net.Socket();
@@ -55,13 +58,27 @@ export async function attach<ApiInfo extends BaseEvents = BaseEvents>({
           unpackrStream.write(data);
         })
         .on("error", (error) => {
-          logger.error("socket error", error);
+          logger.error("nvim socket error", error);
         })
         .on("end", () => {
-          logger.debug("connection closed by neovim");
+          // FIN from neovim. Expected when nvim exits; otherwise this means
+          // nvim closed our rpc channel (e.g. it rejected a message we wrote)
+          // and every subsequent rpcnotify from lua will fail with
+          // "Invalid channel", so record it loudly.
+          if (!detached) {
+            logger.warn("neovim closed the rpc socket (received FIN)");
+          }
         })
-        .on("close", () => {
-          logger.debug("connection closed by node");
+        .on("close", (hadError: boolean) => {
+          if (detached) {
+            logger.debug("nvim socket closed after detach");
+            return;
+          }
+          logger.error(
+            `lost connection to neovim (hadError=${hadError}); exiting. The nvim-side bridge is dead, so this process can no longer do anything useful.`,
+          );
+          // Give the logger a chance to flush before we go.
+          setTimeout(() => process.exit(1), 100);
         });
       resolve(client);
     });
@@ -81,7 +98,20 @@ export async function attach<ApiInfo extends BaseEvents = BaseEvents>({
     }
 
     logger.debug(prettyRPCMessage(message, "out"));
-    nvimSocket.write(packr.pack(message) as unknown as Uint8Array);
+    // A pack failure or a write error would otherwise be silent, and if
+    // neovim rejects what we wrote it will close the channel — leaving the
+    // process alive but unable to talk to nvim.
+    let packed;
+    try {
+      packed = packr.pack(message) as unknown as Uint8Array;
+    } catch (error) {
+      logger.error("failed to pack rpc message for nvim", error as Error);
+      processMessageOutQueue();
+      return;
+    }
+    nvimSocket.write(packed, (error) => {
+      if (error) logger.error("failed to write to nvim socket", error);
+    });
     processMessageOutQueue();
   }
 
@@ -204,6 +234,7 @@ export async function attach<ApiInfo extends BaseEvents = BaseEvents>({
       requestHandlers.set(method as string, callback);
     },
     detach() {
+      detached = true;
       nvimSocket.destroy();
       unpackrStream.end();
     },
