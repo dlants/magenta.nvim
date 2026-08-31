@@ -15,7 +15,11 @@ const context: RequestContext = {
   outputTokenCount: 0,
 };
 
-const requestContext = { ...context, isOpeningRequest: true, suspended: false };
+const requestContext = {
+  ...context,
+  isOpeningRequest: true,
+  status: "pending" as const,
+};
 describe("composeSupervisors onBeforeRequest", () => {
   it("contributes one hook entry per supervisor that answers, in order", async () => {
     const first: ThreadSupervisor = {

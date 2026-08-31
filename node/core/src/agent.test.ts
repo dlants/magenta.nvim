@@ -2913,6 +2913,34 @@ describe("Agent preflight token count", () => {
     expect(agent.inputTokenCount).toBe(42);
   });
 
+  it("clears the count when it fails rather than reporting a stale one", async () => {
+    const seen: (number | undefined)[] = [];
+    const { agent, mockClient } = createTestAgent({
+      getHooks: () => agentHooks({ onBeforeRequest: [noteCount(seen, true)] }),
+    });
+    mockClient.mockInputTokenCount = 42;
+    const first = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+    await first;
+    expect(agent.inputTokenCount).toBe(42);
+
+    mockClient.countTokensError = new Error("count failed");
+    const second = agent.runTurnLoop(userInput("again"));
+    const stream2 = await pollUntil(() => {
+      const s = mockClient.streams[1];
+      if (!s) throw new Error("waiting for the second request");
+      return s;
+    });
+    stream2.streamText("ok");
+    stream2.finishResponse("end_turn");
+    await second;
+    // The previous request's number would make a hook decide about the wrong
+    // conversation, so it is dropped.
+    expect(seen).toEqual([42, undefined]);
+    expect(agent.inputTokenCount).toBeUndefined();
+  });
   it("does not count when an earlier hook has already suspended", async () => {
     const seen: (number | undefined)[] = [];
     const { agent, mockClient } = createTestAgent({

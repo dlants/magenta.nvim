@@ -6,6 +6,10 @@ import {
   createTestOpenAIAgent,
 } from "../test-helpers.ts";
 import type { BeforeRequestHook } from "../thread-api.ts";
+import {
+  AutoCompactSupervisor,
+  composeSupervisors,
+} from "../thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
 import { ABORT_MARKER_TEXT } from "./anthropic-runner.ts";
@@ -259,6 +263,38 @@ describe("abort parity", () => {
   });
 });
 
+describe("preflight token count parity", () => {
+  /** The count is provider-specific: only the anthropic manager implements
+   * `countTokens`. On openai a hook that asks for one sees `undefined`, so
+   * `AutoCompactSupervisor` cannot fire — auto-compaction is an
+   * anthropic-only feature until openai grows a counting endpoint. */
+  const compactHooks = () =>
+    agentHooks({
+      onBeforeRequest: composeSupervisors(() => [
+        new AutoCompactSupervisor({ nextPrompt: "wrap up", threshold: 1 }),
+      ]).onBeforeRequest,
+    });
+  it("suspends for compaction on anthropic and not on openai", async () => {
+    const { agent, mockClient } = createTestAgent({
+      getHooks: compactHooks,
+      executeTools: noExecutor,
+    });
+    mockClient.mockInputTokenCount = 100;
+    expect(await agent.runTurnLoop([text("go")])).toEqual({
+      type: "suspended",
+      reason: { kind: "compact", nextPrompt: "wrap up" },
+    });
+
+    const openai = createTestOpenAIAgent({
+      getHooks: compactHooks,
+      executeTools: noExecutor,
+    });
+    const turn = openai.agent.runTurnLoop([text("go")]);
+    const stream = await openai.mockClient.awaitStream();
+    stream.finishResponse("end_turn", { inputTokens: 100, outputTokens: 1 });
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+  });
+});
 describe("appendUserMessage coalescing", () => {
   const makeAnthropic = () => createTestAgent().agent.manager;
   const makeOpenAI = () => createTestOpenAIAgent().agent.manager;

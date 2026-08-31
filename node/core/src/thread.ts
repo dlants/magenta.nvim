@@ -543,7 +543,7 @@ export class Thread {
   private reminderAction(ctx: AgentRequestContext): RequestAction {
     // A suspended request is never issued, so a reminder placed in it would
     // be marked sent and never delivered.
-    if (ctx.suspended) return { type: "none" };
+    if (ctx.status === "suspended") return { type: "none" };
     return this.systemReminders.onBeforeRequest(ctx) ?? { type: "none" };
   }
 
@@ -557,7 +557,11 @@ export class Thread {
   private async queueFlushAction(
     ctx: AgentRequestContext,
   ): Promise<RequestAction> {
-    if (ctx.suspended || ctx.isOpeningRequest || !this.nextRequestQueue.length)
+    if (
+      ctx.status === "suspended" ||
+      ctx.isOpeningRequest ||
+      !this.nextRequestQueue.length
+    )
       return { type: "none" };
     return { type: "submissions", messages: await this.flushMidTurn() };
   }

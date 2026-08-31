@@ -434,6 +434,38 @@ Notes and deviations:
   - Composition parity: injections from several hooks arrive in registration order, the first `suspend` wins, and the system reminder is still last. `system-reminders.test.ts` and the supervisor tests cover this and should need no behavioural change.
   - Retries do not re-count.
 
+### Review follow-up (stage 3)
+
+- `ComposedBeforeRequest` is a discriminated union again:
+  `{type:"suspend"; reason; content}` | `{type:"proceed"; injections; submissions}`.
+  A suspended composition cannot carry submissions — content drained before a
+  later hook suspended is folded into `content`, which the gate still records
+  in the log (so nothing is lost) but never presents as "about to be sent".
+- `AgentRequestContext.suspended: boolean` became
+  `{status:"pending"} | {status:"suspended"; reason}`, so the rule "a hook that
+  commits state must decline when suspended" is checkable, and the suspended
+  variant carries the winning reason. `thread.ts`'s two guards read `status`.
+- A failed `countTokens()` now clears `lastPreflightTokenCount` rather than
+  leaving the previous request's number in place: a hook deciding about the
+  wrong conversation is worse than one that sees no count and declines.
+  `MockAnthropicClient.countTokensError` is the knob; covered in `agent.test.ts`
+  ("clears the count when it fails rather than reporting a stale one").
+- Not done, deliberately: making `BeforeRequestHook` generic over
+  `requestPreflightTokenCount` so a declaring hook receives `number` rather than
+  `number | undefined`. The count can legitimately be absent even for a
+  declaring hook (provider has no `countTokens`, or the count failed), so the
+  stronger type would be a lie; `AutoCompactSupervisor` has to handle
+  `undefined` either way. Its `breached(undefined) === false` is the intended
+  behaviour and is now pinned by tests.
+- New coverage:
+  - `runner-parity.test.ts` "preflight token count parity" documents that
+    auto-compaction is anthropic-only: openai's manager has no `countTokens`,
+    so `AutoCompactSupervisor` never fires there.
+  - `thread.test.ts` "keeps a system reminder pending across a suspended
+    request": a reminder consulted on a suspended request is neither placed in
+    the log nor marked sent, and is delivered on the next issued request.
+- Deleted the orphaned doc comment above `GateOutcome`.
+
 ## Collapse ThreadMode into AgentPhase
 
 - Goal: one state representation on `Agent`. `ThreadMode` is deleted; `running_tools` carries `activeTools`; `yielded` is a phase.

@@ -489,6 +489,8 @@ export class MockAnthropicClient {
   public mockInputTokenCount: number | undefined;
   /** How many preflight counts the agent has issued. */
   public countTokensCalls = 0;
+  /** When set, every preflight count rejects with it. */
+  public countTokensError: Error | undefined;
 
   messages = {
     stream: (params: Anthropic.Messages.MessageStreamParams): MockStream => {
@@ -501,6 +503,7 @@ export class MockAnthropicClient {
       _params: Anthropic.Messages.MessageCountTokensParams,
     ): Promise<{ input_tokens: number }> => {
       this.countTokensCalls++;
+      if (this.countTokensError) return Promise.reject(this.countTokensError);
       return Promise.resolve({ input_tokens: this.mockInputTokenCount ?? 0 });
     },
   };

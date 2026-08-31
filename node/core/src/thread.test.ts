@@ -403,6 +403,44 @@ describe("deferred submissions", () => {
       await cleanupArchive(threadId);
     }
   });
+  it("keeps a system reminder pending across a suspended request", async () => {
+    const threadId = uniqueThreadId("reminder-suspend");
+    const { core, mockClient } = createAgentWithMock(undefined, threadId);
+    try {
+      let suspend = true;
+      core.hooks = composeSupervisors(() => [
+        {
+          onBeforeRequest: () =>
+            Promise.resolve(
+              suspend
+                ? {
+                    type: "suspend" as const,
+                    reason: { kind: "stop" as const, message: "halt" },
+                  }
+                : { type: "none" as const },
+            ),
+        },
+      ]);
+      expect(await core.send([{ type: "user", text: "start" }])).toEqual({
+        type: "suspended",
+        reason: { kind: "stop", message: "halt" },
+      });
+      // A reminder placed in a request that is never issued would be marked
+      // sent and silently lost.
+      expect(mockClient.streams).toHaveLength(0);
+      expect(JSON.stringify(core.getProviderMessages())).not.toContain(
+        "system-reminder",
+      );
+      suspend = false;
+      void core.send([{ type: "user", text: "resume" }]);
+      const stream = await mockClient.awaitStream();
+      expect(JSON.stringify(stream.messages)).toContain("Remember the skills");
+      stream.finishResponse("end_turn");
+    } finally {
+      await core.destroy();
+      await cleanupArchive(threadId);
+    }
+  });
   it("carries a queue flushed for a suspended request onto the handoff", async () => {
     const threadId = uniqueThreadId("deferred-compact");
     const calls: string[] = [];

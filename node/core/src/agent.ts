@@ -172,19 +172,18 @@ export interface AgentDeps {
       };
 }
 
-/** What the before-request hooks produced, for a caller that wants to place it
- * itself. */
 /** What the gate decided, plus whether it put anything in the log. */
 type GateOutcome = {
   decision: BeforeRequestDecision;
   appended: boolean;
 };
 
-type ComposedBeforeRequest = {
-  suspend: SuspendReason | undefined;
-  injections: AgentInput[];
-  submissions: InputMessage[];
-};
+/** A suspended composition cannot carry submissions: a drained queue is not
+ * content to send but content already folded into `content`, which the gate
+ * records in the log so it is not lost. */
+type ComposedBeforeRequest =
+  | { type: "suspend"; reason: SuspendReason; content: AgentInput[] }
+  | { type: "proceed"; injections: AgentInput[]; submissions: InputMessage[] };
 
 export class Agent {
   public state: ThreadState;
@@ -633,7 +632,9 @@ export class Agent {
   }
 
   /** The most recent preflight count, for the conversation as it stood before
-   * some request. `undefined` until a hook asks for one. */
+   * some request. `undefined` until a hook asks for one, when the provider has
+   * no `countTokens`, and when the count failed — a failed count clears it
+   * rather than reporting the previous request's number. */
   private lastPreflightTokenCount: number | undefined;
 
   get inputTokenCount(): number | undefined {
@@ -649,6 +650,10 @@ export class Agent {
       this.lastPreflightTokenCount = await this.manager.countTokens();
       this.scheduleUpdate();
     } catch (error) {
+      // Drop the previous count rather than pass it off as this request's: a
+      // hook deciding about the wrong conversation is worse than one that
+      // sees no count and declines.
+      this.lastPreflightTokenCount = undefined;
       this.context.logger.warn(
         `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -969,10 +974,16 @@ export class Agent {
     // `submit`, so a turn that never reaches the gate leaves it for the next.
     const lead = isOpeningRequest ? this.takeTurnPrefix() : [];
     const composed = await this.composeBeforeRequest(isOpeningRequest);
-    const content = [...lead, ...composed.injections];
-    content.push(
-      ...toAgentInput(this.prepareUserContent(composed.submissions).content),
-    );
+    const content =
+      composed.type === "suspend"
+        ? [...lead, ...composed.content]
+        : [
+            ...lead,
+            ...composed.injections,
+            ...toAgentInput(
+              this.prepareUserContent(composed.submissions).content,
+            ),
+          ];
     // Whether anything landed decides where the caller's own content goes.
     const appended = content.length > 0;
     if (appended) {
@@ -983,9 +994,9 @@ export class Agent {
         isOpeningRequest ? undefined : { coalesce: true },
       );
     }
-    if (composed.suspend) {
+    if (composed.type === "suspend") {
       return {
-        decision: { type: "suspend", reason: composed.suspend },
+        decision: { type: "suspend", reason: composed.reason },
         appended,
       };
     }
@@ -1066,7 +1077,9 @@ export class Agent {
         inputTokenCount: this.lastPreflightTokenCount,
         outputTokenCount: this.outputTokenCount(),
         isOpeningRequest,
-        suspended: suspend !== undefined,
+        ...(suspend === undefined
+          ? ({ status: "pending" } as const)
+          : ({ status: "suspended", reason: suspend } as const)),
       });
       switch (action.type) {
         case "inject":
@@ -1095,7 +1108,17 @@ export class Agent {
           assertUnreachable(action);
       }
     }
-    return { suspend, injections, submissions };
+    if (suspend !== undefined) {
+      return {
+        type: "suspend",
+        reason: suspend,
+        content: [
+          ...injections,
+          ...toAgentInput(this.prepareUserContent(submissions).content),
+        ],
+      };
+    }
+    return { type: "proceed", injections, submissions };
   }
 
   private disposed = false;
