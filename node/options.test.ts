@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   BUILTIN_SKILLS_PATH,
   DEFAULT_SANDBOX_CONFIG,
+  DEFAULT_SIDEBAR_POSITION_OPTS,
   loadProjectSettings,
   loadUserSettings,
   type MagentaOptions,
@@ -514,6 +515,22 @@ describe("suppressProjectSkills", () => {
 
     expect(result).toBeDefined();
     expect(result?.suppressProjectSkills).toEqual(["plan"]);
+  });
+});
+
+describe("sidebarPositionOpts", () => {
+  it("keeps the defaults for positions the config does not name", () => {
+    const result = parseOptions(
+      {
+        profiles: [{ name: "test", provider: "mock" }],
+        sidebarPositionOpts: { left: { displayHeightPercentage: 0.5 } },
+      },
+      noopLogger,
+    );
+    expect(result.sidebarPositionOpts).toEqual({
+      ...DEFAULT_SIDEBAR_POSITION_OPTS,
+      left: { displayHeightPercentage: 0.5 },
+    });
   });
 });
 

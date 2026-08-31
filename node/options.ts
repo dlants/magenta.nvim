@@ -174,6 +174,26 @@ export type SandboxConfig = {
 export const DEFAULT_AUTO_COMPACT_PROMPT =
   "Continue with the task you were working on before the conversation was automatically compacted.";
 
+export const DEFAULT_SIDEBAR_POSITION_OPTS: SidebarPositionOpts = {
+  above: {
+    displayHeightPercentage: 0.3,
+    inputHeightPercentage: 0.1,
+  },
+  below: {
+    displayHeightPercentage: 0.3,
+    inputHeightPercentage: 0.1,
+  },
+  tab: {
+    displayHeightPercentage: 0.8,
+  },
+  left: {
+    displayHeightPercentage: 0.8,
+  },
+  right: {
+    displayHeightPercentage: 0.8,
+  },
+};
+
 export const DEFAULT_SANDBOX_CONFIG: SandboxConfig = {
   filesystem: {
     allowWrite: ["./"],
@@ -787,7 +807,7 @@ function parseSidebarPosition(
 function parseSidebarPositionOpts(
   input: unknown,
   logger?: { warn: (msg: string) => void },
-): SidebarPositionOpts | undefined {
+): Partial<SidebarPositionOpts> | undefined {
   if (typeof input !== "object" || input === null) {
     logger?.warn("sidebarPositionOpts must be an object");
     return undefined;
@@ -866,7 +886,7 @@ function parseSidebarPositionOpts(
     return undefined;
   }
 
-  return result as SidebarPositionOpts;
+  return result;
 }
 
 function mergeSandboxConfigs(
@@ -1052,25 +1072,7 @@ export function parseOptions(
     profiles: [],
     activeProfile: "",
     sidebarPosition: "left",
-    sidebarPositionOpts: {
-      above: {
-        displayHeightPercentage: 0.3,
-        inputHeightPercentage: 0.1,
-      },
-      below: {
-        displayHeightPercentage: 0.3,
-        inputHeightPercentage: 0.1,
-      },
-      tab: {
-        displayHeightPercentage: 0.8,
-      },
-      left: {
-        displayHeightPercentage: 0.8,
-      },
-      right: {
-        displayHeightPercentage: 0.8,
-      },
-    },
+    sidebarPositionOpts: structuredClone(DEFAULT_SIDEBAR_POSITION_OPTS),
     maxConcurrentSubagents: 3,
     maxConcurrentFastSubagents: 8,
     autoCompactThreshold: 300000,
@@ -1114,9 +1116,13 @@ export function parseOptions(
       inputOptionsObj.sidebarPositionOpts,
     );
     if (sidebarPositionOpts) {
-      options.sidebarPositionOpts = sidebarPositionOpts;
+      // Per-position merge: a config that names only one position must not
+      // erase the defaults for the others.
+      options.sidebarPositionOpts = {
+        ...options.sidebarPositionOpts,
+        ...sidebarPositionOpts,
+      };
     }
-
     // Parse sandbox config — merge user values onto defaults
     if ("sandbox" in inputOptionsObj) {
       const parsedSandbox = parseSandboxConfig(inputOptionsObj.sandbox, logger);
