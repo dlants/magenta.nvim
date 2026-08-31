@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 import { Stream } from "openai/core/streaming.mjs";
 import { pollUntil } from "../utils/async.ts";
+import type { OpenAIStreamingClient } from "./openai-runner.ts";
 import type { StopReason, Usage } from "./provider-types.ts";
 
 type ResponseStreamEvent = OpenAI.Responses.ResponseStreamEvent;
@@ -524,7 +525,7 @@ class MockResponses {
   }
 }
 
-export class MockOpenAIClient {
+export class MockOpenAIClient implements OpenAIStreamingClient {
   public streams: MockResponseStream[] = [];
 
   responses = new MockResponses(this);

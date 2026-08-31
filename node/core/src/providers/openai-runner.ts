@@ -95,9 +95,12 @@ type AttemptResult =
   | { type: "error"; error: Error };
 
 export class OpenAIInferenceManager implements NativeInferenceManager {
-  /** True between the start and the settling of a `sendRequest` call; the only
-   * externally visible state this manager has. */
-  private requestInFlight = false;
+  /** The whole of this manager's externally visible state: whether a
+   * `sendRequest` call is in flight, and whether it has been aborted. Abort is
+   * only meaningful during a request, so it lives inside the running variant. */
+  private request: { type: "idle" } | { type: "running"; aborted: boolean } = {
+    type: "idle",
+  };
   private onRequestUpdate: OnRequestUpdate | undefined;
   /** ProviderMessage[] is the single source of truth; the request body is
    * derived from it on every turn (see `createStreamParameters`). */
@@ -118,7 +121,6 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
   private stream:
     | (AsyncIterable<ResponseStreamEvent> & { controller: AbortController })
     | undefined;
-  private aborted = false;
   private retryAbortController: AbortController | undefined;
 
   /** Stable for the life of this agent (and its clones) so every turn of the
@@ -409,9 +411,13 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     this.notify();
   }
 
+  private get isAborted(): boolean {
+    return this.request.type === "running" && this.request.aborted;
+  }
+
   abort(): void {
-    if (!this.requestInFlight) return;
-    this.aborted = true;
+    if (this.request.type !== "running") return;
+    this.request.aborted = true;
     this.retryAbortController?.abort();
     this.stream?.controller.abort();
   }
@@ -455,13 +461,12 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
 
   /** One provider request, including the retry/backoff budget. */
   async sendRequest(onUpdate: OnRequestUpdate): Promise<RequestResult> {
-    if (this.requestInFlight) {
+    if (this.request.type === "running") {
       throw new Error(
         "sendRequest called while a request is already in flight",
       );
     }
-    this.requestInFlight = true;
-    this.aborted = false;
+    this.request = { type: "running", aborted: false };
     this.onRequestUpdate = onUpdate;
     try {
       const outcome = await this.streamOneResponse();
@@ -474,7 +479,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       }
       return outcome;
     } finally {
-      this.requestInFlight = false;
+      this.request = { type: "idle" };
       this.onRequestUpdate = undefined;
       this.stream = undefined;
     }
@@ -532,7 +537,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
           }
         }
 
-        if (this.aborted) return { type: "aborted" };
+        if (this.isAborted) return { type: "aborted" };
 
         if (!usage) {
           // The stream ended without a terminal event: a cancellation, which
@@ -546,7 +551,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
           usage,
         };
       } catch (error) {
-        if (this.aborted) return { type: "aborted" };
+        if (this.isAborted) return { type: "aborted" };
         return {
           type: "error",
           error: error instanceof Error ? error : new Error(String(error)),

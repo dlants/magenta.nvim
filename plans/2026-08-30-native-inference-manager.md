@@ -367,6 +367,18 @@ Notes and deviations:
 - Clone tests build the clone through `createTestOpenAIAgent({ cloneFrom })`
   rather than calling `runner.clone()` and running a turn on the bare manager.
 
+### Review follow-up (stage 2)
+
+- `MockOpenAIClient implements OpenAIStreamingClient`, so the
+  `as unknown as OpenAIStreamingClient` double-casts in `test-helpers.ts` and
+  `node/providers/mock.ts` are gone and mock drift is now a compile error.
+- The openai test context's profile uses `stub<ProviderProfile>(...)` rather
+  than an `as` cast.
+- `OpenAIInferenceManager`'s `requestInFlight` + `aborted` booleans collapsed
+  into one field, `request: {type:"idle"} | {type:"running"; aborted: boolean}`,
+  read through a private `isAborted` getter, so "aborted while idle" is
+  unrepresentable.
+
 - Goal: `OpenAIRunner` becomes `OpenAIInferenceManager`; the duplicated loop, retry, ticker and phase code is deleted. Both providers are now driven by `Agent`'s single loop.
 - Tests:
   - `openai-runner.test.ts`, `openai-runner-retry.test.ts`, `openai-wiring.test.ts`, `openai.test.ts` pass untouched.

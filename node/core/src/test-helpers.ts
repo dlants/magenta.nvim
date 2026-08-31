@@ -18,7 +18,6 @@ import { MockOpenAIClient } from "./providers/mock-openai-client.ts";
 import {
   OpenAIInferenceManager,
   type OpenAIRunnerOptions,
-  type OpenAIStreamingClient,
 } from "./providers/openai-runner.ts";
 import type {
   AgentInput,
@@ -263,7 +262,7 @@ export function createTestOpenAIAgent(
     createAgent(options: AgentOptions): NativeInferenceManager {
       return new OpenAIInferenceManager(
         tools ? { ...options, tools } : options,
-        mockClient as unknown as OpenAIStreamingClient,
+        mockClient,
         { ...defaultOpenAIOptions, ...opts?.openaiOptions },
       );
     },
@@ -275,7 +274,10 @@ export function createTestOpenAIAgent(
     agent: buildTestAgent(provider, {
       ...opts,
       context: {
-        profile: { provider: "openai", model: "gpt-5.4" } as ProviderProfile,
+        profile: stub<ProviderProfile>({
+          provider: "openai",
+          model: "gpt-5.4",
+        }),
         ...opts?.context,
       },
     }),

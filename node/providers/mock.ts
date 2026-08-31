@@ -2,7 +2,6 @@ import type Anthropic from "@anthropic-ai/sdk";
 import {
   MockOpenAIClient,
   OpenAIInferenceManager,
-  type OpenAIStreamingClient,
   type ToolRequest,
   validateInput,
 } from "@magenta/core";
@@ -374,15 +373,11 @@ Streams: ${this.mockClient.streams.length}`);
 
   createAgent(options: AgentOptions): NativeInferenceManager {
     if (this.agentKind === "openai") {
-      return new OpenAIInferenceManager(
-        options,
-        this.mockOpenAIClient as unknown as OpenAIStreamingClient,
-        {
-          includeWebSearch: true,
-          logger: winston.createLogger(),
-          validateInput,
-        },
-      );
+      return new OpenAIInferenceManager(options, this.mockOpenAIClient, {
+        includeWebSearch: true,
+        logger: winston.createLogger(),
+        validateInput,
+      });
     }
     return new AnthropicInferenceManager(
       options,
