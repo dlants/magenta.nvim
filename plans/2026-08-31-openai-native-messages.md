@@ -392,6 +392,23 @@ Decisions/deviations:
 - Full `vitest run` has two pre-existing flakes in `node/comments/comment-input.test.ts` (spinner
   virt-line timing); the file passes in isolation.
 
+Review follow-ups (stage 3):
+
+- `AnthropicProvider.createStreamParameters` was deleted outright (along with the now-unused
+  `mapProviderTextToAnthropicText` helper and the local `MessageStreamParams` type) rather than
+  left emitting `signature: ""`. It had no callers — the inference manager builds requests from
+  native messages — and the only shape it could produce for a thinking block was an API-invalid
+  empty signature.
+- Anthropic native signature accumulation is asserted again in
+  `anthropic-inference.test.ts` ("accumulates signature across multiple deltas"): after
+  `content_block_stop` (and `stream.settle()`) the committed native block carries `"ABCDEF"`, read
+  through the public `manager.getNativeMessages()`. The assertion has to run *before*
+  `finishResponse`, because the SDK's own accumulator overwrites the signature per delta when it
+  assembles the final message, and the manager replaces the turn's content with that message on
+  `stream-completed`. The real API only ever sends one `signature_delta`, so that overwrite is not
+  a bug.
+- The internal streaming block type was already named `AnthropicStreamingBlock`; no rename needed.
+
 ## Docs
 
 - Goal: `context.md` and `plans/2026-08-30-native-inference-manager.md`'s description of the manager

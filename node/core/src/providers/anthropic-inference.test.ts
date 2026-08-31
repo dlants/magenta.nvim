@@ -935,6 +935,18 @@ describe("thinking blocks", () => {
       index: blockIndex,
     });
 
+    await stream.settle();
+    // The committed native block carries the concatenation of both signature
+    // deltas. Asserted before the final message arrives, since the SDK's own
+    // accumulator overwrites the signature per delta when the response is
+    // assembled (the real API only ever sends one signature_delta).
+    const nativeContent = agent.manager.getNativeMessages().at(-1)!.content;
+    expect(nativeContent[0]).toMatchObject({
+      type: "thinking",
+      thinking: "Part 1 Part 2",
+      signature: "ABCDEF",
+    });
+
     stream.finishResponse("end_turn");
     await stream.finalMessage();
     await turn;
