@@ -273,11 +273,10 @@ export type {
 } from "./thread-api.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
-  ComposedRequestActions,
-  ComposedSupervisorActions,
   EndTurnAction,
   EndTurnContext,
   PlainStopSuspendReason,
+  RequestAction,
   RequestContext,
   SupervisorAction,
   SuspendReason,

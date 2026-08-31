@@ -9,10 +9,9 @@ import type {
 } from "./providers/provider-types.ts";
 import type { PendingMessage } from "./submission/index.ts";
 import type {
-  ComposedRequestActions,
-  ComposedSupervisorActions,
   EndTurnAction,
   EndTurnContext,
+  RequestAction,
   RequestContext,
   SuspendReason,
   YieldAction,
@@ -122,11 +121,6 @@ export type QueuedMessage = {
   message: PendingMessage;
 };
 
-/** The `Agent` -> `Thread` questions. Each is answered by at most one hook,
- * supplied at construction: arbitration between several policies is the
- * owner's business (see `composeSupervisors`), not the agent's. A hook returns
- * an action and must not call back into the agent, and every action it can
- * return is a continuation — no hook return value resolves a `send`. */
 /** What the agent tells its owner about the request it is about to issue.
  * `isOpeningRequest` is the agent's own knowledge — which request of a turn
  * this is — and it is the single source of truth for it; the supervisors
@@ -135,42 +129,61 @@ export type AgentRequestContext = RequestContext & {
   /** This is the first request of the turn the agent's caller asked for, as
    * opposed to a continuation carrying tool results. */
   isOpeningRequest: boolean;
+  /** An earlier hook has already suspended this request. Later hooks are
+   * still consulted — a stop is a fact each of them may need to record — but
+   * one whose contribution commits state (draining a queue, marking a
+   * once-per-conversation reminder as sent) must decline. */
+  suspended: boolean;
 };
 
+/** One entry at the before-request point. An object rather than a function so
+ * `Agent` can read `requestPreflightTokenCount` *without* invoking it, and so
+ * know whether to issue a token count before this entry runs. */
+export type BeforeRequestHook = {
+  /** This hook reads `ctx.inputTokenCount` and wants it to describe the
+   * request it is deciding about. Not declaring it is the opt-out: a
+   * conversation nobody asks about is never counted. */
+  requestPreflightTokenCount?: boolean;
+  run: (ctx: AgentRequestContext) => Promise<RequestAction>;
+};
+
+/** Every requested tool has settled and its results are about to be written.
+ * Fire-and-forget, consulted before the continuation's before-request hooks —
+ * but it also fires on turns that stop here (abort, yield) and issue no
+ * continuation at all, deliberately: a consumer accumulating state off tool
+ * results wants it carried into whatever request comes next, even one from a
+ * later turn. */
+export type ToolResultsHook = (results: ToolResults) => void;
+
+/** The model called yield_to_parent. Awaited, and consulted before the tool
+ * result is written, so a refusal arrives as that call's result rather than as
+ * a contradicting message in a fresh turn. */
+export type YieldHook = (value: YieldValue) => Promise<YieldAction>;
+
+/** The `Agent` -> owner questions: one array per hook point, each composed by
+ * that point's own rule. `Agent` never learns what a `Supervisor` is — the
+ * owner flattens its supervisors into these arrays at registration. */
 export type AgentHooks = {
-  /** The model called yield_to_parent. Awaited, and consulted before the tool
-   * result is written, so a refusal arrives as that call's result rather than
-   * as a contradicting message in a fresh turn. */
-  onYield?: (value: YieldValue) => Promise<YieldAction>;
-  /** About to issue a provider request — the opening one of a submission, or a
-   * continuation carrying tool results. Not re-fired when a request is
-   * retried. The answer is the supervisors' actions, in order: the agent
-   * applies every injection and honours the first `suspend` it scans. */
-  onBeforeRequest?: (
-    ctx: AgentRequestContext,
-  ) => Promise<ComposedRequestActions>;
-  /** Every requested tool has settled and its results are about to be
-   * written. Fire-and-forget, consulted before `onBeforeRequest` for the
-   * continuation that carries them — but it also fires on turns that stop
-   * here (abort, yield) and issue no continuation at all, deliberately: a
-   * consumer accumulating state off tool results (e.g. an abbreviated bash
-   * output) wants it carried into whatever request comes next, even one from
-   * a later turn. Results are therefore not attached to the continuation
-   * `RequestContext`, which would drop them in exactly those cases. */
-  onToolResults?: (results: ToolResults) => void;
-  /** A file-touching tool (edl, get_files) finished. Fire-and-forget. */
+  /** About to issue a provider request — the opening one of a submission, or
+   * a continuation carrying tool results. Not re-fired when a request is
+   * retried. Every injection is applied, in order; the first `suspend`
+   * wins. */
+  onBeforeRequest: BeforeRequestHook[];
+  onToolResults: ToolResultsHook[];
+  /** The first `accept`/`reject` wins; `send-message` texts concatenate. */
+  onYield: YieldHook[];
+  /** A file-touching tool (edl, get_files) finished. Fire-and-forget. Not a
+   * turn-loop hook point — it fires per file from inside a tool — but the
+   * agent wraps it for its own `editedFilesThisTurn` bookkeeping. */
   onToolApplied?: OnToolApplied;
 };
 
 /** What the owning `Thread` answers. A superset of `AgentHooks`: the turn
- * loop lives in `Thread`, so the end-of-turn question is asked there and the
- * agent never sees it. */
-export type ThreadHooks = Omit<AgentHooks, "onBeforeRequest"> & {
-  /** The runner stopped without yielding. */
+ * loop's outer half lives in `Thread`, so the end-of-turn question is asked
+ * there and the agent never sees it. */
+export type ThreadHooks = AgentHooks & {
+  /** The agent stopped without yielding. */
   onEndTurn?: (ctx: EndTurnContext) => EndTurnAction;
-  /** The supervisors' own decision. It has no `submissions`: queued user
-   * content is the thread's, and `Thread` wraps this hook to add it. */
-  onBeforeRequest?: (ctx: RequestContext) => Promise<ComposedSupervisorActions>;
   /** The thread's log was thrown away and it starts over. */
   onReset?: () => void;
   /** Whether any supervisor would contribute content to a request issued

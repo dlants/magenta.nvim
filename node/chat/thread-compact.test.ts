@@ -713,34 +713,16 @@ it("auto-compact threshold from options wires into the thread's supervisor", asy
 
       await pollUntil(
         () => {
-          const state = originalThread.agent.log;
           if (originalThread.getProviderStatus().type !== "idle")
             throw new Error("waiting for stop");
-          if (
-            state.inputTokenCount === undefined ||
-            state.inputTokenCount < 160_000
-          ) {
-            throw new Error(
-              `expected inputTokenCount >= 160000 but got ${state.inputTokenCount}`,
-            );
-          }
         },
-        { timeout: 2000, message: "inputTokenCount should be populated" },
+        { timeout: 2000, message: "thread should come to rest" },
       );
-
-      // Drive a second turn. At its handoff the over-threshold count triggers
-      // the options-configured supervisor without any manual override.
+      // The next send's gate counts the conversation it is about to send, so
+      // the options-configured supervisor fires before that request goes out.
+      driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
       await driver.inputMagentaText("Another question");
       await driver.send();
-
-      const request2 = await driver.mockAnthropic.awaitPendingStream({
-        message: "second request",
-      });
-      request2.respond({
-        stopReason: "end_turn",
-        text: "Sure, happy to help.",
-        toolRequests: [],
-      });
 
       await pollUntil(
         () => {
@@ -757,9 +739,8 @@ it("auto-compact triggers when inputTokenCount breaches the supervisor threshold
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
-    // inputTokenCount lags one turn (it is populated post-flight), so set the
-    // mock high before the first turn. The first turn has no supervisor yet,
-    // so it never compacts regardless of the count.
+    // Nothing asks for a token count until the supervisor below is attached,
+    // so the first turn never compacts regardless of the mock value.
     driver.mockAnthropic.mockClient.mockInputTokenCount = 170_000;
 
     // Build up some conversation history
@@ -777,25 +758,13 @@ it("auto-compact triggers when inputTokenCount breaches the supervisor threshold
 
     const originalThread = driver.magenta.chat.getActiveThread();
 
-    // Wait for the first turn to settle and its post-flight token count to
-    // populate inputTokenCount.
     await pollUntil(
       () => {
-        const state = originalThread.agent.log;
         if (originalThread.getProviderStatus().type !== "idle")
           throw new Error("waiting for stop");
-        if (
-          state.inputTokenCount === undefined ||
-          state.inputTokenCount < 160_000
-        ) {
-          throw new Error(
-            `expected inputTokenCount >= 160000 but got ${state.inputTokenCount}`,
-          );
-        }
       },
-      { timeout: 2000, message: "inputTokenCount should be populated" },
+      { timeout: 2000, message: "thread should come to rest" },
     );
-
     // Auto-compact is now a supervisor concern. Attach one (after the first
     // turn's handoff already ran) with a threshold below the current count and
     // a configured nextPrompt so the next handoff triggers compaction.
@@ -1302,19 +1271,6 @@ it("auto-compact does not trigger on compact threads", async () => {
 
     // Set extremely high token count to make sure it would trigger on a normal thread
     driver.mockAnthropic.mockClient.mockInputTokenCount = 190_000;
-
-    // Wait for token count to propagate
-    await pollUntil(
-      () => {
-        const tokenCount =
-          driver.magenta.chat.getActiveThread().agent.log.inputTokenCount;
-        if (tokenCount === undefined || tokenCount < 160_000) {
-          throw new Error(`expected high token count but got ${tokenCount}`);
-        }
-      },
-      { timeout: 2000, message: "inputTokenCount should be populated" },
-    );
-
     // Trigger manual compact
     await driver.inputMagentaText("@compact Continue please");
     await driver.send();

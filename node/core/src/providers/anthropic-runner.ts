@@ -203,8 +203,6 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
   private currentAssistantMessage: NativeMessage | undefined;
   /** Stored for cloning */
   private anthropicOptions: AnthropicRunnerOptions;
-  /** Token count for the full conversation, updated after each streaming completion */
-  private inputTokenCount: number | undefined;
   private retryAbortController: AbortController | undefined;
   /** True between the start and the settling of a `sendRequest` call; the only
    * externally-visible state this class has. */
@@ -225,7 +223,6 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     return {
       messages: this.cachedProviderMessages,
       latestUsage: this.latestUsage,
-      inputTokenCount: this.inputTokenCount,
     };
   }
 
@@ -445,7 +442,6 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     this.onRequestUpdate = onUpdate;
     try {
       const outcome = await this.streamOneResponse();
-      this.countTokensPostFlight();
       if (outcome.type === "completed") {
         return {
           type: "completed",
@@ -641,11 +637,9 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     }
   }
 
-  private countTokensPostFlight(): void {
-    if (this.options.skipPostFlightTokenCount) return;
-    if (typeof this.client.messages.countTokens !== "function") {
-      return;
-    }
+  /** The conversation as it would be sent right now. Preflight and awaited:
+   * whoever asked for it is deciding about this request. */
+  async countTokens(): Promise<number> {
     const messagesWithCache = withCacheControl(
       stripTrailingThinkingBlocks(this.messages),
     );
@@ -658,17 +652,8 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     if (this.params.tool_choice)
       countParams.tool_choice = this.params.tool_choice;
     if (this.params.thinking) countParams.thinking = this.params.thinking;
-    this.client.messages
-      .countTokens(countParams)
-      .then((result) => {
-        this.inputTokenCount = result.input_tokens;
-        this.notify();
-      })
-      .catch((error: unknown) => {
-        this.anthropicOptions.logger.warn(
-          `countTokens post-flight failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
+    const result = await this.client.messages.countTokens(countParams);
+    return result.input_tokens;
   }
 
   truncateMessages(messageIdx: NativeMessageIdx): void {
@@ -796,11 +781,10 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       ]),
     );
 
-    // Copy latestUsage and inputTokenCount if present
+    // Copy latestUsage if present
     if (this.latestUsage) {
       cloned.latestUsage = { ...this.latestUsage };
     }
-    cloned.inputTokenCount = this.inputTokenCount;
 
     // Rebuild cached provider messages from the cloned data
     cloned.cachedProviderMessages = convertAnthropicMessagesToProvider(

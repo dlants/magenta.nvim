@@ -180,13 +180,11 @@ type GateOutcome = {
   appended: boolean;
 };
 
-type ComposedBeforeRequest =
-  | { type: "suspend"; reason: SuspendReason; injections: AgentInput[] }
-  | {
-      type: "proceed";
-      injections: AgentInput[];
-      submissions: InputMessage[];
-    };
+type ComposedBeforeRequest = {
+  suspend: SuspendReason | undefined;
+  injections: AgentInput[];
+  submissions: InputMessage[];
+};
 
 export class Agent {
   public state: ThreadState;
@@ -370,12 +368,11 @@ export class Agent {
   }
 
   getLastStopTokenCount(): number {
-    const state = this.manager.log;
-    if (state.inputTokenCount !== undefined) {
-      return state.inputTokenCount;
+    if (this.lastPreflightTokenCount !== undefined) {
+      return this.lastPreflightTokenCount;
     }
 
-    const latestUsage = state.latestUsage;
+    const latestUsage = this.manager.log.latestUsage;
     if (!latestUsage) {
       return 0;
     }
@@ -635,8 +632,27 @@ export class Agent {
     await this.handleYield(pending.result, pending.value);
   }
 
+  /** The most recent preflight count, for the conversation as it stood before
+   * some request. `undefined` until a hook asks for one. */
+  private lastPreflightTokenCount: number | undefined;
+
   get inputTokenCount(): number | undefined {
-    return this.manager.log.inputTokenCount;
+    return this.lastPreflightTokenCount;
+  }
+
+  /** Issued at most once per request, immediately before the first hook that
+   * declared it needs the count, so that hook decides about the conversation
+   * it is actually about to send. */
+  private async countTokensForRequest(): Promise<void> {
+    if (!this.manager.countTokens) return;
+    try {
+      this.lastPreflightTokenCount = await this.manager.countTokens();
+      this.scheduleUpdate();
+    } catch (error) {
+      this.context.logger.warn(
+        `preflight countTokens failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   get lastAssistantMessage():
@@ -784,7 +800,9 @@ export class Agent {
       }
     }
 
-    this.deps.getHooks().onToolResults?.(results);
+    for (const hook of this.deps.getHooks().onToolResults) {
+      hook(results);
+    }
 
     this.update({ type: "set-mode", mode: { type: "normal" } });
 
@@ -952,19 +970,9 @@ export class Agent {
     const lead = isOpeningRequest ? this.takeTurnPrefix() : [];
     const composed = await this.composeBeforeRequest(isOpeningRequest);
     const content = [...lead, ...composed.injections];
-    switch (composed.type) {
-      case "proceed":
-        content.push(
-          ...toAgentInput(
-            this.prepareUserContent(composed.submissions).content,
-          ),
-        );
-        break;
-      case "suspend":
-        break;
-      default:
-        assertUnreachable(composed);
-    }
+    content.push(
+      ...toAgentInput(this.prepareUserContent(composed.submissions).content),
+    );
     // Whether anything landed decides where the caller's own content goes.
     const appended = content.length > 0;
     if (appended) {
@@ -975,9 +983,9 @@ export class Agent {
         isOpeningRequest ? undefined : { coalesce: true },
       );
     }
-    if (composed.type === "suspend") {
+    if (composed.suspend) {
       return {
-        decision: { type: "suspend", reason: composed.reason },
+        decision: { type: "suspend", reason: composed.suspend },
         appended,
       };
     }
@@ -1021,12 +1029,20 @@ export class Agent {
     };
   }
 
+  /** The first `accept`/`reject` wins outright — later hooks are not
+   * consulted, since the decision is made — and `send-message` texts
+   * concatenate. */
   private async consultYieldSupervisors(
     value: YieldValue,
   ): Promise<YieldAction> {
-    const onYield = this.deps.getHooks().onYield;
-    if (!onYield) return { type: "none" };
-    return await onYield(value);
+    const texts: string[] = [];
+    for (const hook of this.deps.getHooks().onYield) {
+      const action = await hook(value);
+      if (action.type === "accept" || action.type === "reject") return action;
+      if (action.type === "send-message") texts.push(action.text);
+    }
+    if (texts.length === 0) return { type: "none" };
+    return { type: "send-message", text: texts.join("\n\n") };
   }
 
   /** Consult the supervisors. Nothing is appended here: placing what they
@@ -1035,27 +1051,51 @@ export class Agent {
   private async composeBeforeRequest(
     isOpeningRequest: boolean,
   ): Promise<ComposedBeforeRequest> {
-    const onBeforeRequest = this.deps.getHooks().onBeforeRequest;
-    if (!onBeforeRequest)
-      return { type: "proceed", injections: [], submissions: [] };
-    const composed = await onBeforeRequest({
-      inputTokenCount: this.manager.log.inputTokenCount,
-      outputTokenCount: this.outputTokenCount(),
-      isOpeningRequest,
-    });
-    const injections: AgentInput[] = composed.injections.map((block) =>
-      block.type === "text"
-        ? {
-            type: "text" as const,
-            text: block.text,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    const injections: AgentInput[] = [];
+    const submissions: InputMessage[] = [];
+    let suspend: SuspendReason | undefined;
+    let counted = false;
+    for (const hook of this.deps.getHooks().onBeforeRequest) {
+      // Lazily, once, and never once the request is already suspended: a
+      // count nobody will act on is a round trip for nothing.
+      if (hook.requestPreflightTokenCount && !counted && !suspend) {
+        counted = true;
+        await this.countTokensForRequest();
+      }
+      const action = await hook.run({
+        inputTokenCount: this.lastPreflightTokenCount,
+        outputTokenCount: this.outputTokenCount(),
+        isOpeningRequest,
+        suspended: suspend !== undefined,
+      });
+      switch (action.type) {
+        case "inject":
+          for (const block of action.content) {
+            injections.push(
+              block.type === "text"
+                ? {
+                    type: "text" as const,
+                    text: block.text,
+                    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                  }
+                : block,
+            );
           }
-        : block,
-    );
-    if (composed.type === "suspend") {
-      return { type: "suspend", reason: composed.reason, injections };
+          break;
+        case "submissions":
+          submissions.push(...action.messages);
+          break;
+        case "suspend":
+          // The first suspension wins; a later one cannot restate the reason.
+          suspend ??= action.reason;
+          break;
+        case "none":
+          break;
+        default:
+          assertUnreachable(action);
+      }
     }
-    return { type: "proceed", injections, submissions: composed.submissions };
+    return { suspend, injections, submissions };
   }
 
   private disposed = false;

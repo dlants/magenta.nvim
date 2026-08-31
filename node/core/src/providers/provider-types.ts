@@ -356,7 +356,6 @@ export type ToolExecutor = (
 export type AgentLog = {
   readonly messages: ReadonlyArray<ProviderMessage>;
   readonly latestUsage: Usage | undefined;
-  readonly inputTokenCount: number | undefined;
 };
 
 /** What one provider request produced. Retries are internal to the request, so
@@ -398,6 +397,10 @@ export interface NativeInferenceManager {
   getNativeMessageIdx(): NativeMessageIdx;
   truncateMessages(messageIdx: NativeMessageIdx): void;
   clone(): NativeInferenceManager;
+  /** Count the conversation as it would be sent right now. Only providers
+   * that support it implement it; `Agent` issues it lazily, at most once per
+   * request, and only when a before-request hook asks for it. */
+  countTokens?(): Promise<number>;
   sendRequest(onUpdate: OnRequestUpdate): Promise<RequestResult>;
   /** Cancels an in-flight request or a pending retry wait; a no-op otherwise. */
   abort(): void;
@@ -430,5 +433,4 @@ export interface AgentOptions {
     effort?: ReasoningEffort;
     summary?: ReasoningSummary;
   };
-  skipPostFlightTokenCount?: boolean;
 }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Agent } from "../agent.ts";
-import { createTestAgent, createTestOpenAIAgent } from "../test-helpers.ts";
+import {
+  agentHooks,
+  createTestAgent,
+  createTestOpenAIAgent,
+} from "../test-helpers.ts";
+import type { BeforeRequestHook } from "../thread-api.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
 import { ABORT_MARKER_TEXT } from "./anthropic-runner.ts";
@@ -154,30 +159,22 @@ describe("onBeforeRequest", () => {
     Promise.resolve({ type: "continue" as const, results: new Map() });
 
   const held = { kind: "stop" as const, message: "held" };
+  /** The gate fires on the opening request too; this one holds the
+   * continuation that would carry the tool results. */
+  const holdSecond = (bump: () => number): BeforeRequestHook => ({
+    run: () =>
+      Promise.resolve(
+        bump() === 1
+          ? { type: "none" as const }
+          : { type: "suspend" as const, reason: held },
+      ),
+  });
 
   it("stops the anthropic turn without issuing the continuation", async () => {
     let calls = 0;
     const { agent, mockClient } = createTestAgent({
-      getHooks: () => ({
-        onBeforeRequest: () => {
-          calls++;
-          // The gate fires on the opening request too; this one holds the
-          // continuation that would carry the tool results.
-          return Promise.resolve(
-            calls === 1
-              ? {
-                  type: "proceed" as const,
-                  injections: [],
-                  submissions: [],
-                }
-              : {
-                  type: "suspend" as const,
-                  reason: held,
-                  injections: [],
-                },
-          );
-        },
-      }),
+      getHooks: () =>
+        agentHooks({ onBeforeRequest: [holdSecond(() => ++calls)] }),
     });
     const turn = agent.runTurnLoop([text("go")]);
     const stream = await mockClient.awaitStream();
@@ -194,16 +191,8 @@ describe("onBeforeRequest", () => {
     let calls = 0;
     const { agent, mockClient } = createTestOpenAIAgent({
       executeTools: emptyResults,
-      getHooks: () => ({
-        onBeforeRequest: () => {
-          calls++;
-          return Promise.resolve(
-            calls === 1
-              ? { type: "proceed" as const, injections: [], submissions: [] }
-              : { type: "suspend" as const, reason: held, injections: [] },
-          );
-        },
-      }),
+      getHooks: () =>
+        agentHooks({ onBeforeRequest: [holdSecond(() => ++calls)] }),
     });
     const turn = agent.runTurnLoop([text("go")]);
     const stream = await mockClient.awaitStream();

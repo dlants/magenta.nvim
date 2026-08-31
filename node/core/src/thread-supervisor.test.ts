@@ -15,63 +15,44 @@ const context: RequestContext = {
   outputTokenCount: 0,
 };
 
+const requestContext = { ...context, isOpeningRequest: true, suspended: false };
 describe("composeSupervisors onBeforeRequest", () => {
-  it("merges the injections in supervisor order", async () => {
+  it("contributes one hook entry per supervisor that answers, in order", async () => {
     const first: ThreadSupervisor = {
       onBeforeRequest: () => Promise.resolve(injectText("first")),
     };
-    const second: ThreadSupervisor = {
-      onBeforeRequest: () => Promise.resolve(injectText("second")),
-    };
-    const hooks = composeSupervisors(() => [first, second]);
-    expect(await hooks.onBeforeRequest?.(context)).toEqual({
-      injections: [
-        { type: "text", text: "first" },
-        { type: "text", text: "second" },
-      ],
-      type: "proceed",
-    });
-  });
-
-  it("carries the suspension alongside the injections", async () => {
-    const injector: ThreadSupervisor = {
-      onBeforeRequest: () => Promise.resolve(injectText("note")),
-    };
-    const hooks = composeSupervisors(() => [
-      injector,
-      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
-    ]);
-    expect(await hooks.onBeforeRequest?.(context)).toEqual({
-      injections: [{ type: "text", text: "note" }],
-      type: "suspend",
-      reason: { kind: "compact", nextPrompt: "go" },
-    });
-  });
-
-  it("keeps only the first suspension", async () => {
-    const hooks = composeSupervisors(() => [
-      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
-      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "stop" }),
-    ]);
-    expect(await hooks.onBeforeRequest?.(context)).toEqual({
-      injections: [],
-      type: "suspend",
-      reason: { kind: "compact", nextPrompt: "go" },
-    });
-  });
-
-  it("drops `none` actions", async () => {
     const quiet: ThreadSupervisor = {
       onBeforeRequest: () => Promise.resolve({ type: "none" as const }),
     };
-    const hooks = composeSupervisors(() => [quiet, {}]);
-    expect(await hooks.onBeforeRequest?.(context)).toEqual({
-      injections: [],
-      type: "proceed",
+    const hooks = composeSupervisors(() => [first, {}, quiet]);
+    expect(hooks.onBeforeRequest.length).toBe(2);
+    expect(
+      await Promise.all(
+        hooks.onBeforeRequest.map((h) => h.run(requestContext)),
+      ),
+    ).toEqual([injectText("first"), { type: "none" }]);
+  });
+  it("declares the preflight token count only for supervisors that ask", () => {
+    const hooks = composeSupervisors(() => [
+      { onBeforeRequest: () => Promise.resolve({ type: "none" as const }) },
+      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
+    ]);
+    expect(
+      hooks.onBeforeRequest.map((h) => h.requestPreflightTokenCount ?? false),
+    ).toEqual([false, true]);
+  });
+  it("reads the supervisor list at every call", async () => {
+    const supervisors: ThreadSupervisor[] = [];
+    const hooks = composeSupervisors(() => supervisors);
+    expect(hooks.onBeforeRequest.length).toBe(0);
+    supervisors.push({
+      onBeforeRequest: () => Promise.resolve(injectText("late")),
     });
+    expect(await hooks.onBeforeRequest[0].run(requestContext)).toEqual(
+      injectText("late"),
+    );
   });
 });
-
 describe("composeSupervisors hasPendingContent", () => {
   it("is true when any supervisor has something pending", async () => {
     const hooks = composeSupervisors(() => [

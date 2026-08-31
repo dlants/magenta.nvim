@@ -26,6 +26,7 @@ import {
   resolveAsText,
 } from "./submission/index.ts";
 import {
+  agentHooks,
   awaitNextStream,
   cleanupArchive,
   createAgentWithMock,
@@ -36,7 +37,11 @@ import {
   userInput,
 } from "./test-helpers.ts";
 import { Thread } from "./thread.ts";
-import type { SendResult, ThreadSendResult } from "./thread-api.ts";
+import type {
+  BeforeRequestHook,
+  SendResult,
+  ThreadSendResult,
+} from "./thread-api.ts";
 import {
   AutoCompactSupervisor,
   composeSupervisors,
@@ -1136,7 +1141,7 @@ function countOccurrences(value: unknown, needle: string): number {
 }
 
 describe("AutoCompactSupervisor integration", () => {
-  it("triggers compaction on end_turn handoff when input tokens breach the threshold", async () => {
+  it("compacts at the gate of the request whose conversation breaches the threshold", async () => {
     const { core, mockClient } = createAgentWithMock();
     core.hooks = composeSupervisors(() => [
       new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
@@ -1150,18 +1155,16 @@ describe("AutoCompactSupervisor integration", () => {
     stream.streamText("done");
     stream.finishResponse("end_turn");
 
-    // inputTokenCount is populated post-flight, so it lags one turn. Drive a
-    // second turn; the handoff at its end sees the over-threshold count.
     await pollUntil(() => {
-      if (core.agent.manager.log.inputTokenCount === 50) return true;
-      throw new Error("waiting for token count");
+      if (core.agent.inputTokenCount === 50) return true;
+      throw new Error("waiting for the preflight token count");
     });
-    mockClient.mockInputTokenCount = 200;
+    expect(compactions.prompts.length).toBe(0);
 
+    // The count is taken before the request it describes, so the very next
+    // gate sees the breach — no wasted request goes out first.
+    mockClient.mockInputTokenCount = 200;
     void core.send([{ type: "user", text: "again" }]);
-    const stream2 = await awaitNextStream(mockClient, stream);
-    stream2.streamText("done again");
-    stream2.finishResponse("end_turn");
 
     await pollUntil(() => {
       if (compactions.prompts.length > 0) return true;
@@ -1169,6 +1172,7 @@ describe("AutoCompactSupervisor integration", () => {
     });
 
     expect(compactions.prompts.length).toBe(1);
+    expect(mockClient.streams.length).toBe(1);
   });
 
   it("does not trigger compaction when input tokens are below the threshold", async () => {
@@ -1205,22 +1209,11 @@ describe("AutoCompactSupervisor integration", () => {
 
     const compactions = trackCompactions(core);
 
-    // First turn populates the post-flight inputTokenCount.
-    void core.send([{ type: "user", text: "hello" }]);
-    const stream = await mockClient.awaitStream();
-    stream.streamText("done");
-    stream.finishResponse("end_turn");
-    await pollUntil(() => {
-      if (core.agent.manager.log.inputTokenCount === 50) return true;
-      throw new Error("waiting for token count");
-    });
-    mockClient.mockInputTokenCount = 200;
-
-    // Second turn ends with a tool_use. After the tool resolves, the tool_use
-    // handoff sees the over-threshold count and triggers compaction rather
-    // than continuing the conversation.
+    // The turn ends with a tool_use; the continuation that would carry the
+    // tool results is gated, and its count is over threshold.
     void core.send([{ type: "user", text: "edit a" }]);
-    const stream2 = await awaitNextStream(mockClient, stream);
+    const stream2 = await mockClient.awaitStream();
+    mockClient.mockInputTokenCount = 200;
     stream2.streamToolUse("edl-1" as ToolRequestId, "edl" as ToolName, {
       script: `file \`/tmp/a.txt\`\nnarrow /hello/\nreplace "bye"`,
     });
@@ -1233,29 +1226,21 @@ describe("AutoCompactSupervisor integration", () => {
     expect(compactions.prompts.length).toBe(1);
   });
 
-  it("triggers compaction on a max_tokens handoff when over threshold", async () => {
+  it("compacts at the gate of the continuation a max_tokens stop asks for", async () => {
     const { core, mockClient } = createAgentWithMock();
     core.hooks = composeSupervisors(() => [
+      new MaxTokensSupervisor(),
       new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
     ]);
     mockClient.mockInputTokenCount = 50;
 
     const compactions = trackCompactions(core);
 
-    void core.send([{ type: "user", text: "hello" }]);
-    const stream = await mockClient.awaitStream();
-    stream.streamText("done");
-    stream.finishResponse("end_turn");
-    await pollUntil(() => {
-      if (core.agent.manager.log.inputTokenCount === 50) return true;
-      throw new Error("waiting for token count");
-    });
-    mockClient.mockInputTokenCount = 200;
-
-    // A max_tokens stop without a tool_use block routes through the handoff
-    // check before the truncation-continue path.
+    // A max_tokens stop without a tool_use block continues with a
+    // continue-prompt; that continuation's gate sees the breach.
     void core.send([{ type: "user", text: "again" }]);
-    const stream2 = await awaitNextStream(mockClient, stream);
+    const stream2 = await mockClient.awaitStream();
+    mockClient.mockInputTokenCount = 200;
     stream2.streamText("partial");
     stream2.finishResponse("max_tokens");
 
@@ -1651,22 +1636,27 @@ describe("AutoCompactSupervisor integration", () => {
     let continuationOutputTokens: number | undefined;
     let requests = 0;
     core.hooks = {
+      ...agentHooks({
+        onToolResults: [
+          (results) => {
+            events.push(`results:${results.size}`);
+          },
+        ],
+        onBeforeRequest: [
+          {
+            run: (ctx) => {
+              events.push("request");
+              requests++;
+              // Only a continuation has a finished assistant message behind it.
+              if (requests > 1) {
+                continuationOutputTokens = ctx.outputTokenCount;
+              }
+              return Promise.resolve({ type: "none" as const });
+            },
+          },
+        ],
+      }),
       hasPendingContent: () => Promise.resolve(false),
-      onToolResults: (results) => {
-        events.push(`results:${results.size}`);
-      },
-      onBeforeRequest: (ctx) => {
-        events.push("request");
-        requests++;
-        // Only a continuation has a finished assistant message behind it.
-        if (requests > 1) {
-          continuationOutputTokens = ctx.outputTokenCount;
-        }
-        return Promise.resolve({
-          type: "proceed" as const,
-          injections: [],
-        });
-      },
     };
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
@@ -1705,14 +1695,22 @@ describe("AutoCompactSupervisor integration", () => {
     });
     const events: string[] = [];
     core.hooks = {
+      ...agentHooks({
+        onToolResults: [
+          (results) => {
+            events.push(`results:${results.size}`);
+          },
+        ],
+        onBeforeRequest: [
+          {
+            run: () => {
+              events.push("request");
+              return Promise.resolve({ type: "none" as const });
+            },
+          },
+        ],
+      }),
       hasPendingContent: () => Promise.resolve(false),
-      onToolResults: (results) => {
-        events.push(`results:${results.size}`);
-      },
-      onBeforeRequest: () => {
-        events.push("request");
-        return Promise.resolve({ type: "proceed" as const, injections: [] });
-      },
     };
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
@@ -1738,14 +1736,22 @@ describe("AutoCompactSupervisor integration", () => {
     });
     const events: string[] = [];
     core.hooks = {
+      ...agentHooks({
+        onToolResults: [
+          (results) => {
+            events.push(`results:${results.size}`);
+          },
+        ],
+        onBeforeRequest: [
+          {
+            run: () => {
+              events.push("request");
+              return Promise.resolve({ type: "none" as const });
+            },
+          },
+        ],
+      }),
       hasPendingContent: () => Promise.resolve(false),
-      onToolResults: (results) => {
-        events.push(`results:${results.size}`);
-      },
-      onBeforeRequest: () => {
-        events.push("request");
-        return Promise.resolve({ type: "proceed" as const, injections: [] });
-      },
     };
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
@@ -1810,26 +1816,15 @@ describe("AutoCompactSupervisor integration", () => {
 
     const compactions = trackCompactions(core);
 
-    // First turn populates the post-flight inputTokenCount.
-    void core.send([{ type: "user", text: "hello" }]);
-    const stream = await mockClient.awaitStream();
-    stream.streamText("done");
-    stream.finishResponse("end_turn");
-    await pollUntil(() => {
-      if (compactions.prompts.length > 0) return true;
-      throw new Error("waiting for the end-turn compaction");
-    });
-    expect(compactions.prompts.length).toBe(1);
-
-    // The next send is over threshold before its first request goes out, so
-    // the submission consult compacts instead of issuing it — once.
-    compactions.prompts.length = 0;
+    // The send is over threshold before its first request goes out, so the
+    // gate compacts instead of issuing it — once, and with no request.
     void core.send([{ type: "user", text: "again" }]);
     await pollUntil(() => {
       if (compactions.prompts.length > 0) return true;
       throw new Error("waiting for the submission compaction");
     });
     expect(compactions.prompts.length).toBe(1);
+    expect(mockClient.streams.length).toBe(0);
     // The user's message is in the log the compaction snapshot is taken from.
     expect(JSON.stringify(core.getProviderMessages())).toContain("again");
   });
@@ -2865,17 +2860,103 @@ describe("Thread survives the compaction agent swap", () => {
   });
 });
 
+describe("Agent preflight token count", () => {
+  const noteCount = (
+    seen: (number | undefined)[],
+    preflight?: true,
+  ): BeforeRequestHook => ({
+    ...(preflight ? { requestPreflightTokenCount: true } : {}),
+    run: (ctx) => {
+      seen.push(ctx.inputTokenCount);
+      return Promise.resolve({ type: "none" as const });
+    },
+  });
+
+  it("issues no count when no hook asks for one", async () => {
+    const seen: (number | undefined)[] = [];
+    const { agent, mockClient } = createTestAgent({
+      getHooks: () => agentHooks({ onBeforeRequest: [noteCount(seen)] }),
+    });
+    mockClient.mockInputTokenCount = 42;
+    const turn = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+    await turn;
+    expect(mockClient.countTokensCalls).toBe(0);
+    expect(seen).toEqual([undefined]);
+    expect(agent.inputTokenCount).toBeUndefined();
+  });
+
+  it("counts once per request, immediately before the first hook that asks", async () => {
+    const seen: (number | undefined)[] = [];
+    const { agent, mockClient } = createTestAgent({
+      getHooks: () =>
+        agentHooks({
+          onBeforeRequest: [
+            noteCount(seen),
+            noteCount(seen, true),
+            noteCount(seen, true),
+          ],
+        }),
+    });
+    mockClient.mockInputTokenCount = 42;
+    const turn = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+    await turn;
+    // The hook ahead of the counting one decides without a count; the two
+    // behind it share the one that was taken.
+    expect(seen).toEqual([undefined, 42, 42]);
+    expect(mockClient.countTokensCalls).toBe(1);
+    expect(agent.inputTokenCount).toBe(42);
+  });
+
+  it("does not count when an earlier hook has already suspended", async () => {
+    const seen: (number | undefined)[] = [];
+    const { agent, mockClient } = createTestAgent({
+      getHooks: () =>
+        agentHooks({
+          onBeforeRequest: [
+            {
+              run: () =>
+                Promise.resolve({
+                  type: "suspend" as const,
+                  reason: { kind: "stop" as const, message: "held" },
+                }),
+            },
+            noteCount(seen, true),
+          ],
+        }),
+    });
+    mockClient.mockInputTokenCount = 42;
+    expect(await agent.runTurnLoop(userInput("hello"))).toEqual({
+      type: "suspended",
+      reason: { kind: "stop", message: "held" },
+    });
+    // The later hook is still consulted — a stop is a fact it may need to
+    // record — but the request it would decide about is never issued.
+    expect(seen).toEqual([undefined]);
+    expect(mockClient.countTokensCalls).toBe(0);
+  });
+});
+
 describe("Agent turn loop", () => {
   it("suspending at the gate issues no request", async () => {
     const { agent, mockClient } = createTestAgent({
-      getHooks: () => ({
-        onBeforeRequest: () =>
-          Promise.resolve({
-            type: "suspend" as const,
-            reason: { kind: "stop" as const, message: "held" },
-            injections: [],
-          }),
-      }),
+      getHooks: () =>
+        agentHooks({
+          onBeforeRequest: [
+            {
+              run: () =>
+                Promise.resolve({
+                  type: "suspend" as const,
+                  reason: { kind: "stop" as const, message: "held" },
+                }),
+            },
+          ],
+        }),
     });
 
     expect(await agent.runTurnLoop(userInput("hello"))).toEqual({
@@ -2942,14 +3023,18 @@ describe("Agent turn loop", () => {
 
   it("injections from the gate ride the caller's own user message", async () => {
     const { agent, mockClient } = createTestAgent({
-      getHooks: () => ({
-        onBeforeRequest: () =>
-          Promise.resolve({
-            type: "proceed" as const,
-            injections: [{ type: "text" as const, text: "injected" }],
-            submissions: [],
-          }),
-      }),
+      getHooks: () =>
+        agentHooks({
+          onBeforeRequest: [
+            {
+              run: () =>
+                Promise.resolve({
+                  type: "inject" as const,
+                  content: [{ type: "text" as const, text: "injected" }],
+                }),
+            },
+          ],
+        }),
     });
     const turn = agent.runTurnLoop(userInput("hello"));
     const stream = await mockClient.awaitStream();

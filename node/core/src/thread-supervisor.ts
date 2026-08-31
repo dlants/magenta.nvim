@@ -4,12 +4,18 @@ import type { CompactSuspendReason } from "./compaction/index.ts";
 import type {
   ProviderMessageContent,
   StopReason,
+  ToolResults,
 } from "./providers/provider-types.ts";
 import {
   formatSystemInfo,
   type SystemInfo,
 } from "./providers/system-prompt.ts";
-import type { ThreadHooks } from "./thread-api.ts";
+import type {
+  BeforeRequestHook,
+  ThreadHooks,
+  ToolResultsHook,
+  YieldHook,
+} from "./thread-api.ts";
 
 /** Action returned from the `onEndTurnWithoutYield` hook. */
 export type EndTurnAction =
@@ -56,32 +62,18 @@ export function injectText(
   return { type: "inject", content: [{ type: "text", text }] };
 }
 
-/** The composed result of consulting every supervisor before a request. A
- * plural collaboration reduced to a single decision: all the injections, and
- * at most one suspension. Injections survive a suspension — they belong in
- * the snapshot handed over. */
-export type ComposedSupervisorActions =
-  | { type: "suspend"; reason: SuspendReason; injections: InjectedContent[] }
-  | { type: "proceed"; injections: InjectedContent[] };
-
-/** What the agent's `onBeforeRequest` hook answers: the supervisors' decision
- * plus, on the proceed path, the user's own queued content. `submissions` is
- * separate from `injections` because the agent orders it last and applies the
- * reminder/token-reset rules to it, and it is absent from the suspend variant
- * because a suspension must leave the queues undelivered. Only the owning
- * `Thread` fills it in, from its async queue. */
-export type ComposedRequestActions =
-  | { type: "suspend"; reason: SuspendReason; injections: InjectedContent[] }
-  | {
-      type: "proceed";
-      injections: InjectedContent[];
-      submissions: InputMessage[];
-    };
+/** What a before-request hook may contribute. A superset of
+ * `SupervisorAction`: only the owner's own queue-flush hook produces
+ * `submissions` — the user's own queued content, which the agent orders last,
+ * after every injection. */
+export type RequestAction =
+  | SupervisorAction
+  | { type: "submissions"; messages: InputMessage[] };
 
 /** Fold a list of supervisors into the single `ThreadHooks` set a `Thread`
  * consults. The merge rules are exactly today's: `send-message` texts join
  * with a blank line, and the first `accept`/`reject` wins a yield. Request
- * actions are merged into a single `ComposedRequestActions`: every injection,
+ * actions become one before-request hook entry each: every injection,
  * in supervisor order, and the first `suspend`. Arbitration lives here rather than
  * in the agent because it is policy over a plural collaborator, and each
  * consumer is free to choose a different one. */
@@ -89,6 +81,44 @@ export function composeSupervisors(
   getSupervisors: () => ReadonlyArray<ThreadSupervisor>,
 ): ThreadHooks {
   return {
+    // Getters, not eagerly-built arrays: the supervisor list is read at every
+    // hook point, so a supervisor registered later still participates.
+    get onBeforeRequest(): BeforeRequestHook[] {
+      const hooks: BeforeRequestHook[] = [];
+      for (const sup of getSupervisors()) {
+        const run = sup.onBeforeRequest?.bind(sup);
+        if (!run) continue;
+        hooks.push({
+          ...(sup.requestPreflightTokenCount
+            ? { requestPreflightTokenCount: true }
+            : {}),
+          run,
+        });
+      }
+      return hooks;
+    },
+    get onToolResults(): ToolResultsHook[] {
+      const hooks: ToolResultsHook[] = [];
+      for (const sup of getSupervisors()) {
+        const hook = sup.onToolResults?.bind(sup);
+        if (hook) hooks.push(hook);
+      }
+      return hooks;
+    },
+    get onYield(): YieldHook[] {
+      const hooks: YieldHook[] = [];
+      for (const sup of getSupervisors()) {
+        const onYield = sup.onYield?.bind(sup);
+        if (!onYield) continue;
+        // The built-in supervisors predate structured yields and read text.
+        hooks.push((value) =>
+          onYield(
+            value.type === "text" ? value.text : JSON.stringify(value.value),
+          ),
+        );
+      }
+      return hooks;
+    },
     onEndTurn: (context) => {
       const texts: string[] = [];
       // The first suspension wins, and it wins over any nudge: there is no
@@ -106,35 +136,6 @@ export function composeSupervisors(
       if (suspend) return suspend;
       if (texts.length === 0) return { type: "none" };
       return { type: "send-message", text: texts.join("\n\n") };
-    },
-    onYield: async (value) => {
-      // The built-in supervisors predate structured yields and read text.
-      const result =
-        value.type === "text" ? value.text : JSON.stringify(value.value);
-      const texts: string[] = [];
-      for (const sup of getSupervisors()) {
-        const action = await sup.onYield?.(result);
-        if (!action) continue;
-        if (action.type === "accept" || action.type === "reject") return action;
-        if (action.type === "send-message") texts.push(action.text);
-      }
-      if (texts.length === 0) return { type: "none" };
-      return { type: "send-message", text: texts.join("\n\n") };
-    },
-    onBeforeRequest: async (context) => {
-      const injections: InjectedContent[] = [];
-      // The first suspension wins; a later one cannot restate the reason.
-      let suspend: { reason: SuspendReason } | undefined;
-      for (const sup of getSupervisors()) {
-        const action = await sup.onBeforeRequest?.(context);
-        if (!action) continue;
-        if (action.type === "inject") injections.push(...action.content);
-        else if (action.type === "suspend")
-          suspend ??= { reason: action.reason };
-      }
-      return suspend
-        ? { type: "suspend", reason: suspend.reason, injections }
-        : { type: "proceed", injections };
     },
     onReset: () => {
       for (const sup of getSupervisors()) {
@@ -172,6 +173,14 @@ export type RequestContext = {
 export interface ThreadSupervisor {
   onEndTurnWithoutYield?(context: EndTurnContext): EndTurnAction;
   onYield?(result: string): Promise<YieldAction>;
+  /** Every requested tool has settled and its results are about to be
+   * written. Fire-and-forget. */
+  onToolResults?(results: ToolResults): void;
+  /** This supervisor reads `context.inputTokenCount` in `onBeforeRequest` and
+   * needs it to describe the request it is deciding about, so the agent
+   * counts the conversation before consulting it. Declaring it is what makes
+   * the count happen at all. */
+  requestPreflightTokenCount?: boolean;
   /** The thread threw its log away (compaction) and starts over. A supervisor
    * whose contribution is once-per-conversation re-arms here. */
   onReset?(): void;
@@ -303,6 +312,7 @@ export class UnsupervisedSupervisor implements ThreadSupervisor {
 /** Triggers auto-compaction when the thread's input token count breaches
  *  a configurable threshold. Only implements the handoff hook. */
 export class AutoCompactSupervisor implements ThreadSupervisor {
+  readonly requestPreflightTokenCount = true;
   private readonly threshold: number;
   private readonly nextPrompt: string;
 

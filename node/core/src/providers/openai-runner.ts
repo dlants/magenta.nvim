@@ -137,7 +137,6 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     return {
       messages: this.messages,
       latestUsage: this.latestUsage,
-      inputTokenCount: undefined,
     };
   }
 

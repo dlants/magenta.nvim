@@ -44,10 +44,7 @@ import type {
   ThreadSendResult,
 } from "./thread-api.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
-import type {
-  ComposedRequestActions,
-  SuspendReason,
-} from "./thread-supervisor.ts";
+import type { RequestAction, SuspendReason } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
@@ -89,6 +86,9 @@ export class Thread {
   public state: ThreadState;
   public agent: Agent;
   public hooks: ThreadHooks = {
+    onBeforeRequest: [],
+    onToolResults: [],
+    onYield: [],
     hasPendingContent: () => Promise.resolve(false),
   };
   /** Kept for the lifetime of the thread, so they outlive any one agent. */
@@ -518,48 +518,48 @@ export class Thread {
   }
 
   /** The agent's view of the owner's hooks. `onEndTurn` is filtered out
-   * structurally by `AgentHooks`; `onBeforeRequest` is wrapped so the async
-   * queue is drained into the request that carries the tool results. */
+   * structurally by `AgentHooks`; the thread's own two contributions are
+   * appended to the before-request array like any other entry. */
   private agentHooks(): AgentHooks {
     return {
-      ...this.hooks,
-      onBeforeRequest: (ctx) => this.beforeRequest(ctx),
-      onToolResults: (results) => {
-        this.hooks.onToolResults?.(results);
-        this.systemReminders.onToolResults(results);
-      },
+      onBeforeRequest: [
+        ...this.hooks.onBeforeRequest,
+        // Last, so the reminder sits after every other injection and
+        // immediately before the user's own content.
+        { run: (ctx) => Promise.resolve(this.reminderAction(ctx)) },
+        { run: (ctx) => this.queueFlushAction(ctx) },
+      ],
+      onToolResults: [
+        ...this.hooks.onToolResults,
+        (results) => this.systemReminders.onToolResults(results),
+      ],
+      onYield: this.hooks.onYield,
+      ...(this.hooks.onToolApplied
+        ? { onToolApplied: this.hooks.onToolApplied }
+        : {}),
     };
   }
 
-  private async beforeRequest({
-    isOpeningRequest,
-    ...ctx
-  }: AgentRequestContext): Promise<ComposedRequestActions> {
-    let composed = (await this.hooks.onBeforeRequest?.(ctx)) ?? {
-      type: "proceed" as const,
-      injections: [],
-    };
-    // A suspension leaves the queues intact and unresolved: their commands
-    // must run against the world as it is when they are finally delivered.
-    if (composed.type === "suspend") return composed;
-    // Last, so the reminder sits after every other injection and immediately
-    // before the user's own content.
-    const reminder = this.systemReminders.onBeforeRequest(ctx);
-    if (reminder?.type === "inject") {
-      composed = {
-        ...composed,
-        injections: [...composed.injections, ...reminder.content],
-      };
-    }
-    // Only a mid-turn request carries the async queue: at a turn boundary
-    // `flushAtStop` owns both queues, and flushing here as well would deliver
-    // the same entries twice. Which request this is comes from the agent —
-    // the only place that knows — rather than from thread-side bookkeeping
-    // that could drift out of step with it.
-    if (isOpeningRequest || !this.nextRequestQueue.length) {
-      return { ...composed, submissions: [] };
-    }
-    return { ...composed, submissions: await this.flushMidTurn() };
+  private reminderAction(ctx: AgentRequestContext): RequestAction {
+    // A suspended request is never issued, so a reminder placed in it would
+    // be marked sent and never delivered.
+    if (ctx.suspended) return { type: "none" };
+    return this.systemReminders.onBeforeRequest(ctx) ?? { type: "none" };
+  }
+
+  /** Only a mid-turn request carries the async queue: at a turn boundary
+   * `flushAtStop` owns both queues, and flushing here as well would deliver
+   * the same entries twice. Which request this is comes from the agent — the
+   * only place that knows — rather than from thread-side bookkeeping that
+   * could drift out of step with it. A suspension leaves the queues intact
+   * and unresolved: their commands must run against the world as it is when
+   * they are finally delivered. */
+  private async queueFlushAction(
+    ctx: AgentRequestContext,
+  ): Promise<RequestAction> {
+    if (ctx.suspended || ctx.isOpeningRequest || !this.nextRequestQueue.length)
+      return { type: "none" };
+    return { type: "submissions", messages: await this.flushMidTurn() };
   }
 
   async send(

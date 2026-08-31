@@ -1,7 +1,7 @@
 import { AnthropicError, APIError } from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent } from "../agent.ts";
-import { createTestAgent, userInput } from "../test-helpers.ts";
+import { agentHooks, createTestAgent, userInput } from "../test-helpers.ts";
 import { isRetryableError } from "./anthropic-runner.ts";
 
 function make529Error(): APIError {
@@ -127,19 +127,21 @@ describe("Agent retry logic", () => {
     expect((result.error as APIError).status).toBe(400);
   });
 
-  it("does not re-fire the before-request gate on a retried request", async () => {
+  it("does not re-fire the before-request gate, or re-count, on a retried request", async () => {
     let calls = 0;
     const { agent, mockClient } = createTestAgent({
-      getHooks: () => ({
-        onBeforeRequest: () => {
-          calls++;
-          return Promise.resolve({
-            type: "proceed" as const,
-            injections: [],
-            submissions: [],
-          });
-        },
-      }),
+      getHooks: () =>
+        agentHooks({
+          onBeforeRequest: [
+            {
+              requestPreflightTokenCount: true,
+              run: () => {
+                calls++;
+                return Promise.resolve({ type: "none" as const });
+              },
+            },
+          ],
+        }),
     });
     const turn = start(agent);
     await vi.advanceTimersByTimeAsync(0);
@@ -152,6 +154,9 @@ describe("Agent retry logic", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
     expect(calls).toBe(1);
+    // The retry stays inside one `sendRequest`, so the count taken for the
+    // request it describes is still current.
+    expect(mockClient.countTokensCalls).toBe(1);
   });
 
   it("retries on 529 with correct delays and succeeds", async () => {

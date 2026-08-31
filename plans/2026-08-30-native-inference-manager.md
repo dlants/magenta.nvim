@@ -384,7 +384,47 @@ Notes and deviations:
   - `openai-runner.test.ts`, `openai-runner-retry.test.ts`, `openai-wiring.test.ts`, `openai.test.ts` pass untouched.
   - `runner-parity.test.ts` is the real integration check here — it already asserts identical provider content, identical phase sequences and identical executor calls across the two. It should now be _more_ likely to hold by construction; keep it and extend it with an abort case.
 
-## Hooks array and preflight token count
+## Hooks array and preflight token count — DONE
+
+Done. `AgentHooks` is `{ onBeforeRequest: BeforeRequestHook[]; onToolResults:
+ToolResultsHook[]; onYield: YieldHook[] }`; `Agent` iterates each array and
+applies that point's composition rule. `composeSupervisors` now flattens the
+supervisor list into those arrays (as getters, so a supervisor registered later
+still participates) and keeps only the thread-level points. `Thread.beforeRequest`
+is gone: the system reminder and the mid-turn queue flush are two ordinary
+entries appended to the array in `Thread.agentHooks()`. `countTokens()` is an
+optional method on `NativeInferenceManager`, issued from the gate lazily and at
+most once per request.
+
+Notes and deviations:
+
+- `AgentRequestContext` gained `suspended`. `Agent` consults *every* hook, as
+  the supervisor composition did, but a hook whose contribution commits state
+  (draining the queue, marking a reminder sent) must decline once an earlier
+  hook has suspended — previously `Thread.beforeRequest` got this for free by
+  returning early. The token count is likewise skipped after a suspension.
+- `onToolApplied` stayed on `AgentHooks` as a single optional function rather
+  than moving to `AgentContext`: the supervisors that consume it are registered
+  on the `Thread` *after* its `AgentContext` is built, so the context has no way
+  to reach them. It is documented as not being a turn-loop hook point.
+- `ThreadSupervisor` gained `requestPreflightTokenCount?: boolean` (set by
+  `AutoCompactSupervisor`) and `onToolResults?`, so a supervisor can contribute
+  at every agent hook point.
+- `AgentLog.inputTokenCount` and `AgentOptions.skipPostFlightTokenCount` are
+  gone. `Agent.inputTokenCount` / `getLastStopTokenCount()` serve the most
+  recent preflight count, falling back to `latestUsage` as before.
+- Behaviour change worth recording: because the count is now fresh at every
+  gate, `AutoCompactSupervisor.onEndTurnWithoutYield` can no longer fire — a
+  thread that comes to rest over the threshold suspends at the *next* gate,
+  before its request goes out, which is what the end-turn check existed to
+  approximate. It is kept as a safety net for owners that supply a count some
+  other way. The three "compacts on the X handoff" tests became "compacts at
+  the gate of the request/continuation", and the `max_tokens` one now registers
+  `MaxTokensSupervisor` so there is a continuation to gate.
+- `MockAnthropicClient` grew `countTokensCalls` so tests can assert that no
+  count is issued when nobody asks.
+- `test-helpers.ts` grew `agentHooks(partial)`, which fills in the hook points a
+  test does not care about.
 
 - Goal: `AgentHooks` becomes one typed array per hook point; `Agent` iterates and composes. `combineSupervisors` and `Thread.beforeRequest`'s wrapping collapse into registration. `countTokens` is issued from the gate, lazily, at most once per request.
 - Tests:

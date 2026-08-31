@@ -139,6 +139,16 @@ function baseTestContext(provider: Provider): AgentContext {
   };
 }
 
+/** Fill in the hook points a test does not care about. */
+export function agentHooks(partial: Partial<AgentHooks> = {}): AgentHooks {
+  return {
+    onBeforeRequest: [],
+    onToolResults: [],
+    onYield: [],
+    ...partial,
+  };
+}
+
 export function createAgentWithMock(
   overrides?: Partial<AgentContext>,
   threadId: ThreadId = "test-thread" as ThreadId,
@@ -213,7 +223,7 @@ function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
     threadId: "test-agent" as ThreadId,
     state,
     structuredToolResults: new Map(),
-    getHooks: opts.getHooks ?? (() => ({})),
+    getHooks: opts.getHooks ?? (() => agentHooks()),
     onUpdate: opts.onUpdate ?? (() => {}),
     runnerInit: opts.cloneFrom
       ? {
