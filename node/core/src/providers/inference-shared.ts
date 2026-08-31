@@ -12,7 +12,7 @@ export const ABORT_MARKER_TEXT = "[The user aborted the previous request.]";
 export const ABORT_TOOL_RESULT_TEXT =
   "Request was aborted by the user before tool execution completed.";
 
-export const RETRY_DELAYS = [1000, 5000, 10000, 30000];
+export const RETRY_DELAYS = [1000, 5000, 10000, 30000] as const;
 
 export const MAX_RETRY_DURATION = 300_000;
 

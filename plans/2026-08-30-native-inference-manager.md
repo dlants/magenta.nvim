@@ -617,6 +617,7 @@ Notes and deviations:
   `isRetryableError` / `isSSEParseError` / `isStreamOrderError` stayed put —
   they narrow on the Anthropic SDK's error classes, so they are genuinely
   anthropic's.
+  `RETRY_DELAYS` is `as const`, so the budget cannot be mutated by an importer.
 - File renames: `anthropic-runner.ts` → `anthropic-inference.ts`,
   `openai-runner.ts` → `openai-inference.ts`, and the root re-export
   `node/providers/anthropic-runner.ts` → `anthropic-inference.ts`. Test files
