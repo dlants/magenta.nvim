@@ -14,12 +14,19 @@ import {
   MockAnthropicClient,
   type MockStream,
 } from "./providers/mock-anthropic-client.ts";
+import { MockOpenAIClient } from "./providers/mock-openai-client.ts";
+import {
+  OpenAIInferenceManager,
+  type OpenAIRunnerOptions,
+  type OpenAIStreamingClient,
+} from "./providers/openai-runner.ts";
 import type {
   AgentInput,
   AgentOptions,
   NativeInferenceManager,
   NativeMessageIdx,
   Provider,
+  ProviderToolSpec,
   RequestedTool,
   ToolExecutor,
   ToolOutcome,
@@ -33,7 +40,6 @@ import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import { pollUntil } from "./utils/async.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
-
 export const TEST_ARCHIVE_DIR = path.join(os.tmpdir(), "magenta-test-archive");
 
 export const noopLogger: Logger = {
@@ -166,27 +172,22 @@ export function createAgentWithMock(
   };
 }
 
-/** An `Agent` on a mock client, with no thread around it: the harness for the
- * turn loop itself. */
-export function createTestAgent(opts?: {
+/** What every test agent can vary, whichever provider backs it. */
+type TestAgentOpts = {
   onUpdate?: () => void;
   getHooks?: () => AgentHooks;
   context?: Partial<AgentContext>;
-  anthropicOptions?: Partial<AnthropicRunnerOptions>;
   /** Stand in for real tool execution. Tests about the loop's handling of
    * tool outcomes supply this instead of wiring up real tools. */
   executeTools?: ToolExecutor;
-  /** Share a client with another agent, so a test can watch one stream of
-   * requests across both. */
-  mockClient?: MockAnthropicClient;
   /** Build on a copy of an existing conversation instead of a fresh one. */
   cloneFrom?: NativeInferenceManager;
-}): { agent: Agent; mockClient: MockAnthropicClient } {
-  const mockClient = opts?.mockClient ?? new MockAnthropicClient();
-  const provider = createMockProvider(mockClient, opts?.anthropicOptions);
+};
+
+function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
   const context: AgentContext = {
     ...baseTestContext(provider),
-    ...opts?.context,
+    ...opts.context,
   };
   const state: ThreadState = {
     title: undefined,
@@ -199,7 +200,7 @@ export function createTestAgent(opts?: {
     lastTurnResult: undefined,
     toolSpecs: [],
   };
-  const executeTools = opts?.executeTools;
+  const executeTools = opts.executeTools;
   const AgentClass = executeTools
     ? class extends Agent {
         protected override executeTools(
@@ -209,13 +210,13 @@ export function createTestAgent(opts?: {
         }
       }
     : Agent;
-  const agent = new AgentClass(context, {
+  return new AgentClass(context, {
     threadId: "test-agent" as ThreadId,
     state,
     structuredToolResults: new Map(),
-    getHooks: opts?.getHooks ?? (() => ({})),
-    onUpdate: opts?.onUpdate ?? (() => {}),
-    runnerInit: opts?.cloneFrom
+    getHooks: opts.getHooks ?? (() => ({})),
+    onUpdate: opts.onUpdate ?? (() => {}),
+    runnerInit: opts.cloneFrom
       ? {
           type: "cloned",
           cloneFrom: opts.cloneFrom,
@@ -224,7 +225,62 @@ export function createTestAgent(opts?: {
         }
       : { type: "new" },
   });
-  return { agent, mockClient };
+}
+
+/** An `Agent` on a mock anthropic client, with no thread around it: the
+ * harness for the turn loop itself. */
+export function createTestAgent(
+  opts?: TestAgentOpts & {
+    anthropicOptions?: Partial<AnthropicRunnerOptions>;
+    /** Share a client with another agent, so a test can watch one stream of
+     * requests across both. */
+    mockClient?: MockAnthropicClient;
+  },
+): { agent: Agent; mockClient: MockAnthropicClient } {
+  const mockClient = opts?.mockClient ?? new MockAnthropicClient();
+  const provider = createMockProvider(mockClient, opts?.anthropicOptions);
+  return { agent: buildTestAgent(provider, opts ?? {}), mockClient };
+}
+
+export const defaultOpenAIOptions: OpenAIRunnerOptions = {
+  includeWebSearch: false,
+  logger: noopLogger,
+  validateInput,
+};
+
+/** The same harness over the openai manager. Both providers are driven by the
+ * one loop in `Agent`, so the two differ only in which client is mocked. */
+export function createTestOpenAIAgent(
+  opts?: TestAgentOpts & {
+    openaiOptions?: Partial<OpenAIRunnerOptions>;
+    mockClient?: MockOpenAIClient;
+    tools?: ProviderToolSpec[];
+  },
+): { agent: Agent; mockClient: MockOpenAIClient } {
+  const mockClient = opts?.mockClient ?? new MockOpenAIClient();
+  const tools = opts?.tools;
+  const provider: Provider = {
+    createAgent(options: AgentOptions): NativeInferenceManager {
+      return new OpenAIInferenceManager(
+        tools ? { ...options, tools } : options,
+        mockClient as unknown as OpenAIStreamingClient,
+        { ...defaultOpenAIOptions, ...opts?.openaiOptions },
+      );
+    },
+    forceToolUse() {
+      throw new Error("Not implemented in mock");
+    },
+  };
+  return {
+    agent: buildTestAgent(provider, {
+      ...opts,
+      context: {
+        profile: { provider: "openai", model: "gpt-5.4" } as ProviderProfile,
+        ...opts?.context,
+      },
+    }),
+    mockClient,
+  };
 }
 
 /** One turn's worth of user input. */

@@ -331,7 +331,41 @@ Deviations worth recording:
   - The retry tests stay with the managers, where retry stays: `anthropic-runner-retry.test.ts` / `openai-runner-retry.test.ts` should need only mechanical changes, plus an assertion that a retried request emits `{type:"retry"}` and clears it on the next attempt, and that `Agent` never re-enters the gate across a retry.
   - Assert `phase.block` is not reference-identical to the manager's internal block (the aliasing invariant).
 
-## Convert OpenAI
+## Convert OpenAI — DONE
+
+Done. `OpenAIRunner` is `OpenAIInferenceManager` (file rename still deferred to
+stage 6): the loop, `runLoop`, `finishAbort`, `logExtent`, the ticker, the
+`AgentPhase` field and `LegacyRunnerHooks` are all deleted, and `activity`
+collapsed to a single `requestInFlight` boolean. Both providers are now driven
+by `Agent`'s one loop.
+
+Notes and deviations:
+
+- `syncStreamingBlock` no longer writes a phase; it constructs a fresh
+  `StreamingBlock` and reports it through the request callback, and returns
+  early when no request is in flight. The retry loop reports only
+  `attempt-started` / `retry-scheduled`.
+- `notify()` (and therefore `AgentOptions.onUpdate`) survives in the manager
+  alongside `Agent.scheduleUpdate`, exactly as it does in the anthropic
+  manager. Stage 5 drops both together.
+- Test seam: `test-helpers.ts` grew `createTestOpenAIAgent`, which builds a real
+  `Agent` over an `OpenAIInferenceManager` on a `MockOpenAIClient`.
+  `createTestAgent` and it now share a `buildTestAgent(provider, opts)` and a
+  common `TestAgentOpts` (`onUpdate`, `getHooks`, `context`, `executeTools`,
+  `cloneFrom`); the openai one additionally takes `openaiOptions` and `tools`.
+- `openai-runner.test.ts` and `openai-runner-retry.test.ts` drive
+  `agent.runTurnLoop` and read `agent.manager.log`. Three mechanical
+  consequences: `startTurn` must await the stream *by index*
+  (`awaitStream` hands back the previous, finished stream now that a turn is
+  several awaits long); the retry suite's `start` awaits a tick before reading
+  stream 0, since the request is no longer issued synchronously; and the system
+  prompt in these tests is the shared test context's, not a per-test string.
+- `runner-parity.test.ts` now drives both sides through `Agent.runTurnLoop`, so
+  `executorCalls` is measured the same way on both, and gained an
+  `abort parity` case: an abort landing mid-stream yields `{type:"aborted"}`,
+  an idle phase and a trailing user-role abort marker on both providers.
+- Clone tests build the clone through `createTestOpenAIAgent({ cloneFrom })`
+  rather than calling `runner.clone()` and running a turn on the bare manager.
 
 - Goal: `OpenAIRunner` becomes `OpenAIInferenceManager`; the duplicated loop, retry, ticker and phase code is deleted. Both providers are now driven by `Agent`'s single loop.
 - Tests:

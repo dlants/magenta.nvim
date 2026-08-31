@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import {
   MockOpenAIClient,
-  OpenAIRunner,
+  OpenAIInferenceManager,
   type OpenAIStreamingClient,
   type ToolRequest,
   validateInput,
@@ -374,7 +374,7 @@ Streams: ${this.mockClient.streams.length}`);
 
   createAgent(options: AgentOptions): NativeInferenceManager {
     if (this.agentKind === "openai") {
-      return new OpenAIRunner(
+      return new OpenAIInferenceManager(
         options,
         this.mockOpenAIClient as unknown as OpenAIStreamingClient,
         {

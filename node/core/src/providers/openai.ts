@@ -26,7 +26,7 @@ import {
   DEFAULT_BEDROCK_MANTLE_REGION,
 } from "./bedrock-sigv4.ts";
 import { CodexAuthError, type CodexCredentials } from "./codex-auth.ts";
-import { OpenAIRunner } from "./openai-runner.ts";
+import { OpenAIInferenceManager } from "./openai-runner.ts";
 import {
   type AgentInput,
   type AgentOptions,
@@ -1218,7 +1218,7 @@ export class OpenAIProvider implements Provider {
     if (this.authType === "chatgpt") {
       assertChatGPTModelSupported(options.model);
     }
-    return new OpenAIRunner(options, this.client, {
+    return new OpenAIInferenceManager(options, this.client, {
       includeWebSearch: this.includeWebSearch,
       logger: this.logger,
       validateInput: this.validateInput,

@@ -1,14 +1,14 @@
 import { APIError } from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Agent } from "../agent.ts";
+import { createTestOpenAIAgent } from "../test-helpers.ts";
 import type { ToolName } from "../tool-types.ts";
-import { validateInput } from "../tools/helpers.ts";
-import { MockOpenAIClient } from "./mock-openai-client.ts";
+import type {
+  MockOpenAIClient,
+  MockResponseStream,
+} from "./mock-openai-client.ts";
 import {
-  type LegacyRunnerHooks,
-  OpenAIRunner,
-  type OpenAIStreamingClient,
-} from "./openai-runner.ts";
-import {
+  type NativeInferenceManager,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ProviderToolSpec,
   type RequestedTool,
@@ -16,13 +16,6 @@ import {
   type ToolResults,
   type TurnResult,
 } from "./provider-types.ts";
-
-const noopLogger = {
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  debug: () => {},
-};
 
 const spec: ProviderToolSpec = {
   name: "get_files" as ToolName,
@@ -45,19 +38,9 @@ function errorResults(requests: ReadonlyArray<RequestedTool>): ToolResults {
 }
 
 function setup() {
-  const client = new MockOpenAIClient();
   const calls: RequestedTool[][] = [];
-  const agent = new OpenAIRunner(
-    {
-      model: "gpt-5.4",
-      systemPrompt: "be helpful",
-      tools: [spec],
-      onUpdate: () => {},
-    },
-    client as unknown as OpenAIStreamingClient,
-    { includeWebSearch: false, logger: noopLogger, validateInput },
-  );
-  const hooks: LegacyRunnerHooks = {
+  const { agent, mockClient: client } = createTestOpenAIAgent({
+    tools: [spec],
     executeTools: (requests: ReadonlyArray<RequestedTool>) => {
       calls.push([...requests]);
       return Promise.resolve({
@@ -65,8 +48,8 @@ function setup() {
         results: errorResults(requests),
       });
     },
-  };
-  return { client, agent, calls, hooks };
+  });
+  return { client, agent, calls };
 }
 
 function apiError(status: number): APIError {
@@ -85,33 +68,30 @@ async function tick(times = 6): Promise<void> {
   }
 }
 
-function start(
+/** The loop reaches the request a few awaits in, so let those settle before
+ * reading the stream: polling would deadlock against the fake timers. */
+async function start(
   client: MockOpenAIClient,
-  agent: OpenAIRunner,
-  hooks: LegacyRunnerHooks,
-): { turn: Promise<TurnResult>; stream: ReturnType<typeof streamAt> } {
-  const turn = agent.runTurn(
-    [
-      {
-        type: "text",
-        text: "hello",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ],
-    hooks,
-  );
+  agent: Agent,
+): Promise<{ turn: Promise<TurnResult>; stream: MockResponseStream }> {
+  const turn = agent.runTurnLoop([
+    {
+      type: "text",
+      text: "hello",
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+    },
+  ]);
+  await tick();
   return { turn, stream: streamAt(client, 0) };
 }
 
-/** `runTurn` opens its first stream synchronously, so no polling (which would
- * deadlock against the fake timers) is needed. */
 function streamAt(client: MockOpenAIClient, index: number) {
   const stream = client.streams[index];
   if (!stream) throw new Error(`no stream at index ${index}`);
   return stream;
 }
 
-describe("OpenAIRunner retry", () => {
+describe("OpenAIInferenceManager retry", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -120,8 +100,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("retries a retryable error and discards the partial attempt", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = start(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await start(client, agent);
 
     stream.streamText("half an answer");
     await tick();
@@ -143,7 +123,7 @@ describe("OpenAIRunner retry", () => {
 
     expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
 
-    const messages = agent.log.messages;
+    const messages = agent.manager.log.messages;
     const assistant = messages[messages.length - 1];
     // The half-accumulated text from the failed attempt must not survive.
     expect(assistant.content).toHaveLength(1);
@@ -154,8 +134,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("surfaces a non-retryable error without retrying", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = start(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await start(client, agent);
     stream.respondWithError(apiError(400));
     await tick();
 
@@ -165,8 +145,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("treats response.failed as an error", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = start(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await start(client, agent);
     stream.emitEvent({
       type: "response.failed",
       response: {
@@ -184,8 +164,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("falls back to a generic message when response.failed carries no error", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = start(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await start(client, agent);
     stream.emitEvent({
       type: "response.failed",
       response: mockFailedResponse(),
@@ -200,8 +180,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("treats an `error` stream event as an error", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = start(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await start(client, agent);
     stream.emitEvent({
       type: "error",
       code: "rate_limit",
@@ -218,8 +198,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("aborting during the backoff sleep unwinds the turn", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = start(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await start(client, agent);
     stream.respondWithError(apiError(503));
     await tick();
 
@@ -233,7 +213,7 @@ describe("OpenAIRunner retry", () => {
     expect(client.streams).toHaveLength(1);
   });
 });
-describe("OpenAIRunner sendRequest", () => {
+describe("OpenAIInferenceManager sendRequest", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -241,21 +221,21 @@ describe("OpenAIRunner sendRequest", () => {
     vi.useRealTimers();
   });
   /** What `Agent` does: seed the conversation, then issue one request. */
-  function send(client: MockOpenAIClient, agent: OpenAIRunner) {
+  function send(client: MockOpenAIClient, manager: NativeInferenceManager) {
     const updates: RequestUpdate[] = [];
-    agent.appendUserMessage([
+    manager.appendUserMessage([
       {
         type: "text",
         text: "hello",
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    const request = agent.sendRequest((update) => updates.push(update));
+    const request = manager.sendRequest((update) => updates.push(update));
     return { request, updates, stream: streamAt(client, 0) };
   }
   it("retries within one request and reports the countdown to the caller", async () => {
     const { client, agent } = setup();
-    const { request, updates, stream } = send(client, agent);
+    const { request, updates, stream } = send(client, agent.manager);
     stream.respondWithError(apiError(429));
     await tick();
     const scheduled = updates.filter((u) => u.type === "retry-scheduled");
@@ -278,18 +258,18 @@ describe("OpenAIRunner sendRequest", () => {
   });
   it("aborts an in-flight request and leaves the runner reusable", async () => {
     const { client, agent } = setup();
-    const { request, stream } = send(client, agent);
+    const manager = agent.manager;
+    const { request, stream } = send(client, manager);
     stream.streamText("half an answer");
     await tick();
-    agent.abort();
+    manager.abort();
     // The backend signals a cancellation only by closing the connection.
     stream.abortMidstream();
     await tick();
     expect(await request).toEqual({ type: "aborted" });
-    expect(agent.phase).toEqual({ type: "idle" });
-    agent.finalize({ type: "aborted" });
-    // A second request must be issuable: the first one released the runner.
-    const second = agent.sendRequest(() => {});
+    manager.finalize({ type: "aborted" });
+    // A second request must be issuable: the first one released the manager.
+    const second = manager.sendRequest(() => {});
     await tick();
     streamAt(client, 1).finishResponse();
     await tick();
@@ -297,7 +277,7 @@ describe("OpenAIRunner sendRequest", () => {
   });
 });
 
-describe("OpenAIRunner incomplete responses", () => {
+describe("OpenAIInferenceManager incomplete responses", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -306,14 +286,14 @@ describe("OpenAIRunner incomplete responses", () => {
   });
 
   it("maps max_output_tokens to max_tokens and still runs the tool call", async () => {
-    const { client, agent, calls, hooks } = setup();
-    const { turn, stream } = start(client, agent, hooks);
+    const { client, agent, calls } = setup();
+    const { turn, stream } = await start(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await tick();
     stream.finishIncomplete("max_output_tokens");
     await tick();
 
-    expect(agent.log.messages[1].stopReason).toBe("max_tokens");
+    expect(agent.manager.log.messages[1].stopReason).toBe("max_tokens");
     expect(calls.map((batch) => batch.map((request) => request.id))).toEqual([
       ["call_1"],
     ]);
@@ -329,8 +309,8 @@ describe("OpenAIRunner incomplete responses", () => {
   });
 
   it("maps content_filter to content", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = start(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await start(client, agent);
     stream.streamText("partial");
     await tick();
     stream.finishIncomplete("content_filter");

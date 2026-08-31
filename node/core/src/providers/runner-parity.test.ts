@@ -1,30 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { Logger } from "../logger.ts";
-import { createTestAgent } from "../test-helpers.ts";
+import type { Agent } from "../agent.ts";
+import { createTestAgent, createTestOpenAIAgent } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
-import { validateInput } from "../tools/helpers.ts";
-import { MockOpenAIClient } from "./mock-openai-client.ts";
-import { OpenAIRunner, type OpenAIStreamingClient } from "./openai-runner.ts";
+import { pollUntil } from "../utils/async.ts";
+import { ABORT_MARKER_TEXT } from "./anthropic-runner.ts";
 import {
   type AgentInput,
   type AgentPhase,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ProviderMessage,
-  type ProviderToolSpec,
   type TurnResult,
 } from "./provider-types.ts";
-
-const noopLogger: Logger = {
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  debug: () => {},
-};
-
-const sharedOptions = {
-  systemPrompt: "be helpful",
-  tools: [] as ProviderToolSpec[],
-};
 
 function text(text: string): AgentInput {
   return {
@@ -65,12 +51,8 @@ const noExecutor = () => {
 /** Snapshot of what a single opening request produced, taken while the turn is
  * still in flight so the user message is visible before any cleanup.
  *
- * The two sides are driven differently for now: anthropic goes through
- * `Agent.runTurnLoop` while openai still has its own loop, so this compares
- * the observable result of two drivers rather than one driver over two
- * managers. Stage 2 puts openai on `sendRequest`, at which point the
- * comparison holds by construction and `executorCalls` stops being a
- * hardcoded 0 on the anthropic side. */
+ * Both sides are driven by the one loop in `Agent`, so this compares two
+ * managers under one driver rather than two drivers. */
 type TurnSnapshot = {
   messages: ProviderMessage[];
   phaseDuringTurn: AgentPhase["type"];
@@ -80,10 +62,13 @@ type TurnSnapshot = {
 };
 
 async function anthropicContent(): Promise<TurnSnapshot> {
-  // The agent executes tools itself; a turn with no tool_use never reaches
-  // that code, which is what the openai side counts.
-  const executorCalls = 0;
-  const { agent, mockClient } = createTestAgent();
+  let executorCalls = 0;
+  const { agent, mockClient } = createTestAgent({
+    executeTools: () => {
+      executorCalls++;
+      return noExecutor();
+    },
+  });
   const turn = agent.runTurnLoop(input);
   const stream = await mockClient.awaitStream();
   const phaseDuringTurn = agent.phase.type;
@@ -100,26 +85,17 @@ async function anthropicContent(): Promise<TurnSnapshot> {
 }
 
 async function openaiContent(): Promise<TurnSnapshot> {
-  const client = new MockOpenAIClient();
   let executorCalls = 0;
-  const agent = new OpenAIRunner(
-    {
-      ...sharedOptions,
-      model: "gpt-5.4",
-      onUpdate: () => {},
-    },
-    client as unknown as OpenAIStreamingClient,
-    { includeWebSearch: false, logger: noopLogger, validateInput },
-  );
-  const turn = agent.runTurn(input, {
+  const { agent, mockClient } = createTestOpenAIAgent({
     executeTools: () => {
       executorCalls++;
       return noExecutor();
     },
   });
-  const stream = await client.awaitStream();
+  const turn = agent.runTurnLoop(input);
+  const stream = await mockClient.awaitStream();
   const phaseDuringTurn = agent.phase.type;
-  const messages = snapshot(agent.log.messages);
+  const messages = snapshot(agent.manager.log.messages);
   stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
   const turnResult = await turn;
   return {
@@ -215,54 +191,88 @@ describe("onBeforeRequest", () => {
   });
 
   it("stops the openai turn without issuing the continuation", async () => {
-    const client = new MockOpenAIClient();
     let calls = 0;
-    const runner = new OpenAIRunner(
-      {
-        ...sharedOptions,
-        model: "gpt-5.4",
-        onUpdate: () => {},
-      },
-      client as unknown as OpenAIStreamingClient,
-      { includeWebSearch: false, logger: noopLogger, validateInput },
-    );
-    const turn = runner.runTurn([text("go")], {
+    const { agent, mockClient } = createTestOpenAIAgent({
       executeTools: emptyResults,
-      onBeforeRequest: () => {
-        calls++;
-        // The gate fires on the opening request too; this one holds the
-        // continuation that would carry the tool results.
-        return Promise.resolve(
-          calls === 1
-            ? { type: "proceed" as const }
-            : { type: "suspend" as const, reason: held },
-        );
-      },
+      getHooks: () => ({
+        onBeforeRequest: () => {
+          calls++;
+          return Promise.resolve(
+            calls === 1
+              ? { type: "proceed" as const, injections: [], submissions: [] }
+              : { type: "suspend" as const, reason: held, injections: [] },
+          );
+        },
+      }),
     });
-    const stream = await client.awaitStream();
+    const turn = agent.runTurnLoop([text("go")]);
+    const stream = await mockClient.awaitStream();
     stream.streamToolCall("tool-1", "get_files", {
       files: [{ filePath: "/tmp/a.txt" }],
     });
     stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
     expect(await turn).toEqual({ type: "suspended", reason: held });
     expect(calls).toBe(2);
-    expect(client.streams).toHaveLength(1);
+    expect(mockClient.streams).toHaveLength(1);
+  });
+});
+
+describe("abort parity", () => {
+  /** An abort landing mid-stream unwinds the same way on both sides: one
+   * `aborted` result, an idle phase, and a well-formed history whose last
+   * message is the abort marker. */
+  async function abortMidStream(
+    start: () => { agent: Agent; abortStream: () => void },
+  ) {
+    const { agent, abortStream } = start();
+    const turn = agent.runTurnLoop([text("go")]);
+    await pollUntil(() => {
+      if (agent.phase.type !== "streaming") throw new Error("not streaming");
+      return true;
+    });
+    agent.abort();
+    abortStream();
+    const result = await turn;
+    const messages = agent.manager.log.messages;
+    const last = messages[messages.length - 1];
+    return {
+      result,
+      phaseAfterTurn: agent.phase.type,
+      lastRole: last.role,
+      lastText: JSON.stringify(last.content),
+    };
+  }
+
+  it("unwinds identically across anthropic and openai", async () => {
+    const anthropic = await abortMidStream(() => {
+      const { agent, mockClient } = createTestAgent();
+      return {
+        agent,
+        abortStream: () =>
+          mockClient.streams[mockClient.streams.length - 1]?.abort(),
+      };
+    });
+    const openai = await abortMidStream(() => {
+      const { agent, mockClient } = createTestOpenAIAgent();
+      return {
+        agent,
+        abortStream: () =>
+          mockClient.streams[mockClient.streams.length - 1]?.abortMidstream(),
+      };
+    });
+
+    for (const snap of [anthropic, openai]) {
+      expect(snap.result).toEqual({ type: "aborted" });
+      expect(snap.phaseAfterTurn).toBe("idle");
+      expect(snap.lastRole).toBe("user");
+      expect(snap.lastText).toContain(ABORT_MARKER_TEXT);
+    }
   });
 });
 
 describe("appendUserMessage coalescing", () => {
   const makeAnthropic = () => createTestAgent().agent.manager;
-
-  const makeOpenAI = () =>
-    new OpenAIRunner(
-      {
-        ...sharedOptions,
-        model: "gpt-5.4",
-        onUpdate: () => {},
-      },
-      new MockOpenAIClient() as unknown as OpenAIStreamingClient,
-      { includeWebSearch: false, logger: noopLogger, validateInput },
-    );
+  const makeOpenAI = () => createTestOpenAIAgent().agent.manager;
 
   it.each([
     ["anthropic", makeAnthropic],

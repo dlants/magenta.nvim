@@ -173,7 +173,7 @@ export {
 } from "./providers/mock-openai-client.ts";
 export { OpenAIProvider } from "./providers/openai.ts";
 export {
-  OpenAIRunner,
+  OpenAIInferenceManager,
   type OpenAIStreamingClient,
 } from "./providers/openai-runner.ts";
 export { getProvider, setMockProvider } from "./providers/provider.ts";

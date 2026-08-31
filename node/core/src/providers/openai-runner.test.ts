@@ -1,18 +1,15 @@
 import type OpenAI from "openai";
 import { describe, expect, it } from "vitest";
+import type { Agent } from "../agent.ts";
+import { createTestOpenAIAgent } from "../test-helpers.ts";
 import type { ToolName, ToolStructuredResult } from "../tool-types.ts";
-import { validateInput } from "../tools/helpers.ts";
 import { ABORT_TOOL_RESULT_TEXT } from "./anthropic-runner.ts";
-import {
+import type {
   MockOpenAIClient,
-  type MockResponseStream,
+  MockResponseStream,
 } from "./mock-openai-client.ts";
 import {
-  type LegacyRunnerHooks,
-  OpenAIRunner,
-  type OpenAIStreamingClient,
-} from "./openai-runner.ts";
-import {
+  type NativeInferenceManager,
   type NativeMessageIdx,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ProviderMessage,
@@ -23,19 +20,6 @@ import {
   type ToolResults,
   type TurnResult,
 } from "./provider-types.ts";
-
-/** Hooks for a cloned runner: no test clones a runner and then runs tools
- * through it. */
-const cloneHooks: LegacyRunnerHooks = {
-  executeTools: () => Promise.resolve({ type: "continue", results: new Map() }),
-};
-
-const noopLogger = {
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  debug: () => {},
-};
 
 const spec: ProviderToolSpec = {
   name: "get_files" as ToolName,
@@ -74,9 +58,12 @@ function okResults(
 }
 
 function setup(
-  options: { includeWebSearch?: boolean; executeTools?: ToolExecutor } = {},
+  options: {
+    includeWebSearch?: boolean;
+    executeTools?: ToolExecutor;
+    client?: MockOpenAIClient;
+  } = {},
 ) {
-  const client = new MockOpenAIClient();
   const calls: RequestedTool[][] = [];
   const state = { updates: 0 };
   const executeTools: ToolExecutor = (requests) => {
@@ -90,40 +77,33 @@ function setup(
         }))
     )(requests);
   };
-  const agent = new OpenAIRunner(
-    {
-      model: "gpt-5.4",
-      systemPrompt: "be helpful",
-      tools: [spec],
-      onUpdate: () => {
-        state.updates++;
-      },
+  const { agent, mockClient: client } = createTestOpenAIAgent({
+    ...(options.client ? { mockClient: options.client } : {}),
+    tools: [spec],
+    executeTools,
+    onUpdate: () => {
+      state.updates++;
     },
-    client as unknown as OpenAIStreamingClient,
-    {
-      includeWebSearch: options.includeWebSearch ?? false,
-      logger: noopLogger,
-      validateInput,
-    },
-  );
-  return { client, agent, calls, state, hooks: { executeTools } };
+    openaiOptions: { includeWebSearch: options.includeWebSearch ?? false },
+  });
+  return { client, agent, calls, state };
 }
 
-/** `runTurn` opens its stream synchronously, so the turn promise and the
- * stream that serves it are both available immediately. */
+/** Start a turn and wait for the request it issues. `awaitStream` would hand
+ * back the previous, already-finished stream, so index from where we are. */
 async function startTurn(
   client: MockOpenAIClient,
-  agent: OpenAIRunner,
-  hooks: LegacyRunnerHooks,
+  agent: Agent,
   text = "hello",
 ): Promise<{ turn: Promise<TurnResult>; stream: MockResponseStream }> {
-  const turn = agent.runTurn([userText(text)], hooks);
-  const stream = await client.awaitStream();
+  const next = client.streams.length;
+  const turn = agent.runTurnLoop([userText(text)]);
+  const stream = await client.awaitStreamAt(next);
   return { turn, stream };
 }
 
-function assistant(agent: OpenAIRunner): ProviderMessage {
-  const messages = agent.log.messages;
+function assistant(agent: Agent): ProviderMessage {
+  const messages = agent.manager.log.messages;
   const last = messages[messages.length - 1];
   expect(last.role).toBe("assistant");
   return last;
@@ -131,29 +111,28 @@ function assistant(agent: OpenAIRunner): ProviderMessage {
 
 /** The last assistant message, which an aborted turn leaves behind its own
  * user-role abort marker. */
-function lastAssistant(agent: OpenAIRunner): ProviderMessage {
-  const messages = agent.log.messages;
+function lastAssistant(agent: Agent): ProviderMessage {
+  const messages = agent.manager.log.messages;
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === "assistant") return messages[i];
   }
   throw new Error("no assistant message");
 }
 
-function streamingBlock(agent: OpenAIRunner) {
+function streamingBlock(agent: Agent) {
   const phase = agent.phase;
   return phase.type === "streaming" ? phase.block : undefined;
 }
 
-function toolUseBlocks(agent: OpenAIRunner) {
-  return agent.log.messages.flatMap((message) =>
+function toolUseBlocks(agent: Agent) {
+  return agent.manager.log.messages.flatMap((message) =>
     message.content.filter((content) => content.type === "tool_use"),
   );
 }
-
-describe("OpenAIRunner text turns", () => {
+describe("OpenAIInferenceManager text turns", () => {
   it("commits each completed item as it arrives, before the turn ends", async () => {
-    const { client, agent, hooks } = setup({ includeWebSearch: true });
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { client, agent } = setup({ includeWebSearch: true });
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamWebSearchCall("denis lantsman");
     await stream.settle();
     // Without incremental commits the message only materializes at
@@ -164,15 +143,15 @@ describe("OpenAIRunner text turns", () => {
     stream.streamText("an answer");
     await stream.settle();
     expect(assistant(agent).content).toHaveLength(2);
-    expect(agent.log.messages).toHaveLength(2);
+    expect(agent.manager.log.messages).toHaveLength(2);
 
     stream.finishResponse();
     await turn;
   });
 
   it("exposes completed blocks alongside the in-flight one mid-stream", async () => {
-    const { client, agent, hooks } = setup({ includeWebSearch: true });
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { client, agent } = setup({ includeWebSearch: true });
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamReasoningSummary(["let me look that up"]);
     stream.streamWebSearchCall("denis lantsman");
     // A message item that has started but not finished: what the view shows as
@@ -212,10 +191,10 @@ describe("OpenAIRunner text turns", () => {
   });
 
   it("streams text, calls onUpdate, and resolves the turn with usage recorded", async () => {
-    const { client, agent, state, hooks } = setup();
+    const { client, agent, state } = setup();
 
-    const { turn, stream } = await startTurn(client, agent, hooks);
-    expect(stream.instructions).toBe("be helpful");
+    const { turn, stream } = await startTurn(client, agent);
+    expect(stream.instructions).toBe("test system prompt");
 
     stream.streamText("hi there");
     await stream.settle();
@@ -226,7 +205,7 @@ describe("OpenAIRunner text turns", () => {
     });
 
     expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
-    expect(agent.log.latestUsage).toEqual({
+    expect(agent.manager.log.latestUsage).toEqual({
       inputTokens: 100,
       outputTokens: 5,
       cacheHits: 64,
@@ -243,8 +222,8 @@ describe("OpenAIRunner text turns", () => {
   });
 
   it("exposes the partially accumulated text as the streaming block", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await startTurn(client, agent);
     stream.emitEvent({
       type: "response.output_item.added",
       output_index: 0,
@@ -272,8 +251,8 @@ describe("OpenAIRunner text turns", () => {
   });
 
   it("sends one stable prompt_cache_key for every turn and its clones", async () => {
-    const { client, agent, hooks } = setup();
-    const first = await startTurn(client, agent, hooks);
+    const { client, agent } = setup();
+    const first = await startTurn(client, agent);
     const key = first.stream.params.prompt_cache_key;
     expect(typeof key).toBe("string");
     first.stream.streamText("one");
@@ -281,29 +260,33 @@ describe("OpenAIRunner text turns", () => {
     first.stream.finishResponse();
     await first.turn;
 
-    const second = await startTurn(client, agent, hooks, "again");
+    const second = await startTurn(client, agent, "again");
     expect(second.stream.params.prompt_cache_key).toBe(key);
     second.stream.finishResponse();
     await second.turn;
 
-    const cloned = agent.clone();
-    const third = await startTurn(client, cloned, cloneHooks, "clone");
+    const { agent: cloned } = createTestOpenAIAgent({
+      mockClient: client,
+      tools: [spec],
+      cloneFrom: agent.manager,
+    });
+    const third = await startTurn(client, cloned, "clone");
     expect(third.stream.params.prompt_cache_key).toBe(key);
     third.stream.finishResponse();
     await third.turn;
   });
 });
 
-describe("OpenAIRunner tool calls", () => {
+describe("OpenAIInferenceManager tool calls", () => {
   it("surfaces a tool_use block and echoes the call plus its output", async () => {
-    const { client, agent, calls, hooks } = setup({
+    const { client, agent, calls } = setup({
       executeTools: (requests) =>
         Promise.resolve({
           type: "continue",
           results: okResults(requests, "file contents"),
         }),
     });
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { turn, stream } = await startTurn(client, agent);
 
     stream.streamToolCall("call_1", "get_files", {
       files: [{ filePath: "a.ts" }],
@@ -313,7 +296,7 @@ describe("OpenAIRunner tool calls", () => {
 
     const followup = await client.awaitStreamAt(1);
 
-    expect(agent.log.messages[1].stopReason).toBe("tool_use");
+    expect(agent.manager.log.messages[1].stopReason).toBe("tool_use");
     expect(calls).toHaveLength(1);
     expect(calls[0].map((request) => request.id)).toEqual(["call_1"]);
 
@@ -338,8 +321,8 @@ describe("OpenAIRunner tool calls", () => {
   });
 
   it("keys parallel tool calls on output_index", async () => {
-    const { client, agent, calls, hooks } = setup();
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { client, agent, calls } = setup();
+    const { turn, stream } = await startTurn(client, agent);
 
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     stream.streamToolCall("call_2", "get_files", { filePath: "b.ts" });
@@ -347,7 +330,7 @@ describe("OpenAIRunner tool calls", () => {
     stream.finishResponse();
 
     const followup = await client.awaitStreamAt(1);
-    expect(agent.log.messages[1].stopReason).toBe("tool_use");
+    expect(agent.manager.log.messages[1].stopReason).toBe("tool_use");
     expect(toolUseBlocks(agent).map((t) => t.id)).toEqual(["call_1", "call_2"]);
     expect(calls[0].map((request) => request.id)).toEqual(["call_1", "call_2"]);
     expect(followup.inputItemsOfType("function_call_output")).toHaveLength(2);
@@ -356,14 +339,14 @@ describe("OpenAIRunner tool calls", () => {
   });
 
   it("records the results and parks the agent when the executor suspends", async () => {
-    const { client, agent, hooks } = setup({
+    const { client, agent } = setup({
       executeTools: (requests) =>
         Promise.resolve({
           type: "suspend",
           results: okResults(requests, "yielded"),
         }),
     });
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -371,7 +354,7 @@ describe("OpenAIRunner tool calls", () => {
     expect(await turn).toEqual({ type: "suspended" });
     // No continuation request: the turn ends where the executor said it does.
     expect(client.streams).toHaveLength(1);
-    const results = agent.log.messages.flatMap((message) =>
+    const results = agent.manager.log.messages.flatMap((message) =>
       message.content.filter((content) => content.type === "tool_result"),
     );
     expect(results.map((result) => result.id)).toEqual(["call_1"]);
@@ -379,10 +362,10 @@ describe("OpenAIRunner tool calls", () => {
   });
 });
 
-describe("OpenAIRunner reasoning", () => {
+describe("OpenAIInferenceManager reasoning", () => {
   it("folds many summary parts into one thinking block", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await startTurn(client, agent);
 
     stream.streamReasoningSummary(["first", "second", "third"], {
       itemId: "rs_1",
@@ -403,7 +386,7 @@ describe("OpenAIRunner reasoning", () => {
       providerMetadata: { provider: "openai", itemId: "rs_1" },
     });
 
-    const next = await startTurn(client, agent, hooks, "more");
+    const next = await startTurn(client, agent, "more");
     const reasoning = next.stream.inputItemsOfType("reasoning");
     expect(reasoning).toHaveLength(1);
     expect(reasoning[0].encrypted_content).toBe("enc-1");
@@ -412,8 +395,8 @@ describe("OpenAIRunner reasoning", () => {
   });
 
   it("round-trips an empty-summary reasoning item", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await startTurn(client, agent);
 
     stream.streamEmptyReasoning("enc-empty", "rs_empty");
     stream.streamText("ok");
@@ -426,7 +409,7 @@ describe("OpenAIRunner reasoning", () => {
     );
     expect(thinking).toMatchObject({ thinking: "", signature: "enc-empty" });
 
-    const next = await startTurn(client, agent, hooks, "again");
+    const next = await startTurn(client, agent, "again");
     expect(next.stream.inputItemsOfType("reasoning")[0]).toMatchObject({
       id: "rs_empty",
       encrypted_content: "enc-empty",
@@ -437,10 +420,10 @@ describe("OpenAIRunner reasoning", () => {
   });
 });
 
-describe("OpenAIRunner web search", () => {
+describe("OpenAIInferenceManager web search", () => {
   it("keeps the search call and its annotations across turns", async () => {
-    const { client, agent, hooks } = setup({ includeWebSearch: true });
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { client, agent } = setup({ includeWebSearch: true });
+    const { turn, stream } = await startTurn(client, agent);
 
     const annotation: OpenAI.Responses.ResponseOutputText.URLCitation = {
       type: "url_citation",
@@ -467,7 +450,7 @@ describe("OpenAIRunner web search", () => {
       url: "https://example.com",
     });
 
-    const next = await startTurn(client, agent, hooks, "thanks");
+    const next = await startTurn(client, agent, "thanks");
     expect(next.stream.inputItemsOfType("web_search_call")[0]).toMatchObject({
       id: "ws_1",
     });
@@ -476,10 +459,10 @@ describe("OpenAIRunner web search", () => {
   });
 });
 
-describe("OpenAIRunner abort", () => {
+describe("OpenAIInferenceManager abort", () => {
   it("unwinds the turn when the stream just ends", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await startTurn(client, agent);
 
     stream.emitEvent({
       type: "response.output_item.added",
@@ -506,7 +489,7 @@ describe("OpenAIRunner abort", () => {
     stream.abortMidstream();
 
     expect(await turn).toEqual({ type: "aborted" });
-    expect(agent.log.latestUsage).toBeUndefined();
+    expect(agent.manager.log.latestUsage).toBeUndefined();
     expect(lastAssistant(agent).content[0]).toMatchObject({
       type: "text",
       text: "partial answer",
@@ -515,8 +498,8 @@ describe("OpenAIRunner abort", () => {
   });
 
   it("drops a tool call that was never dispatched", async () => {
-    const { client, agent, calls, hooks } = setup();
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { client, agent, calls } = setup();
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
 
@@ -529,11 +512,11 @@ describe("OpenAIRunner abort", () => {
   });
 
   it("unwinds when the executor reports that it aborted its tools", async () => {
-    const { client, agent, hooks } = setup({
+    const { client, agent } = setup({
       executeTools: () =>
         Promise.resolve({ type: "aborted", results: new Map() }),
     });
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -542,7 +525,7 @@ describe("OpenAIRunner abort", () => {
     expect(client.streams).toHaveLength(1);
     // An aborted tool_use is still answered, so the history stays well-formed.
     expect(toolUseBlocks(agent)).toHaveLength(1);
-    const results = agent.log.messages.flatMap((message) =>
+    const results = agent.manager.log.messages.flatMap((message) =>
       message.content.filter((content) => content.type === "tool_result"),
     );
     expect(results).toHaveLength(1);
@@ -553,13 +536,13 @@ describe("OpenAIRunner abort", () => {
   });
 });
 
-describe("OpenAIRunner invariant guards", () => {
+describe("OpenAIInferenceManager invariant guards", () => {
   it("answers an id the executor omitted", async () => {
-    const { client, agent, hooks } = setup({
+    const { client, agent } = setup({
       executeTools: () =>
         Promise.resolve({ type: "continue", results: new Map() }),
     });
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -576,10 +559,10 @@ describe("OpenAIRunner invariant guards", () => {
   });
 
   it("answers every id when the executor rejects", async () => {
-    const { client, agent, hooks } = setup({
+    const { client, agent } = setup({
       executeTools: () => Promise.reject(new Error("executor blew up")),
     });
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -592,15 +575,15 @@ describe("OpenAIRunner invariant guards", () => {
     await turn;
   });
 
-  it("rejects a second runTurn while one is in flight", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = await startTurn(client, agent, hooks);
+  it("rejects a second turn while one is in flight", async () => {
+    const { client, agent } = setup();
+    const { turn, stream } = await startTurn(client, agent);
 
-    await expect(agent.runTurn([userText("again")], hooks)).rejects.toThrow(
+    await expect(agent.runTurnLoop([userText("again")])).rejects.toThrow(
       /already in flight/,
     );
     // The rejected call must not have perturbed the history.
-    expect(agent.log.messages).toHaveLength(1);
+    expect(agent.manager.log.messages).toHaveLength(1);
 
     stream.streamText("hi");
     await stream.settle();
@@ -609,31 +592,30 @@ describe("OpenAIRunner invariant guards", () => {
   });
 });
 
-describe("OpenAIRunner clone", () => {
+describe("OpenAIInferenceManager clone", () => {
   it("returns an idle deep copy with history intact", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamText("original");
     await stream.settle();
     stream.finishResponse();
     await turn;
 
-    const cloned = agent.clone();
+    const { agent: cloned } = createTestOpenAIAgent({
+      mockClient: client,
+      tools: [spec],
+      cloneFrom: agent.manager,
+    });
     expect(cloned.phase).toEqual({ type: "idle" });
-    expect(cloned.log.messages).toHaveLength(2);
-    expect(cloned.log.messages[1].content[0]).toMatchObject({
+    expect(cloned.manager.log.messages).toHaveLength(2);
+    expect(cloned.manager.log.messages[1].content[0]).toMatchObject({
       type: "text",
       text: "original",
     });
 
-    const clonedTurn = await startTurn(
-      client,
-      cloned,
-      cloneHooks,
-      "only in the clone",
-    );
-    expect(agent.log.messages).toHaveLength(2);
-    expect(cloned.log.messages).toHaveLength(3);
+    const clonedTurn = await startTurn(client, cloned, "only in the clone");
+    expect(agent.manager.log.messages).toHaveLength(2);
+    expect(cloned.manager.log.messages).toHaveLength(3);
     clonedTurn.stream.finishResponse();
     await clonedTurn.turn;
   });
@@ -641,17 +623,17 @@ describe("OpenAIRunner clone", () => {
   it("drops an unanswered tool call in the clone", async () => {
     // Cloning mid-tool-execution is the one moment a tool_use has no result
     // yet, which is exactly when a fork can happen.
-    let midToolClone: OpenAIRunner | undefined;
-    const { client, agent, hooks } = setup({
+    let midToolClone: NativeInferenceManager | undefined;
+    const { client, agent } = setup({
       executeTools: (requests) => {
-        midToolClone = agent.clone();
+        midToolClone = agent.manager.clone();
         return Promise.resolve({
           type: "continue",
           results: okResults(requests),
         });
       },
     });
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -669,31 +651,31 @@ describe("OpenAIRunner clone", () => {
   });
 });
 
-describe("OpenAIRunner truncation", () => {
+describe("OpenAIInferenceManager truncation", () => {
   it("keeps messages up to the given index", async () => {
-    const { client, agent, hooks } = setup();
-    const first = await startTurn(client, agent, hooks);
+    const { client, agent } = setup();
+    const first = await startTurn(client, agent);
     first.stream.streamText("first");
     await first.stream.settle();
     first.stream.finishResponse();
     await first.turn;
 
-    const idx = agent.getNativeMessageIdx();
-    const second = await startTurn(client, agent, hooks, "second");
+    const idx = agent.manager.getNativeMessageIdx();
+    const second = await startTurn(client, agent, "second");
     second.stream.streamText("second answer");
     await second.stream.settle();
     second.stream.finishResponse();
     await second.turn;
-    expect(agent.log.messages).toHaveLength(4);
+    expect(agent.manager.log.messages).toHaveLength(4);
 
-    agent.truncateMessages(idx);
-    expect(agent.log.messages).toHaveLength(2);
+    agent.manager.truncateMessages(idx);
+    expect(agent.manager.log.messages).toHaveLength(2);
     expect(agent.phase).toEqual({ type: "idle" });
   });
 
   it("drops a tool_use severed from its tool_result", async () => {
-    const { client, agent, hooks } = setup();
-    const { turn, stream } = await startTurn(client, agent, hooks);
+    const { client, agent } = setup();
+    const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -701,16 +683,16 @@ describe("OpenAIRunner truncation", () => {
     followup.finishResponse();
     await turn;
 
-    const assistantIdx = agent.log.messages.findIndex((message) =>
+    const assistantIdx = agent.manager.log.messages.findIndex((message) =>
       message.content.some((content) => content.type === "tool_use"),
     ) as NativeMessageIdx;
 
     // Truncating back to the assistant message severs the tool_use from its
     // result; the backend rejects such a request, so it must be dropped.
-    agent.truncateMessages(assistantIdx);
+    agent.manager.truncateMessages(assistantIdx);
     expect(toolUseBlocks(agent)).toHaveLength(0);
 
-    const next = await startTurn(client, agent, hooks, "carry on");
+    const next = await startTurn(client, agent, "carry on");
     expect(next.stream.inputItemsOfType("function_call")).toHaveLength(0);
     next.stream.finishResponse();
     await next.turn;
