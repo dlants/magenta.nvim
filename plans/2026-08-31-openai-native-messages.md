@@ -409,9 +409,19 @@ Review follow-ups (stage 3):
   a bug.
 - The internal streaming block type was already named `AnthropicStreamingBlock`; no rename needed.
 
-## Docs
+## Docs — DONE
 
 - Goal: `context.md` and `plans/2026-08-30-native-inference-manager.md`'s description of the manager
   no longer describe OpenAI as ProviderMessage-native; the invariant "nothing native escapes the
   manager, and the conversion is one-directional" is written down where the next reader will find it.
 - Tests: none; prose only.
+
+Decisions/deviations:
+
+- `context.md`'s core-layer section gained a paragraph naming the native array per provider
+  (`Anthropic.MessageParam[]` / `OpenAI.Responses.ResponseInputItem[]`) and the two invariants as
+  named bullets, pointing at `anthropic-conversion.ts` / `openai-conversion.ts`.
+- The 08-30 plan needed no in-place edits — it never claimed OpenAI was native, it described the
+  interface as if both providers honored it. It gained a closing "Follow-up: OpenAI was not actually
+  native" section recording that the description only became true for both providers with this plan,
+  rather than rewriting history in the stage notes.

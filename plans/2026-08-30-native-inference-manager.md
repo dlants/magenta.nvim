@@ -635,3 +635,18 @@ Notes and deviations:
 - `context.md`'s core-layer section now describes `NativeInferenceManager`
   (per-request callback, not an emitter) and says `Agent` owns the loop, the
   executor, the hooks and the phase; only `Agent` is an emitter.
+
+## Follow-up: OpenAI was not actually native
+
+At the time this plan landed, only `AnthropicInferenceManager` really held a
+native array. `OpenAIInferenceManager` kept `ProviderMessage[]` as its source of
+truth and converted *back* to `ResponseInputItem[]` on every request, which is
+why `ProviderMessage` grew wire-carrying fields (`ProviderMetadata`,
+`ProviderThinkingContent.signature`). Line 39's description of the manager only
+became true for both providers in
+`plans/2026-08-31-openai-native-messages.md`, which made the OpenAI manager
+store `ResponseInputItem[]` and derive `log.messages` through
+`convertOpenAIItemsToProvider`, and deleted the reverse conversion and the
+smuggled fields. The invariants — nothing native escapes the manager, and the
+native → `ProviderMessage` conversion is one-directional — are recorded in
+`context.md`'s core-layer section.

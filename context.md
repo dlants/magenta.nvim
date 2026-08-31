@@ -34,9 +34,15 @@ Each result is a snippet with its file path — treat it as a pointer and open t
 `Agent` is an **event emitter**. It extends a custom type-safe `Emitter<Events>` class (`node/core/src/emitter.ts`) that provides `on()`, `off()`, and `emit()` methods parameterized on a typed event map.
 
 - **`NativeInferenceManager`** (`node/core/src/providers/provider-types.ts`) — the provider-specific context: it owns the native message array, converts it to `ProviderMessage`s, and issues one request at a time (including retries and stream accumulation). Implemented by `AnthropicInferenceManager` (`providers/anthropic-inference.ts`) and `OpenAIInferenceManager` (`providers/openai-inference.ts`). It is not an emitter — it reports streaming progress through a callback passed to `sendRequest`, whose lifetime is exactly the request's.
+
 - **`Agent`** (`node/core/src/agent.ts`) — orchestrates agents and tools. Emits `update`, `playChime`, `scrollToLastMessage`, `setupResubmit`, `aborting`, and `contextUpdatesSent`.
 
 `Agent` owns the turn loop, the tool executor, the hooks and `AgentPhase`; the manager owns only "is a request in flight". The root project therefore only needs to subscribe to `Agent` — all core events are routed through a single point rather than requiring the root to subscribe to multiple emitters.
+
+The manager's native array is the wire format: `Anthropic.MessageParam[]` for anthropic, `OpenAI.Responses.ResponseInputItem[]` for openai. Requests are built from that array directly. Two invariants hold for both providers:
+
+- **Nothing native escapes the manager.** `ProviderMessage` is a display type. Native items and native streaming blocks (`AnthropicStreamingBlock`, `OpenAIStreamingBlock`) stay inside; streaming progress is reported as the generalized `StreamingBlock`.
+- **The conversion is one-directional.** `convertAnthropicMessagesToProvider` (`providers/anthropic-conversion.ts`) and `convertOpenAIItemsToProvider` (`providers/openai-conversion.ts`) derive `log.messages` from the native array and are memoized as `cachedProviderMessages`. There is no conversion back, so `ProviderMessage` never needs to carry wire-only fields, and no information is lost by round-tripping.
 
 ## Root layer (neovim-specific)
 
