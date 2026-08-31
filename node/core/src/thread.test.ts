@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentContext } from "./agent.ts";
+import { phaseLabel } from "./agent.ts";
 import type { ThreadType } from "./chat-types.ts";
 import { type Compactor, runSubmission } from "./compaction/index.ts";
 import {
@@ -195,8 +196,10 @@ describe("deferred submissions", () => {
     );
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (core.state.mode.type === "tool_use") return true;
-      throw new Error(`waiting for tool_use, got ${core.state.mode.type}`);
+      if (phaseLabel(core.getProviderStatus()) === "running_tools") return true;
+      throw new Error(
+        `waiting for tool_use, got ${phaseLabel(core.getProviderStatus())}`,
+      );
     });
     expect(
       await core.submit(pendingMessage("also check this"), "async"),
@@ -305,8 +308,10 @@ describe("deferred submissions", () => {
     );
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (core.state.mode.type === "tool_use") return true;
-      throw new Error(`waiting for tool_use, got ${core.state.mode.type}`);
+      if (phaseLabel(core.getProviderStatus()) === "running_tools") return true;
+      throw new Error(
+        `waiting for tool_use, got ${phaseLabel(core.getProviderStatus())}`,
+      );
     });
     expect(
       await core.submit(pendingMessage("@compact wrap it up"), "async"),

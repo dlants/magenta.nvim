@@ -2,7 +2,13 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
-import { Agent, type AgentContext, type ThreadState } from "./agent.ts";
+import {
+  Agent,
+  type AgentActivity,
+  type AgentContext,
+  type AgentPhase,
+  type ThreadState,
+} from "./agent.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
@@ -56,6 +62,16 @@ export const defaultAnthropicOptions: AnthropicRunnerOptions = {
   logger: noopLogger,
   validateInput,
 };
+
+/** The phase flattened back to one level, so a test can assert on
+ * `streaming` / `running_tools` without unwrapping `running` every time. The
+ * nesting itself is asserted directly in `agent.test.ts`. */
+export function flatPhase(agent: {
+  phase: AgentPhase;
+}): AgentActivity | Exclude<AgentPhase, { type: "running" }> {
+  const phase = agent.phase;
+  return phase.type === "running" ? phase.activity : phase;
+}
 
 export function createMockProvider(
   mockClient: MockAnthropicClient,
@@ -203,7 +219,6 @@ function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
     threadType: context.threadType,
     systemPrompt: context.systemPrompt,
     systemInfo: context.systemInfo,
-    mode: { type: "normal" },
     edlRegisters: { registers: new Map(), nextSavedId: 0 },
     editedFilesThisTurn: [],
     lastTurnResult: undefined,

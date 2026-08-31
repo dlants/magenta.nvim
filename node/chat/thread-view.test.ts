@@ -1,4 +1,4 @@
-import type { AgentPhase } from "@magenta/core";
+import type { AgentPhase, TurnActivity } from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import { type Line, NvimBuffer } from "../nvim/buffer.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
@@ -6,20 +6,16 @@ import { mountView, pos } from "../tea/view.ts";
 import { withNvimClient } from "../test/preamble.ts";
 import { renderStatus } from "./thread-view.ts";
 
-async function renderStatusToString(agentPhase: AgentPhase): Promise<string> {
+async function renderStatusToString(
+  activity: Extract<TurnActivity, { type: "streaming" }>,
+): Promise<string> {
+  const agentPhase: AgentPhase = { type: "running", activity };
   let text = "";
   await withNvimClient(async (nvim) => {
     const buffer = await NvimBuffer.create(false, true, nvim);
     await buffer.setOption("modifiable", false);
     await mountView({
-      view: () =>
-        renderStatus(
-          agentPhase,
-          { type: "normal" },
-          undefined,
-          undefined,
-          undefined,
-        ),
+      view: () => renderStatus(agentPhase, undefined, undefined, undefined),
       props: {},
       mount: {
         nvim,

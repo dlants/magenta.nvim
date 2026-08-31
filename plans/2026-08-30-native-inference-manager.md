@@ -466,7 +466,47 @@ Notes and deviations:
     the log nor marked sent, and is delivered on the next issued request.
 - Deleted the orphaned doc comment above `GateOutcome`.
 
-## Collapse ThreadMode into AgentPhase
+## Collapse ThreadMode into AgentPhase — DONE
+
+Done. `ThreadMode`, `ThreadState.mode` and the `set-mode` action are gone.
+`AgentPhase` is `idle | running{activity} | yielded{response,value,tornDown?}`,
+with `AgentActivity = TurnActivity | {type:"aborting"}`; `TurnActivity`
+(`thread-api.ts`) lost `awaiting_tools` and its `running_tools` gained
+`activeTools`. `AgentPhase` moved out of `provider-types.ts` into `agent.ts`,
+next to `ActiveToolEntry` and the loop that owns it.
+
+Notes and deviations:
+
+- `ThreadPhase` keeps its top-level `aborting`: on the agent `aborting` is an
+  activity (only reachable from a turn in flight), and `Thread.get phase()`
+  lifts it. That getter is now four lines: `running` passes its activity
+  through, and `idle`/`yielded` are both "at rest with a `lastResult`".
+- Three small readers were added to `agent.ts` and exported from the package
+  rather than making every consumer re-derive them: `phaseActiveTools`,
+  `phaseStreamingBlock` and `phaseLabel` (a flat label, for logging and tests).
+  The root layer's `state.mode` reads and its `phase.type === "streaming"`
+  reads go through them.
+- `renderStatus` lost its `mode` parameter and its streaming arm became
+  `renderStreaming(activity)`; `shouldShowContextFiles` is now just
+  `phase.type === "idle"`, so — as the plan flagged — a yielded thread no
+  longer shows context files. `chat.ts`'s thread-summary status is one switch
+  over the phase instead of three mode checks followed by a phase switch.
+- Behaviour fix the merge forced: `activeTools` means *live* invocations. It
+  used to be cleared by `set-mode normal` when the executor finished; with the
+  map living on the phase it would otherwise survive until the next request,
+  and `thread-view`'s `isActive` would keep rendering tool *progress* for a
+  tool that already had a result. `executeTools` clears it (and notifies) when
+  the last invocation settles, and the loop notifies unthrottled after
+  `appendToolResults` — the progress-to-result switch is not a frame the view
+  may miss. `spawn-subagents.test.ts`'s per-agent expansion tests caught this.
+- Test seam: `test-helpers.ts` grew `flatPhase(agent)`, which unwraps `running`
+  so the provider suites keep asserting `streaming` / `running_tools` at one
+  level. The nesting itself is asserted directly in `agent.test.ts`
+  (`Thread.phase`). The old "is running/awaiting_tools when tools run outside
+  the runner's view" test is gone with the variant it described.
+- `agent.test.ts`'s torn-down-thread test sets the terminal `yielded` phase
+  through a cast rather than driving a whole yield plus teardown; it used to
+  assign `state.mode` the same way.
 
 - Goal: one state representation on `Agent`. `ThreadMode` is deleted; `running_tools` carries `activeTools`; `yielded` is a phase.
 - Tests:

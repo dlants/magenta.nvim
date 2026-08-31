@@ -4,6 +4,7 @@ import {
   agentHooks,
   createTestAgent,
   createTestOpenAIAgent,
+  flatPhase,
 } from "../test-helpers.ts";
 import type { BeforeRequestHook } from "../thread-api.ts";
 import {
@@ -15,7 +16,6 @@ import { pollUntil } from "../utils/async.ts";
 import { ABORT_MARKER_TEXT } from "./anthropic-runner.ts";
 import {
   type AgentInput,
-  type AgentPhase,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ProviderMessage,
   type TurnResult,
@@ -64,8 +64,8 @@ const noExecutor = () => {
  * managers under one driver rather than two drivers. */
 type TurnSnapshot = {
   messages: ProviderMessage[];
-  phaseDuringTurn: AgentPhase["type"];
-  phaseAfterTurn: AgentPhase["type"];
+  phaseDuringTurn: string;
+  phaseAfterTurn: string;
   turnResult: TurnResult;
   executorCalls: number;
 };
@@ -80,14 +80,14 @@ async function anthropicContent(): Promise<TurnSnapshot> {
   });
   const turn = agent.runTurnLoop(input);
   const stream = await mockClient.awaitStream();
-  const phaseDuringTurn = agent.phase.type;
+  const phaseDuringTurn = flatPhase(agent).type;
   const messages = snapshot(agent.getProviderMessages());
   stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
   const turnResult = await turn;
   return {
     messages,
     phaseDuringTurn,
-    phaseAfterTurn: agent.phase.type,
+    phaseAfterTurn: flatPhase(agent).type,
     turnResult,
     executorCalls,
   };
@@ -103,14 +103,14 @@ async function openaiContent(): Promise<TurnSnapshot> {
   });
   const turn = agent.runTurnLoop(input);
   const stream = await mockClient.awaitStream();
-  const phaseDuringTurn = agent.phase.type;
+  const phaseDuringTurn = flatPhase(agent).type;
   const messages = snapshot(agent.manager.log.messages);
   stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
   const turnResult = await turn;
   return {
     messages,
     phaseDuringTurn,
-    phaseAfterTurn: agent.phase.type,
+    phaseAfterTurn: flatPhase(agent).type,
     turnResult,
     executorCalls,
   };
@@ -220,7 +220,8 @@ describe("abort parity", () => {
     const { agent, abortStream } = start();
     const turn = agent.runTurnLoop([text("go")]);
     await pollUntil(() => {
-      if (agent.phase.type !== "streaming") throw new Error("not streaming");
+      if (flatPhase(agent).type !== "streaming")
+        throw new Error("not streaming");
       return true;
     });
     agent.abort();
@@ -230,7 +231,7 @@ describe("abort parity", () => {
     const last = messages[messages.length - 1];
     return {
       result,
-      phaseAfterTurn: agent.phase.type,
+      phaseAfterTurn: flatPhase(agent).type,
       lastRole: last.role,
       lastText: JSON.stringify(last.content),
     };

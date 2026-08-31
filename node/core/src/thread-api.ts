@@ -44,15 +44,13 @@ export type TurnActivity =
     }
   | {
       type: "running_tools";
+      /** As the model asked for them, including malformed requests that never
+       * became an `activeTools` entry. */
       requested: ReadonlyArray<RequestedTool>;
       /** the turn was cut short by the output token limit mid-tool-use */
       truncated: boolean;
-    }
-  /** The runner has handed off and is idle while the thread's executor runs
-   * the tools; the runner's requested list is no longer available, so the
-   * live tool entries are what there is to show. */
-  | {
-      type: "awaiting_tools";
+      /** The live tool invocations, keyed by request id. Malformed requests
+       * have no entry. */
       activeTools: ReadonlyMap<ToolRequestId, ActiveToolEntry>;
     };
 

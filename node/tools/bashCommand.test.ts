@@ -1,7 +1,13 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { pollUntil, type ToolName, type ToolRequestId } from "@magenta/core";
+import {
+  phaseActiveTools,
+  phaseLabel,
+  pollUntil,
+  type ToolName,
+  type ToolRequestId,
+} from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import { getcwd } from "../nvim/nvim.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
@@ -1065,11 +1071,13 @@ describe("bash command output logging", () => {
 
       // Get the tool instance and trigger termination
       const thread = driver.magenta.chat.getActiveThread();
-      const { mode } = thread.core.state;
-      if (mode.type !== "tool_use") {
-        throw new Error(`Expected tool_use mode, got ${mode.type}`);
+      const active = phaseActiveTools(thread.core.getProviderStatus());
+      if (!active) {
+        throw new Error(
+          `Expected running tools, got ${phaseLabel(thread.core.getProviderStatus())}`,
+        );
       }
-      const entry = mode.activeTools.get("test-bash-sigterm" as ToolRequestId);
+      const entry = active.get("test-bash-sigterm" as ToolRequestId);
       if (!entry) {
         throw new Error("Expected tool entry");
       }
@@ -1152,11 +1160,13 @@ describe("bash command output logging", () => {
 
       // Get the tool instance and trigger termination
       const thread = driver.magenta.chat.getActiveThread();
-      const { mode } = thread.core.state;
-      if (mode.type !== "tool_use") {
-        throw new Error(`Expected tool_use mode, got ${mode.type}`);
+      const active = phaseActiveTools(thread.core.getProviderStatus());
+      if (!active) {
+        throw new Error(
+          `Expected running tools, got ${phaseLabel(thread.core.getProviderStatus())}`,
+        );
       }
-      const entry = mode.activeTools.get("test-bash-sigkill" as ToolRequestId);
+      const entry = active.get("test-bash-sigkill" as ToolRequestId);
       if (!entry) {
         throw new Error("Expected tool entry");
       }
@@ -1270,11 +1280,13 @@ wait
 
       // Get the tool instance and trigger termination
       const thread = driver.magenta.chat.getActiveThread();
-      const { mode } = thread.core.state;
-      if (mode.type !== "tool_use") {
-        throw new Error(`Expected tool_use mode, got ${mode.type}`);
+      const active = phaseActiveTools(thread.core.getProviderStatus());
+      if (!active) {
+        throw new Error(
+          `Expected running tools, got ${phaseLabel(thread.core.getProviderStatus())}`,
+        );
       }
-      const entry = mode.activeTools.get("test-bash-tree" as ToolRequestId);
+      const entry = active.get("test-bash-tree" as ToolRequestId);
       if (!entry) {
         throw new Error("Expected tool entry");
       }

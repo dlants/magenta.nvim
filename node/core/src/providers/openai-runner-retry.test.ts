@@ -1,7 +1,7 @@
 import { APIError } from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent } from "../agent.ts";
-import { createTestOpenAIAgent } from "../test-helpers.ts";
+import { createTestOpenAIAgent, flatPhase } from "../test-helpers.ts";
 import type { ToolName } from "../tool-types.ts";
 import type {
   MockOpenAIClient,
@@ -108,7 +108,7 @@ describe("OpenAIInferenceManager retry", () => {
     stream.respondWithError(apiError(429));
     await tick();
 
-    const phase = agent.phase;
+    const phase = flatPhase(agent);
     expect(phase.type).toBe("streaming");
     if (phase.type === "streaming") {
       expect(phase.retry?.attempt).toBe(1);
@@ -203,7 +203,7 @@ describe("OpenAIInferenceManager retry", () => {
     stream.respondWithError(apiError(503));
     await tick();
 
-    const phase = agent.phase;
+    const phase = flatPhase(agent);
     expect(phase.type === "streaming" && phase.retry).toBeTruthy();
 
     agent.abort();

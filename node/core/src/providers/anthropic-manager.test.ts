@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Agent } from "../agent.ts";
 import type { Logger } from "../logger.ts";
 import type { ProviderProfile } from "../provider-options.ts";
-import { createTestAgent, noopLogger } from "../test-helpers.ts";
+import { createTestAgent, flatPhase, noopLogger } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { delay, pollUntil } from "../utils/async.ts";
 import {
@@ -13,7 +13,6 @@ import {
 import { MockAnthropicClient } from "./mock-anthropic-client.ts";
 import type {
   AgentInput,
-  AgentPhase,
   NativeMessageIdx,
   RequestedTool,
   StreamingBlock,
@@ -40,8 +39,8 @@ class TestAgent {
     return this.agent.manager.log;
   }
 
-  get phase(): AgentPhase {
-    return this.agent.phase;
+  get phase(): ReturnType<typeof flatPhase> {
+    return flatPhase(this.agent);
   }
 
   truncateMessages(idx: NativeMessageIdx): void {
@@ -132,7 +131,8 @@ function createAgent(
 }
 
 function streamingBlock(agent: TestAgent): StreamingBlock | undefined {
-  return agent.phase.type === "streaming" ? agent.phase.block : undefined;
+  const phase = agent.phase;
+  return phase.type === "streaming" ? phase.block : undefined;
 }
 
 /** Wait for the agent to open a *new* stream, past the ones already seen. */

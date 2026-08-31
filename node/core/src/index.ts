@@ -2,10 +2,14 @@ export {
   type ActiveToolEntry,
   Agent,
   type AgentAction,
+  type AgentActivity,
   type AgentContext,
+  type AgentPhase,
   type EnvironmentConfig,
   type InputMessage,
-  type ThreadMode,
+  phaseActiveTools,
+  phaseLabel,
+  phaseStreamingBlock,
   type ThreadState,
 } from "./agent.ts";
 export type { AgentInfo, AgentsMap } from "./agents/agents.ts";
@@ -181,7 +185,6 @@ export type {
   AgentInput,
   AgentLog,
   AgentOptions,
-  AgentPhase,
   BeforeRequestDecision,
   FinalizeReason,
   NativeInferenceManager,

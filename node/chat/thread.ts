@@ -28,6 +28,8 @@ import {
   type NativeMessageIdx,
   type PendingMessage,
   parseCompact,
+  phaseActiveTools,
+  phaseStreamingBlock,
   type ResolvedSubmission,
   renderPending,
   resolveAsText,
@@ -598,8 +600,7 @@ export class NvimThread {
     if (this.core.phase.type === "idle") {
       return undefined;
     }
-    const phase = this.core.getProviderStatus();
-    const block = phase.type === "streaming" ? phase.block : undefined;
+    const block = phaseStreamingBlock(this.core.getProviderStatus());
     if (block?.type === "tool_use" && block.name === "reply") {
       const replies: { [id: CommentId]: string } = {};
       for (const reply of extractPartialReplies(block.inputJson)) {
@@ -736,9 +737,9 @@ export class NvimThread {
     // submitted back to the agent (e.g. mid tool_use turn while other tools
     // are still running). The rendering layer needs these to display custom
     // result summaries as soon as the tool completes.
-    const mode = this.core.state.mode;
-    if (mode.type === "tool_use") {
-      for (const entry of mode.activeTools.values()) {
+    const active = phaseActiveTools(this.core.getProviderStatus());
+    if (active) {
+      for (const entry of active.values()) {
         if (entry.result && !next.has(entry.request.id)) {
           next.set(entry.request.id, entry.result);
         }
@@ -1023,10 +1024,10 @@ export class NvimThread {
       }
 
       case "abort": {
-        if (this.core.state.mode.type === "tool_use") {
-          for (const [, entry] of this.core.state.mode.activeTools) {
-            entry.handle.abort();
-          }
+        for (const entry of phaseActiveTools(
+          this.core.getProviderStatus(),
+        )?.values() ?? []) {
+          entry.handle.abort();
         }
         this.abortAndWait().catch((e: Error) => {
           this.context.nvim.logger.error(`Error during abort: ${e.message}`);

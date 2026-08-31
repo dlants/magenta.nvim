@@ -261,7 +261,7 @@ export class Chat implements ThreadManager {
             if (
               threadWrapper.parentThreadId === thread.id &&
               threadWrapper.state === "initialized" &&
-              threadWrapper.thread.core.state.mode.type !== "yielded"
+              threadWrapper.thread.getProviderStatus().type !== "yielded"
             ) {
               threadWrapper.thread.update({
                 type: "thread-msg",
@@ -963,8 +963,10 @@ export class Chat implements ThreadManager {
     const core = wrapper.thread.core;
     // A yielded thread has finished its work; a streaming thread is actively
     // working. Neither needs the user's attention.
-    if (core.state.mode.type === "yielded") return false;
-    if (core.getProviderStatus().type === "streaming") return false;
+    const phase = core.getProviderStatus();
+    if (phase.type === "yielded") return false;
+    if (phase.type === "running" && phase.activity.type === "streaming")
+      return false;
     return wrapper.lastActivityTime > wrapper.lastViewedTime;
   }
 
@@ -1530,7 +1532,6 @@ ${rows}${loadMore}`;
 
       case "initialized": {
         const thread = threadWrapper.thread;
-        const mode = thread.core.state.mode;
         const agentPhase = thread.getProviderStatus();
         const lastTurnResult = thread.core.state.lastTurnResult;
 
@@ -1545,38 +1546,34 @@ ${rows}${loadMore}`;
                 activity: `🐳 ${teardownMessage}`,
               };
             }
-            if (mode.type === "yielded") {
-              return {
-                type: "yielded" as const,
-                response: mode.response,
-              };
-            }
-
-            if (mode.type === "tool_use") {
-              const hasPendingApproval =
-                this.threadHasPendingApprovals(threadId);
-              return {
-                type: "running" as const,
-                activity: hasPendingApproval
-                  ? "waiting for approval"
-                  : "executing tools",
-              };
-            }
-
-            // Then check where the agent is
             switch (agentPhase.type) {
-              case "streaming":
+              case "yielded":
                 return {
-                  type: "running" as const,
-                  activity: "streaming response",
+                  type: "yielded" as const,
+                  response: agentPhase.response,
                 };
-              case "running_tools":
-                return {
-                  type: "running" as const,
-                  activity: "executing tools",
-                };
-              case "aborting":
-                return { type: "running" as const, activity: "aborting" };
+              case "running":
+                switch (agentPhase.activity.type) {
+                  case "streaming":
+                    return {
+                      type: "running" as const,
+                      activity: "streaming response",
+                    };
+                  case "running_tools":
+                    return {
+                      type: "running" as const,
+                      activity: this.threadHasPendingApprovals(threadId)
+                        ? "waiting for approval"
+                        : "executing tools",
+                    };
+                  case "aborting":
+                    return {
+                      type: "running" as const,
+                      activity: "aborting",
+                    };
+                  default:
+                    return assertUnreachable(agentPhase.activity);
+                }
               case "idle":
                 if (lastTurnResult?.type === "failed") {
                   return {

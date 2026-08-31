@@ -1,3 +1,4 @@
+import type { AgentPhase } from "./agent.ts";
 import {
   Agent,
   type AgentContext,
@@ -10,7 +11,6 @@ import type { EdlRegisters } from "./edl/index.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
   AgentInput,
-  AgentPhase,
   NativeInferenceManager,
   NativeMessageIdx,
   ProviderMessage,
@@ -131,7 +131,6 @@ export class Thread {
       threadType: context.threadType,
       systemPrompt: context.systemPrompt,
       systemInfo: context.systemInfo,
-      mode: { type: "normal" },
       edlRegisters:
         init.type === "clone"
           ? init.edlRegisters
@@ -217,55 +216,24 @@ export class Thread {
   /** Derived on read rather than stored: everything in `TurnActivity` moves
    * between renders, so a mirror would be stale by construction. */
   get phase(): ThreadPhase {
-    const mode = this.state.mode;
-    const runnerPhase = this.agent.phase;
-    switch (runnerPhase.type) {
-      case "aborting":
-        return { type: "aborting" };
-      case "streaming":
-        return {
-          type: "running",
-          activity: {
-            type: "streaming",
-            startedAt: runnerPhase.startedAt,
-            lastEventTime: runnerPhase.lastEventTime,
-            block: runnerPhase.block,
-            retry: runnerPhase.retry,
-          },
-        };
-      case "running_tools":
-        return {
-          type: "running",
-          activity: {
-            type: "running_tools",
-            requested: runnerPhase.requested,
-            truncated: runnerPhase.truncated,
-          },
-        };
-      case "idle":
-        break;
-      default:
-        assertUnreachable(runnerPhase);
+    const phase = this.agent.phase;
+    if (phase.type === "running") {
+      // `aborting` is an activity on the agent but a top-level phase here: an
+      // unwinding thread is not doing work a consumer can render.
+      return phase.activity.type === "aborting"
+        ? { type: "aborting" }
+        : { type: "running", activity: phase.activity };
     }
-    if (mode.type === "tool_use") {
-      // The runner has handed the turn off and is idle while the executor
-      // runs; the requested-tool list is the runner's and is gone, so this is
-      // its own variant rather than a `running_tools` with fabricated fields.
-      return {
-        type: "running",
-        activity: {
-          type: "awaiting_tools",
-          activeTools: mode.activeTools,
-        },
-      };
-    }
+    // idle and yielded are both at rest; how the last submission ended is what
+    // distinguishes them, and that travels on `lastResult`.
     return { type: "idle", lastResult: this.lastSendResult() };
   }
 
   private lastSendResult(): SendResult | undefined {
     const state = this.state;
-    if (state.mode.type === "yielded") {
-      return { type: "yielded", value: state.mode.value };
+    const phase = this.agent.phase;
+    if (phase.type === "yielded") {
+      return { type: "yielded", value: phase.value };
     }
     const last = state.lastTurnResult;
     if (!last) return undefined;

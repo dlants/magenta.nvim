@@ -16,7 +16,6 @@ import type { ProviderProfile } from "./provider-options.ts";
 import { ABORT_MARKER_TEXT } from "./providers/anthropic-runner.ts";
 import type {
   AgentInput,
-  AgentPhase,
   BeforeRequestDecision,
   NativeInferenceManager,
   NativeMessageIdx,
@@ -29,6 +28,7 @@ import type {
   RequestResult,
   RequestUpdate,
   StopReason,
+  StreamingBlock,
   ToolOutcome,
   TurnResult,
 } from "./providers/provider-types.ts";
@@ -38,6 +38,7 @@ import type {
   AgentHooks,
   OnUpdate,
   SendResult,
+  TurnActivity,
   YieldValue,
 } from "./thread-api.ts";
 import type { SuspendReason, YieldAction } from "./thread-supervisor.ts";
@@ -92,9 +93,37 @@ export type ActiveToolEntry = {
   result?: ProviderToolResult;
 };
 
-export type ThreadMode =
-  | { type: "normal" }
-  | { type: "tool_use"; activeTools: Map<ToolRequestId, ActiveToolEntry> }
+/** What the agent is doing right now, and the only state representation of it.
+ * `aborting` is an activity rather than a peer of `idle` because it is only
+ * reachable from a turn in flight; the thread-facing `ThreadPhase` surfaces it
+ * at the top level instead. */
+export type AgentActivity = TurnActivity | { type: "aborting" };
+/** The phase as one flat label, for logging and test assertions. */
+export function phaseLabel(phase: AgentPhase): string {
+  return phase.type === "running" ? phase.activity.type : phase.type;
+}
+
+/** The block currently being streamed, if a request is in flight. */
+export function phaseStreamingBlock(
+  phase: AgentPhase,
+): StreamingBlock | undefined {
+  return phase.type === "running" && phase.activity.type === "streaming"
+    ? phase.activity.block
+    : undefined;
+}
+/** The live tool invocations for a phase, when tools are running. */
+export function phaseActiveTools(
+  phase: AgentPhase,
+): ReadonlyMap<ToolRequestId, ActiveToolEntry> | undefined {
+  return phase.type === "running" && phase.activity.type === "running_tools"
+    ? phase.activity.activeTools
+    : undefined;
+}
+export type AgentPhase =
+  | { type: "idle" }
+  | { type: "running"; activity: AgentActivity }
+  /** Terminal for practical purposes: the model called `yield_to_parent` and
+   * the supervisors accepted. */
   | {
       type: "yielded";
       response: string;
@@ -137,7 +166,6 @@ export interface AgentContext {
 
 export type AgentAction =
   | { type: "set-title"; title: string }
-  | { type: "set-mode"; mode: ThreadMode }
   | {
       type: "set-active-tool-result";
       id: ToolRequestId;
@@ -150,7 +178,6 @@ export type ThreadState = {
   threadType: ThreadType;
   systemPrompt: SystemPrompt;
   systemInfo: SystemInfo;
-  mode: ThreadMode;
   edlRegisters: EdlRegisters;
   editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];
   lastTurnResult: TurnResult | undefined;
@@ -194,6 +221,23 @@ export class Agent {
   private currentPhase: AgentPhase = { type: "idle" };
   get phase(): AgentPhase {
     return this.currentPhase;
+  }
+  private setPhase(phase: AgentPhase): void {
+    this.currentPhase = phase;
+    this.deps.onUpdate();
+  }
+  /** The live tool entries, when tools are running. Written into by the
+   * executor and read by anything that has to reach a running tool. */
+  private clearActiveTools(): void {
+    const phase = this.currentPhase;
+    if (phase.type === "running" && phase.activity.type === "running_tools") {
+      phase.activity.activeTools = new Map();
+    }
+  }
+  private get activeTools():
+    | ReadonlyMap<ToolRequestId, ActiveToolEntry>
+    | undefined {
+    return phaseActiveTools(this.currentPhase);
   }
   public readonly structuredToolResults: Map<
     ToolRequestId,
@@ -254,23 +298,22 @@ export class Agent {
       case "set-title":
         this.state.title = action.title;
         break;
-      case "set-mode":
-        this.state.mode = action.mode;
-        break;
-      case "set-active-tool-result":
+      case "set-active-tool-result": {
         if (action.result.result.status === "ok") {
           this.structuredToolResults.set(
             action.id,
             action.result.result.structuredResult,
           );
         }
-        if (this.state.mode.type === "tool_use") {
-          const entry = this.state.mode.activeTools.get(action.id);
+        const active = this.activeTools;
+        if (active) {
+          const entry = active.get(action.id);
           if (entry) {
             entry.result = action.result;
           }
         }
         break;
+      }
       case "reset-agent-state":
         this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
         this.state.editedFilesThisTurn = [];
@@ -388,7 +431,7 @@ export class Agent {
 
   get isBusy(): boolean {
     return (
-      this.currentTurn !== undefined || this.state.mode.type === "tool_use"
+      this.currentTurn !== undefined || this.currentPhase.type === "running"
     );
   }
 
@@ -512,9 +555,13 @@ export class Agent {
       if (this.abortRequested) return this.finishTurnAbort();
 
       this.currentPhase = {
-        type: "running_tools",
-        requested,
-        truncated: outcome.stopReason === "max_tokens",
+        type: "running",
+        activity: {
+          type: "running_tools",
+          requested,
+          truncated: outcome.stopReason === "max_tokens",
+          activeTools: new Map(),
+        },
       };
       this.deps.onUpdate();
 
@@ -531,7 +578,10 @@ export class Agent {
       }
 
       this.manager.appendToolResults(requested, toolOutcome.results);
-      this.scheduleUpdate();
+      // Not throttled: this is the transition from live tool progress to
+      // rendered results, and the view must not show progress for a tool the
+      // log has already answered.
+      this.deps.onUpdate();
 
       if (toolOutcome.type === "aborted") {
         this.abortRequested = true;
@@ -545,11 +595,14 @@ export class Agent {
    * `streaming` phase, so they are never observable as a transition. */
   private async streamOneResponse(): Promise<RequestResult> {
     this.currentPhase = {
-      type: "streaming",
-      startedAt: new Date(),
-      lastEventTime: new Date(),
-      block: undefined,
-      retry: undefined,
+      type: "running",
+      activity: {
+        type: "streaming",
+        startedAt: new Date(),
+        lastEventTime: new Date(),
+        block: undefined,
+        retry: undefined,
+      },
     };
     this.deps.onUpdate();
     return await this.manager.sendRequest((update) =>
@@ -560,22 +613,24 @@ export class Agent {
    * `lastEventTime`; the block itself is mirrored onto the phase and read at
    * render time. */
   private handleRequestUpdate(update: RequestUpdate): void {
-    if (this.currentPhase.type !== "streaming") return;
-    this.currentPhase.lastEventTime = new Date();
+    const phase = this.currentPhase;
+    if (phase.type !== "running" || phase.activity.type !== "streaming") return;
+    const activity = phase.activity;
+    activity.lastEventTime = new Date();
     switch (update.type) {
       case "streaming-block":
-        this.currentPhase.block = update.streamingBlock;
+        activity.block = update.streamingBlock;
         break;
       case "block-finished":
-        this.currentPhase.block = undefined;
+        activity.block = undefined;
         break;
       case "retry-scheduled":
-        this.currentPhase.retry = update.retry;
-        this.currentPhase.block = undefined;
+        activity.retry = update.retry;
+        activity.block = undefined;
         break;
       case "attempt-started":
-        this.currentPhase.retry = undefined;
-        this.currentPhase.block = undefined;
+        activity.retry = undefined;
+        activity.block = undefined;
         break;
       default:
         assertUnreachable(update);
@@ -585,7 +640,7 @@ export class Agent {
   /** The single terminal abort transition: leave the history well-formed and
    * mark why it stops here. */
   private finishTurnAbort(): TurnResult {
-    this.currentPhase = { type: "aborting" };
+    this.currentPhase = { type: "running", activity: { type: "aborting" } };
     this.deps.onUpdate();
     this.manager.finalize({ type: "aborted" });
     this.manager.appendUserMessage([
@@ -667,7 +722,6 @@ export class Agent {
   }
 
   private handleStopped(stopReason: StopReason): void {
-    this.update({ type: "set-mode", mode: { type: "normal" } });
     this.settle({ type: "completed", stopReason });
   }
 
@@ -747,7 +801,11 @@ export class Agent {
       });
     }
 
-    this.update({ type: "set-mode", mode: { type: "tool_use", activeTools } });
+    const phase = this.currentPhase;
+    if (phase.type === "running" && phase.activity.type === "running_tools") {
+      phase.activity.activeTools = activeTools;
+    }
+    this.deps.onUpdate();
 
     await Promise.all(
       [...activeTools].map(([id, entry]) =>
@@ -808,8 +866,10 @@ export class Agent {
     for (const hook of this.deps.getHooks().onToolResults) {
       hook(results);
     }
-
-    this.update({ type: "set-mode", mode: { type: "normal" } });
+    // Nothing is running any more: `activeTools` means *live* invocations, and
+    // the view switches from tool progress to results the moment it empties.
+    this.clearActiveTools();
+    this.deps.onUpdate();
 
     if (this.abortRequested) {
       return { type: "aborted", results };
@@ -834,7 +894,7 @@ export class Agent {
 
   async abort(): Promise<void> {
     // A yielded thread has already completed its work — don't overwrite its state.
-    if (this.state.mode.type === "yielded") {
+    if (this.currentPhase.type === "yielded") {
       return;
     }
     await this.abortAndWait();
@@ -843,8 +903,9 @@ export class Agent {
   async abortAndWait(): Promise<void> {
     this.abortRequested = true;
 
-    if (this.state.mode.type === "tool_use") {
-      for (const [, entry] of this.state.mode.activeTools) {
+    const active = this.activeTools;
+    if (active) {
+      for (const [, entry] of active) {
         entry.handle.abort();
       }
     }
@@ -862,15 +923,17 @@ export class Agent {
 
   private finishAbort(): void {
     this.abortRequested = false;
+    if (this.currentPhase.type !== "yielded") {
+      this.currentPhase = { type: "idle" };
+    }
     this.deps.onUpdate();
-    this.update({ type: "set-mode", mode: { type: "normal" } });
     this.settle({ type: "aborted" });
   }
 
   private submission: Defer<SendResult> | undefined;
 
   send(inputMessages?: InputMessage[]): Promise<SendResult> {
-    if (this.state.mode.type === "yielded" && this.state.mode.tornDown) {
+    if (this.currentPhase.type === "yielded" && this.currentPhase.tornDown) {
       return Promise.reject(
         new Error(
           "This thread's container has been torn down. No further messages can be sent.",
@@ -932,17 +995,15 @@ export class Agent {
           yieldValue.type === "structured"
             ? yieldValue
             : { type: "text", text: response };
-        this.update({
-          type: "set-mode",
-          mode: { type: "yielded", response, value, tornDown: true },
-        });
+        this.setPhase({ type: "yielded", response, value, tornDown: true });
         this.settleYield(value);
         break;
       }
       case "none":
-        this.update({
-          type: "set-mode",
-          mode: { type: "yielded", response: yieldResult, value: yieldValue },
+        this.setPhase({
+          type: "yielded",
+          response: yieldResult,
+          value: yieldValue,
         });
         this.settleYield(yieldValue);
         break;

@@ -1,7 +1,12 @@
 import { AnthropicError, APIError } from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent } from "../agent.ts";
-import { agentHooks, createTestAgent, userInput } from "../test-helpers.ts";
+import {
+  agentHooks,
+  createTestAgent,
+  flatPhase,
+  userInput,
+} from "../test-helpers.ts";
 import { isRetryableError } from "./anthropic-runner.ts";
 
 function make529Error(): APIError {
@@ -173,7 +178,7 @@ describe("Agent retry logic", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     // Should be in retry state
-    const status1 = agent.phase;
+    const status1 = flatPhase(agent);
     expect(status1.type).toBe("streaming");
     if (status1.type === "streaming") {
       expect(status1.retry).toBeDefined();
@@ -188,7 +193,7 @@ describe("Agent retry logic", () => {
     stream.respondWithError(make529Error());
     await vi.advanceTimersByTimeAsync(0);
 
-    const status2 = agent.phase;
+    const status2 = flatPhase(agent);
     expect(status2.type).toBe("streaming");
     if (status2.type === "streaming") {
       expect(status2.retry).toBeDefined();
@@ -227,7 +232,7 @@ describe("Agent retry logic", () => {
     );
     await vi.advanceTimersByTimeAsync(0);
 
-    const status = agent.phase;
+    const status = flatPhase(agent);
     expect(status.type).toBe("streaming");
     if (status.type === "streaming") {
       expect(status.retry).toBeDefined();
@@ -255,7 +260,7 @@ describe("Agent retry logic", () => {
     stream.respondWithError(make429Error());
     await vi.advanceTimersByTimeAsync(0);
 
-    const status = agent.phase;
+    const status = flatPhase(agent);
     expect(status.type).toBe("streaming");
     if (status.type === "streaming") {
       expect(status.retry).toBeDefined();
@@ -341,7 +346,7 @@ describe("Agent retry logic", () => {
     stream.respondWithError(make529Error());
     await vi.advanceTimersByTimeAsync(0);
 
-    const status = agent.phase;
+    const status = flatPhase(agent);
     expect(status.type).toBe("streaming");
     if (status.type === "streaming") {
       expect(status.retry).toBeDefined();
@@ -370,7 +375,7 @@ describe("Agent retry logic", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     // Should be in retry wait state
-    const status = agent.phase;
+    const status = flatPhase(agent);
     expect(status.type).toBe("streaming");
     if (status.type === "streaming") {
       expect(status.retry).toBeDefined();
@@ -397,7 +402,7 @@ describe("Agent retry logic", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     // During wait: retry should be set
-    const statusDuringWait = agent.phase;
+    const statusDuringWait = flatPhase(agent);
     expect(statusDuringWait.type).toBe("streaming");
     if (statusDuringWait.type === "streaming") {
       expect(statusDuringWait.retry).toBeDefined();
@@ -410,7 +415,7 @@ describe("Agent retry logic", () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     // During retry attempt: retry should be cleared
-    const statusDuringRetry = agent.phase;
+    const statusDuringRetry = flatPhase(agent);
     expect(statusDuringRetry.type).toBe("streaming");
     if (statusDuringRetry.type === "streaming") {
       expect(statusDuringRetry.retry).toBeUndefined();
@@ -422,6 +427,6 @@ describe("Agent retry logic", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
-    expect(agent.phase.type).toBe("idle");
+    expect(flatPhase(agent).type).toBe("idle");
   });
 });

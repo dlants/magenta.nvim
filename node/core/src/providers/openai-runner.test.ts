@@ -1,7 +1,7 @@
 import type OpenAI from "openai";
 import { describe, expect, it } from "vitest";
 import type { Agent } from "../agent.ts";
-import { createTestOpenAIAgent } from "../test-helpers.ts";
+import { createTestOpenAIAgent, flatPhase } from "../test-helpers.ts";
 import type { ToolName, ToolStructuredResult } from "../tool-types.ts";
 import { ABORT_TOOL_RESULT_TEXT } from "./anthropic-runner.ts";
 import type {
@@ -120,7 +120,7 @@ function lastAssistant(agent: Agent): ProviderMessage {
 }
 
 function streamingBlock(agent: Agent) {
-  const phase = agent.phase;
+  const phase = flatPhase(agent);
   return phase.type === "streaming" ? phase.block : undefined;
 }
 
@@ -218,7 +218,7 @@ describe("OpenAIInferenceManager text turns", () => {
       text: "hi there",
     });
     expect(message.stopReason).toBe("end_turn");
-    expect(agent.phase).toEqual({ type: "idle" });
+    expect(flatPhase(agent)).toEqual({ type: "idle" });
   });
 
   it("exposes the partially accumulated text as the streaming block", async () => {
@@ -358,7 +358,7 @@ describe("OpenAIInferenceManager tool calls", () => {
       message.content.filter((content) => content.type === "tool_result"),
     );
     expect(results.map((result) => result.id)).toEqual(["call_1"]);
-    expect(agent.phase).toEqual({ type: "idle" });
+    expect(flatPhase(agent)).toEqual({ type: "idle" });
   });
 });
 
@@ -494,7 +494,7 @@ describe("OpenAIInferenceManager abort", () => {
       type: "text",
       text: "partial answer",
     });
-    expect(agent.phase).toEqual({ type: "idle" });
+    expect(flatPhase(agent)).toEqual({ type: "idle" });
   });
 
   it("drops a tool call that was never dispatched", async () => {
@@ -606,7 +606,7 @@ describe("OpenAIInferenceManager clone", () => {
       tools: [spec],
       cloneFrom: agent.manager,
     });
-    expect(cloned.phase).toEqual({ type: "idle" });
+    expect(flatPhase(cloned)).toEqual({ type: "idle" });
     expect(cloned.manager.log.messages).toHaveLength(2);
     expect(cloned.manager.log.messages[1].content[0]).toMatchObject({
       type: "text",
@@ -670,7 +670,7 @@ describe("OpenAIInferenceManager truncation", () => {
 
     agent.manager.truncateMessages(idx);
     expect(agent.manager.log.messages).toHaveLength(2);
-    expect(agent.phase).toEqual({ type: "idle" });
+    expect(flatPhase(agent)).toEqual({ type: "idle" });
   });
 
   it("drops a tool_use severed from its tool_result", async () => {

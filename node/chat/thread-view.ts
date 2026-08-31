@@ -13,11 +13,12 @@ import {
   formatToolSpecs,
   type NativeMessageIdx,
   type ProviderToolSpec,
+  phaseStreamingBlock,
   renderPending,
   type ThreadId,
-  type ThreadMode,
   type ToolName,
   type ToolRequestId,
+  type TurnActivity,
 } from "@magenta/core";
 import {
   jumpToComment,
@@ -93,18 +94,12 @@ export type RunningCompaction = {
 
 export const renderStatus = (
   agentPhase: AgentPhase,
-  mode: ThreadMode,
   latestUsage: Usage | undefined,
   lastTurnResult: TurnResult | undefined,
   compaction: RunningCompaction | undefined,
 ): VDOMNode => {
-  const yieldedResponse = mode.type === "yielded" ? mode.response : undefined;
-  // First check mode for thread-specific states
-  if (mode.type === "tool_use") {
-    return d`Executing tools...`;
-  }
-  if (yieldedResponse !== undefined) {
-    return d`↗️ yielded to parent: ${yieldedResponse}`;
+  if (agentPhase.type === "yielded") {
+    return d`↗️ yielded to parent: ${agentPhase.response}`;
   }
   if (compaction) {
     const { run, onSelectChunk } = compaction;
@@ -116,27 +111,18 @@ export const renderStatus = (
 
   // Then render based on the phase the turn is passing through
   switch (agentPhase.type) {
-    case "running_tools":
-      return d`Executing tools...`;
-    case "aborting":
-      return d`Aborting...`;
-    case "streaming": {
-      if (agentPhase.retry) {
-        const secsLeft = Math.max(
-          1,
-          Math.ceil(
-            (agentPhase.retry.nextRetryAt.getTime() - Date.now()) / 1000,
-          ),
-        );
-        const reason = shortErrorMessage(agentPhase.retry.error);
-        return d`⏳ Retrying in ${String(secsLeft)}s (attempt ${String(agentPhase.retry.attempt)}) — ${reason}`;
+    case "running": {
+      const activity = agentPhase.activity;
+      switch (activity.type) {
+        case "running_tools":
+          return d`Executing tools...`;
+        case "aborting":
+          return d`Aborting...`;
+        case "streaming":
+          return renderStreaming(activity);
+        default:
+          return assertUnreachable(activity);
       }
-      const waitedMs = Date.now() - agentPhase.lastEventTime.getTime();
-      if (waitedMs > 3000) {
-        const waitedSecs = Math.floor(waitedMs / 1000);
-        return d`Streaming response ${spinnerFrame(agentPhase.startedAt)} (waiting ${String(waitedSecs)}s)`;
-      }
-      return d`Streaming response ${spinnerFrame(agentPhase.startedAt)}`;
     }
     case "idle":
       return renderTurnResult(lastTurnResult, latestUsage);
@@ -144,6 +130,24 @@ export const renderStatus = (
       assertUnreachable(agentPhase);
   }
 };
+function renderStreaming(
+  activity: Extract<TurnActivity, { type: "streaming" }>,
+): VDOMNode {
+  if (activity.retry) {
+    const secsLeft = Math.max(
+      1,
+      Math.ceil((activity.retry.nextRetryAt.getTime() - Date.now()) / 1000),
+    );
+    const reason = shortErrorMessage(activity.retry.error);
+    return d`⏳ Retrying in ${String(secsLeft)}s (attempt ${String(activity.retry.attempt)}) — ${reason}`;
+  }
+  const waitedMs = Date.now() - activity.lastEventTime.getTime();
+  if (waitedMs > 3000) {
+    const waitedSecs = Math.floor(waitedMs / 1000);
+    return d`Streaming response ${spinnerFrame(activity.startedAt)} (waiting ${String(waitedSecs)}s)`;
+  }
+  return d`Streaming response ${spinnerFrame(activity.startedAt)}`;
+}
 
 function renderTurnResult(
   result: TurnResult | undefined,
@@ -193,13 +197,10 @@ function renderUsage(usage: Usage): VDOMNode {
  */
 const shouldShowContextFiles = (
   agentPhase: AgentPhase,
-  mode: ThreadMode,
   contextManager: ContextManager,
 ): boolean => {
   return (
-    agentPhase.type === "idle" &&
-    mode.type === "normal" &&
-    Object.keys(contextManager.files).length > 0
+    agentPhase.type === "idle" && Object.keys(contextManager.files).length > 0
   );
 };
 
@@ -455,7 +456,6 @@ export const view: View<{
 
   const messages = thread.getProviderMessages();
   const agentPhase = thread.getProviderStatus();
-  const mode = thread.core.state.mode;
 
   const pendingComments = thread.comments?.store.getPendingEntries() ?? [];
   const pendingCommentsNode = pendingComments.length
@@ -472,12 +472,7 @@ export const view: View<{
     : d``;
   // Show logo when empty and not busy
   const isIdle = agentPhase.type === "idle";
-  if (
-    messages.length === 0 &&
-    isIdle &&
-    mode.type === "normal" &&
-    thread.submission?.type !== "failed"
-  ) {
+  if (messages.length === 0 && isIdle && thread.submission?.type !== "failed") {
     return d`\
 ${titleView}
 ${systemPromptView}
@@ -496,7 +491,6 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
   const latestUsage = thread.agent.log.latestUsage;
   const statusView = renderStatus(
     agentPhase,
-    mode,
     latestUsage,
     thread.core.state.lastTurnResult,
     runningCompaction(thread),
@@ -504,7 +498,6 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
 
   const contextManagerView = shouldShowContextFiles(
     agentPhase,
-    mode,
     thread.contextManager,
   )
     ? d`\n${contextFilesView(thread.contextManager, contextViewCtx(thread), {
@@ -729,10 +722,9 @@ ${contentView}`;
     return d`${renderedBody}${forkedToAtIdx(messageIdx)}`;
   });
 
-  const streamingBlockView =
-    agentPhase.type === "streaming"
-      ? d`\n${renderStreamingBlock(thread)}\n`
-      : d``;
+  const streamingBlockView = phaseStreamingBlock(agentPhase)
+    ? d`\n${renderStreamingBlock(thread)}\n`
+    : d``;
 
   const failedSubmit =
     thread.submission?.type === "failed" ? thread.submission : undefined;
@@ -940,9 +932,11 @@ function renderMessageContentBlock(
       };
 
       // Check if tool is active (still running)
+      const phase = thread.getProviderStatus();
       const activeEntry =
-        thread.core.state.mode.type === "tool_use" &&
-        thread.core.state.mode.activeTools.get(request.id);
+        phase.type === "running" &&
+        phase.activity.type === "running_tools" &&
+        phase.activity.activeTools.get(request.id);
 
       const isActive = !!activeEntry;
       const abortBinding = isActive
@@ -1212,8 +1206,7 @@ export function findToolResult(
 }
 
 function renderStreamingBlock(thread: NvimThread): string | VDOMNode {
-  const phase = thread.getProviderStatus();
-  const block = phase.type === "streaming" ? phase.block : undefined;
+  const block = phaseStreamingBlock(thread.getProviderStatus());
   if (!block) return d``;
 
   switch (block.type) {

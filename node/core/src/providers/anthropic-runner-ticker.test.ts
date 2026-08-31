@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent } from "../agent.ts";
-import { createTestAgent, userInput } from "../test-helpers.ts";
+import { createTestAgent, flatPhase, userInput } from "../test-helpers.ts";
 
 function start(agent: Agent) {
   return agent.runTurnLoop(userInput("hello"));
@@ -78,14 +78,14 @@ describe("Agent streaming ticker", () => {
     await vi.advanceTimersByTimeAsync(0);
     const stream = await mockClient.awaitStream();
 
-    const initial = agent.phase;
+    const initial = flatPhase(agent);
     expect(initial.type).toBe("streaming");
     if (initial.type !== "streaming") return;
     const startEventTime = initial.lastEventTime.getTime();
 
     // Dead air: lastEventTime should not advance.
     await vi.advanceTimersByTimeAsync(2000);
-    const duringWait = agent.phase;
+    const duringWait = flatPhase(agent);
     if (duringWait.type !== "streaming") throw new Error("expected streaming");
     expect(duringWait.lastEventTime.getTime()).toBe(startEventTime);
 
@@ -97,7 +97,7 @@ describe("Agent streaming ticker", () => {
     });
     await stream.settle();
 
-    const afterEvent = agent.phase;
+    const afterEvent = flatPhase(agent);
     if (afterEvent.type !== "streaming") throw new Error("expected streaming");
     expect(afterEvent.lastEventTime.getTime()).toBeGreaterThan(startEventTime);
 

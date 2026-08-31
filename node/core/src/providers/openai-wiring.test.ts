@@ -2,6 +2,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentContext } from "../agent.ts";
+import { phaseLabel } from "../agent.ts";
 import type { ThreadId, ThreadType } from "../chat-types.ts";
 import type { Logger } from "../logger.ts";
 import type { OpenAIAuth } from "../openai-auth.ts";
@@ -122,12 +123,15 @@ describe("OpenAI provider wiring", () => {
     stream.finishResponse();
 
     await pollUntil(() => {
-      if (core.state.mode.type === "yielded") return true;
-      throw new Error(`waiting for yielded, got ${core.state.mode.type}`);
+      if (core.getProviderStatus().type === "yielded") return true;
+      throw new Error(
+        `waiting for yielded, got ${phaseLabel(core.getProviderStatus())}`,
+      );
     });
-    expect(core.state.mode.type).toBe("yielded");
-    if (core.state.mode.type === "yielded") {
-      expect(core.state.mode.response).toBe("all done");
+    const yielded = core.getProviderStatus();
+    expect(yielded.type).toBe("yielded");
+    if (yielded.type === "yielded") {
+      expect(yielded.response).toBe("all done");
     }
   });
 

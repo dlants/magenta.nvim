@@ -314,23 +314,6 @@ export type RequestedTool = {
   request: Result<ToolRequest, { rawRequest: unknown }>;
 };
 
-export type AgentPhase =
-  | { type: "idle" }
-  | {
-      type: "streaming";
-      startedAt: Date;
-      lastEventTime: Date;
-      block: StreamingBlock | undefined;
-      retry: RetryStatus | undefined;
-    }
-  | {
-      type: "running_tools";
-      requested: ReadonlyArray<RequestedTool>;
-      /** the turn was cut short by the output token limit mid-tool-use */
-      truncated: boolean;
-    }
-  | { type: "aborting" };
-
 export type TurnResult =
   | { type: "stopped"; stopReason: StopReason }
   | { type: "suspended"; reason?: SuspendReason | undefined }
