@@ -1,188 +1,65 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { ToolName, ToolRequestId } from "@magenta/core";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX, validateInput } from "@magenta/core";
 import { describe, expect, it } from "vitest";
-import winston from "winston";
+import type { Agent } from "../agent.ts";
+import type { Logger } from "../logger.ts";
+import type { ProviderProfile } from "../provider-options.ts";
+import { createTestAgent, noopLogger } from "../test-helpers.ts";
+import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { delay, pollUntil } from "../utils/async.ts";
 import {
   ABORT_MARKER_TEXT,
-  AnthropicInferenceManager,
-  type AnthropicRunnerOptions,
+  type AnthropicInferenceManager,
 } from "./anthropic-runner.ts";
 import { MockAnthropicClient } from "./mock-anthropic-client.ts";
 import type {
   AgentInput,
   AgentPhase,
-  BeforeRequestDecision,
   NativeMessageIdx,
-  ProviderToolSpec,
   RequestedTool,
   StreamingBlock,
   ToolExecutor,
-  ToolOutcome,
   ToolResults,
   TurnResult,
 } from "./provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 
-type LoopHooks = {
-  executeTools: ToolExecutor;
-  onUpdate: () => void;
-  onBeforeRequest?: () => Promise<BeforeRequestDecision>;
-};
-
-/** Stands in for `Agent` for tests that are about what the manager puts on the
- * wire. It drives the same sequence the agent's loop does — gate, request,
- * tool results — without the agent's context, tools or supervisors. Loop
- * policy itself is tested against the real `Agent`, in core. */
+/** A thin adapter onto the real `Agent`: these tests are about what the
+ * manager puts on the wire, but the loop driving it must be the production
+ * one, so nothing here reimplements it. */
 class TestAgent {
-  phase: AgentPhase = { type: "idle" };
-  private abortRequested = false;
-  private turnInFlight = false;
-
   constructor(
-    readonly manager: AnthropicInferenceManager,
-    private hooks: LoopHooks,
+    readonly agent: Agent,
+    private makeClone: (from: Agent) => TestAgent,
   ) {}
 
-  get log() {
-    return this.manager.log;
+  get manager(): AnthropicInferenceManager {
+    return this.agent.manager as AnthropicInferenceManager;
   }
 
-  getNativeMessageIdx(): NativeMessageIdx {
-    return this.manager.getNativeMessageIdx();
+  get log() {
+    return this.agent.manager.log;
+  }
+
+  get phase(): AgentPhase {
+    return this.agent.phase;
   }
 
   truncateMessages(idx: NativeMessageIdx): void {
-    this.manager.truncateMessages(idx);
+    this.agent.manager.truncateMessages(idx);
   }
 
-  appendUserMessage(
-    ...args: Parameters<AnthropicInferenceManager["appendUserMessage"]>
-  ): void {
-    this.manager.appendUserMessage(...args);
-  }
-
-  clone(hooks: LoopHooks): TestAgent {
-    return new TestAgent(this.manager.clone(), hooks);
+  clone(): TestAgent {
+    return this.makeClone(this.agent);
   }
 
   abort(): void {
-    if (!this.turnInFlight) return;
-    this.abortRequested = true;
-    this.manager.abort();
+    void this.agent.abort();
   }
 
-  async runTurn(input: AgentInput[]): Promise<TurnResult> {
-    if (this.turnInFlight) {
-      throw new Error("runTurn called while a turn is already in flight");
-    }
-    this.turnInFlight = true;
-    this.abortRequested = false;
-    try {
-      return await this.runLoop(input);
-    } finally {
-      this.turnInFlight = false;
-      this.abortRequested = false;
-      this.phase = { type: "idle" };
-      this.hooks.onUpdate();
-    }
-  }
-
-  private async runLoop(initialInput: AgentInput[]): Promise<TurnResult> {
-    let pending: AgentInput[] | undefined = initialInput;
-    while (true) {
-      if (this.abortRequested) return this.finishAbort();
-      const decision: BeforeRequestDecision = this.hooks.onBeforeRequest
-        ? await this.hooks.onBeforeRequest()
-        : { type: "proceed" };
-      if (pending) {
-        this.manager.appendUserMessage(pending);
-        pending = undefined;
-      }
-      if (decision.type === "suspend") {
-        return { type: "suspended", reason: decision.reason };
-      }
-      if (this.abortRequested) return this.finishAbort();
-
-      this.phase = {
-        type: "streaming",
-        startedAt: new Date(),
-        lastEventTime: new Date(),
-        block: undefined,
-        retry: undefined,
-      };
-      const outcome = await this.manager.sendRequest((update) => {
-        if (this.phase.type !== "streaming") return;
-        this.phase.lastEventTime = new Date();
-        if (update.type === "streaming-block") {
-          this.phase.block = update.streamingBlock;
-        } else if (update.type === "block-finished") {
-          this.phase.block = undefined;
-        } else {
-          this.phase.retry = update.retry;
-        }
-        this.hooks.onUpdate();
-      });
-
-      if (outcome.type === "aborted") return this.finishAbort();
-      if (outcome.type === "error") {
-        this.manager.finalize({ type: "error", error: outcome.error });
-        return { type: "failed", error: outcome.error };
-      }
-
-      const requested = outcome.requested;
-      if (requested.length === 0) {
-        return {
-          type: "stopped",
-          stopReason:
-            outcome.stopReason === "tool_use" ? "end_turn" : outcome.stopReason,
-        };
-      }
-      if (this.abortRequested) return this.finishAbort();
-
-      this.phase = {
-        type: "running_tools",
-        requested,
-        truncated: outcome.stopReason === "max_tokens",
-      };
-
-      let toolOutcome: ToolOutcome;
-      try {
-        toolOutcome = await this.hooks.executeTools(requested);
-      } catch {
-        toolOutcome = { type: "continue", results: new Map() };
-      }
-      this.manager.appendToolResults(requested, toolOutcome.results);
-
-      if (toolOutcome.type === "aborted") {
-        this.abortRequested = true;
-        return this.finishAbort();
-      }
-      if (toolOutcome.type === "suspend") return { type: "suspended" };
-      if (this.abortRequested) return this.finishAbort();
-    }
-  }
-
-  private finishAbort(): TurnResult {
-    this.phase = { type: "aborting" };
-    this.manager.finalize({ type: "aborted" });
-    this.manager.appendUserMessage([
-      {
-        type: "text",
-        text: ABORT_MARKER_TEXT,
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-      },
-    ]);
-    return { type: "aborted" };
+  runTurn(input: AgentInput[]): Promise<TurnResult> {
+    return this.agent.runTurnLoop(input);
   }
 }
-
-/** Hooks for a cloned runner: no test clones a runner and then runs tools
- * through it. */
-const cloneHooks: LoopHooks = {
-  executeTools: () => Promise.resolve({ type: "continue", results: new Map() }),
-  onUpdate: () => {},
-};
 
 /** Counts `onUpdate` notifications, which is all the agent emits now. */
 type Tracked = { updates: number };
@@ -195,35 +72,69 @@ function trackUpdates(): Tracked {
 const rejectingExecutor: ToolExecutor = () =>
   Promise.reject(new Error("unexpected tool execution"));
 
+type CreateOptions = {
+  model?: string;
+  executeTools?: ToolExecutor;
+  logger?: Logger;
+  thinking?: {
+    enabled: boolean;
+    budgetTokens?: number;
+    displayThinking?: boolean;
+    effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  };
+};
+
+function agentOptions(opts: CreateOptions, mockClient: MockAnthropicClient) {
+  return {
+    mockClient,
+    executeTools: opts.executeTools ?? rejectingExecutor,
+    anthropicOptions: {
+      includeWebSearch: true,
+      logger: opts.logger ?? noopLogger,
+    },
+    context: {
+      profile: {
+        provider: "mock",
+        model: opts.model ?? "claude-sonnet-4-20250514",
+        ...(opts.thinking ? { thinking: opts.thinking } : {}),
+      } as ProviderProfile,
+    },
+  };
+}
+
 function createAgent(
-  mockClient: MockAnthropicClient | Anthropic,
-  options?: Partial<typeof defaultOptions> & {
-    thinking?: {
-      enabled: boolean;
-      budgetTokens?: number;
-      displayThinking?: boolean;
-      effort?: "low" | "medium" | "high" | "xhigh" | "max";
-    };
-  },
+  mockClient: MockAnthropicClient,
+  options?: CreateOptions,
   tracked?: Tracked,
 ): TestAgent {
-  const merged = { ...defaultOptions, ...options };
-  const onUpdate = tracked
-    ? () => {
-        tracked.updates++;
-      }
-    : merged.onUpdate;
-  return new TestAgent(
-    new AnthropicInferenceManager(
-      { ...merged, onUpdate },
-      mockClient as unknown as Anthropic,
-      defaultAnthropicOptions,
-    ),
-    { executeTools: merged.executeTools, onUpdate },
+  const opts = options ?? {};
+  const wrap = (agent: Agent): TestAgent =>
+    new TestAgent(agent, (from) =>
+      wrap(
+        createTestAgent({
+          ...agentOptions(opts, mockClient),
+          cloneFrom: from.manager,
+        }).agent,
+      ),
+    );
+  return wrap(
+    createTestAgent({
+      ...agentOptions(opts, mockClient),
+      ...(tracked
+        ? {
+            onUpdate: () => {
+              tracked.updates++;
+            },
+          }
+        : {}),
+    }).agent,
   );
 }
 
-/** The in-progress block is only observable through `phase`. */
+function streamingBlock(agent: TestAgent): StreamingBlock | undefined {
+  return agent.phase.type === "streaming" ? agent.phase.block : undefined;
+}
+
 /** Wait for the agent to open a *new* stream, past the ones already seen. */
 function awaitNextStream(mockClient: MockAnthropicClient, seen: number) {
   return pollUntil(() => {
@@ -231,10 +142,6 @@ function awaitNextStream(mockClient: MockAnthropicClient, seen: number) {
     if (!stream) throw new Error("No new stream yet");
     return stream;
   });
-}
-
-function streamingBlock(agent: TestAgent): StreamingBlock | undefined {
-  return agent.phase.type === "streaming" ? agent.phase.block : undefined;
 }
 
 function okResults(
@@ -258,22 +165,6 @@ function okResults(
     ]),
   );
 }
-
-const defaultOptions = {
-  model: "claude-sonnet-4-20250514",
-  systemPrompt: "You are a helpful assistant.",
-  tools: [] as ProviderToolSpec[],
-  executeTools: rejectingExecutor,
-  onUpdate: () => {},
-};
-
-const defaultAnthropicOptions: AnthropicRunnerOptions = {
-  authType: "max",
-  includeWebSearch: true,
-  disableParallelToolUseFlag: true,
-  logger: winston.createLogger(),
-  validateInput,
-};
 
 describe("thinking.effort", () => {
   it("includes output_config.effort on adaptive-thinking models", async () => {
@@ -307,26 +198,17 @@ describe("thinking.effort", () => {
   it("drops effort and warns on non-adaptive-thinking models", async () => {
     const mockClient = new MockAnthropicClient();
     const warnings: string[] = [];
-    const logger = winston.createLogger();
-    logger.warn = ((msg: string) => {
-      warnings.push(msg);
-      return logger;
-    }) as typeof logger.warn;
-
-    const agent = new TestAgent(
-      new AnthropicInferenceManager(
-        {
-          model: "claude-sonnet-4-5",
-          systemPrompt: "You are a helpful assistant.",
-          tools: [] as ProviderToolSpec[],
-          thinking: { enabled: true, effort: "max" },
-          onUpdate: () => {},
-        },
-        mockClient as unknown as Anthropic,
-        { ...defaultAnthropicOptions, logger },
-      ),
-      { executeTools: rejectingExecutor, onUpdate: () => {} },
-    );
+    const logger: Logger = {
+      ...noopLogger,
+      warn: (msg: string) => {
+        warnings.push(msg);
+      },
+    } as Logger;
+    const agent = createAgent(mockClient, {
+      model: "claude-sonnet-4-5",
+      thinking: { enabled: true, effort: "max" },
+      logger,
+    });
 
     const turn = agent.runTurn([
       {
@@ -421,7 +303,9 @@ describe("user input", () => {
       },
     ];
     const turn = agent.runTurn(content);
-
+    // The loop appends the caller's content after consulting the gate,
+    // so wait for the request it produced before reading the log.
+    await mockClient.awaitStream();
     const state = agent.log;
     expect(state.messages).toHaveLength(1);
     expect(state.messages[0].role).toBe("user");
@@ -454,7 +338,7 @@ describe("user input", () => {
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-
+    await mockClient.awaitStream();
     expect(agent.log.messages[0].content[0]).toMatchObject({
       type: "image",
       source: {
@@ -485,7 +369,7 @@ describe("user input", () => {
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-
+    await mockClient.awaitStream();
     expect(agent.log.messages[0].content[0]).toMatchObject({
       type: "document",
       source: {
@@ -660,7 +544,8 @@ describe("onUpdate", () => {
     const stream = await mockClient.awaitStream();
     const beforeStreaming = tracked.updates;
     stream.streamText("Hello");
-    await delay(0);
+    // The agent throttles its notifications, so a microtask is not enough.
+    await delay(50);
     expect(tracked.updates).toBeGreaterThan(beforeStreaming);
 
     const beforeStop = tracked.updates;
@@ -673,17 +558,14 @@ describe("onUpdate", () => {
 
 describe("abort", () => {
   it("does nothing when no turn is in flight", async () => {
-    const mockClient = {} as Anthropic;
-    const tracked = trackUpdates();
-    const agent = createAgent(mockClient, undefined, tracked);
-
+    const mockClient = new MockAnthropicClient();
+    const agent = createAgent(mockClient);
     agent.abort();
     await delay(0);
-
-    expect(tracked.updates).toBe(0);
     expect(agent.phase).toEqual({ type: "idle" });
+    expect(agent.log.messages).toEqual([]);
+    expect(mockClient.streams).toEqual([]);
   });
-
   it("resolves the turn as aborted when the stream is active", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
@@ -1300,6 +1182,7 @@ describe("streaming block", () => {
     await delay(0);
 
     // Streaming should have produced further update notifications
+    await delay(50);
     expect(tracked.updates).toBeGreaterThan(initialCount);
 
     stream.finishResponse("end_turn");
@@ -1432,7 +1315,7 @@ describe("web search result preservation", () => {
     ]);
 
     // Check that the native messages sent to the API contain the web search result
-    const stream2 = await mockClient.awaitStream();
+    const stream2 = await awaitNextStream(mockClient, 1);
     const sentMessages = stream2.messages;
 
     // Messages: user, assistant (with server_tool_use + web_search_tool_result + text), user
@@ -1615,7 +1498,7 @@ describe("web search result preservation", () => {
         },
       ]);
 
-      const stream2 = await mockClient.awaitStream();
+      const stream2 = await awaitNextStream(mockClient, 1);
       stream2.streamText("Starting to respond...");
 
       // Abort the second request
@@ -1671,7 +1554,7 @@ describe("web search result preservation", () => {
         },
       ]);
 
-      const stream2 = await mockClient.awaitStream();
+      const stream2 = await awaitNextStream(mockClient, 1);
       stream2.streamText("Starting to respond...");
       await stream2.settle();
 
@@ -1720,7 +1603,7 @@ describe("web search result preservation", () => {
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      const stream2 = await mockClient.awaitStream();
+      const stream2 = await awaitNextStream(mockClient, 1);
       stream2.streamText("Complete response");
       stream2.finishResponse("end_turn", {
         inputTokens: 150,
@@ -1841,6 +1724,7 @@ const x = 1;
         },
       ]);
 
+      await mockClient.awaitStream();
       const state = agent.log;
       expect(state.messages).toHaveLength(1);
       expect(state.messages[0].content[0].type).toBe("context_update");
@@ -1865,6 +1749,7 @@ const x = 1;
         },
       ]);
 
+      await mockClient.awaitStream();
       const state = agent.log;
       expect(state.messages[0].content[0].type).toBe("text");
 
@@ -1894,6 +1779,7 @@ File context here
         },
       ]);
 
+      await mockClient.awaitStream();
       const state = agent.log;
       expect(state.messages).toHaveLength(1);
       expect(state.messages[0].content).toHaveLength(2);
@@ -1935,14 +1821,14 @@ File context here
         },
       ]);
 
-      const stream2 = await mockClient.awaitStream();
+      const stream2 = await awaitNextStream(mockClient, 1);
       stream2.streamText("I'm doing well!");
       stream2.finishResponse("end_turn");
       await stream2.finalMessage();
       await delay(0);
 
       // Clone the agent
-      const cloned = agent.clone(cloneHooks);
+      const cloned = agent.clone();
 
       // Verify cloned agent has same messages
       expect(cloned.log.messages).toHaveLength(4);
@@ -1984,7 +1870,7 @@ File context here
       await delay(0);
 
       // Clone the agent
-      const cloned = agent.clone(cloneHooks);
+      const cloned = agent.clone();
 
       // Add more messages to original
       const turn2 = agent.runTurn([
@@ -2034,7 +1920,7 @@ File context here
       });
 
       // Clone — currentAssistantMessage hasn't been created yet (no block-finished)
-      const cloned = agent.clone(cloneHooks);
+      const cloned = agent.clone();
       const clonedState = cloned.log;
 
       // Only the user message should be present (no assistant message)
@@ -2089,7 +1975,7 @@ File context here
       await stream.settle();
 
       // Clone while tool_use is in-progress (in currentAnthropicBlock)
-      const cloned = agent.clone(cloneHooks);
+      const cloned = agent.clone();
       const clonedState = cloned.log;
 
       // Should have user + assistant with just the finalized text
@@ -2130,7 +2016,7 @@ File context here
       expect(agent.phase.type).toBe("streaming");
 
       // Clone — server_tool_use should be dropped, leaving empty assistant → removed
-      const cloned = agent.clone(cloneHooks);
+      const cloned = agent.clone();
       const clonedState = cloned.log;
 
       expect(clonedState.messages).toHaveLength(1);
@@ -2185,7 +2071,7 @@ File context here
       });
 
       // Clone while the tool results are still outstanding
-      const cloned = agent.clone(cloneHooks);
+      const cloned = agent.clone();
       const clonedState = cloned.log;
 
       // Should have: user, assistant (text + tool_use), user (error tool_result)
@@ -2245,7 +2131,7 @@ File context here
       await stream.settle();
 
       // Clone mid-stream
-      const cloned = agent.clone(cloneHooks);
+      const cloned = agent.clone();
 
       // Continue streaming on source
       stream.streamText("Second part");
@@ -2297,7 +2183,7 @@ File context here
       await delay(0);
 
       // Clone the agent
-      const cloned = agent.clone(cloneHooks);
+      const cloned = agent.clone();
 
       // Verify stop reason is preserved
       const clonedState = cloned.log;
@@ -2325,7 +2211,7 @@ File context here
       await delay(0);
 
       // Clone the agent
-      const cloned = agent.clone(cloneHooks);
+      const cloned = agent.clone();
 
       // Start a turn on the clone; the input is appended immediately
       const clonedTurn = cloned.runTurn([
@@ -2377,7 +2263,7 @@ File context here
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      stream = await mockClient.awaitStream();
+      stream = await awaitNextStream(mockClient, 1);
       stream.streamText("A2");
       stream.finishResponse("end_turn");
       await turn2;
@@ -2551,7 +2437,7 @@ File context here
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         },
       ]);
-      stream = await mockClient.awaitStream();
+      stream = await awaitNextStream(mockClient, 1);
       stream.streamText("A2");
       stream.finishResponse("end_turn");
       await turn2;

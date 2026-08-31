@@ -373,8 +373,6 @@ describe("OpenAI provider wiring", () => {
           model: "gpt-5.1-codex",
           systemPrompt: "hi",
           tools: [],
-          executeTools: () =>
-            Promise.resolve({ type: "continue", results: new Map() }),
           onUpdate: () => {},
         }),
       ).toThrow(/gpt-5\.4/);

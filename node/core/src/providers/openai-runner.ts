@@ -22,6 +22,7 @@ import type {
   AgentOptions,
   AgentPhase,
   BeforeRequestDecision,
+  FinalizeReason,
   NativeInferenceManager,
   NativeMessageIdx,
   OnBeforeRequest,
@@ -31,6 +32,7 @@ import type {
   ProviderToolResult,
   RequestedTool,
   RequestResult,
+  RetryStatus,
   StreamStopReason,
   ToolExecutor,
   ToolOutcome,
@@ -99,17 +101,22 @@ type AttemptResult =
   | { type: "error"; error: Error };
 
 /** Temporary: the loop still living in this class takes its collaborators as
- * hooks. It goes away when the loop does; `Agent` never supplies these. */
+ * arguments to `runTurn`. It goes away when the loop does; `Agent` drives
+ * `sendRequest` and never supplies these. */
 export type LegacyRunnerHooks = {
   executeTools: ToolExecutor;
-  onUpdate: () => void;
   onBeforeRequest?: OnBeforeRequest | undefined;
 };
 
 export class OpenAIRunner implements NativeInferenceManager {
   /** Legacy: mirrored for the loop below. `Agent` reads its own phase. */
   phase: AgentPhase = { type: "idle" };
-  private requestInFlight = false;
+  /** What this runner is doing. One field, so `turnInFlight && requestInFlight`
+   * is not representable and `abort()` has one thing to test. */
+  private activity:
+    | { type: "idle" }
+    | { type: "legacy-turn" }
+    | { type: "request" } = { type: "idle" };
   private onRequestUpdate: OnRequestUpdate | undefined;
   /** ProviderMessage[] is the single source of truth; the request body is
    * derived from it on every turn (see `createStreamParameters`). */
@@ -133,8 +140,6 @@ export class OpenAIRunner implements NativeInferenceManager {
   private aborted = false;
   private retryAbortController: AbortController | undefined;
   private tickInterval: ReturnType<typeof setInterval> | undefined;
-  /** True between the start and the settling of a `runTurn` call. */
-  private turnInFlight = false;
 
   /** Stable for the life of this agent (and its clones) so every turn of the
    * conversation routes to the same prompt-cache shard. */
@@ -430,7 +435,7 @@ export class OpenAIRunner implements NativeInferenceManager {
   }
 
   abort(): void {
-    if (!this.turnInFlight && !this.requestInFlight) return;
+    if (this.activity.type === "idle") return;
     this.aborted = true;
     this.retryAbortController?.abort();
     this.stream?.controller.abort();
@@ -446,9 +451,9 @@ export class OpenAIRunner implements NativeInferenceManager {
     this.notify();
   }
 
-  clone(hooks?: LegacyRunnerHooks): OpenAIRunner {
+  clone(): OpenAIRunner {
     const cloned = new OpenAIRunner(
-      { ...this.options, onBeforeRequest: undefined, ...(hooks ?? {}) },
+      this.options,
       this.client,
       this.openaiOptions,
     );
@@ -464,17 +469,20 @@ export class OpenAIRunner implements NativeInferenceManager {
   // Streaming
   // -------------------------------------------------------------------------
 
-  async runTurn(input: AgentInput[]): Promise<TurnResult> {
-    if (this.turnInFlight) {
+  async runTurn(
+    input: AgentInput[],
+    hooks: LegacyRunnerHooks,
+  ): Promise<TurnResult> {
+    if (this.activity.type !== "idle") {
       throw new Error("runTurn called while a turn is already in flight");
     }
-    this.turnInFlight = true;
+    this.activity = { type: "legacy-turn" };
     this.aborted = false;
     this.startTicker();
     try {
-      return await this.runLoop(input);
+      return await this.runLoop(input, hooks);
     } finally {
-      this.turnInFlight = false;
+      this.activity = { type: "idle" };
       this.aborted = false;
       this.stream = undefined;
       this.phase = { type: "idle" };
@@ -493,7 +501,10 @@ export class OpenAIRunner implements NativeInferenceManager {
 
   /** Alternates between inference and tool execution until something ends the
    * turn. This is the only thing that drives the agent forward. */
-  private async runLoop(initialInput: AgentInput[]): Promise<TurnResult> {
+  private async runLoop(
+    initialInput: AgentInput[],
+    hooks: LegacyRunnerHooks,
+  ): Promise<TurnResult> {
     let pending: AgentInput[] | undefined = initialInput;
     while (true) {
       if (this.aborted) return this.finishAbort();
@@ -501,8 +512,8 @@ export class OpenAIRunner implements NativeInferenceManager {
       // Not `await hook?.()`: with no hook there is nothing to wait for, and
       // an unconditional await would push the request a tick further out.
       const before = this.logExtent();
-      const decision: BeforeRequestDecision = this.options.onBeforeRequest
-        ? await this.options.onBeforeRequest()
+      const decision: BeforeRequestDecision = hooks.onBeforeRequest
+        ? await hooks.onBeforeRequest()
         : { type: "proceed" };
       // After the gate, so the owner's injections sit ahead of the caller's
       // own content — and in the same user message as them, but not folded
@@ -549,13 +560,9 @@ export class OpenAIRunner implements NativeInferenceManager {
       };
       this.options.onUpdate();
 
-      const executeTools = this.options.executeTools;
-      if (!executeTools) {
-        throw new Error("legacy runLoop requires an executeTools hook");
-      }
       let toolOutcome: ToolOutcome;
       try {
-        toolOutcome = await executeTools(requested);
+        toolOutcome = await hooks.executeTools(requested);
       } catch (error) {
         // A rejecting executor is still a turn that must leave every tool_use
         // answered, so fall through with no results and let the fill do it.
@@ -603,12 +610,12 @@ export class OpenAIRunner implements NativeInferenceManager {
 
   /** One provider request, including the retry/backoff budget. */
   async sendRequest(onUpdate: OnRequestUpdate): Promise<RequestResult> {
-    if (this.requestInFlight) {
+    if (this.activity.type !== "idle") {
       throw new Error(
         "sendRequest called while a request is already in flight",
       );
     }
-    this.requestInFlight = true;
+    this.activity = { type: "request" };
     this.aborted = false;
     this.onRequestUpdate = onUpdate;
     try {
@@ -622,16 +629,14 @@ export class OpenAIRunner implements NativeInferenceManager {
       }
       return outcome;
     } finally {
-      this.requestInFlight = false;
+      this.activity = { type: "idle" };
       this.onRequestUpdate = undefined;
       this.stream = undefined;
       this.phase = { type: "idle" };
     }
   }
 
-  finalize(
-    reason: { type: "aborted" } | { type: "error"; error: Error },
-  ): void {
+  finalize(reason: FinalizeReason): void {
     if (reason.type === "aborted") {
       this.update({ type: "stream-aborted" });
     } else {
@@ -715,7 +720,7 @@ export class OpenAIRunner implements NativeInferenceManager {
         block: undefined,
         retry: undefined,
       };
-      this.onRequestUpdate?.({ type: "retry", retry: undefined });
+      this.onRequestUpdate?.({ type: "attempt-started" });
       this.options.onUpdate();
 
       const result = await attempt();
@@ -740,20 +745,19 @@ export class OpenAIRunner implements NativeInferenceManager {
       }
 
       const delay = getRetryDelay(attemptNum);
+      const retry: RetryStatus = {
+        attempt: attemptNum + 1,
+        nextRetryAt: new Date(Date.now() + delay),
+        error: result.error,
+      };
       this.phase = {
         type: "streaming",
         startedAt: startTime,
         lastEventTime: new Date(),
         block: undefined,
-        retry: {
-          attempt: attemptNum + 1,
-          nextRetryAt: new Date(Date.now() + delay),
-          error: result.error,
-        },
+        retry,
       };
-      if (this.phase.type === "streaming") {
-        this.onRequestUpdate?.({ type: "retry", retry: this.phase.retry });
-      }
+      this.onRequestUpdate?.({ type: "retry-scheduled", retry });
       this.options.onUpdate();
 
       this.retryAbortController = new AbortController();

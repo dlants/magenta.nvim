@@ -18,7 +18,11 @@ import type {
   AgentInput,
   AgentOptions,
   NativeInferenceManager,
+  NativeMessageIdx,
   Provider,
+  RequestedTool,
+  ToolExecutor,
+  ToolOutcome,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
@@ -169,8 +173,16 @@ export function createTestAgent(opts?: {
   getHooks?: () => AgentHooks;
   context?: Partial<AgentContext>;
   anthropicOptions?: Partial<AnthropicRunnerOptions>;
+  /** Stand in for real tool execution. Tests about the loop's handling of
+   * tool outcomes supply this instead of wiring up real tools. */
+  executeTools?: ToolExecutor;
+  /** Share a client with another agent, so a test can watch one stream of
+   * requests across both. */
+  mockClient?: MockAnthropicClient;
+  /** Build on a copy of an existing conversation instead of a fresh one. */
+  cloneFrom?: NativeInferenceManager;
 }): { agent: Agent; mockClient: MockAnthropicClient } {
-  const mockClient = new MockAnthropicClient();
+  const mockClient = opts?.mockClient ?? new MockAnthropicClient();
   const provider = createMockProvider(mockClient, opts?.anthropicOptions);
   const context: AgentContext = {
     ...baseTestContext(provider),
@@ -187,13 +199,30 @@ export function createTestAgent(opts?: {
     lastTurnResult: undefined,
     toolSpecs: [],
   };
-  const agent = new Agent(context, {
+  const executeTools = opts?.executeTools;
+  const AgentClass = executeTools
+    ? class extends Agent {
+        protected override executeTools(
+          requests: ReadonlyArray<RequestedTool>,
+        ): Promise<ToolOutcome> {
+          return executeTools(requests);
+        }
+      }
+    : Agent;
+  const agent = new AgentClass(context, {
     threadId: "test-agent" as ThreadId,
     state,
     structuredToolResults: new Map(),
     getHooks: opts?.getHooks ?? (() => ({})),
     onUpdate: opts?.onUpdate ?? (() => {}),
-    runnerInit: { type: "new" },
+    runnerInit: opts?.cloneFrom
+      ? {
+          type: "cloned",
+          cloneFrom: opts.cloneFrom,
+          truncateTo: (opts.cloneFrom.log.messages.length -
+            1) as NativeMessageIdx,
+        }
+      : { type: "new" },
   });
   return { agent, mockClient };
 }

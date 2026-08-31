@@ -63,7 +63,14 @@ const noExecutor = () => {
 };
 
 /** Snapshot of what a single opening request produced, taken while the turn is
- * still in flight so the user message is visible before any cleanup. */
+ * still in flight so the user message is visible before any cleanup.
+ *
+ * The two sides are driven differently for now: anthropic goes through
+ * `Agent.runTurnLoop` while openai still has its own loop, so this compares
+ * the observable result of two drivers rather than one driver over two
+ * managers. Stage 2 puts openai on `sendRequest`, at which point the
+ * comparison holds by construction and `executorCalls` stops being a
+ * hardcoded 0 on the anthropic side. */
 type TurnSnapshot = {
   messages: ProviderMessage[];
   phaseDuringTurn: AgentPhase["type"];
@@ -99,16 +106,17 @@ async function openaiContent(): Promise<TurnSnapshot> {
     {
       ...sharedOptions,
       model: "gpt-5.4",
-      executeTools: () => {
-        executorCalls++;
-        return noExecutor();
-      },
       onUpdate: () => {},
     },
     client as unknown as OpenAIStreamingClient,
     { includeWebSearch: false, logger: noopLogger, validateInput },
   );
-  const turn = agent.runTurn(input);
+  const turn = agent.runTurn(input, {
+    executeTools: () => {
+      executorCalls++;
+      return noExecutor();
+    },
+  });
   const stream = await client.awaitStream();
   const phaseDuringTurn = agent.phase.type;
   const messages = snapshot(agent.log.messages);
@@ -213,23 +221,24 @@ describe("onBeforeRequest", () => {
       {
         ...sharedOptions,
         model: "gpt-5.4",
-        executeTools: emptyResults,
         onUpdate: () => {},
-        onBeforeRequest: () => {
-          calls++;
-          // The gate fires on the opening request too; this one holds the
-          // continuation that would carry the tool results.
-          return Promise.resolve(
-            calls === 1
-              ? { type: "proceed" as const }
-              : { type: "suspend" as const, reason: held },
-          );
-        },
       },
       client as unknown as OpenAIStreamingClient,
       { includeWebSearch: false, logger: noopLogger, validateInput },
     );
-    const turn = runner.runTurn([text("go")]);
+    const turn = runner.runTurn([text("go")], {
+      executeTools: emptyResults,
+      onBeforeRequest: () => {
+        calls++;
+        // The gate fires on the opening request too; this one holds the
+        // continuation that would carry the tool results.
+        return Promise.resolve(
+          calls === 1
+            ? { type: "proceed" as const }
+            : { type: "suspend" as const, reason: held },
+        );
+      },
+    });
     const stream = await client.awaitStream();
     stream.streamToolCall("tool-1", "get_files", {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -249,7 +258,6 @@ describe("appendUserMessage coalescing", () => {
       {
         ...sharedOptions,
         model: "gpt-5.4",
-        executeTools: noExecutor,
         onUpdate: () => {},
       },
       new MockOpenAIClient() as unknown as OpenAIStreamingClient,

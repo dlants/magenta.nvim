@@ -174,6 +174,12 @@ export interface AgentDeps {
 
 /** What the before-request hooks produced, for a caller that wants to place it
  * itself. */
+/** What the gate decided, plus whether it put anything in the log. */
+type GateOutcome = {
+  decision: BeforeRequestDecision;
+  appended: boolean;
+};
+
 type ComposedBeforeRequest =
   | { type: "suspend"; reason: SuspendReason; injections: AgentInput[] }
   | {
@@ -186,8 +192,12 @@ export class Agent {
   public state: ThreadState;
   /** The provider-specific conversation. `Agent` owns the loop that drives it. */
   public manager: NativeInferenceManager;
-  /** The turn loop's state, and the only thing callers observe about it. */
-  public phase: AgentPhase = { type: "idle" };
+  /** The turn loop's state, and the only thing callers observe about it. Only
+   * the loop writes it; callers read it through `getProviderStatus`. */
+  private currentPhase: AgentPhase = { type: "idle" };
+  get phase(): AgentPhase {
+    return this.currentPhase;
+  }
   public readonly structuredToolResults: Map<
     ToolRequestId,
     ToolStructuredResult
@@ -336,7 +346,7 @@ export class Agent {
   }
 
   getProviderStatus(): AgentPhase {
-    return this.phase;
+    return this.currentPhase;
   }
 
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
@@ -453,7 +463,7 @@ export class Agent {
     } finally {
       this.turnInFlight = false;
       this.abortRequested = false;
-      this.phase = { type: "idle" };
+      this.currentPhase = { type: "idle" };
       this.stopTicker();
       // At rest there must be no update still queued behind the throttle: the
       // final notification is this one.
@@ -480,8 +490,8 @@ export class Agent {
         this.scheduleUpdate();
         pending = undefined;
       }
-      if (gate.type === "suspend") {
-        return { type: "suspended", reason: gate.reason };
+      if (gate.decision.type === "suspend") {
+        return { type: "suspended", reason: gate.decision.reason };
       }
       if (this.abortRequested) return this.finishTurnAbort();
 
@@ -505,7 +515,7 @@ export class Agent {
 
       if (this.abortRequested) return this.finishTurnAbort();
 
-      this.phase = {
+      this.currentPhase = {
         type: "running_tools",
         requested,
         truncated: outcome.stopReason === "max_tokens",
@@ -538,7 +548,7 @@ export class Agent {
   /** One provider request. Retries live inside it and stay inside the
    * `streaming` phase, so they are never observable as a transition. */
   private async streamOneResponse(): Promise<RequestResult> {
-    this.phase = {
+    this.currentPhase = {
       type: "streaming",
       startedAt: new Date(),
       lastEventTime: new Date(),
@@ -554,18 +564,22 @@ export class Agent {
    * `lastEventTime`; the block itself is mirrored onto the phase and read at
    * render time. */
   private handleRequestUpdate(update: RequestUpdate): void {
-    if (this.phase.type !== "streaming") return;
-    this.phase.lastEventTime = new Date();
+    if (this.currentPhase.type !== "streaming") return;
+    this.currentPhase.lastEventTime = new Date();
     switch (update.type) {
       case "streaming-block":
-        this.phase.block = update.streamingBlock;
+        this.currentPhase.block = update.streamingBlock;
         break;
       case "block-finished":
-        this.phase.block = undefined;
+        this.currentPhase.block = undefined;
         break;
-      case "retry":
-        this.phase.retry = update.retry;
-        this.phase.block = undefined;
+      case "retry-scheduled":
+        this.currentPhase.retry = update.retry;
+        this.currentPhase.block = undefined;
+        break;
+      case "attempt-started":
+        this.currentPhase.retry = undefined;
+        this.currentPhase.block = undefined;
         break;
       default:
         assertUnreachable(update);
@@ -575,7 +589,7 @@ export class Agent {
   /** The single terminal abort transition: leave the history well-formed and
    * mark why it stops here. */
   private finishTurnAbort(): TurnResult {
-    this.phase = { type: "aborting" };
+    this.currentPhase = { type: "aborting" };
     this.deps.onUpdate();
     this.manager.finalize({ type: "aborted" });
     this.manager.appendUserMessage([
@@ -677,7 +691,9 @@ export class Agent {
     };
   }
 
-  private async executeTools(
+  /** Overridable so a test can stand in for real tool execution; production
+   * never replaces it. */
+  protected async executeTools(
     requests: ReadonlyArray<RequestedTool>,
   ): Promise<ToolOutcome> {
     const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
@@ -814,7 +830,9 @@ export class Agent {
     const turn = this.currentTurn;
     if (turn) {
       await turn;
-    } else {
+    } else if (!this.turnInFlight) {
+      // Nothing in flight to unwind: settle here. A turn driven directly
+      // through `runTurnLoop` unwinds itself, and its caller awaits it.
       this.finishAbort();
     }
   }
@@ -925,9 +943,7 @@ export class Agent {
    * request: on the opening request it lands ahead of the caller's own
    * content, and on a continuation it folds into the message carrying the
    * tool results. */
-  private async onBeforeRequest(): Promise<
-    BeforeRequestDecision & { appended: boolean }
-  > {
+  private async onBeforeRequest(): Promise<GateOutcome> {
     const isOpeningRequest = this.openingRequestPending;
     this.openingRequestPending = false;
     // Content seeded for this turn leads its opening request, ahead of the
@@ -949,6 +965,7 @@ export class Agent {
       default:
         assertUnreachable(composed);
     }
+    // Whether anything landed decides where the caller's own content goes.
     const appended = content.length > 0;
     if (appended) {
       // The opening request of a turn starts its own user message; a
@@ -959,9 +976,12 @@ export class Agent {
       );
     }
     if (composed.type === "suspend") {
-      return { type: "suspend", reason: composed.reason, appended };
+      return {
+        decision: { type: "suspend", reason: composed.reason },
+        appended,
+      };
     }
-    return { type: "proceed", appended };
+    return { decision: { type: "proceed" }, appended };
   }
   /** Set by `submit` for the turn's opening request and consumed by the first
    * gate; later gates in the same turn are continuations by construction — the

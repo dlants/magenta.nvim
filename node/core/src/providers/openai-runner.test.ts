@@ -28,7 +28,6 @@ import {
  * through it. */
 const cloneHooks: LegacyRunnerHooks = {
   executeTools: () => Promise.resolve({ type: "continue", results: new Map() }),
-  onUpdate: () => {},
 };
 
 const noopLogger = {
@@ -96,7 +95,6 @@ function setup(
       model: "gpt-5.4",
       systemPrompt: "be helpful",
       tools: [spec],
-      executeTools,
       onUpdate: () => {
         state.updates++;
       },
@@ -108,7 +106,7 @@ function setup(
       validateInput,
     },
   );
-  return { client, agent, calls, state };
+  return { client, agent, calls, state, hooks: { executeTools } };
 }
 
 /** `runTurn` opens its stream synchronously, so the turn promise and the
@@ -116,9 +114,10 @@ function setup(
 async function startTurn(
   client: MockOpenAIClient,
   agent: OpenAIRunner,
+  hooks: LegacyRunnerHooks,
   text = "hello",
 ): Promise<{ turn: Promise<TurnResult>; stream: MockResponseStream }> {
-  const turn = agent.runTurn([userText(text)]);
+  const turn = agent.runTurn([userText(text)], hooks);
   const stream = await client.awaitStream();
   return { turn, stream };
 }
@@ -153,8 +152,8 @@ function toolUseBlocks(agent: OpenAIRunner) {
 
 describe("OpenAIRunner text turns", () => {
   it("commits each completed item as it arrives, before the turn ends", async () => {
-    const { client, agent } = setup({ includeWebSearch: true });
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, hooks } = setup({ includeWebSearch: true });
+    const { turn, stream } = await startTurn(client, agent, hooks);
     stream.streamWebSearchCall("denis lantsman");
     await stream.settle();
     // Without incremental commits the message only materializes at
@@ -172,8 +171,8 @@ describe("OpenAIRunner text turns", () => {
   });
 
   it("exposes completed blocks alongside the in-flight one mid-stream", async () => {
-    const { client, agent } = setup({ includeWebSearch: true });
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, hooks } = setup({ includeWebSearch: true });
+    const { turn, stream } = await startTurn(client, agent, hooks);
     stream.streamReasoningSummary(["let me look that up"]);
     stream.streamWebSearchCall("denis lantsman");
     // A message item that has started but not finished: what the view shows as
@@ -213,9 +212,9 @@ describe("OpenAIRunner text turns", () => {
   });
 
   it("streams text, calls onUpdate, and resolves the turn with usage recorded", async () => {
-    const { client, agent, state } = setup();
+    const { client, agent, state, hooks } = setup();
 
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent, hooks);
     expect(stream.instructions).toBe("be helpful");
 
     stream.streamText("hi there");
@@ -244,8 +243,8 @@ describe("OpenAIRunner text turns", () => {
   });
 
   it("exposes the partially accumulated text as the streaming block", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = await startTurn(client, agent, hooks);
     stream.emitEvent({
       type: "response.output_item.added",
       output_index: 0,
@@ -273,8 +272,8 @@ describe("OpenAIRunner text turns", () => {
   });
 
   it("sends one stable prompt_cache_key for every turn and its clones", async () => {
-    const { client, agent } = setup();
-    const first = await startTurn(client, agent);
+    const { client, agent, hooks } = setup();
+    const first = await startTurn(client, agent, hooks);
     const key = first.stream.params.prompt_cache_key;
     expect(typeof key).toBe("string");
     first.stream.streamText("one");
@@ -282,13 +281,13 @@ describe("OpenAIRunner text turns", () => {
     first.stream.finishResponse();
     await first.turn;
 
-    const second = await startTurn(client, agent, "again");
+    const second = await startTurn(client, agent, hooks, "again");
     expect(second.stream.params.prompt_cache_key).toBe(key);
     second.stream.finishResponse();
     await second.turn;
 
-    const cloned = agent.clone(cloneHooks);
-    const third = await startTurn(client, cloned, "clone");
+    const cloned = agent.clone();
+    const third = await startTurn(client, cloned, cloneHooks, "clone");
     expect(third.stream.params.prompt_cache_key).toBe(key);
     third.stream.finishResponse();
     await third.turn;
@@ -297,14 +296,14 @@ describe("OpenAIRunner text turns", () => {
 
 describe("OpenAIRunner tool calls", () => {
   it("surfaces a tool_use block and echoes the call plus its output", async () => {
-    const { client, agent, calls } = setup({
+    const { client, agent, calls, hooks } = setup({
       executeTools: (requests) =>
         Promise.resolve({
           type: "continue",
           results: okResults(requests, "file contents"),
         }),
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent, hooks);
 
     stream.streamToolCall("call_1", "get_files", {
       files: [{ filePath: "a.ts" }],
@@ -339,8 +338,8 @@ describe("OpenAIRunner tool calls", () => {
   });
 
   it("keys parallel tool calls on output_index", async () => {
-    const { client, agent, calls } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, calls, hooks } = setup();
+    const { turn, stream } = await startTurn(client, agent, hooks);
 
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     stream.streamToolCall("call_2", "get_files", { filePath: "b.ts" });
@@ -357,14 +356,14 @@ describe("OpenAIRunner tool calls", () => {
   });
 
   it("records the results and parks the agent when the executor suspends", async () => {
-    const { client, agent } = setup({
+    const { client, agent, hooks } = setup({
       executeTools: (requests) =>
         Promise.resolve({
           type: "suspend",
           results: okResults(requests, "yielded"),
         }),
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent, hooks);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -382,8 +381,8 @@ describe("OpenAIRunner tool calls", () => {
 
 describe("OpenAIRunner reasoning", () => {
   it("folds many summary parts into one thinking block", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = await startTurn(client, agent, hooks);
 
     stream.streamReasoningSummary(["first", "second", "third"], {
       itemId: "rs_1",
@@ -404,7 +403,7 @@ describe("OpenAIRunner reasoning", () => {
       providerMetadata: { provider: "openai", itemId: "rs_1" },
     });
 
-    const next = await startTurn(client, agent, "more");
+    const next = await startTurn(client, agent, hooks, "more");
     const reasoning = next.stream.inputItemsOfType("reasoning");
     expect(reasoning).toHaveLength(1);
     expect(reasoning[0].encrypted_content).toBe("enc-1");
@@ -413,8 +412,8 @@ describe("OpenAIRunner reasoning", () => {
   });
 
   it("round-trips an empty-summary reasoning item", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = await startTurn(client, agent, hooks);
 
     stream.streamEmptyReasoning("enc-empty", "rs_empty");
     stream.streamText("ok");
@@ -427,7 +426,7 @@ describe("OpenAIRunner reasoning", () => {
     );
     expect(thinking).toMatchObject({ thinking: "", signature: "enc-empty" });
 
-    const next = await startTurn(client, agent, "again");
+    const next = await startTurn(client, agent, hooks, "again");
     expect(next.stream.inputItemsOfType("reasoning")[0]).toMatchObject({
       id: "rs_empty",
       encrypted_content: "enc-empty",
@@ -440,8 +439,8 @@ describe("OpenAIRunner reasoning", () => {
 
 describe("OpenAIRunner web search", () => {
   it("keeps the search call and its annotations across turns", async () => {
-    const { client, agent } = setup({ includeWebSearch: true });
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, hooks } = setup({ includeWebSearch: true });
+    const { turn, stream } = await startTurn(client, agent, hooks);
 
     const annotation: OpenAI.Responses.ResponseOutputText.URLCitation = {
       type: "url_citation",
@@ -468,7 +467,7 @@ describe("OpenAIRunner web search", () => {
       url: "https://example.com",
     });
 
-    const next = await startTurn(client, agent, "thanks");
+    const next = await startTurn(client, agent, hooks, "thanks");
     expect(next.stream.inputItemsOfType("web_search_call")[0]).toMatchObject({
       id: "ws_1",
     });
@@ -479,8 +478,8 @@ describe("OpenAIRunner web search", () => {
 
 describe("OpenAIRunner abort", () => {
   it("unwinds the turn when the stream just ends", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = await startTurn(client, agent, hooks);
 
     stream.emitEvent({
       type: "response.output_item.added",
@@ -516,8 +515,8 @@ describe("OpenAIRunner abort", () => {
   });
 
   it("drops a tool call that was never dispatched", async () => {
-    const { client, agent, calls } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, calls, hooks } = setup();
+    const { turn, stream } = await startTurn(client, agent, hooks);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
 
@@ -530,11 +529,11 @@ describe("OpenAIRunner abort", () => {
   });
 
   it("unwinds when the executor reports that it aborted its tools", async () => {
-    const { client, agent } = setup({
+    const { client, agent, hooks } = setup({
       executeTools: () =>
         Promise.resolve({ type: "aborted", results: new Map() }),
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent, hooks);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -556,11 +555,11 @@ describe("OpenAIRunner abort", () => {
 
 describe("OpenAIRunner invariant guards", () => {
   it("answers an id the executor omitted", async () => {
-    const { client, agent } = setup({
+    const { client, agent, hooks } = setup({
       executeTools: () =>
         Promise.resolve({ type: "continue", results: new Map() }),
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent, hooks);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -577,10 +576,10 @@ describe("OpenAIRunner invariant guards", () => {
   });
 
   it("answers every id when the executor rejects", async () => {
-    const { client, agent } = setup({
+    const { client, agent, hooks } = setup({
       executeTools: () => Promise.reject(new Error("executor blew up")),
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent, hooks);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -594,10 +593,10 @@ describe("OpenAIRunner invariant guards", () => {
   });
 
   it("rejects a second runTurn while one is in flight", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = await startTurn(client, agent, hooks);
 
-    await expect(agent.runTurn([userText("again")])).rejects.toThrow(
+    await expect(agent.runTurn([userText("again")], hooks)).rejects.toThrow(
       /already in flight/,
     );
     // The rejected call must not have perturbed the history.
@@ -612,14 +611,14 @@ describe("OpenAIRunner invariant guards", () => {
 
 describe("OpenAIRunner clone", () => {
   it("returns an idle deep copy with history intact", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = await startTurn(client, agent, hooks);
     stream.streamText("original");
     await stream.settle();
     stream.finishResponse();
     await turn;
 
-    const cloned = agent.clone(cloneHooks);
+    const cloned = agent.clone();
     expect(cloned.phase).toEqual({ type: "idle" });
     expect(cloned.log.messages).toHaveLength(2);
     expect(cloned.log.messages[1].content[0]).toMatchObject({
@@ -627,7 +626,12 @@ describe("OpenAIRunner clone", () => {
       text: "original",
     });
 
-    const clonedTurn = await startTurn(client, cloned, "only in the clone");
+    const clonedTurn = await startTurn(
+      client,
+      cloned,
+      cloneHooks,
+      "only in the clone",
+    );
     expect(agent.log.messages).toHaveLength(2);
     expect(cloned.log.messages).toHaveLength(3);
     clonedTurn.stream.finishResponse();
@@ -638,16 +642,16 @@ describe("OpenAIRunner clone", () => {
     // Cloning mid-tool-execution is the one moment a tool_use has no result
     // yet, which is exactly when a fork can happen.
     let midToolClone: OpenAIRunner | undefined;
-    const { client, agent } = setup({
+    const { client, agent, hooks } = setup({
       executeTools: (requests) => {
-        midToolClone = agent.clone(cloneHooks);
+        midToolClone = agent.clone();
         return Promise.resolve({
           type: "continue",
           results: okResults(requests),
         });
       },
     });
-    const { turn, stream } = await startTurn(client, agent);
+    const { turn, stream } = await startTurn(client, agent, hooks);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -667,15 +671,15 @@ describe("OpenAIRunner clone", () => {
 
 describe("OpenAIRunner truncation", () => {
   it("keeps messages up to the given index", async () => {
-    const { client, agent } = setup();
-    const first = await startTurn(client, agent);
+    const { client, agent, hooks } = setup();
+    const first = await startTurn(client, agent, hooks);
     first.stream.streamText("first");
     await first.stream.settle();
     first.stream.finishResponse();
     await first.turn;
 
     const idx = agent.getNativeMessageIdx();
-    const second = await startTurn(client, agent, "second");
+    const second = await startTurn(client, agent, hooks, "second");
     second.stream.streamText("second answer");
     await second.stream.settle();
     second.stream.finishResponse();
@@ -688,8 +692,8 @@ describe("OpenAIRunner truncation", () => {
   });
 
   it("drops a tool_use severed from its tool_result", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = await startTurn(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = await startTurn(client, agent, hooks);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
     stream.finishResponse();
@@ -706,7 +710,7 @@ describe("OpenAIRunner truncation", () => {
     agent.truncateMessages(assistantIdx);
     expect(toolUseBlocks(agent)).toHaveLength(0);
 
-    const next = await startTurn(client, agent, "carry on");
+    const next = await startTurn(client, agent, hooks, "carry on");
     expect(next.stream.inputItemsOfType("function_call")).toHaveLength(0);
     next.stream.finishResponse();
     await next.turn;

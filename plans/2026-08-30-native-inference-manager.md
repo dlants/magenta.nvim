@@ -277,6 +277,52 @@ Deviations worth recording:
 - `runTurnLoop` flushes the throttled update before its final notification, so
   a settled turn leaves nothing queued.
 
+### Review follow-up (stage 1)
+
+- The root `node/providers/anthropic-runner.test.ts` and its hand-written
+  `TestAgent` loop are gone. The file moved to
+  `node/core/src/providers/anthropic-manager.test.ts` and its `TestAgent` is now
+  a thin adapter over the real `Agent` (`runTurnLoop`, `phase`, `manager.log`),
+  so no test drives a second copy of the loop. It lives in core because that is
+  where both the manager and `createTestAgent` are.
+- `Agent.executeTools` is `protected`; `createTestAgent({ executeTools })`
+  overrides it in a local subclass. That is the only test seam — production
+  never replaces it, and no hook field returns to `AgentOptions`.
+- `createTestAgent` also accepts `mockClient` (share a client across agents) and
+  `cloneFrom` (build on a copy of an existing conversation).
+- Moving to the real loop changed three things in those tests: the caller's
+  content is appended *after* the gate, so a log read must first await the
+  request; `onUpdate` is throttled at 32ms, so counting assertions need more
+  than a microtask; and `mockClient.awaitStream()` returns the *last* stream, so
+  the second request of a turn is polled by index.
+- `Agent.abortAndWait` no longer calls `finishAbort()` when a turn is in flight
+  without a `currentTurn` — a turn driven directly through `runTurnLoop` unwinds
+  itself. Consequently `abort()` with nothing in flight still settles and
+  notifies, which one test now asserts as "no request, empty log" instead of
+  "no notifications".
+- `agent.test.ts` covers the loop's tail directly: gate injections coalescing
+  into the caller's message, a rejecting executor still answering every
+  `tool_use`, an executor reporting `aborted` unwinding once, and a failed
+  request finalizing then failing the turn.
+- Type representation:
+  - `AgentOptions` no longer carries `executeTools`/`onBeforeRequest`. The
+    OpenAI legacy loop takes `LegacyRunnerHooks` as an argument to `runTurn`,
+    so the runtime "legacy runLoop requires an executeTools hook" throw is gone
+    and `clone()` matches the interface exactly.
+  - `OpenAIRunner`'s `turnInFlight`/`requestInFlight` pair became one `activity`
+    field (`idle | legacy-turn | request`).
+  - `RequestUpdate`'s retry variant split into `retry-scheduled` and
+    `attempt-started`; the `undefined` convention is gone.
+  - `FinalizeReason` is named and exported; both managers use it.
+  - `Agent.phase` is a getter over a private field.
+  - The gate returns `{ decision, appended }` rather than bolting `appended`
+    onto `BeforeRequestDecision`.
+- `openai-runner-retry.test.ts` covers the new manager surface: a retry inside
+  one `sendRequest` (with `retry-scheduled` / `attempt-started` reported), and
+  an abort mid-request that leaves the runner reusable for a second request.
+- `runner-parity.test.ts` documents that its two sides are driven differently
+  until stage 2.
+
 
 - Goal: the loop, retry budget, ticker and `AgentPhase` live in `Agent`. `AnthropicRunner` becomes `AnthropicInferenceManager` (no phase, no loop, no hooks). `Runner` / `RunnerHooks` are gone; `Agent` holds a manager. Because `Agent` changes in this stage, the openai runner has to keep working — during this stage `OpenAIRunner` is adapted to the `NativeInferenceManager` interface with its own loop code left dead/unreachable, and stage 2 deletes it.
 - Tests:

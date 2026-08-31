@@ -376,9 +376,10 @@ export type RequestResult =
 export type RequestUpdate =
   | { type: "streaming-block"; streamingBlock: StreamingBlock }
   | { type: "block-finished" }
-  /** A retryable failure; the manager is backing off and will try again.
-   * `undefined` when a fresh attempt starts, which clears the countdown. */
-  | { type: "retry"; retry: RetryStatus | undefined };
+  /** A retryable failure; the manager is backing off and will try again. */
+  | { type: "retry-scheduled"; retry: RetryStatus }
+  /** A fresh attempt is going out, which clears any retry countdown. */
+  | { type: "attempt-started" };
 
 export type OnRequestUpdate = (update: RequestUpdate) => void;
 
@@ -402,8 +403,13 @@ export interface NativeInferenceManager {
   abort(): void;
   /** Leave the history in a shape the provider will accept: no dangling
    * tool_use or half-streamed blocks. */
-  finalize(reason: { type: "aborted" } | { type: "error"; error: Error }): void;
+  finalize(reason: FinalizeReason): void;
 }
+
+/** Why a request stopped short of a completed response. */
+export type FinalizeReason =
+  | { type: "aborted" }
+  | { type: "error"; error: Error };
 export type OnBeforeRequest = () => Promise<BeforeRequestDecision>;
 export type BeforeRequestDecision =
   | { type: "proceed" }
@@ -412,10 +418,7 @@ export interface AgentOptions {
   model: string;
   systemPrompt: string;
   tools: ProviderToolSpec[];
-  /** Only the OpenAI manager's not-yet-extracted loop still reads these; they
-   * go away with it. `onUpdate` survives until the token count is preflight. */
-  executeTools?: ToolExecutor | undefined;
-  onBeforeRequest?: OnBeforeRequest | undefined;
+  /** Survives until the token count is preflight (stage 3). */
   onUpdate: () => void;
   thinking?: {
     enabled: boolean;

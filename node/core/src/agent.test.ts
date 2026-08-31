@@ -2939,4 +2939,97 @@ describe("Agent turn loop", () => {
     void agent.abort();
     await turn;
   });
+
+  it("injections from the gate ride the caller's own user message", async () => {
+    const { agent, mockClient } = createTestAgent({
+      getHooks: () => ({
+        onBeforeRequest: () =>
+          Promise.resolve({
+            type: "proceed" as const,
+            injections: [{ type: "text" as const, text: "injected" }],
+            submissions: [],
+          }),
+      }),
+    });
+    const turn = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+
+    const messages = agent.getProviderMessages();
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("user");
+    expect(
+      messages[0].content
+        .filter((c) => c.type === "text")
+        .map((c) => (c as { text: string }).text),
+    ).toEqual(["injected", "hello"]);
+
+    stream.finishResponse("end_turn");
+    await turn;
+  });
+
+  it("a rejecting executor still answers every tool_use", async () => {
+    const { agent, mockClient } = createTestAgent({
+      executeTools: () => Promise.reject(new Error("executor blew up")),
+    });
+    const turn = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/a.txt" }],
+    });
+    stream.finishResponse("tool_use");
+
+    const second = await pollUntil(() => {
+      const s = mockClient.streams[1];
+      if (!s) throw new Error("waiting for the continuation");
+      return s;
+    });
+    const results = agent
+      .getProviderMessages()
+      .flatMap((m) => m.content)
+      .filter((c) => c.type === "tool_result");
+    expect(results).toHaveLength(1);
+
+    second.finishResponse("end_turn");
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+  });
+
+  it("an executor that reports it aborted unwinds the turn once", async () => {
+    const { agent, mockClient } = createTestAgent({
+      executeTools: () =>
+        Promise.resolve({ type: "aborted" as const, results: new Map() }),
+    });
+    const turn = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/a.txt" }],
+    });
+    stream.finishResponse("tool_use");
+
+    expect(await turn).toEqual({ type: "aborted" });
+    const texts = agent
+      .getProviderMessages()
+      .flatMap((m) => m.content)
+      .filter((c) => c.type === "text")
+      .map((c) => (c as { text: string }).text);
+    expect(
+      texts.filter((text) => text.includes("aborted the previous")),
+    ).toHaveLength(1);
+    expect(mockClient.streams).toHaveLength(1);
+  });
+
+  it("a failed request finalizes the log and fails the turn", async () => {
+    const { agent, mockClient } = createTestAgent();
+    const turn = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    stream.streamText("half an answer");
+    await stream.settle();
+    stream.respondWithError(new Error("connection lost"));
+
+    const result = await turn;
+    expect(result.type).toBe("failed");
+    // Finalized: the half-streamed assistant turn is left in a shape the
+    // provider will accept on the next request.
+    expect(agent.phase).toEqual({ type: "idle" });
+    expect(mockClient.streams).toHaveLength(1);
+  });
 });

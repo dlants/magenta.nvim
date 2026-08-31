@@ -3,11 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolName } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
 import { MockOpenAIClient } from "./mock-openai-client.ts";
-import { OpenAIRunner, type OpenAIStreamingClient } from "./openai-runner.ts";
+import {
+  type LegacyRunnerHooks,
+  OpenAIRunner,
+  type OpenAIStreamingClient,
+} from "./openai-runner.ts";
 import {
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ProviderToolSpec,
   type RequestedTool,
+  type RequestUpdate,
   type ToolResults,
   type TurnResult,
 } from "./provider-types.ts";
@@ -47,19 +52,21 @@ function setup() {
       model: "gpt-5.4",
       systemPrompt: "be helpful",
       tools: [spec],
-      executeTools: (requests) => {
-        calls.push([...requests]);
-        return Promise.resolve({
-          type: "continue",
-          results: errorResults(requests),
-        });
-      },
       onUpdate: () => {},
     },
     client as unknown as OpenAIStreamingClient,
     { includeWebSearch: false, logger: noopLogger, validateInput },
   );
-  return { client, agent, calls };
+  const hooks: LegacyRunnerHooks = {
+    executeTools: (requests: ReadonlyArray<RequestedTool>) => {
+      calls.push([...requests]);
+      return Promise.resolve({
+        type: "continue" as const,
+        results: errorResults(requests),
+      });
+    },
+  };
+  return { client, agent, calls, hooks };
 }
 
 function apiError(status: number): APIError {
@@ -81,14 +88,18 @@ async function tick(times = 6): Promise<void> {
 function start(
   client: MockOpenAIClient,
   agent: OpenAIRunner,
+  hooks: LegacyRunnerHooks,
 ): { turn: Promise<TurnResult>; stream: ReturnType<typeof streamAt> } {
-  const turn = agent.runTurn([
-    {
-      type: "text",
-      text: "hello",
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    },
-  ]);
+  const turn = agent.runTurn(
+    [
+      {
+        type: "text",
+        text: "hello",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ],
+    hooks,
+  );
   return { turn, stream: streamAt(client, 0) };
 }
 
@@ -109,8 +120,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("retries a retryable error and discards the partial attempt", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = start(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = start(client, agent, hooks);
 
     stream.streamText("half an answer");
     await tick();
@@ -143,8 +154,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("surfaces a non-retryable error without retrying", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = start(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = start(client, agent, hooks);
     stream.respondWithError(apiError(400));
     await tick();
 
@@ -154,8 +165,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("treats response.failed as an error", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = start(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = start(client, agent, hooks);
     stream.emitEvent({
       type: "response.failed",
       response: {
@@ -173,8 +184,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("falls back to a generic message when response.failed carries no error", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = start(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = start(client, agent, hooks);
     stream.emitEvent({
       type: "response.failed",
       response: mockFailedResponse(),
@@ -189,8 +200,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("treats an `error` stream event as an error", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = start(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = start(client, agent, hooks);
     stream.emitEvent({
       type: "error",
       code: "rate_limit",
@@ -207,8 +218,8 @@ describe("OpenAIRunner retry", () => {
   });
 
   it("aborting during the backoff sleep unwinds the turn", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = start(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = start(client, agent, hooks);
     stream.respondWithError(apiError(503));
     await tick();
 
@@ -222,6 +233,69 @@ describe("OpenAIRunner retry", () => {
     expect(client.streams).toHaveLength(1);
   });
 });
+describe("OpenAIRunner sendRequest", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  /** What `Agent` does: seed the conversation, then issue one request. */
+  function send(client: MockOpenAIClient, agent: OpenAIRunner) {
+    const updates: RequestUpdate[] = [];
+    agent.appendUserMessage([
+      {
+        type: "text",
+        text: "hello",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ]);
+    const request = agent.sendRequest((update) => updates.push(update));
+    return { request, updates, stream: streamAt(client, 0) };
+  }
+  it("retries within one request and reports the countdown to the caller", async () => {
+    const { client, agent } = setup();
+    const { request, updates, stream } = send(client, agent);
+    stream.respondWithError(apiError(429));
+    await tick();
+    const scheduled = updates.filter((u) => u.type === "retry-scheduled");
+    expect(scheduled).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    // The fresh attempt clears the countdown.
+    expect(
+      updates.filter((u) => u.type === "attempt-started").length,
+    ).toBeGreaterThan(1);
+    const retry = streamAt(client, 1);
+    retry.streamText("the real answer");
+    await tick();
+    retry.finishResponse();
+    await tick();
+    expect(await request).toEqual({
+      type: "completed",
+      stopReason: "end_turn",
+      requested: [],
+    });
+  });
+  it("aborts an in-flight request and leaves the runner reusable", async () => {
+    const { client, agent } = setup();
+    const { request, stream } = send(client, agent);
+    stream.streamText("half an answer");
+    await tick();
+    agent.abort();
+    // The backend signals a cancellation only by closing the connection.
+    stream.abortMidstream();
+    await tick();
+    expect(await request).toEqual({ type: "aborted" });
+    expect(agent.phase).toEqual({ type: "idle" });
+    agent.finalize({ type: "aborted" });
+    // A second request must be issuable: the first one released the runner.
+    const second = agent.sendRequest(() => {});
+    await tick();
+    streamAt(client, 1).finishResponse();
+    await tick();
+    expect((await second).type).toBe("completed");
+  });
+});
 
 describe("OpenAIRunner incomplete responses", () => {
   beforeEach(() => {
@@ -232,8 +306,8 @@ describe("OpenAIRunner incomplete responses", () => {
   });
 
   it("maps max_output_tokens to max_tokens and still runs the tool call", async () => {
-    const { client, agent, calls } = setup();
-    const { turn, stream } = start(client, agent);
+    const { client, agent, calls, hooks } = setup();
+    const { turn, stream } = start(client, agent, hooks);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await tick();
     stream.finishIncomplete("max_output_tokens");
@@ -255,8 +329,8 @@ describe("OpenAIRunner incomplete responses", () => {
   });
 
   it("maps content_filter to content", async () => {
-    const { client, agent } = setup();
-    const { turn, stream } = start(client, agent);
+    const { client, agent, hooks } = setup();
+    const { turn, stream } = start(client, agent, hooks);
     stream.streamText("partial");
     await tick();
     stream.finishIncomplete("content_filter");

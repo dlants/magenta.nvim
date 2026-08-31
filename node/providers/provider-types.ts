@@ -4,6 +4,7 @@ export type {
   AgentOptions,
   AgentPhase,
   BeforeRequestDecision,
+  FinalizeReason,
   NativeInferenceManager,
   NativeMessageIdx,
   OnRequestUpdate,

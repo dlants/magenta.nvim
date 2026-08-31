@@ -24,6 +24,7 @@ import type {
   AgentInput,
   AgentLog,
   AgentOptions,
+  FinalizeReason,
   NativeInferenceManager,
   NativeMessageIdx,
   OnRequestUpdate,
@@ -490,9 +491,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       .map((block) => ({ id: block.id, request: block.request }));
   }
 
-  finalize(
-    reason: { type: "aborted" } | { type: "error"; error: Error },
-  ): void {
+  finalize(reason: FinalizeReason): void {
     this.currentRequest = undefined;
     this.cleanup(reason);
     this.currentAssistantMessage = undefined;
@@ -561,7 +560,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     let attempt = 0;
     while (true) {
       // Clear retry status when starting a new attempt
-      this.onRequestUpdate?.({ type: "retry", retry: undefined });
+      this.onRequestUpdate?.({ type: "attempt-started" });
       if (attempt > 0) {
         this.update({ type: "reset-attempt" });
       }
@@ -610,7 +609,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
 
       const delay = getRetryDelay(attempt);
       this.onRequestUpdate?.({
-        type: "retry",
+        type: "retry-scheduled",
         retry: {
           attempt: attempt + 1,
           nextRetryAt: new Date(Date.now() + delay),
@@ -776,7 +775,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
 
   clone(): AnthropicInferenceManager {
     const cloned = new AnthropicInferenceManager(
-      { ...this.options, onBeforeRequest: undefined },
+      this.options,
       this.client,
       this.anthropicOptions,
     );
@@ -863,9 +862,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
   /** Leave the message array in a shape the provider will accept after a turn
    * ended without the model finishing: drop incomplete blocks and answer every
    * tool_use that the executor never got to. */
-  private cleanup(
-    reason: { type: "aborted" } | { type: "error"; error: Error },
-  ): void {
+  private cleanup(reason: FinalizeReason): void {
     this.currentAnthropicBlock = undefined;
 
     const lastMessage = this.messages[this.messages.length - 1];
