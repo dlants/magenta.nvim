@@ -13,7 +13,10 @@ import {
 } from "./compaction/index.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { ProviderProfile } from "./provider-options.ts";
-import { AnthropicInferenceManager } from "./providers/anthropic-runner.ts";
+import {
+  ABORT_MARKER_TEXT,
+  AnthropicInferenceManager,
+} from "./providers/anthropic-runner.ts";
 import { MockAnthropicClient } from "./providers/mock-anthropic-client.ts";
 import type {
   InferenceOptions,
@@ -2227,9 +2230,10 @@ describe("Agent createFreshAgent thinking effort override", () => {
     });
 
     expect(captured.length).toBe(1);
-    expect(captured[0].thinking).toBeDefined();
-    expect(captured[0].thinking?.effort).toBe("max");
-    expect(captured[0].thinking?.enabled).toBe(true);
+    expect(captured[0].config).toEqual({
+      type: "thinking",
+      thinking: { enabled: true, effort: "max" },
+    });
   });
 
   it("force-enables thinking when profile.thinking is unset but subagent has effort", () => {
@@ -2260,8 +2264,10 @@ describe("Agent createFreshAgent thinking effort override", () => {
       getProvider: () => spyProvider,
     });
 
-    expect(captured[0].thinking?.effort).toBe("max");
-    expect(captured[0].thinking?.enabled).toBe(true);
+    expect(captured[0].config).toEqual({
+      type: "thinking",
+      thinking: { enabled: true, effort: "max" },
+    });
   });
 
   it("uses profile.thinking unchanged when no subagentConfig.effort override", () => {
@@ -2292,7 +2298,10 @@ describe("Agent createFreshAgent thinking effort override", () => {
       getProvider: () => spyProvider,
     });
 
-    expect(captured[0].thinking?.effort).toBe("high");
+    expect(captured[0].config).toEqual({
+      type: "thinking",
+      thinking: { enabled: true, effort: "high" },
+    });
   });
 });
 
@@ -3067,6 +3076,36 @@ describe("Agent turn loop", () => {
 
     void agent.abort();
     await turn;
+  });
+
+  it("notifies with the abort marker already in the log", async () => {
+    const snapshots: string[][] = [];
+    const { agent, mockClient } = createTestAgent({
+      onUpdate: () => {
+        snapshots.push(
+          agent
+            .getProviderMessages()
+            .flatMap((m) => m.content)
+            .filter((c) => c.type === "text")
+            .map((c) => (c as { text: string }).text),
+        );
+      },
+    });
+    const turn = agent.runTurnLoop(userInput("hello"));
+    const stream = await mockClient.awaitStream();
+    stream.emitEvent({
+      type: "content_block_start",
+      index: stream.nextBlockIndex(),
+      content_block: { type: "text", text: "partial", citations: null },
+    });
+    await stream.settle();
+    await agent.abortAndWait();
+    expect(await turn).toEqual({ type: "aborted" });
+    // The view must refresh once the marker is in the log, rather than
+    // waiting for some unrelated later event.
+    expect(snapshots.some((texts) => texts.includes(ABORT_MARKER_TEXT))).toBe(
+      true,
+    );
   });
 
   it("injections from the gate ride the caller's own user message", async () => {

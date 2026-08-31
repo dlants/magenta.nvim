@@ -481,7 +481,6 @@ export class AnthropicProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    context?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -489,15 +488,8 @@ export class AnthropicProvider implements Provider {
       effort?: "low" | "medium" | "high" | "xhigh" | "max";
     };
   }): ProviderToolUseRequest {
-    const {
-      model,
-      input,
-      spec,
-      systemPrompt,
-      disableCaching,
-      context,
-      thinking,
-    } = options;
+    const { model, input, spec, systemPrompt, disableCaching, thinking } =
+      options;
     let aborted = false;
 
     // Convert input to native Anthropic content blocks
@@ -521,15 +513,7 @@ export class AnthropicProvider implements Provider {
       },
     );
 
-    // Extract native messages from context agent if provided
-    let contextMessages: Anthropic.MessageParam[] = [];
-    if (context && context instanceof AnthropicInferenceManager) {
-      contextMessages = context.getNativeMessages();
-    }
-
-    // Build messages: optional context + new user message
     const messages: Anthropic.MessageParam[] = [
-      ...contextMessages,
       { role: "user", content: userContent },
     ];
 

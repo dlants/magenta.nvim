@@ -574,6 +574,32 @@ Notes and deviations:
 - File renames (`anthropic-inference.ts` / `openai-inference.ts`) and moving
   `ABORT_MARKER_TEXT` out of `anthropic-runner.ts` remain stage 6.
 
+### Review follow-up (stage 5)
+
+- `forceToolUse`'s `context` parameter is gone rather than retyped. It had no
+  production caller, and the two implementations disagreed about it in a way the
+  type could not express (anthropic `instanceof`-narrowed to its own manager and
+  silently dropped anything else; openai read `context.log.messages`). If a
+  caller ever needs prior conversation, it should pass the messages it wants,
+  not a manager.
+- `InferenceOptions`' two mutually exclusive provider bags collapsed into one
+  discriminated field: `config?: {type:"thinking"; thinking} | {type:"reasoning";
+  reasoning}`, read through the exported `thinkingConfig(options)` /
+  `reasoningConfig(options)` helpers. The discriminant is the config's own kind
+  rather than the provider name, so `MockProvider` — which chooses its manager
+  from its own `agentKind` — can pass whatever it was handed straight through.
+  `Agent.inferenceConfig()` picks the one shape the profile's provider can act
+  on; that branch used to live inline in `createManager`.
+- `ThinkingConfig` is `{enabled:false} | {enabled:true; budgetTokens?;
+  displayThinking?; effort?}`, so the disabled state carries no dead fields.
+  `ProviderProfile.thinking` keeps its looser user-facing shape (it is parsed
+  from lua options); `Agent.inferenceConfig()` is the conversion point.
+- `agent.test.ts` gained "notifies with the abort marker already in the log",
+  which snapshots `onUpdate` and asserts a frame fires with the marker already
+  present — the re-render `finishTurnAbort` now owns after the managers' internal
+  `notify()` was removed. The gate's own `scheduleUpdate` is left unobserved
+  deliberately: it is throttled and immediately followed by streaming updates.
+
 ## Naming and cleanup
 
 - Goal: settle the names (`NativeInferenceManager`, files `anthropic-inference.ts`, `openai-inference.ts`), move `ABORT_MARKER_TEXT` / `ABORT_TOOL_RESULT_TEXT` out of `anthropic-runner.ts` so openai no longer cross-imports from it, and update `context.md`'s architecture section, which currently documents `Runner` as "the provider-specific turn loop" and describes `Agent` as subscribing to runner events.

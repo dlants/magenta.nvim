@@ -35,7 +35,10 @@ import type {
   StreamStopReason,
   ToolResults,
 } from "./provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
+import {
+  PLACEHOLDER_NATIVE_MESSAGE_IDX,
+  thinkingConfig,
+} from "./provider-types.ts";
 
 export type AnthropicRunnerOptions = {
   authType: "key" | "max" | "keychain";
@@ -903,7 +906,8 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
   ): Omit<Anthropic.Messages.MessageStreamParams, "messages"> {
     const { authType, includeWebSearch, disableParallelToolUseFlag } =
       anthropicOptions;
-    const { model, tools, systemPrompt, thinking } = this.options;
+    const { model, tools, systemPrompt } = this.options;
+    const thinking = thinkingConfig(this.options);
 
     const anthropicTools: Anthropic.Tool[] = tools.map((t): Anthropic.Tool => {
       return {

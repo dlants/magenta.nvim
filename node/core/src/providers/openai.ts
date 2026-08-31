@@ -43,6 +43,7 @@ import {
   type ProviderToolUseRequest,
   type ProviderToolUseResponse,
   type ProviderWebSearchCitation,
+  reasoningConfig,
   type StopReason,
   type Usage,
 } from "./provider-types.ts";
@@ -1070,7 +1071,6 @@ export class OpenAIProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    context?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -1078,7 +1078,7 @@ export class OpenAIProvider implements Provider {
       effort?: ThinkingEffort;
     };
   }): ProviderToolUseRequest {
-    const { model, input, spec, systemPrompt, context } = options;
+    const { model, input, spec, systemPrompt } = options;
     if (this.authType === "chatgpt") {
       assertChatGPTModelSupported(model);
     }
@@ -1087,7 +1087,6 @@ export class OpenAIProvider implements Provider {
     const abortController = new AbortController();
 
     const messages: ProviderMessage[] = [
-      ...(context ? context.log.messages : []),
       {
         role: "user",
         content: input,
@@ -1222,7 +1221,7 @@ export class OpenAIProvider implements Provider {
       includeWebSearch: this.includeWebSearch,
       logger: this.logger,
       validateInput: this.validateInput,
-      reasoning: options.reasoning,
+      reasoning: reasoningConfig(options),
     });
   }
 }

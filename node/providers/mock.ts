@@ -59,7 +59,6 @@ type MockForceToolUseRequest = {
   input: AgentInput[];
   spec: ProviderToolSpec;
   systemPrompt?: string | undefined;
-  context?: NativeInferenceManager | undefined;
   defer: Defer<{
     toolRequest: Result<ToolRequest, { rawRequest: unknown }>;
     stopReason: StreamStopReason;
@@ -112,7 +111,6 @@ export class MockProvider implements Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    context?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -120,13 +118,12 @@ export class MockProvider implements Provider {
       effort?: "low" | "medium" | "high" | "xhigh" | "max";
     };
   }): ProviderToolUseRequest {
-    const { model, input, spec, systemPrompt, context } = options;
+    const { model, input, spec, systemPrompt } = options;
     const request: MockForceToolUseRequest = {
       model,
       input,
       spec,
       systemPrompt,
-      context,
       defer: new Defer(),
       aborted: false,
     };

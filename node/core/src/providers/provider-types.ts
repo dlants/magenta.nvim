@@ -217,9 +217,6 @@ export interface Provider {
     spec: ProviderToolSpec;
     systemPrompt?: string;
     disableCaching?: boolean;
-    /** Prior conversation to condition on. Single-shot: `forceToolUse` issues
-     * one request and never feeds results back, so it only needs the context. */
-    context?: NativeInferenceManager;
     thinking?: {
       enabled: boolean;
       budgetTokens?: number;
@@ -389,18 +386,50 @@ export type FinalizeReason =
 /** Inference configuration for one conversation. No hook or loop concern
  * appears here: the manager's only outbound channel is the per-request
  * `OnRequestUpdate` callback. */
+export type ThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+/** Extended thinking configuration. Disabled thinking carries no other
+ * fields, so a budget or effort that can never be acted on is not
+ * representable. */
+export type ThinkingConfig =
+  | { enabled: false }
+  | {
+      enabled: true;
+      budgetTokens?: number;
+      displayThinking?: boolean;
+      effort?: ThinkingEffort;
+    };
+
+export type ReasoningConfig = {
+  effort?: ReasoningEffort;
+  summary?: ReasoningSummary;
+};
+
+/** Provider-specific inference config. Exactly one shape is present, so a
+ * manager can never be handed configuration it cannot act on. */
+export type ProviderInferenceConfig =
+  | { type: "thinking"; thinking: ThinkingConfig }
+  | { type: "reasoning"; reasoning: ReasoningConfig };
+
 export interface InferenceOptions {
   model: string;
   systemPrompt: string;
   tools: ProviderToolSpec[];
-  thinking?: {
-    enabled: boolean;
-    budgetTokens?: number;
-    displayThinking?: boolean;
-    effort?: "low" | "medium" | "high" | "xhigh" | "max";
-  };
-  reasoning?: {
-    effort?: ReasoningEffort;
-    summary?: ReasoningSummary;
-  };
+  config?: ProviderInferenceConfig;
+}
+
+export function thinkingConfig(
+  options: InferenceOptions,
+): ThinkingConfig | undefined {
+  return options.config?.type === "thinking"
+    ? options.config.thinking
+    : undefined;
+}
+
+export function reasoningConfig(
+  options: InferenceOptions,
+): ReasoningConfig | undefined {
+  return options.config?.type === "reasoning"
+    ? options.config.reasoning
+    : undefined;
 }

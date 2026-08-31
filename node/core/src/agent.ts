@@ -19,6 +19,7 @@ import type {
   NativeInferenceManager,
   NativeMessageIdx,
   Provider,
+  ProviderInferenceConfig,
   ProviderMessage,
   ProviderMessageContent,
   ProviderToolResult,
@@ -364,43 +365,51 @@ export class Agent {
     return this.state.toolSpecs;
   }
 
+  /** Pick the one provider-specific inference config the profile's provider
+   * can act on. */
+  private inferenceConfig(): ProviderInferenceConfig | undefined {
+    const profile = this.context.profile;
+    if (profile.provider === "openai") {
+      return profile.reasoning
+        ? { type: "reasoning", reasoning: profile.reasoning }
+        : undefined;
+    }
+
+    const effortOverride = this.context.subagentConfig?.effort;
+    const baseThinking = profile.thinking;
+    if (effortOverride) {
+      return {
+        type: "thinking",
+        thinking: {
+          enabled: true,
+          ...(baseThinking?.displayThinking !== undefined
+            ? { displayThinking: baseThinking.displayThinking }
+            : {}),
+          ...(baseThinking?.budgetTokens !== undefined
+            ? { budgetTokens: baseThinking.budgetTokens }
+            : {}),
+          effort: effortOverride,
+        },
+      };
+    }
+
+    if (!baseThinking) return undefined;
+    if (!baseThinking.enabled) {
+      return { type: "thinking", thinking: { enabled: false } };
+    }
+    const { enabled: _enabled, ...rest } = baseThinking;
+    return { type: "thinking", thinking: { enabled: true, ...rest } };
+  }
+
   private createManager(): NativeInferenceManager {
     this.refreshToolSpecs();
     const provider = this.context.getProvider(this.context.profile);
+    const config = this.inferenceConfig();
     const agent = provider.createInferenceManager({
       model: this.context.profile.model,
       systemPrompt: this.state.systemPrompt,
       tools: this.getToolSpecs(),
-      ...((this.context.profile.provider === "anthropic" ||
-        this.context.profile.provider === "bedrock" ||
-        this.context.profile.provider === "mock") &&
-        (() => {
-          const effortOverride = this.context.subagentConfig?.effort;
-          const baseThinking = this.context.profile.thinking;
-          if (effortOverride) {
-            return {
-              thinking: {
-                enabled: true,
-                ...(baseThinking?.displayThinking !== undefined
-                  ? { displayThinking: baseThinking.displayThinking }
-                  : {}),
-                ...(baseThinking?.budgetTokens !== undefined
-                  ? { budgetTokens: baseThinking.budgetTokens }
-                  : {}),
-                effort: effortOverride,
-              },
-            };
-          }
-          if (baseThinking) {
-            return { thinking: baseThinking };
-          }
-          return {};
-        })()),
-      ...(this.context.profile.reasoning &&
-        (this.context.profile.provider === "openai" ||
-          this.context.profile.provider === "mock") && {
-          reasoning: this.context.profile.reasoning,
-        }),
+      ...(config ? { config } : {}),
     });
     return agent;
   }
