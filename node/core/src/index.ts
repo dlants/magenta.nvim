@@ -156,19 +156,17 @@ export type {
 export { AnthropicProvider } from "./providers/anthropic.ts";
 export { withCacheControl } from "./providers/anthropic-cache.ts";
 export { convertAnthropicMessagesToProvider } from "./providers/anthropic-conversion.ts";
+export type { AnthropicInferenceOptions } from "./providers/anthropic-inference.ts";
+export { AnthropicInferenceManager } from "./providers/anthropic-inference.ts";
 export {
   CLAUDE_CODE_SPOOF_PROMPT,
   getContextWindowForModel,
   getMaxTokensForModel,
 } from "./providers/anthropic-models.ts";
-export type { AnthropicRunnerOptions } from "./providers/anthropic-runner.ts";
-export {
-  ABORT_MARKER_TEXT,
-  AnthropicInferenceManager,
-} from "./providers/anthropic-runner.ts";
 export type { BedrockProviderOptions } from "./providers/bedrock.ts";
 export { BedrockProvider } from "./providers/bedrock.ts";
 export { CodexAuth, CodexAuthError } from "./providers/codex-auth.ts";
+export { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
 export {
   MockAnthropicClient,
   MockStream,
@@ -181,7 +179,7 @@ export { OpenAIProvider } from "./providers/openai.ts";
 export {
   OpenAIInferenceManager,
   type OpenAIStreamingClient,
-} from "./providers/openai-runner.ts";
+} from "./providers/openai-inference.ts";
 export { getProvider, setMockProvider } from "./providers/provider.ts";
 export type {
   AgentInput,

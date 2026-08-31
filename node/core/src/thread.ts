@@ -58,7 +58,7 @@ export type ThreadInit =
   | { type: "fresh" }
   | {
       type: "clone";
-      sourceRunner: NativeInferenceManager;
+      sourceManager: NativeInferenceManager;
       nativeMessageIdx: NativeMessageIdx;
       provenance: ForkProvenance;
       edlRegisters: EdlRegisters;
@@ -145,7 +145,7 @@ export class Thread {
       init.type === "clone"
         ? {
             type: "cloned",
-            cloneFrom: init.sourceRunner,
+            cloneFrom: init.sourceManager,
             truncateTo: init.nativeMessageIdx,
           }
         : { type: "new" },
@@ -169,7 +169,7 @@ export class Thread {
       callbacks,
       {
         type: "clone",
-        sourceRunner: sourceThread.inferenceManager,
+        sourceManager: sourceThread.inferenceManager,
         nativeMessageIdx,
         provenance: {
           fromThreadId: sourceThread.id,

@@ -6,10 +6,8 @@ import type { ProviderProfile } from "../provider-options.ts";
 import { createTestAgent, flatPhase, noopLogger } from "../test-helpers.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { delay, pollUntil } from "../utils/async.ts";
-import {
-  ABORT_MARKER_TEXT,
-  type AnthropicInferenceManager,
-} from "./anthropic-runner.ts";
+import type { AnthropicInferenceManager } from "./anthropic-inference.ts";
+import { ABORT_MARKER_TEXT } from "./inference-shared.ts";
 import { MockAnthropicClient } from "./mock-anthropic-client.ts";
 import type {
   AgentInput,

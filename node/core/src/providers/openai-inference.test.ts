@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Agent, ToolExecutor } from "../agent.ts";
 import { createTestOpenAIAgent, flatPhase } from "../test-helpers.ts";
 import type { ToolName, ToolStructuredResult } from "../tool-types.ts";
-import { ABORT_TOOL_RESULT_TEXT } from "./anthropic-runner.ts";
+import { ABORT_TOOL_RESULT_TEXT } from "./inference-shared.ts";
 import type {
   MockOpenAIClient,
   MockResponseStream,

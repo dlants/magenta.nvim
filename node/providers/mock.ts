@@ -8,7 +8,7 @@ import {
 import winston from "winston";
 import { Defer, pollUntil } from "../utils/async.ts";
 import type { Result } from "../utils/result.ts";
-import { AnthropicInferenceManager } from "./anthropic-runner.ts";
+import { AnthropicInferenceManager } from "./anthropic-inference.ts";
 import {
   MockAnthropicClient,
   type MockStream,

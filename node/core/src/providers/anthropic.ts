@@ -13,17 +13,16 @@ import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import { extendError, type Result } from "../utils/result.ts";
 import { withCacheControl } from "./anthropic-cache.ts";
 import {
+  AnthropicInferenceManager,
+  isRetryableError,
+} from "./anthropic-inference.ts";
+import {
   CLAUDE_CODE_SPOOF_PROMPT,
   getMaxTokensForModel,
   resolveOutputConfig,
 } from "./anthropic-models.ts";
-import {
-  AnthropicInferenceManager,
-  getRetryDelay,
-  isRetryableError,
-  MAX_RETRY_DURATION,
-} from "./anthropic-runner.ts";
 import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
+import { getRetryDelay, MAX_RETRY_DURATION } from "./inference-shared.ts";
 import type {
   AgentInput,
   InferenceOptions,

@@ -600,7 +600,37 @@ Notes and deviations:
   `notify()` was removed. The gate's own `scheduleUpdate` is left unobserved
   deliberately: it is throttled and immediately followed by streaming updates.
 
-## Naming and cleanup
+## Naming and cleanup — DONE
 
 - Goal: settle the names (`NativeInferenceManager`, files `anthropic-inference.ts`, `openai-inference.ts`), move `ABORT_MARKER_TEXT` / `ABORT_TOOL_RESULT_TEXT` out of `anthropic-runner.ts` so openai no longer cross-imports from it, and update `context.md`'s architecture section, which currently documents `Runner` as "the provider-specific turn loop" and describes `Agent` as subscribing to runner events.
 - Tests: `npx tsc -b`, `npx vitest run`, `npx biome check .`.
+
+Done. All three commands are green.
+
+Notes and deviations:
+
+- `ABORT_MARKER_TEXT`, `ABORT_TOOL_RESULT_TEXT` and the shared retry budget
+  (`RETRY_DELAYS`, `MAX_RETRY_DURATION`, `getRetryDelay`) moved to a new
+  `node/core/src/providers/inference-shared.ts`. The retry helpers went with the
+  abort text because they were the other half of the same cross-import: openai
+  and `anthropic.ts` both reached into `anthropic-runner.ts` for them.
+  `isRetryableError` / `isSSEParseError` / `isStreamOrderError` stayed put —
+  they narrow on the Anthropic SDK's error classes, so they are genuinely
+  anthropic's.
+- File renames: `anthropic-runner.ts` → `anthropic-inference.ts`,
+  `openai-runner.ts` → `openai-inference.ts`, and the root re-export
+  `node/providers/anthropic-runner.ts` → `anthropic-inference.ts`. Test files
+  followed: `anthropic-manager.test.ts` → `anthropic-inference.test.ts`,
+  `anthropic-runner-{retry,ticker,auth-refresh}.test.ts` →
+  `anthropic-inference-*`, `openai-runner{,-retry}.test.ts` →
+  `openai-inference*`, `runner-parity.test.ts` → `inference-parity.test.ts`.
+  The old `anthropic-runner.test.ts` was never about the runner — it tests
+  `getMaxTokensForModel`, `getContextWindowForModel`,
+  `convertAnthropicMessagesToProvider` and `stripTrailingThinkingBlocks` — so it
+  became `anthropic-helpers.test.ts`.
+- Type/field renames: `AnthropicRunnerOptions` → `AnthropicInferenceOptions`,
+  `OpenAIRunnerOptions` → `OpenAIInferenceOptions`, `ThreadInit.sourceRunner` →
+  `sourceManager`.
+- `context.md`'s core-layer section now describes `NativeInferenceManager`
+  (per-request callback, not an emitter) and says `Agent` owns the loop, the
+  executor, the hooks and the phase; only `Agent` is an emitter.

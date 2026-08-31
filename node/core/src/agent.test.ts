@@ -13,10 +13,8 @@ import {
 } from "./compaction/index.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
 import type { ProviderProfile } from "./provider-options.ts";
-import {
-  ABORT_MARKER_TEXT,
-  AnthropicInferenceManager,
-} from "./providers/anthropic-runner.ts";
+import { AnthropicInferenceManager } from "./providers/anthropic-inference.ts";
+import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
 import { MockAnthropicClient } from "./providers/mock-anthropic-client.ts";
 import type {
   InferenceOptions,

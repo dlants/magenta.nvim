@@ -20,6 +20,11 @@ import {
   supportsAdaptiveThinking,
 } from "./anthropic-models.ts";
 import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
+import {
+  ABORT_TOOL_RESULT_TEXT,
+  getRetryDelay,
+  MAX_RETRY_DURATION,
+} from "./inference-shared.ts";
 import type {
   AgentInput,
   AgentLog,
@@ -40,7 +45,7 @@ import {
   thinkingConfig,
 } from "./provider-types.ts";
 
-export type AnthropicRunnerOptions = {
+export type AnthropicInferenceOptions = {
   authType: "key" | "max" | "keychain";
   includeWebSearch: boolean;
   disableParallelToolUseFlag: boolean;
@@ -72,14 +77,6 @@ type AnthropicStreamingBlock =
 
 import type { Usage } from "./provider-types.ts";
 
-/** Appended to the conversation when a turn is cut short by the user, so the
- * model sees why the transcript stops where it does. */
-export const ABORT_MARKER_TEXT = "[The user aborted the previous request.]";
-/** Result recorded for any tool_use the executor never answered because the
- * turn was aborted first. */
-export const ABORT_TOOL_RESULT_TEXT =
-  "Request was aborted by the user before tool execution completed.";
-
 /** Actions that mutate the accumulating assistant message as the stream
  * arrives. Turn outcomes are not actions — they are returned by `runTurn`. */
 type Action =
@@ -96,9 +93,6 @@ type Action =
     }
   | { type: "block-finished"; index: number }
   | { type: "stream-completed"; response: Anthropic.Message };
-
-export const RETRY_DELAYS = [1000, 5000, 10000, 30000];
-export const MAX_RETRY_DURATION = 300_000;
 
 export function isRetryableError(error: Error): boolean {
   if (
@@ -179,12 +173,6 @@ export function isStreamOrderError(error: Error): boolean {
   return STREAM_ORDER_MESSAGE.test(error.message);
 }
 
-export function getRetryDelay(attempt: number): number {
-  return attempt < RETRY_DELAYS.length
-    ? RETRY_DELAYS[attempt]
-    : RETRY_DELAYS[RETRY_DELAYS.length - 1];
-}
-
 /** This class only ever writes block arrays, never the bare-string `content`
  * form Anthropic's `MessageParam` also permits. */
 type NativeMessage = Omit<Anthropic.MessageParam, "content"> & {
@@ -205,7 +193,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
   /** Assistant message being built during streaming */
   private currentAssistantMessage: NativeMessage | undefined;
   /** Stored for cloning */
-  private anthropicOptions: AnthropicRunnerOptions;
+  private anthropicOptions: AnthropicInferenceOptions;
   private retryAbortController: AbortController | undefined;
   /** True between the start and the settling of a `sendRequest` call; the only
    * externally-visible state this class has. */
@@ -216,7 +204,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
   constructor(
     private options: InferenceOptions,
     private client: Anthropic,
-    anthropicOptions: AnthropicRunnerOptions,
+    anthropicOptions: AnthropicInferenceOptions,
   ) {
     this.anthropicOptions = anthropicOptions;
     this.params = this.createNativeStreamParameters(anthropicOptions);
@@ -902,7 +890,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
   }
 
   private createNativeStreamParameters(
-    anthropicOptions: AnthropicRunnerOptions,
+    anthropicOptions: AnthropicInferenceOptions,
   ): Omit<Anthropic.Messages.MessageStreamParams, "messages"> {
     const { authType, includeWebSearch, disableParallelToolUseFlag } =
       anthropicOptions;

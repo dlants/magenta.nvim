@@ -15,8 +15,8 @@ import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import {
   AnthropicInferenceManager,
-  type AnthropicRunnerOptions,
-} from "./providers/anthropic-runner.ts";
+  type AnthropicInferenceOptions,
+} from "./providers/anthropic-inference.ts";
 import {
   MockAnthropicClient,
   type MockStream,
@@ -24,8 +24,8 @@ import {
 import { MockOpenAIClient } from "./providers/mock-openai-client.ts";
 import {
   OpenAIInferenceManager,
-  type OpenAIRunnerOptions,
-} from "./providers/openai-runner.ts";
+  type OpenAIInferenceOptions,
+} from "./providers/openai-inference.ts";
 import type {
   AgentInput,
   InferenceOptions,
@@ -54,7 +54,7 @@ export const noopLogger: Logger = {
   trace: () => {},
 } as Logger;
 
-export const defaultAnthropicOptions: AnthropicRunnerOptions = {
+export const defaultAnthropicOptions: AnthropicInferenceOptions = {
   authType: "max",
   includeWebSearch: false,
   disableParallelToolUseFlag: true,
@@ -74,7 +74,7 @@ export function flatPhase(agent: {
 
 export function createMockProvider(
   mockClient: MockAnthropicClient,
-  anthropicOptions?: Partial<AnthropicRunnerOptions>,
+  anthropicOptions?: Partial<AnthropicInferenceOptions>,
 ): Provider {
   return {
     createInferenceManager(options: InferenceOptions): NativeInferenceManager {
@@ -254,7 +254,7 @@ function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
  * harness for the turn loop itself. */
 export function createTestAgent(
   opts?: TestAgentOpts & {
-    anthropicOptions?: Partial<AnthropicRunnerOptions>;
+    anthropicOptions?: Partial<AnthropicInferenceOptions>;
     /** Share a client with another agent, so a test can watch one stream of
      * requests across both. */
     mockClient?: MockAnthropicClient;
@@ -265,7 +265,7 @@ export function createTestAgent(
   return { agent: buildTestAgent(provider, opts ?? {}), mockClient };
 }
 
-export const defaultOpenAIOptions: OpenAIRunnerOptions = {
+export const defaultOpenAIOptions: OpenAIInferenceOptions = {
   includeWebSearch: false,
   logger: noopLogger,
   validateInput,
@@ -275,7 +275,7 @@ export const defaultOpenAIOptions: OpenAIRunnerOptions = {
  * one loop in `Agent`, so the two differ only in which client is mocked. */
 export function createTestOpenAIAgent(
   opts?: TestAgentOpts & {
-    openaiOptions?: Partial<OpenAIRunnerOptions>;
+    openaiOptions?: Partial<OpenAIInferenceOptions>;
     mockClient?: MockOpenAIClient;
     tools?: ProviderToolSpec[];
   },

@@ -13,7 +13,7 @@ import {
 } from "../thread-supervisor.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { pollUntil } from "../utils/async.ts";
-import { ABORT_MARKER_TEXT } from "./anthropic-runner.ts";
+import { ABORT_MARKER_TEXT } from "./inference-shared.ts";
 import {
   type AgentInput,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,

@@ -19,14 +19,14 @@ import type {
 } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { Result } from "../utils/result.ts";
-import { getRetryDelay, MAX_RETRY_DURATION } from "./anthropic-runner.ts";
 import {
   bedrockMantleBaseUrl,
   createSigV4Fetch,
   DEFAULT_BEDROCK_MANTLE_REGION,
 } from "./bedrock-sigv4.ts";
 import { CodexAuthError, type CodexCredentials } from "./codex-auth.ts";
-import { OpenAIInferenceManager } from "./openai-runner.ts";
+import { getRetryDelay, MAX_RETRY_DURATION } from "./inference-shared.ts";
+import { OpenAIInferenceManager } from "./openai-inference.ts";
 import {
   type AgentInput,
   type InferenceOptions,

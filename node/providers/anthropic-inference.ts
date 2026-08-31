@@ -1,4 +1,4 @@
-export type { AnthropicRunnerOptions } from "@magenta/core";
+export type { AnthropicInferenceOptions } from "@magenta/core";
 export {
   ABORT_MARKER_TEXT,
   AnthropicInferenceManager,

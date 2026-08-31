@@ -13,7 +13,7 @@ import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
-import { ABORT_MARKER_TEXT } from "./providers/anthropic-runner.ts";
+import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
 import type {
   AgentInput,
   NativeInferenceManager,

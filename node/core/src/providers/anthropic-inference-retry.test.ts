@@ -7,7 +7,7 @@ import {
   flatPhase,
   userInput,
 } from "../test-helpers.ts";
-import { isRetryableError } from "./anthropic-runner.ts";
+import { isRetryableError } from "./anthropic-inference.ts";
 
 function make529Error(): APIError {
   return new APIError(

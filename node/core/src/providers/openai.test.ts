@@ -10,7 +10,7 @@ import type {
   ToolStructuredResult,
 } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
-import { RETRY_DELAYS } from "./anthropic-runner.ts";
+import { RETRY_DELAYS } from "./inference-shared.ts";
 import {
   MockOpenAIClient,
   type MockResponseStream,

@@ -8,7 +8,7 @@ import {
   ABORT_TOOL_RESULT_TEXT,
   getRetryDelay,
   MAX_RETRY_DURATION,
-} from "./anthropic-runner.ts";
+} from "./inference-shared.ts";
 import {
   convertResponseOutputToProviderContent,
   createStreamParameters,
@@ -55,7 +55,7 @@ export type OpenAIStreamingClient = {
   };
 };
 
-export type OpenAIRunnerOptions = {
+export type OpenAIInferenceOptions = {
   includeWebSearch: boolean;
   logger: Logger;
   validateInput: ValidateInput;
@@ -130,7 +130,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
   constructor(
     private options: InferenceOptions,
     private client: OpenAIStreamingClient,
-    private openaiOptions: OpenAIRunnerOptions,
+    private openaiOptions: OpenAIInferenceOptions,
   ) {}
 
   get log(): AgentLog {
