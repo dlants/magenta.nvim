@@ -210,7 +210,31 @@ export function convertInputToNativeItems(
 
 # Stages
 
-## Native conversion module
+## Native conversion module — DONE
+
+Implemented in `node/core/src/providers/openai-conversion.ts`, tested in
+`openai-conversion.test.ts` (6 tests). Nothing is wired to it yet.
+
+Decisions/deviations:
+
+- `webSearchQuery` and `parseToolRequest` are now exported from `openai.ts` and reused rather than
+  duplicated. The resulting `openai.ts -> openai-inference.ts -> openai-conversion.ts -> openai.ts`
+  cycle is the one that already exists between the first two modules.
+- Role is derived per item by `roleOf`: anything with a `role` field maps assistant -> assistant and
+  user/system/developer -> user; `reasoning` / `function_call` / `web_search_call` are assistant;
+  `function_call_output` is user; everything else (e.g. `item_reference`) has no display
+  representation and is skipped without breaking the grouping of its neighbours.
+- `function_call_output` always converts to a `tool_result` with `status: "ok"`. The wire format has
+  no error flag, so the error/ok distinction is genuinely not recoverable from the native items;
+  this is a real (small) display regression to accept in stage 2.
+- Reasoning items always produce a `thinking` block, even with an empty summary, matching today's
+  `convertResponseOutputToProviderContent`.
+- User-side `input_image` / `input_file` are recovered by parsing the data URL back into a
+  `base64` source; unparseable or unsupported media types are dropped.
+- `outputText` tolerates the content-part array shape the API has begun returning for
+  `function_call_output.output`, which the SDK still types as `string`.
+- `classifyTextContent` is applied to user-side text only.
+
 
 - Goal: `convertOpenAIItemsToProvider` exists and is correct, with nothing wired to it yet.
 - Notes: build it from the existing `convertResponseOutputToProviderContent` (`openai.ts:737`) plus

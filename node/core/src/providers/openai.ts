@@ -535,7 +535,7 @@ type WebSearchAction =
   | OpenAI.Responses.ResponseFunctionWebSearch.OpenPage
   | OpenAI.Responses.ResponseFunctionWebSearch.Find;
 
-function webSearchQuery(
+export function webSearchQuery(
   item: OpenAI.Responses.ResponseFunctionWebSearch,
 ): string | undefined {
   const { action } = item as { action?: WebSearchAction };
@@ -825,7 +825,7 @@ export function convertResponseOutputToProviderContent(
   return content;
 }
 
-function parseToolRequest(
+export function parseToolRequest(
   validateInput: ValidateInput,
   item: { call_id: string; name: string; arguments: string },
 ): Result<ToolRequest, { rawRequest: unknown }> {
