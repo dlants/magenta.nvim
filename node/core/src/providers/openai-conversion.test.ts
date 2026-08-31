@@ -1,7 +1,11 @@
 import type OpenAI from "openai";
 import { describe, expect, it } from "vitest";
 import { validateInput } from "../tools/helpers.ts";
-import { convertOpenAIItemsToProvider } from "./openai-conversion.ts";
+import {
+  convertOpenAIItemsToProvider,
+  type ItemStopInfo,
+} from "./openai-conversion.ts";
+import type { NativeMessageIdx } from "./provider-types.ts";
 
 type Item = OpenAI.Responses.ResponseInputItem;
 
@@ -79,11 +83,11 @@ describe("convertOpenAIItemsToProvider", () => {
       },
       { role: "assistant", content: "done" },
     ];
-    const stopInfo = new Map([
+    const stopInfo = new Map<NativeMessageIdx, ItemStopInfo>([
       [
-        1,
+        1 as NativeMessageIdx,
         {
-          stopReason: "end_turn" as const,
+          stopReason: "end_turn",
           usage: { inputTokens: 3, outputTokens: 4 },
         },
       ],
@@ -199,6 +203,152 @@ describe("convertOpenAIItemsToProvider", () => {
         },
       ],
     });
+  });
+
+  it("attaches stop info keyed by the last item of a multi-item assistant group", () => {
+    const items: Item[] = [
+      { type: "reasoning", id: "rs_1", summary: [] },
+      { role: "assistant", content: "done" },
+    ];
+    const messages = convertOpenAIItemsToProvider(
+      validateInput,
+      items,
+      new Map<NativeMessageIdx, ItemStopInfo>([
+        [
+          1 as NativeMessageIdx,
+          {
+            stopReason: "end_turn",
+            usage: { inputTokens: 1, outputTokens: 2 },
+          },
+        ],
+      ]),
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0].stopReason).toBe("end_turn");
+  });
+
+  it("ignores stop info keyed to a user item", () => {
+    const messages = convertOpenAIItemsToProvider(
+      validateInput,
+      [{ role: "user", content: "hi" }],
+      new Map<NativeMessageIdx, ItemStopInfo>([
+        [
+          0 as NativeMessageIdx,
+          {
+            stopReason: "end_turn",
+            usage: { inputTokens: 1, outputTokens: 2 },
+          },
+        ],
+      ]),
+    );
+    expect(messages[0].stopReason).toBeUndefined();
+  });
+
+  it("recovers the tool name for a function_call_output and joins content-part output", () => {
+    const messages = convert([
+      {
+        type: "function_call",
+        call_id: "call_1",
+        name: "bash_command",
+        arguments: "{}",
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_1",
+        output: [
+          { type: "output_text", text: "a" },
+          { type: "output_text", text: "b" },
+          { type: "output_image" },
+        ],
+      } as unknown as Item,
+      { type: "function_call_output", call_id: "call_unknown", output: "x" },
+    ]);
+    const results = messages[1].content;
+    expect(results[0]).toMatchObject({
+      type: "tool_result",
+      result: {
+        status: "ok",
+        value: [{ type: "text", text: "ab" }],
+        structuredResult: { toolName: "bash_command" },
+      },
+    });
+    expect(results[1]).toMatchObject({
+      result: { structuredResult: { toolName: "unknown" } },
+    });
+  });
+
+  it("surfaces a tool request parse failure rather than throwing", () => {
+    const messages = convert([
+      {
+        type: "function_call",
+        call_id: "call_1",
+        name: "bash_command",
+        arguments: "{not json",
+      },
+    ]);
+    expect(messages[0].content[0]).toMatchObject({
+      type: "tool_use",
+      request: { status: "error" },
+    });
+  });
+
+  it("drops web_search_call actions with no query while keeping the group open", () => {
+    const messages = convert([
+      {
+        type: "web_search_call",
+        id: "ws_1",
+        status: "completed",
+        action: { type: "open_page", url: "https://example.com" },
+      } as Item,
+      { role: "assistant", content: "read it" },
+    ]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0].content.map((c) => c.type)).toEqual(["text"]);
+  });
+
+  it("parses image and file data urls, dropping unsupported ones", () => {
+    const messages = convert([
+      {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "input_image",
+            detail: "auto",
+            image_url: "data:image/png;base64,AAA",
+          },
+          {
+            type: "input_image",
+            detail: "auto",
+            image_url: "data:image/tiff;base64,BBB",
+          },
+          {
+            type: "input_image",
+            detail: "auto",
+            image_url: "https://example.com/a.png",
+          },
+          {
+            type: "input_file",
+            file_data: "data:application/pdf;base64,CCC",
+            filename: "doc.pdf",
+          },
+          {
+            type: "input_file",
+            file_data: "data:application/pdf;base64,DDD",
+          },
+          { type: "input_file", file_data: "data:text/plain;base64,EEE" },
+        ],
+      },
+    ]);
+    expect(messages[0].content).toMatchObject([
+      { type: "image", source: { media_type: "image/png", data: "AAA" } },
+      {
+        type: "document",
+        source: { media_type: "application/pdf", data: "CCC" },
+        title: "doc.pdf",
+      },
+      { type: "document", title: undefined },
+    ]);
   });
 
   it("drops item kinds with no display representation without breaking grouping", () => {

@@ -32,15 +32,21 @@ type Item = OpenAI.Responses.ResponseInputItem;
 export function convertOpenAIItemsToProvider(
   validateInput: ValidateInput,
   items: ReadonlyArray<Item>,
-  stopInfo?: Map<number, ItemStopInfo>,
+  stopInfo?: Map<NativeMessageIdx, ItemStopInfo>,
 ): ProviderMessage[] {
   const messages: ProviderMessage[] = [];
+  const toolNames = toolNamesByCallId(items);
 
   items.forEach((item, idx) => {
     const nativeMessageIdx = idx as NativeMessageIdx;
     const role = roleOf(item);
     if (!role) return;
-    const content = convertItem(validateInput, item, nativeMessageIdx);
+    const content = convertItem(
+      validateInput,
+      item,
+      nativeMessageIdx,
+      toolNames,
+    );
 
     const last = messages[messages.length - 1];
     // An item that produced no displayable content still owns its stop info, so
@@ -51,7 +57,7 @@ export function convertOpenAIItemsToProvider(
       messages.push({ role, content });
     }
 
-    const info = stopInfo?.get(idx);
+    const info = stopInfo?.get(nativeMessageIdx);
     if (info && role === "assistant") {
       const target = messages[messages.length - 1];
       target.stopReason = info.stopReason;
@@ -60,6 +66,18 @@ export function convertOpenAIItemsToProvider(
   });
 
   return messages;
+}
+
+/** A `function_call_output` carries no tool name on the wire; it is recovered
+ * from the `function_call` it answers. */
+function toolNamesByCallId(items: ReadonlyArray<Item>): Map<string, ToolName> {
+  const names = new Map<string, ToolName>();
+  for (const item of items) {
+    if (item.type === "function_call") {
+      names.set(item.call_id, item.name as ToolName);
+    }
+  }
+  return names;
 }
 
 /** Which side of the conversation an item belongs to. `undefined` for item
@@ -84,6 +102,7 @@ function convertItem(
   validateInput: ValidateInput,
   item: Item,
   nativeMessageIdx: NativeMessageIdx,
+  toolNames: Map<string, ToolName>,
 ): ProviderMessageContent[] {
   if ("role" in item && item.role) {
     return convertMessageItem(item, nativeMessageIdx);
@@ -125,7 +144,9 @@ function convertItem(
             value: [
               { type: "text", text: outputText(item.output), nativeMessageIdx },
             ],
-            structuredResult: { toolName: "unknown" as ToolName },
+            structuredResult: {
+              toolName: toolNames.get(item.call_id) ?? ("unknown" as ToolName),
+            },
           },
           nativeMessageIdx,
         },
@@ -134,14 +155,12 @@ function convertItem(
     case "web_search_call": {
       // Only `search` actions carry a query; `open_page` / `find` have no
       // representation in ProviderServerToolUseContent, so they are dropped.
-      const query = webSearchQuery(
-        item as OpenAI.Responses.ResponseFunctionWebSearch,
-      );
-      if (query === undefined) return [];
+      const query = webSearchQuery(item);
+      if (query === undefined || item.id === undefined) return [];
       return [
         {
           type: "server_tool_use",
-          id: item.id ?? "",
+          id: item.id,
           name: "web_search",
           input: { query },
           nativeMessageIdx,
@@ -156,16 +175,14 @@ function convertItem(
 
 /** The SDK types `output` as a string, but the API has begun returning a
  * content-part array for some tools. */
-function outputText(output: unknown): string {
+function outputText(
+  output: string | ReadonlyArray<{ text?: string | undefined }>,
+): string {
   if (typeof output === "string") return output;
-  if (Array.isArray(output)) {
-    return output
-      .map((part: { text?: string }) =>
-        typeof part?.text === "string" ? part.text : "",
-      )
-      .join("");
-  }
-  return "";
+  if (!Array.isArray(output)) return "";
+  return output
+    .map((part) => (typeof part?.text === "string" ? part.text : ""))
+    .join("");
 }
 
 type MessageItem = Extract<Item, { role: string }>;
@@ -202,7 +219,7 @@ function convertMessageItem(
         break;
 
       case "input_image": {
-        const source = parseImageSource(part.image_url);
+        const source = parseImageSource(part.image_url ?? undefined);
         if (source) {
           out.push({ type: "image", source, nativeMessageIdx });
         }
@@ -210,8 +227,8 @@ function convertMessageItem(
       }
 
       case "input_file": {
-        const source = parseDataUrl(part.file_data);
-        if (source && source.media_type === "application/pdf") {
+        const source = parseDataUrl(part.file_data ?? undefined);
+        if (source && source.mediaType === "application/pdf") {
           out.push({
             type: "document",
             source: {
@@ -219,7 +236,7 @@ function convertMessageItem(
               media_type: "application/pdf",
               data: source.data,
             },
-            title: part.filename ?? null,
+            title: part.filename ?? undefined,
             nativeMessageIdx,
           });
         }
@@ -276,20 +293,20 @@ const IMAGE_MEDIA_TYPES = [
 ] as const;
 
 function parseImageSource(
-  url: string | null | undefined,
+  url: string | undefined,
 ): ProviderImageContent["source"] | undefined {
   const parsed = parseDataUrl(url);
   if (!parsed) return undefined;
-  const mediaType = IMAGE_MEDIA_TYPES.find((t) => t === parsed.media_type);
+  const mediaType = IMAGE_MEDIA_TYPES.find((t) => t === parsed.mediaType);
   if (!mediaType) return undefined;
   return { type: "base64", media_type: mediaType, data: parsed.data };
 }
 
 function parseDataUrl(
-  url: string | null | undefined,
-): { type: "base64"; media_type: string; data: string } | undefined {
+  url: string | undefined,
+): { mediaType: string; data: string } | undefined {
   if (!url) return undefined;
   const match = /^data:([^;,]+);base64,(.*)$/s.exec(url);
   if (!match) return undefined;
-  return { type: "base64", media_type: match[1], data: match[2] };
+  return { mediaType: match[1], data: match[2] };
 }

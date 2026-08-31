@@ -134,7 +134,7 @@ export type ProviderDocumentContent = {
     media_type: "application/pdf";
     data: string;
   };
-  title?: string | null;
+  title?: string | undefined;
   nativeMessageIdx: NativeMessageIdx;
 };
 

@@ -535,10 +535,11 @@ type WebSearchAction =
   | OpenAI.Responses.ResponseFunctionWebSearch.OpenPage
   | OpenAI.Responses.ResponseFunctionWebSearch.Find;
 
-export function webSearchQuery(
-  item: OpenAI.Responses.ResponseFunctionWebSearch,
-): string | undefined {
-  const { action } = item as { action?: WebSearchAction };
+export function webSearchQuery(item: {
+  type: "web_search_call";
+  action?: WebSearchAction | undefined;
+}): string | undefined {
+  const { action } = item;
   return action?.type === "search" ? action.query : undefined;
 }
 

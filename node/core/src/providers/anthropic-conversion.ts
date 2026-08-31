@@ -106,7 +106,7 @@ function convertBlockToProvider(
           media_type: "application/pdf";
           data: string;
         },
-        title: block.title ?? null,
+        title: block.title ?? undefined,
         nativeMessageIdx,
       };
 

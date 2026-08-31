@@ -235,6 +235,25 @@ Decisions/deviations:
   `function_call_output.output`, which the SDK still types as `string`.
 - `classifyTextContent` is applied to user-side text only.
 
+Review follow-ups (stage 1):
+
+- `stopInfo` is keyed by the branded `NativeMessageIdx`, not a raw `number`.
+- `outputText` takes `string | ReadonlyArray<{ text?: string }>` rather than `unknown`.
+- `function_call_output` recovers its tool name from the matching `function_call` item's `name`
+  (prescanned into a `call_id -> ToolName` map); `"unknown"` remains only for an output with no
+  matching call in the log.
+- A `web_search_call` with no `id` is skipped rather than emitting an empty-string id.
+- `webSearchQuery` (`openai.ts`) now takes the structural shape it reads, so the casts at all three
+  call sites are gone.
+- `ProviderDocumentContent.title` is `string | undefined` (was `string | null`); `null` no longer
+  enters internal data. The `|| null` writes in `anthropic.ts` / `anthropic-inference.ts` are into
+  Anthropic SDK types and stay.
+- `parseDataUrl` returns `{ mediaType, data }` and only `parseImageSource` produces a validated
+  `{ type: "base64", media_type: ImageMediaType }`.
+- Added tests for content-part `function_call_output`, data-url image/file parsing (unsupported
+  media type, malformed url, non-PDF file), the queryless `web_search_call` drop path, tool request
+  parse failure, and stop info on a multi-item assistant group / on a user item.
+
 
 - Goal: `convertOpenAIItemsToProvider` exists and is correct, with nothing wired to it yet.
 - Notes: build it from the existing `convertResponseOutputToProviderContent` (`openai.ts:737`) plus
