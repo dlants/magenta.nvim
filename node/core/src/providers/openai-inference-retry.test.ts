@@ -251,9 +251,8 @@ describe("OpenAIInferenceManager sendRequest", () => {
     retry.finishResponse();
     await tick();
     expect(await request).toEqual({
-      type: "completed",
+      type: "stopped",
       stopReason: "end_turn",
-      requested: [],
     });
   });
   it("aborts an in-flight request and leaves the runner reusable", async () => {
@@ -273,7 +272,7 @@ describe("OpenAIInferenceManager sendRequest", () => {
     await tick();
     streamAt(client, 1).finishResponse();
     await tick();
-    expect((await second).type).toBe("completed");
+    expect((await second).type).toBe("stopped");
   });
 });
 

@@ -46,8 +46,6 @@ export type TurnActivity =
       /** As the model asked for them, including malformed requests that never
        * became an `activeTools` entry. */
       requested: ReadonlyArray<RequestedTool>;
-      /** the turn was cut short by the output token limit mid-tool-use */
-      truncated: boolean;
       /** Where the invocations are: not created yet, live, or settled (their
        * results are in the log). Keeping the three apart means an empty map is
        * never overloaded to mean "done". */

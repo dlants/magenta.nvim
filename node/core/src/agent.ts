@@ -567,15 +567,10 @@ export class Agent {
         return { type: "failed", error: outcome.error };
       }
 
-      const requested = outcome.requested;
-      if (requested.length === 0) {
-        // Without tool_use blocks the provider's reason is the turn's reason.
-        return {
-          type: "stopped",
-          stopReason:
-            outcome.stopReason === "tool_use" ? "end_turn" : outcome.stopReason,
-        };
+      if (outcome.type === "stopped") {
+        return { type: "stopped", stopReason: outcome.stopReason };
       }
+      const requested = outcome.requested;
 
       if (this.abortRequested) return this.finishTurnAbort();
 
@@ -584,7 +579,6 @@ export class Agent {
         activity: {
           type: "running_tools",
           requested,
-          truncated: outcome.stopReason === "max_tokens",
           tools: { type: "pending" },
         },
       };

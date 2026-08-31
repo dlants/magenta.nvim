@@ -328,15 +328,9 @@ export type AgentLog = {
   readonly latestUsage: Usage | undefined;
 };
 
-/** What one provider request produced. Retries are internal to the request, so
- * `error` means permanently failed. */
 export type RequestResult =
-  | {
-      type: "completed";
-      stopReason: StreamStopReason;
-      /** tool_use blocks accumulated during this request. */
-      requested: RequestedTool[];
-    }
+  | { type: "tool_use"; requested: RequestedTool[] }
+  | { type: "stopped"; stopReason: StopReason }
   | { type: "aborted" }
   | { type: "error"; error: Error };
 

@@ -462,11 +462,16 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     try {
       const outcome = await this.streamOneResponse();
       if (outcome.type === "completed") {
-        return {
-          type: "completed",
-          stopReason: outcome.stopReason,
-          requested: this.collectRequestedTools(),
-        };
+        const requested = this.collectRequestedTools();
+        return requested.length
+          ? { type: "tool_use", requested }
+          : {
+              type: "stopped",
+              stopReason:
+                outcome.stopReason === "tool_use"
+                  ? "end_turn"
+                  : outcome.stopReason,
+            };
       }
       return outcome;
     } finally {

@@ -39,6 +39,7 @@ import type {
   RequestResult,
   StreamStopReason,
   ToolResults,
+  Usage,
 } from "./provider-types.ts";
 import {
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -58,7 +59,6 @@ export type AnthropicInferenceOptions = {
   refreshAuth?: RefreshAuth | undefined;
 };
 
-// Internal streaming block type for all Anthropic block types
 type AnthropicStreamingBlock =
   | { type: "text"; text: string }
   | { type: "thinking"; thinking: string; signature: string }
@@ -75,10 +75,6 @@ type AnthropicStreamingBlock =
       content: Anthropic.WebSearchToolResultBlockContent;
     };
 
-import type { Usage } from "./provider-types.ts";
-
-/** Actions that mutate the accumulating assistant message as the stream
- * arrives. Turn outcomes are not actions — they are returned by `runTurn`. */
 type Action =
   | { type: "reset-attempt" }
   | {
@@ -178,6 +174,7 @@ export function isStreamOrderError(error: Error): boolean {
 type NativeMessage = Omit<Anthropic.MessageParam, "content"> & {
   content: Anthropic.Messages.ContentBlockParam[];
 };
+
 export class AnthropicInferenceManager implements NativeInferenceManager {
   private messages: NativeMessage[] = [];
   private currentRequest: MessageStream | undefined;
@@ -429,11 +426,16 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     try {
       const outcome = await this.streamOneResponse();
       if (outcome.type === "completed") {
-        return {
-          type: "completed",
-          stopReason: outcome.stopReason,
-          requested: this.collectRequestedTools(),
-        };
+        const requested = this.collectRequestedTools();
+        return requested.length
+          ? { type: "tool_use", requested }
+          : {
+              type: "stopped",
+              stopReason:
+                outcome.stopReason === "tool_use"
+                  ? "end_turn"
+                  : outcome.stopReason,
+            };
       }
       return outcome;
     } finally {
