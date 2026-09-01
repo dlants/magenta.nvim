@@ -13,7 +13,11 @@ import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
-import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
+import {
+  ABORT_MARKER_TEXT,
+  ABORT_TOOL_RESULT_TEXT,
+  UNANSWERED_TOOL_RESULT_TEXT,
+} from "./providers/inference-shared.ts";
 import type {
   AgentInput,
   NativeInferenceManager,
@@ -218,6 +222,20 @@ type ComposedBeforeRequest =
   | { type: "suspend"; reason: SuspendReason; content: AgentInput[] }
   | { type: "proceed"; injections: AgentInput[]; submissions: InputMessage[] };
 
+function completeToolResults(
+  requested: ReadonlyArray<RequestedTool>,
+  results: ToolResults,
+  missingError: string,
+): ToolResults {
+  if (requested.every(({ id }) => results.has(id))) return results;
+  const filled = new Map(results);
+  for (const { id } of requested) {
+    if (!filled.has(id)) {
+      filled.set(id, { status: "error", error: missingError });
+    }
+  }
+  return filled;
+}
 export class Agent {
   public state: ThreadState;
   public manager: NativeInferenceManager;
@@ -501,14 +519,51 @@ export class Agent {
 
       if (this.abortRequested) return this.finishTurnAbort();
 
-      const yielded = this.detectYield(requested);
-      if (yielded) {
-        for (const hook of this.deps.getHooks().onToolResults) {
-          hook(yielded.results);
+      // `yield_to_parent` is never executed: it ends the turn, so the agent
+      // answers it itself and marks every tool it shares the request with as
+      // skipped. The log must leave no tool_use unanswered.
+      const yieldRequest = requested.find(
+        (r) =>
+          r.request.status === "ok" &&
+          r.request.value.toolName === "yield_to_parent",
+      );
+      if (yieldRequest && yieldRequest.request.status === "ok") {
+        const input = yieldRequest.request.value.input;
+        const value: YieldValue =
+          this.context.yieldSchema !== undefined
+            ? { type: "structured", value: input }
+            : { type: "text", text: (input as { result: string }).result };
+
+        const results = new Map<ToolRequestId, ProviderToolResult["result"]>();
+        for (const { id } of requested) {
+          results.set(
+            id,
+            id === yieldRequest.id
+              ? {
+                  status: "ok",
+                  value: [
+                    {
+                      type: "text",
+                      text: "Yield accepted. Your result has been sent to the parent thread.",
+                      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                    },
+                  ],
+                  structuredResult: { toolName: "yield_to_parent" as ToolName },
+                }
+              : {
+                  status: "error",
+                  error:
+                    "Not executed: the thread yielded to its parent in this request.",
+                },
+          );
         }
-        this.manager.appendToolResults(requested, yielded.results);
+
+        for (const hook of this.deps.getHooks().onToolResults) {
+          hook(results);
+        }
+        this.manager.appendToolResults(requested, results);
         this.deps.onUpdate();
-        return { type: "yielded", value: yielded.value };
+        return { type: "yielded", value };
       }
 
       this.currentPhase = {
@@ -533,7 +588,19 @@ export class Agent {
         toolOutcome = { type: "continue", results: new Map() };
       }
 
-      this.manager.appendToolResults(requested, toolOutcome.results);
+      this.manager.appendToolResults(
+        requested,
+        // Only the agent knows why an id went unanswered — an executor that
+        // aborted, rejected, or simply skipped it — so it says so here rather
+        // than leaving the manager to invent a reason.
+        completeToolResults(
+          requested,
+          toolOutcome.results,
+          toolOutcome.type === "aborted"
+            ? ABORT_TOOL_RESULT_TEXT
+            : UNANSWERED_TOOL_RESULT_TEXT,
+        ),
+      );
       // Not throttled: this is the transition from live tool progress to
       // rendered results, and the view must not show progress for a tool the
       // log has already answered.
@@ -545,50 +612,6 @@ export class Agent {
       }
       if (this.abortRequested) return this.finishTurnAbort();
     }
-  }
-  /** `yield_to_parent` is never executed: it ends the turn, so the agent
-   * answers it itself and marks every tool it shares the request with as
-   * skipped. The log must leave no tool_use unanswered. */
-  private detectYield(
-    requested: ReadonlyArray<RequestedTool>,
-  ): { value: YieldValue; results: ToolResults } | undefined {
-    const yieldRequest = requested.find(
-      (r) =>
-        r.request.status === "ok" &&
-        r.request.value.toolName === "yield_to_parent",
-    );
-    if (!yieldRequest || yieldRequest.request.status !== "ok") return undefined;
-
-    const input = yieldRequest.request.value.input;
-    const value: YieldValue =
-      this.context.yieldSchema !== undefined
-        ? { type: "structured", value: input }
-        : { type: "text", text: (input as { result: string }).result };
-
-    const results = new Map<ToolRequestId, ProviderToolResult["result"]>();
-    for (const { id } of requested) {
-      results.set(
-        id,
-        id === yieldRequest.id
-          ? {
-              status: "ok",
-              value: [
-                {
-                  type: "text",
-                  text: "Yield accepted. Your result has been sent to the parent thread.",
-                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-                },
-              ],
-              structuredResult: { toolName: "yield_to_parent" as ToolName },
-            }
-          : {
-              status: "error",
-              error:
-                "Not executed: the thread yielded to its parent in this request.",
-            },
-      );
-    }
-    return { value, results };
   }
 
   /** One provider request. Retries live inside it and stay inside the

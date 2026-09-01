@@ -303,8 +303,6 @@ export type RequestedTool = {
 export type TurnResult =
   | { type: "stopped"; stopReason: StopReason }
   | { type: "suspended"; reason: SuspendReason }
-  /** The model called `yield_to_parent`. The tool is never executed: the
-   * agent answers every tool_use of that request itself and stops. */
   | { type: "yielded"; value: YieldValue }
   | { type: "aborted" }
   | { type: "failed"; error: Error };

@@ -22,6 +22,7 @@ import {
 import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
 import {
   ABORT_TOOL_RESULT_TEXT,
+  assertCompleteToolResults,
   getRetryDelay,
   MAX_RETRY_DURATION,
 } from "./inference-shared.ts";
@@ -444,17 +445,15 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     }
   }
 
-  /** Every requested tool gets exactly one result block. Ids the executor
-   * omitted are answered here rather than trusted to the executor. */
+  /** Every requested tool gets exactly one result block; a caller that leaves
+   * one unanswered has produced a log the provider will reject. */
   appendToolResults(
     requested: ReadonlyArray<RequestedTool>,
     results: ToolResults,
   ): void {
+    assertCompleteToolResults(requested, results);
     for (const { id } of requested) {
-      const result = results.get(id) ?? {
-        status: "error" as const,
-        error: ABORT_TOOL_RESULT_TEXT,
-      };
+      const result = results.get(id) as ProviderToolResult["result"];
       // Anthropic wants one user message per tool result.
       this.messages.push({
         role: "user",

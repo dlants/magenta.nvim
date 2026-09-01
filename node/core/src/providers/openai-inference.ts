@@ -11,7 +11,7 @@ import {
   type RefreshAuth,
 } from "./auth-refresh.ts";
 import {
-  ABORT_TOOL_RESULT_TEXT,
+  assertCompleteToolResults,
   getRetryDelay,
   MAX_RETRY_DURATION,
 } from "./inference-shared.ts";
@@ -415,12 +415,10 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     requested: ReadonlyArray<RequestedTool>,
     results: ToolResults,
   ): void {
+    assertCompleteToolResults(requested, results);
     const attachments: OpenAI.Responses.ResponseInputContent[] = [];
     for (const { id } of requested) {
-      const result = results.get(id) ?? {
-        status: "error" as const,
-        error: ABORT_TOOL_RESULT_TEXT,
-      };
+      const result = results.get(id) as ProviderToolResult["result"];
       this.items.push({
         type: "function_call_output",
         call_id: id,

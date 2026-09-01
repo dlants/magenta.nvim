@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { Agent, ToolExecutor } from "../agent.ts";
 import { createTestOpenAIAgent, flatPhase } from "../test-helpers.ts";
 import type { ToolName, ToolStructuredResult } from "../tool-types.ts";
-import { ABORT_TOOL_RESULT_TEXT } from "./inference-shared.ts";
+import {
+  ABORT_TOOL_RESULT_TEXT,
+  UNANSWERED_TOOL_RESULT_TEXT,
+} from "./inference-shared.ts";
 import type {
   MockOpenAIClient,
   MockResponseStream,
@@ -601,7 +604,7 @@ describe("OpenAIInferenceManager invariant guards", () => {
     expect(outputs).toHaveLength(1);
     expect(outputs[0]).toMatchObject({
       call_id: "call_1",
-      output: ABORT_TOOL_RESULT_TEXT,
+      output: UNANSWERED_TOOL_RESULT_TEXT,
     });
     followup.finishResponse();
     await turn;
@@ -618,7 +621,7 @@ describe("OpenAIInferenceManager invariant guards", () => {
 
     const followup = await client.awaitStreamAt(1);
     expect(followup.inputItemsOfType("function_call_output")).toMatchObject([
-      { call_id: "call_1", output: ABORT_TOOL_RESULT_TEXT },
+      { call_id: "call_1", output: UNANSWERED_TOOL_RESULT_TEXT },
     ]);
     followup.finishResponse();
     await turn;
