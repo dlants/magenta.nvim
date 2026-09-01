@@ -27,6 +27,13 @@ export type YieldValue =
   /** conforms to the `yieldSchema` this thread was constructed with */
   | { type: "structured"; value: unknown };
 
+/** The display/transport rendering of a yield: what a human reads and what a
+ * `resultPrefix` can be glued onto. Derived, never stored alongside the
+ * value. */
+export function renderYieldValue(value: YieldValue): string {
+  return value.type === "structured" ? JSON.stringify(value.value) : value.text;
+}
+
 /** The intra-turn detail of `AgentPhase.running`. It is a read-through projection of the
  * runner rather than a stored mirror: everything in it (the streaming block,
  * the retry countdown, the active tool list) moves between renders, so a copy
@@ -167,16 +174,16 @@ export type AgentHooks = {
   onToolResults: ToolResultsHook[];
   /** The first `accept`/`reject` wins; `send-message` texts concatenate. */
   onYield: YieldHook[];
-  /** A file-touching tool (edl, get_files) finished. Fire-and-forget. Not a
-   * turn-loop hook point — it fires per file from inside a tool — but the
-   * agent wraps it for its own `editedFilesThisTurn` bookkeeping. */
-  onToolApplied?: OnToolApplied;
 };
 
 /** What the owning `Thread` answers. A superset of `AgentHooks`: the turn
  * loop's outer half lives in `Thread`, so the end-of-turn question is asked
  * there and the agent never sees it. */
 export type ThreadHooks = AgentHooks & {
+  /** A file-touching tool (edl, get_files) finished. Fire-and-forget. Fires
+   * per file from inside a tool, not at a turn-loop boundary; the thread owns
+   * tool construction, so it never reaches the agent. */
+  onToolApplied?: OnToolApplied;
   /** The agent stopped without yielding. */
   onEndTurn?: (ctx: EndTurnContext) => EndTurnAction;
   /** The thread's log was thrown away and it starts over. */

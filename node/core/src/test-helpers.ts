@@ -40,6 +40,7 @@ import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import { Thread, threadToolSpecs } from "./thread.ts";
 import type { AgentHooks, TurnActivity } from "./thread-api.ts";
+import { createTool } from "./tools/create-tool.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import { pollUntil } from "./utils/async.ts";
@@ -236,6 +237,28 @@ function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
   return new AgentClass(context, {
     threadId: "test-agent" as ThreadId,
     state,
+    createTool: (request) =>
+      createTool(request, {
+        threadId: "test-agent" as ThreadId,
+        logger: context.logger,
+        lspClient: context.lspClient,
+        luaExecutor: context.luaExecutor,
+        mcpToolManager: context.mcpToolManager,
+        cwd: context.cwd,
+        homeDir: context.homeDir,
+        maxConcurrentSubagents: context.maxConcurrentSubagents,
+        maxConcurrentFastSubagents: context.maxConcurrentFastSubagents,
+        contextTracker: context.contextTracker,
+        onToolApplied: () => {},
+        edlRegisters: state.edlRegisters,
+        commentStore: context.commentStore,
+        fileIO: context.fileIO,
+        shell: context.shell,
+        threadManager: context.threadManager,
+        scriptRunner: context.getScriptRunner?.(),
+        requestRender: () => {},
+        getAgents: () => context.getAgents(),
+      }),
     structuredToolResults: new Map(),
     toolSpecs: threadToolSpecs(context),
     getHooks: opts.getHooks ?? (() => agentHooks()),

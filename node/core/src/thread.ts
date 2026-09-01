@@ -6,6 +6,7 @@ import {
   type InputMessage,
   type ThreadState,
 } from "./agent.ts";
+import type { OnToolApplied } from "./capabilities/context-tracker.ts";
 import type { ThreadId } from "./chat-types.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { ProviderProfile } from "./provider-options.ts";
@@ -45,6 +46,7 @@ import type {
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type { RequestAction, SuspendReason } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
+import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 
@@ -261,11 +263,58 @@ export class Thread {
     }
   }
 
+  /** Tool construction is the thread's: the agent only drives invocations.
+   * Rebuilt per tool so a tool always sees the thread's current registers. */
+  private toolContext(): CreateToolContext {
+    return {
+      threadId: this.id,
+      logger: this.context.logger,
+      lspClient: this.context.lspClient,
+      luaExecutor: this.context.luaExecutor,
+      mcpToolManager: this.context.mcpToolManager,
+      cwd: this.context.cwd,
+      homeDir: this.context.homeDir,
+      maxConcurrentSubagents: this.context.maxConcurrentSubagents,
+      maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
+      contextTracker: this.context.contextTracker,
+      onToolApplied: (absFilePath, tool, fileTypeInfo) =>
+        this.onToolApplied(absFilePath, tool, fileTypeInfo),
+      edlRegisters: this.state.edlRegisters,
+      commentStore: this.context.commentStore,
+      fileIO: this.context.fileIO,
+      shell: this.context.shell,
+      threadManager: this.context.threadManager,
+      scriptRunner: this.context.getScriptRunner?.(),
+      requestRender: () => this.handleUpdate(),
+      getAgents: () => this.context.getAgents(),
+    };
+  }
+
+  private onToolApplied: OnToolApplied = (absFilePath, tool, fileTypeInfo) => {
+    try {
+      this.hooks.onToolApplied?.(absFilePath, tool, fileTypeInfo);
+    } catch (error) {
+      this.context.logger.error(
+        `onToolApplied hook threw: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (
+      tool.type === "edl-edit" &&
+      !this.state.editedFilesThisTurn.some((e) => e.path === absFilePath)
+    ) {
+      this.state.editedFilesThisTurn.push({
+        path: absFilePath,
+        snapshot: tool.previousContent,
+      });
+    }
+  };
+
   private createAgent(runnerInit: AgentDeps["runnerInit"]): Agent {
     return new Agent(this.context, {
       threadId: this.id,
       state: this.state,
       structuredToolResults: this.structuredToolResults,
+      createTool: (request) => createTool(request, this.toolContext()),
       toolSpecs: this.state.toolSpecs,
       getHooks: () => this.agentHooks(),
       onUpdate: () => this.handleUpdate(),
@@ -501,9 +550,6 @@ export class Thread {
         (results) => this.systemReminders.onToolResults(results),
       ],
       onYield: this.hooks.onYield,
-      ...(this.hooks.onToolApplied
-        ? { onToolApplied: this.hooks.onToolApplied }
-        : {}),
     };
   }
 
@@ -608,6 +654,7 @@ export class Thread {
   private async runToRest(messages: InputMessage[]): Promise<SendResult> {
     // An abort can only target a loop that is running, so there is no stale
     // flag to clear here: `abort` leaves `idle` alone.
+    this.state.editedFilesThisTurn = [];
     const epoch = ++this.sendEpoch;
     this.loopState = { type: "running", epoch };
     const isCurrentLoop = () =>
@@ -834,7 +881,9 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     }
     this.threadLogger.resetCursor();
 
-    this.update({ type: "reset-agent-state" });
+    this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
+    this.state.editedFilesThisTurn = [];
+    this.handleUpdate();
     this.systemReminders = this.createReminderSupervisor();
     this.hooks.onReset?.();
 

@@ -1844,7 +1844,7 @@ describe("AutoCompactSupervisor integration", () => {
   });
 });
 
-describe("AgentHooks.onToolApplied", () => {
+describe("ThreadHooks.onToolApplied", () => {
   it("fires for edl edits and get_files reads, alongside editedFilesThisTurn", async () => {
     const fileIO = new InMemoryFileIO({
       "/tmp/a.txt": "hello",
@@ -1924,7 +1924,7 @@ describe("AgentHooks.onToolApplied", () => {
     ]);
   });
 });
-describe("Agent.editedFilesThisTurn", () => {
+describe("Thread.editedFilesThisTurn", () => {
   it("starts empty and resets on new sendMessage", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({

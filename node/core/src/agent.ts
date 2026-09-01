@@ -42,6 +42,7 @@ import type {
   TurnActivity,
   YieldValue,
 } from "./thread-api.ts";
+import { renderYieldValue } from "./thread-api.ts";
 import type { SuspendReason, YieldAction } from "./thread-supervisor.ts";
 import type {
   ToolInvocation,
@@ -50,7 +51,6 @@ import type {
   ToolRequestId,
   ToolStructuredResult,
 } from "./tool-types.ts";
-import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
@@ -165,8 +165,7 @@ export type AgentAction =
       type: "set-active-tool-result";
       id: ToolRequestId;
       result: ProviderToolResult;
-    }
-  | { type: "reset-agent-state" };
+    };
 
 export type ThreadState = {
   title: string | undefined;
@@ -183,6 +182,9 @@ export interface AgentDeps {
   threadId: ThreadId;
   state: ThreadState;
   toolSpecs: ProviderToolSpec[];
+  /** Tool construction, and everything it needs, is the owner's: the agent
+   * only drives the invocations it gets back. */
+  createTool: (request: ToolRequest) => ToolInvocation;
   structuredToolResults: Map<ToolRequestId, ToolStructuredResult>;
   getHooks: () => AgentHooks;
   onUpdate: OnUpdate;
@@ -287,10 +289,6 @@ export class Agent {
         }
         break;
       }
-      case "reset-agent-state":
-        this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
-        this.state.editedFilesThisTurn = [];
-        break;
       default:
         assertUnreachable(action);
     }
@@ -407,7 +405,7 @@ export class Agent {
 
   private abortRequested = false;
 
-  private pendingYield: { result: string; value: YieldValue } | undefined;
+  private pendingYield: YieldValue | undefined;
 
   private outputTokenCount(): number {
     let total = 0;
@@ -635,7 +633,7 @@ export class Agent {
     const pending = this.pendingYield;
     this.pendingYield = undefined;
     if (!pending) return;
-    await this.handleYield(pending.result, pending.value);
+    await this.handleYield(pending);
   }
 
   /** The most recent preflight count, for the conversation as it stood before
@@ -677,47 +675,6 @@ export class Agent {
     this.settle({ type: "completed", stopReason });
   }
 
-  private createToolContext(): CreateToolContext {
-    return {
-      mcpToolManager: this.context.mcpToolManager,
-      threadId: this.threadId,
-      logger: this.context.logger,
-      lspClient: this.context.lspClient,
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-      maxConcurrentSubagents: this.context.maxConcurrentSubagents,
-      maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
-      contextTracker: this.context.contextTracker,
-      onToolApplied: (absFilePath, tool, fileTypeInfo) => {
-        try {
-          this.deps.getHooks().onToolApplied?.(absFilePath, tool, fileTypeInfo);
-        } catch (error) {
-          this.context.logger.error(
-            `onToolApplied hook threw: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-        if (
-          tool.type === "edl-edit" &&
-          !this.state.editedFilesThisTurn.some((e) => e.path === absFilePath)
-        ) {
-          this.state.editedFilesThisTurn.push({
-            path: absFilePath,
-            snapshot: tool.previousContent,
-          });
-        }
-      },
-      edlRegisters: this.state.edlRegisters,
-      fileIO: this.context.fileIO,
-      shell: this.context.shell,
-      threadManager: this.context.threadManager,
-      scriptRunner: this.context.getScriptRunner?.(),
-      luaExecutor: this.context.luaExecutor,
-      commentStore: this.context.commentStore,
-      requestRender: () => this.deps.onUpdate(),
-      getAgents: () => this.context.getAgents(),
-    };
-  }
-
   /** Overridable so a test can stand in for real tool execution; production
    * never replaces it. */
   protected async executeTools(
@@ -737,7 +694,7 @@ export class Agent {
       const request = requested.request.value;
       let invocation;
       try {
-        invocation = createTool(request, this.createToolContext());
+        invocation = this.deps.createTool(request);
       } catch (err) {
         results.set(requested.id, {
           status: "error",
@@ -783,7 +740,6 @@ export class Agent {
       ),
     );
 
-    let yieldResult: string | undefined;
     let yieldValue: YieldValue | undefined;
     for (const [id, entry] of activeTools) {
       if (entry.toolName === "yield_to_parent") {
@@ -794,10 +750,6 @@ export class Agent {
                 type: "text",
                 text: (entry.request.input as { result: string }).result,
               };
-        yieldResult =
-          this.context.yieldSchema !== undefined
-            ? JSON.stringify(entry.request.input)
-            : (entry.request.input as { result: string }).result;
         results.set(id, {
           status: "ok",
           value: [
@@ -827,11 +779,8 @@ export class Agent {
       return { type: "aborted", results };
     }
 
-    if (yieldResult !== undefined && yieldValue !== undefined) {
-      this.pendingYield = {
-        result: yieldResult,
-        value: yieldValue,
-      };
+    if (yieldValue !== undefined) {
+      this.pendingYield = yieldValue;
       return { type: "suspend", results };
     }
 
@@ -909,7 +858,6 @@ export class Agent {
   }
 
   private async submit(inputMessages?: InputMessage[]): Promise<void> {
-    this.state.editedFilesThisTurn = [];
     this.openingRequestPending = true;
     // Whether a send with no user content is worth a request is the owner's
     // call: it probes its supervisors before it gets here, and the request it
@@ -933,10 +881,8 @@ export class Agent {
     return undefined;
   }
 
-  private async handleYield(
-    yieldResult: string,
-    yieldValue: YieldValue,
-  ): Promise<void> {
+  private async handleYield(yieldValue: YieldValue): Promise<void> {
+    const yieldResult = renderYieldValue(yieldValue);
     const action = await this.consultYieldSupervisors(yieldValue);
     switch (action.type) {
       case "accept": {
