@@ -430,7 +430,7 @@ describe("tool execution", () => {
     const toolUseId = "tool-omitted" as ToolRequestId;
     const agent = createAgent(mockClient, {
       executeTools: () =>
-        Promise.resolve({ type: "suspend" as const, results: new Map() }),
+        Promise.resolve({ type: "continue" as const, results: new Map() }),
     });
 
     const turn = agent.runTurn([
@@ -446,8 +446,9 @@ describe("tool execution", () => {
       files: [{ filePath: "test.ts" }],
     });
     stream.finishResponse("tool_use");
-
-    expect(await turn).toEqual({ type: "suspended" });
+    const stream2 = await awaitNextStream(mockClient, 1);
+    stream2.finishResponse("end_turn");
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
 
     const toolResult = agent.log.messages[2].content[0];
     expect(toolResult).toMatchObject({
@@ -1053,7 +1054,7 @@ describe("streaming block", () => {
     const agent = createAgent(mockClient, {
       executeTools: (requests) =>
         Promise.resolve({
-          type: "suspend" as const,
+          type: "continue" as const,
           results: okResults(requests),
         }),
     });
@@ -1117,8 +1118,10 @@ describe("streaming block", () => {
     expect(streamingBlock(agent)).toBeUndefined();
 
     stream.finishResponse("tool_use");
+    const stream2 = await awaitNextStream(mockClient, 1);
+    stream2.finishResponse("end_turn");
     await stream.finalMessage();
-    await turn;
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
   });
 
   it("returns undefined for server_tool_use blocks", async () => {
@@ -1630,7 +1633,7 @@ describe("web search result preservation", () => {
       const agent = createAgent(mockClient, {
         executeTools: (requests) =>
           Promise.resolve({
-            type: "suspend" as const,
+            type: "continue" as const,
             results: okResults(requests),
           }),
       });
@@ -1651,7 +1654,9 @@ describe("web search result preservation", () => {
         {},
       );
       stream.finishResponse("tool_use");
-      expect(await turn).toEqual({ type: "suspended" });
+      const stream2 = await awaitNextStream(mockClient, 1);
+      stream2.finishResponse("end_turn");
+      expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
 
       const state = agent.log;
       const assistantContent = state.messages[1].content;
@@ -1943,7 +1948,7 @@ File context here
       const agent = createAgent(mockClient, {
         executeTools: (requests) =>
           Promise.resolve({
-            type: "suspend" as const,
+            type: "continue" as const,
             results: okResults(requests),
           }),
       });
@@ -1975,6 +1980,12 @@ File context here
           caller: { type: "direct" as const },
         },
       });
+      stream.emitEvent({
+        type: "content_block_delta",
+        index: toolIndex,
+        delta: { type: "input_json_delta", partial_json: "{}" },
+      });
+
       await stream.settle();
 
       // Clone while tool_use is in-progress (in currentAnthropicBlock)
@@ -1993,8 +2004,10 @@ File context here
       // Clean up source
       stream.emitEvent({ type: "content_block_stop", index: toolIndex });
       stream.finishResponse("end_turn");
+      const stream2 = await awaitNextStream(mockClient, 1);
+      stream2.finishResponse("end_turn");
       await stream.finalMessage();
-      await turn;
+      expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
     });
 
     it("clone while streaming with finalized server_tool_use drops it", async () => {
@@ -2044,7 +2057,7 @@ File context here
           onCalled();
           return new Promise((resolve) => {
             releaseTools = () =>
-              resolve({ type: "suspend", results: okResults(requests) });
+              resolve({ type: "continue", results: okResults(requests) });
           });
         },
       });
@@ -2113,7 +2126,9 @@ File context here
       expect(agent.log.messages).toHaveLength(2);
 
       releaseTools();
-      expect(await turn).toEqual({ type: "suspended" });
+      const stream2 = await awaitNextStream(mockClient, 1);
+      stream2.finishResponse("end_turn");
+      expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
     });
 
     it("source agent continues streaming unaffected after clone", async () => {

@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
+import type { YieldValue } from "../thread-api.ts";
 import type { SuspendReason } from "../thread-supervisor.ts";
 import type * as ToolManager from "../tool-types.ts";
 import type { ToolName, ToolRequest } from "../tool-types.ts";
@@ -301,7 +302,10 @@ export type RequestedTool = {
 
 export type TurnResult =
   | { type: "stopped"; stopReason: StopReason }
-  | { type: "suspended"; reason?: SuspendReason | undefined }
+  | { type: "suspended"; reason: SuspendReason }
+  /** The model called `yield_to_parent`. The tool is never executed: the
+   * agent answers every tool_use of that request itself and stops. */
+  | { type: "yielded"; value: YieldValue }
   | { type: "aborted" }
   | { type: "failed"; error: Error };
 

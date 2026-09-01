@@ -162,6 +162,7 @@ function renderTurnResult(
     case "aborted":
       return d`[ABORTED] ${usage ? d` ${renderUsage(usage)}` : d``} `;
     case "suspended":
+    case "yielded":
       return renderStopReason("end_turn", usage);
     case "failed":
       return d`Error ${result.error.message}${

@@ -258,6 +258,8 @@ export class Thread {
         };
       case "suspended":
         return undefined;
+      case "yielded":
+        return { type: "yielded", value: last.value };
       default:
         assertUnreachable(last);
     }

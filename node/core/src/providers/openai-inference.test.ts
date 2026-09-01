@@ -340,7 +340,7 @@ describe("OpenAIInferenceManager tool calls", () => {
     const { client, agent } = setup({
       executeTools: (requests) =>
         Promise.resolve({
-          type: "suspend",
+          type: "continue" as const,
           results: okResults(requests, "yielded"),
         }),
     });
@@ -349,9 +349,11 @@ describe("OpenAIInferenceManager tool calls", () => {
     await stream.settle();
     stream.finishResponse();
 
-    expect(await turn).toEqual({ type: "suspended" });
-    // No continuation request: the turn ends where the executor said it does.
-    expect(client.streams).toHaveLength(1);
+    const followup = await client.awaitStreamAt(1);
+    expect(followup.inputItemsOfType("function_call_output")).toHaveLength(1);
+    followup.finishResponse();
+
+    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
     const results = agent.manager.log.messages.flatMap((message) =>
       message.content.filter((content) => content.type === "tool_result"),
     );

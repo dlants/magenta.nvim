@@ -199,7 +199,6 @@ export interface AgentDeps {
 
 export type ToolOutcome =
   | { type: "continue"; results: ToolResults }
-  | { type: "suspend"; results: ToolResults }
   | { type: "aborted"; results: ToolResults };
 
 export type ToolExecutor = (
@@ -405,8 +404,6 @@ export class Agent {
 
   private abortRequested = false;
 
-  private pendingYield: YieldValue | undefined;
-
   private outputTokenCount(): number {
     let total = 0;
     for (const message of this.manager.log.messages) {
@@ -504,6 +501,16 @@ export class Agent {
 
       if (this.abortRequested) return this.finishTurnAbort();
 
+      const yielded = this.detectYield(requested);
+      if (yielded) {
+        for (const hook of this.deps.getHooks().onToolResults) {
+          hook(yielded.results);
+        }
+        this.manager.appendToolResults(requested, yielded.results);
+        this.deps.onUpdate();
+        return { type: "yielded", value: yielded.value };
+      }
+
       this.currentPhase = {
         type: "running",
         activity: {
@@ -536,10 +543,54 @@ export class Agent {
         this.abortRequested = true;
         return this.finishTurnAbort();
       }
-      if (toolOutcome.type === "suspend") return { type: "suspended" };
       if (this.abortRequested) return this.finishTurnAbort();
     }
   }
+  /** `yield_to_parent` is never executed: it ends the turn, so the agent
+   * answers it itself and marks every tool it shares the request with as
+   * skipped. The log must leave no tool_use unanswered. */
+  private detectYield(
+    requested: ReadonlyArray<RequestedTool>,
+  ): { value: YieldValue; results: ToolResults } | undefined {
+    const yieldRequest = requested.find(
+      (r) =>
+        r.request.status === "ok" &&
+        r.request.value.toolName === "yield_to_parent",
+    );
+    if (!yieldRequest || yieldRequest.request.status !== "ok") return undefined;
+
+    const input = yieldRequest.request.value.input;
+    const value: YieldValue =
+      this.context.yieldSchema !== undefined
+        ? { type: "structured", value: input }
+        : { type: "text", text: (input as { result: string }).result };
+
+    const results = new Map<ToolRequestId, ProviderToolResult["result"]>();
+    for (const { id } of requested) {
+      results.set(
+        id,
+        id === yieldRequest.id
+          ? {
+              status: "ok",
+              value: [
+                {
+                  type: "text",
+                  text: "Yield accepted. Your result has been sent to the parent thread.",
+                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                },
+              ],
+              structuredResult: { toolName: "yield_to_parent" as ToolName },
+            }
+          : {
+              status: "error",
+              error:
+                "Not executed: the thread yielded to its parent in this request.",
+            },
+      );
+    }
+    return { value, results };
+  }
+
   /** One provider request. Retries live inside it and stay inside the
    * `streaming` phase, so they are never observable as a transition. */
   private async streamOneResponse(): Promise<RequestResult> {
@@ -613,7 +664,10 @@ export class Agent {
         this.finishAbort();
         return;
       case "suspended":
-        await this.handleSuspend(result.reason);
+        this.settle({ type: "suspended", reason: result.reason });
+        return;
+      case "yielded":
+        await this.handleYield(result.value);
         return;
       case "stopped":
         this.handleStopped(result.stopReason);
@@ -621,19 +675,6 @@ export class Agent {
       default:
         assertUnreachable(result);
     }
-  }
-
-  private async handleSuspend(
-    supervisorReason?: SuspendReason | undefined,
-  ): Promise<void> {
-    if (supervisorReason) {
-      this.settle({ type: "suspended", reason: supervisorReason });
-      return;
-    }
-    const pending = this.pendingYield;
-    this.pendingYield = undefined;
-    if (!pending) return;
-    await this.handleYield(pending);
   }
 
   /** The most recent preflight count, for the conversation as it stood before
@@ -740,29 +781,7 @@ export class Agent {
       ),
     );
 
-    let yieldValue: YieldValue | undefined;
     for (const [id, entry] of activeTools) {
-      if (entry.toolName === "yield_to_parent") {
-        yieldValue =
-          this.context.yieldSchema !== undefined
-            ? { type: "structured", value: entry.request.input }
-            : {
-                type: "text",
-                text: (entry.request.input as { result: string }).result,
-              };
-        results.set(id, {
-          status: "ok",
-          value: [
-            {
-              type: "text",
-              text: "Yield accepted. Your result has been sent to the parent thread.",
-              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-            },
-          ],
-          structuredResult: { toolName: "yield_to_parent" as ToolName },
-        });
-        continue;
-      }
       if (entry.result) {
         results.set(id, entry.result.result);
       }
@@ -777,11 +796,6 @@ export class Agent {
 
     if (this.abortRequested) {
       return { type: "aborted", results };
-    }
-
-    if (yieldValue !== undefined) {
-      this.pendingYield = yieldValue;
-      return { type: "suspend", results };
     }
 
     return { type: "continue", results };
