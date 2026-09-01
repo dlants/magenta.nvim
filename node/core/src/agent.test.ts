@@ -1084,10 +1084,8 @@ describe("Agent.abort appends user abort message", () => {
       ]),
     );
 
-    // There should also be a tool_result error message before the abort message
-    const secondToLast = messages[messages.length - 2];
-    expect(secondToLast.role).toBe("user");
-    expect(secondToLast.content).toEqual(
+    // The tool_result error rides the same user message as the abort marker
+    expect(lastMessage.content).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: "tool_result",

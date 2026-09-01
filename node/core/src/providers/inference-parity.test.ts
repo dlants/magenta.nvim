@@ -306,7 +306,7 @@ describe("appendUserMessage coalescing", () => {
   ])("%s folds a coalescing append into the trailing user message", (_name, make) => {
     const runner = make();
     runner.appendUserMessage([text("first")]);
-    runner.appendUserMessage([text("second")], { coalesce: true });
+    runner.appendUserMessage([text("second")]);
     const messages = runner.log.messages;
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe("user");
@@ -318,7 +318,7 @@ describe("appendUserMessage coalescing", () => {
     ["openai", makeOpenAI],
   ])("%s pushes a new user message when there is nothing to fold into", (_name, make) => {
     const runner = make();
-    runner.appendUserMessage([text("only")], { coalesce: true });
+    runner.appendUserMessage([text("only")]);
     const messages = runner.log.messages;
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe("user");

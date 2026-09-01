@@ -399,11 +399,11 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     this.currentRequest?.abort();
   }
 
-  appendUserMessage(content: AgentInput[], opts?: { coalesce?: true }): void {
+  appendUserMessage(content: AgentInput[]): void {
     if (content.length === 0) return;
     const native = this.convertInputToNative(content);
     const last = this.messages[this.messages.length - 1];
-    if (opts?.coalesce && last && last.role === "user") {
+    if (last && last.role === "user") {
       last.content = [...last.content, ...native];
     } else {
       this.messages.push({ role: "user", content: native });

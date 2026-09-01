@@ -46,8 +46,22 @@ import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type { RequestAction, SuspendReason } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
+import { getToolSpecs } from "./tools/toolManager.ts";
+
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
+export function threadToolSpecs(context: AgentContext): ProviderToolSpec[] {
+  return getToolSpecs(
+    context.threadType,
+    context.mcpToolManager,
+    context.availableCapabilities,
+    context.getAgents(),
+    context.subagentConfig,
+    context.yieldSchema,
+    context.getScriptRunner?.()?.getScriptCatalog(),
+    context.subagentDockerfile,
+  );
+}
 
 export type ThreadArchiveOptions = {
   baseDir?: string;
@@ -137,7 +151,7 @@ export class Thread {
       title: undefined,
       editedFilesThisTurn: [],
       lastTurnResult: undefined,
-      toolSpecs: [],
+      toolSpecs: threadToolSpecs(context),
     };
     this.systemReminders = this.createReminderSupervisor();
 
@@ -252,6 +266,7 @@ export class Thread {
       threadId: this.id,
       state: this.state,
       structuredToolResults: this.structuredToolResults,
+      toolSpecs: this.state.toolSpecs,
       getHooks: () => this.agentHooks(),
       onUpdate: () => this.handleUpdate(),
       runnerInit,
@@ -268,10 +283,6 @@ export class Thread {
 
   update(...args: Parameters<Agent["update"]>): void {
     this.agent.update(...args);
-  }
-
-  refreshToolSpecs(): void {
-    this.agent.refreshToolSpecs();
   }
 
   getToolSpecs(): ProviderToolSpec[] {

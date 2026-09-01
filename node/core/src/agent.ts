@@ -53,7 +53,6 @@ import type {
 import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
-import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
 import type { AbsFilePath, HomeDir, NvimCwd } from "./utils/files.ts";
@@ -94,15 +93,10 @@ export type ActiveToolEntry = {
   result?: ProviderToolResult;
 };
 
-/** The phase as one flat label, for logging and test assertions. */
 export function phaseLabel(phase: AgentPhase): string {
   return phase.type === "running" ? phase.activity.type : phase.type;
 }
-/** The live tool invocations, when tools are actually running. `undefined`
- * covers both "not a tool-running phase" and "the invocations have settled";
- * a caller that needs to tell those apart narrows `phase` itself. */
 
-/** The block currently being streamed, if a request is in flight. */
 export function phaseStreamingBlock(
   phase: AgentPhase,
 ): StreamingBlock | undefined {
@@ -110,6 +104,7 @@ export function phaseStreamingBlock(
     ? phase.activity.block
     : undefined;
 }
+
 export function phaseActiveTools(
   phase: AgentPhase,
 ): ReadonlyMap<ToolRequestId, ActiveToolEntry> | undefined {
@@ -119,14 +114,11 @@ export function phaseActiveTools(
     ? phase.activity.tools.activeTools
     : undefined;
 }
+
 export type AgentPhase =
   | { type: "idle" }
   | { type: "running"; activity: TurnActivity }
-  /** Unwinding: the tools have been told to stop and the history is being left
-   * well-formed. Only reachable from a turn in flight. */
   | { type: "aborting" }
-  /** Terminal for practical purposes: the model called `yield_to_parent` and
-   * the supervisors accepted. */
   | {
       type: "yielded";
       response: string;
@@ -190,6 +182,7 @@ export type ThreadState = {
 export interface AgentDeps {
   threadId: ThreadId;
   state: ThreadState;
+  toolSpecs: ProviderToolSpec[];
   structuredToolResults: Map<ToolRequestId, ToolStructuredResult>;
   getHooks: () => AgentHooks;
   onUpdate: OnUpdate;
@@ -202,9 +195,6 @@ export interface AgentDeps {
       };
 }
 
-/** ToolResults are always inserted into the runner, so we always end in a valid state.
- * This means we can later send another request, or append more messages.
- */
 export type ToolOutcome =
   | { type: "continue"; results: ToolResults }
   | { type: "suspend"; results: ToolResults }
@@ -213,28 +203,23 @@ export type ToolOutcome =
 export type ToolExecutor = (
   requests: ReadonlyArray<RequestedTool>,
 ) => Promise<ToolOutcome>;
+
 export type BeforeRequestDecision =
   | { type: "proceed" }
   | { type: "suspend"; reason: SuspendReason };
-/** What the gate decided, plus whether it put anything in the log. */
-type GateOutcome = {
+
+type OnBeforeRequestResult = {
   decision: BeforeRequestDecision;
   appended: boolean;
 };
 
-/** A suspended composition cannot carry submissions: a drained queue is not
- * content to send but content already folded into `content`, which the gate
- * records in the log so it is not lost. */
 type ComposedBeforeRequest =
   | { type: "suspend"; reason: SuspendReason; content: AgentInput[] }
   | { type: "proceed"; injections: AgentInput[]; submissions: InputMessage[] };
 
 export class Agent {
   public state: ThreadState;
-  /** The provider-specific conversation. `Agent` owns the loop that drives it. */
   public manager: NativeInferenceManager;
-  /** The turn loop's state, and the only thing callers observe about it. Only
-   * the loop writes it; callers read it through `phase`. */
   private currentPhase: AgentPhase = { type: "idle" };
   get phase(): AgentPhase {
     return this.currentPhase;
@@ -243,9 +228,6 @@ export class Agent {
     this.currentPhase = phase;
     this.deps.onUpdate();
   }
-  /** Where the turn's tool invocations are. Written by the executor and read
-   * by anything that has to reach a running tool. Replaces the phase rather
-   * than mutating it, so `TurnActivity` stays a value. */
   private setToolInvocationState(tools: ToolInvocationState): void {
     const phase = this.currentPhase;
     if (phase.type !== "running" || phase.activity.type !== "running_tools") {
@@ -274,7 +256,7 @@ export class Agent {
     this.threadId = deps.threadId;
     this.state = deps.state;
     this.structuredToolResults = deps.structuredToolResults;
-    this.refreshToolSpecs();
+    this.state.toolSpecs = deps.toolSpecs;
 
     if (deps.runnerInit.type === "cloned") {
       this.manager = deps.runnerInit.cloneFrom.clone();
@@ -284,37 +266,6 @@ export class Agent {
     }
   }
 
-  private updateThrottleTimer: ReturnType<typeof setTimeout> | undefined;
-  private updatePending = false;
-
-  private flushUpdate(): void {
-    if (this.updatePending) {
-      this.updatePending = false;
-      this.deps.onUpdate();
-    }
-  }
-
-  private scheduleUpdate(): void {
-    this.updatePending = true;
-    if (!this.updateThrottleTimer) {
-      this.updateThrottleTimer = setTimeout(() => {
-        this.updateThrottleTimer = undefined;
-        this.flushUpdate();
-      }, 32);
-    }
-  }
-
-  private flushUpdateNow(): void {
-    if (this.updateThrottleTimer) {
-      clearTimeout(this.updateThrottleTimer);
-      this.updateThrottleTimer = undefined;
-    }
-    this.updatePending = false;
-  }
-
-  /** Process a state mutation. Calls onUpdate() unless silent is true.
-   *  Use silent for internal bookkeeping that doesn't need a view re-render.
-   */
   update(action: AgentAction, { silent }: { silent?: boolean } = {}): void {
     switch (action.type) {
       case "set-title":
@@ -348,25 +299,10 @@ export class Agent {
     }
   }
 
-  refreshToolSpecs(): void {
-    this.state.toolSpecs = getToolSpecs(
-      this.state.threadType,
-      this.context.mcpToolManager,
-      this.context.availableCapabilities,
-      this.context.getAgents(),
-      this.context.subagentConfig,
-      this.context.yieldSchema,
-      this.context.getScriptRunner?.()?.getScriptCatalog(),
-      this.context.subagentDockerfile,
-    );
-  }
-
   getToolSpecs(): ProviderToolSpec[] {
     return this.state.toolSpecs;
   }
 
-  /** Pick the one provider-specific inference config the profile's provider
-   * can act on. */
   private inferenceConfig(): ProviderInferenceConfig | undefined {
     const profile = this.context.profile;
     if (profile.provider === "openai") {
@@ -402,7 +338,6 @@ export class Agent {
   }
 
   private createManager(): NativeInferenceManager {
-    this.refreshToolSpecs();
     const provider = this.context.getProvider(this.context.profile);
     const config = this.inferenceConfig();
     const agent = provider.createInferenceManager({
@@ -472,8 +407,6 @@ export class Agent {
 
   private abortRequested = false;
 
-  /** Why the tool executor asked to suspend. Only the yield case exists: a
-   * supervisor's suspension travels back on the `TurnResult` itself. */
   private pendingYield: { result: string; value: YieldValue } | undefined;
 
   private outputTokenCount(): number {
@@ -485,34 +418,35 @@ export class Agent {
   }
 
   private runTurn(input: AgentInput[]): Promise<void> {
-    // The seeded prefix is not passed in: it leads the request the gate
-    // composes, so the gate is what consumes it.
     const turn = this.runTurnLoop(input)
       .then((result) => {
         this.currentTurn = undefined;
-        this.flushUpdateNow();
         return this.handleTurnResult(result);
       })
       .catch(this.handleSendMessageError);
     this.currentTurn = turn;
     return turn;
   }
-  /** True between the start and the settling of a turn. */
+
   private turnInFlight = false;
+
   /** Heartbeat that forces a re-render ~1/sec while a turn is in flight, so
    * time-based status (waiting timer, retry countdown) updates during dead
    * air. */
   private tickInterval: ReturnType<typeof setInterval> | undefined;
+
   private startTicker(): void {
     this.stopTicker();
     this.tickInterval = setInterval(() => this.deps.onUpdate(), 1000);
   }
+
   private stopTicker(): void {
     if (this.tickInterval !== undefined) {
       clearInterval(this.tickInterval);
       this.tickInterval = undefined;
     }
   }
+
   /** Drive one turn to completion. `send` is the ordinary entry point; this is
    * public so a caller (and the loop's tests) can drive a turn directly. */
   async runTurnLoop(input: AgentInput[]): Promise<TurnResult> {
@@ -529,33 +463,31 @@ export class Agent {
       this.abortRequested = false;
       this.currentPhase = { type: "idle" };
       this.stopTicker();
-      // At rest there must be no update still queued behind the throttle: the
-      // final notification is this one.
-      this.flushUpdateNow();
       this.deps.onUpdate();
     }
   }
-  /** Alternates between inference and tool execution until something ends the
-   * turn. This is the only thing that drives the agent forward. */
+
   private async runLoop(initialInput: AgentInput[]): Promise<TurnResult> {
-    let pending: AgentInput[] | undefined = initialInput;
+    let initialInputPending = true;
     while (true) {
       if (this.abortRequested) return this.finishTurnAbort();
 
-      const gate = await this.onBeforeRequest();
-      // After the gate, so the owner's injections sit ahead of the caller's
-      // own content — and in the same user message as them, but not folded
-      // into whatever the log happened to end with otherwise.
-      if (pending) {
-        this.manager.appendUserMessage(
-          pending,
-          gate.appended ? { coalesce: true } : undefined,
-        );
-        this.scheduleUpdate();
-        pending = undefined;
+      const onBeforeRequestResult = await this.onBeforeRequest();
+      const appendedInitialInput = initialInputPending;
+      if (initialInputPending) {
+        this.manager.appendUserMessage(initialInput);
+        initialInputPending = false;
       }
-      if (gate.decision.type === "suspend") {
-        return { type: "suspended", reason: gate.decision.reason };
+      // One notification for the whole composed user message: the gate's
+      // injections and the caller's content land in the same message, and an
+      // observer that saw it half-built would treat the half as final.
+      if (onBeforeRequestResult.appended || appendedInitialInput)
+        this.deps.onUpdate();
+      if (onBeforeRequestResult.decision.type === "suspend") {
+        return {
+          type: "suspended",
+          reason: onBeforeRequestResult.decision.reason,
+        };
       }
       if (this.abortRequested) return this.finishTurnAbort();
 
@@ -654,7 +586,7 @@ export class Agent {
       default:
         assertUnreachable(update);
     }
-    this.scheduleUpdate();
+    this.deps.onUpdate();
   }
   /** The single terminal abort transition: leave the history well-formed and
    * mark why it stops here. */
@@ -669,7 +601,7 @@ export class Agent {
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    this.scheduleUpdate();
+    this.deps.onUpdate();
     return { type: "aborted" };
   }
 
@@ -723,7 +655,7 @@ export class Agent {
     if (!this.manager.countTokens) return;
     try {
       this.lastPreflightTokenCount = await this.manager.countTokens();
-      this.scheduleUpdate();
+      this.deps.onUpdate();
     } catch (error) {
       // Drop the previous count rather than pass it off as this request's: a
       // hook deciding about the wrong conversation is worse than one that
@@ -1043,12 +975,7 @@ export class Agent {
     this.settle({ type: "yielded", value });
   }
 
-  /** The runner is at the top of a loop iteration, about to issue a request.
-   * Whatever the supervisors produce is appended here, so it rides that
-   * request: on the opening request it lands ahead of the caller's own
-   * content, and on a continuation it folds into the message carrying the
-   * tool results. */
-  private async onBeforeRequest(): Promise<GateOutcome> {
+  private async onBeforeRequest(): Promise<OnBeforeRequestResult> {
     const isOpeningRequest = this.openingRequestPending;
     this.openingRequestPending = false;
     // Content seeded for this turn leads its opening request, ahead of the
@@ -1071,11 +998,7 @@ export class Agent {
     if (appended) {
       // The opening request of a turn starts its own user message; a
       // continuation folds into the one already carrying the tool results.
-      this.manager.appendUserMessage(
-        content,
-        isOpeningRequest ? undefined : { coalesce: true },
-      );
-      this.scheduleUpdate();
+      this.manager.appendUserMessage(content);
     }
     if (composed.type === "suspend") {
       return {
@@ -1209,10 +1132,6 @@ export class Agent {
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
-
-    if (this.updateThrottleTimer) {
-      clearTimeout(this.updateThrottleTimer);
-    }
 
     try {
       await this.abort();

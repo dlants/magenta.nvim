@@ -611,10 +611,11 @@ describe("abort", () => {
 
     const state = agent.log;
 
-    // user message, assistant with tool_use, user with tool_result, abort marker
-    expect(state.messages).toHaveLength(4);
+    // user message, assistant with tool_use, user with tool_result and the
+    // abort marker folded into it
+    expect(state.messages).toHaveLength(3);
     expect(state.messages[2].role).toBe("user");
-    expect(state.messages[3].content[0]).toMatchObject({
+    expect(state.messages[2].content[1]).toMatchObject({
       type: "text",
       text: ABORT_MARKER_TEXT,
     });
@@ -704,9 +705,9 @@ describe("abort with empty blocks", () => {
     expect(await turn).toEqual({ type: "aborted" });
 
     const state = agent.log;
-    // The empty text block is filtered out, leaving the user message and the
-    // abort marker
-    expect(state.messages).toHaveLength(2);
+    // The empty text block is filtered out, so the abort marker folds back
+    // into the user message it was answering.
+    expect(state.messages).toHaveLength(1);
     expect(state.messages[0].role).toBe("user");
   });
 
@@ -743,7 +744,7 @@ describe("abort with empty blocks", () => {
 
     const state = agent.log;
     // The empty thinking block should be filtered out
-    expect(state.messages).toHaveLength(2);
+    expect(state.messages).toHaveLength(1);
     expect(state.messages[0].role).toBe("user");
   });
 

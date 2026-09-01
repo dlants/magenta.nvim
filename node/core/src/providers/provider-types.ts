@@ -331,7 +331,7 @@ export type OnRequestUpdate = (update: RequestUpdate) => void;
 
 export interface NativeInferenceManager {
   readonly log: AgentLog;
-  appendUserMessage(content: AgentInput[], opts?: { coalesce?: true }): void;
+  appendUserMessage(content: AgentInput[]): void;
   appendToolResults(
     requested: ReadonlyArray<RequestedTool>,
     results: ToolResults,

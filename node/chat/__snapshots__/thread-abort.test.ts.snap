@@ -33,23 +33,13 @@ Do not acknowledge this reminder or mention it to the user.
         "text": "First message",
         "type": "text",
       },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
       {
-        "nativeMessageIdx": 1,
+        "nativeMessageIdx": 0,
         "text": "[The user aborted the previous request.]",
         "type": "text",
       },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
       {
-        "nativeMessageIdx": 2,
+        "nativeMessageIdx": 0,
         "text": "Second message while first is pending",
         "type": "text",
       },
@@ -59,7 +49,7 @@ Do not acknowledge this reminder or mention it to the user.
   {
     "content": [
       {
-        "nativeMessageIdx": 3,
+        "nativeMessageIdx": 1,
         "text": "Second response that should be shown",
         "type": "text",
       },
@@ -156,23 +146,13 @@ terminated by signal SIGTERM (<timing>ms)
         },
         "type": "tool_result",
       },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
       {
-        "nativeMessageIdx": 3,
+        "nativeMessageIdx": 2,
         "text": "[The user aborted the previous request.]",
         "type": "text",
       },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
       {
-        "nativeMessageIdx": 4,
+        "nativeMessageIdx": 2,
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
@@ -191,7 +171,7 @@ Do not acknowledge this reminder or mention it to the user.
         "type": "system_reminder",
       },
       {
-        "nativeMessageIdx": 4,
+        "nativeMessageIdx": 2,
         "text": "Cancel that, run something else",
         "type": "text",
       },
@@ -341,11 +321,6 @@ Do not acknowledge this reminder or mention it to the user.
         "tool_use_id": "bash-tool",
         "type": "tool_result",
       },
-    ],
-    "role": "user",
-  },
-  {
-    "content": [
       {
         "text": "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
         "type": "text",

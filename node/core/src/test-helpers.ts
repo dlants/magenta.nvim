@@ -38,7 +38,7 @@ import type {
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
-import { Thread } from "./thread.ts";
+import { Thread, threadToolSpecs } from "./thread.ts";
 import type { AgentHooks, TurnActivity } from "./thread-api.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
@@ -221,7 +221,7 @@ function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
     edlRegisters: { registers: new Map(), nextSavedId: 0 },
     editedFilesThisTurn: [],
     lastTurnResult: undefined,
-    toolSpecs: [],
+    toolSpecs: threadToolSpecs(context),
   };
   const executeTools = opts.executeTools;
   const AgentClass = executeTools
@@ -237,6 +237,7 @@ function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
     threadId: "test-agent" as ThreadId,
     state,
     structuredToolResults: new Map(),
+    toolSpecs: threadToolSpecs(context),
     getHooks: opts.getHooks ?? (() => agentHooks()),
     onUpdate: opts.onUpdate ?? (() => {}),
     runnerInit: opts.cloneFrom

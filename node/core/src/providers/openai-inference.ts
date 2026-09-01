@@ -392,14 +392,14 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     return (this.items.length - 1) as NativeMessageIdx;
   }
 
-  appendUserMessage(content: AgentInput[], opts?: { coalesce?: true }): void {
+  appendUserMessage(content: AgentInput[]): void {
     if (content.length === 0) return;
     // Tagged text is stored on the wire as plain input_text and re-tagged by
     // the display conversion, so nothing is classified here.
     const native = convertInputToNativeItems(content);
     if (native.length === 0) return;
     const lastUser = userMessageContent(this.items[this.items.length - 1]);
-    if (opts?.coalesce && lastUser) {
+    if (lastUser) {
       lastUser.push(...native[0].content);
     } else {
       this.items.push(...native);
