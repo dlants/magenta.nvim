@@ -619,7 +619,7 @@ export class NvimThread {
    * tool input is still streaming we can see which comments it targets and
    * how far each reply has been written. */
   private commentActivity(): CommentThreadActivity | undefined {
-    if (this.core.loopState.type === "idle") {
+    if (!this.core.isBusy) {
       return undefined;
     }
     const block = loopStreamingBlock(this.core.loopState);
@@ -1006,7 +1006,7 @@ export class NvimThread {
   /** A send that preempts the turn in flight also drops that turn's pending
    * sandbox approvals: they belong to the work being abandoned. */
   private rejectPendingSandboxApprovals(): void {
-    if (this.core.loopState.type !== "idle") {
+    if (this.core.isBusy) {
       this.sandboxViolationHandler?.rejectAll();
     }
   }

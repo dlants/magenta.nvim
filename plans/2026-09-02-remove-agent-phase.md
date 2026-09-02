@@ -422,10 +422,38 @@ Notes:
   were repointed rather than rewritten.
 - `npx tsc -b`, `npx biome check .` and the full suite are green.
 
-## root layer
+## root layer — DONE
 
 - Goal: `node/chat` and `node/magenta.ts` compile against the new surface: `thread.loopState`, `!thread.isBusy`, `thread.title`, `thread.toolSpecs`, etc. `npx tsc -b` and `npx biome check .` clean.
 - Tests:
   - `thread-view.test.ts`: streaming status, "Executing tools...", and the idle result line render from `loopState` + `lastResult`.
   - Sidebar icon and the comment gate in `magenta.ts` respond to `isBusy` — verify a comment submitted mid-turn is still deferred.
   - `bashCommand.test.ts` active-tool lookups work through `loopActiveTools`.
+
+Notes:
+
+- Most of the mechanical repointing had already landed in stages 2–5, so this
+  stage was the residue: the remaining `loopState.type === "idle"` checks that
+  are really "is this thread doing anything" became `core.isBusy` — the
+  sidebar status icon (`node/magenta.ts`), the idle-thread comment gate
+  (`node/magenta.ts`), `NvimThread.commentActivity` and
+  `rejectPendingSandboxApprovals` (`node/chat/thread.ts`).
+- `thread-view.ts`'s hand-rolled drill into
+  `phase.activity.tools.activeTools` is now `loopActiveTools(thread.loopState)`,
+  the one accessor for that map.
+- Leftover `phase` / `agentPhase` identifiers in `node/chat` were renamed to
+  `loopState`, so nothing in the root layer still speaks of a phase.
+- Also finished the in-flight `SendResult` change that was sitting uncommitted
+  in the tree: `{type: "completed", stopReason: undefined}` (a submission that
+  never issued a request) became its own `{type: "empty"}` variant, so
+  `completed.stopReason` is a stated `StopReason`. `runLoop`'s
+  "no stop reason means no continuation" special case disappears — `empty` is
+  simply not `completed`. `RestResult` (`Exclude<SendResult, {suspended}>`) is
+  exported from core and used by `Thread.lastResult()` and `thread-view.ts`'s
+  `RenderedResult`; `renderTurnResult` renders `empty` like `yielded`
+  (`Stopped (end_turn)`). Tests asserting the old shape were repointed.
+- No new tests: `thread-view.test.ts` (streaming / preparing / aborting /
+  result line), `chat.test.ts`, `thread-abort.test.ts` and
+  `bashCommand.test.ts`'s `loopActiveTools` lookups already cover this
+  stage's surface, and all pass unchanged.
+- `npx tsc -b`, `npx biome check .` and the full suite are green.

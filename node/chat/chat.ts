@@ -964,8 +964,8 @@ export class Chat implements ThreadManager {
     // A yielded thread has finished its work; a streaming thread is actively
     // working. Neither needs the user's attention.
     if (core.yielded) return false;
-    const phase = core.loopState;
-    if (phase.type === "running" && phase.activity.type === "streaming")
+    const loopState = core.loopState;
+    if (loopState.type === "running" && loopState.activity.type === "streaming")
       return false;
     return wrapper.lastActivityTime > wrapper.lastViewedTime;
   }
@@ -1531,7 +1531,7 @@ ${rows}${loadMore}`;
 
       case "initialized": {
         const thread = threadWrapper.thread;
-        const agentPhase = thread.loopState;
+        const loopState = thread.loopState;
         const lastTurnResult = thread.core.lastResult();
 
         const summary = {
@@ -1552,11 +1552,11 @@ ${rows}${loadMore}`;
                 response: yielded.response,
               };
             }
-            switch (agentPhase.type) {
+            switch (loopState.type) {
               case "running":
-                if (agentPhase.aborting)
+                if (loopState.aborting)
                   return { type: "running" as const, activity: "aborting" };
-                switch (agentPhase.activity.type) {
+                switch (loopState.activity.type) {
                   case "preparing":
                     return {
                       type: "running" as const,
@@ -1575,7 +1575,7 @@ ${rows}${loadMore}`;
                         : "executing tools",
                     };
                   default:
-                    return assertUnreachable(agentPhase.activity);
+                    return assertUnreachable(loopState.activity);
                 }
               case "idle":
                 if (lastTurnResult?.type === "failed") {
@@ -1592,7 +1592,7 @@ ${rows}${loadMore}`;
                       : (lastTurnResult?.type ?? "end_turn"),
                 };
               default:
-                return assertUnreachable(agentPhase);
+                return assertUnreachable(loopState);
             }
           })(),
         };

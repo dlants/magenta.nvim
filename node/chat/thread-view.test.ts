@@ -14,7 +14,7 @@ import { renderStatus } from "./thread-view.ts";
 async function renderStatusToString(
   state: ThreadLoopState | Extract<LoopActivity, { type: "streaming" }>,
 ): Promise<string> {
-  const agentPhase: ThreadLoopState =
+  const loopState: ThreadLoopState =
     state.type === "streaming"
       ? {
           type: "running",
@@ -30,7 +30,7 @@ async function renderStatusToString(
     await mountView({
       view: () =>
         renderStatus(
-          agentPhase,
+          loopState,
           undefined,
           undefined,
           undefined,

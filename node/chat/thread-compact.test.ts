@@ -332,9 +332,9 @@ it("compact flow without continuation: @compact with no next prompt", async () =
 
     await pollUntil(
       () => {
-        const agentPhase = thread.loopState;
-        if (agentPhase.type !== "idle")
-          throw new Error(`expected idle but got ${agentPhase.type}`);
+        const loopState = thread.loopState;
+        if (loopState.type !== "idle")
+          throw new Error(`expected idle but got ${loopState.type}`);
         const turnResult = thread.core.lastResult();
         if (turnResult?.type !== "completed")
           throw new Error(`expected stopped but got ${turnResult?.type}`);

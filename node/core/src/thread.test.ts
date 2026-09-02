@@ -946,10 +946,7 @@ describe("empty send gate", () => {
     core.hooks = composeSupervisors(() => [
       { hasPendingContent: () => Promise.resolve(false) },
     ]);
-    expect(await core.send([])).toEqual({
-      type: "completed",
-      stopReason: undefined,
-    });
+    expect(await core.send([])).toEqual({ type: "empty" });
     expect(mockClient.streams.length).toBe(0);
   });
 
@@ -967,10 +964,7 @@ describe("empty send gate", () => {
     core.hooks = composeSupervisors(() => [
       { hasPendingContent: () => Promise.resolve(false) },
     ]);
-    expect(await core.submit(pendingMessage(""))).toEqual({
-      type: "completed",
-      stopReason: undefined,
-    });
+    expect(await core.submit(pendingMessage(""))).toEqual({ type: "empty" });
     expect(mockClient.streams.length).toBe(0);
 
     const sent = core.send([{ type: "user", text: "now do it" }]);

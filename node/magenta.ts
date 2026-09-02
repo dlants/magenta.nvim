@@ -333,8 +333,7 @@ export class Magenta {
         if (!wrapper || wrapper.state !== "initialized") {
           return "";
         }
-        const phase = wrapper.thread.core.loopState;
-        if (phase.type === "running") {
+        if (wrapper.thread.core.isBusy) {
           return "⏳";
         }
         return wrapper.thread.core.lastResult()?.type === "failed" ? "✗" : "✓";
@@ -1050,7 +1049,7 @@ ${lines.join("\n")}
     // An idle thread has no upcoming request to piggyback the comment on, so
     // send an empty turn: CommentSupervisor injects the pending update.
     const thread = this.chat.getActiveRootThreadOrUndefined();
-    if (commentId && thread && thread.core.loopState.type === "idle") {
+    if (commentId && thread && !thread.core.isBusy) {
       this.dispatch({
         type: "thread-msg",
         id: thread.id,

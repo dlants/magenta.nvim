@@ -268,6 +268,7 @@ export type {
   AgentHooks,
   OnUpdate,
   QueuedMessage,
+  RestResult,
   SendOptions,
   SendResult,
   ThreadResult,

@@ -234,21 +234,15 @@ describe("Thread.send result", () => {
     if (settled.type !== "failed") throw new Error("expected failed");
     expect(settled.error.message).toBe("provider failure");
   });
-  it("resolves completed rather than hanging when there is nothing to send", async () => {
+  it("resolves empty rather than hanging when there is nothing to send", async () => {
     const { core } = createAgentWithMock();
-    expect(await core.send([])).toEqual({
-      type: "completed",
-      stopReason: undefined,
-    });
+    expect(await core.send([])).toEqual({ type: "empty" });
   });
-  it("resolves completed rather than hanging on an empty raw send", async () => {
+  it("resolves empty rather than hanging on an empty raw send", async () => {
     const { core } = createAgentWithMock({
       threadType: "compact" as ThreadType,
     });
-    expect(await core.send([])).toEqual({
-      type: "completed",
-      stopReason: undefined,
-    });
+    expect(await core.send([])).toEqual({ type: "empty" });
   });
   it("rejects once the thread's container has been torn down", async () => {
     const { core } = createAgentWithMock({
@@ -634,10 +628,7 @@ describe("runSubmission across a compaction handoff", () => {
       const stream = await mockClient.awaitStream();
       stream.streamText("done");
       stream.finishResponse("end_turn");
-      expect(await result).toEqual({
-        type: "completed",
-        stopReason: undefined,
-      });
+      expect(await result).toEqual({ type: "empty" });
       expect(compactor.calls).toEqual([]);
       // The log is coherent and resumable: a fresh send just continues.
       const next = core.send([{ type: "user", text: "again" }]);

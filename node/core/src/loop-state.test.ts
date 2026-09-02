@@ -7,7 +7,7 @@ const machine = () => new LoopStateMachine(() => {});
 /** The send an activity belongs to; these transition tests never await it. */
 const neverSettles = new Promise<SendResult>(() => {});
 
-const completed: SendResult = { type: "completed", stopReason: undefined };
+const completed: SendResult = { type: "completed", stopReason: "end_turn" };
 
 describe("LoopStateMachine", () => {
   it("keeps the aborting flag across activity transitions and clears it at idle", () => {

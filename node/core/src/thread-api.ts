@@ -50,9 +50,11 @@ export type SendOptions = {
  * the promise resolves when the thread finally comes to rest. */
 export type SendResult =
   /** The agent came to rest. `stopReason` is how the turn that just finished
-   * ended, or `undefined` when the submission settled without ever issuing a
-   * request (empty content), so there is nothing to continue from. */
-  | { type: "completed"; stopReason: StopReason | undefined }
+   * ended. */
+  | { type: "completed"; stopReason: StopReason }
+  /** The submission settled without ever issuing a request (empty content),
+   * so there was never a turn and there is nothing to continue from. */
+  | { type: "empty" }
   | { type: "yielded"; value: YieldValue }
   | { type: "aborted" }
   /** The runner exhausted its retries. The agent has already rolled its
@@ -73,6 +75,9 @@ export type SendResult =
    * and the reason is opaque to core's turn loop. */
   | { type: "suspended"; reason: SuspendReason };
 
+/** How a submission ended, as anything outside the thread may see it: a
+ * suspension is a handoff to a supervisor, never an outcome. */
+export type RestResult = Exclude<SendResult, { type: "suspended" }>;
 export type ThreadSendResult = SendResult | { type: "queued" };
 /** The thread's lifecycle outcome, for actors who never submitted: the
  * subagent tool and the script runner. Settles at most once. */

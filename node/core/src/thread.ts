@@ -55,6 +55,7 @@ import type {
   AgentRequestContext,
   OnUpdate,
   QueuedMessage,
+  RestResult,
   SendOptions,
   SendResult,
   ThreadHooks,
@@ -186,7 +187,7 @@ export class Thread {
   }
   edlRegisters: EdlRegisters;
   editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[] = [];
-  toolSpecs: ProviderToolSpec[];
+  readonly toolSpecs: ProviderToolSpec[];
   public agent: Agent;
   public hooks: ThreadHooks = {
     onBeforeRequest: [],
@@ -327,7 +328,7 @@ export class Thread {
 
   /** A render-only view of how the most recent submission ended. Nothing may
    * branch on it for control flow. */
-  lastResult(): Exclude<SendResult, { type: "suspended" }> | undefined {
+  lastResult(): RestResult | undefined {
     if (this.yieldState) {
       return { type: "yielded", value: this.yieldState.value };
     }
@@ -844,7 +845,7 @@ export class Thread {
       // Probing takes time, and a send that arrived while it ran owns the
       // loop now: this one is over before it touched the agent.
       if (!isCurrentLoop()) return { type: "aborted" };
-      if (!pending) return { type: "completed", stopReason: undefined };
+      if (!pending) return { type: "empty" };
     }
     let result = await this.runTurn(messages);
     for (;;) {
@@ -863,9 +864,6 @@ export class Thread {
       // here: the only window the loop itself owns is the continuation,
       // guarded below.
       if (result.type !== "completed") return result;
-      // No stop reason means the agent settled without running a turn (an
-      // empty submission); there is nothing to continue from.
-      if (result.stopReason === undefined) return result;
 
       const stopReason = result.stopReason;
       const next = await this.continuation(stopReason);

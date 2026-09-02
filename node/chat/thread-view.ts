@@ -12,11 +12,12 @@ import {
   formatToolSpec,
   formatToolSpecs,
   type LoopActivity,
+  loopActiveTools,
   loopStreamingBlock,
   type NativeMessageIdx,
   type ProviderToolSpec,
+  type RestResult,
   renderPending,
-  type SendResult,
   type ThreadId,
   type ToolRequestId,
   type YieldState,
@@ -93,7 +94,7 @@ export type RunningCompaction = {
 };
 
 export const renderStatus = (
-  agentPhase: ThreadLoopState,
+  loopState: ThreadLoopState,
   latestUsage: Usage | undefined,
   lastTurnResult: RenderedResult,
   compaction: RunningCompaction | undefined,
@@ -112,10 +113,10 @@ export const renderStatus = (
   }
 
   // Then render based on what the loop is doing
-  switch (agentPhase.type) {
+  switch (loopState.type) {
     case "running": {
-      if (agentPhase.aborting) return d`Aborting...`;
-      const activity = agentPhase.activity;
+      if (loopState.aborting) return d`Aborting...`;
+      const activity = loopState.activity;
       switch (activity.type) {
         case "preparing":
           return d`Preparing...`;
@@ -130,7 +131,7 @@ export const renderStatus = (
     case "idle":
       return renderTurnResult(lastTurnResult, latestUsage);
     default:
-      assertUnreachable(agentPhase);
+      assertUnreachable(loopState);
   }
 };
 function renderStreaming(
@@ -156,7 +157,7 @@ function renderStreaming(
 
 /** How the last submission ended, as the view sees it: a suspension is a
  * handoff, never rendered. */
-type RenderedResult = Exclude<SendResult, { type: "suspended" }> | undefined;
+type RenderedResult = RestResult | undefined;
 function renderTurnResult(
   result: RenderedResult,
   usage: Usage | undefined,
@@ -166,7 +167,8 @@ function renderTurnResult(
   }
   switch (result.type) {
     case "completed":
-      return renderStopReason(result.stopReason ?? "end_turn", usage);
+      return renderStopReason(result.stopReason, usage);
+    case "empty":
     case "yielded":
       return renderStopReason("end_turn", usage);
     case "aborted":
@@ -204,11 +206,11 @@ function renderUsage(usage: Usage): VDOMNode {
  * Helper function to determine if context manager view should be shown
  */
 const shouldShowContextFiles = (
-  agentPhase: ThreadLoopState,
+  loopState: ThreadLoopState,
   contextManager: ContextManager,
 ): boolean => {
   return (
-    agentPhase.type === "idle" && Object.keys(contextManager.files).length > 0
+    loopState.type === "idle" && Object.keys(contextManager.files).length > 0
   );
 };
 
@@ -463,7 +465,7 @@ export const view: View<{
   );
 
   const messages = thread.getProviderMessages();
-  const agentPhase = thread.loopState;
+  const loopState = thread.loopState;
 
   const pendingComments = thread.comments?.store.getPendingEntries() ?? [];
   const pendingCommentsNode = pendingComments.length
@@ -479,7 +481,7 @@ export const view: View<{
       })}`
     : d``;
   // Show logo when empty and not busy
-  const isIdle = agentPhase.type === "idle";
+  const isIdle = loopState.type === "idle";
   if (messages.length === 0 && isIdle && thread.submission?.type !== "failed") {
     return d`\
 ${titleView}
@@ -498,7 +500,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
 
   const latestUsage = thread.agent.log.latestUsage;
   const statusView = renderStatus(
-    agentPhase,
+    loopState,
     latestUsage,
     thread.core.lastResult(),
     runningCompaction(thread),
@@ -507,7 +509,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
   );
 
   const contextManagerView = shouldShowContextFiles(
-    agentPhase,
+    loopState,
     thread.contextManager,
   )
     ? d`\n${contextFilesView(thread.contextManager, contextViewCtx(thread), {
@@ -732,7 +734,7 @@ ${contentView}`;
     return d`${renderedBody}${forkedToAtIdx(messageIdx)}`;
   });
 
-  const streamingBlockView = loopStreamingBlock(agentPhase)
+  const streamingBlockView = loopStreamingBlock(loopState)
     ? d`\n${renderStreamingBlock(thread)}\n`
     : d``;
 
@@ -943,12 +945,7 @@ function renderMessageContentBlock(
       };
 
       // Check if tool is active (still running)
-      const phase = thread.loopState;
-      const activeEntry =
-        phase.type === "running" &&
-        phase.activity.type === "running_tools" &&
-        phase.activity.tools.type === "running" &&
-        phase.activity.tools.activeTools.get(request.id);
+      const activeEntry = loopActiveTools(thread.loopState)?.get(request.id);
 
       const isActive = !!activeEntry;
       const abortBinding = isActive
