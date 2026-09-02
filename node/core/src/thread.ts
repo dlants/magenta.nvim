@@ -6,8 +6,20 @@ import {
   type InputMessage,
   type ThreadState,
 } from "./agent.ts";
-import type { OnToolApplied } from "./capabilities/context-tracker.ts";
-import type { ThreadId } from "./chat-types.ts";
+import type { AgentsMap } from "./agents/agents.ts";
+import type {
+  ContextTracker,
+  OnToolApplied,
+} from "./capabilities/context-tracker.ts";
+import type { FileIO } from "./capabilities/file-io.ts";
+import type { GitClient } from "./capabilities/git-client.ts";
+import type { LspClient } from "./capabilities/lsp-client.ts";
+import type { LuaExecutor } from "./capabilities/lua-executor.ts";
+import type { ScriptRunner } from "./capabilities/script-runner.ts";
+import type { Shell } from "./capabilities/shell.ts";
+import type { ThreadManager } from "./capabilities/thread-manager.ts";
+import type { ThreadId, ThreadType } from "./chat-types.ts";
+import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
@@ -19,6 +31,7 @@ import type {
   StopReason,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
+import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
 import {
   compactPrompt,
   type Delivery,
@@ -42,17 +55,50 @@ import type {
   ThreadHooks,
   ThreadResult,
   ThreadSendResult,
+  YieldValue,
 } from "./thread-api.ts";
+import { renderYieldValue } from "./thread-api.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type { RequestAction, SuspendReason } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
 import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
+import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
+import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
-
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
-export function threadToolSpecs(context: AgentContext): ProviderToolSpec[] {
+import type { HomeDir, NvimCwd } from "./utils/files.ts";
+export type EnvironmentConfig =
+  | { type: "local"; cwd?: NvimCwd }
+  | { type: "docker"; container: string; cwd: string };
+
+/** Everything a thread and the tools it builds read. A superset of what the
+ * agent itself needs. */
+export interface ThreadContext extends AgentContext {
+  cwd: NvimCwd;
+  homeDir: HomeDir;
+  threadType: ThreadType;
+  systemPrompt: SystemPrompt;
+  systemInfo: SystemInfo;
+  mcpToolManager: MCPToolManagerImpl;
+  threadManager: ThreadManager;
+  getScriptRunner?: () => ScriptRunner | undefined;
+  fileIO: FileIO;
+  shell: Shell;
+  gitClient: GitClient;
+  lspClient: LspClient;
+  luaExecutor?: LuaExecutor | undefined;
+  availableCapabilities: Set<ToolCapability>;
+  environmentConfig: EnvironmentConfig;
+  subagentDockerfile?: string;
+  maxConcurrentSubagents: number;
+  maxConcurrentFastSubagents: number;
+  getAgents: () => AgentsMap;
+  contextTracker: ContextTracker;
+  commentStore?: CommentStore | undefined;
+}
+export function threadToolSpecs(context: ThreadContext): ProviderToolSpec[] {
   return getToolSpecs(
     context.threadType,
     context.mcpToolManager,
@@ -120,7 +166,7 @@ export class Thread {
 
   constructor(
     public id: ThreadId,
-    public readonly context: AgentContext,
+    public readonly context: ThreadContext,
     public callbacks: ThreadCallbacks,
     init: ThreadInit = { type: "fresh" },
     private archiveOptions: ThreadArchiveOptions = {},
@@ -175,7 +221,7 @@ export class Thread {
     sourceThread: Thread;
     newId: ThreadId;
     nativeMessageIdx: NativeMessageIdx;
-    context: AgentContext;
+    context: ThreadContext;
     callbacks: ThreadCallbacks;
   }): Promise<Thread> {
     const { sourceThread, newId, nativeMessageIdx, context, callbacks } = args;
@@ -313,7 +359,6 @@ export class Thread {
 
   private createAgent(runnerInit: AgentDeps["runnerInit"]): Agent {
     return new Agent(this.context, {
-      threadId: this.id,
       state: this.state,
       structuredToolResults: this.structuredToolResults,
       createTool: (request) => createTool(request, this.toolContext()),
@@ -551,7 +596,6 @@ export class Thread {
         ...this.hooks.onToolResults,
         (results) => this.systemReminders.onToolResults(results),
       ],
-      onYield: this.hooks.onYield,
     };
   }
 
@@ -671,6 +715,14 @@ export class Thread {
       }
       let result = await this.agent.send(messages);
       for (;;) {
+        if (result.type === "yielded") {
+          const resolved = await this.resolveYield(result.value);
+          if (resolved.type === "settled") return resolved.result;
+          // A rejected yield goes back in through the front door, as an
+          // ordinary continuation of this loop.
+          result = await this.agent.send(resolved.messages);
+          continue;
+        }
         // An abort that arrives while a turn is in flight comes back through
         // the agent as an `aborted` result, so there is no separate check
         // here: the only window the loop itself owns is the continuation,
@@ -715,6 +767,50 @@ export class Thread {
     }
   }
 
+  /** The agent has yielded and settled; the supervisors decide whether that
+   * stands. The first `accept`/`reject` wins outright — later hooks are not
+   * consulted, since the decision is made — and `send-message` texts
+   * concatenate. */
+  private async resolveYield(
+    value: YieldValue,
+  ): Promise<
+    | { type: "settled"; result: SendResult }
+    | { type: "resubmit"; messages: InputMessage[] }
+  > {
+    const rendered = renderYieldValue(value);
+    const texts: string[] = [];
+    for (const hook of this.hooks.onYield) {
+      const action = await hook(value);
+      if (action.type === "accept") {
+        const response = action.resultPrefix
+          ? `${action.resultPrefix}\n\n${rendered}`
+          : rendered;
+        const accepted: YieldValue =
+          value.type === "structured"
+            ? value
+            : { type: "text", text: response };
+        this.agent.markYieldAccepted(accepted, response);
+        return {
+          type: "settled",
+          result: { type: "yielded", value: accepted },
+        };
+      }
+      if (action.type === "reject") {
+        return {
+          type: "resubmit",
+          messages: [{ type: "system", text: action.message }],
+        };
+      }
+      if (action.type === "send-message") texts.push(action.text);
+    }
+    if (!texts.length) {
+      return { type: "settled", result: { type: "yielded", value } };
+    }
+    return {
+      type: "resubmit",
+      messages: [{ type: "system", text: texts.join("\n\n") }],
+    };
+  }
   /** What follows this stop, if anything. A stop that issues no request never
    * reaches the before-request supervisors: the resting case is `onEndTurn`'s,
    * which is where auto-compaction gets to suspend a thread at rest. */

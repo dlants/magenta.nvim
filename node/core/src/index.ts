@@ -2,10 +2,8 @@ export {
   type ActiveToolEntry,
   Agent,
   type AgentAction,
-  type AgentContext,
   type AgentPhase,
   type BeforeRequestDecision,
-  type EnvironmentConfig,
   type InputMessage,
   phaseActiveTools,
   phaseLabel,
@@ -257,7 +255,12 @@ export {
   resolveAsText,
   type Submission,
 } from "./submission/index.ts";
-export { Thread, type ThreadCallbacks } from "./thread.ts";
+export {
+  type EnvironmentConfig,
+  Thread,
+  type ThreadCallbacks,
+  type ThreadContext,
+} from "./thread.ts";
 export type {
   AgentHooks,
   OnUpdate,

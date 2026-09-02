@@ -1,15 +1,5 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import type { AgentsMap } from "./agents/agents.ts";
-import type { ContextTracker } from "./capabilities/context-tracker.ts";
-import type { FileIO } from "./capabilities/file-io.ts";
-import type { GitClient } from "./capabilities/git-client.ts";
-import type { LspClient } from "./capabilities/lsp-client.ts";
-import type { LuaExecutor } from "./capabilities/lua-executor.ts";
-import type { ScriptRunner } from "./capabilities/script-runner.ts";
-import type { Shell } from "./capabilities/shell.ts";
-import type { ThreadManager } from "./capabilities/thread-manager.ts";
-import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
-import type { CommentStore } from "./context/comment-store.ts";
+import type { SubagentConfig, ThreadType } from "./chat-types.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
@@ -47,7 +37,7 @@ import type {
   YieldValue,
 } from "./thread-api.ts";
 import { renderYieldValue } from "./thread-api.ts";
-import type { SuspendReason, YieldAction } from "./thread-supervisor.ts";
+import type { SuspendReason } from "./thread-supervisor.ts";
 import type {
   ToolInvocation,
   ToolName,
@@ -55,11 +45,9 @@ import type {
   ToolRequestId,
   ToolStructuredResult,
 } from "./tool-types.ts";
-import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
-import type { ToolCapability } from "./tools/tool-registry.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
-import type { AbsFilePath, HomeDir, NvimCwd } from "./utils/files.ts";
+import type { AbsFilePath } from "./utils/files.ts";
 
 export type InputMessage =
   | {
@@ -130,37 +118,12 @@ export type AgentPhase =
       tornDown: boolean;
     };
 
-export type EnvironmentConfig =
-  | { type: "local"; cwd?: NvimCwd }
-  | { type: "docker"; container: string; cwd: string };
-
 export interface AgentContext {
   logger: Logger;
   profile: ProviderProfile;
-  cwd: NvimCwd;
-  homeDir: HomeDir;
-  threadType: ThreadType;
   subagentConfig?: SubagentConfig;
-  systemPrompt: SystemPrompt;
-  systemInfo: SystemInfo;
-  mcpToolManager: MCPToolManagerImpl;
-  threadManager: ThreadManager;
-  getScriptRunner?: () => ScriptRunner | undefined;
-  fileIO: FileIO;
-  shell: Shell;
-  gitClient: GitClient;
-  lspClient: LspClient;
-  luaExecutor?: LuaExecutor | undefined;
-  availableCapabilities: Set<ToolCapability>;
-  environmentConfig: EnvironmentConfig;
-  subagentDockerfile?: string;
-  maxConcurrentSubagents: number;
-  maxConcurrentFastSubagents: number;
-  getAgents: () => AgentsMap;
-  getProvider: (profile: ProviderProfile) => Provider;
-  contextTracker: ContextTracker;
-  commentStore?: CommentStore | undefined;
   yieldSchema?: JSONSchemaType;
+  getProvider: (profile: ProviderProfile) => Provider;
 }
 
 export type AgentAction =
@@ -183,7 +146,6 @@ export type ThreadState = {
 };
 
 export interface AgentDeps {
-  threadId: ThreadId;
   state: ThreadState;
   toolSpecs: ProviderToolSpec[];
   /** Tool construction, and everything it needs, is the owner's: the agent
@@ -236,6 +198,7 @@ function completeToolResults(
   }
   return filled;
 }
+
 export class Agent {
   public state: ThreadState;
   public manager: NativeInferenceManager;
@@ -266,13 +229,11 @@ export class Agent {
     ToolRequestId,
     ToolStructuredResult
   >;
-  private readonly threadId: ThreadId;
 
   constructor(
     private context: AgentContext,
     private deps: AgentDeps,
   ) {
-    this.threadId = deps.threadId;
     this.state = deps.state;
     this.structuredToolResults = deps.structuredToolResults;
     this.state.toolSpecs = deps.toolSpecs;
@@ -470,7 +431,11 @@ export class Agent {
     this.abortRequested = false;
     this.startTicker();
     try {
-      return await this.runLoop(input);
+      const result = await this.runLoop(input);
+      if (result.type === "aborted") this.finishTurnAbort();
+      if (result.type === "failed")
+        this.manager.finalize({ type: "error", error: result.error });
+      return result;
     } finally {
       this.turnInFlight = false;
       this.abortRequested = false;
@@ -483,7 +448,7 @@ export class Agent {
   private async runLoop(initialInput: AgentInput[]): Promise<TurnResult> {
     let initialInputPending = true;
     while (true) {
-      if (this.abortRequested) return this.finishTurnAbort();
+      if (this.abortRequested) return { type: "aborted" };
 
       const onBeforeRequestResult = await this.onBeforeRequest();
       const appendedInitialInput = initialInputPending;
@@ -496,19 +461,21 @@ export class Agent {
       // observer that saw it half-built would treat the half as final.
       if (onBeforeRequestResult.appended || appendedInitialInput)
         this.deps.onUpdate();
+
+      // we append the input and onBeforeRequest injections before suspending, so everything's
+      // in the context for examination and resume
       if (onBeforeRequestResult.decision.type === "suspend") {
         return {
           type: "suspended",
           reason: onBeforeRequestResult.decision.reason,
         };
       }
-      if (this.abortRequested) return this.finishTurnAbort();
+      if (this.abortRequested) return { type: "aborted" };
 
       const outcome = await this.streamOneResponse();
 
-      if (outcome.type === "aborted") return this.finishTurnAbort();
+      if (outcome.type === "aborted") return { type: "aborted" };
       if (outcome.type === "error") {
-        this.manager.finalize({ type: "error", error: outcome.error });
         return { type: "failed", error: outcome.error };
       }
 
@@ -517,7 +484,7 @@ export class Agent {
       }
       const requested = outcome.requested;
 
-      if (this.abortRequested) return this.finishTurnAbort();
+      if (this.abortRequested) return { type: "aborted" };
 
       // `yield_to_parent` is never executed: it ends the turn, so the agent
       // answers it itself and marks every tool it shares the request with as
@@ -552,8 +519,7 @@ export class Agent {
                 }
               : {
                   status: "error",
-                  error:
-                    "Not executed: the thread yielded to its parent in this request.",
+                  error: "The thread yielded so this tool was skipped.",
                 },
           );
         }
@@ -588,6 +554,7 @@ export class Agent {
         toolOutcome = { type: "continue", results: new Map() };
       }
 
+      // always append a complete set of tool results, so we leave the inference manager in a resumeable state
       this.manager.appendToolResults(
         requested,
         // Only the agent knows why an id went unanswered — an executor that
@@ -601,16 +568,14 @@ export class Agent {
             : UNANSWERED_TOOL_RESULT_TEXT,
         ),
       );
-      // Not throttled: this is the transition from live tool progress to
-      // rendered results, and the view must not show progress for a tool the
-      // log has already answered.
       this.deps.onUpdate();
 
       if (toolOutcome.type === "aborted") {
         this.abortRequested = true;
-        return this.finishTurnAbort();
+        return { type: "aborted" };
       }
-      if (this.abortRequested) return this.finishTurnAbort();
+
+      // continue to the next iteration
     }
   }
 
@@ -662,7 +627,7 @@ export class Agent {
   }
   /** The single terminal abort transition: leave the history well-formed and
    * mark why it stops here. */
-  private finishTurnAbort(): TurnResult {
+  private finishTurnAbort(): void {
     this.currentPhase = { type: "aborting" };
     this.deps.onUpdate();
     this.manager.finalize({ type: "aborted" });
@@ -674,7 +639,6 @@ export class Agent {
       },
     ]);
     this.deps.onUpdate();
-    return { type: "aborted" };
   }
 
   private async handleTurnResult(result: TurnResult): Promise<void> {
@@ -690,7 +654,15 @@ export class Agent {
         this.settle({ type: "suspended", reason: result.reason });
         return;
       case "yielded":
-        await this.handleYield(result.value);
+        // Whether this yield is really the end — a supervisor may reject it or
+        // tear the container down — is the owner's call, made on the result.
+        this.setPhase({
+          type: "yielded",
+          response: renderYieldValue(result.value),
+          value: result.value,
+          tornDown: false,
+        });
+        this.settle({ type: "yielded", value: result.value });
         return;
       case "stopped":
         this.handleStopped(result.stopReason);
@@ -782,26 +754,30 @@ export class Agent {
     this.setToolInvocationState({ type: "running", activeTools });
 
     await Promise.all(
-      [...activeTools].map(([id, entry]) =>
-        entry.handle.promise.then(
-          (result) =>
-            this.update({ type: "set-active-tool-result", id, result }),
-          (err: Error) =>
-            this.update({
-              type: "set-active-tool-result",
-              id,
-              result: {
-                type: "tool_result",
-                id,
-                result: {
-                  status: "error",
-                  error: `Tool execution failed: ${err.message}`,
-                },
-                nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-              },
-            }),
-        ),
-      ),
+      [...activeTools].map(async ([id, entry]) => {
+        let result: ProviderToolResult;
+        try {
+          result = await entry.handle.promise;
+        } catch (err) {
+          result = {
+            type: "tool_result",
+            id,
+            result: {
+              status: "error",
+              error: `Tool execution failed: ${(err as Error).message}`,
+            },
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          };
+        }
+        // One tool's bookkeeping must not tear down the others' results.
+        try {
+          this.update({ type: "set-active-tool-result", id, result });
+        } catch (err) {
+          this.context.logger.error(
+            `recording the result of ${entry.toolName} failed: ${(err as Error).message}`,
+          );
+        }
+      }),
     );
 
     for (const [id, entry] of activeTools) {
@@ -811,7 +787,13 @@ export class Agent {
     }
 
     for (const hook of this.deps.getHooks().onToolResults) {
-      hook(results);
+      try {
+        hook(results);
+      } catch (err) {
+        this.context.logger.error(
+          `onToolResults hook threw: ${(err as Error).message}`,
+        );
+      }
     }
     // Nothing is running any more: `activeTools` means *live* invocations, and
     // the view switches from tool progress to results the moment it empties.
@@ -918,44 +900,10 @@ export class Agent {
     return undefined;
   }
 
-  private async handleYield(yieldValue: YieldValue): Promise<void> {
-    const yieldResult = renderYieldValue(yieldValue);
-    const action = await this.consultYieldSupervisors(yieldValue);
-    switch (action.type) {
-      case "accept": {
-        const response = action.resultPrefix
-          ? `${action.resultPrefix}\n\n${yieldResult}`
-          : yieldResult;
-        const value: YieldValue =
-          yieldValue.type === "structured"
-            ? yieldValue
-            : { type: "text", text: response };
-        this.setPhase({ type: "yielded", response, value, tornDown: true });
-        this.settleYield(value);
-        break;
-      }
-      case "none":
-        this.setPhase({
-          type: "yielded",
-          response: yieldResult,
-          value: yieldValue,
-          tornDown: false,
-        });
-        this.settleYield(yieldValue);
-        break;
-      case "reject":
-        await this.submit([{ type: "system", text: action.message }]);
-        return;
-      case "send-message":
-        await this.submit([{ type: "system", text: action.text }]);
-        return;
-      default:
-        assertUnreachable(action);
-    }
-  }
-
-  private settleYield(value: YieldValue): void {
-    this.settle({ type: "yielded", value });
+  /** The owner's verdict on a yield it has already been handed: the container
+   * is gone, so nothing more can be sent to this thread. */
+  markYieldAccepted(value: YieldValue, response: string): void {
+    this.setPhase({ type: "yielded", response, value, tornDown: true });
   }
 
   private async onBeforeRequest(): Promise<OnBeforeRequestResult> {
@@ -1029,25 +977,6 @@ export class Agent {
     };
   }
 
-  /** The first `accept`/`reject` wins outright — later hooks are not
-   * consulted, since the decision is made — and `send-message` texts
-   * concatenate. */
-  private async consultYieldSupervisors(
-    value: YieldValue,
-  ): Promise<YieldAction> {
-    const texts: string[] = [];
-    for (const hook of this.deps.getHooks().onYield) {
-      const action = await hook(value);
-      if (action.type === "accept" || action.type === "reject") return action;
-      if (action.type === "send-message") texts.push(action.text);
-    }
-    if (texts.length === 0) return { type: "none" };
-    return { type: "send-message", text: texts.join("\n\n") };
-  }
-
-  /** Consult the supervisors. Nothing is appended here: placing what they
-   * produce — and ordering it against the turn's own content — belongs to the
-   * one caller, `onBeforeRequest`. */
   private async composeBeforeRequest(
     isOpeningRequest: boolean,
   ): Promise<ComposedBeforeRequest> {
@@ -1056,8 +985,6 @@ export class Agent {
     let suspend: SuspendReason | undefined;
     let counted = false;
     for (const hook of this.deps.getHooks().onBeforeRequest) {
-      // Lazily, once, and never once the request is already suspended: a
-      // count nobody will act on is a round trip for nothing.
       if (hook.requestPreflightTokenCount && !counted && !suspend) {
         counted = true;
         await this.countTokensForRequest();

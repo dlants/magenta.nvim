@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { AgentContext } from "./agent.ts";
 import { phaseLabel } from "./agent.ts";
 import type { ThreadType } from "./chat-types.ts";
 import { type Compactor, runSubmission } from "./compaction/index.ts";
@@ -15,7 +14,7 @@ import {
   uniqueThreadId,
   userTexts,
 } from "./test-helpers.ts";
-import type { Thread } from "./thread.ts";
+import type { Thread, ThreadContext } from "./thread.ts";
 import type { QueuedMessage } from "./thread-api.ts";
 import {
   composeSupervisors,
@@ -185,7 +184,7 @@ describe("deferred submissions", () => {
         writeFile: async () => {},
         fileExists: async () => true,
         stat: async () => statPromise,
-      } as unknown as AgentContext["fileIO"],
+      } as unknown as ThreadContext["fileIO"],
     });
     void core.send([{ type: "user", text: "start" }]);
     const stream = await mockClient.awaitStream();
@@ -285,7 +284,7 @@ describe("deferred submissions", () => {
           writeFile: async () => {},
           fileExists: async () => true,
           stat: async () => statPromise,
-        } as unknown as AgentContext["fileIO"],
+        } as unknown as ThreadContext["fileIO"],
       },
       uniqueThreadId("deferred-async-compact"),
       (message) => {

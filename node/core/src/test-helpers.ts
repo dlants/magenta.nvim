@@ -4,7 +4,6 @@ import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
   Agent,
-  type AgentContext,
   type AgentPhase,
   type ThreadState,
   type ToolExecutor,
@@ -38,8 +37,8 @@ import type {
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
-import { Thread, threadToolSpecs } from "./thread.ts";
-import type { AgentHooks, TurnActivity } from "./thread-api.ts";
+import { Thread, type ThreadContext, threadToolSpecs } from "./thread.ts";
+import type { AgentHooks, ThreadHooks, TurnActivity } from "./thread-api.ts";
 import { createTool } from "./tools/create-tool.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
@@ -113,38 +112,38 @@ function stub<T>(partial: Partial<T>): T {
 }
 
 /** The stubbed context every test agent shares. */
-function baseTestContext(provider: Provider): AgentContext {
+function baseTestContext(provider: Provider): ThreadContext {
   return {
     logger: noopLogger,
     profile: {
       provider: "mock",
       model: "claude-3-5-sonnet-20241022",
     } as ProviderProfile,
-    cwd: "/tmp" as AgentContext["cwd"],
-    homeDir: "/home" as AgentContext["homeDir"],
+    cwd: "/tmp" as ThreadContext["cwd"],
+    homeDir: "/home" as ThreadContext["homeDir"],
     threadType: "root" as ThreadType,
     systemPrompt: "test system prompt" as unknown as SystemPrompt,
     systemInfo: {
       timestamp: "Mon Jan 01 2024 00:00:00 GMT+0000",
       platform: "linux",
       neovimVersion: "0.10.0",
-      cwd: "/tmp" as AgentContext["cwd"],
+      cwd: "/tmp" as ThreadContext["cwd"],
     },
     mcpToolManager: stub<MCPToolManager>({
       serverMap: {},
       getToolSpecs: () => [],
     }),
-    threadManager: stub<AgentContext["threadManager"]>({}),
-    fileIO: stub<AgentContext["fileIO"]>({
+    threadManager: stub<ThreadContext["threadManager"]>({}),
+    fileIO: stub<ThreadContext["fileIO"]>({
       readFile: async () => "",
       writeFile: async () => {},
       fileExists: async () => false,
     }),
-    shell: stub<AgentContext["shell"]>({}),
-    gitClient: stub<AgentContext["gitClient"]>({
+    shell: stub<ThreadContext["shell"]>({}),
+    gitClient: stub<ThreadContext["gitClient"]>({
       getState: async () => undefined,
     }),
-    lspClient: stub<AgentContext["lspClient"]>({}),
+    lspClient: stub<ThreadContext["lspClient"]>({}),
     availableCapabilities: new Set(),
     environmentConfig: { type: "local" },
     maxConcurrentSubagents: 1,
@@ -156,7 +155,8 @@ function baseTestContext(provider: Provider): AgentContext {
 }
 
 /** Fill in the hook points a test does not care about. */
-export function agentHooks(partial: Partial<AgentHooks> = {}): AgentHooks {
+type TestHooks = AgentHooks & Pick<ThreadHooks, "onYield">;
+export function agentHooks(partial: Partial<TestHooks> = {}): TestHooks {
   return {
     onBeforeRequest: [],
     onToolResults: [],
@@ -166,18 +166,18 @@ export function agentHooks(partial: Partial<AgentHooks> = {}): AgentHooks {
 }
 
 export function createAgentWithMock(
-  overrides?: Partial<AgentContext>,
+  overrides?: Partial<ThreadContext>,
   threadId: ThreadId = "test-thread" as ThreadId,
   resolve?: ResolveSubmission,
   onUpdate?: () => void,
 ): {
   core: Thread;
   mockClient: MockAnthropicClient;
-  context: AgentContext;
+  context: ThreadContext;
 } {
   const mockClient = new MockAnthropicClient();
   const provider = createMockProvider(mockClient);
-  const context: AgentContext = {
+  const context: ThreadContext = {
     ...baseTestContext(provider),
     ...overrides,
   };
@@ -201,7 +201,7 @@ export function createAgentWithMock(
 type TestAgentOpts = {
   onUpdate?: () => void;
   getHooks?: () => AgentHooks;
-  context?: Partial<AgentContext>;
+  context?: Partial<ThreadContext>;
   /** Stand in for real tool execution. Tests about the loop's handling of
    * tool outcomes supply this instead of wiring up real tools. */
   executeTools?: ToolExecutor;
@@ -210,7 +210,7 @@ type TestAgentOpts = {
 };
 
 function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
-  const context: AgentContext = {
+  const context: ThreadContext = {
     ...baseTestContext(provider),
     ...opts.context,
   };
@@ -235,7 +235,6 @@ function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
       }
     : Agent;
   return new AgentClass(context, {
-    threadId: "test-agent" as ThreadId,
     state,
     createTool: (request) =>
       createTool(request, {

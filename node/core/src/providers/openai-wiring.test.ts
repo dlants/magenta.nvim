@@ -1,13 +1,13 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentContext } from "../agent.ts";
 import { phaseLabel } from "../agent.ts";
 import type { ThreadId, ThreadType } from "../chat-types.ts";
 import type { Logger } from "../logger.ts";
 import type { OpenAIAuth } from "../openai-auth.ts";
 import type { ProviderProfile } from "../provider-options.ts";
 import { resolveAsText } from "../submission/index.ts";
+import type { ThreadContext } from "../thread.ts";
 import { Thread } from "../thread.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { validateInput } from "../tools/helpers.ts";
@@ -41,15 +41,15 @@ function createProvider(client?: MockOpenAIClient): OpenAIProvider {
 function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
   const client = new MockOpenAIClient();
   const provider = createProvider(client);
-  const context: AgentContext = {
+  const context: ThreadContext = {
     logger: noopLogger,
     profile: {
       name: "openai-test",
       provider: "openai",
       model: "gpt-5.4",
     } as ProviderProfile,
-    cwd: "/tmp" as AgentContext["cwd"],
-    homeDir: "/home" as AgentContext["homeDir"],
+    cwd: "/tmp" as ThreadContext["cwd"],
+    homeDir: "/home" as ThreadContext["homeDir"],
     threadType: "subagent" as ThreadType,
     contextTracker: { files: {} },
     systemPrompt: "test system prompt" as unknown as SystemPrompt,
@@ -57,7 +57,7 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
       timestamp: "Mon Jan 01 2024 00:00:00 GMT+0000",
       platform: "linux",
       neovimVersion: "0.10.0",
-      cwd: "/tmp" as AgentContext["cwd"],
+      cwd: "/tmp" as ThreadContext["cwd"],
     },
     mcpToolManager: {
       serverMap: {},
@@ -66,19 +66,19 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
     threadManager: {
       getThread: () => undefined,
       getThreads: () => [],
-    } as unknown as AgentContext["threadManager"],
+    } as unknown as ThreadContext["threadManager"],
     fileIO: {
       readFile: async () => "",
       writeFile: async () => {},
       fileExists: async () => false,
-    } as unknown as AgentContext["fileIO"],
+    } as unknown as ThreadContext["fileIO"],
     shell: {
       exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    } as unknown as AgentContext["shell"],
+    } as unknown as ThreadContext["shell"],
     gitClient: {
       getState: async () => undefined,
-    } as unknown as AgentContext["gitClient"],
-    lspClient: {} as unknown as AgentContext["lspClient"],
+    } as unknown as ThreadContext["gitClient"],
+    lspClient: {} as unknown as ThreadContext["lspClient"],
     availableCapabilities: new Set(),
     environmentConfig: { type: "local" },
     maxConcurrentSubagents: 1,

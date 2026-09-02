@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
-import type { AgentContext, AgentPhase } from "./agent.ts";
+import type { AgentPhase } from "./agent.ts";
 import { phaseActiveTools, phaseLabel } from "./agent.ts";
 import type { ToolApplied } from "./capabilities/context-tracker.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
@@ -39,6 +39,7 @@ import {
   uniqueThreadId,
   userInput,
 } from "./test-helpers.ts";
+import type { ThreadContext } from "./thread.ts";
 import { Thread } from "./thread.ts";
 import type {
   BeforeRequestHook,
@@ -1044,7 +1045,7 @@ describe("Agent.abort appends user abort message", () => {
         writeFile: async () => {},
         fileExists: async () => true,
         stat: async () => statPromise,
-      } as unknown as AgentContext["fileIO"],
+      } as unknown as ThreadContext["fileIO"],
     });
 
     void core.send([{ type: "user", text: "hello" }]);
@@ -1214,7 +1215,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("triggers compaction on a tool_use handoff after tools resolve", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
-      fileIO: fileIO as unknown as AgentContext["fileIO"],
+      fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     core.hooks = composeSupervisors(() => [
       new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
@@ -1295,7 +1296,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("injects an image on the tool_use continuation, after the tool result", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
-      fileIO: fileIO as unknown as AgentContext["fileIO"],
+      fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     let injected = false;
     let requests = 0;
@@ -1390,7 +1391,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("appends a tool_use-path injection immediately when a compaction follows", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
-      fileIO: fileIO as unknown as AgentContext["fileIO"],
+      fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     let asked = false;
     let requests = 0;
@@ -1705,7 +1706,7 @@ describe("AutoCompactSupervisor integration", () => {
         writeFile: async () => {},
         fileExists: async () => true,
         stat: async () => statPromise,
-      } as unknown as AgentContext["fileIO"],
+      } as unknown as ThreadContext["fileIO"],
     });
     const events: string[] = [];
     core.hooks = {
@@ -1851,7 +1852,7 @@ describe("ThreadHooks.onToolApplied", () => {
       "/tmp/b.txt": "other",
     });
     const { core, mockClient } = createAgentWithMock({
-      fileIO: fileIO as unknown as AgentContext["fileIO"],
+      fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     const applied: {
       supervisor: number;
@@ -1898,7 +1899,7 @@ describe("ThreadHooks.onToolApplied", () => {
   it("keeps editedFilesThisTurn bookkeeping when a subscriber throws", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
-      fileIO: fileIO as unknown as AgentContext["fileIO"],
+      fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     core.hooks = composeSupervisors(() => [
       {
@@ -1928,7 +1929,7 @@ describe("Thread.editedFilesThisTurn", () => {
   it("starts empty and resets on new sendMessage", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
-      fileIO: fileIO as unknown as AgentContext["fileIO"],
+      fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
 
     expect(core.state.editedFilesThisTurn).toEqual([]);
@@ -1958,7 +1959,7 @@ describe("Thread.editedFilesThisTurn", () => {
   it("keeps the pre-turn snapshot after a second edit to the same file", async () => {
     const fileIO = new InMemoryFileIO({ "/tmp/a.txt": "hello" });
     const { core, mockClient } = createAgentWithMock({
-      fileIO: fileIO as unknown as AgentContext["fileIO"],
+      fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     void core.send([{ type: "user", text: "edit a" }]);
     const stream = await mockClient.awaitStream();
@@ -2059,7 +2060,7 @@ describe("Agent bash summary reminder", () => {
   it("fires the bash reminder on the first abbreviated bash output", async () => {
     const { shell } = createMockShell(makeAbbreviatedShellResult());
     const { core, mockClient } = createAgentWithMock({
-      shell: shell as unknown as AgentContext["shell"],
+      shell: shell as unknown as ThreadContext["shell"],
     });
 
     void core.send([{ type: "user", text: "run a thing" }]);
@@ -2084,7 +2085,7 @@ describe("Agent bash summary reminder", () => {
   it("combines the standing and bash reminders into a single <system-reminder> block when both gates fire", async () => {
     const { shell } = createMockShell(makeAbbreviatedShellResult());
     const { core, mockClient } = createAgentWithMock({
-      shell: shell as unknown as AgentContext["shell"],
+      shell: shell as unknown as ThreadContext["shell"],
     });
 
     void core.send([{ type: "user", text: "run a thing" }]);
@@ -2133,7 +2134,7 @@ describe("Agent bash summary reminder", () => {
       makeAbbreviatedShellResult(),
     );
     const { core, mockClient } = createAgentWithMock({
-      shell: shell as unknown as AgentContext["shell"],
+      shell: shell as unknown as ThreadContext["shell"],
     });
 
     void core.send([{ type: "user", text: "first" }]);
@@ -3229,7 +3230,7 @@ describe("Agent turn loop", () => {
           writeFile: async () => {},
           fileExists: async () => true,
           stat: async () => statPromise,
-        } as unknown as AgentContext["fileIO"],
+        } as unknown as ThreadContext["fileIO"],
       },
     });
     const turn = agent.runTurnLoop(userInput("hello"));

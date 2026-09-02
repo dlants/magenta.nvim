@@ -172,14 +172,15 @@ export type AgentHooks = {
    * wins. */
   onBeforeRequest: BeforeRequestHook[];
   onToolResults: ToolResultsHook[];
-  /** The first `accept`/`reject` wins; `send-message` texts concatenate. */
-  onYield: YieldHook[];
 };
 
 /** What the owning `Thread` answers. A superset of `AgentHooks`: the turn
  * loop's outer half lives in `Thread`, so the end-of-turn question is asked
  * there and the agent never sees it. */
 export type ThreadHooks = AgentHooks & {
+  /** The model called yield_to_parent and the agent settled on it. The first
+   * `accept`/`reject` wins; `send-message` texts concatenate. */
+  onYield: YieldHook[];
   /** A file-touching tool (edl, get_files) finished. Fire-and-forget. Fires
    * per file from inside a tool, not at a turn-loop boundary; the thread owns
    * tool construction, so it never reaches the agent. */
