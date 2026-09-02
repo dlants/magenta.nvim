@@ -370,24 +370,11 @@ export class Agent {
 
   private turnInFlight = false;
 
-  private async runLoop(
-    initialInput: AgentInput[],
-    lead: AgentInput[],
-  ): Promise<TurnResult> {
+  private async runLoop(initialInput: AgentInput[]): Promise<TurnResult> {
     let initialInputPending = true;
-    let leadPending = lead.length > 0;
     while (true) {
       if (this.abortRequested) return { type: "aborted" };
 
-      // Content that describes the conversation itself — a compaction
-      // summary, a fork notification — leads the message, ahead of the gate's
-      // injections, so the standing reminder still sits immediately before
-      // the caller's own content.
-      const appendedLead = leadPending;
-      if (leadPending) {
-        this.manager.appendUserMessage(lead);
-        leadPending = false;
-      }
       const onBeforeRequestResult = await this.onBeforeRequest();
       const appendedInitialInput = initialInputPending;
       if (initialInputPending) {
@@ -397,11 +384,7 @@ export class Agent {
       // One notification for the whole composed user message: the gate's
       // injections and the caller's content land in the same message, and an
       // observer that saw it half-built would treat the half as final.
-      if (
-        onBeforeRequestResult.appended ||
-        appendedInitialInput ||
-        appendedLead
-      )
+      if (onBeforeRequestResult.appended || appendedInitialInput)
         this.deps.onUpdate();
 
       // we append the input and onBeforeRequest injections before suspending, so everything's
@@ -792,10 +775,7 @@ export class Agent {
 
   private submission: Defer<SendResult> | undefined;
 
-  send(
-    inputMessages?: InputMessage[],
-    { lead }: { lead?: InputMessage[] } = {},
-  ): Promise<SendResult> {
+  send(inputMessages?: InputMessage[]): Promise<SendResult> {
     if (this.currentPhase.type === "yielded" && this.currentPhase.tornDown) {
       return Promise.reject(
         new Error(
@@ -816,15 +796,12 @@ export class Agent {
     // call: it probes its supervisors before it gets here, and the request it
     // decides to issue is composed inside the turn, by the gate.
     const { content } = this.prepareUserContent(inputMessages);
-    const leadContent = lead?.length
-      ? toAgentInput(this.prepareUserContent(lead).content)
-      : [];
     this.preSubmitNativeIdx = this.manager.getNativeMessageIdx();
     this.deps.onUpdate();
 
     this.turnInFlight = true;
     this.abortRequested = false;
-    this.currentTurn = this.driveTurn(toAgentInput(content), leadContent)
+    this.currentTurn = this.driveTurn(toAgentInput(content))
       .then((result) => {
         this.currentTurn = undefined;
         return this.handleTurnResult(result);
@@ -837,12 +814,9 @@ export class Agent {
   /** The turn `send` started, from the first request to the phase returning to
    * idle. Its result is the owner's `SendResult`; nobody drives a turn any
    * other way. */
-  private async driveTurn(
-    input: AgentInput[],
-    lead: AgentInput[],
-  ): Promise<TurnResult> {
+  private async driveTurn(input: AgentInput[]): Promise<TurnResult> {
     try {
-      const result = await this.runLoop(input, lead);
+      const result = await this.runLoop(input);
       if (result.type === "aborted") this.finishTurnAbort();
       if (result.type === "failed")
         this.manager.finalize({ type: "error", error: result.error });
