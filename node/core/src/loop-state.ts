@@ -5,7 +5,7 @@ import type {
   RetryStatus,
   StreamingBlock,
 } from "./providers/provider-types.ts";
-import type { ToolInvocationState } from "./thread-api.ts";
+import type { SendResult, ToolInvocationState } from "./thread-api.ts";
 import type { ToolRequestId } from "./tool-types.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 
@@ -18,6 +18,10 @@ export type LoopActivity =
   | { type: "preparing" }
   | {
       readonly type: "streaming";
+      /** The submission this activity belongs to. Held on the state rather
+       * than beside it, so "there is a send in flight" and "what it is doing"
+       * cannot disagree. */
+      readonly send: Promise<SendResult>;
       readonly startedAt: Date;
       /** Most recent sign of life from the server; drives the dead-air
        * "waiting Ns" counter. */
@@ -27,6 +31,7 @@ export type LoopActivity =
     }
   | {
       readonly type: "running_tools";
+      readonly send: Promise<SendResult>;
       /** As the model asked for them, including malformed requests that never
        * became an `activeTools` entry. */
       readonly requested: ReadonlyArray<RequestedTool>;
@@ -42,7 +47,10 @@ export type LoopActivity =
 export type LoopEpoch = number & { readonly __loopEpoch: true };
 
 export type ThreadLoopState =
-  | { type: "idle" }
+  /** Nothing in flight. `lastResult` is how the most recent submission ended;
+   * it exists only here, so a view can never show a stale result beside a
+   * live turn. */
+  | { type: "idle"; lastResult?: SendResult }
   | {
       type: "running";
       epoch: LoopEpoch;
@@ -98,9 +106,9 @@ export class LoopStateMachine {
     return this.epoch;
   }
 
-  finish(epoch: LoopEpoch): void {
+  finish(epoch: LoopEpoch, lastResult?: SendResult): void {
     if (!this.isCurrent(epoch)) return;
-    this.state = { type: "idle" };
+    this.state = { type: "idle", ...(lastResult ? { lastResult } : {}) };
     this.onUpdate();
   }
 
@@ -137,10 +145,13 @@ export class LoopStateMachine {
     this.setActivity({ type: "preparing" });
   }
 
-  streaming(): void {
+  /** A request is being handed to the agent: the loop is streaming until it
+   * calls out for tools or the send settles. */
+  streaming(send: Promise<SendResult>): void {
     const now = new Date();
     this.setActivity({
       type: "streaming",
+      send,
       startedAt: now,
       lastEventTime: now,
       block: undefined,
@@ -148,12 +159,31 @@ export class LoopStateMachine {
     });
   }
 
+  /** The send in flight, if any. The tool edges reuse it rather than being
+   * handed it again: they happen inside a send the loop already tracks. */
+  private currentSend(): Promise<SendResult> | undefined {
+    const state = this.state;
+    if (state.type !== "running" || state.activity.type === "preparing") {
+      return undefined;
+    }
+    return state.activity.send;
+  }
+
   runningTools(requested: ReadonlyArray<RequestedTool>): void {
+    const send = this.currentSend();
+    if (!send) return;
     this.setActivity({
       type: "running_tools",
+      send,
       requested,
       tools: { type: "pending" },
     });
+  }
+
+  /** The batch returned; the send it belongs to is streaming again. */
+  toolsSettled(): void {
+    const send = this.currentSend();
+    if (send) this.streaming(send);
   }
 
   /** Where the invocations of the current batch have got to. */
@@ -195,6 +225,7 @@ export class LoopStateMachine {
     }
     this.setActivity({
       type: "streaming",
+      send: prev.send,
       startedAt: prev.startedAt,
       lastEventTime: new Date(),
       block,

@@ -280,7 +280,7 @@ Review follow-ups (stage 2):
   carry the aborting flag into the superseding turn", and two `renderStatus`
   cases (`preparing`, and `aborting` winning over the activity).
 
-## thread: ThreadLoopState
+## thread: ThreadLoopState — DONE
 
 - Goal: `loopState` gains the `running` activity sub-states and the `aborting` flag, driven by the `send` promise (held on the sub-state), the executor call, and `onRequestUpdate`; `idle` carries `lastResult`, replacing `state.lastTurnResult` and `lastResult()`; `isBusy` is `loopState.type !== "idle"`; `loopStreamingBlock` / `loopActiveTools` replace the phase helpers.
 - Tests:
@@ -291,6 +291,42 @@ Review follow-ups (stage 2):
   - A callback
  from a superseded epoch is ignored.
   - `thread-abort.test.ts` assertions on phase become assertions on `loopState` / `lastResult`.
+
+Notes:
+
+- The `send` promise lives on the `streaming` / `running_tools` activities.
+  Only the turn edge supplies it (`Thread.runTurn` calls `agent.send` first and
+  hands the promise to `loop.streaming(send)`); the tool edges happen *inside*
+  a send the loop already tracks, so `runningTools` carries it forward from
+  the current activity and the return edge is a new `toolsSettled()` rather
+  than a second `streaming()` with nothing to pass. A transition that finds no
+  send in flight is a no-op, so the invariant "streaming ⇒ there is a send" is
+  structural.
+- `idle` gained `lastResult?: SendResult`, written by `LoopStateMachine.finish(epoch, result)`.
+  `runToRest` is now a thin wrapper that owns `start`/`finish` and records the
+  result; the body moved to `runLoop(messages, epoch)`, which is the old try
+  block dedented (no logic change).
+- `Thread.lastResult()` stays as the render-only accessor, but derives from
+  `loopState`: yield first, then `idle.lastResult`, with `suspended` mapped to
+  `undefined` as before. It is *not* deleted in this stage — the root layer
+  and several tests still read `state.lastTurnResult` (the agent keeps writing
+  it), and repointing those is stage 5's ("dissolve ThreadState") explicit
+  scope. So `lastTurnResult` is briefly duplicated by design.
+- `Thread.isBusy` is now exactly `loopState.type !== "idle"`; the `|| agent.isBusy`
+  disjunct is gone. `Agent.isBusy` survives only as the send reentrancy guard.
+- `flatLoop` drops `lastResult` (it answers "what is the loop doing"), so the
+  many `expect(flatLoop(x)).toEqual({type: "idle"})` assertions keep their
+  meaning.
+- New tests: `thread.test.ts` "Thread loop activity" (the
+  `preparing → streaming → running_tools → streaming → idle` walk, with the
+  streaming block visible and `lastResult` absent mid-loop; and the loop
+  staying `running`/`preparing` between the turns of a multi-turn loop —
+  the gap that motivated the lift), plus "keeps the activity while the abort
+  winds the loop down" (aborting flag set, activity still `running_tools`,
+  `lastResult` = `aborted`). `agent.test.ts`'s `Thread.loopState` block already
+  covered `lastResult` after completed / failed / aborted / yielded, and
+  `loop-state.test.ts` already covers the superseded epoch.
+- `npx tsc -b`, `npx biome check .` and the full suite are green.
 
 ## agent: drop update()/AgentAction
 

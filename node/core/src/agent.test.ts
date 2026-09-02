@@ -81,7 +81,7 @@ describe("Thread.loopState", () => {
       if (core.loopState.type === "idle") return true;
       throw new Error(`waiting for idle, currently: ${core.loopState.type}`);
     });
-    expect(core.loopState).toEqual({ type: "idle" });
+    expect(core.loopState.type).toBe("idle");
     expect(core.lastResult()).toEqual({
       type: "completed",
       stopReason: "end_turn",
@@ -112,8 +112,10 @@ describe("Thread.loopState", () => {
       if (core.loopState.type === "idle") return true;
       throw new Error(`waiting for idle, currently: ${core.loopState.type}`);
     });
-    expect(core.loopState).toEqual({ type: "idle" });
-    expect(core.lastResult()).toEqual({ type: "aborted" });
+    expect(core.loopState).toEqual({
+      type: "idle",
+      lastResult: { type: "aborted" },
+    });
   });
 
   it("surfaces a structured yield as a structured result", async () => {

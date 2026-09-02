@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { LoopStateMachine } from "./loop-state.ts";
+import type { SendResult } from "./thread-api.ts";
 
 const machine = () => new LoopStateMachine(() => {});
+
+/** The send an activity belongs to; these transition tests never await it. */
+const neverSettles = new Promise<SendResult>(() => {});
 
 describe("LoopStateMachine", () => {
   it("keeps the aborting flag across activity transitions and clears it at idle", () => {
     const loop = machine();
     const epoch = loop.start();
-    loop.streaming();
+    loop.streaming(neverSettles);
     loop.markAborting();
     expect(loop.isAborting()).toBe(true);
 
@@ -18,7 +22,7 @@ describe("LoopStateMachine", () => {
       activity: { type: "running_tools" },
     });
 
-    loop.streaming();
+    loop.streaming(neverSettles);
     expect(loop.isEpochAborting(epoch)).toBe(true);
 
     loop.applyRequestUpdate({ type: "attempt-started" });
@@ -32,7 +36,7 @@ describe("LoopStateMachine", () => {
   it("ignores writes from a superseded epoch", () => {
     const loop = machine();
     const first = loop.start();
-    loop.streaming();
+    loop.streaming(neverSettles);
     const second = loop.start();
 
     expect(loop.isCurrent(first)).toBe(false);
@@ -58,7 +62,7 @@ describe("LoopStateMachine", () => {
   it("drops request updates that arrive while tools are running", () => {
     const loop = machine();
     loop.start();
-    loop.streaming();
+    loop.streaming(neverSettles);
     loop.runningTools([]);
 
     loop.applyRequestUpdate({ type: "attempt-started" });

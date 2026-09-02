@@ -21,7 +21,11 @@ import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
-import { LoopStateMachine, type ThreadLoopState } from "./loop-state.ts";
+import {
+  type LoopEpoch,
+  LoopStateMachine,
+  type ThreadLoopState,
+} from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
   NativeInferenceManager,
@@ -298,7 +302,7 @@ export class Thread {
   /** Busy from the first request of a submission until the loop comes to
    * rest, which spans the gaps between turns. */
   get isBusy(): boolean {
-    return this.loopState.type !== "idle" || this.agent.isBusy;
+    return this.loopState.type !== "idle";
   }
 
   get inferenceManager(): NativeInferenceManager {
@@ -317,28 +321,14 @@ export class Thread {
   /** A render-only view of how the most recent submission ended. Nothing may
    * branch on it for control flow. */
   lastResult(): SendResult | undefined {
-    const state = this.state;
     if (this.yieldState) {
       return { type: "yielded", value: this.yieldState.value };
     }
-    const last = state.lastTurnResult;
-    if (!last) return undefined;
-    switch (last.type) {
-      case "stopped":
-        return { type: "completed", stopReason: last.stopReason };
-      case "aborted":
-        return { type: "aborted" };
-      case "failed":
-        return {
-          type: "failed",
-          error: last.error,
-          discardedSubmission: true,
-        };
-      case "suspended":
-        return undefined;
-      default:
-        assertUnreachable(last);
-    }
+    const state = this.loopState;
+    if (state.type !== "idle") return undefined;
+    const last = state.lastResult;
+    // A suspension is a handoff, not an outcome anyone renders.
+    return last?.type === "suspended" ? undefined : last;
   }
 
   /** Tool construction is the thread's: the agent only drives invocations.
@@ -427,7 +417,7 @@ export class Thread {
     try {
       return await this.toolExecutor.execute(requests);
     } finally {
-      this.loop.streaming();
+      this.loop.toolsSettled();
     }
   }
 
@@ -803,9 +793,10 @@ export class Thread {
    * handed over until the loop gets the thread back; the tool batches inside
    * it announce themselves from `executeTools`. */
   private async runTurn(messages: InputMessage[]): Promise<SendResult> {
-    this.loop.streaming();
+    const send = this.agent.send(messages);
+    this.loop.streaming(send);
     try {
-      return await this.agent.send(messages);
+      return await send;
     } finally {
       this.loop.preparing();
     }
@@ -823,68 +814,79 @@ export class Thread {
     // flag to clear here: `abort` leaves `idle` alone.
     this.state.editedFilesThisTurn = [];
     const epoch = this.loop.start();
-    const isCurrentLoop = () => this.loop.isCurrent(epoch);
+    // How the submission ended is recorded as the loop comes to rest, so it
+    // only ever exists alongside `idle`.
+    let result: SendResult | undefined;
     try {
-      if (!messages.length) {
-        const pending = await this.hasPendingContent();
-        // Probing takes time, and a send that arrived while it ran owns the
-        // loop now: this one is over before it touched the agent.
-        if (!isCurrentLoop()) return { type: "aborted" };
-        if (!pending) return { type: "completed", stopReason: undefined };
+      result = await this.runLoop(messages, epoch);
+      return result;
+    } finally {
+      this.loop.finish(epoch, result);
+    }
+  }
+
+  private async runLoop(
+    messages: InputMessage[],
+    epoch: LoopEpoch,
+  ): Promise<SendResult> {
+    const isCurrentLoop = () => this.loop.isCurrent(epoch);
+    if (!messages.length) {
+      const pending = await this.hasPendingContent();
+      // Probing takes time, and a send that arrived while it ran owns the
+      // loop now: this one is over before it touched the agent.
+      if (!isCurrentLoop()) return { type: "aborted" };
+      if (!pending) return { type: "completed", stopReason: undefined };
+    }
+    let result = await this.runTurn(messages);
+    for (;;) {
+      // A yield suspension is the thread's own, raised by `yieldGate`, and
+      // must never escape: an owner would read it as an unclaimed stop.
+      if (result.type === "suspended" && result.reason.kind === "yield") {
+        const resolved = await this.resolveYield(result.reason.value);
+        if (resolved.type === "settled") return resolved.result;
+        // A rejected yield goes back in through the front door, as an
+        // ordinary continuation of this loop.
+        result = await this.runTurn(resolved.messages);
+        continue;
       }
-      let result = await this.runTurn(messages);
-      for (;;) {
-        // A yield suspension is the thread's own, raised by `yieldGate`, and
-        // must never escape: an owner would read it as an unclaimed stop.
-        if (result.type === "suspended" && result.reason.kind === "yield") {
-          const resolved = await this.resolveYield(result.reason.value);
-          if (resolved.type === "settled") return resolved.result;
-          // A rejected yield goes back in through the front door, as an
-          // ordinary continuation of this loop.
-          result = await this.runTurn(resolved.messages);
+      // An abort that arrives while a turn is in flight comes back through
+      // the agent as an `aborted` result, so there is no separate check
+      // here: the only window the loop itself owns is the continuation,
+      // guarded below.
+      if (result.type !== "completed") return result;
+      // No stop reason means the agent settled without running a turn (an
+      // empty submission); there is nothing to continue from.
+      if (result.stopReason === undefined) return result;
+
+      const stopReason = result.stopReason;
+      const next = await this.continuation(stopReason);
+      if (this.loop.isEpochAborting(epoch)) return { type: "aborted" };
+      switch (next.type) {
+        case "rest":
+          return result;
+        case "suspended":
+          return { type: "suspended", reason: next.reason };
+        case "messages":
+        case "flushed": {
+          const continued = await this.runTurn(next.messages);
+          if (continued.type === "suspended" && next.type === "flushed") {
+            return {
+              type: "suspended",
+              reason: this.carryOntoSuspension(continued.reason, next.carry),
+            };
+          }
+          // A continuation rolls back only as far as its own request, so
+          // the originally submitted content is still in the log and must
+          // not be handed back for resubmission.
+          result =
+            continued.type === "failed"
+              ? { ...continued, discardedSubmission: false }
+              : continued;
           continue;
         }
-        // An abort that arrives while a turn is in flight comes back through
-        // the agent as an `aborted` result, so there is no separate check
-        // here: the only window the loop itself owns is the continuation,
-        // guarded below.
-        if (result.type !== "completed") return result;
-        // No stop reason means the agent settled without running a turn (an
-        // empty submission); there is nothing to continue from.
-        if (result.stopReason === undefined) return result;
-
-        const stopReason = result.stopReason;
-        const next = await this.continuation(stopReason);
-        if (this.loop.isEpochAborting(epoch)) return { type: "aborted" };
-        switch (next.type) {
-          case "rest":
-            return result;
-          case "suspended":
-            return { type: "suspended", reason: next.reason };
-          case "messages":
-          case "flushed": {
-            const continued = await this.runTurn(next.messages);
-            if (continued.type === "suspended" && next.type === "flushed") {
-              return {
-                type: "suspended",
-                reason: this.carryOntoSuspension(continued.reason, next.carry),
-              };
-            }
-            // A continuation rolls back only as far as its own request, so
-            // the originally submitted content is still in the log and must
-            // not be handed back for resubmission.
-            result =
-              continued.type === "failed"
-                ? { ...continued, discardedSubmission: false }
-                : continued;
-            continue;
-          }
-          default:
-            assertUnreachable(next);
-        }
+        default:
+          assertUnreachable(next);
       }
-    } finally {
-      this.loop.finish(epoch);
     }
   }
 

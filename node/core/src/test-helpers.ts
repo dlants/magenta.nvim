@@ -69,12 +69,14 @@ export const defaultAnthropicOptions: AnthropicInferenceOptions = {
 
 /** The loop state flattened back to one level, so a test can assert on
  * `streaming` / `running_tools` without unwrapping `running` every time. The
- * nesting itself is asserted directly in `agent.test.ts`. */
+ * nesting itself is asserted directly in `agent.test.ts`. How the last
+ * submission ended is dropped: this is "what is the loop doing", and
+ * `lastResult` is asserted on its own. */
 export function flatLoop(owner: {
   loopState: ThreadLoopState;
 }): LoopActivity | { type: "idle" } {
   const state = owner.loopState;
-  return state.type === "running" ? state.activity : state;
+  return state.type === "running" ? state.activity : { type: "idle" };
 }
 
 /** The bare-agent harness's stand-in for the thread: it owns the loop state
@@ -94,8 +96,18 @@ export class TestAgent extends Agent {
 
   override send(...args: Parameters<Agent["send"]>): Promise<SendResult> {
     const epoch = this.loop.start();
-    this.loop.streaming();
-    return super.send(...args).finally(() => this.loop.finish(epoch));
+    const send = super.send(...args);
+    this.loop.streaming(send);
+    return send.then(
+      (result) => {
+        this.loop.finish(epoch, result);
+        return result;
+      },
+      (error: unknown) => {
+        this.loop.finish(epoch);
+        throw error;
+      },
+    );
   }
 
   private host: ToolExecutorHost | undefined;
@@ -307,7 +319,7 @@ function buildTestAgent(
     try {
       return await runBatch(requests);
     } finally {
-      loop.streaming();
+      loop.toolsSettled();
     }
   };
   const agent = new TestAgent(

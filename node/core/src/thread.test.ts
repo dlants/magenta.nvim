@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ThreadType } from "./chat-types.ts";
 import { type Compactor, runSubmission } from "./compaction/index.ts";
-import { loopActiveTools, loopLabel } from "./loop-state.ts";
+import {
+  loopActiveTools,
+  loopLabel,
+  loopStreamingBlock,
+} from "./loop-state.ts";
 import {
   parseCompact,
   pendingMessage,
@@ -597,6 +601,23 @@ describe("Thread aborts the tools it owns", () => {
     await sent;
   });
 
+  it("keeps the activity while the abort winds the loop down", async () => {
+    const { core, sent, resolveStat } = await threadWithLiveTool(
+      "aborting-flag-live-tool",
+    );
+    const aborting = core.abort();
+    // An aborting thread is still running its tools, and the view still has
+    // to show that.
+    expect(core.loopState).toMatchObject({
+      type: "running",
+      aborting: true,
+      activity: { type: "running_tools" },
+    });
+    resolveStat();
+    await aborting;
+    await sent;
+    expect(core.lastResult()).toEqual({ type: "aborted" });
+  });
   it("does not carry the aborting flag into the superseding turn", async () => {
     const { core, sent, abortSpies, resolveStat } = await threadWithLiveTool(
       "supersede-live-tool",
@@ -618,6 +639,97 @@ describe("Thread aborts the tools it owns", () => {
   });
 });
 
+describe("Thread loop activity", () => {
+  it("walks preparing → streaming → running_tools → streaming → idle", async () => {
+    const labels: string[] = [];
+    const { core, mockClient } = createAgentWithMock(
+      {
+        fileIO: {
+          readFile: async () => "file contents",
+          writeFile: async () => {},
+          fileExists: async () => true,
+          stat: async () => ({ mtimeMs: 0, size: 100 }),
+        } as unknown as ThreadContext["fileIO"],
+      },
+      uniqueThreadId("loop-activity"),
+      undefined,
+      () => {
+        const label = loopLabel(core.loopState);
+        if (labels[labels.length - 1] !== label) labels.push(label);
+      },
+    );
+    const sent = core.send([{ type: "user", text: "read the file" }]);
+    const stream = await mockClient.awaitStream();
+    stream.emitEvent({
+      type: "content_block_start",
+      index: stream.nextBlockIndex(),
+      content_block: { type: "text", text: "looking", citations: null },
+    });
+    await stream.settle();
+    // Nothing is rendered as a last result while the loop owns the thread.
+    expect(core.lastResult()).toBeUndefined();
+    // The block in flight is visible for the duration of the streaming
+    // activity.
+    expect(loopStreamingBlock(core.loopState)).toEqual({
+      type: "text",
+      text: "looking",
+    });
+    stream.emitEvent({ type: "content_block_stop", index: 0 });
+    stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/test.txt" }],
+    });
+    stream.finishResponse("tool_use");
+    const second = await awaitNextStream(mockClient, stream);
+    second.finishResponse("end_turn");
+    await sent;
+    expect(labels.slice(0, 4)).toEqual([
+      "preparing",
+      "streaming",
+      "running_tools",
+      "streaming",
+    ]);
+    expect(labels[labels.length - 1]).toBe("idle");
+    expect(core.lastResult()).toEqual({
+      type: "completed",
+      stopReason: "end_turn",
+    });
+  });
+  it("stays running between the turns of a multi-turn loop", async () => {
+    const entered = new Defer<void>();
+    const gate = new Defer<void>();
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("loop-between-turns"),
+      async (message) => {
+        entered.resolve();
+        await gate.promise;
+        return {
+          compact: false,
+          messages: [{ type: "user" as const, text: renderPending(message) }],
+          reminders: [],
+        };
+      },
+    );
+    const sent = core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    await core.submit(pendingMessage("queued follow-up"), "next");
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+    // The agent has settled, but the loop has not: it is deciding what
+    // follows the stop, and the thread is still busy.
+    await entered.promise;
+    expect(core.loopState).toMatchObject({
+      type: "running",
+      activity: { type: "preparing" },
+    });
+    expect(core.isBusy).toBe(true);
+    gate.resolve();
+    const second = await awaitNextStream(mockClient, stream);
+    second.finishResponse("end_turn");
+    await sent;
+    expect(core.loopState.type).toBe("idle");
+  });
+});
 describe("Thread.abort between turns", () => {
   it("stops the loop instead of issuing the continuation", async () => {
     const entered = new Defer<void>();

@@ -1,4 +1,9 @@
-import type { LoopActivity, LoopEpoch, ThreadLoopState } from "@magenta/core";
+import type {
+  LoopActivity,
+  LoopEpoch,
+  SendResult,
+  ThreadLoopState,
+} from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import { type Line, NvimBuffer } from "../nvim/buffer.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
@@ -49,11 +54,16 @@ async function renderStatusToString(
   return text;
 }
 
+/** The activities carry the submission they belong to; these render-only
+ * tests never observe it. */
+const neverSettles = new Promise<SendResult>(() => {});
+
 describe("thread-view renderStatus streaming", () => {
   it("shows no waiting timer when last event was recent", async () => {
     const now = new Date();
     const text = await renderStatusToString({
       type: "streaming",
+      send: neverSettles,
       startedAt: now,
       lastEventTime: new Date(now.getTime() - 1000),
       block: undefined,
@@ -67,6 +77,7 @@ describe("thread-view renderStatus streaming", () => {
     const now = new Date();
     const text = await renderStatusToString({
       type: "streaming",
+      send: neverSettles,
       startedAt: new Date(now.getTime() - 4000),
       lastEventTime: new Date(now.getTime() - 4000),
       block: undefined,
@@ -80,6 +91,7 @@ describe("thread-view renderStatus streaming", () => {
     const now = new Date();
     const text = await renderStatusToString({
       type: "streaming",
+      send: neverSettles,
       startedAt: new Date(now.getTime() - 2000),
       lastEventTime: new Date(now.getTime() - 2000),
       block: undefined,
@@ -111,6 +123,7 @@ describe("thread-view renderStatus streaming", () => {
       epoch: 1 as LoopEpoch,
       activity: {
         type: "streaming",
+        send: neverSettles,
         startedAt: now,
         lastEventTime: now,
         block: undefined,
