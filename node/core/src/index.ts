@@ -260,6 +260,7 @@ export {
   Thread,
   type ThreadCallbacks,
   type ThreadContext,
+  type YieldState,
 } from "./thread.ts";
 export type {
   AgentHooks,

@@ -15,6 +15,7 @@ import type {
   ThreadHooks,
   ToolResultsHook,
   YieldHook,
+  YieldValue,
 } from "./thread-api.ts";
 
 /** Action returned from the `onEndTurnWithoutYield` hook. */
@@ -41,7 +42,15 @@ export type InjectedContent =
  * act on the reason — it only has to leave the log coherent and resumable —
  * but the set of reasons is closed, so whoever handles the suspension narrows
  * on `kind` rather than casting. */
-export type SuspendReason = CompactSuspendReason | PlainStopSuspendReason;
+export type SuspendReason =
+  | CompactSuspendReason
+  | PlainStopSuspendReason
+  | YieldSuspendReason;
+
+/** The model called yield_to_parent and its result is in the log. Produced
+ * only by Thread's own yield gate and consumed only by Thread's turn loop —
+ * it never escapes to an owner. */
+export type YieldSuspendReason = { kind: "yield"; value: YieldValue };
 
 /** "Stop this submission here"; nothing to hand off, just a reason to show. */
 export type PlainStopSuspendReason = { kind: "stop"; message: string };
@@ -101,7 +110,13 @@ export function composeSupervisors(
       const hooks: ToolResultsHook[] = [];
       for (const sup of getSupervisors()) {
         const hook = sup.onToolResults?.bind(sup);
-        if (hook) hooks.push(hook);
+        // Supervisors observe tool results; only the thread's own yield gate
+        // stops a turn here.
+        if (hook)
+          hooks.push((results) => {
+            hook(results);
+            return undefined;
+          });
       }
       return hooks;
     },

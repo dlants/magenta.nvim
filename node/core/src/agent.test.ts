@@ -1,7 +1,6 @@
 import * as fs from "node:fs/promises";
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
-import type { AgentPhase } from "./agent.ts";
 import { phaseActiveTools, phaseLabel } from "./agent.ts";
 import type { ToolApplied } from "./capabilities/context-tracker.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
@@ -38,7 +37,7 @@ import {
   TEST_ARCHIVE_DIR,
   uniqueThreadId,
 } from "./test-helpers.ts";
-import type { ThreadContext } from "./thread.ts";
+import type { ThreadContext, YieldState } from "./thread.ts";
 import { Thread } from "./thread.ts";
 import type {
   BeforeRequestHook,
@@ -135,10 +134,10 @@ describe("Thread.phase", () => {
     );
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.phase.type === "yielded") return true;
+      if (core.yielded) return true;
       throw new Error("waiting for yield");
     });
-    expect(core.phase.type).toBe("yielded");
+    expect(core.yielded).toBeDefined();
     expect(core.lastResult()).toEqual({
       type: "yielded",
       value: { type: "structured", value: { count: 3 } },
@@ -158,10 +157,10 @@ describe("Thread.phase", () => {
     );
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.phase.type === "yielded") return true;
+      if (core.yielded) return true;
       throw new Error("waiting for yield");
     });
-    expect(core.phase.type).toBe("yielded");
+    expect(core.yielded).toBeDefined();
     expect(core.lastResult()).toEqual({
       type: "yielded",
       value: { type: "text", text: "done" },
@@ -255,8 +254,7 @@ describe("Thread.send result", () => {
     });
     // Stand the thread up in the terminal state a torn-down subagent reaches,
     // without driving a whole yield + teardown.
-    (core.agent as unknown as { currentPhase: AgentPhase }).currentPhase = {
-      type: "yielded",
+    (core as unknown as { yieldState: YieldState }).yieldState = {
       response: "done",
       value: { type: "text", text: "done" },
       tornDown: true,
@@ -746,17 +744,15 @@ describe("Agent.handleProviderStopped", () => {
     // Agent should route to handleProviderStoppedWithToolUse,
     // which executes the yield tool, and maybeAutoRespond transitions to yielded mode
     await pollUntil(() => {
-      if (core.phase.type === "yielded") return true;
+      if (core.yielded) return true;
       throw new Error(
         `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
       );
     });
 
-    const yielded = core.phase;
-    expect(yielded.type).toBe("yielded");
-    if (yielded.type === "yielded") {
-      expect(yielded.response).toBe("Here is the result of my work");
-    }
+    const yielded = core.yielded;
+    if (!yielded) throw new Error("expected a yield");
+    expect(yielded.response).toBe("Here is the result of my work");
   });
 
   it("custom yieldSchema yields a structured JSON value", async () => {
@@ -779,17 +775,15 @@ describe("Agent.handleProviderStopped", () => {
     stream.finishResponse("max_tokens");
 
     await pollUntil(() => {
-      if (core.phase.type === "yielded") return true;
+      if (core.yielded) return true;
       throw new Error(
         `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
       );
     });
 
-    const yielded = core.phase;
-    expect(yielded.type).toBe("yielded");
-    if (yielded.type === "yielded") {
-      expect(JSON.parse(yielded.response)).toEqual({ count: 3 });
-    }
+    const yielded = core.yielded;
+    if (!yielded) throw new Error("expected a yield");
+    expect(JSON.parse(yielded.response)).toEqual({ count: 3 });
   });
   it("max_tokens with truncated (incomplete) tool_use block sends error tool_result and auto-continues", async () => {
     const { core, mockClient } = createAgentWithMock();
@@ -929,6 +923,112 @@ describe("MaxTokensSupervisor", () => {
   });
 });
 
+describe("yield_to_parent as an ordinary tool", () => {
+  it("stops the turn over a real tool result, issuing no further request", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    const sent = core.send([{ type: "user", text: "do the task" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "yield-1" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "all done" },
+    );
+    stream.finishResponse("tool_use");
+    expect(await sent).toEqual({
+      type: "yielded",
+      value: { type: "text", text: "all done" },
+    });
+    // The tool really ran, and the loop stopped rather than continuing on the
+    // results.
+    const last = core.getMessages().at(-1);
+    expect(last).toMatchObject({
+      role: "user",
+      content: [
+        { type: "tool_result", id: "yield-1", result: { status: "ok" } },
+      ],
+    });
+    expect(mockClient.streams.length).toBe(1);
+  });
+  it("runs the tools requested alongside it", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+      fileIO: new InMemoryFileIO({ "/tmp/a.txt": "hello" }),
+    });
+    const sent = core.send([{ type: "user", text: "do the task" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("get-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/a.txt" }],
+    });
+    stream.streamToolUse(
+      "yield-1" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "all done" },
+    );
+    stream.finishResponse("tool_use");
+    expect(await sent).toEqual({
+      type: "yielded",
+      value: { type: "text", text: "all done" },
+    });
+    expect(core.getMessages().slice(-2)).toMatchObject([
+      {
+        content: [
+          {
+            id: "get-1",
+            result: { status: "ok", value: [{}, { text: "hello" }] },
+          },
+        ],
+      },
+      { content: [{ id: "yield-1", result: { status: "ok" } }] },
+    ]);
+  });
+  it("wins over a compaction the same turn would otherwise trigger", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    core.hooks = composeSupervisors(() => [
+      new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
+    ]);
+    mockClient.mockInputTokenCount = 50;
+    const compactions = trackCompactions(core);
+    const sent = core.send([{ type: "user", text: "do the task" }]);
+    const stream = await mockClient.awaitStream();
+    // Over threshold as of the continuation this turn would otherwise issue.
+    mockClient.mockInputTokenCount = 200;
+    stream.streamToolUse(
+      "yield-1" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "all done" },
+    );
+    stream.finishResponse("tool_use");
+    // The compaction gate belongs to a request that is never issued.
+    expect(await sent).toEqual({
+      type: "yielded",
+      value: { type: "text", text: "all done" },
+    });
+    expect(compactions.prompts.length).toBe(0);
+  });
+  it("does not stop the turn when the call is malformed", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    void core.send([{ type: "user", text: "do the task" }]);
+    const first = await mockClient.awaitStream();
+    first.streamToolUse(
+      "yield-bad" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: 42 },
+    );
+    first.finishResponse("tool_use");
+    // No structured result, so no suspension: the turn continues with the
+    // error result.
+    const next = await awaitNextStream(mockClient, first);
+    expect(core.yielded).toBeUndefined();
+    next.streamText("sorry");
+    next.finishResponse("end_turn");
+  });
+});
 describe("Agent.abort on yielded thread", () => {
   it("abort is a no-op when thread has already yielded", async () => {
     const { core, mockClient } = createAgentWithMock({
@@ -947,23 +1047,21 @@ describe("Agent.abort on yielded thread", () => {
     stream.finishResponse("tool_use");
 
     await pollUntil(() => {
-      if (core.phase.type === "yielded") return true;
+      if (core.yielded) return true;
       throw new Error(
         `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
       );
     });
 
-    expect(core.phase.type).toBe("yielded");
+    expect(core.yielded).toBeDefined();
 
     // Now abort — should be a no-op
     await core.abort();
 
     // Mode should still be yielded with the original response
-    const yielded = core.phase;
-    expect(yielded.type).toBe("yielded");
-    if (yielded.type === "yielded") {
-      expect(yielded.response).toBe("Here is the result of my work");
-    }
+    const yielded = core.yielded;
+    if (!yielded) throw new Error("expected a yield");
+    expect(yielded.response).toBe("Here is the result of my work");
   });
 
   it("abortAndWait leaves the yield in place", async () => {
@@ -981,7 +1079,7 @@ describe("Agent.abort on yielded thread", () => {
     );
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (core.phase.type === "yielded") return true;
+      if (core.yielded) return true;
       throw new Error(
         `waiting for yielded, currently: ${phaseLabel(core.phase)}`,
       );
@@ -989,7 +1087,7 @@ describe("Agent.abort on yielded thread", () => {
     // `abort()` short-circuits on a yielded agent, but the preempting-send path
     // calls `abortAndWait` directly: it must not erase the yield either.
     await core.agent.abortAndWait();
-    expect(core.phase.type).toBe("yielded");
+    expect(core.yielded).toBeDefined();
     expect(core.lastResult()).toEqual({
       type: "yielded",
       value: { type: "text", text: "all done" },
@@ -1770,7 +1868,7 @@ describe("AutoCompactSupervisor integration", () => {
     );
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (core.phase.type === "yielded") return true;
+      if (core.yielded) return true;
       throw new Error(
         `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
       );

@@ -15,7 +15,9 @@ export type Input = {
   [key: string]: unknown;
 };
 
-export type StructuredResult = { toolName: "yield_to_parent" };
+/** The call's input, thread-side. The thread builds the `YieldValue` from it;
+ * the model never sees it. */
+export type StructuredResult = { toolName: "yield_to_parent"; input: Input };
 
 export type ToolRequest = GenericToolRequest<"yield_to_parent", Input>;
 
@@ -29,14 +31,16 @@ export function execute(request: ToolRequest): ExecutingToolInvocation {
         value: [
           {
             type: "text" as const,
-            text:
-              typeof request.input.result === "string"
-                ? request.input.result
-                : JSON.stringify(request.input),
+            // The model just wrote the yielded text; echoing it back only
+            // spends tokens.
+            text: "Yield acknowledged.",
             nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
           },
         ],
-        structuredResult: { toolName: "yield_to_parent" as const },
+        structuredResult: {
+          toolName: "yield_to_parent" as const,
+          input: request.input,
+        },
       },
       nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     }),

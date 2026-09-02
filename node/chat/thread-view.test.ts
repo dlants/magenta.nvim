@@ -16,7 +16,14 @@ async function renderStatusToString(
     await buffer.setOption("modifiable", false);
     await mountView({
       view: () =>
-        renderStatus(agentPhase, undefined, undefined, undefined, () => {}),
+        renderStatus(
+          agentPhase,
+          undefined,
+          undefined,
+          undefined,
+          () => {},
+          undefined,
+        ),
       props: {},
       mount: {
         nvim,

@@ -18,6 +18,7 @@ import {
   type ThreadId,
   type ToolRequestId,
   type TurnActivity,
+  type YieldState,
 } from "@magenta/core";
 import {
   jumpToComment,
@@ -97,9 +98,10 @@ export const renderStatus = (
   lastTurnResult: TurnResult | undefined,
   compaction: RunningCompaction | undefined,
   requestTick: () => void,
+  yielded: YieldState | undefined,
 ): VDOMNode => {
-  if (agentPhase.type === "yielded") {
-    return d`↗️ yielded to parent: ${agentPhase.response}`;
+  if (yielded) {
+    return d`↗️ yielded to parent: ${yielded.response}`;
   }
   if (compaction) {
     const { run, onSelectChunk } = compaction;
@@ -164,7 +166,6 @@ function renderTurnResult(
     case "aborted":
       return d`[ABORTED] ${usage ? d` ${renderUsage(usage)}` : d``} `;
     case "suspended":
-    case "yielded":
       return renderStopReason("end_turn", usage);
     case "failed":
       return d`Error ${result.error.message}${
@@ -498,6 +499,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     thread.core.state.lastTurnResult,
     runningCompaction(thread),
     thread.requestAnimationTick,
+    thread.core.yielded,
   );
 
   const contextManagerView = shouldShowContextFiles(

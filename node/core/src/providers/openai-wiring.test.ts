@@ -123,14 +123,10 @@ describe("OpenAI provider wiring", () => {
     stream.finishResponse();
 
     await pollUntil(() => {
-      if (core.phase.type === "yielded") return true;
+      if (core.yielded) return true;
       throw new Error(`waiting for yielded, got ${phaseLabel(core.phase)}`);
     });
-    const yielded = core.phase;
-    expect(yielded.type).toBe("yielded");
-    if (yielded.type === "yielded") {
-      expect(yielded.response).toBe("all done");
-    }
+    expect(core.yielded?.response).toBe("all done");
   });
 
   it("caches one provider instance per profile name", () => {

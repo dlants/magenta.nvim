@@ -150,16 +150,20 @@ export type BeforeRequestHook = {
 };
 
 /** Every requested tool has settled and its results are about to be written.
- * Fire-and-forget, consulted before the continuation's before-request hooks —
- * but it also fires on turns that stop here (abort, yield) and issue no
- * continuation at all, deliberately: a consumer accumulating state off tool
- * results wants it carried into whatever request comes next, even one from a
- * later turn. */
-export type ToolResultsHook = (results: ToolResults) => void;
+ * Consulted before the continuation's before-request hooks — but it also fires
+ * on turns that stop here (abort) and issue no continuation at all,
+ * deliberately: a consumer accumulating state off tool results wants it
+ * carried into whatever request comes next, even one from a later turn.
+ *
+ * The results are already final — a hook cannot change them — but it may stop
+ * the turn here, over a well-formed log. The first `suspend` wins. */
+export type ToolResultsHook = (
+  results: ToolResults,
+) => SuspendReason | undefined;
 
-/** The model called yield_to_parent. Awaited, and consulted before the tool
- * result is written, so a refusal arrives as that call's result rather than as
- * a contradicting message in a fresh turn. */
+/** The model called yield_to_parent and the tool result is already in the log.
+ * Awaited; a refusal arrives as a follow-up system message after that
+ * result. */
 export type YieldHook = (value: YieldValue) => Promise<YieldAction>;
 
 /** The `Agent` -> owner questions: one array per hook point, each composed by

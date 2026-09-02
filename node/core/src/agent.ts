@@ -1,4 +1,3 @@
-import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import type { SubagentConfig, ThreadType } from "./chat-types.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
@@ -34,9 +33,7 @@ import type {
   SendResult,
   ToolInvocationState,
   TurnActivity,
-  YieldValue,
 } from "./thread-api.ts";
-import { renderYieldValue } from "./thread-api.ts";
 import type { SuspendReason } from "./thread-supervisor.ts";
 import type {
   ToolInvocation,
@@ -109,19 +106,12 @@ export function phaseActiveTools(
 export type AgentPhase =
   | { type: "idle" }
   | { type: "running"; activity: TurnActivity }
-  | { type: "aborting" }
-  | {
-      type: "yielded";
-      response: string;
-      value: YieldValue;
-      tornDown: boolean;
-    };
+  | { type: "aborting" };
 
 export interface AgentContext {
   logger: Logger;
   profile: ProviderProfile;
   subagentConfig?: SubagentConfig;
-  yieldSchema?: JSONSchemaType;
   getProvider: (profile: ProviderProfile) => Provider;
 }
 
@@ -163,6 +153,9 @@ export interface AgentDeps {
 
 export type ToolOutcome =
   | { type: "continue"; results: ToolResults }
+  /** The owner wants the turn to stop over these results. The reason is opaque
+   * to the agent, exactly as on the before-request path. */
+  | { type: "suspend"; results: ToolResults; reason: SuspendReason }
   | { type: "aborted"; results: ToolResults };
 
 export type ToolExecutor = (
@@ -411,51 +404,6 @@ export class Agent {
 
       if (this.abortRequested) return { type: "aborted" };
 
-      // `yield_to_parent` is never executed: it ends the turn, so the agent
-      // answers it itself and marks every tool it shares the request with as
-      // skipped. The log must leave no tool_use unanswered.
-      const yieldRequest = requested.find(
-        (r) =>
-          r.request.status === "ok" &&
-          r.request.value.toolName === "yield_to_parent",
-      );
-      if (yieldRequest && yieldRequest.request.status === "ok") {
-        const input = yieldRequest.request.value.input;
-        const value: YieldValue =
-          this.context.yieldSchema !== undefined
-            ? { type: "structured", value: input }
-            : { type: "text", text: (input as { result: string }).result };
-
-        const results = new Map<ToolRequestId, ProviderToolResult["result"]>();
-        for (const { id } of requested) {
-          results.set(
-            id,
-            id === yieldRequest.id
-              ? {
-                  status: "ok",
-                  value: [
-                    {
-                      type: "text",
-                      text: "Yield accepted. Your result has been sent to the parent thread.",
-                      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-                    },
-                  ],
-                }
-              : {
-                  status: "error",
-                  error: "The thread yielded so this tool was skipped.",
-                },
-          );
-        }
-
-        for (const hook of this.deps.getHooks().onToolResults) {
-          hook(results);
-        }
-        this.manager.appendToolResults(requested, results);
-        this.deps.onUpdate();
-        return { type: "yielded", value };
-      }
-
       this.currentPhase = {
         type: "running",
         activity: {
@@ -497,6 +445,10 @@ export class Agent {
       if (toolOutcome.type === "aborted") {
         this.abortRequested = true;
         return { type: "aborted" };
+      }
+
+      if (toolOutcome.type === "suspend") {
+        return { type: "suspended", reason: toolOutcome.reason };
       }
 
       // continue to the next iteration
@@ -576,17 +528,6 @@ export class Agent {
         return;
       case "suspended":
         this.settle({ type: "suspended", reason: result.reason });
-        return;
-      case "yielded":
-        // Whether this yield is really the end — a supervisor may reject it or
-        // tear the container down — is the owner's call, made on the result.
-        this.setPhase({
-          type: "yielded",
-          response: renderYieldValue(result.value),
-          value: result.value,
-          tornDown: false,
-        });
-        this.settle({ type: "yielded", value: result.value });
         return;
       case "stopped":
         this.handleStopped(result.stopReason);
@@ -710,9 +651,13 @@ export class Agent {
       }
     }
 
+    // Every hook is consulted even once one has asked to suspend — a stop is a
+    // fact each of them may need to record — and the first `suspend` wins.
+    let suspend: SuspendReason | undefined;
     for (const hook of this.deps.getHooks().onToolResults) {
       try {
-        hook(results);
+        const asked = hook(results);
+        suspend ??= asked;
       } catch (err) {
         this.context.logger.error(
           `onToolResults hook threw: ${(err as Error).message}`,
@@ -727,6 +672,10 @@ export class Agent {
       return { type: "aborted", results };
     }
 
+    if (suspend) {
+      return { type: "suspend", results, reason: suspend };
+    }
+
     return { type: "continue", results };
   }
 
@@ -737,10 +686,6 @@ export class Agent {
   }
 
   async abort(): Promise<void> {
-    // A yielded thread has already completed its work — don't overwrite its state.
-    if (this.currentPhase.type === "yielded") {
-      return;
-    }
     await this.abortAndWait();
   }
 
@@ -766,9 +711,7 @@ export class Agent {
 
   private finishAbort(): void {
     this.abortRequested = false;
-    if (this.currentPhase.type !== "yielded") {
-      this.currentPhase = { type: "idle" };
-    }
+    this.currentPhase = { type: "idle" };
     this.deps.onUpdate();
     this.settle({ type: "aborted" });
   }
@@ -776,13 +719,6 @@ export class Agent {
   private submission: Defer<SendResult> | undefined;
 
   send(inputMessages?: InputMessage[]): Promise<SendResult> {
-    if (this.currentPhase.type === "yielded" && this.currentPhase.tornDown) {
-      return Promise.reject(
-        new Error(
-          "This thread's container has been torn down. No further messages can be sent.",
-        ),
-      );
-    }
     if (this.turnInFlight) {
       return Promise.reject(
         new Error("send called while a turn is already in flight"),
@@ -846,12 +782,6 @@ export class Agent {
       }
     }
     return undefined;
-  }
-
-  /** The owner's verdict on a yield it has already been handed: the container
-   * is gone, so nothing more can be sent to this thread. */
-  markYieldAccepted(value: YieldValue, response: string): void {
-    this.setPhase({ type: "yielded", response, value, tornDown: true });
   }
 
   private async onBeforeRequest(): Promise<OnBeforeRequestResult> {

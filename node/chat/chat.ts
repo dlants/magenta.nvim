@@ -261,7 +261,7 @@ export class Chat implements ThreadManager {
             if (
               threadWrapper.parentThreadId === thread.id &&
               threadWrapper.state === "initialized" &&
-              threadWrapper.thread.phase.type !== "yielded"
+              !threadWrapper.thread.core.yielded
             ) {
               threadWrapper.thread.update({
                 type: "thread-msg",
@@ -963,8 +963,8 @@ export class Chat implements ThreadManager {
     const core = wrapper.thread.core;
     // A yielded thread has finished its work; a streaming thread is actively
     // working. Neither needs the user's attention.
+    if (core.yielded) return false;
     const phase = core.phase;
-    if (phase.type === "yielded") return false;
     if (phase.type === "running" && phase.activity.type === "streaming")
       return false;
     return wrapper.lastActivityTime > wrapper.lastViewedTime;
@@ -1545,12 +1545,14 @@ ${rows}${loadMore}`;
                 activity: `🐳 ${teardownMessage}`,
               };
             }
+            const yielded = thread.core.yielded;
+            if (yielded) {
+              return {
+                type: "yielded" as const,
+                response: yielded.response,
+              };
+            }
             switch (agentPhase.type) {
-              case "yielded":
-                return {
-                  type: "yielded" as const,
-                  response: agentPhase.response,
-                };
               case "running":
                 switch (agentPhase.activity.type) {
                   case "streaming":

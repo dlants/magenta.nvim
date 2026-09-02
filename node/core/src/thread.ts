@@ -1,3 +1,4 @@
+import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import type { AgentPhase } from "./agent.ts";
 import {
   Agent,
@@ -28,6 +29,7 @@ import type {
   ProviderMessage,
   ProviderToolSpec,
   StopReason,
+  ToolResults,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
@@ -65,6 +67,7 @@ import type {
   ToolRequestId,
   ToolStructuredResult,
 } from "./tool-types.ts";
+import { structuredResultFor } from "./tool-types.ts";
 import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
@@ -73,6 +76,16 @@ import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
 import type { HomeDir, NvimCwd } from "./utils/files.ts";
+/** How a thread's yield came to rest. */
+export type YieldState = {
+  value: YieldValue;
+  /** The rendered result, including any `resultPrefix` the accepting owner
+   * added. */
+  response: string;
+  /** The accepting owner took the thread's world away with it. */
+  tornDown: boolean;
+};
+
 export type EnvironmentConfig =
   | { type: "local"; cwd?: NvimCwd }
   | { type: "docker"; container: string; cwd: string };
@@ -80,6 +93,10 @@ export type EnvironmentConfig =
 /** Everything a thread and the tools it builds read. A superset of what the
  * agent itself needs. */
 export interface ThreadContext extends AgentContext {
+  /** The shape this thread yields in. The thread's own concern: it decides the
+   * tool's spec and reads the yielded input back — the agent never sees a
+   * yield. */
+  yieldSchema?: JSONSchemaType;
   cwd: NvimCwd;
   homeDir: HomeDir;
   threadType: ThreadType;
@@ -289,9 +306,8 @@ export class Thread {
    * branch on it for control flow. */
   lastResult(): SendResult | undefined {
     const state = this.state;
-    const phase = this.agent.phase;
-    if (phase.type === "yielded") {
-      return { type: "yielded", value: phase.value };
+    if (this.yieldState) {
+      return { type: "yielded", value: this.yieldState.value };
     }
     const last = state.lastTurnResult;
     if (!last) return undefined;
@@ -308,8 +324,6 @@ export class Thread {
         };
       case "suspended":
         return undefined;
-      case "yielded":
-        return { type: "yielded", value: last.value };
       default:
         assertUnreachable(last);
     }
@@ -441,7 +455,17 @@ export class Thread {
 
   /** Abort the in-flight turn and hand back whatever never went out. The
    * queues are the thread's, so the debris is the thread's to report. */
+  /** Set once the thread's yield has been resolved. `tornDown` means an owner
+   * accepted it and took the thread's world away, so nothing more can be
+   * sent. */
+  private yieldState: YieldState | undefined;
+  get yielded(): YieldState | undefined {
+    return this.yieldState;
+  }
+
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
+    // A yielded thread has already completed its work.
+    if (this.yieldState) return { unsent: [] };
     if (this.loopState.type === "running")
       this.loopState = { type: "aborting", epoch: this.loopState.epoch };
     await this.agent.abort();
@@ -617,14 +641,39 @@ export class Thread {
         { run: (ctx) => this.queueFlushAction(ctx) },
       ],
       onToolResults: [
+        (results) => this.yieldGate(results),
         ...this.hooks.onToolResults,
-        (results) =>
+        (results) => {
           this.systemReminders.onToolResults(
             results,
             this.structuredToolResults,
-          ),
+          );
+          return undefined;
+        },
       ],
     };
+  }
+
+  /** `yield_to_parent` ran like any other tool; the suspension it raises is
+   * how the agent — which knows nothing about the tool — is told to stop over
+   * a log where every tool_use is answered. Narrowing on the structured result
+   * rather than the request means only a call that actually succeeded fires
+   * it, and only for ids in this step's results, so an earlier yield inherited
+   * by a cloned thread can never re-fire. */
+  private yieldGate(results: ToolResults): SuspendReason | undefined {
+    for (const id of results.keys()) {
+      const structured = structuredResultFor(
+        this.structuredToolResults.get(id),
+        "yield_to_parent",
+      );
+      if (!structured) continue;
+      const value: YieldValue =
+        this.context.yieldSchema !== undefined
+          ? { type: "structured", value: structured.input }
+          : { type: "text", text: structured.input.result ?? "" };
+      return { kind: "yield", value };
+    }
+    return undefined;
   }
 
   private reminderAction(ctx: AgentRequestContext): RequestAction {
@@ -657,6 +706,11 @@ export class Thread {
     messages: InputMessage[],
     { queue }: SendOptions = {},
   ): Promise<ThreadSendResult> {
+    if (this.yieldState?.tornDown) {
+      throw new Error(
+        "This thread's container has been torn down. No further messages can be sent.",
+      );
+    }
     // The compact thread's content is composed by its caller, so it bypasses
     // context updates, reminders and the queue entirely.
     if (this.state.threadType === "compact") {
@@ -747,8 +801,10 @@ export class Thread {
       }
       let result = await this.agent.send(messages);
       for (;;) {
-        if (result.type === "yielded") {
-          const resolved = await this.resolveYield(result.value);
+        // A yield suspension is the thread's own, raised by `yieldGate`, and
+        // must never escape: an owner would read it as an unclaimed stop.
+        if (result.type === "suspended" && result.reason.kind === "yield") {
+          const resolved = await this.resolveYield(result.reason.value);
           if (resolved.type === "settled") return resolved.result;
           // A rejected yield goes back in through the front door, as an
           // ordinary continuation of this loop.
@@ -821,7 +877,7 @@ export class Thread {
           value.type === "structured"
             ? value
             : { type: "text", text: response };
-        this.agent.markYieldAccepted(accepted, response);
+        this.yieldState = { value: accepted, response, tornDown: true };
         return {
           type: "settled",
           result: { type: "yielded", value: accepted },
@@ -836,6 +892,11 @@ export class Thread {
       if (action.type === "send-message") texts.push(action.text);
     }
     if (!texts.length) {
+      this.yieldState = {
+        value,
+        response: rendered,
+        tornDown: false,
+      };
       return { type: "settled", result: { type: "yielded", value } };
     }
     return {
@@ -904,6 +965,7 @@ export class Thread {
             : carry,
         };
       case "stop":
+      case "yield":
         // The runner appends a suspended request's input to the log anyway, so
         // the content is already in place for whatever resumes the thread.
         return reason;
