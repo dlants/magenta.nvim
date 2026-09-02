@@ -726,10 +726,9 @@ export class Thread {
    * every turn boundary; deciding whether a stop is really the end — queued
    * content, a supervisor nudge, a truncated response — is the thread's. */
   private async runToRest(submitted: InputMessage[]): Promise<SendResult> {
-    const messages = this.pendingSeed.length
-      ? [...this.pendingSeed, ...submitted]
-      : submitted;
+    const lead = this.pendingSeed;
     this.pendingSeed = [];
+    const messages = submitted;
     // An abort can only target a loop that is running, so there is no stale
     // flag to clear here: `abort` leaves `idle` alone.
     this.state.editedFilesThisTurn = [];
@@ -738,14 +737,14 @@ export class Thread {
     const isCurrentLoop = () =>
       this.loopState.type !== "idle" && this.loopState.epoch === epoch;
     try {
-      if (!messages.length) {
+      if (!messages.length && !lead.length) {
         const pending = await this.hasPendingContent();
         // Probing takes time, and a send that arrived while it ran owns the
         // loop now: this one is over before it touched the agent.
         if (!isCurrentLoop()) return { type: "aborted" };
         if (!pending) return { type: "completed", stopReason: undefined };
       }
-      let result = await this.agent.send(messages);
+      let result = await this.agent.send(messages, { lead });
       for (;;) {
         if (result.type === "yielded") {
           const resolved = await this.resolveYield(result.value);
