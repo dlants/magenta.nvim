@@ -1,9 +1,9 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { phaseLabel } from "../agent.ts";
 import type { ThreadId, ThreadType } from "../chat-types.ts";
 import type { Logger } from "../logger.ts";
+import { loopLabel } from "../loop-state.ts";
 import type { OpenAIAuth } from "../openai-auth.ts";
 import type { ProviderProfile } from "../provider-options.ts";
 import { resolveAsText } from "../submission/index.ts";
@@ -124,7 +124,7 @@ describe("OpenAI provider wiring", () => {
 
     await pollUntil(() => {
       if (core.yielded) return true;
-      throw new Error(`waiting for yielded, got ${phaseLabel(core.phase)}`);
+      throw new Error(`waiting for yielded, got ${loopLabel(core.loopState)}`);
     });
     expect(core.yielded?.response).toBe("all done");
   });

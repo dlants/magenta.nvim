@@ -1,5 +1,4 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import type { AgentPhase } from "./agent.ts";
 import {
   Agent,
   type AgentContext,
@@ -22,6 +21,7 @@ import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
+import { LoopStateMachine, type ThreadLoopState } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
   NativeInferenceManager,
@@ -228,8 +228,8 @@ export class Thread {
       logger: context.logger,
       createTool: (request) => this.invokeTool(request),
       getHooks: () => this.agentHooks(),
-      isAborting: () => this.agent.isAbortRequested,
-      publishTools: (tools) => this.agent.setToolInvocationState(tools),
+      isAborting: () => this.loop.isAborting(),
+      publishTools: (tools) => this.loop.setToolInvocationState(tools),
       onUpdate: () => this.handleUpdate(),
     });
 
@@ -304,11 +304,13 @@ export class Thread {
     return this.agent.manager;
   }
 
-  /** The agent's own phase — there is one representation of this state, and
-   * the thread does not re-encode it. How the last submission ended travels
-   * separately, on `lastResult()`. */
-  get phase(): AgentPhase {
-    return this.agent.phase;
+  /** What this thread is doing. The thread sees every edge of it — it calls
+   * the agent, it is called back for tool execution, and it is handed the
+   * request-progress updates — so it is the loop's own account, not a mirror
+   * of the agent's. How the last submission ended travels separately, on
+   * `lastResult()`. */
+  get loopState(): ThreadLoopState {
+    return this.loop.current;
   }
 
   /** A render-only view of how the most recent submission ended. Nothing may
@@ -406,18 +408,32 @@ export class Thread {
   private createAgent(runnerInit: AgentDeps["runnerInit"]): Agent {
     return new Agent(this.context, {
       state: this.state,
-      executeTools: (requests) => this.toolExecutor.execute(requests),
+      executeTools: (requests) => this.executeTools(requests),
       toolSpecs: this.state.toolSpecs,
       getHooks: () => this.agentHooks(),
-      onUpdate: () => this.handleUpdate(),
+      onRequestUpdate: (update) => this.loop.applyRequestUpdate(update),
       runnerInit,
     });
+  }
+
+  /** Being called is the "tools started" edge and returning is "tools
+   * settled": between them the loop is running tools, and on either side of
+   * them it is streaming. */
+  private async executeTools(
+    ...args: Parameters<ToolExecutorHost["execute"]>
+  ): ReturnType<ToolExecutorHost["execute"]> {
+    this.loop.runningTools(args[0]);
+    try {
+      return await this.toolExecutor.execute(...args);
+    } finally {
+      this.loop.streaming();
+    }
   }
 
   private handleUpdate(): void {
     if (this.destroyed) return;
     this.threadLogger.record(
-      this.phase.type === "running" ? "streaming" : "at-rest",
+      this.loopState.type === "running" ? "streaming" : "at-rest",
     );
     this.callbacks.onUpdate();
   }
@@ -464,6 +480,7 @@ export class Thread {
   setTitle(title: string): void {
     this.agent.update({ type: "set-title", title });
     this.threadLogger.recordTitle(title);
+    this.handleUpdate();
   }
 
   /** Abort the in-flight turn and hand back whatever never went out. The
@@ -479,8 +496,7 @@ export class Thread {
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
     // A yielded thread has already completed its work.
     if (this.yieldState) return { unsent: [] };
-    if (this.loopState.type === "running")
-      this.loopState = { type: "aborting", epoch: this.loopState.epoch };
+    this.loop.markAborting();
     this.toolExecutor.abortAll();
     await this.agent.abort();
     const unsent = this.drainQueues();
@@ -739,6 +755,7 @@ export class Thread {
         );
         return { type: "queued" };
       }
+      this.loop.markAborting();
       this.toolExecutor.abortAll();
       await this.agent.abortAndWait();
       // Sending now supersedes whatever was waiting on the aborted turn.
@@ -774,21 +791,23 @@ export class Thread {
     return await this.hooks.hasPendingContent();
   }
 
-  /** Bumped for each turn loop as it starts, and carried in `loopState`, so
-   * "am I still the current loop" is a property of the state. */
-  private sendEpoch = 0;
-
   /** The turn loop's lifecycle. Non-idle from the moment `runToRest` takes
-   * over until it settles: the agent looks idle between turns now that it
-   * settles at every stop, so busyness is the loop's to report. `aborting`
-   * is how an abort landing between turns — when the agent itself has
-   * nothing in flight to interrupt — still stops the loop. */
-  private loopState:
-    | { type: "idle" }
-    | { type: "running"; epoch: number }
-    | { type: "aborting"; epoch: number } = { type: "idle" };
-  private isAborting(epoch: number): boolean {
-    return this.loopState.type === "aborting" && this.loopState.epoch === epoch;
+   * over until it settles: the agent settles at every stop, so busyness is
+   * the loop's to report. `aborting` is how an abort landing between turns —
+   * when the agent itself has nothing in flight to interrupt — still stops
+   * the loop. */
+  private loop = new LoopStateMachine(() => this.handleUpdate());
+
+  /** One turn through the agent. Streaming from the moment the request is
+   * handed over until the loop gets the thread back; the tool batches inside
+   * it announce themselves from `executeTools`. */
+  private async runTurn(messages: InputMessage[]): Promise<SendResult> {
+    this.loop.streaming();
+    try {
+      return await this.agent.send(messages);
+    } finally {
+      this.loop.preparing();
+    }
   }
 
   /** Drive the agent until nothing more should be sent. The agent stops at
@@ -802,10 +821,8 @@ export class Thread {
     // An abort can only target a loop that is running, so there is no stale
     // flag to clear here: `abort` leaves `idle` alone.
     this.state.editedFilesThisTurn = [];
-    const epoch = ++this.sendEpoch;
-    this.loopState = { type: "running", epoch };
-    const isCurrentLoop = () =>
-      this.loopState.type !== "idle" && this.loopState.epoch === epoch;
+    const epoch = this.loop.start();
+    const isCurrentLoop = () => this.loop.isCurrent(epoch);
     try {
       if (!messages.length) {
         const pending = await this.hasPendingContent();
@@ -814,7 +831,7 @@ export class Thread {
         if (!isCurrentLoop()) return { type: "aborted" };
         if (!pending) return { type: "completed", stopReason: undefined };
       }
-      let result = await this.agent.send(messages);
+      let result = await this.runTurn(messages);
       for (;;) {
         // A yield suspension is the thread's own, raised by `yieldGate`, and
         // must never escape: an owner would read it as an unclaimed stop.
@@ -823,7 +840,7 @@ export class Thread {
           if (resolved.type === "settled") return resolved.result;
           // A rejected yield goes back in through the front door, as an
           // ordinary continuation of this loop.
-          result = await this.agent.send(resolved.messages);
+          result = await this.runTurn(resolved.messages);
           continue;
         }
         // An abort that arrives while a turn is in flight comes back through
@@ -837,7 +854,7 @@ export class Thread {
 
         const stopReason = result.stopReason;
         const next = await this.continuation(stopReason);
-        if (this.isAborting(epoch)) return { type: "aborted" };
+        if (this.loop.isAborting(epoch)) return { type: "aborted" };
         switch (next.type) {
           case "rest":
             return result;
@@ -845,7 +862,7 @@ export class Thread {
             return { type: "suspended", reason: next.reason };
           case "messages":
           case "flushed": {
-            const continued = await this.agent.send(next.messages);
+            const continued = await this.runTurn(next.messages);
             if (continued.type === "suspended" && next.type === "flushed") {
               return {
                 type: "suspended",
@@ -866,7 +883,7 @@ export class Thread {
         }
       }
     } finally {
-      if (isCurrentLoop()) this.loopState = { type: "idle" };
+      this.loop.finish(epoch);
     }
   }
 

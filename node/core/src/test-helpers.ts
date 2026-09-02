@@ -4,12 +4,18 @@ import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
   Agent,
-  type AgentPhase,
+  type AgentContext,
+  type AgentDeps,
   type ThreadState,
   type ToolExecutor,
 } from "./agent.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { Logger } from "./logger.ts";
+import {
+  type LoopActivity,
+  LoopStateMachine,
+  type ThreadLoopState,
+} from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import {
   AnthropicInferenceManager,
@@ -36,12 +42,7 @@ import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import { Thread, type ThreadContext, threadToolSpecs } from "./thread.ts";
-import type {
-  AgentHooks,
-  SendResult,
-  ThreadHooks,
-  TurnActivity,
-} from "./thread-api.ts";
+import type { AgentHooks, SendResult, ThreadHooks } from "./thread-api.ts";
 import { ToolExecutorHost } from "./tool-executor.ts";
 import { createTool } from "./tools/create-tool.ts";
 import { validateInput } from "./tools/helpers.ts";
@@ -66,14 +67,51 @@ export const defaultAnthropicOptions: AnthropicInferenceOptions = {
   validateInput,
 };
 
-/** The phase flattened back to one level, so a test can assert on
+/** The loop state flattened back to one level, so a test can assert on
  * `streaming` / `running_tools` without unwrapping `running` every time. The
  * nesting itself is asserted directly in `agent.test.ts`. */
-export function flatPhase(agent: {
-  phase: AgentPhase;
-}): TurnActivity | Exclude<AgentPhase, { type: "running" }> {
-  const phase = agent.phase;
-  return phase.type === "running" ? phase.activity : phase;
+export function flatLoop(owner: {
+  loopState: ThreadLoopState;
+}): LoopActivity | { type: "idle" } {
+  const state = owner.loopState;
+  return state.type === "running" ? state.activity : state;
+}
+
+/** The bare-agent harness's stand-in for the thread: it owns the loop state
+ * the same way, so what a test observes is what production observes. */
+export class TestAgent extends Agent {
+  constructor(
+    context: AgentContext,
+    deps: AgentDeps,
+    readonly loop: LoopStateMachine,
+  ) {
+    super(context, deps);
+  }
+
+  get loopState(): ThreadLoopState {
+    return this.loop.current;
+  }
+
+  override send(...args: Parameters<Agent["send"]>): Promise<SendResult> {
+    const epoch = this.loop.start();
+    this.loop.streaming();
+    return super.send(...args).finally(() => this.loop.finish(epoch));
+  }
+
+  private host: ToolExecutorHost | undefined;
+
+  attachHost(host: ToolExecutorHost): void {
+    this.host = host;
+  }
+
+  /** Aborting is the owner's, exactly as on `Thread`: the flag that decides a
+   * tool batch's outcome lives with the loop, and the live invocations are
+   * its to stop. */
+  override async abortAndWait(): Promise<void> {
+    this.loop.markAborting();
+    this.host?.abortAll();
+    await super.abortAndWait();
+  }
 }
 
 export function createMockProvider(
@@ -216,7 +254,7 @@ type TestAgentOpts = {
 function buildTestAgent(
   provider: Provider,
   opts: TestAgentOpts,
-): { agent: Agent; toolExecutor: ToolExecutorHost } {
+): { agent: TestAgent; toolExecutor: ToolExecutorHost } {
   const context: ThreadContext = {
     ...baseTestContext(provider),
     ...opts.context,
@@ -231,18 +269,14 @@ function buildTestAgent(
     lastTurnResult: undefined,
     toolSpecs: threadToolSpecs(context),
   };
-  let agent: Agent | undefined;
-  const requireAgent = (): Agent => {
-    if (!agent) throw new Error("test agent used before construction");
-    return agent;
-  };
+  const loop = new LoopStateMachine(opts.onUpdate ?? (() => {}));
   // The bare-agent harness stands in for the thread: it owns tool execution
   // the same way, so the loop under test sees production wiring.
   const host = new ToolExecutorHost({
     logger: context.logger,
     getHooks: opts.getHooks ?? (() => agentHooks()),
-    isAborting: () => requireAgent().isAbortRequested,
-    publishTools: (tools) => requireAgent().setToolInvocationState(tools),
+    isAborting: () => loop.isAborting(),
+    publishTools: (tools) => loop.setToolInvocationState(tools),
     onUpdate: opts.onUpdate ?? (() => {}),
     createTool: (request) =>
       createTool(request, {
@@ -267,22 +301,35 @@ function buildTestAgent(
         getAgents: () => context.getAgents(),
       }),
   });
-  const executeTools = opts.executeTools ?? ((r) => host.execute(r));
-  agent = new Agent(context, {
-    state,
-    executeTools,
-    toolSpecs: threadToolSpecs(context),
-    getHooks: opts.getHooks ?? (() => agentHooks()),
-    onUpdate: opts.onUpdate ?? (() => {}),
-    runnerInit: opts.cloneFrom
-      ? {
-          type: "cloned",
-          cloneFrom: opts.cloneFrom,
-          truncateTo: (opts.cloneFrom.log.messages.length -
-            1) as NativeMessageIdx,
-        }
-      : { type: "new" },
-  });
+  const runBatch = opts.executeTools ?? ((r) => host.execute(r));
+  const executeTools: ToolExecutor = async (requests) => {
+    loop.runningTools(requests);
+    try {
+      return await runBatch(requests);
+    } finally {
+      loop.streaming();
+    }
+  };
+  const agent = new TestAgent(
+    context,
+    {
+      state,
+      executeTools,
+      toolSpecs: threadToolSpecs(context),
+      getHooks: opts.getHooks ?? (() => agentHooks()),
+      onRequestUpdate: (update) => loop.applyRequestUpdate(update),
+      runnerInit: opts.cloneFrom
+        ? {
+            type: "cloned",
+            cloneFrom: opts.cloneFrom,
+            truncateTo: (opts.cloneFrom.log.messages.length -
+              1) as NativeMessageIdx,
+          }
+        : { type: "new" },
+    },
+    loop,
+  );
+  agent.attachHost(host);
   return { agent, toolExecutor: host };
 }
 
@@ -296,7 +343,7 @@ export function createTestAgent(
     mockClient?: MockAnthropicClient;
   },
 ): {
-  agent: Agent;
+  agent: TestAgent;
   mockClient: MockAnthropicClient;
   toolExecutor: ToolExecutorHost;
 } {
@@ -320,7 +367,7 @@ export function createTestOpenAIAgent(
     tools?: ProviderToolSpec[];
   },
 ): {
-  agent: Agent;
+  agent: TestAgent;
   mockClient: MockOpenAIClient;
   toolExecutor: ToolExecutorHost;
 } {

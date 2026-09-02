@@ -21,26 +21,14 @@ import type {
   RequestResult,
   RequestUpdate,
   StopReason,
-  StreamingBlock,
   ToolResults,
   TurnResult,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
-import type {
-  AgentHooks,
-  OnUpdate,
-  SendResult,
-  ToolInvocationState,
-  TurnActivity,
-} from "./thread-api.ts";
+import type { AgentHooks, SendResult } from "./thread-api.ts";
 import type { SuspendReason } from "./thread-supervisor.ts";
-import type {
-  ToolInvocation,
-  ToolName,
-  ToolRequest,
-  ToolRequestId,
-} from "./tool-types.ts";
+import type { ToolInvocation, ToolName, ToolRequest } from "./tool-types.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
@@ -81,33 +69,6 @@ export type ActiveToolEntry = {
   result?: ProviderToolResult;
 };
 
-export function phaseLabel(phase: AgentPhase): string {
-  return phase.type === "running" ? phase.activity.type : phase.type;
-}
-
-export function phaseStreamingBlock(
-  phase: AgentPhase,
-): StreamingBlock | undefined {
-  return phase.type === "running" && phase.activity.type === "streaming"
-    ? phase.activity.block
-    : undefined;
-}
-
-export function phaseActiveTools(
-  phase: AgentPhase,
-): ReadonlyMap<ToolRequestId, ActiveToolEntry> | undefined {
-  return phase.type === "running" &&
-    phase.activity.type === "running_tools" &&
-    phase.activity.tools.type === "running"
-    ? phase.activity.tools.activeTools
-    : undefined;
-}
-
-export type AgentPhase =
-  | { type: "idle" }
-  | { type: "running"; activity: TurnActivity }
-  | { type: "aborting" };
-
 export interface AgentContext {
   logger: Logger;
   profile: ProviderProfile;
@@ -115,13 +76,7 @@ export interface AgentContext {
   getProvider: (profile: ProviderProfile) => Provider;
 }
 
-export type AgentAction =
-  | { type: "set-title"; title: string }
-  | {
-      type: "set-active-tool-result";
-      id: ToolRequestId;
-      result: ProviderToolResult;
-    };
+export type AgentAction = { type: "set-title"; title: string };
 
 export type ThreadState = {
   title: string | undefined;
@@ -137,12 +92,14 @@ export type ThreadState = {
 export interface AgentDeps {
   state: ThreadState;
   toolSpecs: ProviderToolSpec[];
+  /** The manager's progress callback, handed to its owner. The agent stores
+   * nothing from it. */
+  onRequestUpdate: (update: RequestUpdate) => void;
   /** Tool execution is the owner's: it builds the tools, owns the live
    * invocations, runs the `onToolResults` hooks and aborts them. The agent
    * only appends what comes back. */
   executeTools: ToolExecutor;
   getHooks: () => AgentHooks;
-  onUpdate: OnUpdate;
   runnerInit:
     | { type: "new" }
     | {
@@ -194,30 +151,6 @@ function completeToolResults(
 export class Agent {
   public state: ThreadState;
   public manager: NativeInferenceManager;
-  private currentPhase: AgentPhase = { type: "idle" };
-  get phase(): AgentPhase {
-    return this.currentPhase;
-  }
-  private setPhase(phase: AgentPhase): void {
-    this.currentPhase = phase;
-    this.deps.onUpdate();
-  }
-  /** The owner drives tool execution now, and reports where it has got to. */
-  setToolInvocationState(tools: ToolInvocationState): void {
-    const phase = this.currentPhase;
-    if (phase.type !== "running" || phase.activity.type !== "running_tools") {
-      return;
-    }
-    this.setPhase({
-      type: "running",
-      activity: { ...phase.activity, tools },
-    });
-  }
-  private get activeTools():
-    | ReadonlyMap<ToolRequestId, ActiveToolEntry>
-    | undefined {
-    return phaseActiveTools(this.currentPhase);
-  }
 
   constructor(
     private context: AgentContext,
@@ -234,26 +167,13 @@ export class Agent {
     }
   }
 
-  update(action: AgentAction, { silent }: { silent?: boolean } = {}): void {
+  update(action: AgentAction): void {
     switch (action.type) {
       case "set-title":
         this.state.title = action.title;
         break;
-      case "set-active-tool-result": {
-        const active = this.activeTools;
-        if (active) {
-          const entry = active.get(action.id);
-          if (entry) {
-            entry.result = action.result;
-          }
-        }
-        break;
-      }
       default:
-        assertUnreachable(action);
-    }
-    if (!silent) {
-      this.deps.onUpdate();
+        assertUnreachable(action.type);
     }
   }
 
@@ -320,7 +240,6 @@ export class Agent {
     const idx = this.preSubmitNativeIdx;
     this.preSubmitNativeIdx = undefined;
     this.manager.truncateMessages(idx);
-    this.deps.onUpdate();
   }
 
   getMessages(): ProviderMessage[] {
@@ -348,18 +267,12 @@ export class Agent {
   private currentTurn: Promise<void> | undefined;
 
   get isBusy(): boolean {
-    return (
-      this.currentTurn !== undefined || this.currentPhase.type === "running"
-    );
+    return this.currentTurn !== undefined || this.turnInFlight;
   }
 
+  /** Private and unobservable: how a turn ends is reported as its result, and
+   * who is winding the loop down is the owner's own business. */
   private abortRequested = false;
-
-  /** Read by the owner's tool executor, which decides a batch's outcome by
-   * it. */
-  get isAbortRequested(): boolean {
-    return this.abortRequested;
-  }
 
   private outputTokenCount(): number {
     let total = 0;
@@ -377,16 +290,10 @@ export class Agent {
       if (this.abortRequested) return { type: "aborted" };
 
       const onBeforeRequestResult = await this.onBeforeRequest();
-      const appendedInitialInput = initialInputPending;
       if (initialInputPending) {
         this.manager.appendUserMessage(initialInput);
         initialInputPending = false;
       }
-      // One notification for the whole composed user message: the gate's
-      // injections and the caller's content land in the same message, and an
-      // observer that saw it half-built would treat the half as final.
-      if (onBeforeRequestResult.appended || appendedInitialInput)
-        this.deps.onUpdate();
 
       // we append the input and onBeforeRequest injections before suspending, so everything's
       // in the context for examination and resume
@@ -411,16 +318,6 @@ export class Agent {
       const requested = outcome.requested;
 
       if (this.abortRequested) return { type: "aborted" };
-
-      this.currentPhase = {
-        type: "running",
-        activity: {
-          type: "running_tools",
-          requested,
-          tools: { type: "pending" },
-        },
-      };
-      this.deps.onUpdate();
 
       let toolOutcome: ToolOutcome;
       try {
@@ -448,7 +345,6 @@ export class Agent {
             : UNANSWERED_TOOL_RESULT_TEXT,
         ),
       );
-      this.deps.onUpdate();
 
       if (toolOutcome.type === "aborted") {
         this.abortRequested = true;
@@ -463,57 +359,17 @@ export class Agent {
     }
   }
 
-  /** One provider request. Retries live inside it and stay inside the
-   * `streaming` phase, so they are never observable as a transition. */
+  /** One provider request. Retries live inside it, and the owner is told about
+   * them through the progress callback it supplied. */
   private async streamOneResponse(): Promise<RequestResult> {
-    this.currentPhase = {
-      type: "running",
-      activity: {
-        type: "streaming",
-        startedAt: new Date(),
-        lastEventTime: new Date(),
-        block: undefined,
-        retry: undefined,
-      },
-    };
-    this.deps.onUpdate();
     return await this.manager.sendRequest((update) =>
-      this.handleRequestUpdate(update),
+      this.deps.onRequestUpdate(update),
     );
   }
-  /** Every update is a sign of life from the server, so each stamps
-   * `lastEventTime`; the block itself is mirrored onto the phase and read at
-   * render time. */
-  private handleRequestUpdate(update: RequestUpdate): void {
-    const phase = this.currentPhase;
-    if (phase.type !== "running" || phase.activity.type !== "streaming") return;
-    const activity = phase.activity;
-    activity.lastEventTime = new Date();
-    switch (update.type) {
-      case "streaming-block":
-        activity.block = update.streamingBlock;
-        break;
-      case "block-finished":
-        activity.block = undefined;
-        break;
-      case "retry-scheduled":
-        activity.retry = update.retry;
-        activity.block = undefined;
-        break;
-      case "attempt-started":
-        activity.retry = undefined;
-        activity.block = undefined;
-        break;
-      default:
-        assertUnreachable(update);
-    }
-    this.deps.onUpdate();
-  }
+
   /** The single terminal abort transition: leave the history well-formed and
    * mark why it stops here. */
   private finishTurnAbort(): void {
-    this.currentPhase = { type: "aborting" };
-    this.deps.onUpdate();
     this.manager.finalize({ type: "aborted" });
     this.manager.appendUserMessage([
       {
@@ -522,7 +378,6 @@ export class Agent {
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
-    this.deps.onUpdate();
   }
 
   private async handleTurnResult(result: TurnResult): Promise<void> {
@@ -562,7 +417,6 @@ export class Agent {
     if (!this.manager.countTokens) return;
     try {
       this.lastPreflightTokenCount = await this.manager.countTokens();
-      this.deps.onUpdate();
     } catch (error) {
       // Drop the previous count rather than pass it off as this request's: a
       // hook deciding about the wrong conversation is worse than one that
@@ -611,8 +465,6 @@ export class Agent {
 
   private finishAbort(): void {
     this.abortRequested = false;
-    this.currentPhase = { type: "idle" };
-    this.deps.onUpdate();
     this.settle({ type: "aborted" });
   }
 
@@ -633,7 +485,6 @@ export class Agent {
     // decides to issue is composed inside the turn, by the gate.
     const { content } = this.prepareUserContent(inputMessages);
     this.preSubmitNativeIdx = this.manager.getNativeMessageIdx();
-    this.deps.onUpdate();
 
     this.turnInFlight = true;
     this.abortRequested = false;
@@ -647,9 +498,8 @@ export class Agent {
     return deferred.promise;
   }
 
-  /** The turn `send` started, from the first request to the phase returning to
-   * idle. Its result is the owner's `SendResult`; nobody drives a turn any
-   * other way. */
+  /** The turn `send` started. Its result is the owner's `SendResult`; nobody
+   * drives a turn any other way. */
   private async driveTurn(input: AgentInput[]): Promise<TurnResult> {
     try {
       const result = await this.runLoop(input);
@@ -660,15 +510,12 @@ export class Agent {
     } finally {
       this.turnInFlight = false;
       this.abortRequested = false;
-      this.currentPhase = { type: "idle" };
-      this.deps.onUpdate();
     }
   }
 
   private settle(outcome: SendResult): void {
     const deferred = this.submission;
     this.submission = undefined;
-    this.deps.onUpdate();
     deferred?.resolve(outcome);
   }
 

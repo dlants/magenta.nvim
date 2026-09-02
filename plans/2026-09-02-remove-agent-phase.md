@@ -198,12 +198,65 @@ Notes:
   flake in `spawn-subagents.test.ts` under full-suite load; passes in
   isolation and on a rerun of the file).
 
-## agent: phase out
+## agent: phase out — DONE
 
 - Goal: `AgentPhase`, `phaseLabel`, `phaseStreamingBlock`, `phaseActiveTools`, and `handleRequestUpdate` are gone; `deps.onRequestUpdate` is passed straight to `manager.sendRequest`; `abortRequested` is private and unobservable; `deps.onUpdate` is deleted.
 - Tests:
   - Abort during streaming and abort during tool execution: the abort marker is in the log and every requested tool has a result.
   - Core tests that polled `phase` are repointed at `thread.loopState` — the real check that transitions happen at the same moments as before.
+
+Notes:
+
+- The state machine had to land somewhere the moment the phase left the agent,
+  so `ThreadLoopState` arrives here rather than in the next stage — but only
+  its *shape*: `{idle} | {running, epoch, activity, aborting?}` with the
+  `preparing`/`streaming`/`running_tools` activities, plus `loopLabel`,
+  `loopStreamingBlock`, `loopActiveTools`. What the next stage still owes:
+  folding the `send` promise into the sub-states, `idle.lastResult` (replacing
+  `state.lastTurnResult` / `Thread.lastResult()`), and `isBusy` becoming
+  `loopState.type !== "idle"` (it is still `|| agent.isBusy` today).
+- The transitions live in `LoopStateMachine` (`node/core/src/loop-state.ts`)
+  rather than as fields on `Thread`, because the bare-agent test harness needs
+  the same machine: a test that observes the loop must observe the production
+  one. `Thread` holds one and exposes `get loopState()`.
+- The edges the owner drives, all of them thread-side:
+  - `runToRest` → `start()` / `finish(epoch)`; `preparing` is the default
+    activity, so the gaps between turns are already accounted for.
+  - `Thread.runTurn` wraps each `agent.send`: `streaming()` before,
+    `preparing()` in the `finally`.
+  - `Thread.executeTools` wraps the host: `runningTools(requests)` on the way
+    in, `streaming()` on the way out.
+  - `AgentDeps.onRequestUpdate` → `applyRequestUpdate`, which stamps
+    `lastEventTime` and folds the block/retry in.
+- `aborting` is a flag on `running` (not the old third state) already in this
+  stage: an activity transition would otherwise clobber it. Both places that
+  used to rely on `agent.isAbortRequested` now call `loop.markAborting()` —
+  `Thread.abort` and the supersede path in `Thread.send` — and the tool
+  executor's `isAborting` reads the flag.
+- Stage-1 seams removed: `Agent.isAbortRequested` and
+  `Agent.setToolInvocationState` are gone; `abortRequested` is private.
+  `AgentDeps.onUpdate` is gone, and with it every agent-side notification.
+- `AgentAction.set-active-tool-result` went with the phase (it read
+  `activeTools` and had no caller left after stage 1); `set-title` remains
+  until stage 4, and `Thread.setTitle` now issues the render itself.
+  `TurnActivity` is deleted from `thread-api.ts`, superseded by `LoopActivity`.
+- Test harness: `createTestAgent` / `createTestOpenAIAgent` return a
+  `TestAgent` (a subclass) that owns a `LoopStateMachine` — `send` starts and
+  finishes the loop, `abortAndWait` marks aborting and stops the live
+  invocations, exactly as `Thread` does. `flatPhase(agent)` became
+  `flatLoop(owner)` over anything with a `loopState`, so `flatLoop(core)` reads
+  the thread's own loop rather than the agent's.
+- Root layer: mechanically repointed (`thread.loopState`, `loopLabel`,
+  `loopStreamingBlock`, `loopActiveTools`); `renderStatus` and the sidebar
+  status gained a `preparing` case and render `Aborting...` off the flag. The
+  rest of the root work (`isBusy`, `title`, `lastResult`) is still stage 5's.
+- Two tests changed meaning rather than shape: the compaction test that
+  asserted an update from `agent.update({set-title})` now calls
+  `thread.setTitle`, and "issues no continuation when the abort races the
+  stop" now waits for `running`/`preparing` — the window where the agent has
+  settled and the loop is deciding — since the thread's loop is never idle
+  mid-submission.
+- `npx tsc -b`, `npx biome check .` and the full suite are green.
 
 ## thread: ThreadLoopState
 

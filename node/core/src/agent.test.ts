@@ -1,7 +1,6 @@
 import * as fs from "node:fs/promises";
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
-import { phaseActiveTools, phaseLabel } from "./agent.ts";
 import type { ToolApplied } from "./capabilities/context-tracker.ts";
 import type { OutputLine, Shell, ShellResult } from "./capabilities/shell.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
@@ -11,6 +10,7 @@ import {
   runSubmission,
 } from "./compaction/index.ts";
 import { InMemoryFileIO } from "./edl/in-memory-file-io.ts";
+import { loopActiveTools, loopLabel } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import { AnthropicInferenceManager } from "./providers/anthropic-inference.ts";
 import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
@@ -33,7 +33,7 @@ import {
   createAgentWithMock,
   createTestAgent,
   defaultAnthropicOptions,
-  flatPhase,
+  flatLoop,
   TEST_ARCHIVE_DIR,
   uniqueThreadId,
 } from "./test-helpers.ts";
@@ -58,10 +58,10 @@ import { Defer, delay, pollUntil } from "./utils/async.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
 
-describe("Thread.phase", () => {
+describe("Thread.loopState", () => {
   it("is idle with no result before anything is sent", () => {
     const { core } = createAgentWithMock();
-    expect(core.phase).toEqual({ type: "idle" });
+    expect(core.loopState).toEqual({ type: "idle" });
     expect(core.lastResult()).toBeUndefined();
   });
   it("is running/streaming during a turn and idle/completed after it", async () => {
@@ -69,19 +69,19 @@ describe("Thread.phase", () => {
     void core.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     await pollUntil(() => {
-      if (core.phase.type === "running") return true;
-      throw new Error(`waiting for running, currently: ${core.phase.type}`);
+      if (core.loopState.type === "running") return true;
+      throw new Error(`waiting for running, currently: ${core.loopState.type}`);
     });
-    const running = core.phase;
+    const running = core.loopState;
     if (running.type !== "running") throw new Error("expected running");
     expect(running.activity.type).toBe("streaming");
     stream.streamText("hi");
     stream.finishResponse("end_turn");
     await pollUntil(() => {
-      if (core.phase.type === "idle") return true;
-      throw new Error(`waiting for idle, currently: ${core.phase.type}`);
+      if (core.loopState.type === "idle") return true;
+      throw new Error(`waiting for idle, currently: ${core.loopState.type}`);
     });
-    expect(core.phase).toEqual({ type: "idle" });
+    expect(core.loopState).toEqual({ type: "idle" });
     expect(core.lastResult()).toEqual({
       type: "completed",
       stopReason: "end_turn",
@@ -93,10 +93,10 @@ describe("Thread.phase", () => {
     const stream = await mockClient.awaitStream();
     stream.respondWithError(new Error("provider failure"));
     await pollUntil(() => {
-      if (core.phase.type === "idle") return true;
-      throw new Error(`waiting for idle, currently: ${core.phase.type}`);
+      if (core.loopState.type === "idle") return true;
+      throw new Error(`waiting for idle, currently: ${core.loopState.type}`);
     });
-    expect(core.phase.type).toBe("idle");
+    expect(core.loopState.type).toBe("idle");
     const lastResult = core.lastResult();
     if (lastResult?.type !== "failed") throw new Error("expected failed");
     expect(lastResult.error.message).toBe("provider failure");
@@ -109,10 +109,10 @@ describe("Thread.phase", () => {
     stream.streamText("partial");
     await core.abort();
     await pollUntil(() => {
-      if (core.phase.type === "idle") return true;
-      throw new Error(`waiting for idle, currently: ${core.phase.type}`);
+      if (core.loopState.type === "idle") return true;
+      throw new Error(`waiting for idle, currently: ${core.loopState.type}`);
     });
-    expect(core.phase).toEqual({ type: "idle" });
+    expect(core.loopState).toEqual({ type: "idle" });
     expect(core.lastResult()).toEqual({ type: "aborted" });
   });
 
@@ -746,7 +746,7 @@ describe("Agent.handleProviderStopped", () => {
     await pollUntil(() => {
       if (core.yielded) return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
+        `waiting for yielded mode, currently: ${loopLabel(core.loopState)}`,
       );
     });
 
@@ -777,7 +777,7 @@ describe("Agent.handleProviderStopped", () => {
     await pollUntil(() => {
       if (core.yielded) return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
+        `waiting for yielded mode, currently: ${loopLabel(core.loopState)}`,
       );
     });
 
@@ -1049,7 +1049,7 @@ describe("Agent.abort on yielded thread", () => {
     await pollUntil(() => {
       if (core.yielded) return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
+        `waiting for yielded mode, currently: ${loopLabel(core.loopState)}`,
       );
     });
 
@@ -1081,7 +1081,7 @@ describe("Agent.abort on yielded thread", () => {
     await pollUntil(() => {
       if (core.yielded) return true;
       throw new Error(
-        `waiting for yielded, currently: ${phaseLabel(core.phase)}`,
+        `waiting for yielded, currently: ${loopLabel(core.loopState)}`,
       );
     });
     // `abort()` short-circuits on a yielded agent, but the preempting-send path
@@ -1152,9 +1152,9 @@ describe("Agent.abort appends user abort message", () => {
 
     // Wait for tool_use mode
     await pollUntil(() => {
-      if (phaseLabel(core.phase) === "running_tools") return true;
+      if (loopLabel(core.loopState) === "running_tools") return true;
       throw new Error(
-        `waiting for tool_use mode, currently: ${phaseLabel(core.phase)}`,
+        `waiting for tool_use mode, currently: ${loopLabel(core.loopState)}`,
       );
     });
 
@@ -1296,7 +1296,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.finishResponse("end_turn", { inputTokens: 50, outputTokens: 5 });
 
     await pollUntil(() => {
-      if (flatPhase(core.agent).type !== "idle") throw new Error("waiting");
+      if (flatLoop(core).type !== "idle") throw new Error("waiting");
       return true;
     });
 
@@ -1548,7 +1548,7 @@ describe("AutoCompactSupervisor integration", () => {
     const stream2 = await awaitNextStream(mockClient, stream);
     stream2.respondWithError(new Error("provider failure"));
     await pollUntil(() => {
-      if (core.phase.type === "idle") return true;
+      if (core.loopState.type === "idle") return true;
       throw new Error("waiting for idle");
     });
     expect(
@@ -1585,7 +1585,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream2.streamText("partial");
     await core.abort();
     await pollUntil(() => {
-      if (core.phase.type === "idle") return true;
+      if (core.loopState.type === "idle") return true;
       throw new Error("waiting for idle");
     });
     expect(
@@ -1825,9 +1825,9 @@ describe("AutoCompactSupervisor integration", () => {
     });
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (phaseLabel(core.phase) === "running_tools") return true;
+      if (loopLabel(core.loopState) === "running_tools") return true;
       throw new Error(
-        `waiting for tool_use mode, currently: ${phaseLabel(core.phase)}`,
+        `waiting for tool_use mode, currently: ${loopLabel(core.loopState)}`,
       );
     });
     const abortPromise = core.abort();
@@ -1870,7 +1870,7 @@ describe("AutoCompactSupervisor integration", () => {
     await pollUntil(() => {
       if (core.yielded) return true;
       throw new Error(
-        `waiting for yielded mode, currently: ${phaseLabel(core.phase)}`,
+        `waiting for yielded mode, currently: ${loopLabel(core.loopState)}`,
       );
     });
     expect(events).toEqual(["request", "results:1"]);
@@ -2640,7 +2640,7 @@ describe("Agent conversation archive", () => {
       nextStream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (flatPhase(core.agent).type !== "idle") throw new Error("waiting");
+        if (flatLoop(core).type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -2690,7 +2690,7 @@ describe("Agent conversation archive", () => {
 
       nextStream.finishResponse("end_turn");
       await pollUntil(() => {
-        if (flatPhase(core.agent).type !== "idle") throw new Error("waiting");
+        if (flatLoop(core).type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -2717,7 +2717,7 @@ describe("Agent conversation archive", () => {
       stream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (flatPhase(core.agent).type !== "idle") throw new Error("waiting");
+        if (flatLoop(core).type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -2747,7 +2747,7 @@ describe("Agent conversation archive", () => {
       contStream.finishResponse("end_turn");
       await compactPromise;
       await pollUntil(() => {
-        if (flatPhase(core.agent).type !== "idle") throw new Error("waiting");
+        if (flatLoop(core).type !== "idle") throw new Error("waiting");
         return true;
       });
       await core.awaitArchiveFlush();
@@ -2785,7 +2785,7 @@ describe("Agent conversation archive", () => {
       stream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (flatPhase(parent.agent).type !== "idle") throw new Error("waiting");
+        if (flatLoop(parent).type !== "idle") throw new Error("waiting");
         return true;
       });
 
@@ -2808,7 +2808,7 @@ describe("Agent conversation archive", () => {
       childStream.finishResponse("end_turn");
 
       await pollUntil(() => {
-        if (flatPhase(child!.agent).type !== "idle") throw new Error("waiting");
+        if (flatLoop(child!).type !== "idle") throw new Error("waiting");
         return true;
       });
       await child.awaitArchiveFlush();
@@ -2853,7 +2853,7 @@ describe("Agent thread state", () => {
       stream.streamText("parent response");
       stream.finishResponse("end_turn");
       await pollUntil(() => {
-        if (flatPhase(parent.agent).type !== "idle") throw new Error("waiting");
+        if (flatLoop(parent).type !== "idle") throw new Error("waiting");
         return true;
       });
 
@@ -2917,7 +2917,7 @@ describe("Thread survives the compaction agent swap", () => {
     contStream.finishResponse("end_turn");
     await compactPromise;
     await pollUntil(() => {
-      if (flatPhase(core.agent).type !== "idle") throw new Error("waiting");
+      if (flatLoop(core).type !== "idle") throw new Error("waiting");
       return true;
     });
   }
@@ -2954,7 +2954,7 @@ describe("Thread survives the compaction agent swap", () => {
 
       let updates = 0;
       core.callbacks.onUpdate = () => updates++;
-      core.agent.update({ type: "set-title", title: "after compaction" });
+      core.setTitle("after compaction");
       expect(updates).toBe(1);
     } finally {
       await core.destroy();
@@ -2992,7 +2992,7 @@ describe("Thread survives the compaction agent swap", () => {
       contStream.finishResponse("end_turn");
       await compactPromise;
       await pollUntil(() => {
-        if (flatPhase(core.agent).type !== "idle") throw new Error("waiting");
+        if (flatLoop(core).type !== "idle") throw new Error("waiting");
         return true;
       });
     } finally {
@@ -3156,7 +3156,7 @@ describe("Agent turn loop", () => {
     expect(
       texts.filter((text) => text.includes("aborted the previous")),
     ).toHaveLength(1);
-    expect(flatPhase(agent)).toEqual({ type: "idle" });
+    expect(flatLoop(agent)).toEqual({ type: "idle" });
   });
 
   it("the streaming block on the phase is a copy, not the manager's own", async () => {
@@ -3170,7 +3170,7 @@ describe("Agent turn loop", () => {
       content_block: { type: "text", text: "", citations: null },
     });
     await stream.settle();
-    const phase = flatPhase(agent);
+    const phase = flatLoop(agent);
     if (phase.type !== "streaming") throw new Error("expected streaming");
     const first = phase.block;
 
@@ -3183,7 +3183,7 @@ describe("Agent turn loop", () => {
 
     // The block the view already read must not have changed under it.
     expect(first).toEqual({ type: "text", text: "" });
-    const later = flatPhase(agent);
+    const later = flatLoop(agent);
     expect(later.type === "streaming" && later.block).not.toBe(first);
 
     void agent.abort();
@@ -3306,7 +3306,7 @@ describe("Agent turn loop", () => {
     const { agent, mockClient } = createTestAgent({
       onUpdate: () => {
         snapshots.push({
-          hasActive: phaseActiveTools(agent.phase) !== undefined,
+          hasActive: loopActiveTools(agent.loopState) !== undefined,
           results: agent
             .getProviderMessages()
             .flatMap((m) => m.content)
@@ -3358,7 +3358,7 @@ describe("Agent turn loop", () => {
     });
     stream.finishResponse("tool_use");
     const active = await pollUntil(() => {
-      const tools = phaseActiveTools(agent.phase);
+      const tools = loopActiveTools(agent.loopState);
       if (!tools?.size) throw new Error("waiting for live invocations");
       return tools;
     });
@@ -3386,7 +3386,7 @@ describe("Agent turn loop", () => {
     expect(result.type).toBe("failed");
     // Finalized: the half-streamed assistant turn is left in a shape the
     // provider will accept on the next request.
-    expect(flatPhase(agent)).toEqual({ type: "idle" });
+    expect(flatLoop(agent)).toEqual({ type: "idle" });
     expect(mockClient.streams).toHaveLength(1);
   });
 });

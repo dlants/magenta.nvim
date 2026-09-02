@@ -1,9 +1,14 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
-import type { Agent, ToolExecutor } from "../agent.ts";
+import type { ToolExecutor } from "../agent.ts";
 import type { Logger } from "../logger.ts";
 import type { ProviderProfile } from "../provider-options.ts";
-import { createTestAgent, flatPhase, noopLogger } from "../test-helpers.ts";
+import {
+  createTestAgent,
+  flatLoop,
+  noopLogger,
+  type TestAgent,
+} from "../test-helpers.ts";
 import type { SendResult } from "../thread-api.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { delay, pollUntil } from "../utils/async.ts";
@@ -22,10 +27,10 @@ import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 /** A thin adapter onto the real `Agent`: these tests are about what the
  * manager puts on the wire, but the loop driving it must be the production
  * one, so nothing here reimplements it. */
-class TestAgent {
+class AgentUnderTest {
   constructor(
-    readonly agent: Agent,
-    private makeClone: (from: Agent) => TestAgent,
+    readonly agent: TestAgent,
+    private makeClone: (from: TestAgent) => AgentUnderTest,
   ) {}
 
   get manager(): AnthropicInferenceManager {
@@ -36,15 +41,15 @@ class TestAgent {
     return this.agent.manager.log;
   }
 
-  get phase(): ReturnType<typeof flatPhase> {
-    return flatPhase(this.agent);
+  get activity(): ReturnType<typeof flatLoop> {
+    return flatLoop(this.agent);
   }
 
   truncateMessages(idx: NativeMessageIdx): void {
     this.agent.manager.truncateMessages(idx);
   }
 
-  clone(): TestAgent {
+  clone(): AgentUnderTest {
     return this.makeClone(this.agent);
   }
 
@@ -108,10 +113,10 @@ function createAgent(
   mockClient: MockAnthropicClient,
   options?: CreateOptions,
   tracked?: Tracked,
-): TestAgent {
+): AgentUnderTest {
   const opts = options ?? {};
-  const wrap = (agent: Agent): TestAgent =>
-    new TestAgent(agent, (from) =>
+  const wrap = (agent: TestAgent): AgentUnderTest =>
+    new AgentUnderTest(agent, (from) =>
       wrap(
         createTestAgent({
           ...agentOptions(opts, mockClient),
@@ -133,8 +138,8 @@ function createAgent(
   );
 }
 
-function streamingBlock(agent: TestAgent): StreamingBlock | undefined {
-  const phase = agent.phase;
+function streamingBlock(agent: AgentUnderTest): StreamingBlock | undefined {
+  const phase = agent.activity;
   return phase.type === "streaming" ? phase.block : undefined;
 }
 
@@ -491,7 +496,7 @@ describe("abort", () => {
     const agent = createAgent(mockClient);
     agent.abort();
     await delay(0);
-    expect(agent.phase).toEqual({ type: "idle" });
+    expect(agent.activity).toEqual({ type: "idle" });
     expect(agent.log.messages).toEqual([]);
     expect(mockClient.streams).toEqual([]);
   });
@@ -507,7 +512,7 @@ describe("abort", () => {
     agent.abort();
 
     expect(await turn).toEqual({ type: "aborted" });
-    expect(agent.phase).toEqual({ type: "idle" });
+    expect(agent.activity).toEqual({ type: "idle" });
   });
 
   it("adds tool_result with abort message when aborting during tool_use", async () => {
@@ -1623,7 +1628,7 @@ File context here
       const turn = agent.runTurn("Hello");
 
       const stream = await mockClient.awaitStream();
-      expect(agent.phase.type).toBe("streaming");
+      expect(agent.activity.type).toBe("streaming");
 
       // Start a text block but don't finish it — stays in currentAnthropicBlock
       const index = stream.nextBlockIndex();
@@ -1645,7 +1650,7 @@ File context here
       // Only the user message should be present (no assistant message)
       expect(clonedState.messages).toHaveLength(1);
       expect(clonedState.messages[0].role).toBe("user");
-      expect(cloned.phase).toEqual({ type: "idle" });
+      expect(cloned.activity).toEqual({ type: "idle" });
 
       // Clean up source
       stream.emitEvent({ type: "content_block_stop", index });
@@ -1704,7 +1709,7 @@ File context here
         "text",
         "Complete text",
       );
-      expect(cloned.phase).toEqual({ type: "idle" });
+      expect(cloned.activity).toEqual({ type: "idle" });
 
       // Clean up source
       stream.emitEvent({ type: "content_block_stop", index: toolIndex });
@@ -1728,7 +1733,7 @@ File context here
         query: "test query",
       });
 
-      expect(agent.phase.type).toBe("streaming");
+      expect(agent.activity.type).toBe("streaming");
 
       // Clone — server_tool_use should be dropped, leaving empty assistant → removed
       const cloned = agent.clone();
@@ -1736,7 +1741,7 @@ File context here
 
       expect(clonedState.messages).toHaveLength(1);
       expect(clonedState.messages[0].role).toBe("user");
-      expect(cloned.phase).toEqual({ type: "idle" });
+      expect(cloned.activity).toEqual({ type: "idle" });
 
       // Clean up source
       stream.finishResponse("end_turn");
@@ -1774,7 +1779,7 @@ File context here
 
       // The executor is stalled, so the agent stays in running_tools
       await toolsCalled;
-      expect(agent.phase).toMatchObject({
+      expect(agent.activity).toMatchObject({
         type: "running_tools",
         requested: [{ id: "tool-req-1" }],
       });
@@ -1812,10 +1817,10 @@ File context here
         },
         nativeMessageIdx: 2 as NativeMessageIdx,
       });
-      expect(cloned.phase).toEqual({ type: "idle" });
+      expect(cloned.activity).toEqual({ type: "idle" });
 
       // Source agent should be unchanged
-      expect(agent.phase.type).toBe("running_tools");
+      expect(agent.activity.type).toBe("running_tools");
       expect(agent.log.messages).toHaveLength(2);
 
       releaseTools();
@@ -1846,7 +1851,7 @@ File context here
 
       // Source should have the complete response
       const sourceState = agent.log;
-      expect(agent.phase).toEqual({ type: "idle" });
+      expect(agent.activity).toEqual({ type: "idle" });
       expect(sourceState.messages).toHaveLength(2);
       expect(sourceState.messages[1].content).toHaveLength(2);
       expect(sourceState.messages[1].content[0]).toHaveProperty(
@@ -1887,7 +1892,7 @@ File context here
       // Verify stop reason is preserved
       const clonedState = cloned.log;
       expect(clonedState.messages[1].stopReason).toBe("end_turn");
-      expect(cloned.phase).toEqual({ type: "idle" });
+      expect(cloned.activity).toEqual({ type: "idle" });
       await turn;
     });
 
@@ -1948,7 +1953,7 @@ File context here
       agent.truncateMessages(messageIdx);
 
       expect(agent.log.messages).toHaveLength(2);
-      expect(agent.phase).toEqual({ type: "idle" });
+      expect(agent.activity).toEqual({ type: "idle" });
     });
 
     it("truncates at assistant tool_use message and extends to keep tool_result", async () => {

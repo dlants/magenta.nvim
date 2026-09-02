@@ -23,13 +23,13 @@ import {
   GitTracker,
   type InputMessage,
   loadAgents,
+  loopActiveTools,
+  loopStreamingBlock,
   MaxTokensSupervisor,
   type MCPToolManagerImpl,
   type NativeMessageIdx,
   type PendingMessage,
   parseCompact,
-  phaseActiveTools,
-  phaseStreamingBlock,
   type ResolvedSubmission,
   renderPending,
   resolveAsText,
@@ -60,9 +60,9 @@ import { openFileInNonMagentaWindow } from "../nvim/openFileInNonMagentaWindow.t
 import type { Row0Indexed } from "../nvim/window.ts";
 import type { MagentaOptions, Profile } from "../options.ts";
 import {
-  type AgentPhase,
   getProvider,
   type ProviderMessage,
+  type ThreadLoopState,
 } from "../providers/provider.ts";
 import type { SystemInfo, SystemPrompt } from "../providers/system-prompt.ts";
 import type { RootMsg } from "../root-msg.ts";
@@ -619,10 +619,10 @@ export class NvimThread {
    * tool input is still streaming we can see which comments it targets and
    * how far each reply has been written. */
   private commentActivity(): CommentThreadActivity | undefined {
-    if (this.core.phase.type === "idle") {
+    if (this.core.loopState.type === "idle") {
       return undefined;
     }
-    const block = phaseStreamingBlock(this.core.phase);
+    const block = loopStreamingBlock(this.core.loopState);
     if (block?.type === "tool_use" && block.name === "reply") {
       const replies: { [id: CommentId]: string } = {};
       for (const reply of extractPartialReplies(block.inputJson)) {
@@ -750,7 +750,7 @@ export class NvimThread {
     // submitted back to the agent (e.g. mid tool_use turn while other tools
     // are still running). The rendering layer needs these to display custom
     // result summaries as soon as the tool completes.
-    const active = phaseActiveTools(this.core.phase);
+    const active = loopActiveTools(this.core.loopState);
     if (active) {
       for (const entry of active.values()) {
         if (entry.result && !next.has(entry.request.id)) {
@@ -966,8 +966,8 @@ export class NvimThread {
     this.fileSupervisor.destroy();
   }
 
-  get phase(): AgentPhase {
-    return this.core.phase;
+  get loopState(): ThreadLoopState {
+    return this.core.loopState;
   }
 
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
@@ -1006,7 +1006,7 @@ export class NvimThread {
   /** A send that preempts the turn in flight also drops that turn's pending
    * sandbox approvals: they belong to the work being abandoned. */
   private rejectPendingSandboxApprovals(): void {
-    if (this.core.phase.type !== "idle") {
+    if (this.core.loopState.type !== "idle") {
       this.sandboxViolationHandler?.rejectAll();
     }
   }
@@ -1042,7 +1042,8 @@ export class NvimThread {
       }
 
       case "abort": {
-        for (const entry of phaseActiveTools(this.core.phase)?.values() ?? []) {
+        for (const entry of loopActiveTools(this.core.loopState)?.values() ??
+          []) {
           entry.handle.abort();
         }
         this.abortAndWait().catch((e: Error) => {

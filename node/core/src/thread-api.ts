@@ -1,12 +1,6 @@
 import type { ActiveToolEntry } from "./agent.ts";
 import type { OnToolApplied } from "./capabilities/context-tracker.ts";
-import type {
-  RequestedTool,
-  RetryStatus,
-  StopReason,
-  StreamingBlock,
-  ToolResults,
-} from "./providers/provider-types.ts";
+import type { StopReason, ToolResults } from "./providers/provider-types.ts";
 import type { PendingMessage } from "./submission/index.ts";
 import type {
   EndTurnAction,
@@ -34,30 +28,6 @@ export function renderYieldValue(value: YieldValue): string {
   return value.type === "structured" ? JSON.stringify(value.value) : value.text;
 }
 
-/** The intra-turn detail of `AgentPhase.running`. It is a read-through projection of the
- * runner rather than a stored mirror: everything in it (the streaming block,
- * the retry countdown, the active tool list) moves between renders, so a copy
- * would be stale by construction. */
-export type TurnActivity =
-  | {
-      type: "streaming";
-      startedAt: Date;
-      /** Most recent sign of life from the server; drives the dead-air
-       * "waiting Ns" counter. */
-      lastEventTime: Date;
-      block: StreamingBlock | undefined;
-      retry: RetryStatus | undefined;
-    }
-  | {
-      type: "running_tools";
-      /** As the model asked for them, including malformed requests that never
-       * became an `activeTools` entry. */
-      requested: ReadonlyArray<RequestedTool>;
-      /** Where the invocations are: not created yet, live, or settled (their
-       * results are in the log). Keeping the three apart means an empty map is
-       * never overloaded to mean "done". */
-      tools: ToolInvocationState;
-    };
 /** Malformed requests never become an `activeTools` entry, so the map can be
  * smaller than `requested`. */
 export type ToolInvocationState =

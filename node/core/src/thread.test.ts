@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { phaseActiveTools, phaseLabel } from "./agent.ts";
 import type { ThreadType } from "./chat-types.ts";
 import { type Compactor, runSubmission } from "./compaction/index.ts";
+import { loopActiveTools, loopLabel } from "./loop-state.ts";
 import {
   parseCompact,
   pendingMessage,
@@ -195,8 +195,8 @@ describe("deferred submissions", () => {
     );
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (phaseLabel(core.phase) === "running_tools") return true;
-      throw new Error(`waiting for tool_use, got ${phaseLabel(core.phase)}`);
+      if (loopLabel(core.loopState) === "running_tools") return true;
+      throw new Error(`waiting for tool_use, got ${loopLabel(core.loopState)}`);
     });
     expect(
       await core.submit(pendingMessage("also check this"), "async"),
@@ -305,8 +305,8 @@ describe("deferred submissions", () => {
     );
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (phaseLabel(core.phase) === "running_tools") return true;
-      throw new Error(`waiting for tool_use, got ${phaseLabel(core.phase)}`);
+      if (loopLabel(core.loopState) === "running_tools") return true;
+      throw new Error(`waiting for tool_use, got ${loopLabel(core.loopState)}`);
     });
     expect(
       await core.submit(pendingMessage("@compact wrap it up"), "async"),
@@ -566,7 +566,7 @@ describe("Thread aborts the tools it owns", () => {
     });
     stream.finishResponse("tool_use");
     const active = await pollUntil(() => {
-      const tools = phaseActiveTools(core.phase);
+      const tools = loopActiveTools(core.loopState);
       if (!tools?.size) throw new Error("waiting for live invocations");
       return tools;
     });
@@ -664,7 +664,15 @@ describe("Thread.abort between turns", () => {
     // reports it — the loop must take that at face value rather than
     // treating the stop as a turn boundary to continue from.
     onUpdate = () => {
-      if (aborted || core.phase.type !== "idle") return;
+      const state = core.loopState;
+      // The agent has settled and handed the thread back to the loop: the
+      // window in which the loop is deciding what follows the stop.
+      if (
+        aborted ||
+        state.type !== "running" ||
+        state.activity.type !== "preparing"
+      )
+        return;
       aborted = true;
       aborting = core.abort();
     };

@@ -1,7 +1,6 @@
 export type {
   AgentInput,
   AgentLog,
-  AgentPhase,
   FinalizeReason,
   InferenceOptions,
   NativeInferenceManager,
@@ -40,6 +39,7 @@ export type {
   StopReason,
   StreamingBlock,
   StreamStopReason,
+  ThreadLoopState,
   ToolExecutor,
   ToolOutcome,
   ToolResults,

@@ -2,12 +2,8 @@ export {
   type ActiveToolEntry,
   Agent,
   type AgentAction,
-  type AgentPhase,
   type BeforeRequestDecision,
   type InputMessage,
-  phaseActiveTools,
-  phaseLabel,
-  phaseStreamingBlock,
   type ThreadState,
   type ToolExecutor,
   type ToolOutcome,
@@ -144,6 +140,13 @@ export { parse } from "./edl/parser.ts";
 export type { FileMutationSummary } from "./edl/types.ts";
 export { Emitter, type EventMap } from "./emitter.ts";
 export type { Logger } from "./logger.ts";
+export {
+  type LoopActivity,
+  loopActiveTools,
+  loopLabel,
+  loopStreamingBlock,
+  type ThreadLoopState,
+} from "./loop-state.ts";
 export type { OpenAIAuth } from "./openai-auth.ts";
 export type { AbsFilePath, Cwd } from "./paths.ts";
 export type {
@@ -270,7 +273,6 @@ export type {
   SendResult,
   ThreadResult,
   ThreadSendResult,
-  TurnActivity,
   YieldValue,
 } from "./thread-api.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";

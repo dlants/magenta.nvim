@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  phaseActiveTools,
-  phaseLabel,
+  loopActiveTools,
+  loopLabel,
   pollUntil,
   type ToolName,
   type ToolRequestId,
@@ -1071,10 +1071,10 @@ describe("bash command output logging", () => {
 
       // Get the tool instance and trigger termination
       const thread = driver.magenta.chat.getActiveThread();
-      const active = phaseActiveTools(thread.core.phase);
+      const active = loopActiveTools(thread.core.loopState);
       if (!active) {
         throw new Error(
-          `Expected running tools, got ${phaseLabel(thread.core.phase)}`,
+          `Expected running tools, got ${loopLabel(thread.core.loopState)}`,
         );
       }
       const entry = active.get("test-bash-sigterm" as ToolRequestId);
@@ -1160,10 +1160,10 @@ describe("bash command output logging", () => {
 
       // Get the tool instance and trigger termination
       const thread = driver.magenta.chat.getActiveThread();
-      const active = phaseActiveTools(thread.core.phase);
+      const active = loopActiveTools(thread.core.loopState);
       if (!active) {
         throw new Error(
-          `Expected running tools, got ${phaseLabel(thread.core.phase)}`,
+          `Expected running tools, got ${loopLabel(thread.core.loopState)}`,
         );
       }
       const entry = active.get("test-bash-sigkill" as ToolRequestId);
@@ -1280,10 +1280,10 @@ wait
 
       // Get the tool instance and trigger termination
       const thread = driver.magenta.chat.getActiveThread();
-      const active = phaseActiveTools(thread.core.phase);
+      const active = loopActiveTools(thread.core.loopState);
       if (!active) {
         throw new Error(
-          `Expected running tools, got ${phaseLabel(thread.core.phase)}`,
+          `Expected running tools, got ${loopLabel(thread.core.loopState)}`,
         );
       }
       const entry = active.get("test-bash-tree" as ToolRequestId);

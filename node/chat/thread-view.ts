@@ -11,13 +11,13 @@ import {
   displayPath,
   formatToolSpec,
   formatToolSpecs,
+  type LoopActivity,
+  loopStreamingBlock,
   type NativeMessageIdx,
   type ProviderToolSpec,
-  phaseStreamingBlock,
   renderPending,
   type ThreadId,
   type ToolRequestId,
-  type TurnActivity,
   type YieldState,
 } from "@magenta/core";
 import {
@@ -32,11 +32,11 @@ import {
   renderGitUpdate,
 } from "../context/context-manager.ts";
 import type {
-  AgentPhase,
   ProviderMessage,
   ProviderMessageContent,
   ProviderToolResult,
   StopReason,
+  ThreadLoopState,
   TurnResult,
   Usage,
 } from "../providers/provider.ts";
@@ -93,7 +93,7 @@ export type RunningCompaction = {
 };
 
 export const renderStatus = (
-  agentPhase: AgentPhase,
+  agentPhase: ThreadLoopState,
   latestUsage: Usage | undefined,
   lastTurnResult: TurnResult | undefined,
   compaction: RunningCompaction | undefined,
@@ -111,11 +111,14 @@ export const renderStatus = (
     });
   }
 
-  // Then render based on the phase the turn is passing through
+  // Then render based on what the loop is doing
   switch (agentPhase.type) {
     case "running": {
+      if (agentPhase.aborting) return d`Aborting...`;
       const activity = agentPhase.activity;
       switch (activity.type) {
+        case "preparing":
+          return d`Preparing...`;
         case "running_tools":
           return d`Executing tools...`;
         case "streaming":
@@ -124,8 +127,6 @@ export const renderStatus = (
           return assertUnreachable(activity);
       }
     }
-    case "aborting":
-      return d`Aborting...`;
     case "idle":
       return renderTurnResult(lastTurnResult, latestUsage);
     default:
@@ -133,7 +134,7 @@ export const renderStatus = (
   }
 };
 function renderStreaming(
-  activity: Extract<TurnActivity, { type: "streaming" }>,
+  activity: Extract<LoopActivity, { type: "streaming" }>,
   requestTick: () => void,
 ): VDOMNode {
   requestTick();
@@ -200,7 +201,7 @@ function renderUsage(usage: Usage): VDOMNode {
  * Helper function to determine if context manager view should be shown
  */
 const shouldShowContextFiles = (
-  agentPhase: AgentPhase,
+  agentPhase: ThreadLoopState,
   contextManager: ContextManager,
 ): boolean => {
   return (
@@ -459,7 +460,7 @@ export const view: View<{
   );
 
   const messages = thread.getProviderMessages();
-  const agentPhase = thread.phase;
+  const agentPhase = thread.loopState;
 
   const pendingComments = thread.comments?.store.getPendingEntries() ?? [];
   const pendingCommentsNode = pendingComments.length
@@ -728,7 +729,7 @@ ${contentView}`;
     return d`${renderedBody}${forkedToAtIdx(messageIdx)}`;
   });
 
-  const streamingBlockView = phaseStreamingBlock(agentPhase)
+  const streamingBlockView = loopStreamingBlock(agentPhase)
     ? d`\n${renderStreamingBlock(thread)}\n`
     : d``;
 
@@ -939,7 +940,7 @@ function renderMessageContentBlock(
       };
 
       // Check if tool is active (still running)
-      const phase = thread.phase;
+      const phase = thread.loopState;
       const activeEntry =
         phase.type === "running" &&
         phase.activity.type === "running_tools" &&
@@ -1211,7 +1212,7 @@ export function findToolResult(
 }
 
 function renderStreamingBlock(thread: NvimThread): string | VDOMNode {
-  const block = phaseStreamingBlock(thread.phase);
+  const block = loopStreamingBlock(thread.loopState);
   if (!block) return d``;
 
   switch (block.type) {
