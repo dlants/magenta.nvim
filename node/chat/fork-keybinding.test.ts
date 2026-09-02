@@ -9,8 +9,8 @@ import type { NvimThread } from "./thread.ts";
  * the cloned history at fork time. */
 function expectForkNotificationQueued(thread: NvimThread): void {
   expect(
-    thread.core.pendingTurnContent.some(
-      (c) => c.type === "text" && c.text.includes("<fork-notification>"),
+    thread.core.pendingTurnContent.some((c) =>
+      c.text.includes("<fork-notification>"),
     ),
   ).toBe(true);
 }

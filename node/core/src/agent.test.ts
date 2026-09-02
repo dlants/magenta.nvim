@@ -37,7 +37,6 @@ import {
   flatPhase,
   TEST_ARCHIVE_DIR,
   uniqueThreadId,
-  userInput,
 } from "./test-helpers.ts";
 import type { ThreadContext } from "./thread.ts";
 import { Thread } from "./thread.ts";
@@ -665,18 +664,12 @@ describe("Thread.reset", () => {
       await sent;
 
       core.structuredToolResults.set("tr-1" as ToolRequestId, {
-        toolName: "edl" as ToolName,
+        toolName: "unknown",
       });
       const oldAgent = core.agent;
 
       await core.reset({
-        seed: [
-          {
-            type: "text",
-            text: "SEED",
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          },
-        ],
+        seed: [{ type: "user", text: "SEED" }],
         archive: { type: "none" },
       });
 
@@ -2845,13 +2838,7 @@ describe("Thread survives the compaction agent swap", () => {
     try {
       // Queued on the pre-compaction agent, which the swap discards: the
       // prefix belongs to the message list being replaced.
-      core.prependToNextTurn([
-        {
-          type: "text",
-          text: "stale prefix",
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        },
-      ]);
+      core.prependToNextTurn([{ type: "user", text: "stale prefix" }]);
       const compactPromise = runSubmission({
         thread: core,
         compactor: {
@@ -2869,9 +2856,7 @@ describe("Thread survives the compaction agent swap", () => {
           }),
       });
       const contStream = await mockClient.awaitStream();
-      const texts = core.pendingTurnContent.map((c) =>
-        c.type === "text" ? c.text : "",
-      );
+      const texts = core.pendingTurnContent.map((c) => c.text);
       expect(texts.some((t) => t.includes("stale prefix"))).toBe(false);
       contStream.streamText("resumed");
       contStream.finishResponse("end_turn");
@@ -2905,7 +2890,7 @@ describe("Agent preflight token count", () => {
       getHooks: () => agentHooks({ onBeforeRequest: [noteCount(seen)] }),
     });
     mockClient.mockInputTokenCount = 42;
-    const turn = agent.runTurnLoop(userInput("hello"));
+    const turn = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("ok");
     stream.finishResponse("end_turn");
@@ -2928,7 +2913,7 @@ describe("Agent preflight token count", () => {
         }),
     });
     mockClient.mockInputTokenCount = 42;
-    const turn = agent.runTurnLoop(userInput("hello"));
+    const turn = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("ok");
     stream.finishResponse("end_turn");
@@ -2946,7 +2931,7 @@ describe("Agent preflight token count", () => {
       getHooks: () => agentHooks({ onBeforeRequest: [noteCount(seen, true)] }),
     });
     mockClient.mockInputTokenCount = 42;
-    const first = agent.runTurnLoop(userInput("hello"));
+    const first = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("ok");
     stream.finishResponse("end_turn");
@@ -2954,7 +2939,7 @@ describe("Agent preflight token count", () => {
     expect(agent.inputTokenCount).toBe(42);
 
     mockClient.countTokensError = new Error("count failed");
-    const second = agent.runTurnLoop(userInput("again"));
+    const second = agent.send([{ type: "user", text: "again" }]);
     const stream2 = await pollUntil(() => {
       const s = mockClient.streams[1];
       if (!s) throw new Error("waiting for the second request");
@@ -2986,7 +2971,7 @@ describe("Agent preflight token count", () => {
         }),
     });
     mockClient.mockInputTokenCount = 42;
-    expect(await agent.runTurnLoop(userInput("hello"))).toEqual({
+    expect(await agent.send([{ type: "user", text: "hello" }])).toEqual({
       type: "suspended",
       reason: { kind: "stop", message: "held" },
     });
@@ -3014,7 +2999,7 @@ describe("Agent turn loop", () => {
         }),
     });
 
-    expect(await agent.runTurnLoop(userInput("hello"))).toEqual({
+    expect(await agent.send([{ type: "user", text: "hello" }])).toEqual({
       type: "suspended",
       reason: { kind: "stop", message: "held" },
     });
@@ -3025,7 +3010,7 @@ describe("Agent turn loop", () => {
 
   it("an abort mid-stream unwinds once, leaving one abort marker", async () => {
     const { agent, mockClient } = createTestAgent();
-    const turn = agent.runTurnLoop(userInput("hello"));
+    const turn = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial");
 
@@ -3046,7 +3031,7 @@ describe("Agent turn loop", () => {
 
   it("the streaming block on the phase is a copy, not the manager's own", async () => {
     const { agent, mockClient } = createTestAgent();
-    const turn = agent.runTurnLoop(userInput("hello"));
+    const turn = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
 
     stream.emitEvent({
@@ -3088,7 +3073,7 @@ describe("Agent turn loop", () => {
         );
       },
     });
-    const turn = agent.runTurnLoop(userInput("hello"));
+    const turn = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.emitEvent({
       type: "content_block_start",
@@ -3120,7 +3105,7 @@ describe("Agent turn loop", () => {
           ],
         }),
     });
-    const turn = agent.runTurnLoop(userInput("hello"));
+    const turn = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
 
     const messages = agent.getProviderMessages();
@@ -3140,7 +3125,7 @@ describe("Agent turn loop", () => {
     const { agent, mockClient } = createTestAgent({
       executeTools: () => Promise.reject(new Error("executor blew up")),
     });
-    const turn = agent.runTurnLoop(userInput("hello"));
+    const turn = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -3159,7 +3144,7 @@ describe("Agent turn loop", () => {
     expect(results).toHaveLength(1);
 
     second.finishResponse("end_turn");
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
   });
 
   it("an executor that reports it aborted unwinds the turn once", async () => {
@@ -3167,7 +3152,7 @@ describe("Agent turn loop", () => {
       executeTools: () =>
         Promise.resolve({ type: "aborted" as const, results: new Map() }),
     });
-    const turn = agent.runTurnLoop(userInput("hello"));
+    const turn = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -3199,7 +3184,7 @@ describe("Agent turn loop", () => {
         });
       },
     });
-    const turn = agent.runTurnLoop(userInput("hello"));
+    const turn = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -3233,7 +3218,7 @@ describe("Agent turn loop", () => {
         } as unknown as ThreadContext["fileIO"],
       },
     });
-    const turn = agent.runTurnLoop(userInput("hello"));
+    const turn = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -3256,7 +3241,7 @@ describe("Agent turn loop", () => {
 
   it("a failed request finalizes the log and fails the turn", async () => {
     const { agent, mockClient } = createTestAgent();
-    const turn = agent.runTurnLoop(userInput("hello"));
+    const turn = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("half an answer");
     await stream.settle();

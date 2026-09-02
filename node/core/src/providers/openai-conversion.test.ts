@@ -243,7 +243,7 @@ describe("convertOpenAIItemsToProvider", () => {
     expect(messages[0].stopReason).toBeUndefined();
   });
 
-  it("recovers the tool name for a function_call_output and joins content-part output", () => {
+  it("joins content-part output for a function_call_output", () => {
     const messages = convert([
       {
         type: "function_call",
@@ -268,7 +268,7 @@ describe("convertOpenAIItemsToProvider", () => {
       result: {
         status: "ok",
         value: [{ type: "text", text: "ab" }],
-        structuredResult: { toolName: "bash_command" },
+        structuredResult: { toolName: "unknown" },
       },
     });
     expect(results[1]).toMatchObject({

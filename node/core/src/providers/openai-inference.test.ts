@@ -2,6 +2,7 @@ import type OpenAI from "openai";
 import { describe, expect, it } from "vitest";
 import type { Agent, ToolExecutor } from "../agent.ts";
 import { createTestOpenAIAgent, flatPhase } from "../test-helpers.ts";
+import type { SendResult } from "../thread-api.ts";
 import type { ToolName, ToolStructuredResult } from "../tool-types.ts";
 import {
   ABORT_TOOL_RESULT_TEXT,
@@ -19,7 +20,6 @@ import {
   type ProviderToolSpec,
   type RequestedTool,
   type ToolResults,
-  type TurnResult,
 } from "./provider-types.ts";
 
 const spec: ProviderToolSpec = {
@@ -96,9 +96,9 @@ async function startTurn(
   client: MockOpenAIClient,
   agent: Agent,
   text = "hello",
-): Promise<{ turn: Promise<TurnResult>; stream: MockResponseStream }> {
+): Promise<{ turn: Promise<SendResult>; stream: MockResponseStream }> {
   const next = client.streams.length;
-  const turn = agent.runTurnLoop([userText(text)]);
+  const turn = agent.send([{ type: "user", text }]);
   const stream = await client.awaitStreamAt(next);
   return { turn, stream };
 }
@@ -205,7 +205,7 @@ describe("OpenAIInferenceManager text turns", () => {
       cacheHits: 64,
     });
 
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
     expect(agent.manager.log.latestUsage).toEqual({
       inputTokens: 100,
       outputTokens: 5,
@@ -318,7 +318,7 @@ describe("OpenAIInferenceManager tool calls", () => {
       output: "file contents",
     });
     followup.finishResponse();
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
   });
 
   it("keys parallel tool calls on output_index", async () => {
@@ -356,7 +356,7 @@ describe("OpenAIInferenceManager tool calls", () => {
     expect(followup.inputItemsOfType("function_call_output")).toHaveLength(1);
     followup.finishResponse();
 
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
     const results = agent.manager.log.messages.flatMap((message) =>
       message.content.filter((content) => content.type === "tool_result"),
     );
@@ -631,7 +631,7 @@ describe("OpenAIInferenceManager invariant guards", () => {
     const { client, agent } = setup();
     const { turn, stream } = await startTurn(client, agent);
 
-    await expect(agent.runTurnLoop([userText("again")])).rejects.toThrow(
+    await expect(agent.send([{ type: "user", text: "again" }])).rejects.toThrow(
       /already in flight/,
     );
     // The rejected call must not have perturbed the history.
@@ -640,7 +640,7 @@ describe("OpenAIInferenceManager invariant guards", () => {
     stream.streamText("hi");
     await stream.settle();
     stream.finishResponse();
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
   });
 });
 

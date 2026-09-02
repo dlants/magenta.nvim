@@ -1,12 +1,8 @@
 import { APIError } from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Agent } from "../agent.ts";
-import { createTestOpenAIAgent, flatPhase } from "../test-helpers.ts";
+import { createTestOpenAIAgent, flatPhase, sendText } from "../test-helpers.ts";
 import type { ToolName } from "../tool-types.ts";
-import type {
-  MockOpenAIClient,
-  MockResponseStream,
-} from "./mock-openai-client.ts";
+import type { MockOpenAIClient } from "./mock-openai-client.ts";
 import {
   type NativeInferenceManager,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -14,7 +10,6 @@ import {
   type RequestedTool,
   type RequestUpdate,
   type ToolResults,
-  type TurnResult,
 } from "./provider-types.ts";
 
 const spec: ProviderToolSpec = {
@@ -68,23 +63,6 @@ async function tick(times = 6): Promise<void> {
   }
 }
 
-/** The loop reaches the request a few awaits in, so let those settle before
- * reading the stream: polling would deadlock against the fake timers. */
-async function start(
-  client: MockOpenAIClient,
-  agent: Agent,
-): Promise<{ turn: Promise<TurnResult>; stream: MockResponseStream }> {
-  const turn = agent.runTurnLoop([
-    {
-      type: "text",
-      text: "hello",
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    },
-  ]);
-  await tick();
-  return { turn, stream: streamAt(client, 0) };
-}
-
 function streamAt(client: MockOpenAIClient, index: number) {
   const stream = client.streams[index];
   if (!stream) throw new Error(`no stream at index ${index}`);
@@ -101,7 +79,10 @@ describe("OpenAIInferenceManager retry", () => {
 
   it("retries a retryable error and discards the partial attempt", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await start(client, agent);
+
+    const turn = sendText(agent, "hello");
+    await tick();
+    const stream = streamAt(client, 0);
 
     stream.streamText("half an answer");
     await tick();
@@ -121,7 +102,7 @@ describe("OpenAIInferenceManager retry", () => {
     retry.finishResponse();
     await tick();
 
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
 
     const messages = agent.manager.log.messages;
     const assistant = messages[messages.length - 1];
@@ -135,7 +116,9 @@ describe("OpenAIInferenceManager retry", () => {
 
   it("re-sends the pre-turn items verbatim after a retry", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await start(client, agent);
+    const turn = sendText(agent, "hello");
+    await tick();
+    const stream = streamAt(client, 0);
     const originalInput = structuredClone(stream.input);
     stream.streamReasoningSummary(["let me think"], {
       itemId: "rs_1",
@@ -157,7 +140,9 @@ describe("OpenAIInferenceManager retry", () => {
 
   it("surfaces a non-retryable error without retrying", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await start(client, agent);
+    const turn = sendText(agent, "hello");
+    await tick();
+    const stream = streamAt(client, 0);
     stream.respondWithError(apiError(400));
     await tick();
 
@@ -168,7 +153,9 @@ describe("OpenAIInferenceManager retry", () => {
 
   it("treats response.failed as an error", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await start(client, agent);
+    const turn = sendText(agent, "hello");
+    await tick();
+    const stream = streamAt(client, 0);
     stream.emitEvent({
       type: "response.failed",
       response: {
@@ -187,7 +174,9 @@ describe("OpenAIInferenceManager retry", () => {
 
   it("falls back to a generic message when response.failed carries no error", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await start(client, agent);
+    const turn = sendText(agent, "hello");
+    await tick();
+    const stream = streamAt(client, 0);
     stream.emitEvent({
       type: "response.failed",
       response: mockFailedResponse(),
@@ -203,7 +192,9 @@ describe("OpenAIInferenceManager retry", () => {
 
   it("treats an `error` stream event as an error", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await start(client, agent);
+    const turn = sendText(agent, "hello");
+    await tick();
+    const stream = streamAt(client, 0);
     stream.emitEvent({
       type: "error",
       code: "rate_limit",
@@ -221,7 +212,9 @@ describe("OpenAIInferenceManager retry", () => {
 
   it("aborting during the backoff sleep unwinds the turn", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await start(client, agent);
+    const turn = sendText(agent, "hello");
+    await tick();
+    const stream = streamAt(client, 0);
     stream.respondWithError(apiError(503));
     await tick();
 
@@ -308,7 +301,9 @@ describe("OpenAIInferenceManager incomplete responses", () => {
 
   it("maps max_output_tokens to max_tokens and still runs the tool call", async () => {
     const { client, agent, calls } = setup();
-    const { turn, stream } = await start(client, agent);
+    const turn = sendText(agent, "hello");
+    await tick();
+    const stream = streamAt(client, 0);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await tick();
     stream.finishIncomplete("max_output_tokens");
@@ -326,18 +321,20 @@ describe("OpenAIInferenceManager incomplete responses", () => {
     ]);
     followup.finishResponse();
     await tick();
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
   });
 
   it("maps content_filter to content", async () => {
     const { client, agent } = setup();
-    const { turn, stream } = await start(client, agent);
+    const turn = sendText(agent, "hello");
+    await tick();
+    const stream = streamAt(client, 0);
     stream.streamText("partial");
     await tick();
     stream.finishIncomplete("content_filter");
     await tick();
 
-    expect(await turn).toEqual({ type: "stopped", stopReason: "content" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "content" });
   });
 });
 

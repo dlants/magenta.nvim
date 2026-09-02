@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Agent } from "../agent.ts";
-import { createTestAgent, flatPhase, userInput } from "../test-helpers.ts";
+import { createTestAgent, flatPhase, sendText } from "../test-helpers.ts";
 
-function start(agent: Agent) {
-  return agent.runTurnLoop(userInput("hello"));
-}
-
-describe("Agent streaming ticker", () => {
+describe("Agent streaming status", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -15,7 +10,7 @@ describe("Agent streaming ticker", () => {
     vi.useRealTimers();
   });
 
-  it("emits updates ~1/sec while waiting and stops after the turn settles", async () => {
+  it("emits no updates once an aborted turn settles", async () => {
     let didUpdate = 0;
     const { agent, mockClient } = createTestAgent({
       onUpdate: () => {
@@ -23,37 +18,7 @@ describe("Agent streaming ticker", () => {
       },
     });
 
-    const turn = start(agent);
-    // The loop reaches the request after a few awaits; let them run before
-    // polling for the stream (the poll's own retry uses faked timers).
-    await vi.advanceTimersByTimeAsync(0);
-    const stream = await mockClient.awaitStream();
-
-    // Dead air: no stream events, only the heartbeat should fire.
-    const before = didUpdate;
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(didUpdate - before).toBeGreaterThanOrEqual(3);
-
-    // Complete the turn.
-    stream.respond({ text: "done", toolRequests: [], stopReason: "end_turn" });
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
-    await vi.advanceTimersByTimeAsync(0);
-
-    // Ticker must be cleared: no further emissions after the turn settles.
-    const afterSettle = didUpdate;
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(didUpdate).toBe(afterSettle);
-  });
-
-  it("clears the ticker on abort", async () => {
-    let didUpdate = 0;
-    const { agent, mockClient } = createTestAgent({
-      onUpdate: () => {
-        didUpdate++;
-      },
-    });
-
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);
@@ -72,7 +37,7 @@ describe("Agent streaming ticker", () => {
   it("advances lastEventTime on each stream event", async () => {
     const { agent, mockClient } = createTestAgent();
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);

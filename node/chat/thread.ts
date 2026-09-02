@@ -84,6 +84,10 @@ import { notifyUser } from "./notify.ts";
 /** Trailing-edge coalescing window for core updates. The core no longer
  * throttles; a render cadence is a view decision. */
 const RENDER_DEBOUNCE_MS = 32;
+
+/** One frame per spinner step (see `spinnerFrame`), which is also fine for
+ * second-resolution timers. */
+const ANIMATION_TICK_MS = 333;
 /** The view needs the new message to exist before it can scroll to it. */
 const SCROLL_DELAY_MS = 100;
 /** How often the tracked-file poller re-reads the files in context. */
@@ -196,6 +200,9 @@ export type Msg =
     }
   | {
       type: "tool-progress";
+    }
+  | {
+      type: "animation-tick";
     }
   | {
       type: "turn-ended";
@@ -539,6 +546,21 @@ export class NvimThread {
    * thread comes to rest, and a leading-edge throttle would drop exactly that
    * call and leave a stale streaming block on screen forever. */
   private renderDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Pull-based animation clock: a view that renders time-dependent content
+   * (a spinner, an elapsed timer) calls this as it renders, which schedules
+   * one more render — so an animation runs for exactly as long as it is on
+   * screen, and nothing has to guess from state whether one is. */
+  requestAnimationTick = (): void => {
+    if (this.animationTimer || this.destroyed) return;
+    this.animationTimer = setTimeout(() => {
+      this.animationTimer = undefined;
+      if (this.destroyed) return;
+      this.myDispatch({ type: "animation-tick" });
+    }, ANIMATION_TICK_MS);
+  };
+
+  private animationTimer: ReturnType<typeof setTimeout> | undefined;
 
   private onCoreUpdate(): void {
     if (this.renderDebounceTimer) return;
@@ -943,6 +965,11 @@ export class NvimThread {
       this.renderDebounceTimer = undefined;
     }
 
+    if (this.animationTimer) {
+      clearTimeout(this.animationTimer);
+      this.animationTimer = undefined;
+    }
+
     await this.comments?.controller.destroy();
     await this.core.destroy();
     this.fileSupervisor.destroy();
@@ -1200,6 +1227,8 @@ export class NvimThread {
         );
         return;
 
+      case "animation-tick":
+        return;
       case "tool-progress":
         if (this.core.queuedCount === 0) {
           this.state.pendingMessagesExpanded = {};

@@ -1,18 +1,13 @@
 import { APIConnectionError } from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Agent } from "../agent.ts";
 import type { Logger } from "../logger.ts";
-import { createTestOpenAIAgent } from "../test-helpers.ts";
+import { createTestOpenAIAgent, sendText } from "../test-helpers.ts";
 import {
   makeRefreshAuth,
   type RefreshAuth,
   type RunCommand,
 } from "./auth-refresh.ts";
 import type { MockOpenAIClient } from "./mock-openai-client.ts";
-import {
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type TurnResult,
-} from "./provider-types.ts";
 
 const noopLogger: Logger = {
   info: () => {},
@@ -43,21 +38,6 @@ async function tick(times = 6): Promise<void> {
   }
 }
 
-/** The loop reaches the request a few awaits in, so let those settle before
- * reading the stream: polling would deadlock against the fake timers. */
-async function start(agent: Agent): Promise<{ turn: Promise<TurnResult> }> {
-  const turn = agent.runTurnLoop([
-    {
-      type: "text",
-      text: "hello",
-      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-    },
-  ]);
-  await tick();
-  // Wrapped, since returning the promise from an async function would await it.
-  return { turn };
-}
-
 function streamAt(client: MockOpenAIClient, index: number) {
   const stream = client.streams[index];
   if (!stream) throw new Error(`no stream at index ${index}`);
@@ -75,7 +55,9 @@ describe("OpenAIInferenceManager auth refresh", () => {
   it("refreshes auth on a wrapped credentials error and retries successfully", async () => {
     const refreshAuth = vi.fn().mockResolvedValue(undefined);
     const { agent, mockClient } = setup(refreshAuth);
-    const { turn } = await start(agent);
+
+    const turn = sendText(agent, "hello");
+    await tick();
 
     streamAt(mockClient, 0).streamText("half an answer");
     await tick();
@@ -88,7 +70,7 @@ describe("OpenAIInferenceManager auth refresh", () => {
     retry.finishResponse();
     await tick();
 
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
     expect(refreshAuth).toHaveBeenCalledTimes(1);
 
     // The partial text from the failed attempt must not survive the retry.
@@ -100,7 +82,9 @@ describe("OpenAIInferenceManager auth refresh", () => {
 
   it("surfaces the wrapped cause when no refresh command is configured", async () => {
     const { agent, mockClient } = setup(undefined);
-    const { turn } = await start(agent);
+
+    const turn = sendText(agent, "hello");
+    await tick();
 
     streamAt(mockClient, 0).respondWithError(makeWrappedTokenError());
     await tick();
@@ -117,7 +101,9 @@ describe("OpenAIInferenceManager auth refresh", () => {
       .fn()
       .mockRejectedValue(new Error("aws sso login failed: bad config"));
     const { agent, mockClient } = setup(refreshAuth);
-    const { turn } = await start(agent);
+
+    const turn = sendText(agent, "hello");
+    await tick();
 
     streamAt(mockClient, 0).respondWithError(makeWrappedTokenError());
     await tick();
@@ -140,7 +126,9 @@ describe("OpenAIInferenceManager auth refresh", () => {
       runCommand,
     );
     const { agent, mockClient } = setup(refreshAuth);
-    const { turn } = await start(agent);
+
+    const turn = sendText(agent, "hello");
+    await tick();
 
     streamAt(mockClient, 0).respondWithError(makeWrappedTokenError());
     await tick();

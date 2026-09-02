@@ -15,7 +15,8 @@ async function renderStatusToString(
     const buffer = await NvimBuffer.create(false, true, nvim);
     await buffer.setOption("modifiable", false);
     await mountView({
-      view: () => renderStatus(agentPhase, undefined, undefined, undefined),
+      view: () =>
+        renderStatus(agentPhase, undefined, undefined, undefined, () => {}),
       props: {},
       mount: {
         nvim,

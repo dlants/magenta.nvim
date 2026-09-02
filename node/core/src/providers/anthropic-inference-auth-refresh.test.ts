@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Agent } from "../agent.ts";
 import type { Logger } from "../logger.ts";
-import { createTestAgent, userInput } from "../test-helpers.ts";
+import { createTestAgent, sendText } from "../test-helpers.ts";
 import {
   makeRefreshAuth,
   type RefreshAuth,
@@ -27,10 +26,6 @@ function makeTokenExpiredError(): Error {
   return err;
 }
 
-function start(agent: Agent) {
-  return agent.runTurnLoop(userInput("hello"));
-}
-
 describe("Agent auth refresh", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -44,7 +39,7 @@ describe("Agent auth refresh", () => {
     const refreshAuth = vi.fn().mockResolvedValue(undefined);
     const { agent, mockClient } = createAgent(refreshAuth);
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);
@@ -60,7 +55,7 @@ describe("Agent auth refresh", () => {
       stopReason: "end_turn",
     });
 
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
     expect(refreshAuth).toHaveBeenCalledTimes(1);
   });
 
@@ -70,7 +65,7 @@ describe("Agent auth refresh", () => {
       .mockRejectedValue(new Error("aws sso login failed: bad config"));
     const { agent, mockClient } = createAgent(refreshAuth);
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);
@@ -97,7 +92,7 @@ describe("Agent auth refresh", () => {
     );
     const { agent, mockClient } = createAgent(refreshAuth);
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);

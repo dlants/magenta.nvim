@@ -1,11 +1,10 @@
 import { AnthropicError, APIError } from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Agent } from "../agent.ts";
 import {
   agentHooks,
   createTestAgent,
   flatPhase,
-  userInput,
+  sendText,
 } from "../test-helpers.ts";
 import { isRetryableError } from "./anthropic-inference.ts";
 
@@ -34,10 +33,6 @@ function make400Error(): APIError {
     "bad_request",
     new Headers(),
   );
-}
-
-function start(agent: Agent) {
-  return agent.runTurnLoop(userInput("hello"));
 }
 
 describe("isRetryableError", () => {
@@ -115,7 +110,7 @@ describe("Agent retry logic", () => {
   it("non-retryable errors pass through immediately", async () => {
     const { agent, mockClient } = createTestAgent();
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);
@@ -148,7 +143,7 @@ describe("Agent retry logic", () => {
           ],
         }),
     });
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     await vi.advanceTimersByTimeAsync(0);
     let stream = await mockClient.awaitStream();
     stream.respondWithError(make529Error());
@@ -157,7 +152,7 @@ describe("Agent retry logic", () => {
     stream.streamText("ok");
     stream.finishResponse("end_turn");
     await vi.advanceTimersByTimeAsync(0);
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
     expect(calls).toBe(1);
     // The retry stays inside one `sendRequest`, so the count taken for the
     // request it describes is still current.
@@ -167,7 +162,7 @@ describe("Agent retry logic", () => {
   it("retries on 529 with correct delays and succeeds", async () => {
     const { agent, mockClient } = createTestAgent();
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);
@@ -212,13 +207,13 @@ describe("Agent retry logic", () => {
     });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
   });
 
   it("retries on transient SSE JSON parse errors", async () => {
     const { agent, mockClient } = createTestAgent();
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);
@@ -244,13 +239,13 @@ describe("Agent retry logic", () => {
     stream.respond({ text: "done", toolRequests: [], stopReason: "end_turn" });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
   });
 
   it("retries on 429", async () => {
     const { agent, mockClient } = createTestAgent();
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);
@@ -274,13 +269,13 @@ describe("Agent retry logic", () => {
     stream.respond({ text: "done", toolRequests: [], stopReason: "end_turn" });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
   });
 
   it("gives up after max duration", async () => {
     const { agent, mockClient } = createTestAgent();
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);
@@ -330,7 +325,7 @@ describe("Agent retry logic", () => {
     // block and threw "content_block_start ... while block N is still open".
     const { agent, mockClient } = createTestAgent();
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);
@@ -358,13 +353,13 @@ describe("Agent retry logic", () => {
     stream.respond({ text: "done", toolRequests: [], stopReason: "end_turn" });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
   });
 
   it("abort during retry wait cancels immediately", async () => {
     const { agent, mockClient } = createTestAgent();
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);
@@ -391,7 +386,7 @@ describe("Agent retry logic", () => {
   it("status shows retry during wait and clears on retry attempt", async () => {
     const { agent, mockClient } = createTestAgent();
 
-    const turn = start(agent);
+    const turn = sendText(agent, "hello");
     // The loop reaches the request after a few awaits; let them run before
     // polling for the stream (the poll's own retry uses faked timers).
     await vi.advanceTimersByTimeAsync(0);
@@ -426,7 +421,7 @@ describe("Agent retry logic", () => {
     stream.respond({ text: "ok", toolRequests: [], stopReason: "end_turn" });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
     expect(flatPhase(agent).type).toBe("idle");
   });
 });

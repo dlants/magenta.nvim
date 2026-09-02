@@ -36,6 +36,8 @@ import * as YieldToParentRender from "./yield-to-parent.ts";
 
 export type RenderContext = {
   getDisplayWidth: () => number;
+  /** Called while rendering time-dependent content, to keep it animating. */
+  requestTick: () => void;
   nvim: Nvim;
   cwd: NvimCwd;
   homeDir: HomeDir;

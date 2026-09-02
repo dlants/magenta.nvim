@@ -17,6 +17,7 @@ import type * as Edl from "./tools/edl.ts";
 import type * as FindReferences from "./tools/findReferences.ts";
 import type * as GetFile from "./tools/getFile.ts";
 import type * as Hover from "./tools/hover.ts";
+import type * as NvimLua from "./tools/nvimLua.ts";
 import type * as Reply from "./tools/reply.ts";
 import type * as RunScript from "./tools/run-script.ts";
 import type * as SpawnSubagents from "./tools/spawn-subagents.ts";
@@ -31,12 +32,14 @@ export type DisplayContext = {
   homeDir: HomeDir;
 };
 
-export type GenericStructuredResult = { toolName: ToolName };
+/** The result of a tool that publishes no structured data of its own, and of
+ * tool results reconstructed from the provider's native message array (where
+ * the structured data was never serialized). Deliberately carries no tool name:
+ * a name here would make `toolName === "some_tool"` checks pass for a value
+ * that doesn't have that tool's fields. */
+export type GenericStructuredResult = { toolName: "unknown" };
 
-/** The structured result of a tool that publishes one, by tool name.
- * `GenericStructuredResult` is excluded because its `toolName` is the branded
- * `ToolName` rather than a literal, so comparing it to a name narrows
- * nothing. */
+/** The structured result of a tool that publishes one, by tool name. */
 export type StructuredResultFor<K extends string> = Extract<
   ToolStructuredResult,
   { toolName: K }
@@ -60,6 +63,7 @@ export type ToolStructuredResult =
   | SpawnSubagents.StructuredResult
   | GetFile.StructuredResult
   | Hover.StructuredResult
+  | NvimLua.StructuredResult
   | FindReferences.StructuredResult
   | ThreadTitle.StructuredResult
   | YieldToParent.StructuredResult

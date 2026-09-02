@@ -16,7 +16,6 @@ import {
   phaseStreamingBlock,
   renderPending,
   type ThreadId,
-  type ToolName,
   type ToolRequestId,
   type TurnActivity,
 } from "@magenta/core";
@@ -97,6 +96,7 @@ export const renderStatus = (
   latestUsage: Usage | undefined,
   lastTurnResult: TurnResult | undefined,
   compaction: RunningCompaction | undefined,
+  requestTick: () => void,
 ): VDOMNode => {
   if (agentPhase.type === "yielded") {
     return d`↗️ yielded to parent: ${agentPhase.response}`;
@@ -117,7 +117,7 @@ export const renderStatus = (
         case "running_tools":
           return d`Executing tools...`;
         case "streaming":
-          return renderStreaming(activity);
+          return renderStreaming(activity, requestTick);
         default:
           return assertUnreachable(activity);
       }
@@ -132,7 +132,9 @@ export const renderStatus = (
 };
 function renderStreaming(
   activity: Extract<TurnActivity, { type: "streaming" }>,
+  requestTick: () => void,
 ): VDOMNode {
+  requestTick();
   if (activity.retry) {
     const secsLeft = Math.max(
       1,
@@ -495,6 +497,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     latestUsage,
     thread.core.state.lastTurnResult,
     runningCompaction(thread),
+    thread.requestAnimationTick,
   );
 
   const contextManagerView = shouldShowContextFiles(
@@ -923,6 +926,7 @@ function renderMessageContentBlock(
       };
       const renderContext = {
         getDisplayWidth: thread.context.getDisplayWidth,
+        requestTick: thread.requestAnimationTick,
         nvim: thread.context.nvim,
         cwd: thread.context.cwd,
         homeDir: thread.context.homeDir,
@@ -1049,7 +1053,7 @@ function renderMessageContentBlock(
           structuredResult:
             toolResult.result.status === "ok"
               ? toolResult.result.structuredResult
-              : { toolName: request.toolName as ToolName },
+              : { toolName: "unknown" },
         };
 
         // Section 5: Result summary. get_files renders its own interactive

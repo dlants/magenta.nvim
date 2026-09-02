@@ -6,7 +6,7 @@ import {
   createTestOpenAIAgent,
   flatPhase,
 } from "../test-helpers.ts";
-import type { BeforeRequestHook } from "../thread-api.ts";
+import type { BeforeRequestHook, SendResult } from "../thread-api.ts";
 import {
   AutoCompactSupervisor,
   composeSupervisors,
@@ -18,7 +18,6 @@ import {
   type AgentInput,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ProviderMessage,
-  type TurnResult,
 } from "./provider-types.ts";
 
 function text(text: string): AgentInput {
@@ -66,7 +65,7 @@ type TurnSnapshot = {
   messages: ProviderMessage[];
   phaseDuringTurn: string;
   phaseAfterTurn: string;
-  turnResult: TurnResult;
+  turnResult: SendResult;
   executorCalls: number;
 };
 
@@ -78,7 +77,11 @@ async function anthropicContent(): Promise<TurnSnapshot> {
       return noExecutor();
     },
   });
-  const turn = agent.runTurnLoop(input);
+  // The tagged input is richer than a submission can carry (a submission is
+  // text only), so it is appended the way a hook's injection would be, and
+  // the turn is then driven with nothing of its own to add.
+  agent.manager.appendUserMessage(input);
+  const turn = agent.send();
   const stream = await mockClient.awaitStream();
   const phaseDuringTurn = flatPhase(agent).type;
   const messages = snapshot(agent.getProviderMessages());
@@ -101,7 +104,8 @@ async function openaiContent(): Promise<TurnSnapshot> {
       return noExecutor();
     },
   });
-  const turn = agent.runTurnLoop(input);
+  agent.manager.appendUserMessage(input);
+  const turn = agent.send();
   const stream = await mockClient.awaitStream();
   const phaseDuringTurn = flatPhase(agent).type;
   const messages = snapshot(agent.manager.log.messages);
@@ -140,7 +144,7 @@ describe("agent parity for tagged user input", () => {
       expect(snap.phaseDuringTurn).toBe("streaming");
       expect(snap.phaseAfterTurn).toBe("idle");
       expect(snap.turnResult).toEqual({
-        type: "stopped",
+        type: "completed",
         stopReason: "end_turn",
       });
       expect(snap.executorCalls).toBe(0);
@@ -180,13 +184,14 @@ describe("onBeforeRequest", () => {
       getHooks: () =>
         agentHooks({ onBeforeRequest: [holdSecond(() => ++calls)] }),
     });
-    const turn = agent.runTurnLoop([text("go")]);
+    const sendPromise = agent.send([{ type: "user", text: "go" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
     });
     stream.finishResponse("tool_use", { inputTokens: 1, outputTokens: 1 });
-    expect(await turn).toEqual({ type: "suspended", reason: held });
+    const result = await sendPromise;
+    expect(result).toEqual({ type: "suspended", reason: held });
     expect(calls).toBe(2);
     expect(mockClient.streams).toHaveLength(1);
   });
@@ -198,13 +203,14 @@ describe("onBeforeRequest", () => {
       getHooks: () =>
         agentHooks({ onBeforeRequest: [holdSecond(() => ++calls)] }),
     });
-    const turn = agent.runTurnLoop([text("go")]);
+    const sendPromise = agent.send([{ type: "user", text: "go" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolCall("tool-1", "get_files", {
       files: [{ filePath: "/tmp/a.txt" }],
     });
     stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
-    expect(await turn).toEqual({ type: "suspended", reason: held });
+    const result = await sendPromise;
+    expect(result).toEqual({ type: "suspended", reason: held });
     expect(calls).toBe(2);
     expect(mockClient.streams).toHaveLength(1);
   });
@@ -218,7 +224,7 @@ describe("abort parity", () => {
     start: () => { agent: Agent; abortStream: () => void },
   ) {
     const { agent, abortStream } = start();
-    const turn = agent.runTurnLoop([text("go")]);
+    const turn = agent.send([{ type: "user", text: "go" }]);
     await pollUntil(() => {
       if (flatPhase(agent).type !== "streaming")
         throw new Error("not streaming");
@@ -281,7 +287,7 @@ describe("preflight token count parity", () => {
       executeTools: noExecutor,
     });
     mockClient.mockInputTokenCount = 100;
-    expect(await agent.runTurnLoop([text("go")])).toEqual({
+    expect(await agent.send([{ type: "user", text: "go" }])).toEqual({
       type: "suspended",
       reason: { kind: "compact", nextPrompt: "wrap up" },
     });
@@ -290,10 +296,13 @@ describe("preflight token count parity", () => {
       getHooks: compactHooks,
       executeTools: noExecutor,
     });
-    const turn = openai.agent.runTurnLoop([text("go")]);
+    const sendPromise = openai.agent.send([{ type: "user", text: "go" }]);
     const stream = await openai.mockClient.awaitStream();
     stream.finishResponse("end_turn", { inputTokens: 100, outputTokens: 1 });
-    expect(await turn).toEqual({ type: "stopped", stopReason: "end_turn" });
+    expect(await sendPromise).toEqual({
+      type: "completed",
+      stopReason: "end_turn",
+    });
   });
 });
 describe("appendUserMessage coalescing", () => {

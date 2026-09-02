@@ -62,7 +62,7 @@ export function execute(
               nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
             },
           ],
-          structuredResult: { toolName: "nvim_lua" as ToolName },
+          structuredResult: { toolName: "nvim_lua" as const },
         },
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };

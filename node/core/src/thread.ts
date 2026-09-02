@@ -23,7 +23,6 @@ import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
-  AgentInput,
   NativeInferenceManager,
   NativeMessageIdx,
   ProviderMessage,
@@ -397,12 +396,18 @@ export class Thread {
     return this.agent.getLastStopTokenCount();
   }
 
-  get pendingTurnContent(): ReadonlyArray<AgentInput> {
-    return this.agent.pendingTurnContent;
+  /** Content that leads the next submission's user message: a compaction
+   * summary, a fork notification. Held here rather than in the agent, since
+   * it must survive the agent swap in `reset` and an arbitrary wait for the
+   * user's next message. */
+  private pendingSeed: InputMessage[] = [];
+
+  get pendingTurnContent(): ReadonlyArray<InputMessage> {
+    return this.pendingSeed;
   }
 
-  prependToNextTurn(content: AgentInput[]): void {
-    this.agent.prependToNextTurn(content);
+  prependToNextTurn(messages: InputMessage[]): void {
+    this.pendingSeed = [...this.pendingSeed, ...messages];
   }
 
   /** For tests: await pending best-effort archive writes. */
@@ -697,7 +702,11 @@ export class Thread {
   /** Drive the agent until nothing more should be sent. The agent stops at
    * every turn boundary; deciding whether a stop is really the end — queued
    * content, a supervisor nudge, a truncated response — is the thread's. */
-  private async runToRest(messages: InputMessage[]): Promise<SendResult> {
+  private async runToRest(submitted: InputMessage[]): Promise<SendResult> {
+    const messages = this.pendingSeed.length
+      ? [...this.pendingSeed, ...submitted]
+      : submitted;
+    this.pendingSeed = [];
     // An abort can only target a loop that is running, so there is no stale
     // flag to clear here: `abort` leaves `idle` alone.
     this.state.editedFilesThisTurn = [];
@@ -962,7 +971,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     seed,
     archive,
   }: {
-    seed: AgentInput[];
+    seed: InputMessage[];
     archive:
       | { type: "compaction"; summary: string; chunkCount: number }
       | { type: "none" };
@@ -985,7 +994,9 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     this.systemReminders = this.createReminderSupervisor();
     this.hooks.onReset?.();
 
-    if (seed.length) this.agent.prependToNextTurn(seed);
+    // The swap discards the message list the old seed was queued for, so it
+    // goes with it.
+    this.pendingSeed = seed;
   }
 
   private destroyed = false;

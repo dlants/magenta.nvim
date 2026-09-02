@@ -1,5 +1,4 @@
 import type { ProviderMessage } from "../providers/provider-types.ts";
-import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type { Thread } from "../thread.ts";
 import type { SendResult, ThreadSendResult } from "../thread-api.ts";
 
@@ -71,13 +70,7 @@ export async function runSubmission(args: {
     }
 
     await thread.reset({
-      seed: [
-        {
-          type: "text",
-          text: summaryText(outcome.summary),
-          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-        },
-      ],
+      seed: [{ type: "user", text: summaryText(outcome.summary) }],
       archive: {
         type: "compaction",
         summary: outcome.summary,

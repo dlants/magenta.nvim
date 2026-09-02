@@ -1454,9 +1454,8 @@ ${rows}${loadMore}`;
     const markerIdx = thread.core.getProviderMessages().length;
     thread.core.prependToNextTurn([
       {
-        type: "text",
+        type: "user",
         text: "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
-        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       },
     ]);
     thread.state.messageViewState[markerIdx] = {

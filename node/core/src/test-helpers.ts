@@ -38,7 +38,12 @@ import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
 import { Thread, type ThreadContext, threadToolSpecs } from "./thread.ts";
-import type { AgentHooks, ThreadHooks, TurnActivity } from "./thread-api.ts";
+import type {
+  AgentHooks,
+  SendResult,
+  ThreadHooks,
+  TurnActivity,
+} from "./thread-api.ts";
 import { createTool } from "./tools/create-tool.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
@@ -336,6 +341,10 @@ export function createTestOpenAIAgent(
 export const userInput = (text: string): AgentInput[] => [
   { type: "text", text, nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX },
 ];
+
+/** Drive one turn through the agent's only entry point. */
+export const sendText = (agent: Agent, text: string): Promise<SendResult> =>
+  agent.send([{ type: "user", text }]);
 
 export async function cleanupArchive(threadId: ThreadId): Promise<void> {
   const dir = path.dirname(

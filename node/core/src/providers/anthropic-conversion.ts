@@ -150,7 +150,7 @@ function convertBlockToProvider(
                 },
               ],
               structuredResult: {
-                toolName: "unknown" as ToolName,
+                toolName: "unknown",
               },
             };
       } else if (block.is_error) {
@@ -198,7 +198,7 @@ function convertBlockToProvider(
               }
             }),
           structuredResult: {
-            toolName: "unknown" as ToolName,
+            toolName: "unknown",
           },
         };
       }

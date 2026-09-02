@@ -63,7 +63,7 @@ export function execute(
         result: {
           status: "ok",
           value: result,
-          structuredResult: { toolName: request.toolName },
+          structuredResult: { toolName: "unknown" },
         },
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };

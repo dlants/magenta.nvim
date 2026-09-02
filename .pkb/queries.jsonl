@@ -47,3 +47,6 @@
 {"timestamp":"2026-08-29T23:32:37Z","query":"compact thread spawn send create -k 8","commit":"468d0055186445116d1174f0fc40ea97317879ee"}
 {"timestamp":"2026-08-30T04:47:52Z","query":"composeSupervisors ThreadSupervisor construction registration","commit":"f2675774909bf10dfc4af97a0ad34f55fe1caeea"}
 {"timestamp":"2026-09-01T03:16:58Z","query":"Thread Agent constructor hooks supervisors context -k 8","commit":"de04ddb986aaa8fb0673d932b17d7db3ef7d712d"}
+{"timestamp":"2026-09-02T02:26:29Z","query":"restore persisted thread structuredResult from disk -k 6","commit":"c5190d256b22e5b663ed7962fb31b6152767cbb1"}
+{"timestamp":"2026-09-02T05:11:19Z","query":"streaming status indicator animation bouncing dot","commit":"c5190d256b22e5b663ed7962fb31b6152767cbb1"}
+{"timestamp":"2026-09-02T05:11:23Z","query":"bash command elapsed time timer","commit":"c5190d256b22e5b663ed7962fb31b6152767cbb1"}

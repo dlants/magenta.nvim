@@ -371,16 +371,6 @@ export class Agent {
     );
   }
 
-  private pendingTurnPrefix: AgentInput[] | undefined;
-
-  get pendingTurnContent(): ReadonlyArray<AgentInput> {
-    return this.pendingTurnPrefix ?? [];
-  }
-
-  prependToNextTurn(content: AgentInput[]): void {
-    this.pendingTurnPrefix = [...(this.pendingTurnPrefix ?? []), ...content];
-  }
-
   private abortRequested = false;
 
   private outputTokenCount(): number {
@@ -391,59 +381,7 @@ export class Agent {
     return total;
   }
 
-  private runTurn(input: AgentInput[]): Promise<void> {
-    const turn = this.runTurnLoop(input)
-      .then((result) => {
-        this.currentTurn = undefined;
-        return this.handleTurnResult(result);
-      })
-      .catch(this.handleSendMessageError);
-    this.currentTurn = turn;
-    return turn;
-  }
-
   private turnInFlight = false;
-
-  /** Heartbeat that forces a re-render ~1/sec while a turn is in flight, so
-   * time-based status (waiting timer, retry countdown) updates during dead
-   * air. */
-  private tickInterval: ReturnType<typeof setInterval> | undefined;
-
-  private startTicker(): void {
-    this.stopTicker();
-    this.tickInterval = setInterval(() => this.deps.onUpdate(), 1000);
-  }
-
-  private stopTicker(): void {
-    if (this.tickInterval !== undefined) {
-      clearInterval(this.tickInterval);
-      this.tickInterval = undefined;
-    }
-  }
-
-  /** Drive one turn to completion. `send` is the ordinary entry point; this is
-   * public so a caller (and the loop's tests) can drive a turn directly. */
-  async runTurnLoop(input: AgentInput[]): Promise<TurnResult> {
-    if (this.turnInFlight) {
-      throw new Error("runTurn called while a turn is already in flight");
-    }
-    this.turnInFlight = true;
-    this.abortRequested = false;
-    this.startTicker();
-    try {
-      const result = await this.runLoop(input);
-      if (result.type === "aborted") this.finishTurnAbort();
-      if (result.type === "failed")
-        this.manager.finalize({ type: "error", error: result.error });
-      return result;
-    } finally {
-      this.turnInFlight = false;
-      this.abortRequested = false;
-      this.currentPhase = { type: "idle" };
-      this.stopTicker();
-      this.deps.onUpdate();
-    }
-  }
 
   private async runLoop(initialInput: AgentInput[]): Promise<TurnResult> {
     let initialInputPending = true;
@@ -515,7 +453,7 @@ export class Agent {
                       nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                     },
                   ],
-                  structuredResult: { toolName: "yield_to_parent" as ToolName },
+                  structuredResult: { toolName: "yield_to_parent" as const },
                 }
               : {
                   status: "error",
@@ -835,8 +773,7 @@ export class Agent {
     if (turn) {
       await turn;
     } else if (!this.turnInFlight) {
-      // Nothing in flight to unwind: settle here. A turn driven directly
-      // through `runTurnLoop` unwinds itself, and its caller awaits it.
+      // Nothing in flight to unwind: settle here.
       this.finishAbort();
     }
   }
@@ -860,13 +797,50 @@ export class Agent {
         ),
       );
     }
+    if (this.turnInFlight) {
+      return Promise.reject(
+        new Error("send called while a turn is already in flight"),
+      );
+    }
     const deferred = new Defer<SendResult>();
     this.submission = deferred;
-    this.submit(inputMessages).catch((error: Error) => {
-      this.handleSendMessageError(error);
-      this.settle({ type: "failed", error, discardedSubmission: true });
-    });
+
+    this.openingRequestPending = true;
+    // Whether a send with no user content is worth a request is the owner's
+    // call: it probes its supervisors before it gets here, and the request it
+    // decides to issue is composed inside the turn, by the gate.
+    const { content } = this.prepareUserContent(inputMessages);
+    this.preSubmitNativeIdx = this.manager.getNativeMessageIdx();
+    this.deps.onUpdate();
+
+    this.turnInFlight = true;
+    this.abortRequested = false;
+    this.currentTurn = this.driveTurn(toAgentInput(content))
+      .then((result) => {
+        this.currentTurn = undefined;
+        return this.handleTurnResult(result);
+      })
+      .catch(this.handleSendMessageError);
+
     return deferred.promise;
+  }
+
+  /** The turn `send` started, from the first request to the phase returning to
+   * idle. Its result is the owner's `SendResult`; nobody drives a turn any
+   * other way. */
+  private async driveTurn(input: AgentInput[]): Promise<TurnResult> {
+    try {
+      const result = await this.runLoop(input);
+      if (result.type === "aborted") this.finishTurnAbort();
+      if (result.type === "failed")
+        this.manager.finalize({ type: "error", error: result.error });
+      return result;
+    } finally {
+      this.turnInFlight = false;
+      this.abortRequested = false;
+      this.currentPhase = { type: "idle" };
+      this.deps.onUpdate();
+    }
   }
 
   private settle(outcome: SendResult): void {
@@ -874,18 +848,6 @@ export class Agent {
     this.submission = undefined;
     this.deps.onUpdate();
     deferred?.resolve(outcome);
-  }
-
-  private async submit(inputMessages?: InputMessage[]): Promise<void> {
-    this.openingRequestPending = true;
-    // Whether a send with no user content is worth a request is the owner's
-    // call: it probes its supervisors before it gets here, and the request it
-    // decides to issue is composed inside the turn, by the gate.
-    const { content } = this.prepareUserContent(inputMessages);
-
-    this.preSubmitNativeIdx = this.manager.getNativeMessageIdx();
-    this.deps.onUpdate();
-    void this.runTurn(toAgentInput(content));
   }
 
   private getLastAssistantMessage():
@@ -909,16 +871,11 @@ export class Agent {
   private async onBeforeRequest(): Promise<OnBeforeRequestResult> {
     const isOpeningRequest = this.openingRequestPending;
     this.openingRequestPending = false;
-    // Content seeded for this turn leads its opening request, ahead of the
-    // supervisors' own injections. It is consumed here rather than at
-    // `submit`, so a turn that never reaches the gate leaves it for the next.
-    const lead = isOpeningRequest ? this.takeTurnPrefix() : [];
     const composed = await this.composeBeforeRequest(isOpeningRequest);
     const content =
       composed.type === "suspend"
-        ? [...lead, ...composed.content]
+        ? composed.content
         : [
-            ...lead,
             ...composed.injections,
             ...toAgentInput(
               this.prepareUserContent(composed.submissions).content,
@@ -948,11 +905,6 @@ export class Agent {
    * request begins with a `submit` that sets it, so no continuation can read
    * a stale one. */
   private openingRequestPending = false;
-  private takeTurnPrefix(): AgentInput[] {
-    const prefix = this.pendingTurnPrefix ?? [];
-    this.pendingTurnPrefix = undefined;
-    return prefix;
-  }
 
   private handleSendMessageError = (error: Error): void => {
     this.context.logger.error(error);

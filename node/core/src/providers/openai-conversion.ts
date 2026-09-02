@@ -35,18 +35,12 @@ export function convertOpenAIItemsToProvider(
   stopInfo?: Map<NativeMessageIdx, ItemStopInfo>,
 ): ProviderMessage[] {
   const messages: ProviderMessage[] = [];
-  const toolNames = toolNamesByCallId(items);
 
   items.forEach((item, idx) => {
     const nativeMessageIdx = idx as NativeMessageIdx;
     const role = roleOf(item);
     if (!role) return;
-    const content = convertItem(
-      validateInput,
-      item,
-      nativeMessageIdx,
-      toolNames,
-    );
+    const content = convertItem(validateInput, item, nativeMessageIdx);
 
     const last = messages[messages.length - 1];
     // An item that produced no displayable content still owns its stop info, so
@@ -66,18 +60,6 @@ export function convertOpenAIItemsToProvider(
   });
 
   return messages;
-}
-
-/** A `function_call_output` carries no tool name on the wire; it is recovered
- * from the `function_call` it answers. */
-function toolNamesByCallId(items: ReadonlyArray<Item>): Map<string, ToolName> {
-  const names = new Map<string, ToolName>();
-  for (const item of items) {
-    if (item.type === "function_call") {
-      names.set(item.call_id, item.name as ToolName);
-    }
-  }
-  return names;
 }
 
 /** Which side of the conversation an item belongs to. `undefined` for item
@@ -102,7 +84,6 @@ function convertItem(
   validateInput: ValidateInput,
   item: Item,
   nativeMessageIdx: NativeMessageIdx,
-  toolNames: Map<string, ToolName>,
 ): ProviderMessageContent[] {
   if ("role" in item && item.role) {
     return convertMessageItem(item, nativeMessageIdx);
@@ -142,7 +123,7 @@ function convertItem(
               { type: "text", text: outputText(item.output), nativeMessageIdx },
             ],
             structuredResult: {
-              toolName: toolNames.get(item.call_id) ?? ("unknown" as ToolName),
+              toolName: "unknown",
             },
           },
           nativeMessageIdx,
