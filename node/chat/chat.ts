@@ -1085,8 +1085,8 @@ export class Chat implements ThreadManager {
     }
 
     const thread = threadWrapper.thread;
-    if (thread.core.state.title) {
-      return thread.core.state.title;
+    if (thread.core.title) {
+      return thread.core.title;
     }
 
     // Find the first user message text
@@ -1535,7 +1535,7 @@ ${rows}${loadMore}`;
         const lastTurnResult = thread.core.state.lastTurnResult;
 
         const summary = {
-          title: thread.core.state.title,
+          title: thread.core.title,
           status: (() => {
             // Check mode for thread-specific states first
             const teardownMessage = this.teardownMessages.get(threadId);

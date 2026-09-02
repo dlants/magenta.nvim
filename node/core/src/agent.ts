@@ -76,10 +76,7 @@ export interface AgentContext {
   getProvider: (profile: ProviderProfile) => Provider;
 }
 
-export type AgentAction = { type: "set-title"; title: string };
-
 export type ThreadState = {
-  title: string | undefined;
   threadType: ThreadType;
   systemPrompt: SystemPrompt;
   systemInfo: SystemInfo;
@@ -164,16 +161,6 @@ export class Agent {
       this.manager.truncateMessages(deps.runnerInit.truncateTo);
     } else {
       this.manager = this.createManager();
-    }
-  }
-
-  update(action: AgentAction): void {
-    switch (action.type) {
-      case "set-title":
-        this.state.title = action.title;
-        break;
-      default:
-        assertUnreachable(action.type);
     }
   }
 

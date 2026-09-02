@@ -276,7 +276,6 @@ function buildTestAgent(
     ...opts.context,
   };
   const state: ThreadState = {
-    title: undefined,
     threadType: context.threadType,
     systemPrompt: context.systemPrompt,
     systemInfo: context.systemInfo,

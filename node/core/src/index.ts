@@ -1,7 +1,6 @@
 export {
   type ActiveToolEntry,
   Agent,
-  type AgentAction,
   type BeforeRequestDecision,
   type InputMessage,
   type ThreadState,

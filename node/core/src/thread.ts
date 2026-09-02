@@ -171,6 +171,7 @@ export type ThreadCallbacks = {
  * Thread 3 is still thread 3 afterwards, which is why the archive keys by
  * thread id survives the swap. */
 export class Thread {
+  public title: string | undefined;
   public state: ThreadState;
   public agent: Agent;
   public hooks: ThreadHooks = {
@@ -223,7 +224,6 @@ export class Thread {
         init.type === "clone"
           ? init.edlRegisters
           : { registers: new Map(), nextSavedId: 0 },
-      title: undefined,
       editedFilesThisTurn: [],
       lastTurnResult: undefined,
       toolSpecs: threadToolSpecs(context),
@@ -429,10 +429,6 @@ export class Thread {
     this.callbacks.onUpdate();
   }
 
-  update(...args: Parameters<Agent["update"]>): void {
-    this.agent.update(...args);
-  }
-
   getToolSpecs(): ProviderToolSpec[] {
     return this.agent.getToolSpecs();
   }
@@ -469,7 +465,7 @@ export class Thread {
   }
 
   setTitle(title: string): void {
-    this.agent.update({ type: "set-title", title });
+    this.title = title;
     this.threadLogger.recordTitle(title);
     this.handleUpdate();
   }
@@ -755,7 +751,7 @@ export class Thread {
 
     const result = this.followSubmission(this.runToRest(messages));
 
-    if (!this.state.title) {
+    if (!this.title) {
       this.setThreadTitle(messages.map((m) => m.text).join("\n")).catch(
         (err: Error) =>
           this.context.logger.error(

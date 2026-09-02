@@ -442,8 +442,8 @@ export const view: View<{
         id: thread.id,
       }),
   });
-  const titleView = thread.core.state.title
-    ? d`# ${titlePrefix}${thread.core.state.title} ${archiveLink}`
+  const titleView = thread.core.title
+    ? d`# ${titlePrefix}${thread.core.title} ${archiveLink}`
     : d`# ${titlePrefix}[ Untitled ] ${archiveLink}`;
 
   const systemPromptView = renderSystemPrompt(

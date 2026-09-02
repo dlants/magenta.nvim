@@ -351,12 +351,31 @@ Review follow-ups (stage 3):
   `lastResult`. `thread.test.ts` asserts `core.lastResult()` is `undefined`
   after a submission rests suspended.
 
-## agent: drop update()/AgentAction
+## agent: drop update()/AgentAction — DONE
 
 - Goal: `Agent.update` and `AgentAction` deleted. Tool results assigned inline in `executeTools`; `set-title` handled by `Thread`. `title` lives on `Thread`.
 - Tests:
   - A tool completing mid-turn still surfaces its result to the view before the results are appended (the `rebuildToolResultMap` path in `node/chat` that reads active-tool results).
   - Title generation (`setThreadTitle`) sets `thread.title` and records it to the thread logger; `chat.ts` display name and archive summary still show it.
+
+Notes:
+
+- `AgentAction` and `Agent.update` are deleted, along with the pass-through
+  `Thread.update(...args: Parameters<Agent["update"]>)` (it had no caller —
+  the `thread.update(...)` sites in `node/chat/chat.ts` are `NvimThread`'s
+  `RootMsg` update, a different class).
+- `title` moved off `ThreadState` onto `Thread` as a public field.
+  `Thread.setTitle` assigns it, records it on the logger and renders.
+  Read sites repointed: `thread.core.state.title` → `thread.core.title`
+  (`node/chat/chat.ts` display name + archive summary, `node/chat/thread-view.ts`
+  header, `node/chat/thread.ts`), and `this.state.title` → `this.title` in
+  `node/core/src/thread.ts`'s title-generation gate.
+- The inline tool-result assignment was already in place from stage 1
+  (`ToolExecutorHost` assigns `entry.result` directly), so no work was needed
+  there; `set-active-tool-result` had already gone in stage 2.
+- Existing coverage was sufficient: `thread-title.test.ts`, `chat.test.ts`
+  title cases and the archive/summary tests exercise the moved field. Full
+  suite, `npx tsc -b` and `npx biome check .` are green.
 
 ## dissolve ThreadState
 

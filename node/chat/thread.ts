@@ -568,7 +568,7 @@ export class NvimThread {
       this.renderDebounceTimer = undefined;
       if (this.destroyed) return;
       this.rebuildToolResultMap();
-      const title = this.core.state.title;
+      const title = this.core.title;
       if (title !== undefined && title !== this.lastAppliedTitle) {
         this.lastAppliedTitle = title;
         this.context.dispatch({
