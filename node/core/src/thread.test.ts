@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { phaseLabel } from "./agent.ts";
+import { describe, expect, it, vi } from "vitest";
+import { phaseActiveTools, phaseLabel } from "./agent.ts";
 import type { ThreadType } from "./chat-types.ts";
 import { type Compactor, runSubmission } from "./compaction/index.ts";
 import {
@@ -535,6 +535,66 @@ describe("Thread.send while busy", () => {
     expect(texts).not.toContain("queued next");
     expect(texts).toContain("never mind, do this");
     second.finishResponse("end_turn");
+  });
+});
+
+describe("Thread aborts the tools it owns", () => {
+  /** A thread mid-way through a `get_files` batch whose stat never settles on
+   * its own: the invocations are live until someone aborts them. */
+  async function threadWithLiveTool(threadId: string) {
+    let resolveStat!: () => void;
+    const statPromise = new Promise<{ mtimeMs: number; size: number }>(
+      (resolve) => {
+        resolveStat = () => resolve({ mtimeMs: 0, size: 100 });
+      },
+    );
+    const { core, mockClient } = createAgentWithMock(
+      {
+        fileIO: {
+          readFile: async () => "file contents",
+          writeFile: async () => {},
+          fileExists: async () => true,
+          stat: async () => statPromise,
+        } as unknown as ThreadContext["fileIO"],
+      },
+      uniqueThreadId(threadId),
+    );
+    const sent = core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/test.txt" }],
+    });
+    stream.finishResponse("tool_use");
+    const active = await pollUntil(() => {
+      const tools = phaseActiveTools(core.phase);
+      if (!tools?.size) throw new Error("waiting for live invocations");
+      return tools;
+    });
+    const abortSpies = [...active.values()].map((entry) =>
+      vi.spyOn(entry.handle, "abort"),
+    );
+    return { core, sent, abortSpies, resolveStat };
+  }
+
+  it("aborts the live invocations when the thread aborts", async () => {
+    const { core, sent, abortSpies, resolveStat } =
+      await threadWithLiveTool("abort-live-tool");
+    const aborted = core.abort();
+    for (const spy of abortSpies) expect(spy).toHaveBeenCalled();
+    resolveStat();
+    await aborted;
+    await sent;
+    expect(core.isBusy).toBe(false);
+  });
+
+  it("aborts the live invocations when the thread is destroyed", async () => {
+    const { core, sent, abortSpies, resolveStat } =
+      await threadWithLiveTool("destroy-live-tool");
+    const destroyed = core.destroy();
+    for (const spy of abortSpies) expect(spy).toHaveBeenCalled();
+    resolveStat();
+    await destroyed;
+    await sent;
   });
 });
 

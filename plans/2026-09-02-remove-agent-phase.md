@@ -177,6 +177,23 @@ Notes:
   (removed in stage 4) but has no internal caller. The phase renders the same
   map object the host owns, so `phaseActiveTools` is unchanged for callers.
 - `createTestAgent` / `createTestOpenAIAgent` now also return `toolExecutor`.
+- Review follow-ups (same stage):
+  - `ToolExecutorHost.live` is always a `Map` (empty between batches); the
+    unused public `activeTools` getter is gone, so there is one representation
+    of "no batch running".
+  - `execute` collects results from the `Promise.all` return value instead of
+    re-reading `entry.result` afterwards, so a missing result is impossible
+    rather than silently filtered. `ActiveToolEntry.result` stays an optional
+    field because the view reads it mid-batch.
+  - `test-helpers.buildTestAgent` no longer uses `let agent!: Agent`; the
+    host's `isAborting`/`publishTools` closures go through a `requireAgent()`
+    guard that throws if they run before construction.
+  - New coverage: `thread.test.ts` "Thread aborts the tools it owns" (abort and
+    destroy each abort a live invocation — verified to fail when the
+    `toolExecutor.abortAll()` call is removed), and `tool-executor.test.ts`
+    pinning the abort-lands-before-publish window. The agent-level test that
+    called `abortAll()` itself was rescoped/renamed to what it actually
+    asserts: the turn settles as `aborted`.
 - Full suite, `npx tsc -b` and `npx biome check .` are green (one unrelated
   flake in `spawn-subagents.test.ts` under full-suite load; passes in
   isolation and on a rerun of the file).

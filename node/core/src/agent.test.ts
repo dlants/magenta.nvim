@@ -3331,7 +3331,10 @@ describe("Agent turn loop", () => {
     expect(snapshots.some((s) => s.hasActive)).toBe(true);
   });
 
-  it("aborts the live invocations when the abort lands while tools run", async () => {
+  // The thread owns aborting the tools now (see thread.test.ts "Thread aborts
+  // the tools it owns"); what this pins is the agent side: a turn whose tools
+  // were aborted underneath it still settles as `aborted`.
+  it("settles as aborted when the tools are aborted while they run", async () => {
     let resolveStat!: () => void;
     const statPromise = new Promise<{ mtimeMs: number; size: number }>(
       (resolve) => {

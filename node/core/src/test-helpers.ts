@@ -231,14 +231,18 @@ function buildTestAgent(
     lastTurnResult: undefined,
     toolSpecs: threadToolSpecs(context),
   };
-  let agent!: Agent;
+  let agent: Agent | undefined;
+  const requireAgent = (): Agent => {
+    if (!agent) throw new Error("test agent used before construction");
+    return agent;
+  };
   // The bare-agent harness stands in for the thread: it owns tool execution
   // the same way, so the loop under test sees production wiring.
   const host = new ToolExecutorHost({
     logger: context.logger,
     getHooks: opts.getHooks ?? (() => agentHooks()),
-    isAborting: () => agent.isAbortRequested,
-    publishTools: (tools) => agent.setToolInvocationState(tools),
+    isAborting: () => requireAgent().isAbortRequested,
+    publishTools: (tools) => requireAgent().setToolInvocationState(tools),
     onUpdate: opts.onUpdate ?? (() => {}),
     createTool: (request) =>
       createTool(request, {

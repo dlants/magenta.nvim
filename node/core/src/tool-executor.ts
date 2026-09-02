@@ -33,17 +33,13 @@ export type ToolExecutorDeps = {
 export class ToolExecutorHost {
   constructor(private deps: ToolExecutorDeps) {}
 
-  private live: Map<ToolRequestId, ActiveToolEntry> | undefined;
-
   /** The invocations that are running right now. Empty between batches. */
-  get activeTools(): ReadonlyMap<ToolRequestId, ActiveToolEntry> | undefined {
-    return this.live;
-  }
+  private live = new Map<ToolRequestId, ActiveToolEntry>();
 
   /** Abort every live invocation. The outcome of the batch is still decided by
    * `isAborting`, so this only stops the work. */
   abortAll(): void {
-    for (const [, entry] of this.live ?? []) entry.handle.abort();
+    for (const [, entry] of this.live) entry.handle.abort();
   }
 
   async execute(requests: ReadonlyArray<RequestedTool>): Promise<ToolOutcome> {
@@ -59,7 +55,7 @@ export class ToolExecutorHost {
         continue;
       }
       const request = requested.request.value;
-      let invocation;
+      let invocation: ToolInvocation;
       try {
         invocation = this.deps.createTool(request);
       } catch (err) {
@@ -83,7 +79,7 @@ export class ToolExecutorHost {
     if (this.deps.isAborting()) this.abortAll();
     this.deps.publishTools({ type: "running", activeTools });
 
-    await Promise.all(
+    const settled = await Promise.all(
       [...activeTools].map(async ([id, entry]) => {
         let result: ProviderToolResult;
         try {
@@ -101,13 +97,12 @@ export class ToolExecutorHost {
         }
         entry.result = result;
         this.deps.onUpdate();
+        return [id, result] as const;
       }),
     );
 
-    for (const [id, entry] of activeTools) {
-      if (entry.result) {
-        results.set(id, entry.result.result);
-      }
+    for (const [id, result] of settled) {
+      results.set(id, result.result);
     }
 
     // Every hook is consulted even once one has asked to suspend — a stop is a
@@ -125,7 +120,7 @@ export class ToolExecutorHost {
     }
     // Nothing is running any more: `activeTools` means *live* invocations, and
     // the view switches from tool progress to results the moment it empties.
-    this.live = undefined;
+    this.live = new Map();
     this.deps.publishTools({ type: "settled" });
 
     if (this.deps.isAborting()) {
