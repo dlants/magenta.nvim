@@ -1,5 +1,5 @@
 import type { ToolName, ToolRequestId } from "@magenta/core";
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withDriver } from "../test/preamble.ts";
 import { LOGO } from "./thread-view.ts";
 
@@ -31,6 +31,18 @@ describe("node/chat/chat.test.ts", () => {
       await driver.magenta.command("new-thread");
       await driver.assertDisplayBufferContains("# [ Untitled ]");
       await driver.assertDisplayBufferContains(LOGO);
+    });
+  });
+
+  it("summarizes a submission that never issued a request as empty", async () => {
+    await withDriver({}, async (driver) => {
+      await driver.showSidebar();
+      const thread = driver.magenta.chat.getActiveThread();
+      expect(await thread.core.send([])).toEqual({ type: "empty" });
+      expect(driver.magenta.chat.getThreadSummary(thread.id).status).toEqual({
+        type: "stopped",
+        reason: "empty",
+      });
     });
   });
 

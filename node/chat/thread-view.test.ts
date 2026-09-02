@@ -1,6 +1,7 @@
 import type {
   LoopActivity,
   LoopEpoch,
+  RestResult,
   SendResult,
   ThreadLoopState,
 } from "@magenta/core";
@@ -13,6 +14,7 @@ import { renderStatus } from "./thread-view.ts";
 
 async function renderStatusToString(
   state: ThreadLoopState | Extract<LoopActivity, { type: "streaming" }>,
+  lastTurnResult?: RestResult,
 ): Promise<string> {
   const loopState: ThreadLoopState =
     state.type === "streaming"
@@ -32,7 +34,7 @@ async function renderStatusToString(
         renderStatus(
           loopState,
           undefined,
-          undefined,
+          lastTurnResult,
           undefined,
           () => {},
           undefined,
@@ -133,5 +135,13 @@ describe("thread-view renderStatus streaming", () => {
     });
     expect(text).toContain("Aborting...");
     expect(text).not.toContain("Streaming response");
+  });
+
+  it("renders an empty submission as a normal stop", async () => {
+    const text = await renderStatusToString(
+      { type: "idle", lastResult: { type: "empty" } },
+      { type: "empty" },
+    );
+    expect(text).toContain("Stopped (end_turn)");
   });
 });

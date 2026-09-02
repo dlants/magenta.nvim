@@ -456,4 +456,19 @@ Notes:
   result line), `chat.test.ts`, `thread-abort.test.ts` and
   `bashCommand.test.ts`'s `loopActiveTools` lookups already cover this
   stage's surface, and all pass unchanged.
+
+Review follow-ups (stage 6):
+
+- `getThreadSummary`'s `stopped.reason` is now a literal union
+  (`StoppedReason = StopReason | Exclude<RestResult["type"], "completed" |
+  "failed">`) instead of `string`, so a new `SendResult` variant is a compile
+  error rather than a new mystery string in the subagent status line.
+- Dropped the now-dead `lastTurnResult.stopReason ?? "end_turn"` — after the
+  `empty` split, `completed.stopReason` is a stated `StopReason`.
+- Kept the behaviour change the `empty` variant introduced (an empty
+  submission reports `reason: "empty"` rather than `"end_turn"`) and pinned it:
+  `chat.test.ts` "summarizes a submission that never issued a request as
+  empty". `thread-view.test.ts`'s `renderStatusToString` now takes an optional
+  `lastTurnResult`, covering `renderTurnResult`'s `empty` branch
+  (`Stopped (end_turn)`).
 - `npx tsc -b`, `npx biome check .` and the full suite are green.

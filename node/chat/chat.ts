@@ -2,7 +2,9 @@ import type {
   FileIO,
   InputMessage,
   NativeMessageIdx,
+  RestResult,
   ScriptRunner,
+  StopReason,
   SubagentConfig,
   ThreadId,
   ThreadResult,
@@ -183,6 +185,10 @@ export type ChatMsg = {
   type: "chat-msg";
   msg: Msg;
 };
+
+type StoppedReason =
+  | StopReason
+  | Exclude<RestResult["type"], "completed" | "failed">;
 
 export class Chat implements ThreadManager {
   state: ChatState;
@@ -1498,13 +1504,15 @@ ${rows}${loadMore}`;
     return wrapper.thread.isSandboxBypassed;
   }
 
+  /** How a resting thread stopped: the turn's stop reason, or the kind of the
+   * non-completed result. `failed` is reported as an error status instead. */
   getThreadSummary(threadId: ThreadId): {
     title?: string | undefined;
     status:
       | { type: "missing" }
       | { type: "pending" }
       | { type: "running"; activity: string }
-      | { type: "stopped"; reason: string }
+      | { type: "stopped"; reason: StoppedReason }
       | { type: "yielded"; response: string }
       | { type: "error"; message: string };
   } {
@@ -1588,7 +1596,7 @@ ${rows}${loadMore}`;
                   type: "stopped" as const,
                   reason:
                     lastTurnResult?.type === "completed"
-                      ? (lastTurnResult.stopReason ?? "end_turn")
+                      ? lastTurnResult.stopReason
                       : (lastTurnResult?.type ?? "end_turn"),
                 };
               default:
