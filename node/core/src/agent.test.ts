@@ -680,7 +680,7 @@ describe("Thread.reset", () => {
       );
       // The registers belong to the message list being replaced: a saved
       // fragment refers to text the fresh agent has never seen.
-      expect(core.state.edlRegisters.registers.size).toBe(0);
+      expect(core.edlRegisters.registers.size).toBe(0);
 
       void core.send([{ type: "user", text: "continue" }]);
       const next = await awaitNextStream(mockClient, stream);
@@ -1984,7 +1984,7 @@ describe("ThreadHooks.onToolApplied", () => {
       { supervisor: 0, path: "/tmp/b.txt", type: "get-file" },
       { supervisor: 1, path: "/tmp/b.txt", type: "get-file" },
     ]);
-    expect(core.state.editedFilesThisTurn).toEqual([
+    expect(core.editedFilesThisTurn).toEqual([
       { path: "/tmp/a.txt", snapshot: "hello" },
     ]);
   });
@@ -2010,10 +2010,10 @@ describe("ThreadHooks.onToolApplied", () => {
     stream.finishResponse("tool_use");
 
     await pollUntil(() => {
-      if (core.state.editedFilesThisTurn.length === 1) return true;
+      if (core.editedFilesThisTurn.length === 1) return true;
       throw new Error("waiting for the edited-file bookkeeping");
     });
-    expect(core.state.editedFilesThisTurn).toEqual([
+    expect(core.editedFilesThisTurn).toEqual([
       { path: "/tmp/a.txt", snapshot: "hello" },
     ]);
   });
@@ -2025,7 +2025,7 @@ describe("Thread.editedFilesThisTurn", () => {
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
 
-    expect(core.state.editedFilesThisTurn).toEqual([]);
+    expect(core.editedFilesThisTurn).toEqual([]);
 
     void core.send([{ type: "user", text: "edit a" }]);
     const stream = await mockClient.awaitStream();
@@ -2035,18 +2035,18 @@ describe("Thread.editedFilesThisTurn", () => {
     stream.finishResponse("tool_use");
 
     await pollUntil(() => {
-      if (core.state.editedFilesThisTurn.length === 1) return true;
+      if (core.editedFilesThisTurn.length === 1) return true;
       throw new Error(
-        `waiting for 1 edited file, got ${core.state.editedFilesThisTurn.length}`,
+        `waiting for 1 edited file, got ${core.editedFilesThisTurn.length}`,
       );
     });
-    expect(core.state.editedFilesThisTurn).toEqual([
+    expect(core.editedFilesThisTurn).toEqual([
       { path: "/tmp/a.txt", snapshot: "hello" },
     ]);
 
     void core.send([{ type: "user", text: "next turn" }]);
     await mockClient.awaitStream();
-    expect(core.state.editedFilesThisTurn).toEqual([]);
+    expect(core.editedFilesThisTurn).toEqual([]);
   });
 
   it("keeps the pre-turn snapshot after a second edit to the same file", async () => {
@@ -2061,9 +2061,9 @@ describe("Thread.editedFilesThisTurn", () => {
     });
     stream.finishResponse("tool_use");
     await pollUntil(() => {
-      if (core.state.editedFilesThisTurn.length === 1) return true;
+      if (core.editedFilesThisTurn.length === 1) return true;
       throw new Error(
-        `waiting for 1 edited file, got ${core.state.editedFilesThisTurn.length}`,
+        `waiting for 1 edited file, got ${core.editedFilesThisTurn.length}`,
       );
     });
     const stream2 = await awaitNextStream(mockClient, stream);
@@ -2078,7 +2078,7 @@ describe("Thread.editedFilesThisTurn", () => {
       if (content === "done") return true;
       throw new Error(`waiting for second edit, got ${content}`);
     });
-    expect(core.state.editedFilesThisTurn).toEqual([
+    expect(core.editedFilesThisTurn).toEqual([
       { path: "/tmp/a.txt", snapshot: "hello" },
     ]);
   });
@@ -2501,7 +2501,7 @@ describe("Agent failure rollback", () => {
 
     stream.respondWithError(new Error("provider failure"));
     await pollUntil(() => {
-      if (core.state.lastTurnResult?.type === "failed") return true;
+      if (core.lastResult()?.type === "failed") return true;
       throw new Error("waiting for error state");
     });
     // The queued entries were never delivered, so they stay queued.
@@ -2546,7 +2546,7 @@ describe("Agent failure rollback", () => {
       vi.setSystemTime(new Date(Date.now() + 300_001));
       stream.respondWithError(new Error("terminated"));
       await vi.advanceTimersByTimeAsync(0);
-      expect(core.state.lastTurnResult?.type).toBe("failed");
+      expect(core.lastResult()?.type).toBe("failed");
       // No thread-level retry: advancing past every former backoff delay
       // produces no new request.
       await vi.advanceTimersByTimeAsync(60_000);
@@ -2597,7 +2597,7 @@ describe("Agent failure rollback", () => {
     const second = await awaitNextStream(mockClient, stream);
     second.respondWithError(new Error("provider failure"));
     await pollUntil(() => {
-      if (core.state.lastTurnResult?.type === "failed") return true;
+      if (core.lastResult()?.type === "failed") return true;
       throw new Error("waiting for error state");
     });
     for (const message of core.getProviderMessages()) {
@@ -2859,8 +2859,8 @@ describe("Agent thread state", () => {
         return true;
       });
 
-      parent.state.edlRegisters.registers.set("r", "regval");
-      parent.state.edlRegisters.nextSavedId = 3;
+      parent.edlRegisters.registers.set("r", "regval");
+      parent.edlRegisters.nextSavedId = 3;
 
       const nativeMessageIdx = parent.agent.manager.getNativeMessageIdx();
       child = await Thread.clone({
@@ -2871,11 +2871,11 @@ describe("Agent thread state", () => {
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
 
-      expect(child.state.edlRegisters.registers.get("r")).toBe("regval");
-      expect(child.state.edlRegisters.nextSavedId).toBe(3);
+      expect(child.edlRegisters.registers.get("r")).toBe("regval");
+      expect(child.edlRegisters.nextSavedId).toBe(3);
 
-      child.state.edlRegisters.registers.set("r2", "x");
-      expect(parent.state.edlRegisters.registers.has("r2")).toBe(false);
+      child.edlRegisters.registers.set("r2", "x");
+      expect(parent.edlRegisters.registers.has("r2")).toBe(false);
     } finally {
       await parent.destroy();
       if (child) await child.destroy();

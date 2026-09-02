@@ -523,10 +523,10 @@ export class NvimThread {
       this.gitSupervisor,
       this.fileSupervisor,
       ...(this.comments ? [this.comments.supervisor] : []),
-      ...(this.core.state.threadType === "compact"
+      ...(this.core.threadType === "compact"
         ? []
         : [
-            new SystemInfoSupervisor(this.core.state.systemInfo, {
+            new SystemInfoSupervisor(this.core.systemInfo, {
               alreadyInjected: this.core.getProviderMessages().length > 0,
             }),
           ]),
@@ -825,7 +825,7 @@ export class NvimThread {
 
     const sourceCore = sourceThread.core;
     const profile = sourceThread.context.profile;
-    const sourceCoreState = sourceCore.state;
+    const sourceCoreState = sourceCore;
 
     // Independent tracked-file state for the fork; comments are root-only and
     // are deliberately not cloned.
@@ -1180,7 +1180,7 @@ export class NvimThread {
           delete this.state.editedFilesExpanded[key];
           return;
         }
-        const entry = this.core.state.editedFilesThisTurn.find(
+        const entry = this.core.editedFilesThisTurn.find(
           (e) => e.path === msg.filePath,
         );
         if (!entry) return;
@@ -1270,8 +1270,7 @@ export class NvimThread {
     this.sandboxViolationHandler?.rejectAll();
     const { unsent } = await this.core.abort();
     const isUserFacing =
-      this.core.state.threadType === "root" ||
-      this.core.state.threadType === "docker_root";
+      this.core.threadType === "root" || this.core.threadType === "docker_root";
     if (!isUserFacing) return;
     const text = unsent.map((q) => renderPending(q.message)).join("\n");
     if (!text) return;

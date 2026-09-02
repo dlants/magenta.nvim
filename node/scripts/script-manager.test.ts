@@ -189,7 +189,7 @@ it("does not resolve a script's createThread() await on a subagent error", async
       }
 
       await pollUntil(
-        () => threadWrapper.thread.core.state.lastTurnResult?.type === "failed",
+        () => threadWrapper.thread.core.lastResult()?.type === "failed",
       );
 
       // The script's createThread() await must not resolve while the

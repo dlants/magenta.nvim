@@ -754,9 +754,7 @@ describe("foreach-style parallel agents", () => {
 
         const childWrapper = findChildThread(driver.magenta.chat);
         await pollUntil(() => {
-          if (
-            childWrapper.thread.core.state.lastTurnResult?.type === "failed"
-          ) {
+          if (childWrapper.thread.core.lastResult()?.type === "failed") {
             return true;
           }
           throw new Error("waiting for child thread to reach error state");

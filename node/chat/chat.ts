@@ -1125,7 +1125,7 @@ export class Chat implements ThreadManager {
     const threadWrapper = this.threadWrappers[threadId];
     const threadType =
       threadWrapper?.state === "initialized"
-        ? threadWrapper.thread.core.state.threadType
+        ? threadWrapper.thread.core.threadType
         : undefined;
     const icon = threadType === "docker_root" ? "🐳 " : "";
 
@@ -1532,7 +1532,7 @@ ${rows}${loadMore}`;
       case "initialized": {
         const thread = threadWrapper.thread;
         const agentPhase = thread.loopState;
-        const lastTurnResult = thread.core.state.lastTurnResult;
+        const lastTurnResult = thread.core.lastResult();
 
         const summary = {
           title: thread.core.title,
@@ -1587,8 +1587,8 @@ ${rows}${loadMore}`;
                 return {
                   type: "stopped" as const,
                   reason:
-                    lastTurnResult?.type === "stopped"
-                      ? lastTurnResult.stopReason
+                    lastTurnResult?.type === "completed"
+                      ? (lastTurnResult.stopReason ?? "end_turn")
                       : (lastTurnResult?.type ?? "end_turn"),
                 };
               default:

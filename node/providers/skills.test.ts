@@ -65,7 +65,7 @@ This is the content of the test skill.
         await driver.showSidebar();
 
         const thread = driver.magenta.chat.getActiveThread();
-        const systemPrompt = thread.core.state.systemPrompt;
+        const systemPrompt = thread.core.systemPrompt;
 
         expect(systemPrompt).toContain("Available Skills");
         expect(systemPrompt).toContain("test-skill");
@@ -98,7 +98,7 @@ Content here
         await driver.showSidebar();
 
         const thread = driver.magenta.chat.getActiveThread();
-        const systemPrompt = thread.core.state.systemPrompt;
+        const systemPrompt = thread.core.systemPrompt;
 
         expect(systemPrompt).toContain("case-test-skill");
         expect(systemPrompt).toContain("Testing case insensitivity");
@@ -133,7 +133,7 @@ Just regular markdown content without frontmatter.
         await driver.showSidebar();
 
         const thread = driver.magenta.chat.getActiveThread();
-        const systemPrompt = thread.core.state.systemPrompt;
+        const systemPrompt = thread.core.systemPrompt;
 
         // The invalid skill should not appear
         expect(systemPrompt).not.toContain("no-frontmatter");
@@ -169,7 +169,7 @@ Content
         await driver.showSidebar();
 
         const thread = driver.magenta.chat.getActiveThread();
-        const systemPrompt = thread.core.state.systemPrompt;
+        const systemPrompt = thread.core.systemPrompt;
 
         // The invalid skill should not appear
         expect(systemPrompt).not.toContain("only-name");
@@ -215,7 +215,7 @@ Content 2
         await driver.showSidebar();
 
         const thread = driver.magenta.chat.getActiveThread();
-        const systemPrompt = thread.core.state.systemPrompt;
+        const systemPrompt = thread.core.systemPrompt;
 
         // Should contain the duplicate-name skill
         expect(systemPrompt).toContain("duplicate-name");
@@ -258,7 +258,7 @@ Content
         await driver.showSidebar();
 
         const thread = driver.magenta.chat.getActiveThread();
-        const systemPrompt = thread.core.state.systemPrompt;
+        const systemPrompt = thread.core.systemPrompt;
 
         expect(systemPrompt).toContain("Available Skills");
         expect(systemPrompt).toContain("intro-skill");
@@ -279,7 +279,7 @@ Content
         await driver.showSidebar();
 
         const thread = driver.magenta.chat.getActiveThread();
-        const systemPrompt = thread.core.state.systemPrompt;
+        const systemPrompt = thread.core.systemPrompt;
 
         // The built-in skill is always discovered, so the section is present,
         // but no user-configured skills should appear.
@@ -327,7 +327,7 @@ Content B
         await driver.showSidebar();
 
         const thread = driver.magenta.chat.getActiveThread();
-        const systemPrompt = thread.core.state.systemPrompt;
+        const systemPrompt = thread.core.systemPrompt;
 
         expect(systemPrompt).toContain("Available Skills");
         expect(systemPrompt).toContain("skill-a");
@@ -369,7 +369,7 @@ allowed-tools: Bash(git show:*), Bash(git fetch: *), Bash(git diff:*)
         await driver.showSidebar();
 
         const thread = driver.magenta.chat.getActiveThread();
-        const systemPrompt = thread.core.state.systemPrompt;
+        const systemPrompt = thread.core.systemPrompt;
 
         expect(systemPrompt).toContain("fix-ci-failures");
         expect(systemPrompt).toContain("Fix failing tests");
@@ -387,7 +387,7 @@ allowed-tools: Bash(git show:*), Bash(git fetch: *), Bash(git diff:*)
         await driver.showSidebar();
 
         const thread = driver.magenta.chat.getActiveThread();
-        const systemPrompt = thread.core.state.systemPrompt;
+        const systemPrompt = thread.core.systemPrompt;
 
         // The user-configured directory does not exist, but the built-in
         // skill is still discovered, so the section is present.

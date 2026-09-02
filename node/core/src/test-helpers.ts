@@ -6,10 +6,10 @@ import {
   Agent,
   type AgentContext,
   type AgentDeps,
-  type ThreadState,
   type ToolExecutor,
 } from "./agent.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
+import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
 import {
   type LoopActivity,
@@ -275,15 +275,7 @@ function buildTestAgent(
     ...baseTestContext(provider),
     ...opts.context,
   };
-  const state: ThreadState = {
-    threadType: context.threadType,
-    systemPrompt: context.systemPrompt,
-    systemInfo: context.systemInfo,
-    edlRegisters: { registers: new Map(), nextSavedId: 0 },
-    editedFilesThisTurn: [],
-    lastTurnResult: undefined,
-    toolSpecs: threadToolSpecs(context),
-  };
+  const edlRegisters: EdlRegisters = { registers: new Map(), nextSavedId: 0 };
   const loop = new LoopStateMachine(opts.onUpdate ?? (() => {}));
   // The bare-agent harness stands in for the thread: it owns tool execution
   // the same way, so the loop under test sees production wiring.
@@ -306,7 +298,7 @@ function buildTestAgent(
         maxConcurrentFastSubagents: context.maxConcurrentFastSubagents,
         contextTracker: context.contextTracker,
         onToolApplied: () => {},
-        edlRegisters: state.edlRegisters,
+        edlRegisters,
         commentStore: context.commentStore,
         fileIO: context.fileIO,
         shell: context.shell,
@@ -328,7 +320,7 @@ function buildTestAgent(
   const agent = new TestAgent(
     context,
     {
-      state,
+      systemPrompt: context.systemPrompt,
       executeTools,
       toolSpecs: threadToolSpecs(context),
       getHooks: opts.getHooks ?? (() => agentHooks()),

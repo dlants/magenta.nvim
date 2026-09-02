@@ -381,13 +381,46 @@ Notes:
   title cases and the archive/summary tests exercise the moved field. Full
   suite, `npx tsc -b` and `npx biome check .` are green.
 
-## dissolve ThreadState
+## dissolve ThreadState — DONE
 
 - Goal: `ThreadState` type removed; `AgentDeps` narrowed to `systemPrompt` + `toolSpecs` (+ existing callbacks); the other fields are `Thread` fields.
 - Tests:
   - Fork/clone (`fork-thread.test.ts`) still carries `edlRegisters` and reports the source thread's last result correctly.
   - Compaction (`thread-compact.test.ts`) still resets registers and `editedFilesThisTurn`, and the compacted thread reports its own last result.
   - `editedFilesThisTurn` is cleared at the start of each loop and populated by `edl-edit` — the existing `agent.test.ts` cases, repointed at `thread`.
+
+Notes:
+
+- `ThreadState` is deleted from `agent.ts` and from the core re-exports.
+  `AgentDeps` now takes `systemPrompt` + `toolSpecs` (plus the existing
+  callbacks and `runnerInit`); `Agent` holds no shared state object.
+- `lastTurnResult` is gone from the agent entirely rather than kept as a
+  private field: after stage 3 the thread records the `SendResult` on
+  `idle.lastResult`, so the agent's copy was written and never read, and a
+  write-only field is worse than no field.
+- `threadType` / `systemPrompt` / `systemInfo` are getters on `Thread`
+  delegating to `this.context`, not duplicated fields — the context already
+  owns them and a copy could drift. `edlRegisters`, `editedFilesThisTurn` and
+  `toolSpecs` are plain mutable `Thread` fields.
+- Every `X.state.<field>` read site was repointed mechanically to `X.<field>`
+  (core, `node/chat`, `node/providers/skills.test.ts`, `node/scripts`,
+  `node/tools`), and `X.state.lastTurnResult` to `X.lastResult()`.
+- That last swap changes the *type* the root layer sees: `TurnResult`
+  (`stopped` / `suspended` / …) becomes `SendResult` (`completed` / `yielded` /
+  …). So `renderTurnResult` in `thread-view.ts` now takes a local
+  `RenderedResult = Exclude<SendResult, {type: "suspended"}> | undefined` and
+  handles `completed` (with `stopReason` optional, defaulting to `end_turn`)
+  and `yielded`; `chat.ts`'s archive-summary status and
+  `thread-compact.test.ts` compare against `"completed"` instead of
+  `"stopped"`. This is the render half of stage 6 arriving early, forced by
+  the type change — the rest of stage 6 (`loopState` / `isBusy` / `title`
+  read sites) was already done in earlier stages.
+- `test-helpers.buildTestAgent` builds the harness's `edlRegisters` directly
+  instead of a `ThreadState`.
+- No new tests: the existing fork/clone, compaction and `editedFilesThisTurn`
+  cases are exactly the coverage this stage's field moves needed, and they
+  were repointed rather than rewritten.
+- `npx tsc -b`, `npx biome check .` and the full suite are green.
 
 ## root layer
 

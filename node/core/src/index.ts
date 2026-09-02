@@ -3,7 +3,6 @@ export {
   Agent,
   type BeforeRequestDecision,
   type InputMessage,
-  type ThreadState,
   type ToolExecutor,
   type ToolOutcome,
 } from "./agent.ts";

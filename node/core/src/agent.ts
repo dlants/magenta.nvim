@@ -1,5 +1,4 @@
-import type { SubagentConfig, ThreadType } from "./chat-types.ts";
-import type { EdlRegisters } from "./edl/index.ts";
+import type { SubagentConfig } from "./chat-types.ts";
 import type { Logger } from "./logger.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import {
@@ -25,13 +24,12 @@ import type {
   TurnResult,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
+import type { SystemPrompt } from "./providers/system-prompt.ts";
 import type { AgentHooks, SendResult } from "./thread-api.ts";
 import type { SuspendReason } from "./thread-supervisor.ts";
 import type { ToolInvocation, ToolName, ToolRequest } from "./tool-types.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
-import type { AbsFilePath } from "./utils/files.ts";
 
 export type InputMessage =
   | {
@@ -76,18 +74,8 @@ export interface AgentContext {
   getProvider: (profile: ProviderProfile) => Provider;
 }
 
-export type ThreadState = {
-  threadType: ThreadType;
-  systemPrompt: SystemPrompt;
-  systemInfo: SystemInfo;
-  edlRegisters: EdlRegisters;
-  editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];
-  lastTurnResult: TurnResult | undefined;
-  toolSpecs: ProviderToolSpec[];
-};
-
 export interface AgentDeps {
-  state: ThreadState;
+  systemPrompt: SystemPrompt;
   toolSpecs: ProviderToolSpec[];
   /** The manager's progress callback, handed to its owner. The agent stores
    * nothing from it. */
@@ -146,16 +134,12 @@ function completeToolResults(
 }
 
 export class Agent {
-  public state: ThreadState;
   public manager: NativeInferenceManager;
 
   constructor(
     private context: AgentContext,
     private deps: AgentDeps,
   ) {
-    this.state = deps.state;
-    this.state.toolSpecs = deps.toolSpecs;
-
     if (deps.runnerInit.type === "cloned") {
       this.manager = deps.runnerInit.cloneFrom.clone();
       this.manager.truncateMessages(deps.runnerInit.truncateTo);
@@ -165,7 +149,7 @@ export class Agent {
   }
 
   getToolSpecs(): ProviderToolSpec[] {
-    return this.state.toolSpecs;
+    return this.deps.toolSpecs;
   }
 
   private inferenceConfig(): ProviderInferenceConfig | undefined {
@@ -207,7 +191,7 @@ export class Agent {
     const config = this.inferenceConfig();
     const agent = provider.createInferenceManager({
       model: this.context.profile.model,
-      systemPrompt: this.state.systemPrompt,
+      systemPrompt: this.deps.systemPrompt,
       tools: this.getToolSpecs(),
       ...(config ? { config } : {}),
     });
@@ -368,7 +352,6 @@ export class Agent {
   }
 
   private async handleTurnResult(result: TurnResult): Promise<void> {
-    this.state.lastTurnResult = result;
     switch (result.type) {
       case "failed":
         this.handleErrorState(result.error);

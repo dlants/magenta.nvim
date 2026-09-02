@@ -16,6 +16,7 @@ import {
   type NativeMessageIdx,
   type ProviderToolSpec,
   renderPending,
+  type SendResult,
   type ThreadId,
   type ToolRequestId,
   type YieldState,
@@ -37,7 +38,6 @@ import type {
   ProviderToolResult,
   StopReason,
   ThreadLoopState,
-  TurnResult,
   Usage,
 } from "../providers/provider.ts";
 import type { SystemPrompt } from "../providers/system-prompt.ts";
@@ -95,7 +95,7 @@ export type RunningCompaction = {
 export const renderStatus = (
   agentPhase: ThreadLoopState,
   latestUsage: Usage | undefined,
-  lastTurnResult: TurnResult | undefined,
+  lastTurnResult: RenderedResult,
   compaction: RunningCompaction | undefined,
   requestTick: () => void,
   yielded: YieldState | undefined,
@@ -154,20 +154,23 @@ function renderStreaming(
   return d`Streaming response ${spinnerFrame(activity.startedAt)}`;
 }
 
+/** How the last submission ended, as the view sees it: a suspension is a
+ * handoff, never rendered. */
+type RenderedResult = Exclude<SendResult, { type: "suspended" }> | undefined;
 function renderTurnResult(
-  result: TurnResult | undefined,
+  result: RenderedResult,
   usage: Usage | undefined,
 ): VDOMNode {
   if (!result) {
     return renderStopReason("end_turn", usage);
   }
   switch (result.type) {
-    case "stopped":
-      return renderStopReason(result.stopReason, usage);
+    case "completed":
+      return renderStopReason(result.stopReason ?? "end_turn", usage);
+    case "yielded":
+      return renderStopReason("end_turn", usage);
     case "aborted":
       return d`[ABORTED] ${usage ? d` ${renderUsage(usage)}` : d``} `;
-    case "suspended":
-      return renderStopReason("end_turn", usage);
     case "failed":
       return d`Error ${result.error.message}${
         result.error.stack ? `\n${result.error.stack}` : ""
@@ -433,7 +436,7 @@ export const view: View<{
   thread: NvimThread;
   dispatch: Dispatch<Msg>;
 }> = ({ thread, dispatch }) => {
-  const threadType = thread.core.state.threadType;
+  const threadType = thread.core.threadType;
   const titlePrefix = threadType === "docker_root" ? "🐳 " : "";
   const archiveLink = withBindings(d`[Archive]`, {
     "<CR>": () =>
@@ -447,13 +450,13 @@ export const view: View<{
     : d`# ${titlePrefix}[ Untitled ] ${archiveLink}`;
 
   const systemPromptView = renderSystemPrompt(
-    thread.core.state.systemPrompt,
+    thread.core.systemPrompt,
     thread.state.showSystemPrompt,
     dispatch,
   );
 
   const toolDefinitionsView = renderToolDefinitions(
-    thread.core.state.toolSpecs,
+    thread.core.toolSpecs,
     thread.state.showToolDefinitions,
     thread.state.expandedToolDefinitions,
     dispatch,
@@ -497,7 +500,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
   const statusView = renderStatus(
     agentPhase,
     latestUsage,
-    thread.core.state.lastTurnResult,
+    thread.core.lastResult(),
     runningCompaction(thread),
     thread.requestAnimationTick,
     thread.core.yielded,
@@ -524,7 +527,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     dispatch,
   );
   const editedFilesView = editedFilesSummaryView(
-    thread.core.state.editedFilesThisTurn,
+    thread.core.editedFilesThisTurn,
     thread,
     dispatch,
   );

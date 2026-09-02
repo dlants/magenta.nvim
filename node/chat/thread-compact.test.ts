@@ -335,8 +335,8 @@ it("compact flow without continuation: @compact with no next prompt", async () =
         const agentPhase = thread.loopState;
         if (agentPhase.type !== "idle")
           throw new Error(`expected idle but got ${agentPhase.type}`);
-        const turnResult = thread.core.state.lastTurnResult;
-        if (turnResult?.type !== "stopped")
+        const turnResult = thread.core.lastResult();
+        if (turnResult?.type !== "completed")
           throw new Error(`expected stopped but got ${turnResult?.type}`);
         if (turnResult.stopReason !== "end_turn")
           throw new Error(`expected end_turn but got ${turnResult.stopReason}`);
@@ -1248,7 +1248,7 @@ it("spawns one compact child thread per chunk, carrying the summary forward", as
       const wrapper = driver.magenta.chat.threadWrappers[threadId];
       if (wrapper?.state !== "initialized")
         throw new Error("expected the chunk thread to still be around");
-      expect(wrapper.thread.core.state.threadType).toBe("compact");
+      expect(wrapper.thread.core.threadType).toBe("compact");
       expect(wrapper.parentThreadId).toBe(thread.id);
     }
 

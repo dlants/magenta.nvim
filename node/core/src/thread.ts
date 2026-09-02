@@ -4,7 +4,6 @@ import {
   type AgentContext,
   type AgentDeps,
   type InputMessage,
-  type ThreadState,
 } from "./agent.ts";
 import type { AgentsMap } from "./agents/agents.ts";
 import type {
@@ -81,7 +80,7 @@ import type { ToolCapability } from "./tools/tool-registry.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
-import type { HomeDir, NvimCwd } from "./utils/files.ts";
+import type { AbsFilePath, HomeDir, NvimCwd } from "./utils/files.ts";
 /** How a thread's yield came to rest. */
 export type YieldState = {
   value: YieldValue;
@@ -176,7 +175,18 @@ export class Thread {
   get title(): string | undefined {
     return this.#title;
   }
-  public state: ThreadState;
+  get threadType(): ThreadType {
+    return this.context.threadType;
+  }
+  get systemPrompt(): SystemPrompt {
+    return this.context.systemPrompt;
+  }
+  get systemInfo(): SystemInfo {
+    return this.context.systemInfo;
+  }
+  edlRegisters: EdlRegisters;
+  editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[] = [];
+  toolSpecs: ProviderToolSpec[];
   public agent: Agent;
   public hooks: ThreadHooks = {
     onBeforeRequest: [],
@@ -220,18 +230,11 @@ export class Thread {
         ...(forkProvenance ? { forkedFrom: forkProvenance } : {}),
       },
     );
-    this.state = {
-      threadType: context.threadType,
-      systemPrompt: context.systemPrompt,
-      systemInfo: context.systemInfo,
-      edlRegisters:
-        init.type === "clone"
-          ? init.edlRegisters
-          : { registers: new Map(), nextSavedId: 0 },
-      editedFilesThisTurn: [],
-      lastTurnResult: undefined,
-      toolSpecs: threadToolSpecs(context),
-    };
+    this.edlRegisters =
+      init.type === "clone"
+        ? init.edlRegisters
+        : { registers: new Map(), nextSavedId: 0 };
+    this.toolSpecs = threadToolSpecs(context);
     this.systemReminders = this.createReminderSupervisor();
     this.toolExecutor = new ToolExecutorHost({
       logger: context.logger,
@@ -277,8 +280,8 @@ export class Thread {
           nativeMessageIdx,
         },
         edlRegisters: {
-          registers: new Map(sourceThread.state.edlRegisters.registers),
-          nextSavedId: sourceThread.state.edlRegisters.nextSavedId,
+          registers: new Map(sourceThread.edlRegisters.registers),
+          nextSavedId: sourceThread.edlRegisters.nextSavedId,
         },
       },
       sourceThread.archiveOptions,
@@ -351,7 +354,7 @@ export class Thread {
       contextTracker: this.context.contextTracker,
       onToolApplied: (absFilePath, tool, fileTypeInfo) =>
         this.onToolApplied(absFilePath, tool, fileTypeInfo),
-      edlRegisters: this.state.edlRegisters,
+      edlRegisters: this.edlRegisters,
       commentStore: this.context.commentStore,
       fileIO: this.context.fileIO,
       shell: this.context.shell,
@@ -372,9 +375,9 @@ export class Thread {
     }
     if (
       tool.type === "edl-edit" &&
-      !this.state.editedFilesThisTurn.some((e) => e.path === absFilePath)
+      !this.editedFilesThisTurn.some((e) => e.path === absFilePath)
     ) {
-      this.state.editedFilesThisTurn.push({
+      this.editedFilesThisTurn.push({
         path: absFilePath,
         snapshot: tool.previousContent,
       });
@@ -402,9 +405,9 @@ export class Thread {
 
   private createAgent(runnerInit: AgentDeps["runnerInit"]): Agent {
     return new Agent(this.context, {
-      state: this.state,
+      systemPrompt: this.systemPrompt,
       executeTools: (requests) => this.executeTools(requests),
-      toolSpecs: this.state.toolSpecs,
+      toolSpecs: this.toolSpecs,
       getHooks: () => this.agentHooks(),
       onRequestUpdate: (update) => this.loop.applyRequestUpdate(update),
       runnerInit,
@@ -734,7 +737,7 @@ export class Thread {
     }
     // The compact thread's content is composed by its caller, so it bypasses
     // context updates, reminders and the queue entirely.
-    if (this.state.threadType === "compact") {
+    if (this.threadType === "compact") {
       return this.followSubmission(this.runToRest(messages));
     }
 
@@ -812,7 +815,7 @@ export class Thread {
     this.pendingSeed = [];
     // An abort can only target a loop that is running, so there is no stale
     // flag to clear here: `abort` leaves `idle` alone.
-    this.state.editedFilesThisTurn = [];
+    this.editedFilesThisTurn = [];
     const epoch = this.loop.start();
     // How the submission ended is recorded as the loop comes to rest, so it
     // only ever exists alongside `idle`. A throw out of the loop is an
@@ -1073,7 +1076,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
         },
       ],
       spec: ThreadTitle.spec,
-      systemPrompt: this.state.systemPrompt,
+      systemPrompt: this.systemPrompt,
       disableCaching: true,
     });
     const result = await request.promise;
@@ -1115,8 +1118,8 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     }
     this.threadLogger.resetCursor();
 
-    this.state.edlRegisters = { registers: new Map(), nextSavedId: 0 };
-    this.state.editedFilesThisTurn = [];
+    this.edlRegisters = { registers: new Map(), nextSavedId: 0 };
+    this.editedFilesThisTurn = [];
     this.handleUpdate();
     this.systemReminders = this.createReminderSupervisor();
     this.hooks.onReset?.();
