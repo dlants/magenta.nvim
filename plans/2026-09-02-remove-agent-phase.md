@@ -94,7 +94,7 @@ type ThreadLoopState =
       /** Winding down: the loop stops at the next boundary. Not a state of its
        * own — a thread that is aborting is still streaming or still running
        * tools, and the view still has to show that. */
-      aborting?: true;
+      aborting: boolean;
     };
 /** The promise is part of the state: it exists exactly in the sub-states that
  * have a send in flight. */
@@ -257,6 +257,28 @@ Notes:
   settled and the loop is deciding — since the thread's loop is never idle
   mid-submission.
 - `npx tsc -b`, `npx biome check .` and the full suite are green.
+
+Review follow-ups (stage 2):
+
+- `aborting` is now `aborting: boolean` (not `aborting?: true`), so every
+  construction of `running` must state it and "forgot to set" is not
+  indistinguishable from "never aborted".
+- `isAborting(epoch?)` split into `isAborting()` ("is the current loop winding
+  down", used by the tool executor) and `isEpochAborting(epoch)` ("is the loop
+  I own winding down", used by the turn loop).
+- `epoch` is a branded `LoopEpoch` (exported from `@magenta/core`), so an
+  unrelated number cannot be passed to the ownership guards.
+- `LoopActivity`'s `streaming`/`running_tools` fields are `readonly`;
+  `applyRequestUpdate` rebuilds the activity through `setActivity` instead of
+  mutating it in place, keeping identity-based change detection meaningful.
+- `Thread.executeTools` declares `requests: ReadonlyArray<RequestedTool>`
+  instead of indexing a `Parameters<ToolExecutorHost["execute"]>` tuple.
+- New tests: `node/core/src/loop-state.test.ts` (the aborting flag survives
+  activity transitions and is cleared at idle; a superseded epoch cannot write
+  or report aborting; a fresh loop starts unaborted; request updates arriving
+  during `running_tools` are dropped by design), `thread.test.ts` "does not
+  carry the aborting flag into the superseding turn", and two `renderStatus`
+  cases (`preparing`, and `aborting` winning over the activity).
 
 ## thread: ThreadLoopState
 

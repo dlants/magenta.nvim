@@ -1,4 +1,4 @@
-import type { LoopActivity, ThreadLoopState } from "@magenta/core";
+import type { LoopActivity, LoopEpoch, ThreadLoopState } from "@magenta/core";
 import { describe, expect, it } from "vitest";
 import { type Line, NvimBuffer } from "../nvim/buffer.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
@@ -7,9 +7,17 @@ import { withNvimClient } from "../test/preamble.ts";
 import { renderStatus } from "./thread-view.ts";
 
 async function renderStatusToString(
-  activity: Extract<LoopActivity, { type: "streaming" }>,
+  state: ThreadLoopState | Extract<LoopActivity, { type: "streaming" }>,
 ): Promise<string> {
-  const agentPhase: ThreadLoopState = { type: "running", epoch: 1, activity };
+  const agentPhase: ThreadLoopState =
+    state.type === "streaming"
+      ? {
+          type: "running",
+          epoch: 1 as LoopEpoch,
+          activity: state,
+          aborting: false,
+        }
+      : state;
   let text = "";
   await withNvimClient(async (nvim) => {
     const buffer = await NvimBuffer.create(false, true, nvim);
@@ -84,5 +92,33 @@ describe("thread-view renderStatus streaming", () => {
     expect(text).toContain("Retrying in");
     expect(text).toContain("attempt 2");
     expect(text).toContain("API is temporarily overloaded");
+  });
+
+  it("renders the preparing activity", async () => {
+    const text = await renderStatusToString({
+      type: "running",
+      epoch: 1 as LoopEpoch,
+      activity: { type: "preparing" },
+      aborting: false,
+    });
+    expect(text).toContain("Preparing...");
+  });
+
+  it("renders aborting ahead of whatever the loop is still doing", async () => {
+    const now = new Date();
+    const text = await renderStatusToString({
+      type: "running",
+      epoch: 1 as LoopEpoch,
+      activity: {
+        type: "streaming",
+        startedAt: now,
+        lastEventTime: now,
+        block: undefined,
+        retry: undefined,
+      },
+      aborting: true,
+    });
+    expect(text).toContain("Aborting...");
+    expect(text).not.toContain("Streaming response");
   });
 });

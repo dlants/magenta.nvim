@@ -142,6 +142,7 @@ export { Emitter, type EventMap } from "./emitter.ts";
 export type { Logger } from "./logger.ts";
 export {
   type LoopActivity,
+  type LoopEpoch,
   loopActiveTools,
   loopLabel,
   loopStreamingBlock,

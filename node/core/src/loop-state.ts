@@ -17,33 +17,37 @@ export type LoopActivity =
    * pending content, deciding a continuation, the gap between turns. */
   | { type: "preparing" }
   | {
-      type: "streaming";
-      startedAt: Date;
+      readonly type: "streaming";
+      readonly startedAt: Date;
       /** Most recent sign of life from the server; drives the dead-air
        * "waiting Ns" counter. */
-      lastEventTime: Date;
-      block: StreamingBlock | undefined;
-      retry: RetryStatus | undefined;
+      readonly lastEventTime: Date;
+      readonly block: StreamingBlock | undefined;
+      readonly retry: RetryStatus | undefined;
     }
   | {
-      type: "running_tools";
+      readonly type: "running_tools";
       /** As the model asked for them, including malformed requests that never
        * became an `activeTools` entry. */
-      requested: ReadonlyArray<RequestedTool>;
-      tools: ToolInvocationState;
+      readonly requested: ReadonlyArray<RequestedTool>;
+      readonly tools: ToolInvocationState;
     };
 
 /** The single account of what a thread is doing. `aborting` is a flag rather
  * than a state of its own: an aborting loop is still streaming or still
  * running tools, the view still has to render that, and as a flag it cannot
  * be clobbered by an activity transition. */
+/** A loop's identity. Branded so an unrelated number cannot be passed to the
+ * guards that decide whether a caller still owns the loop. */
+export type LoopEpoch = number & { readonly __loopEpoch: true };
+
 export type ThreadLoopState =
   | { type: "idle" }
   | {
       type: "running";
-      epoch: number;
+      epoch: LoopEpoch;
       activity: LoopActivity;
-      aborting?: true;
+      aborting: boolean;
     };
 
 export function loopLabel(state: ThreadLoopState): string {
@@ -74,7 +78,7 @@ export class LoopStateMachine {
   constructor(private onUpdate: () => void) {}
 
   private state: ThreadLoopState = { type: "idle" };
-  private epoch = 0;
+  private epoch = 0 as LoopEpoch;
 
   get current(): ThreadLoopState {
     return this.state;
@@ -82,30 +86,37 @@ export class LoopStateMachine {
 
   /** The loop takes over. Returns the epoch it owns, which every later
    * transition is checked against so a superseded loop cannot write. */
-  start(): number {
-    this.epoch += 1;
+  start(): LoopEpoch {
+    this.epoch = (this.epoch + 1) as LoopEpoch;
     this.state = {
       type: "running",
       epoch: this.epoch,
       activity: { type: "preparing" },
+      aborting: false,
     };
     this.onUpdate();
     return this.epoch;
   }
 
-  finish(epoch: number): void {
+  finish(epoch: LoopEpoch): void {
     if (!this.isCurrent(epoch)) return;
     this.state = { type: "idle" };
     this.onUpdate();
   }
 
-  isCurrent(epoch: number): boolean {
+  isCurrent(epoch: LoopEpoch): boolean {
     return this.state.type === "running" && this.state.epoch === epoch;
   }
 
-  isAborting(epoch?: number): boolean {
-    if (this.state.type !== "running" || !this.state.aborting) return false;
-    return epoch === undefined || this.state.epoch === epoch;
+  /** Is whatever loop is currently running winding down? */
+  isAborting(): boolean {
+    return this.state.type === "running" && this.state.aborting;
+  }
+
+  /** Is the loop the caller owns winding down? A superseded epoch is never
+   * aborting — the flag belongs to the loop that replaced it. */
+  isEpochAborting(epoch: LoopEpoch): boolean {
+    return this.isCurrent(epoch) && this.isAborting();
   }
 
   /** Wind the loop down at the next boundary. Survives every activity
@@ -161,26 +172,33 @@ export class LoopStateMachine {
   applyRequestUpdate(update: RequestUpdate): void {
     const state = this.state;
     if (state.type !== "running" || state.activity.type !== "streaming") return;
-    const activity = state.activity;
-    activity.lastEventTime = new Date();
+    const prev = state.activity;
+    let block = prev.block;
+    let retry = prev.retry;
     switch (update.type) {
       case "streaming-block":
-        activity.block = update.streamingBlock;
+        block = update.streamingBlock;
         break;
       case "block-finished":
-        activity.block = undefined;
+        block = undefined;
         break;
       case "retry-scheduled":
-        activity.retry = update.retry;
-        activity.block = undefined;
+        retry = update.retry;
+        block = undefined;
         break;
       case "attempt-started":
-        activity.retry = undefined;
-        activity.block = undefined;
+        retry = undefined;
+        block = undefined;
         break;
       default:
         assertUnreachable(update);
     }
-    this.onUpdate();
+    this.setActivity({
+      type: "streaming",
+      startedAt: prev.startedAt,
+      lastEventTime: new Date(),
+      block,
+      retry,
+    });
   }
 }

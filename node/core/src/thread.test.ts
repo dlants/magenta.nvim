@@ -596,6 +596,26 @@ describe("Thread aborts the tools it owns", () => {
     await destroyed;
     await sent;
   });
+
+  it("does not carry the aborting flag into the superseding turn", async () => {
+    const { core, sent, abortSpies, resolveStat } = await threadWithLiveTool(
+      "supersede-live-tool",
+    );
+    const resent = core.send([{ type: "user", text: "never mind, do this" }]);
+    for (const spy of abortSpies) expect(spy).toHaveBeenCalled();
+    resolveStat();
+    await sent;
+    // The new loop is its own epoch, so its tools are not silently aborted.
+    await pollUntil(() => {
+      const state = core.loopState;
+      if (state.type !== "running" || state.aborting) {
+        throw new Error("waiting for a clean loop");
+      }
+      return state;
+    });
+    await core.abort();
+    await resent;
+  });
 });
 
 describe("Thread.abort between turns", () => {

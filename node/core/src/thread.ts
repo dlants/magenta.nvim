@@ -28,6 +28,7 @@ import type {
   NativeMessageIdx,
   ProviderMessage,
   ProviderToolSpec,
+  RequestedTool,
   StopReason,
   ToolResults,
 } from "./providers/provider-types.ts";
@@ -420,11 +421,11 @@ export class Thread {
    * settled": between them the loop is running tools, and on either side of
    * them it is streaming. */
   private async executeTools(
-    ...args: Parameters<ToolExecutorHost["execute"]>
+    requests: ReadonlyArray<RequestedTool>,
   ): ReturnType<ToolExecutorHost["execute"]> {
-    this.loop.runningTools(args[0]);
+    this.loop.runningTools(requests);
     try {
-      return await this.toolExecutor.execute(...args);
+      return await this.toolExecutor.execute(requests);
     } finally {
       this.loop.streaming();
     }
@@ -854,7 +855,7 @@ export class Thread {
 
         const stopReason = result.stopReason;
         const next = await this.continuation(stopReason);
-        if (this.loop.isAborting(epoch)) return { type: "aborted" };
+        if (this.loop.isEpochAborting(epoch)) return { type: "aborted" };
         switch (next.type) {
           case "rest":
             return result;
