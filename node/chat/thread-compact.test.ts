@@ -535,19 +535,24 @@ it("compact flow does not process @file commands in subagent or summary", async 
     const afterCompactMessages = afterCompactStream.getProviderMessages();
 
     // The summary and the nextPrompt now ride in a single opening turn, so
-    // they land in one user message: the raw summary block first (no command
-    // processing), then the nextPrompt's blocks (@file expanded).
+    // they land in one user message, behind the opening request's own blocks
+    // (the system-info preamble, the standing reminder): the raw summary
+    // first (no command processing), then the nextPrompt's blocks (@file
+    // expanded).
     const userMessages = afterCompactMessages.filter((m) => m.role === "user");
     expect(userMessages).toHaveLength(1);
     const blocks = userMessages[0].content;
-    expect(blocks[0].type).toBe("text");
+    const summaryIdx = blocks.findIndex(
+      (block) =>
+        block.type === "text" && block.text.includes("<conversation-summary>"),
+    );
+    expect(summaryIdx).toBeGreaterThanOrEqual(0);
     const summaryText = (
-      blocks[0] as Extract<(typeof blocks)[0], { type: "text" }>
+      blocks[summaryIdx] as Extract<(typeof blocks)[0], { type: "text" }>
     ).text;
-    expect(summaryText).toContain("<conversation-summary>");
     expect(summaryText).toContain("@file:poem.txt");
     const promptText = blocks
-      .slice(1)
+      .slice(summaryIdx + 1)
       .filter(
         (c): c is Extract<(typeof blocks)[0], { type: "text" }> =>
           c.type === "text",
