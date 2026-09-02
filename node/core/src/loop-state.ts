@@ -49,8 +49,8 @@ export type LoopEpoch = number & { readonly __loopEpoch: true };
 export type ThreadLoopState =
   /** Nothing in flight. `lastResult` is how the most recent submission ended;
    * it exists only here, so a view can never show a stale result beside a
-   * live turn. */
-  | { type: "idle"; lastResult?: SendResult }
+   * live turn, and is `undefined` only before the first submission. */
+  | { type: "idle"; lastResult: SendResult | undefined }
   | {
       type: "running";
       epoch: LoopEpoch;
@@ -85,7 +85,7 @@ export function loopActiveTools(
 export class LoopStateMachine {
   constructor(private onUpdate: () => void) {}
 
-  private state: ThreadLoopState = { type: "idle" };
+  private state: ThreadLoopState = { type: "idle", lastResult: undefined };
   private epoch = 0 as LoopEpoch;
 
   get current(): ThreadLoopState {
@@ -106,9 +106,9 @@ export class LoopStateMachine {
     return this.epoch;
   }
 
-  finish(epoch: LoopEpoch, lastResult?: SendResult): void {
+  finish(epoch: LoopEpoch, lastResult: SendResult): void {
     if (!this.isCurrent(epoch)) return;
-    this.state = { type: "idle", ...(lastResult ? { lastResult } : {}) };
+    this.state = { type: "idle", lastResult };
     this.onUpdate();
   }
 

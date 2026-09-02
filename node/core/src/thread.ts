@@ -320,7 +320,7 @@ export class Thread {
 
   /** A render-only view of how the most recent submission ended. Nothing may
    * branch on it for control flow. */
-  lastResult(): SendResult | undefined {
+  lastResult(): Exclude<SendResult, { type: "suspended" }> | undefined {
     if (this.yieldState) {
       return { type: "yielded", value: this.yieldState.value };
     }
@@ -815,13 +815,19 @@ export class Thread {
     this.state.editedFilesThisTurn = [];
     const epoch = this.loop.start();
     // How the submission ended is recorded as the loop comes to rest, so it
-    // only ever exists alongside `idle`.
-    let result: SendResult | undefined;
+    // only ever exists alongside `idle`. A throw out of the loop is an
+    // outcome too, and lands as a failure rather than as an absent result.
     try {
-      result = await this.runLoop(messages, epoch);
-      return result;
-    } finally {
+      const result = await this.runLoop(messages, epoch);
       this.loop.finish(epoch, result);
+      return result;
+    } catch (error) {
+      this.loop.finish(epoch, {
+        type: "failed",
+        error: error instanceof Error ? error : new Error(String(error)),
+        discardedSubmission: false,
+      });
+      throw error;
     }
   }
 

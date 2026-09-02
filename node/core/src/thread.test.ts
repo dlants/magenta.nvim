@@ -331,6 +331,8 @@ describe("deferred submissions", () => {
       type: "suspended",
       reason: { kind: "compact", nextPrompt: "wrap it up" },
     });
+    // A suspension is a handoff, not an outcome anyone renders.
+    expect(core.lastResult()).toBeUndefined();
   });
 
   it("folds entries ahead of a stop-time @compact in, and re-queues the rest", async () => {

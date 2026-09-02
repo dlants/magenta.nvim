@@ -328,6 +328,29 @@ Notes:
   `loop-state.test.ts` already covers the superseded epoch.
 - `npx tsc -b`, `npx biome check .` and the full suite are green.
 
+Review follow-ups (stage 3):
+
+- `idle.lastResult` is `SendResult | undefined` (a stated field, not an
+  optional one), and `finish(epoch, lastResult)` requires a result. It is
+  `undefined` only before the first submission ever runs. Splitting `idle` into
+  `idle`/`settled` was considered and rejected: every "is this thread doing
+  anything" check reads `type !== "idle"`, and a second at-rest variant would
+  make each of them a two-way check for no gain.
+- A throw out of `runLoop` is now an outcome rather than an absent result:
+  `runToRest` catches, finishes the loop with
+  `{type: "failed", discardedSubmission: false}`, and rethrows. The test
+  harness's `TestAgent.send` does the same on its rejection path.
+- `Thread.lastResult()` returns
+  `Exclude<SendResult, {type: "suspended"}> | undefined`, so "the render layer
+  never sees a suspension" is in the signature.
+- New/extended tests: `loop-state.test.ts` pins the untested no-op branches —
+  `runningTools` from `idle` and from `preparing`, and `toolsSettled` with no
+  send in flight (plus the normal `running_tools → streaming` return keeping
+  the same `send`) — and the superseded-epoch case now calls
+  `finish(first, {aborted})` so a stale epoch is shown unable to write
+  `lastResult`. `thread.test.ts` asserts `core.lastResult()` is `undefined`
+  after a submission rests suspended.
+
 ## agent: drop update()/AgentAction
 
 - Goal: `Agent.update` and `AgentAction` deleted. Tool results assigned inline in `executeTools`; `set-title` handled by `Thread`. `title` lives on `Thread`.

@@ -7,6 +7,8 @@ const machine = () => new LoopStateMachine(() => {});
 /** The send an activity belongs to; these transition tests never await it. */
 const neverSettles = new Promise<SendResult>(() => {});
 
+const completed: SendResult = { type: "completed", stopReason: undefined };
+
 describe("LoopStateMachine", () => {
   it("keeps the aborting flag across activity transitions and clears it at idle", () => {
     const loop = machine();
@@ -28,8 +30,8 @@ describe("LoopStateMachine", () => {
     loop.applyRequestUpdate({ type: "attempt-started" });
     expect(loop.isAborting()).toBe(true);
 
-    loop.finish(epoch);
-    expect(loop.current).toEqual({ type: "idle" });
+    loop.finish(epoch, completed);
+    expect(loop.current).toEqual({ type: "idle", lastResult: completed });
     expect(loop.isAborting()).toBe(false);
   });
 
@@ -42,21 +44,47 @@ describe("LoopStateMachine", () => {
     expect(loop.isCurrent(first)).toBe(false);
     expect(loop.isEpochAborting(first)).toBe(false);
 
-    loop.finish(first);
+    loop.finish(first, { type: "aborted" });
     expect(loop.current).toMatchObject({ type: "running", epoch: second });
 
-    loop.finish(second);
-    expect(loop.current).toEqual({ type: "idle" });
+    loop.finish(second, completed);
+    expect(loop.current).toEqual({ type: "idle", lastResult: completed });
   });
 
   it("starts each loop with a clear aborting flag", () => {
     const loop = machine();
     const first = loop.start();
     loop.markAborting();
-    loop.finish(first);
+    loop.finish(first, { type: "aborted" });
 
     loop.start();
     expect(loop.isAborting()).toBe(false);
+  });
+
+  it("ignores a tool batch announced outside a tracked send", () => {
+    const loop = machine();
+    loop.runningTools([]);
+    expect(loop.current).toEqual({ type: "idle", lastResult: undefined });
+
+    loop.start();
+    loop.runningTools([]);
+    expect(loop.current).toMatchObject({ activity: { type: "preparing" } });
+  });
+
+  it("returns a settled batch to its own send, and is inert without one", () => {
+    const loop = machine();
+    loop.start();
+    loop.streaming(neverSettles);
+    loop.runningTools([]);
+
+    loop.toolsSettled();
+    expect(loop.current).toMatchObject({
+      activity: { type: "streaming", send: neverSettles },
+    });
+
+    loop.preparing();
+    loop.toolsSettled();
+    expect(loop.current).toMatchObject({ activity: { type: "preparing" } });
   });
 
   it("drops request updates that arrive while tools are running", () => {

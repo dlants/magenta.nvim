@@ -104,7 +104,11 @@ export class TestAgent extends Agent {
         return result;
       },
       (error: unknown) => {
-        this.loop.finish(epoch);
+        this.loop.finish(epoch, {
+          type: "failed",
+          error: error instanceof Error ? error : new Error(String(error)),
+          discardedSubmission: false,
+        });
         throw error;
       },
     );
