@@ -373,6 +373,10 @@ Notes:
 - The inline tool-result assignment was already in place from stage 1
   (`ToolExecutorHost` assigns `entry.result` directly), so no work was needed
   there; `set-active-tool-result` had already gone in stage 2.
+- Review follow-ups (stage 4): `title` is a private `#title` with a public
+  getter, so `setTitle` (which also records to the thread logger and renders)
+  is the only write path; the title-generation gate compares
+  `this.title === undefined` rather than testing truthiness.
 - Existing coverage was sufficient: `thread-title.test.ts`, `chat.test.ts`
   title cases and the archive/summary tests exercise the moved field. Full
   suite, `npx tsc -b` and `npx biome check .` are green.

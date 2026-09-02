@@ -171,7 +171,11 @@ export type ThreadCallbacks = {
  * Thread 3 is still thread 3 afterwards, which is why the archive keys by
  * thread id survives the swap. */
 export class Thread {
-  public title: string | undefined;
+  #title: string | undefined;
+
+  get title(): string | undefined {
+    return this.#title;
+  }
   public state: ThreadState;
   public agent: Agent;
   public hooks: ThreadHooks = {
@@ -465,7 +469,7 @@ export class Thread {
   }
 
   setTitle(title: string): void {
-    this.title = title;
+    this.#title = title;
     this.threadLogger.recordTitle(title);
     this.handleUpdate();
   }
@@ -751,7 +755,7 @@ export class Thread {
 
     const result = this.followSubmission(this.runToRest(messages));
 
-    if (!this.title) {
+    if (this.title === undefined) {
       this.setThreadTitle(messages.map((m) => m.text).join("\n")).catch(
         (err: Error) =>
           this.context.logger.error(
