@@ -1,0 +1,224 @@
+# Objective and Context
+
+> let's get rid of AgentPhase. Instead, the thread should just keep track of agent state via the status of the SendResult.
+>
+> abort state can be internal - we don't need to know if we're aborting outside the agent.
+>
+> inline the action state updates, and just dispatch this.deps.onUpdate directly.
+>
+> title can move out of the agent and into the thread.
+>
+> most of these [ThreadState fields] aren't actually used internally to the agent, so we can get rid of this type, or lift it to thread (the pieces that are still needed).
+
+Entities involved:
+
+- `AgentPhase` (`node/core/src/agent.ts`) — `{idle} | {running, activity: TurnActivity} | {aborting}`, plus the helpers `phaseLabel`, `phaseStreamingBlock`, `phaseActiveTools`.
+- `TurnActivity` / `ToolInvocationState` (`node/core/src/thread-api.ts`) — the intra-turn detail: `streaming` (block, retry, dead-air timestamps) and `running_tools` (requested + invocation state).
+- `AgentAction` / `Agent.update` — two actions: `set-title` and `set-active-tool-result`.
+- `ThreadState` — 8 fields; only `systemPrompt`, `toolSpecs`, `lastTurnResult` are touched inside `Agent`.
+- `SendResult` / `TurnResult` (`thread-api.ts`, `providers/provider-types.ts`) — how a submission and a turn end.
+- `Thread.lastResult()` (`node/core/src/thread.ts`) — render-only view of the last submission, currently derived from `state.lastTurnResult`.
+
+Relevant files:
+
+- `node/core/src/agent.ts` — owns the phase, the actions, and `ThreadState`.
+- `node/core/src/thread.ts` — owns `state`, the turn loop (`runToRest`, `loopState`), `setTitle`, `lastResult`.
+- `node/core/src/thread-api.ts` — `TurnActivity`, `ToolInvocationState`, `SendResult`.
+- `node/core/src/index.ts` — core re-exports (`ActiveToolEntry`, `AgentAction`, `ThreadState`).
+- `node/chat/thread.ts` — `NvimThread`: `get phase()`, `commentActivity()`, `rebuildToolResultMap()`, title read.
+- `node/chat/thread-view.ts` — `renderStatus`, streaming block rendering, active-tool lookup, title/threadType/toolSpecs/editedFiles rendering.
+- `node/chat/chat.ts`, `node/magenta.ts` — phase checks for the sidebar icon, comment gating, notification visibility.
+- `node/core/src/test-helpers.ts` — `waitForTurnResult`, test `ThreadState` construction.
+
+# Design
+
+`AgentPhase` is three things wearing one hat: (a) "is a turn in flight", (b) the intra-turn detail, (c) an abort marker. The thread already knows (a) and (c) — it starts the send, holds the promise, and is the one that decides to abort — and it already half-encodes them in `loopState`. And (b) is not the agent's either: the tool executor and the request-progress callback are both things the thread hands to the agent, so the thread sees those edges too.
+
+So: **delete `AgentPhase`, and lift the state machine to the thread as `ThreadLoopState`.** The thread does not need the agent to tell it anything: it already holds every edge of the machine.
+
+- The turn boundary is the `agent.send(...)` promise, which is folded *into* the state rather than kept beside it: the promise lives on the sub-states that have one (`streaming`, `running_tools`), so "there is a send in flight" and "what it is doing" cannot disagree.
+- The request/tools alternation is the tool executor, which becomes the thread's. `executeTools` moves out of the agent onto `AgentDeps.executeTools(requests): Promise<ToolOutcome>` — the thread already owns tool construction (`invokeTool`), the `onToolResults` hooks, and abort, so it owns the `activeTools` map and the `ToolInvocationState` transitions too. The agent keeps only `completeToolResults` and the appending of results. Being called *is* the "tools started" edge; returning is "tools settled", and the loop is streaming again.
+- The streaming detail is the manager's progress callback, plumbed to its owner: `AgentDeps.onRequestUpdate(update: RequestUpdate)`. The agent's `handleRequestUpdate` disappears — it passes `deps.onRequestUpdate` straight through to `manager.sendRequest`, and the thread folds `streaming-block` / `block-finished` / `retry-scheduled` / `attempt-started` into its `streaming` state. `startedAt` and `lastEventTime` become the thread's clocks, which is where they are read anyway.
+- Abort is the thread's already (`abort()` sets the `aborting` flag; the agent's internal `abortRequested` stays private and unobservable). Tool aborts move with the `activeTools` map.
+- `AgentDeps.onUpdate` goes with the phase. Every call site it had is now either an edge the thread sees itself (the request-update callback, the executor being called and returning, the `send` promise resolving) or a log append sandwiched between two such edges in the same tick — and `NvimThread` coalesces renders on a 50ms trailing window, so no frame can be stale. The thread renders from its own state machine.
+`Agent` is then left with no state machine at all: a turn loop that sends requests, calls out for tool execution, and resolves.
+
+`Thread.loopState` is the single answer to "what is this thread doing". Top level there are two states: `idle` (optionally carrying how the last submission ended) and `running` (the loop owns the thread). Aborting is a flag on `running`, not a third state: an aborting thread is still streaming or still running tools, the view still has to render that, and as a flag it cannot be clobbered by an activity transition — which is exactly the stickiness the old `aborting` phase had to assert by hand. The intra-turn detail is a sub-state of `running`: `preparing` when the loop owns the thread but no send is in flight (probing for pending content, deciding a continuation, the gap between turns), `streaming` from `send`/tool-return until the executor is called or the promise resolves, `running_tools` for the duration of the executor call. `Thread.isBusy` is `loopState.type !== "idle"`; the agent keeps a private busy flag only for its `send` reentrancy guard.
+Helpers become loop-state-shaped, in `thread.ts`: `loopStreamingBlock(state)` and `loopActiveTools(state)` replace `phaseStreamingBlock` / `phaseActiveTools`; `phaseLabel` becomes `loopState.type`. Callers that asked "is it idle" read `!thread.isBusy`; callers that asked "is it streaming" read `loopState.type === "streaming"`.
+
+"How did the last submission end" folds in as well: `idle.lastResult`, set from the `SendResult` that `runToRest` returns, replacing `state.lastTurnResult` and the `lastResult` derivation. It only exists on `idle`, which is the only state in which it means anything — a running thread's last result is not a thing anyone should render. The `yieldState` special case stays (a yielded thread reports `{type: "yielded"}`), and `suspended` results keep mapping to `undefined` so rendering is unchanged in this pass.
+
+`Agent.update`/`AgentAction` go away:
+
+- `set-active-tool-result` is inlined in the thread's executor — the entry is already in hand there; assign `entry.result` and render. The try/catch around "one tool's bookkeeping must not tear down the others'" is no longer needed, since an assignment cannot throw.
+- `set-title` moves to `Thread`: `title` becomes a `Thread` field, `Thread.setTitle` sets it and records it on the logger, then `handleUpdate()`.
+
+`ThreadState` is dissolved:
+
+- `AgentDeps` takes only what the agent needs: `systemPrompt`, `toolSpecs`, `createTool`, `getHooks`, `onUpdate`, `runnerInit`.
+- `lastTurnResult` stops living on shared state. The agent keeps it as a private field feeding nothing external; the thread records `SendResult` itself (above). Tests that read `state.lastTurnResult?.type` move to `thread.lastResult()?.type`.
+- `title`, `threadType`, `systemInfo`, `edlRegisters`, `editedFilesThisTurn`, `toolSpecs` become plain `Thread` fields. The external read sites (`thread.state.X` in chat.ts / thread-view.ts / thread.ts / tests) become `thread.X`.
+
+## Interfaces
+
+```ts
+// agent.ts
+export type ActiveToolEntry = { /* unchanged */ };
+export function loopStreamingBlock(s: ThreadLoopState): StreamingBlock | undefined;
+export function loopActiveTools(s: ThreadLoopState): ReadonlyMap<ToolRequestId, ActiveToolEntry> | undefined;
+export interface AgentDeps {
+  systemPrompt: SystemPrompt;
+  toolSpecs: ProviderToolSpec[];
+  createTool: (request: ToolRequest) => ToolInvocation;
+  getHooks: () => AgentHooks;
+  /** The manager's progress callback, handed to its owner. The agent stores
+   * nothing from it. */
+  onRequestUpdate: (update: RequestUpdate) => void;
+  /** Tool execution is the thread's: it owns construction, the active-tool
+   * map, the onToolResults hooks, and aborting them. The agent only appends
+   * what comes back. */
+  executeTools: (requests: ReadonlyArray<RequestedTool>) => Promise<ToolOutcome>;
+  runnerInit: { type: "new" } | { type: "cloned"; cloneFrom: NativeInferenceManager; truncateTo: NativeMessageIdx };
+}
+class Agent {
+  // removed: phase, update(), AgentAction, state, executeTools, handleRequestUpdate, deps.onUpdate
+  // isBusy stays, private-by-convention: only the send reentrancy guard uses it
+}
+/** `epoch` is today's, unchanged. */
+type ThreadLoopState =
+  | { type: "idle"; lastResult?: SendResult }
+  | {
+      type: "running";
+      epoch: number;
+      activity: LoopActivity;
+      /** Winding down: the loop stops at the next boundary. Not a state of its
+       * own — a thread that is aborting is still streaming or still running
+       * tools, and the view still has to show that. */
+      aborting?: true;
+    };
+/** The promise is part of the state: it exists exactly in the sub-states that
+ * have a send in flight. */
+type LoopActivity =
+  /** the loop owns the thread but no send is in flight: probing for pending
+   * content, between turns, deciding a continuation */
+  | { type: "preparing" }
+  | {
+      type: "streaming";
+      send: Promise<SendResult>;
+      startedAt: Date;
+      lastEventTime: Date;
+      block: StreamingBlock | undefined;
+      retry: RetryStatus | undefined;
+    }
+  | {
+      type: "running_tools";
+      send: Promise<SendResult>;
+      requested: ReadonlyArray<RequestedTool>;
+      tools: ToolInvocationState;
+    };
+// thread.ts
+class Thread {
+  title: string | undefined;
+  readonly threadType: ThreadType;
+  readonly systemPrompt: SystemPrompt;
+  readonly systemInfo: SystemInfo;
+  edlRegisters: EdlRegisters;
+  editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[];
+  toolSpecs: ProviderToolSpec[];
+  readonly loopState: ThreadLoopState;
+  // removed: lastResult() — it is loopState.lastResult on idle
+}
+```
+
+## Invariants
+
+- Abort still leaves the message log well-formed: `finishTurnAbort` writes the abort marker and finalizes the manager exactly as today; only the published phase disappears.
+- Every `tool_use` still gets a result (`completeToolResults`) even if result bookkeeping is skipped.
+- `lastResult` remains render-only; no control flow may branch on it. It exists only on `idle`, so a view cannot show a stale result next to a live turn.
+- `loopState` is the only account of what a thread is doing; the agent has no state machine to read.
+- `loopState` is non-idle from the moment `runToRest` takes over until it settles, including the gaps between turns — so replacing `phase.type === "idle"` with `!isBusy` must not regress the sidebar/comment gating.
+- The `aborting` flag survives every activity transition within its epoch and is cleared only by reaching `idle`; a callback from a superseded epoch is ignored.
+- The executor is called exactly once per tool batch and always returns (the agent already treats a rejection as an empty result set), so `running_tools` can never be stranded.
+
+- A `send` promise always settles, so `idle` is always reached — the `finally` in `runToRest` is the single place that guarantees it.
+- Every `tool_use` still gets a result: `completeToolResults` stays in the agent, so a thread-side executor that skips or aborts an id cannot leave a dangling block.
+
+# Stages
+
+## move tool execution to the thread — DONE
+
+- Goal: `Agent.executeTools` moves onto `AgentDeps` and is implemented by `Thread` — the active-tool map, the `onToolResults` hooks, and tool aborts go with it. The agent keeps `completeToolResults` and the appending of results. No behaviour change yet; the phase still exists, now fed by the thread.
+- Tests:
+  - Existing tool-execution cases (malformed requests, tool-creation failure, a rejecting invocation, abort landing while invocations are being created) still pass unchanged — they are the specification of the code being moved.
+  - A rejecting executor still leaves every `tool_use` answered.
+
+Notes:
+
+- The batch executor lives in a new `node/core/src/tool-executor.ts` as
+  `ToolExecutorHost`, rather than as a method on `Thread`. `Thread` constructs
+  one and hands `deps.executeTools = (r) => host.execute(r)` to every agent it
+  builds; the bare-agent test harness (`buildTestAgent`) constructs its own,
+  so the loop under test still sees production wiring instead of a stub.
+  Later stages can fold the host's callbacks inward as the phase disappears.
+- `AgentDeps.createTool` is gone (it moved into the host's deps); `AgentDeps`
+  gained `executeTools`.
+- Stage-1-only seams, to be removed in stage 2/3:
+  - `Agent.isAbortRequested` (public getter) — the host decides a batch's
+    outcome by it, exactly as the agent's own flag used to.
+  - `Agent.setToolInvocationState` is now public — the host publishes
+    `pending`/`running`/`settled` into the phase, which still exists.
+- Tool aborts are the thread's: `Thread.abort`, the `abortAndWait` path in
+  `Thread.send`, `Thread.reset` and `Thread.destroy` all call
+  `toolExecutor.abortAll()`. `Agent.abortAndWait` no longer touches
+  invocations, so the bare-agent test "aborts the live invocations when the
+  abort lands while tools run" now calls `toolExecutor.abortAll()` itself.
+- The executor assigns `entry.result` directly instead of going through
+  `Agent.update({type: "set-active-tool-result"})`; the action still exists
+  (removed in stage 4) but has no internal caller. The phase renders the same
+  map object the host owns, so `phaseActiveTools` is unchanged for callers.
+- `createTestAgent` / `createTestOpenAIAgent` now also return `toolExecutor`.
+- Full suite, `npx tsc -b` and `npx biome check .` are green (one unrelated
+  flake in `spawn-subagents.test.ts` under full-suite load; passes in
+  isolation and on a rerun of the file).
+
+## agent: phase out
+
+- Goal: `AgentPhase`, `phaseLabel`, `phaseStreamingBlock`, `phaseActiveTools`, and `handleRequestUpdate` are gone; `deps.onRequestUpdate` is passed straight to `manager.sendRequest`; `abortRequested` is private and unobservable; `deps.onUpdate` is deleted.
+- Tests:
+  - Abort during streaming and abort during tool execution: the abort marker is in the log and every requested tool has a result.
+  - Core tests that polled `phase` are repointed at `thread.loopState` — the real check that transitions happen at the same moments as before.
+
+## thread: ThreadLoopState
+
+- Goal: `loopState` gains the `running` activity sub-states and the `aborting` flag, driven by the `send` promise (held on the sub-state), the executor call, and `onRequestUpdate`; `idle` carries `lastResult`, replacing `state.lastTurnResult` and `lastResult()`; `isBusy` is `loopState.type !== "idle"`; `loopStreamingBlock` / `loopActiveTools` replace the phase helpers.
+- Tests:
+  - `loopState` is `running` (not `idle`) between turns of a multi-turn loop — the gap that motivates the lift.
+  - A turn's observed sequence is `preparing` → `streaming` → `running_tools` → `streaming` → `idle`, with the block visible during streaming and the active tools during `running_tools`.
+  - `lastResult` is present on `idle` and absent everywhere else, after: a completed turn, a failed turn (with `discardedSubmission`), an abort, and a yield.
+  - An abort mid-stream sets `aborting` while the activity stays `streaming`, and a subsequent request update leaves the flag set.
+  - A callback
+ from a superseded epoch is ignored.
+  - `thread-abort.test.ts` assertions on phase become assertions on `loopState` / `lastResult`.
+
+## agent: drop update()/AgentAction
+
+- Goal: `Agent.update` and `AgentAction` deleted. Tool results assigned inline in `executeTools`; `set-title` handled by `Thread`. `title` lives on `Thread`.
+- Tests:
+  - A tool completing mid-turn still surfaces its result to the view before the results are appended (the `rebuildToolResultMap` path in `node/chat` that reads active-tool results).
+  - Title generation (`setThreadTitle`) sets `thread.title` and records it to the thread logger; `chat.ts` display name and archive summary still show it.
+
+## dissolve ThreadState
+
+- Goal: `ThreadState` type removed; `AgentDeps` narrowed to `systemPrompt` + `toolSpecs` (+ existing callbacks); the other fields are `Thread` fields.
+- Tests:
+  - Fork/clone (`fork-thread.test.ts`) still carries `edlRegisters` and reports the source thread's last result correctly.
+  - Compaction (`thread-compact.test.ts`) still resets registers and `editedFilesThisTurn`, and the compacted thread reports its own last result.
+  - `editedFilesThisTurn` is cleared at the start of each loop and populated by `edl-edit` — the existing `agent.test.ts` cases, repointed at `thread`.
+
+## root layer
+
+- Goal: `node/chat` and `node/magenta.ts` compile against the new surface: `thread.loopState`, `!thread.isBusy`, `thread.title`, `thread.toolSpecs`, etc. `npx tsc -b` and `npx biome check .` clean.
+- Tests:
+  - `thread-view.test.ts`: streaming status, "Executing tools...", and the idle result line render from `loopState` + `lastResult`.
+  - Sidebar icon and the comment gate in `magenta.ts` respond to `isBusy` — verify a comment submitted mid-turn is still deferred.
+  - `bashCommand.test.ts` active-tool lookups work through `loopActiveTools`.

@@ -3338,7 +3338,7 @@ describe("Agent turn loop", () => {
         resolveStat = () => resolve({ mtimeMs: 0, size: 100 });
       },
     );
-    const { agent, mockClient } = createTestAgent({
+    const { agent, mockClient, toolExecutor } = createTestAgent({
       context: {
         fileIO: {
           readFile: async () => "file contents",
@@ -3362,6 +3362,8 @@ describe("Agent turn loop", () => {
     const abortSpies = [...active.values()].map((entry) =>
       vi.spyOn(entry.handle, "abort"),
     );
+    // Aborting the live invocations is the owner's, not the agent's.
+    toolExecutor.abortAll();
     const abortPromise = agent.abortAndWait();
     resolveStat();
     await abortPromise;

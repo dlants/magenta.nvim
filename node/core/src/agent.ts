@@ -137,9 +137,10 @@ export type ThreadState = {
 export interface AgentDeps {
   state: ThreadState;
   toolSpecs: ProviderToolSpec[];
-  /** Tool construction, and everything it needs, is the owner's: the agent
-   * only drives the invocations it gets back. */
-  createTool: (request: ToolRequest) => ToolInvocation;
+  /** Tool execution is the owner's: it builds the tools, owns the live
+   * invocations, runs the `onToolResults` hooks and aborts them. The agent
+   * only appends what comes back. */
+  executeTools: ToolExecutor;
   getHooks: () => AgentHooks;
   onUpdate: OnUpdate;
   runnerInit:
@@ -201,7 +202,8 @@ export class Agent {
     this.currentPhase = phase;
     this.deps.onUpdate();
   }
-  private setToolInvocationState(tools: ToolInvocationState): void {
+  /** The owner drives tool execution now, and reports where it has got to. */
+  setToolInvocationState(tools: ToolInvocationState): void {
     const phase = this.currentPhase;
     if (phase.type !== "running" || phase.activity.type !== "running_tools") {
       return;
@@ -353,6 +355,12 @@ export class Agent {
 
   private abortRequested = false;
 
+  /** Read by the owner's tool executor, which decides a batch's outcome by
+   * it. */
+  get isAbortRequested(): boolean {
+    return this.abortRequested;
+  }
+
   private outputTokenCount(): number {
     let total = 0;
     for (const message of this.manager.log.messages) {
@@ -416,7 +424,7 @@ export class Agent {
 
       let toolOutcome: ToolOutcome;
       try {
-        toolOutcome = await this.executeTools(requested);
+        toolOutcome = await this.deps.executeTools(requested);
       } catch (error) {
         // A rejecting executor is still a turn that must leave every tool_use
         // answered, so fall through with no results and let the fill do it.
@@ -576,109 +584,6 @@ export class Agent {
     this.settle({ type: "completed", stopReason });
   }
 
-  /** Overridable so a test can stand in for real tool execution; production
-   * never replaces it. */
-  protected async executeTools(
-    requests: ReadonlyArray<RequestedTool>,
-  ): Promise<ToolOutcome> {
-    const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
-    const results = new Map<ToolRequestId, ProviderToolResult["result"]>();
-
-    for (const requested of requests) {
-      if (requested.request.status !== "ok") {
-        results.set(requested.id, {
-          status: "error",
-          error: `Malformed tool_use block: ${requested.request.error}`,
-        });
-        continue;
-      }
-      const request = requested.request.value;
-      let invocation;
-      try {
-        invocation = this.deps.createTool(request);
-      } catch (err) {
-        results.set(requested.id, {
-          status: "error",
-          error: `Tool creation failed: ${(err as Error).message}`,
-        });
-        continue;
-      }
-      activeTools.set(request.id, {
-        handle: invocation,
-        progress: "progress" in invocation ? invocation.progress : undefined,
-        toolName: request.toolName,
-        request,
-      });
-    }
-
-    // An abort can land while the invocations are being created, before they
-    // are reachable from the phase; abort them here so none is left running.
-    if (this.abortRequested) {
-      for (const [, entry] of activeTools) entry.handle.abort();
-    }
-    this.setToolInvocationState({ type: "running", activeTools });
-
-    await Promise.all(
-      [...activeTools].map(async ([id, entry]) => {
-        let result: ProviderToolResult;
-        try {
-          result = await entry.handle.promise;
-        } catch (err) {
-          result = {
-            type: "tool_result",
-            id,
-            result: {
-              status: "error",
-              error: `Tool execution failed: ${(err as Error).message}`,
-            },
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          };
-        }
-        // One tool's bookkeeping must not tear down the others' results.
-        try {
-          this.update({ type: "set-active-tool-result", id, result });
-        } catch (err) {
-          this.context.logger.error(
-            `recording the result of ${entry.toolName} failed: ${(err as Error).message}`,
-          );
-        }
-      }),
-    );
-
-    for (const [id, entry] of activeTools) {
-      if (entry.result) {
-        results.set(id, entry.result.result);
-      }
-    }
-
-    // Every hook is consulted even once one has asked to suspend — a stop is a
-    // fact each of them may need to record — and the first `suspend` wins.
-    let suspend: SuspendReason | undefined;
-    for (const hook of this.deps.getHooks().onToolResults) {
-      try {
-        const asked = hook(results);
-        suspend ??= asked;
-      } catch (err) {
-        this.context.logger.error(
-          `onToolResults hook threw: ${(err as Error).message}`,
-        );
-      }
-    }
-    // Nothing is running any more: `activeTools` means *live* invocations, and
-    // the view switches from tool progress to results the moment it empties.
-    this.setToolInvocationState({ type: "settled" });
-
-    if (this.abortRequested) {
-      return { type: "aborted", results };
-    }
-
-    if (suspend) {
-      return { type: "suspend", results, reason: suspend };
-    }
-
-    return { type: "continue", results };
-  }
-
   private handleErrorState(error: Error): void {
     this.rollbackToPreSubmit();
     this.context.logger.error(error);
@@ -692,12 +597,7 @@ export class Agent {
   async abortAndWait(): Promise<void> {
     this.abortRequested = true;
 
-    const active = this.activeTools;
-    if (active) {
-      for (const [, entry] of active) {
-        entry.handle.abort();
-      }
-    }
+    // The live invocations are the owner's; it aborts them.
     if (this.turnInFlight) this.manager.abort();
 
     const turn = this.currentTurn;

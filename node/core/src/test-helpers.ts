@@ -7,7 +7,6 @@ import {
   type AgentPhase,
   type ThreadState,
   type ToolExecutor,
-  type ToolOutcome,
 } from "./agent.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { Logger } from "./logger.ts";
@@ -32,7 +31,6 @@ import type {
   NativeMessageIdx,
   Provider,
   ProviderToolSpec,
-  RequestedTool,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
@@ -44,6 +42,7 @@ import type {
   ThreadHooks,
   TurnActivity,
 } from "./thread-api.ts";
+import { ToolExecutorHost } from "./tool-executor.ts";
 import { createTool } from "./tools/create-tool.ts";
 import { validateInput } from "./tools/helpers.ts";
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
@@ -214,7 +213,10 @@ type TestAgentOpts = {
   cloneFrom?: NativeInferenceManager;
 };
 
-function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
+function buildTestAgent(
+  provider: Provider,
+  opts: TestAgentOpts,
+): { agent: Agent; toolExecutor: ToolExecutorHost } {
   const context: ThreadContext = {
     ...baseTestContext(provider),
     ...opts.context,
@@ -229,18 +231,15 @@ function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
     lastTurnResult: undefined,
     toolSpecs: threadToolSpecs(context),
   };
-  const executeTools = opts.executeTools;
-  const AgentClass = executeTools
-    ? class extends Agent {
-        protected override executeTools(
-          requests: ReadonlyArray<RequestedTool>,
-        ): Promise<ToolOutcome> {
-          return executeTools(requests);
-        }
-      }
-    : Agent;
-  return new AgentClass(context, {
-    state,
+  let agent!: Agent;
+  // The bare-agent harness stands in for the thread: it owns tool execution
+  // the same way, so the loop under test sees production wiring.
+  const host = new ToolExecutorHost({
+    logger: context.logger,
+    getHooks: opts.getHooks ?? (() => agentHooks()),
+    isAborting: () => agent.isAbortRequested,
+    publishTools: (tools) => agent.setToolInvocationState(tools),
+    onUpdate: opts.onUpdate ?? (() => {}),
     createTool: (request) =>
       createTool(request, {
         threadId: "test-agent" as ThreadId,
@@ -263,6 +262,11 @@ function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
         requestRender: () => {},
         getAgents: () => context.getAgents(),
       }),
+  });
+  const executeTools = opts.executeTools ?? ((r) => host.execute(r));
+  agent = new Agent(context, {
+    state,
+    executeTools,
     toolSpecs: threadToolSpecs(context),
     getHooks: opts.getHooks ?? (() => agentHooks()),
     onUpdate: opts.onUpdate ?? (() => {}),
@@ -275,6 +279,7 @@ function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
         }
       : { type: "new" },
   });
+  return { agent, toolExecutor: host };
 }
 
 /** An `Agent` on a mock anthropic client, with no thread around it: the
@@ -286,10 +291,14 @@ export function createTestAgent(
      * requests across both. */
     mockClient?: MockAnthropicClient;
   },
-): { agent: Agent; mockClient: MockAnthropicClient } {
+): {
+  agent: Agent;
+  mockClient: MockAnthropicClient;
+  toolExecutor: ToolExecutorHost;
+} {
   const mockClient = opts?.mockClient ?? new MockAnthropicClient();
   const provider = createMockProvider(mockClient, opts?.anthropicOptions);
-  return { agent: buildTestAgent(provider, opts ?? {}), mockClient };
+  return { ...buildTestAgent(provider, opts ?? {}), mockClient };
 }
 
 export const defaultOpenAIOptions: OpenAIInferenceOptions = {
@@ -306,7 +315,11 @@ export function createTestOpenAIAgent(
     mockClient?: MockOpenAIClient;
     tools?: ProviderToolSpec[];
   },
-): { agent: Agent; mockClient: MockOpenAIClient } {
+): {
+  agent: Agent;
+  mockClient: MockOpenAIClient;
+  toolExecutor: ToolExecutorHost;
+} {
   const mockClient = opts?.mockClient ?? new MockOpenAIClient();
   const tools = opts?.tools;
   const provider: Provider = {
@@ -322,7 +335,7 @@ export function createTestOpenAIAgent(
     },
   };
   return {
-    agent: buildTestAgent(provider, {
+    ...buildTestAgent(provider, {
       ...opts,
       context: {
         profile: stub<ProviderProfile>({

@@ -61,6 +61,7 @@ import type {
 import { renderYieldValue } from "./thread-api.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type { RequestAction, SuspendReason } from "./thread-supervisor.ts";
+import { ToolExecutorHost } from "./tool-executor.ts";
 import type {
   ToolInvocation,
   ToolRequest,
@@ -223,6 +224,14 @@ export class Thread {
       toolSpecs: threadToolSpecs(context),
     };
     this.systemReminders = this.createReminderSupervisor();
+    this.toolExecutor = new ToolExecutorHost({
+      logger: context.logger,
+      createTool: (request) => this.invokeTool(request),
+      getHooks: () => this.agentHooks(),
+      isAborting: () => this.agent.isAbortRequested,
+      publishTools: (tools) => this.agent.setToolInvocationState(tools),
+      onUpdate: () => this.handleUpdate(),
+    });
 
     this.agent = this.createAgent(
       init.type === "clone"
@@ -390,10 +399,14 @@ export class Thread {
     });
     return { ...invocation, promise };
   }
+  /** Tool execution is the thread's: it owns the live invocations, the
+   * `onToolResults` hooks and aborting them. Handed to each agent it builds. */
+  private toolExecutor: ToolExecutorHost;
+
   private createAgent(runnerInit: AgentDeps["runnerInit"]): Agent {
     return new Agent(this.context, {
       state: this.state,
-      createTool: (request) => this.invokeTool(request),
+      executeTools: (requests) => this.toolExecutor.execute(requests),
       toolSpecs: this.state.toolSpecs,
       getHooks: () => this.agentHooks(),
       onUpdate: () => this.handleUpdate(),
@@ -468,6 +481,7 @@ export class Thread {
     if (this.yieldState) return { unsent: [] };
     if (this.loopState.type === "running")
       this.loopState = { type: "aborting", epoch: this.loopState.epoch };
+    this.toolExecutor.abortAll();
     await this.agent.abort();
     const unsent = this.drainQueues();
     if (unsent.length) this.handleUpdate();
@@ -725,6 +739,7 @@ export class Thread {
         );
         return { type: "queued" };
       }
+      this.toolExecutor.abortAll();
       await this.agent.abortAndWait();
       // Sending now supersedes whatever was waiting on the aborted turn.
       this.drainQueues();
@@ -1061,6 +1076,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
       | { type: "compaction"; summary: string; chunkCount: number }
       | { type: "none" };
   }): Promise<void> {
+    this.toolExecutor.abortAll();
     const previousAgent = this.agent;
     this.agent = this.createAgent({ type: "new" });
     await previousAgent.dispose();
@@ -1090,6 +1106,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     if (this.destroyed) return;
     this.destroyed = true;
 
+    this.toolExecutor.abortAll();
     await this.agent.dispose();
 
     this.settleResult({
