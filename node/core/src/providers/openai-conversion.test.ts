@@ -268,12 +268,9 @@ describe("convertOpenAIItemsToProvider", () => {
       result: {
         status: "ok",
         value: [{ type: "text", text: "ab" }],
-        structuredResult: { toolName: "unknown" },
       },
     });
-    expect(results[1]).toMatchObject({
-      result: { structuredResult: { toolName: "unknown" } },
-    });
+    expect(results[0]).not.toHaveProperty("result.structuredResult");
   });
 
   it("surfaces a tool request parse failure rather than throwing", () => {

@@ -263,7 +263,6 @@ function buildTestAgent(provider: Provider, opts: TestAgentOpts): Agent {
         requestRender: () => {},
         getAgents: () => context.getAgents(),
       }),
-    structuredToolResults: new Map(),
     toolSpecs: threadToolSpecs(context),
     getHooks: opts.getHooks ?? (() => agentHooks()),
     onUpdate: opts.onUpdate ?? (() => {}),

@@ -7,8 +7,7 @@ import type {
   OnToolApplied,
 } from "../capabilities/context-tracker.ts";
 import { FsFileIO } from "../capabilities/file-io.ts";
-import type { ProviderToolResult } from "../providers/provider-types.ts";
-import type { ToolRequestId } from "../tool-types.ts";
+import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
 import type {
   AbsFilePath,
   HomeDir,
@@ -58,7 +57,7 @@ describe("GetFileTool unit tests", () => {
   }
 
   async function getResult(invocation: {
-    promise: Promise<ProviderToolResult>;
+    promise: Promise<ExecutedToolResult>;
   }) {
     return await invocation.promise;
   }

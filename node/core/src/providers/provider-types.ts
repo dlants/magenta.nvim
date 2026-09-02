@@ -172,7 +172,6 @@ export type ProviderToolResult = {
     | {
         status: "ok";
         value: ProviderToolResultContent[];
-        structuredResult: ToolManager.ToolStructuredResult;
       }
     | { status: "error"; error: string };
   nativeMessageIdx: NativeMessageIdx;

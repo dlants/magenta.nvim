@@ -1,10 +1,14 @@
 import type { LuaExecutor } from "../capabilities/lua-executor.ts";
 import {
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolResult,
   type ProviderToolSpec,
 } from "../providers/provider-types.ts";
-import type { ToolInvocation, ToolName, ToolRequestId } from "../tool-types.ts";
+import type {
+  ExecutedToolResult,
+  ExecutingToolInvocation,
+  ToolName,
+  ToolRequestId,
+} from "../tool-types.ts";
 import type { Result } from "../utils/result.ts";
 
 export type ToolRequest = {
@@ -31,10 +35,10 @@ export function execute(
   context: {
     luaExecutor: LuaExecutor;
   },
-): ToolInvocation {
+): ExecutingToolInvocation {
   let aborted = false;
 
-  const promise = (async (): Promise<ProviderToolResult> => {
+  const promise = (async (): Promise<ExecutedToolResult> => {
     try {
       const value = await context.luaExecutor.execLua(request.input.code);
 

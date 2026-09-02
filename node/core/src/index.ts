@@ -295,7 +295,8 @@ export {
 export type {
   CompletedToolInfo,
   DisplayContext,
-  GenericStructuredResult,
+  ExecutedToolResult,
+  ExecutingToolInvocation,
   GenericToolRequest,
   ToolInvocation,
   ToolManagerToolMsg,

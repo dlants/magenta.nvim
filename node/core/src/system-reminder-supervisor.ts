@@ -12,7 +12,11 @@ import {
   type RequestContext,
   type SupervisorAction,
 } from "./thread-supervisor.ts";
-import { structuredResultFor } from "./tool-types.ts";
+import {
+  structuredResultFor,
+  type ToolRequestId,
+  type ToolStructuredResult,
+} from "./tool-types.ts";
 
 /** Minimum output tokens between standing system reminders. */
 const SYSTEM_REMINDER_MIN_TOKEN_INTERVAL = 2000;
@@ -22,7 +26,10 @@ const SYSTEM_REMINDER_MIN_TOKEN_INTERVAL = 2000;
 export interface ReminderSupervisor {
   readonly activeReminders: ReadonlySet<string>;
   activateReminder(text: string): void;
-  onToolResults(results: ToolResults): void;
+  onToolResults(
+    results: ToolResults,
+    structured: ReadonlyMap<ToolRequestId, ToolStructuredResult>,
+  ): void;
   onBeforeRequest(context: RequestContext): SupervisorAction;
 }
 
@@ -69,10 +76,13 @@ export class SystemReminderSupervisor implements ReminderSupervisor {
     this.reminders.add(text);
   }
 
-  onToolResults(results: ToolResults): void {
-    for (const result of results.values()) {
+  onToolResults(
+    results: ToolResults,
+    structuredResults: ReadonlyMap<ToolRequestId, ToolStructuredResult>,
+  ): void {
+    for (const [id, result] of results) {
       if (result.status !== "ok") continue;
-      const structured = result.structuredResult;
+      const structured = structuredResults.get(id);
       const bash = structuredResultFor(structured, "bash_command");
       if (bash?.wasAbbreviated) this.pendingBashReminder = true;
       const getFiles = structuredResultFor(structured, "get_files");

@@ -59,7 +59,6 @@ describe("renderThreadLogToMarkdown", () => {
                     nativeMessageIdx: idx,
                   },
                 ],
-                structuredResult: { status: "ok", value: "" } as never,
               },
               nativeMessageIdx: idx,
             },

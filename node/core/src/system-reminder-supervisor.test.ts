@@ -22,13 +22,14 @@ function request(outputTokenCount: number): RequestContext {
   };
 }
 
-function results(structured: ToolStructuredResult): ToolResults {
-  return new Map([
-    [
-      "tool-1" as ToolRequestId,
-      { status: "ok" as const, value: [], structuredResult: structured },
-    ],
-  ]);
+function results(
+  structured: ToolStructuredResult,
+): [ToolResults, ReadonlyMap<ToolRequestId, ToolStructuredResult>] {
+  const id = "tool-1" as ToolRequestId;
+  return [
+    new Map([[id, { status: "ok" as const, value: [] }]]),
+    new Map([[id, structured]]),
+  ];
 }
 
 function reminderText(supervisor: SystemReminderSupervisor, tokens: number) {
@@ -60,7 +61,7 @@ describe("SystemReminderSupervisor bash latch", () => {
   it("fires on the next request after abbreviated output, then clears", () => {
     const supervisor = makeSupervisor();
     supervisor.onToolResults(
-      results({
+      ...results({
         toolName: "bash_command",
         exitCode: 0,
         signal: undefined,
@@ -89,7 +90,7 @@ describe("SystemReminderSupervisor extra reminders", () => {
       },
     });
     supervisor.onToolResults(
-      results({
+      ...results({
         toolName: "get_files",
         files: [
           {

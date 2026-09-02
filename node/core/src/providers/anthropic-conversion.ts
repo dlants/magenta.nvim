@@ -149,9 +149,6 @@ function convertBlockToProvider(
                   nativeMessageIdx,
                 },
               ],
-              structuredResult: {
-                toolName: "unknown",
-              },
             };
       } else if (block.is_error) {
         const textBlock = block.content?.find((c) => c.type === "text") as
@@ -197,9 +194,6 @@ function convertBlockToProvider(
                 };
               }
             }),
-          structuredResult: {
-            toolName: "unknown",
-          },
         };
       }
 

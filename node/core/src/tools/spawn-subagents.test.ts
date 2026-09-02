@@ -5,9 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThreadManager } from "../capabilities/thread-manager.ts";
 import type { ThreadId } from "../chat-types.ts";
 import type { ProvisionResult } from "../container/types.ts";
-import type { ProviderToolResult } from "../providers/provider-types.ts";
 import type { ThreadResult } from "../thread-api.ts";
-import type { ToolRequestId } from "../tool-types.ts";
+import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
 import { Defer } from "../utils/async.ts";
 import type { NvimCwd, UnresolvedFilePath } from "../utils/files.ts";
 import type { Result } from "../utils/result.ts";
@@ -65,7 +64,7 @@ function makeRequest(input: SpawnSubagents.Input): SpawnSubagents.ToolRequest {
 }
 
 async function getResultText(invocation: {
-  promise: Promise<ProviderToolResult>;
+  promise: Promise<ExecutedToolResult>;
 }): Promise<string> {
   const { result } = await invocation.promise;
   if (result.status === "ok") {

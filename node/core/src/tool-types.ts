@@ -11,7 +11,10 @@ export type ToolRequest = {
   input: unknown;
 };
 
-import type { ProviderToolResult } from "./providers/provider-types.ts";
+import type {
+  ProviderToolResult,
+  ProviderToolResultContent,
+} from "./providers/provider-types.ts";
 import type * as BashCommand from "./tools/bashCommand.ts";
 import type * as Edl from "./tools/edl.ts";
 import type * as FindReferences from "./tools/findReferences.ts";
@@ -32,13 +35,6 @@ export type DisplayContext = {
   homeDir: HomeDir;
 };
 
-/** The result of a tool that publishes no structured data of its own, and of
- * tool results reconstructed from the provider's native message array (where
- * the structured data was never serialized). Deliberately carries no tool name:
- * a name here would make `toolName === "some_tool"` checks pass for a value
- * that doesn't have that tool's fields. */
-export type GenericStructuredResult = { toolName: "unknown" };
-
 /** The structured result of a tool that publishes one, by tool name. */
 export type StructuredResultFor<K extends string> = Extract<
   ToolStructuredResult,
@@ -49,10 +45,10 @@ export type StructuredResultFor<K extends string> = Extract<
 export function structuredResultFor<
   K extends StructuredResultFor<string>["toolName"],
 >(
-  result: ToolStructuredResult,
+  result: ToolStructuredResult | undefined,
   toolName: K,
 ): StructuredResultFor<K> | undefined {
-  return result.toolName === toolName
+  return result?.toolName === toolName
     ? (result as StructuredResultFor<K>)
     : undefined;
 }
@@ -68,13 +64,12 @@ export type ToolStructuredResult =
   | ThreadTitle.StructuredResult
   | YieldToParent.StructuredResult
   | Reply.StructuredResult
-  | RunScript.StructuredResult
-  | GenericStructuredResult;
+  | RunScript.StructuredResult;
 
 export type CompletedToolInfo = {
   request: ToolRequest;
   result: ProviderToolResult;
-  structuredResult: ToolStructuredResult;
+  structuredResult: ToolStructuredResult | undefined;
 };
 
 export type GenericToolRequest<K extends StaticToolName, I> = {
@@ -94,9 +89,28 @@ export type ToolManagerToolMsg = {
 
 export type ToolMsg = { __toolMsg: true };
 
+/** What a tool's `execute` resolves to: the wire result plus the structured
+ * payload that never goes to the model. The thread strips the structured half
+ * before the agent sees it. */
+export type ExecutedToolResult = Omit<ProviderToolResult, "result"> & {
+  result:
+    | {
+        status: "ok";
+        value: ProviderToolResultContent[];
+        structuredResult?: ToolStructuredResult;
+      }
+    | { status: "error"; error: string };
+};
+
+/** What the agent drives: wire results only. */
 export type ToolInvocation = {
   promise: Promise<ProviderToolResult>;
   abort: () => void;
+};
+
+/** What a tool produces, seen only by the thread. */
+export type ExecutingToolInvocation = Omit<ToolInvocation, "promise"> & {
+  promise: Promise<ExecutedToolResult>;
 };
 
 export type ValidateInput = (

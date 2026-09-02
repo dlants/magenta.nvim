@@ -4,8 +4,8 @@ import {
   type ProviderToolSpec,
 } from "../providers/provider-types.ts";
 import type {
+  ExecutingToolInvocation,
   GenericToolRequest,
-  ToolInvocation,
   ToolName,
 } from "../tool-types.ts";
 import type { Result } from "../utils/result.ts";
@@ -19,7 +19,7 @@ export type StructuredResult = { toolName: "yield_to_parent" };
 
 export type ToolRequest = GenericToolRequest<"yield_to_parent", Input>;
 
-export function execute(request: ToolRequest): ToolInvocation {
+export function execute(request: ToolRequest): ExecutingToolInvocation {
   return {
     promise: Promise.resolve({
       type: "tool_result" as const,

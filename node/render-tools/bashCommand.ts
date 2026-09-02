@@ -91,7 +91,7 @@ export function renderResultSummary(info: CompletedToolInfo): VDOMNode {
   }
 
   const sr =
-    info.structuredResult.toolName === "bash_command"
+    info.structuredResult?.toolName === "bash_command"
       ? info.structuredResult
       : undefined;
   const exitCode = sr?.exitCode;
@@ -144,7 +144,7 @@ function renderResultPreview(
   }
 
   const sr =
-    info.structuredResult.toolName === "bash_command"
+    info.structuredResult?.toolName === "bash_command"
       ? info.structuredResult
       : undefined;
   const outputText = sr ? sr.outputText : firstValue.text;
@@ -198,7 +198,7 @@ function renderResultDetail(
   }
 
   const sr =
-    info.structuredResult.toolName === "bash_command"
+    info.structuredResult?.toolName === "bash_command"
       ? info.structuredResult
       : undefined;
   const outputText = sr ? sr.outputText : firstValue.text;

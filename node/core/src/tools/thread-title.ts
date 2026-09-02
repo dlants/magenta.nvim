@@ -1,11 +1,9 @@
-import type {
-  ProviderToolResult,
-  ProviderToolSpec,
-} from "../providers/provider-types.ts";
+import type { ProviderToolSpec } from "../providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
+  ExecutedToolResult,
+  ExecutingToolInvocation,
   GenericToolRequest,
-  ToolInvocation,
   ToolName,
 } from "../tool-types.ts";
 import type { Result } from "../utils/result.ts";
@@ -13,10 +11,10 @@ import type { Result } from "../utils/result.ts";
 export function execute(
   request: ToolRequest,
   _context: Record<string, never>,
-): ToolInvocation {
+): ExecutingToolInvocation {
   let aborted = false;
 
-  const promise = (async (): Promise<ProviderToolResult> => {
+  const promise = (async (): Promise<ExecutedToolResult> => {
     try {
       await Promise.resolve();
       if (aborted) {

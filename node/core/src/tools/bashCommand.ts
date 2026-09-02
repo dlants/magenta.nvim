@@ -1,12 +1,12 @@
 import type { OutputLine, Shell } from "../capabilities/shell.ts";
 import {
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolResult,
   type ProviderToolSpec,
 } from "../providers/provider-types.ts";
 import type {
+  ExecutedToolResult,
+  ExecutingToolInvocation,
   GenericToolRequest,
-  ToolInvocation,
   ToolName,
 } from "../tool-types.ts";
 import type { Result } from "../utils/result.ts";
@@ -213,7 +213,7 @@ function formatOutputForToolResult(
   return { formattedOutput, wasAbbreviated: true };
 }
 
-// ===== New function-based ToolInvocation =====
+// ===== New function-based ExecutingToolInvocation =====
 
 export type BashProgress = {
   liveOutput: OutputLine[];
@@ -226,7 +226,7 @@ export function execute(
     shell: Shell;
     requestRender: () => void;
   },
-): ToolInvocation & { progress: BashProgress } {
+): ExecutingToolInvocation & { progress: BashProgress } {
   const progress: BashProgress = {
     liveOutput: [],
     startTime: undefined,
@@ -262,7 +262,7 @@ export function execute(
         }, 1000);
       },
     })
-    .then((result): ProviderToolResult => {
+    .then((result): ExecutedToolResult => {
       if (aborted) {
         stopTickInterval();
         const { formattedOutput } = formatOutputForToolResult(
@@ -335,7 +335,7 @@ export function execute(
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
     })
-    .catch((error: Error): ProviderToolResult => {
+    .catch((error: Error): ExecutedToolResult => {
       if (aborted) {
         stopTickInterval();
         const durationMs = progress.startTime

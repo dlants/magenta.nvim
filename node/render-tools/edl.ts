@@ -53,14 +53,14 @@ function isError(result: CompletedToolInfo["result"]): boolean {
 function extractEdlDisplayData(
   info: CompletedToolInfo,
 ): Edl.EdlDisplayData | undefined {
-  if (info.structuredResult.toolName === "edl") {
+  if (info.structuredResult?.toolName === "edl") {
     return (info.structuredResult as Edl.StructuredResult).displayData;
   }
   return undefined;
 }
 
 function extractFormattedResult(info: CompletedToolInfo): string {
-  if (info.structuredResult.toolName === "edl") {
+  if (info.structuredResult?.toolName === "edl") {
     return (info.structuredResult as Edl.StructuredResult).formattedResult;
   }
   if (info.result.result.status !== "ok") {

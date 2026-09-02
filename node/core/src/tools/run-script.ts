@@ -3,14 +3,12 @@ import type {
   ScriptRunner,
 } from "../capabilities/script-runner.ts";
 import type { ThreadId } from "../chat-types.ts";
-import type {
-  ProviderToolResult,
-  ProviderToolSpec,
-} from "../providers/provider-types.ts";
+import type { ProviderToolSpec } from "../providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
+  ExecutedToolResult,
+  ExecutingToolInvocation,
   GenericToolRequest,
-  ToolInvocation,
   ToolName,
 } from "../tool-types.ts";
 import type { Result } from "../utils/result.ts";
@@ -84,8 +82,8 @@ export function execute(
     scriptRunner: ScriptRunner | undefined;
     threadId: ThreadId;
   },
-): ToolInvocation {
-  const promise = (async (): Promise<ProviderToolResult> => {
+): ExecutingToolInvocation {
+  const promise = (async (): Promise<ExecutedToolResult> => {
     await Promise.resolve();
     const { scriptRunner } = context;
     if (!scriptRunner) {
@@ -172,7 +170,7 @@ export function execute(
   };
 }
 
-function errorResult(id: ToolRequest["id"], error: string): ProviderToolResult {
+function errorResult(id: ToolRequest["id"], error: string): ExecutedToolResult {
   return {
     type: "tool_result",
     id,

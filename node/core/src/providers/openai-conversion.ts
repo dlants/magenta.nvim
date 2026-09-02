@@ -122,9 +122,6 @@ function convertItem(
             value: [
               { type: "text", text: outputText(item.output), nativeMessageIdx },
             ],
-            structuredResult: {
-              toolName: "unknown",
-            },
           },
           nativeMessageIdx,
         },

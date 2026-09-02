@@ -1050,10 +1050,7 @@ function renderMessageContentBlock(
         const completedInfo: CompletedToolInfo = {
           request: request,
           result: toolResult,
-          structuredResult:
-            toolResult.result.status === "ok"
-              ? toolResult.result.structuredResult
-              : { toolName: "unknown" },
+          structuredResult: thread.core.structuredToolResults.get(request.id),
         };
 
         // Section 5: Result summary. get_files renders its own interactive

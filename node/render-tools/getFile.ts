@@ -72,7 +72,7 @@ function computeFileInfos(
   }
 
   const input = info.request.input as Input;
-  const structured = result.structuredResult as
+  const structured = info.structuredResult as
     | GetFile.StructuredResult
     | undefined;
 

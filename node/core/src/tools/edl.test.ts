@@ -5,8 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OnToolApplied } from "../capabilities/context-tracker.ts";
 import { FsFileIO } from "../capabilities/file-io.ts";
 import type { EdlRegisters } from "../index.ts";
-import type { ProviderToolResult } from "../providers/provider-types.ts";
-import type { ToolRequestId } from "../tool-types.ts";
+import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import * as Edl from "./edl.ts";
 
@@ -96,7 +95,7 @@ replace "goodbye"`;
   }
 
   async function getResultText(invocation: {
-    promise: Promise<ProviderToolResult>;
+    promise: Promise<ExecutedToolResult>;
   }): Promise<{ status: string; text: string }> {
     const providerResult = await invocation.promise;
     if (providerResult.result.status === "ok") {

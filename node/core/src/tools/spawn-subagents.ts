@@ -10,15 +10,13 @@ import type { ThreadManager } from "../capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId } from "../chat-types.ts";
 import { provisionContainer } from "../container/provision.ts";
 import type { ContainerConfig } from "../container/types.ts";
-import type {
-  ProviderToolResult,
-  ProviderToolSpec,
-} from "../providers/provider-types.ts";
+import type { ProviderToolSpec } from "../providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type { ThreadResult } from "../thread-api.ts";
 import type {
+  ExecutedToolResult,
+  ExecutingToolInvocation,
   GenericToolRequest,
-  ToolInvocation,
   ToolName,
 } from "../tool-types.ts";
 import type { NvimCwd, UnresolvedFilePath } from "../utils/files.ts";
@@ -387,7 +385,7 @@ export function execute(
     cwd: NvimCwd;
     agents: AgentsMap;
   },
-): ToolInvocation & { progress: SpawnSubagentsProgress } {
+): ExecutingToolInvocation & { progress: SpawnSubagentsProgress } {
   const input = request.input;
 
   // Merge sharedPrompt and sharedContextFiles into each entry
@@ -613,7 +611,7 @@ export function execute(
     }
   };
 
-  const promise = (async (): Promise<ProviderToolResult> => {
+  const promise = (async (): Promise<ExecutedToolResult> => {
     try {
       const fastElements = progress.elements.filter(isFastElement);
       const otherElements = progress.elements.filter(
@@ -667,7 +665,7 @@ function buildResult(
   requestId: ToolRequest["id"],
   progress: SpawnSubagentsProgress,
   threadResults: ReadonlyMap<ThreadId, ThreadResult>,
-): ProviderToolResult {
+): ExecutedToolResult {
   const agents: StructuredResult["agents"] = [];
   let successCount = 0;
   let failCount = 0;

@@ -13,7 +13,7 @@ import type { ThreadId } from "../chat-types.ts";
 import type { CommentStore } from "../context/comment-store.ts";
 import type { EdlRegisters } from "../edl/index.ts";
 import type { Logger } from "../logger.ts";
-import type { ToolInvocation, ToolRequest } from "../tool-types.ts";
+import type { ExecutingToolInvocation, ToolRequest } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
 import type { HomeDir, NvimCwd } from "../utils/files.ts";
 import * as BashCommand from "./bashCommand.ts";
@@ -57,7 +57,7 @@ export type CreateToolContext = {
 export function createTool(
   request: ToolRequest,
   context: CreateToolContext,
-): ToolInvocation {
+): ExecutingToolInvocation {
   if (request.toolName.startsWith("mcp_")) {
     const { serverName } = parseToolName(request.toolName);
 

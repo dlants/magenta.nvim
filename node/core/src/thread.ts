@@ -59,7 +59,12 @@ import type {
 import { renderYieldValue } from "./thread-api.ts";
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type { RequestAction, SuspendReason } from "./thread-supervisor.ts";
-import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
+import type {
+  ToolInvocation,
+  ToolRequest,
+  ToolRequestId,
+  ToolStructuredResult,
+} from "./tool-types.ts";
 import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
@@ -356,11 +361,25 @@ export class Thread {
     }
   };
 
+  /** Runs the tool and splits its result: the structured payload is recorded
+   * here, and only the wire result reaches the agent. */
+  private invokeTool(request: ToolRequest): ToolInvocation {
+    const invocation = createTool(request, this.toolContext());
+    const promise = invocation.promise.then((executed) => {
+      const { result } = executed;
+      if (result.status !== "ok") return { ...executed, result };
+      const { structuredResult, ...wireResult } = result;
+      if (structuredResult) {
+        this.structuredToolResults.set(request.id, structuredResult);
+      }
+      return { ...executed, result: wireResult };
+    });
+    return { ...invocation, promise };
+  }
   private createAgent(runnerInit: AgentDeps["runnerInit"]): Agent {
     return new Agent(this.context, {
       state: this.state,
-      structuredToolResults: this.structuredToolResults,
-      createTool: (request) => createTool(request, this.toolContext()),
+      createTool: (request) => this.invokeTool(request),
       toolSpecs: this.state.toolSpecs,
       getHooks: () => this.agentHooks(),
       onUpdate: () => this.handleUpdate(),
@@ -599,7 +618,11 @@ export class Thread {
       ],
       onToolResults: [
         ...this.hooks.onToolResults,
-        (results) => this.systemReminders.onToolResults(results),
+        (results) =>
+          this.systemReminders.onToolResults(
+            results,
+            this.structuredToolResults,
+          ),
       ],
     };
   }

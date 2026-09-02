@@ -664,7 +664,7 @@ describe("Thread.reset", () => {
       await sent;
 
       core.structuredToolResults.set("tr-1" as ToolRequestId, {
-        toolName: "unknown",
+        toolName: "thread_title",
       });
       const oldAgent = core.agent;
 
@@ -2049,6 +2049,38 @@ function makeAbbreviatedShellResult(): ShellResult {
   };
 }
 
+describe("structured tool result ownership", () => {
+  it("records the structured payload on the thread, keeping it out of the messages", async () => {
+    const { shell } = createMockShell(makeAbbreviatedShellResult());
+    const { core, mockClient } = createAgentWithMock({
+      shell: shell as unknown as ThreadContext["shell"],
+    });
+    const requestId = "tool-bash-1" as ToolRequestId;
+    void core.send([{ type: "user", text: "run a thing" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(requestId, "bash_command" as ToolName, {
+      command: "echo hi",
+    });
+    stream.finishResponse("tool_use");
+    const structured = await pollUntil(() => {
+      const entry = core.structuredToolResults.get(requestId);
+      if (entry) return entry;
+      throw new Error("waiting for structured result");
+    });
+    expect(structured).toMatchObject({
+      toolName: "bash_command",
+      exitCode: 0,
+      wasAbbreviated: true,
+    });
+    for (const message of core.getProviderMessages()) {
+      for (const content of message.content) {
+        if (content.type === "tool_result") {
+          expect(content.result).not.toHaveProperty("structuredResult");
+        }
+      }
+    }
+  });
+});
 describe("Agent bash summary reminder", () => {
   it("fires the bash reminder on the first abbreviated bash output", async () => {
     const { shell } = createMockShell(makeAbbreviatedShellResult());

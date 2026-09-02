@@ -354,7 +354,7 @@ export function renderResult(
     return undefined;
   }
 
-  if (info.structuredResult.toolName !== "spawn_subagents") return undefined;
+  if (info.structuredResult?.toolName !== "spawn_subagents") return undefined;
   const sr = info.structuredResult as SpawnSubagents.StructuredResult;
 
   const fileBinding = fileBindingFactory(context.threadDispatch);

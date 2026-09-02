@@ -733,25 +733,16 @@ export class NvimThread {
     }
   }
 
-  /** Walks the agent's provider messages and rebuilds the tool result map.
-   * Re-attaches each result's structuredResult from `core.structuredToolResults`,
-   * since the provider strips structuredResult when serializing to native form
-   * but the rich view rendering relies on it. */
+  /** Walks the agent's provider messages and collects the tool results.
+   * Structured (display-only) data is not carried here — it lives in
+   * `core.structuredToolResults` and is looked up at render time. */
   rebuildToolResultMap(): void {
     const next = new Map<ToolRequestId, ProviderToolResult>();
     for (const message of this.core.getProviderMessages()) {
       if (message.role !== "user") continue;
       for (const content of message.content) {
         if (content.type === "tool_result") {
-          const structured = this.core.structuredToolResults.get(content.id);
-          if (structured && content.result.status === "ok") {
-            next.set(content.id, {
-              ...content,
-              result: { ...content.result, structuredResult: structured },
-            });
-          } else {
-            next.set(content.id, content);
-          }
+          next.set(content.id, content);
         }
       }
     }

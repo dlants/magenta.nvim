@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Agent, ToolExecutor } from "../agent.ts";
 import { createTestOpenAIAgent, flatPhase } from "../test-helpers.ts";
 import type { SendResult } from "../thread-api.ts";
-import type { ToolName, ToolStructuredResult } from "../tool-types.ts";
+import type { ToolName } from "../tool-types.ts";
 import {
   ABORT_TOOL_RESULT_TEXT,
   UNANSWERED_TOOL_RESULT_TEXT,
@@ -43,10 +43,6 @@ function okResult(text: string): ProviderToolResult["result"] {
   return {
     status: "ok",
     value: [userText(text)],
-    structuredResult: {
-      status: "ok",
-      value: "",
-    } as unknown as ToolStructuredResult,
   };
 }
 
@@ -736,10 +732,6 @@ describe("OpenAIInferenceManager tool result attachments", () => {
               {
                 status: "ok" as const,
                 value,
-                structuredResult: {
-                  status: "ok",
-                  value: "",
-                } as unknown as ToolStructuredResult,
               },
             ]),
           ),

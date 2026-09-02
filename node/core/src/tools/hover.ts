@@ -7,12 +7,12 @@ import type {
 } from "../capabilities/lsp-client.ts";
 import {
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolResult,
   type ProviderToolSpec,
 } from "../providers/provider-types.ts";
 import type {
+  ExecutedToolResult,
+  ExecutingToolInvocation,
   GenericToolRequest,
-  ToolInvocation,
   ToolName,
 } from "../tool-types.ts";
 import {
@@ -38,10 +38,10 @@ export function execute(
     lspClient: LspClient;
     fileIO: FileIO;
   },
-): ToolInvocation {
+): ExecutingToolInvocation {
   let aborted = false;
 
-  const promise = (async (): Promise<ProviderToolResult> => {
+  const promise = (async (): Promise<ExecutedToolResult> => {
     try {
       const filePath = request.input.filePath;
       const absFilePath = resolveFilePath(

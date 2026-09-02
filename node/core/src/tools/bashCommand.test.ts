@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { OutputLine, Shell, ShellResult } from "../capabilities/shell.ts";
-import type { ProviderToolResult } from "../providers/provider-types.ts";
-import type { ToolRequestId } from "../tool-types.ts";
+import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
 import * as BashCommand from "./bashCommand.ts";
 
 function createMockShell(result: ShellResult): Shell {
@@ -48,7 +47,7 @@ function createTool(command: string, shellResult: ShellResult) {
 }
 
 async function getResultText(invocation: {
-  promise: Promise<ProviderToolResult>;
+  promise: Promise<ExecutedToolResult>;
 }): Promise<string> {
   const { result } = await invocation.promise;
   if (result.status === "ok") {

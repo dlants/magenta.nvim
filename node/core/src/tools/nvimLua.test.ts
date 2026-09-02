@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LuaExecutor } from "../capabilities/lua-executor.ts";
-import type { ProviderToolResult } from "../providers/provider-types.ts";
-import type { ToolRequestId } from "../tool-types.ts";
+import type { ExecutedToolResult, ToolRequestId } from "../tool-types.ts";
 import * as NvimLua from "./nvimLua.ts";
 
 function createTool(code: string, executor: LuaExecutor) {
@@ -16,7 +15,7 @@ function createTool(code: string, executor: LuaExecutor) {
 }
 
 async function getResultText(invocation: {
-  promise: Promise<ProviderToolResult>;
+  promise: Promise<ExecutedToolResult>;
 }): Promise<{ status: string; text: string }> {
   const { result } = await invocation.promise;
   if (result.status === "ok") {

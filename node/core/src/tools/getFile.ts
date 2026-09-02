@@ -5,14 +5,14 @@ import type {
 } from "../capabilities/context-tracker.ts";
 import type { FileIO } from "../capabilities/file-io.ts";
 import type {
-  ProviderToolResult,
   ProviderToolResultContent,
   ProviderToolSpec,
 } from "../providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
+  ExecutedToolResult,
+  ExecutingToolInvocation,
   GenericToolRequest,
-  ToolInvocation,
   ToolName,
 } from "../tool-types.ts";
 import { assertUnreachable } from "../utils/assertUnreachable.ts";
@@ -461,17 +461,17 @@ export function execute(
     contextTracker: ContextTracker;
     onToolApplied: OnToolApplied;
   },
-): ToolInvocation {
+): ExecutingToolInvocation {
   let aborted = false;
 
-  const abortResult: ProviderToolResult = {
+  const abortResult: ExecutedToolResult = {
     type: "tool_result",
     id: request.id,
     result: { status: "error", error: "Request was aborted by the user." },
     nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
 
-  const promise = (async (): Promise<ProviderToolResult> => {
+  const promise = (async (): Promise<ExecutedToolResult> => {
     try {
       const value: ProviderToolResultContent[] = [];
       const files: PerFileResult[] = [];

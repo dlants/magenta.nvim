@@ -1,12 +1,12 @@
 import type { CommentId, CommentStore } from "../context/comment-store.ts";
 import {
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolResult,
   type ProviderToolSpec,
 } from "../providers/provider-types.ts";
 import type {
+  ExecutedToolResult,
+  ExecutingToolInvocation,
   GenericToolRequest,
-  ToolInvocation,
   ToolName,
 } from "../tool-types.ts";
 import type { Result } from "../utils/result.ts";
@@ -28,8 +28,8 @@ export type StructuredResult = {
 export function execute(
   request: ToolRequest,
   context: { commentStore: CommentStore },
-): ToolInvocation {
-  const promise = (async (): Promise<ProviderToolResult> => {
+): ExecutingToolInvocation {
+  const promise = (async (): Promise<ExecutedToolResult> => {
     const replies: PerReplyResult[] = [];
     const lines: string[] = [];
     for (const reply of request.input.replies) {

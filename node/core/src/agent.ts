@@ -43,7 +43,6 @@ import type {
   ToolName,
   ToolRequest,
   ToolRequestId,
-  ToolStructuredResult,
 } from "./tool-types.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
@@ -151,7 +150,6 @@ export interface AgentDeps {
   /** Tool construction, and everything it needs, is the owner's: the agent
    * only drives the invocations it gets back. */
   createTool: (request: ToolRequest) => ToolInvocation;
-  structuredToolResults: Map<ToolRequestId, ToolStructuredResult>;
   getHooks: () => AgentHooks;
   onUpdate: OnUpdate;
   runnerInit:
@@ -225,17 +223,12 @@ export class Agent {
     | undefined {
     return phaseActiveTools(this.currentPhase);
   }
-  public readonly structuredToolResults: Map<
-    ToolRequestId,
-    ToolStructuredResult
-  >;
 
   constructor(
     private context: AgentContext,
     private deps: AgentDeps,
   ) {
     this.state = deps.state;
-    this.structuredToolResults = deps.structuredToolResults;
     this.state.toolSpecs = deps.toolSpecs;
 
     if (deps.runnerInit.type === "cloned") {
@@ -252,12 +245,6 @@ export class Agent {
         this.state.title = action.title;
         break;
       case "set-active-tool-result": {
-        if (action.result.result.status === "ok") {
-          this.structuredToolResults.set(
-            action.id,
-            action.result.result.structuredResult,
-          );
-        }
         const active = this.activeTools;
         if (active) {
           const entry = active.get(action.id);
@@ -453,7 +440,6 @@ export class Agent {
                       nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
                     },
                   ],
-                  structuredResult: { toolName: "yield_to_parent" as const },
                 }
               : {
                   status: "error",

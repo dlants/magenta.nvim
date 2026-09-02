@@ -1,9 +1,7 @@
-import {
-  PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  type ProviderToolResult,
-} from "../../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../../providers/provider-types.ts";
 import type {
-  ToolInvocation,
+  ExecutedToolResult,
+  ExecutingToolInvocation,
   ToolName,
   ToolRequestId,
 } from "../../tool-types.ts";
@@ -28,7 +26,7 @@ export function execute(
     mcpClient: MCPClient;
     requestRender: () => void;
   },
-): ToolInvocation & { progress: MCPProgress } {
+): ExecutingToolInvocation & { progress: MCPProgress } {
   let aborted = false;
 
   const progress: MCPProgress = {
@@ -39,14 +37,14 @@ export function execute(
     context.requestRender();
   }, 1000);
 
-  const abortResult: ProviderToolResult = {
+  const abortResult: ExecutedToolResult = {
     type: "tool_result",
     id: request.id,
     result: { status: "error", error: "Request was aborted by the user." },
     nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
   };
 
-  const promise = (async (): Promise<ProviderToolResult> => {
+  const promise = (async (): Promise<ExecutedToolResult> => {
     try {
       if (aborted) return abortResult;
 
@@ -63,7 +61,6 @@ export function execute(
         result: {
           status: "ok",
           value: result,
-          structuredResult: { toolName: "unknown" },
         },
         nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
       };
