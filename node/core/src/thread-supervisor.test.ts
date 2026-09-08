@@ -17,7 +17,6 @@ const context: RequestContext = {
 
 const requestContext = {
   ...context,
-  isOpeningRequest: true,
   status: "pending" as const,
 };
 describe("composeSupervisors onBeforeRequest", () => {

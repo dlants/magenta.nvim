@@ -1,6 +1,11 @@
 import { APIError } from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createTestOpenAIAgent, flatLoop, sendText } from "../test-helpers.ts";
+import {
+  createTestOpenAIAgent,
+  flatLoop,
+  sendText,
+  toolExecution,
+} from "../test-helpers.ts";
 import type { ToolName } from "../tool-types.ts";
 import type { MockOpenAIClient } from "./mock-openai-client.ts";
 import {
@@ -8,7 +13,7 @@ import {
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ProviderToolSpec,
   type RequestedTool,
-  type RequestUpdate,
+  type StreamEvent,
   type ToolResults,
 } from "./provider-types.ts";
 
@@ -38,10 +43,12 @@ function setup() {
     tools: [spec],
     executeTools: (requests: ReadonlyArray<RequestedTool>) => {
       calls.push([...requests]);
-      return Promise.resolve({
-        type: "continue" as const,
-        results: errorResults(requests),
-      });
+      return toolExecution(
+        Promise.resolve({
+          type: "continue" as const,
+          results: errorResults(requests),
+        }),
+      );
     },
   });
   return { client, agent, calls };
@@ -221,7 +228,7 @@ describe("OpenAIInferenceManager retry", () => {
     const phase = flatLoop(agent);
     expect(phase.type === "streaming" && phase.retry).toBeTruthy();
 
-    agent.abort();
+    agent.abortAndWait();
     await tick();
 
     expect(await turn).toEqual({ type: "aborted" });
@@ -237,7 +244,7 @@ describe("OpenAIInferenceManager sendRequest", () => {
   });
   /** What `Agent` does: seed the conversation, then issue one request. */
   function send(client: MockOpenAIClient, manager: NativeInferenceManager) {
-    const updates: RequestUpdate[] = [];
+    const updates: StreamEvent[] = [];
     manager.appendUserMessage([
       {
         type: "text",
@@ -246,7 +253,12 @@ describe("OpenAIInferenceManager sendRequest", () => {
       },
     ]);
     const request = manager.sendRequest((update) => updates.push(update));
-    return { request, updates, stream: streamAt(client, 0) };
+    return {
+      request: request.promise,
+      abort: () => request.abort(),
+      updates,
+      stream: streamAt(client, 0),
+    };
   }
   it("retries within one request and reports the countdown to the caller", async () => {
     const { client, agent } = setup();
@@ -273,17 +285,16 @@ describe("OpenAIInferenceManager sendRequest", () => {
   it("aborts an in-flight request and leaves the runner reusable", async () => {
     const { client, agent } = setup();
     const manager = agent.manager;
-    const { request, stream } = send(client, manager);
+    const { request, abort, stream } = send(client, manager);
     stream.streamText("half an answer");
     await tick();
-    manager.abort();
+    abort();
     // The backend signals a cancellation only by closing the connection.
     stream.abortMidstream();
     await tick();
     expect(await request).toEqual({ type: "aborted" });
-    manager.finalize({ type: "aborted" });
     // A second request must be issuable: the first one released the manager.
-    const second = manager.sendRequest(() => {});
+    const second = manager.sendRequest(() => {}).promise;
     await tick();
     streamAt(client, 1).finishResponse();
     await tick();

@@ -8,6 +8,7 @@ import {
   flatLoop,
   noopLogger,
   type TestAgent,
+  toolExecution,
 } from "../test-helpers.ts";
 import type { SendResult } from "../thread-api.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
@@ -54,11 +55,11 @@ class AgentUnderTest {
   }
 
   abort(): void {
-    void this.agent.abort();
+    void this.agent.abortAndWait();
   }
 
   runTurn(text: string): Promise<SendResult> {
-    return this.agent.send([{ type: "user", text }]);
+    return this.agent.send([{ type: "user", text }]).promise;
   }
 
   /** Non-text input reaches the manager from a hook, not from a submission,
@@ -77,7 +78,7 @@ function trackUpdates(): Tracked {
 
 /** Default executor: no test reaches it unless it streams a tool_use. */
 const rejectingExecutor: ToolExecutor = () =>
-  Promise.reject(new Error("unexpected tool execution"));
+  toolExecution(Promise.reject(new Error("unexpected tool execution")));
 
 type CreateOptions = {
   model?: string;
@@ -365,10 +366,12 @@ describe("tool execution", () => {
     const agent = createAgent(mockClient, {
       executeTools: (requests) => {
         seen = requests;
-        return Promise.resolve({
-          type: "continue" as const,
-          results: okResults(requests),
-        });
+        return toolExecution(
+          Promise.resolve({
+            type: "continue" as const,
+            results: okResults(requests),
+          }),
+        );
       },
     });
 
@@ -398,7 +401,7 @@ describe("tool execution", () => {
     const toolUseId = "tool-omitted" as ToolRequestId;
     const agent = createAgent(mockClient, {
       executeTools: () =>
-        Promise.resolve({ type: "continue" as const, results: new Map() }),
+        toolExecution({ type: "continue" as const, results: new Map() }),
     });
 
     const turn = agent.runTurn("Hello");
@@ -424,7 +427,8 @@ describe("tool execution", () => {
     const mockClient = new MockAnthropicClient();
     const toolUseId = "tool-reject" as ToolRequestId;
     const agent = createAgent(mockClient, {
-      executeTools: () => Promise.reject(new Error("executor blew up")),
+      executeTools: () =>
+        toolExecution(Promise.reject(new Error("executor blew up"))),
     });
 
     const turn = agent.runTurn("Hello");
@@ -448,14 +452,19 @@ describe("tool execution", () => {
 });
 
 describe("runTurn", () => {
-  it("rejects when a turn is already in flight", async () => {
+  it("fails a turn started while one is already in flight", async () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient);
 
     const turn = agent.runTurn("Hello");
     const stream = await mockClient.awaitStream();
 
-    await expect(agent.runTurn("Again")).rejects.toThrow("already in flight");
+    expect(await agent.runTurn("Again")).toMatchObject({
+      type: "failed",
+      error: expect.objectContaining({
+        message: expect.stringContaining("already in flight"),
+      }) as Error,
+    });
 
     // State is unperturbed: the second input was never appended.
     expect(agent.log.messages).toHaveLength(1);
@@ -929,7 +938,7 @@ describe("streaming block", () => {
     const mockClient = new MockAnthropicClient();
     const agent = createAgent(mockClient, {
       executeTools: (requests) =>
-        Promise.resolve({
+        toolExecution({
           type: "continue" as const,
           results: okResults(requests),
         }),
@@ -1210,11 +1219,15 @@ describe("web search result preservation", () => {
       const state = agent.log;
 
       expect(result.type).toBe("failed");
-      if (result.type === "failed") {
-        expect(result.discardedSubmission).toBe(true);
-      }
-
-      expect(state.messages).toHaveLength(0);
+      // The failed request is not rolled back; the manager only repairs what
+      // the half-written stream left, so the turn stays resumable.
+      // The unanswered tool_use is answered with the stream error, so the
+      // conversation can go back out as it stands.
+      expect(state.messages.map((m) => m.role)).toEqual([
+        "user",
+        "assistant",
+        "user",
+      ]);
     });
 
     it("removes server_tool_use block when stream errors during web search", async () => {
@@ -1241,11 +1254,10 @@ describe("web search result preservation", () => {
       const state = agent.log;
 
       expect(result.type).toBe("failed");
-      if (result.type === "failed") {
-        expect(result.discardedSubmission).toBe(true);
-      }
-
-      expect(state.messages).toHaveLength(0);
+      // The failed request is not rolled back; the manager only repairs what
+      // the half-written stream left, so the turn stays resumable.
+      // Only the server_tool_use block is dropped; the turn itself survives.
+      expect(state.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
     });
   });
 
@@ -1408,7 +1420,7 @@ describe("web search result preservation", () => {
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient, {
         executeTools: (requests) =>
-          Promise.resolve({
+          toolExecution({
             type: "continue" as const,
             results: okResults(requests),
           }),
@@ -1442,7 +1454,7 @@ describe("web search result preservation", () => {
       const toolUseId = "tool-malformed" as ToolRequestId;
       const agent = createAgent(mockClient, {
         executeTools: () =>
-          Promise.resolve({
+          toolExecution({
             type: "continue" as const,
             results: new Map([
               [
@@ -1663,7 +1675,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient, {
         executeTools: (requests) =>
-          Promise.resolve({
+          toolExecution({
             type: "continue" as const,
             results: okResults(requests),
           }),
@@ -1759,10 +1771,12 @@ File context here
       const agent = createAgent(mockClient, {
         executeTools: (requests) => {
           onCalled();
-          return new Promise((resolve) => {
-            releaseTools = () =>
-              resolve({ type: "continue", results: okResults(requests) });
-          });
+          return toolExecution(
+            new Promise((resolve) => {
+              releaseTools = () =>
+                resolve({ type: "continue", results: okResults(requests) });
+            }),
+          );
         },
       });
 
@@ -1960,7 +1974,7 @@ File context here
       const mockClient = new MockAnthropicClient();
       const agent = createAgent(mockClient, {
         executeTools: (requests) =>
-          Promise.resolve({
+          toolExecution({
             type: "continue" as const,
             results: okResults(requests, "file contents"),
           }),
@@ -2000,10 +2014,12 @@ File context here
       const agent = createAgent(mockClient, {
         executeTools: () => {
           onCalled();
-          return new Promise((resolve) => {
-            releaseTools = () =>
-              resolve({ type: "aborted", results: new Map() });
-          });
+          return toolExecution(
+            new Promise((resolve) => {
+              releaseTools = () =>
+                resolve({ type: "aborted", results: new Map() });
+            }),
+          );
         },
       });
 
@@ -2046,10 +2062,12 @@ File context here
       const agent = createAgent(mockClient, {
         executeTools: () => {
           onCalled();
-          return new Promise((resolve) => {
-            releaseTools = () =>
-              resolve({ type: "aborted", results: new Map() });
-          });
+          return toolExecution(
+            new Promise((resolve) => {
+              releaseTools = () =>
+                resolve({ type: "aborted", results: new Map() });
+            }),
+          );
         },
       });
 

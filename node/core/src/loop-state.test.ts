@@ -27,7 +27,7 @@ describe("LoopStateMachine", () => {
     loop.streaming(neverSettles);
     expect(loop.isEpochAborting(epoch)).toBe(true);
 
-    loop.applyRequestUpdate({ type: "attempt-started" });
+    loop.applyStreamEvent({ type: "attempt-started" });
     expect(loop.isAborting()).toBe(true);
 
     loop.finish(epoch, completed);
@@ -93,7 +93,7 @@ describe("LoopStateMachine", () => {
     loop.streaming(neverSettles);
     loop.runningTools([]);
 
-    loop.applyRequestUpdate({ type: "attempt-started" });
+    loop.applyStreamEvent({ type: "attempt-started" });
     expect(loop.current).toMatchObject({
       activity: { type: "running_tools" },
     });

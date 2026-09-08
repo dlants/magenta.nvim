@@ -261,18 +261,13 @@ describe("deferred submissions", () => {
       { result: "done" },
     );
     stream.finishResponse("end_turn");
-    // The rejection is a submission the agent makes on its own behalf. It is
-    // an opening request like any other, so it does not pick up the queue,
-    // which `flushAtStop` still owns.
+    // The rejection is a submission the agent makes on its own behalf, and it
+    // is a request like any other: the async queue rides it.
     const rejection = await awaitNextStream(mockClient, stream);
     expect(userTexts(core)).toContain("not done yet");
-    expect(userTexts(core)).not.toContain("also check this");
-    expect(core.queued.async).toEqual([pendingMessage("also check this")]);
-    rejection.finishResponse("end_turn");
-    const flushed = await awaitNextStream(mockClient, rejection);
     expect(userTexts(core)).toContain("also check this");
     expect(core.queued.async).toEqual([]);
-    flushed.finishResponse("end_turn");
+    rejection.finishResponse("end_turn");
   });
   it("defers an @async @compact past the request it cannot ride on", async () => {
     let resolveStat!: () => void;

@@ -117,3 +117,13 @@ export type ValidateInput = (
   toolName: unknown,
   input: { [key: string]: unknown },
 ) => Result<Record<string, unknown>>;
+
+/** A tool invocation as the loop's owner tracks it: the live handle, its
+ * latest progress, and its result once it lands. */
+export type ActiveToolEntry = {
+  handle: ToolInvocation;
+  progress: unknown;
+  toolName: ToolName;
+  request: ToolRequest;
+  result?: ProviderToolResult;
+};

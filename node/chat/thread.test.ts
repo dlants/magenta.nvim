@@ -193,20 +193,15 @@ it("handles errors during streaming response", async () => {
     const errorMessage = "Simulated error during streaming";
     stream.respondWithError(new Error(errorMessage));
 
-    // After a non-retryable error, the agent's pre-submit history is rolled
-    // back via truncateMessages. The failed user message and the error are
-    // rendered as standalone blocks so the user can see what they tried to
-    // send and why it failed; the input buffer is re-populated for easy
-    // resubmission.
+    // After a non-retryable error nothing is discarded: the failed message
+    // and the error are rendered so the user can see what they sent and why
+    // it failed, and the input buffer is left alone.
     await driver.assertDisplayBufferContains(
       "Test error handling during response",
     );
     await driver.assertDisplayBufferContains("Error");
     await driver.assertDisplayBufferContains(errorMessage);
 
-    await driver.assertInputBufferContains(
-      "Test error handling during response",
-    );
     // The error block is the previous submission's, so it survives until the
     // next one starts rather than until the next render.
     await driver.inputMagentaText("Second attempt");
@@ -215,7 +210,7 @@ it("handles errors during streaming response", async () => {
   });
 });
 
-it("restores only the failed message, leaving queued messages pending", async () => {
+it("keeps queued messages pending when a submission fails", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
     await driver.inputMagentaText("Original message");
@@ -227,9 +222,7 @@ it("restores only the failed message, leaving queued messages pending", async ()
     const thread = driver.magenta.chat.getActiveThread();
     expect(thread.core.queued.async).toHaveLength(1);
     stream.respondWithError(new Error("Simulated error with pending messages"));
-    await driver.assertInputBufferContains("Original message");
-    // The queued message was never delivered, so it stays queued and stays
-    // rendered rather than following the failed message into the input.
+    // The queued message was never delivered, so it stays queued.
     expect(thread.core.queued.async).toHaveLength(1);
     await driver.assertDisplayBufferContains("Queued pending message");
     expect(thread.submission).toEqual({
@@ -239,7 +232,7 @@ it("restores only the failed message, leaving queued messages pending", async ()
     });
   });
 });
-it("restores the failed message when the error arrives after assistant content", async () => {
+it("keeps the partial turn when the error arrives after assistant content", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
     await driver.inputMagentaText("Original message");
@@ -248,11 +241,19 @@ it("restores the failed message when the error arrives after assistant content",
     stream.streamText("Partial assistant response");
     await driver.assertDisplayBufferContains("Partial assistant response");
     stream.respondWithError(new Error("Simulated mid-stream error"));
-    await driver.assertInputBufferContains("Original message");
-    // The partial turn is rolled back, so a resubmit cannot duplicate it.
-    expect(
-      driver.magenta.chat.getActiveThread().core.getProviderMessages(),
-    ).toHaveLength(0);
+    // The half-streamed turn is repaired, not discarded: an empty send
+    // retries the request against exactly this log.
+    await pollUntil(() =>
+      expect(
+        driver.magenta.chat
+          .getActiveThread()
+          .core.getProviderMessages()
+          .map((m) => m.role),
+      ).toEqual(["user", "assistant"]),
+    );
+    await driver.send();
+    const retry = await driver.mockAnthropic.awaitPendingStream();
+    expect(retry.messages.filter((m) => m.role === "user")).toHaveLength(1);
   });
 });
 

@@ -1,4 +1,4 @@
-import type { InputMessage } from "../agent.ts";
+import type { InputMessage } from "../thread.ts";
 
 /** When a parsed submission is delivered.
  * - `now`: abort whatever is running and send immediately

@@ -1,6 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import type { SuspendReason } from "../thread-supervisor.ts";
 import type * as ToolManager from "../tool-types.ts";
 import type { ToolName, ToolRequest } from "../tool-types.ts";
 import type { Result } from "../utils/result.ts";
@@ -298,12 +297,6 @@ export type RequestedTool = {
   request: Result<ToolRequest, { rawRequest: unknown }>;
 };
 
-export type TurnResult =
-  | { type: "stopped"; stopReason: StopReason }
-  | { type: "suspended"; reason: SuspendReason }
-  | { type: "aborted" }
-  | { type: "failed"; error: Error };
-
 export type ToolResults = ReadonlyMap<
   ToolManager.ToolRequestId,
   ProviderToolResult["result"]
@@ -320,13 +313,19 @@ export type RequestResult =
   | { type: "aborted" }
   | { type: "error"; error: Error };
 
-export type RequestUpdate =
+export type StreamEvent =
   | { type: "streaming-block"; streamingBlock: StreamingBlock }
   | { type: "block-finished" }
   | { type: "retry-scheduled"; retry: RetryStatus }
   | { type: "attempt-started" };
 
-export type OnRequestUpdate = (update: RequestUpdate) => void;
+export type OnStreamEvent = (event: StreamEvent) => void;
+
+/** One in-flight request. Aborting it aborts that request and nothing else. */
+export type InferenceRequest = {
+  promise: Promise<RequestResult>;
+  abort(): void;
+};
 
 export interface NativeInferenceManager {
   readonly log: AgentLog;
@@ -339,12 +338,7 @@ export interface NativeInferenceManager {
   truncateMessages(messageIdx: NativeMessageIdx): void;
   clone(): NativeInferenceManager;
   countTokens?(): Promise<number>;
-  sendRequest(onUpdate: OnRequestUpdate): Promise<RequestResult>;
-  abort(): void;
-
-  /** Leave the history in a shape the provider will accept: no dangling
-   * tool_use or half-streamed blocks. */
-  finalize(reason: FinalizeReason): void;
+  sendRequest(onEvent: OnStreamEvent): InferenceRequest;
 }
 
 export type FinalizeReason =

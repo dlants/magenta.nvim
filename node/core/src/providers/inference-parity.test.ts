@@ -5,6 +5,7 @@ import {
   createTestOpenAIAgent,
   flatLoop,
   type TestAgent,
+  toolExecution,
 } from "../test-helpers.ts";
 import type { BeforeRequestHook, SendResult } from "../thread-api.ts";
 import {
@@ -86,7 +87,7 @@ async function anthropicContent(): Promise<TurnSnapshot> {
   const phaseDuringTurn = flatLoop(agent).type;
   const messages = snapshot(agent.getProviderMessages());
   stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
-  const turnResult = await turn;
+  const turnResult = await turn.promise;
   return {
     messages,
     phaseDuringTurn,
@@ -110,7 +111,7 @@ async function openaiContent(): Promise<TurnSnapshot> {
   const phaseDuringTurn = flatLoop(agent).type;
   const messages = snapshot(agent.manager.log.messages);
   stream.finishResponse("end_turn", { inputTokens: 1, outputTokens: 1 });
-  const turnResult = await turn;
+  const turnResult = await turn.promise;
   return {
     messages,
     phaseDuringTurn,
@@ -164,7 +165,9 @@ describe("agent parity for tagged user input", () => {
 describe("onBeforeRequest", () => {
   /** The runner fills a result for every requested tool it isn't handed. */
   const emptyResults = () =>
-    Promise.resolve({ type: "continue" as const, results: new Map() });
+    toolExecution(
+      Promise.resolve({ type: "continue" as const, results: new Map() }),
+    );
 
   const held = { kind: "stop" as const, message: "held" };
   /** The gate fires on the opening request too; this one holds the
@@ -184,7 +187,7 @@ describe("onBeforeRequest", () => {
       getHooks: () =>
         agentHooks({ onBeforeRequest: [holdSecond(() => ++calls)] }),
     });
-    const sendPromise = agent.send([{ type: "user", text: "go" }]);
+    const { promise: sendPromise } = agent.send([{ type: "user", text: "go" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -203,7 +206,7 @@ describe("onBeforeRequest", () => {
       getHooks: () =>
         agentHooks({ onBeforeRequest: [holdSecond(() => ++calls)] }),
     });
-    const sendPromise = agent.send([{ type: "user", text: "go" }]);
+    const { promise: sendPromise } = agent.send([{ type: "user", text: "go" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolCall("tool-1", "get_files", {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -224,13 +227,13 @@ describe("abort parity", () => {
     start: () => { agent: TestAgent; abortStream: () => void },
   ) {
     const { agent, abortStream } = start();
-    const turn = agent.send([{ type: "user", text: "go" }]);
+    const { promise: turn } = agent.send([{ type: "user", text: "go" }]);
     await pollUntil(() => {
       if (flatLoop(agent).type !== "streaming")
         throw new Error("not streaming");
       return true;
     });
-    agent.abort();
+    agent.abortAndWait();
     abortStream();
     const result = await turn;
     const messages = agent.manager.log.messages;
@@ -287,7 +290,7 @@ describe("preflight token count parity", () => {
       executeTools: noExecutor,
     });
     mockClient.mockInputTokenCount = 100;
-    expect(await agent.send([{ type: "user", text: "go" }])).toEqual({
+    expect(await agent.send([{ type: "user", text: "go" }]).promise).toEqual({
       type: "suspended",
       reason: { kind: "compact", nextPrompt: "wrap up" },
     });
@@ -296,7 +299,9 @@ describe("preflight token count parity", () => {
       getHooks: compactHooks,
       executeTools: noExecutor,
     });
-    const sendPromise = openai.agent.send([{ type: "user", text: "go" }]);
+    const { promise: sendPromise } = openai.agent.send([
+      { type: "user", text: "go" },
+    ]);
     const stream = await openai.mockClient.awaitStream();
     stream.finishResponse("end_turn", { inputTokens: 100, outputTokens: 1 });
     expect(await sendPromise).toEqual({

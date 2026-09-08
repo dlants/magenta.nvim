@@ -544,29 +544,6 @@ export class Magenta {
   }
   private handleSidebarMsg(msg: SidebarMsg): void {
     switch (msg.type) {
-      case "setup-resubmit": {
-        const wrapper = this.chat.threadWrappers[msg.threadId];
-        if (!wrapper || wrapper.state !== "initialized") {
-          this.nvim.logger.warn(
-            `setup-resubmit: thread ${msg.threadId} not found or not initialized`,
-          );
-          break;
-        }
-        const buffers = this.bufferManager.getThreadBuffers(msg.threadId);
-        if (!buffers) {
-          break;
-        }
-        buffers.inputBuffer
-          .setLines({
-            start: 0 as Row0Indexed,
-            end: -1 as Row0Indexed,
-            lines: msg.lastUserMessage.split("\n") as Line[],
-          })
-          .catch((error) => {
-            this.nvim.logger.error(`Error updating sidebar input: ${error}`);
-          });
-        break;
-      }
       case "append-to-input": {
         const buffers = this.bufferManager.getThreadBuffers(msg.threadId);
         if (!buffers) {
@@ -796,7 +773,16 @@ export class Magenta {
           this.activeBuffers.inputBuffer,
         );
         this.nvim.logger.debug(`current message: ${text}`);
-        if (!text) return;
+        if (!text) {
+          // Enter on an empty input after a failure retries it: the failed
+          // submission is still in the log, so there is nothing to retype.
+          this.dispatch({
+            type: "thread-msg",
+            id: this.chat.getActiveThread().id,
+            msg: { type: "retry" },
+          });
+          return;
+        }
 
         await this.preprocessAndSend(text);
         break;

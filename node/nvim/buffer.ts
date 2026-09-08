@@ -266,7 +266,10 @@ end
 vim.bo[bufnr].fixendofline = hasEol
 vim.bo[bufnr].endofline = hasEol
 -- the buffer now matches disk by construction
-vim.bo[bufnr].modified = false`,
+vim.bo[bufnr].modified = false
+-- refresh nvim's recorded mtime and b_last_changedtick, so focusing the
+-- buffer later does not trigger a reload or a phantom TextChanged
+vim.cmd("silent! checktime " .. bufnr)`,
         [this.id],
       ]),
       1000,

@@ -114,6 +114,11 @@ export type Msg =
       submission: Submission;
     }
   | {
+      /** Re-issue the request the last failure ended on. The log still holds
+       * the submission, so the retry carries no content of its own. */
+      type: "retry";
+    }
+  | {
       type: "abort";
     }
   | {
@@ -712,24 +717,14 @@ export class NvimThread {
       );
     }
     const submission = this.submission;
-    if (
-      result.type === "failed" &&
-      result.discardedSubmission &&
-      submission !== undefined
-    ) {
+    if (result.type === "failed" && submission !== undefined) {
+      // The submission is still in the log — nothing to retype, so the input
+      // buffer is left alone and an empty send retries the failed request.
       this.submission = {
         type: "failed",
         text: submission.text,
         error: result.error,
       };
-      this.context.dispatch({
-        type: "sidebar-msg",
-        msg: {
-          type: "setup-resubmit",
-          threadId: this.id,
-          lastUserMessage: submission.text,
-        },
-      });
     }
   }
 
@@ -1041,6 +1036,12 @@ export class NvimThread {
         return;
       }
 
+      case "retry": {
+        if (this.submission?.type !== "failed") return;
+        this.beginSubmission(this.submission.text);
+        this.runSubmission(() => this.core.send([], { force: true }));
+        return;
+      }
       case "abort": {
         for (const entry of loopActiveTools(this.core.loopState)?.values() ??
           []) {

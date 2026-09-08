@@ -1,4 +1,4 @@
-import type { ActiveToolEntry, ToolOutcome } from "./agent.ts";
+import type { ToolExecution, ToolOutcome } from "./agent.ts";
 import type { Logger } from "./logger.ts";
 import type {
   ProviderToolResult,
@@ -8,6 +8,7 @@ import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { AgentHooks, ToolInvocationState } from "./thread-api.ts";
 import type { SuspendReason } from "./thread-supervisor.ts";
 import type {
+  ActiveToolEntry,
   ToolInvocation,
   ToolRequest,
   ToolRequestId,
@@ -17,10 +18,6 @@ export type ToolExecutorDeps = {
   logger: Logger;
   createTool: (request: ToolRequest) => ToolInvocation;
   getHooks: () => AgentHooks;
-  /** Whether the owner is winding the turn down. Checked at the two points
-   * where an abort can be missed: after the invocations are created but
-   * before they are reachable, and once they have all settled. */
-  isAborting: () => boolean;
   /** Where the invocations are, for whoever renders them. */
   publishTools: (tools: ToolInvocationState) => void;
   onUpdate: () => void;
@@ -36,13 +33,29 @@ export class ToolExecutorHost {
   /** The invocations that are running right now. Empty between batches. */
   private live = new Map<ToolRequestId, ActiveToolEntry>();
 
-  /** Abort every live invocation. The outcome of the batch is still decided by
-   * `isAborting`, so this only stops the work. */
+  /** Whether the batch in flight has been aborted. Read at the two points
+   * where an abort can be missed: after the invocations are created but
+   * before they are reachable, and once they have all settled. */
+  private aborting = false;
+
+  /** Abort the batch in flight: stop every live invocation and settle the
+   * batch as `aborted`. Also reachable from the thread directly, for the
+   * teardowns that are not the agent winding a turn down. */
   abortAll(): void {
+    this.aborting = true;
     for (const [, entry] of this.live) entry.handle.abort();
   }
 
-  async execute(requests: ReadonlyArray<RequestedTool>): Promise<ToolOutcome> {
+  /** Mirrors `NativeInferenceManager.sendRequest`: the batch starts here and
+   * the handle aborts this batch and nothing else. */
+  execute(requests: ReadonlyArray<RequestedTool>): ToolExecution {
+    return { promise: this.runBatch(requests), abort: () => this.abortAll() };
+  }
+
+  private async runBatch(
+    requests: ReadonlyArray<RequestedTool>,
+  ): Promise<ToolOutcome> {
+    this.aborting = false;
     const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
     const results = new Map<ToolRequestId, ProviderToolResult["result"]>();
 
@@ -76,7 +89,7 @@ export class ToolExecutorHost {
     this.live = activeTools;
     // An abort can land while the invocations are being created, before they
     // are reachable; abort them here so none is left running.
-    if (this.deps.isAborting()) this.abortAll();
+    if (this.aborting) this.abortAll();
     this.deps.publishTools({ type: "running", activeTools });
 
     const settled = await Promise.all(
@@ -123,7 +136,7 @@ export class ToolExecutorHost {
     this.live = new Map();
     this.deps.publishTools({ type: "settled" });
 
-    if (this.deps.isAborting()) {
+    if (this.aborting) {
       return { type: "aborted", results };
     }
 

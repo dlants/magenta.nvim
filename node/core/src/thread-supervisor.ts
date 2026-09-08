@@ -1,4 +1,3 @@
-import type { InputMessage } from "./agent.ts";
 import type { OnToolApplied } from "./capabilities/context-tracker.ts";
 import type { CompactSuspendReason } from "./compaction/index.ts";
 import type {
@@ -71,13 +70,10 @@ export function injectText(
   return { type: "inject", content: [{ type: "text", text }] };
 }
 
-/** What a before-request hook may contribute. A superset of
- * `SupervisorAction`: only the owner's own queue-flush hook produces
- * `submissions` — the user's own queued content, which the agent orders last,
- * after every injection. */
-export type RequestAction =
-  | SupervisorAction
-  | { type: "submissions"; messages: InputMessage[] };
+/** What a before-request hook may contribute. The agent appends every
+ * injection to the request in hook order, so a contribution that must land
+ * last — the user's own queued content — comes from a hook registered last. */
+export type RequestAction = SupervisorAction;
 
 /** Fold a list of supervisors into the single `ThreadHooks` set a `Thread`
  * consults. The merge rules are exactly today's: `send-message` texts join

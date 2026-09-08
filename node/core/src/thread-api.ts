@@ -1,4 +1,3 @@
-import type { ActiveToolEntry } from "./agent.ts";
 import type { OnToolApplied } from "./capabilities/context-tracker.ts";
 import type { StopReason, ToolResults } from "./providers/provider-types.ts";
 import type { PendingMessage } from "./submission/index.ts";
@@ -10,7 +9,7 @@ import type {
   SuspendReason,
   YieldAction,
 } from "./thread-supervisor.ts";
-import type { ToolRequestId } from "./tool-types.ts";
+import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
 
 /** What a thread hands back when it yields. Which variant a thread produces is
  * fixed at construction — a thread either has a `yieldSchema` or does not — so
@@ -39,6 +38,9 @@ export type ToolInvocationState =
   | { type: "settled" };
 
 export type SendOptions = {
+  /** Issue a request even with no content of our own: a retry re-sends the
+   * log exactly as a failure left it. */
+  force?: true;
   /** async: run after the current turn. next: run at the next stop.
    * undefined: abort whatever is running and send now. */
   queue?: "async" | "next";
@@ -57,19 +59,10 @@ export type SendResult =
   | { type: "empty" }
   | { type: "yielded"; value: YieldValue }
   | { type: "aborted" }
-  /** The runner exhausted its retries. The agent has already rolled its
-   * message log back to the state before the failed request, so the thread is
-   * coherent and resumable, and any queued submissions are untouched. */
-  | {
-      type: "failed";
-      error: Error;
-      /** True when the rollback discarded the submitted content itself, so it
-       * is no longer in the log and an owner may restore it for resubmission.
-       * False when the failure happened on a later request of the same
-       * submission — the submitted content is still in the log, and restoring
-       * it would duplicate it. */
-      discardedSubmission: boolean;
-    }
+  /** The runner exhausted its retries. Nothing is discarded: the submission
+   * is still in the log, in a shape the provider will accept, so retrying
+   * re-issues the same request and queued submissions are untouched. */
+  | { type: "failed"; error: Error }
   /** A supervisor stopped the submission before a request was issued. The log
    * is coherent and resumable; what to do about it is the owner's business,
    * and the reason is opaque to core's turn loop. */
@@ -95,15 +88,9 @@ export type QueuedMessage = {
   message: PendingMessage;
 };
 
-/** What the agent tells its owner about the request it is about to issue.
- * `isOpeningRequest` is the agent's own knowledge — which request of a turn
- * this is — and it is the single source of truth for it; the supervisors
- * below the owner are not told. */
-export type AgentRequestContext = RequestContext & {
-  /** This is the first request of the turn the agent's caller asked for, as
-   * opposed to a continuation carrying tool results. */
-  isOpeningRequest: boolean;
-} & (
+/** What the agent tells its owner about the request it is about to issue. */
+export type AgentRequestContext = RequestContext &
+  (
     | { status: "pending" }
     /** An earlier hook has already suspended this request, so it will never be
      * issued. Later hooks are still consulted — a stop is a fact each of them

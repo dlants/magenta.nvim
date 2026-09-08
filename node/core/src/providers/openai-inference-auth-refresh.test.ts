@@ -74,7 +74,7 @@ describe("OpenAIInferenceManager auth refresh", () => {
     expect(refreshAuth).toHaveBeenCalledTimes(1);
 
     // The partial text from the failed attempt must not survive the retry.
-    const messages = agent.getMessages();
+    const messages = agent.getProviderMessages();
     expect(messages[messages.length - 1].content).toMatchObject([
       { type: "text", text: "the real answer" },
     ]);

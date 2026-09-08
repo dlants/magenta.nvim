@@ -1,12 +1,11 @@
-import type { ActiveToolEntry } from "./agent.ts";
 import type {
   RequestedTool,
-  RequestUpdate,
   RetryStatus,
+  StreamEvent,
   StreamingBlock,
 } from "./providers/provider-types.ts";
 import type { SendResult, ToolInvocationState } from "./thread-api.ts";
-import type { ToolRequestId } from "./tool-types.ts";
+import type { ActiveToolEntry, ToolRequestId } from "./tool-types.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 
 /** What the turn loop is doing inside a submission. The owner of the loop sees
@@ -199,21 +198,21 @@ export class LoopStateMachine {
    * `lastEventTime`; the block itself is read at render time. Retries stay
    * inside the `streaming` activity and are never observable as a
    * transition. */
-  applyRequestUpdate(update: RequestUpdate): void {
+  applyStreamEvent(event: StreamEvent): void {
     const state = this.state;
     if (state.type !== "running" || state.activity.type !== "streaming") return;
     const prev = state.activity;
     let block = prev.block;
     let retry = prev.retry;
-    switch (update.type) {
+    switch (event.type) {
       case "streaming-block":
-        block = update.streamingBlock;
+        block = event.streamingBlock;
         break;
       case "block-finished":
         block = undefined;
         break;
       case "retry-scheduled":
-        retry = update.retry;
+        retry = event.retry;
         block = undefined;
         break;
       case "attempt-started":
@@ -221,7 +220,7 @@ export class LoopStateMachine {
         block = undefined;
         break;
       default:
-        assertUnreachable(update);
+        assertUnreachable(event);
     }
     this.setActivity({
       type: "streaming",

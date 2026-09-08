@@ -25,7 +25,7 @@ describe("Agent streaming status", () => {
     await mockClient.awaitStream();
 
     await vi.advanceTimersByTimeAsync(2000);
-    void agent.abort();
+    void agent.abortAndWait();
     expect(await turn).toEqual({ type: "aborted" });
     await vi.advanceTimersByTimeAsync(0);
 

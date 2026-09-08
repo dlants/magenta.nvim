@@ -31,7 +31,6 @@ describe("ToolExecutorHost", () => {
       logger: noopLogger,
       createTool: () => invocation,
       getHooks: () => agentHooks(),
-      isAborting: () => true,
       publishTools: () => {},
       onUpdate: () => {},
     });
@@ -44,7 +43,9 @@ describe("ToolExecutorHost", () => {
       { id: request.id, request: { status: "ok", value: request } },
     ];
 
-    const outcome = await host.execute(requests);
+    const execution = host.execute(requests);
+    execution.abort();
+    const outcome = await execution.promise;
     expect(abort).toHaveBeenCalled();
     expect(outcome.type).toBe("aborted");
     expect(outcome.results.get(request.id)).toEqual({

@@ -35,6 +35,7 @@ import {
   defaultAnthropicOptions,
   flatLoop,
   TEST_ARCHIVE_DIR,
+  toolExecution,
   uniqueThreadId,
 } from "./test-helpers.ts";
 import type { ThreadContext, YieldState } from "./thread.ts";
@@ -318,13 +319,11 @@ describe("Thread turn loop", () => {
     });
     expect(mockClient.streams.length).toBe(streamsBefore);
     releaseResolve?.();
+    // The racer landed on the async queue, so it rides the continuation the
+    // flush was building rather than needing a request of its own.
     const second = await awaitNextStream(mockClient, stream);
     second.streamText("done");
     second.finishResponse("end_turn");
-    // The racer was queued, so it goes out as its own continuation.
-    const third = await awaitNextStream(mockClient, second);
-    third.streamText("done again");
-    third.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
   });
   it("delivers a queued message before an end-turn supervisor can suspend", async () => {
@@ -358,7 +357,7 @@ describe("Thread turn loop", () => {
     await core.destroy();
     await cleanupArchive(threadId);
   });
-  it("does not offer the submitted text back when a continuation fails", async () => {
+  it("keeps the submitted message in the log when a continuation fails", async () => {
     const { core, mockClient } = createAgentWithMock(
       undefined,
       uniqueThreadId("continuation-failure"),
@@ -372,9 +371,8 @@ describe("Thread turn loop", () => {
     continuation.respondWithError(new Error("continuation failure"));
     const result = await sent;
     if (result.type !== "failed") throw new Error("expected failed");
-    // The rollback only reached the continuation request, so the submitted
-    // message is still in the log and must not also be restored for resubmit.
-    expect(result.discardedSubmission).toBe(false);
+    // Nothing is discarded on failure, so the submitted message is still in
+    // the log and a retry re-issues the continuation.
     expect(
       core
         .getProviderMessages()
@@ -443,7 +441,7 @@ describe("runSubmission across a compaction handoff", () => {
     try {
       compactOnce(core, "carry on");
       const compactor = stubCompactor();
-      const oldAgent = core.agent;
+      const oldAgent = core.inferenceManager;
       let settled: ThreadSendResult | undefined;
       const result = runSubmission({
         thread: core,
@@ -457,7 +455,8 @@ describe("runSubmission across a compaction handoff", () => {
       stream.streamText("done");
       stream.finishResponse("end_turn");
       const contStream = await pollUntil(() => {
-        if (core.agent === oldAgent) throw new Error("waiting for swap");
+        if (core.inferenceManager === oldAgent)
+          throw new Error("waiting for swap");
         return awaitNextStream(mockClient, stream);
       });
       expect(settled).toBeUndefined();
@@ -483,7 +482,7 @@ describe("runSubmission across a compaction handoff", () => {
       // entirely of commands can expand to nothing, and an empty user turn is
       // not something to send.
       compactOnce(core, "   ");
-      const oldAgent = core.agent;
+      const oldAgent = core.inferenceManager;
       const result = runSubmission({
         thread: core,
         compactor: stubCompactor(),
@@ -493,7 +492,8 @@ describe("runSubmission across a compaction handoff", () => {
       stream.streamText("done");
       stream.finishResponse("end_turn");
       const contStream = await pollUntil(() => {
-        if (core.agent === oldAgent) throw new Error("waiting for swap");
+        if (core.inferenceManager === oldAgent)
+          throw new Error("waiting for swap");
         return awaitNextStream(mockClient, stream);
       });
       expect(JSON.stringify(contStream.messages)).toContain(
@@ -553,12 +553,13 @@ describe("runSubmission across a compaction handoff", () => {
 
       let stream = await mockClient.awaitStream();
       for (const [idx, prompt] of prompts.entries()) {
-        const oldAgent = core.agent;
+        const oldAgent = core.inferenceManager;
         stream.streamText("done");
         stream.finishResponse("end_turn");
         const prev = stream;
         stream = await pollUntil(() => {
-          if (core.agent === oldAgent) throw new Error("waiting for swap");
+          if (core.inferenceManager === oldAgent)
+            throw new Error("waiting for swap");
           return awaitNextStream(mockClient, prev);
         });
         expect(settled).toBeUndefined();
@@ -657,14 +658,14 @@ describe("Thread.reset", () => {
       core.structuredToolResults.set("tr-1" as ToolRequestId, {
         toolName: "thread_title",
       });
-      const oldAgent = core.agent;
+      const oldAgent = core.inferenceManager;
 
       await core.reset({
         seed: [{ type: "user", text: "SEED" }],
         archive: { type: "none" },
       });
 
-      expect(core.agent).not.toBe(oldAgent);
+      expect(core.inferenceManager).not.toBe(oldAgent);
       expect(core.getProviderMessages()).toEqual([]);
       expect(core.structuredToolResults.has("tr-1" as ToolRequestId)).toBe(
         true,
@@ -1078,8 +1079,8 @@ describe("Agent.abort on yielded thread", () => {
       );
     });
     // `abort()` short-circuits on a yielded agent, but the preempting-send path
-    // calls `abortAndWait` directly: it must not erase the yield either.
-    await core.agent.abortAndWait();
+    // winds the agent's turn down directly: it must not erase the yield either.
+    await core.abortAgentTurn();
     expect(core.yielded).toBeDefined();
     expect(core.lastResult()).toEqual({
       type: "yielded",
@@ -1255,7 +1256,7 @@ describe("AutoCompactSupervisor integration", () => {
     stream.finishResponse("end_turn");
 
     await pollUntil(() => {
-      if (core.agent.inputTokenCount === 50) return true;
+      if (core.inputTokenCount === 50) return true;
       throw new Error("waiting for the preflight token count");
     });
     expect(compactions.prompts.length).toBe(0);
@@ -2418,7 +2419,7 @@ describe("Agent createFreshAgent thinking effort override", () => {
   });
 });
 
-describe("Agent failure rollback", () => {
+describe("Agent failure", () => {
   /** Drive a send to a provider error and wait for the agent to come to rest. */
   const failSend = async (
     core: Thread,
@@ -2433,32 +2434,25 @@ describe("Agent failure rollback", () => {
     return await result;
   };
 
-  it("rolls the log back so a resubmit does not duplicate the user message", async () => {
+  it("keeps the submitted message in the log, so a retry re-issues it once", async () => {
     const { core, mockClient } = createAgentWithMock();
     const failed = await failSend(core, mockClient, "find the bug");
     expect(failed.type).toBe("failed");
-    expect(core.getProviderMessages()).toHaveLength(0);
+    // Nothing is discarded: the user has nothing to retype.
+    expect(core.getProviderMessages()).toHaveLength(1);
 
-    void core.send([{ type: "user", text: "try again" }]);
-    // The resubmitted content is appended by the turn, past the gate, so poll
-    // for it rather than for the stream.
-    const userTexts = await pollUntil(() => {
-      const texts = core
-        .getProviderMessages()
-        .filter((m) => m.role === "user")
-        .flatMap((m) => m.content)
-        .filter((c) => c.type === "text")
-        .map((c) => c.text);
-      if (!texts.some((t) => t.includes("try again"))) {
-        throw new Error("waiting for the resubmitted message");
-      }
-      return texts;
-    });
-    expect(userTexts.filter((t) => t.includes("find the bug"))).toHaveLength(0);
-    expect(userTexts.filter((t) => t.includes("try again"))).toHaveLength(1);
+    const prev = mockClient.streams[mockClient.streams.length - 1];
+    void core.send([], { force: true });
+    const retry = await awaitNextStream(mockClient, prev);
+    const userTexts = retry.messages
+      .filter((m) => m.role === "user")
+      .flatMap((m) => (typeof m.content === "string" ? [] : m.content))
+      .filter((c) => c.type === "text")
+      .map((c) => c.text);
+    expect(userTexts.filter((t) => t.includes("find the bug"))).toHaveLength(1);
   });
 
-  it("rolls back to the snapshot, keeping earlier completed exchanges", async () => {
+  it("keeps earlier completed exchanges alongside the failed submission", async () => {
     const { core, mockClient } = createAgentWithMock();
     void core.send([{ type: "user", text: "first message" }]);
     const first = await mockClient.awaitStream();
@@ -2470,8 +2464,7 @@ describe("Agent failure rollback", () => {
 
     await failSend(core, mockClient, "second message");
     const messages = core.getProviderMessages();
-    expect(messages).toHaveLength(2);
-    expect(messages[1].role).toBe("assistant");
+    expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
   });
 
   it("leaves both queues populated and unresolved, delivering them on the next send", async () => {
@@ -2591,13 +2584,17 @@ describe("Agent failure rollback", () => {
       if (core.lastResult()?.type === "failed") return true;
       throw new Error("waiting for error state");
     });
-    for (const message of core.getProviderMessages()) {
-      for (const content of message.content) {
-        if (content.type === "tool_use") {
-          throw new Error("expected no orphan tool_use in the rolled-back log");
-        }
-      }
-    }
+    // The tool_use stays, but it is answered: what the provider rejects is an
+    // unanswered one, not the exchange itself.
+    const contents = core.getProviderMessages().flatMap((m) => m.content);
+    const toolUseIds = contents
+      .filter((c) => c.type === "tool_use")
+      .map((c) => c.id);
+    const resultIds = contents
+      .filter((c) => c.type === "tool_result")
+      .map((c) => c.id);
+    expect(toolUseIds).toHaveLength(1);
+    expect(resultIds).toEqual(toolUseIds);
   });
 });
 type ParsedEntry = { type: string; [k: string]: unknown };
@@ -2782,7 +2779,7 @@ describe("Agent conversation archive", () => {
         return true;
       });
 
-      const nativeMessageIdx = parent.agent.manager.getNativeMessageIdx();
+      const nativeMessageIdx = parent.inferenceManager.getNativeMessageIdx();
       child = await Thread.clone({
         sourceThread: parent,
         newId: childId,
@@ -2853,7 +2850,7 @@ describe("Agent thread state", () => {
       parent.edlRegisters.registers.set("r", "regval");
       parent.edlRegisters.nextSavedId = 3;
 
-      const nativeMessageIdx = parent.agent.manager.getNativeMessageIdx();
+      const nativeMessageIdx = parent.inferenceManager.getNativeMessageIdx();
       child = await Thread.clone({
         sourceThread: parent,
         newId: childId,
@@ -2941,9 +2938,9 @@ describe("Thread survives the compaction agent swap", () => {
     const threadId = uniqueThreadId("compact-events");
     const { core, mockClient } = createAgentWithMock(undefined, threadId);
     try {
-      const oldAgent = core.agent;
+      const oldAgent = core.inferenceManager;
       await compact(core, mockClient);
-      expect(core.agent).not.toBe(oldAgent);
+      expect(core.inferenceManager).not.toBe(oldAgent);
 
       let updates = 0;
       core.callbacks.onUpdate = () => updates++;
@@ -3013,7 +3010,7 @@ describe("Agent preflight token count", () => {
       getHooks: () => agentHooks({ onBeforeRequest: [noteCount(seen)] }),
     });
     mockClient.mockInputTokenCount = 42;
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const { promise: turn } = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("ok");
     stream.finishResponse("end_turn");
@@ -3036,7 +3033,7 @@ describe("Agent preflight token count", () => {
         }),
     });
     mockClient.mockInputTokenCount = 42;
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const { promise: turn } = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("ok");
     stream.finishResponse("end_turn");
@@ -3054,7 +3051,7 @@ describe("Agent preflight token count", () => {
       getHooks: () => agentHooks({ onBeforeRequest: [noteCount(seen, true)] }),
     });
     mockClient.mockInputTokenCount = 42;
-    const first = agent.send([{ type: "user", text: "hello" }]);
+    const { promise: first } = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("ok");
     stream.finishResponse("end_turn");
@@ -3062,7 +3059,7 @@ describe("Agent preflight token count", () => {
     expect(agent.inputTokenCount).toBe(42);
 
     mockClient.countTokensError = new Error("count failed");
-    const second = agent.send([{ type: "user", text: "again" }]);
+    const { promise: second } = agent.send([{ type: "user", text: "again" }]);
     const stream2 = await pollUntil(() => {
       const s = mockClient.streams[1];
       if (!s) throw new Error("waiting for the second request");
@@ -3094,10 +3091,12 @@ describe("Agent preflight token count", () => {
         }),
     });
     mockClient.mockInputTokenCount = 42;
-    expect(await agent.send([{ type: "user", text: "hello" }])).toEqual({
-      type: "suspended",
-      reason: { kind: "stop", message: "held" },
-    });
+    expect(await agent.send([{ type: "user", text: "hello" }]).promise).toEqual(
+      {
+        type: "suspended",
+        reason: { kind: "stop", message: "held" },
+      },
+    );
     // The later hook is still consulted — a stop is a fact it may need to
     // record — but the request it would decide about is never issued.
     expect(seen).toEqual([undefined]);
@@ -3122,10 +3121,12 @@ describe("Agent turn loop", () => {
         }),
     });
 
-    expect(await agent.send([{ type: "user", text: "hello" }])).toEqual({
-      type: "suspended",
-      reason: { kind: "stop", message: "held" },
-    });
+    expect(await agent.send([{ type: "user", text: "hello" }]).promise).toEqual(
+      {
+        type: "suspended",
+        reason: { kind: "stop", message: "held" },
+      },
+    );
     expect(mockClient.streams).toHaveLength(0);
     // The caller's content still lands, so the next request carries it.
     expect(agent.getProviderMessages()).toHaveLength(1);
@@ -3133,12 +3134,12 @@ describe("Agent turn loop", () => {
 
   it("an abort mid-stream unwinds once, leaving one abort marker", async () => {
     const { agent, mockClient } = createTestAgent();
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const { promise: turn } = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial");
 
-    void agent.abort();
-    void agent.abort();
+    void agent.abortAndWait();
+    void agent.abortAndWait();
     expect(await turn).toEqual({ type: "aborted" });
 
     const texts = agent
@@ -3154,7 +3155,7 @@ describe("Agent turn loop", () => {
 
   it("the streaming block on the phase is a copy, not the manager's own", async () => {
     const { agent, mockClient } = createTestAgent();
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const { promise: turn } = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
 
     stream.emitEvent({
@@ -3179,7 +3180,7 @@ describe("Agent turn loop", () => {
     const later = flatLoop(agent);
     expect(later.type === "streaming" && later.block).not.toBe(first);
 
-    void agent.abort();
+    void agent.abortAndWait();
     await turn;
   });
 
@@ -3196,7 +3197,7 @@ describe("Agent turn loop", () => {
         );
       },
     });
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const { promise: turn } = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.emitEvent({
       type: "content_block_start",
@@ -3228,7 +3229,7 @@ describe("Agent turn loop", () => {
           ],
         }),
     });
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const { promise: turn } = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
 
     const messages = agent.getProviderMessages();
@@ -3246,9 +3247,10 @@ describe("Agent turn loop", () => {
 
   it("a rejecting executor still answers every tool_use", async () => {
     const { agent, mockClient } = createTestAgent({
-      executeTools: () => Promise.reject(new Error("executor blew up")),
+      executeTools: () =>
+        toolExecution(Promise.reject(new Error("executor blew up"))),
     });
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const { promise: turn } = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -3273,9 +3275,11 @@ describe("Agent turn loop", () => {
   it("an executor that reports it aborted unwinds the turn once", async () => {
     const { agent, mockClient } = createTestAgent({
       executeTools: () =>
-        Promise.resolve({ type: "aborted" as const, results: new Map() }),
+        toolExecution(
+          Promise.resolve({ type: "aborted" as const, results: new Map() }),
+        ),
     });
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const { promise: turn } = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -3307,7 +3311,7 @@ describe("Agent turn loop", () => {
         });
       },
     });
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const { promise: turn } = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -3344,7 +3348,7 @@ describe("Agent turn loop", () => {
         } as unknown as ThreadContext["fileIO"],
       },
     });
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const { promise: turn } = agent.send([{ type: "user", text: "hello" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -3375,7 +3379,7 @@ describe("Agent turn loop", () => {
     await stream.settle();
     stream.respondWithError(new Error("connection lost"));
 
-    const result = await turn;
+    const result = await turn.promise;
     expect(result.type).toBe("failed");
     // Finalized: the half-streamed assistant turn is left in a shape the
     // provider will accept on the next request.

@@ -1,10 +1,11 @@
 import type OpenAI from "openai";
 import { describe, expect, it } from "vitest";
-import type { Agent, ToolExecutor } from "../agent.ts";
+import type { ToolExecutor } from "../agent.ts";
 import {
   createTestOpenAIAgent,
   flatLoop,
   type TestAgent,
+  toolExecution,
 } from "../test-helpers.ts";
 import type { SendResult } from "../thread-api.ts";
 import type { ToolName } from "../tool-types.ts";
@@ -72,7 +73,7 @@ function setup(
     return (
       options.executeTools ??
       ((reqs: ReadonlyArray<RequestedTool>) =>
-        Promise.resolve({
+        toolExecution({
           type: "continue" as const,
           results: okResults(reqs),
         }))
@@ -94,16 +95,16 @@ function setup(
  * back the previous, already-finished stream, so index from where we are. */
 async function startTurn(
   client: MockOpenAIClient,
-  agent: Agent,
+  agent: TestAgent,
   text = "hello",
 ): Promise<{ turn: Promise<SendResult>; stream: MockResponseStream }> {
   const next = client.streams.length;
   const turn = agent.send([{ type: "user", text }]);
   const stream = await client.awaitStreamAt(next);
-  return { turn, stream };
+  return { turn: turn.promise, stream };
 }
 
-function assistant(agent: Agent): ProviderMessage {
+function assistant(agent: TestAgent): ProviderMessage {
   const messages = agent.manager.log.messages;
   const last = messages[messages.length - 1];
   expect(last.role).toBe("assistant");
@@ -112,7 +113,7 @@ function assistant(agent: Agent): ProviderMessage {
 
 /** The last assistant message, which an aborted turn leaves behind its own
  * user-role abort marker. */
-function lastAssistant(agent: Agent): ProviderMessage {
+function lastAssistant(agent: TestAgent): ProviderMessage {
   const messages = agent.manager.log.messages;
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === "assistant") return messages[i];
@@ -125,7 +126,7 @@ function streamingBlock(agent: TestAgent) {
   return phase.type === "streaming" ? phase.block : undefined;
 }
 
-function toolUseBlocks(agent: Agent) {
+function toolUseBlocks(agent: TestAgent) {
   return agent.manager.log.messages.flatMap((message) =>
     message.content.filter((content) => content.type === "tool_use"),
   );
@@ -282,7 +283,7 @@ describe("OpenAIInferenceManager tool calls", () => {
   it("surfaces a tool_use block and echoes the call plus its output", async () => {
     const { client, agent, calls } = setup({
       executeTools: (requests) =>
-        Promise.resolve({
+        toolExecution({
           type: "continue",
           results: okResults(requests, "file contents"),
         }),
@@ -342,7 +343,7 @@ describe("OpenAIInferenceManager tool calls", () => {
   it("records the results and parks the agent when the executor suspends", async () => {
     const { client, agent } = setup({
       executeTools: (requests) =>
-        Promise.resolve({
+        toolExecution({
           type: "continue" as const,
           results: okResults(requests, "yielded"),
         }),
@@ -511,7 +512,7 @@ describe("OpenAIInferenceManager abort", () => {
     });
     await stream.settle();
 
-    agent.abort();
+    agent.abortAndWait();
     stream.abortMidstream();
 
     expect(await turn).toEqual({ type: "aborted" });
@@ -529,7 +530,7 @@ describe("OpenAIInferenceManager abort", () => {
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
 
-    agent.abort();
+    agent.abortAndWait();
     stream.abortMidstream();
     expect(await turn).toEqual({ type: "aborted" });
 
@@ -547,7 +548,7 @@ describe("OpenAIInferenceManager abort", () => {
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await stream.settle();
 
-    agent.abort();
+    agent.abortAndWait();
     stream.abortMidstream();
     expect(await turn).toEqual({ type: "aborted" });
 
@@ -563,7 +564,7 @@ describe("OpenAIInferenceManager abort", () => {
   it("unwinds when the executor reports that it aborted its tools", async () => {
     const { client, agent } = setup({
       executeTools: () =>
-        Promise.resolve({ type: "aborted", results: new Map() }),
+        toolExecution({ type: "aborted", results: new Map() }),
     });
     const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
@@ -592,7 +593,7 @@ describe("OpenAIInferenceManager invariant guards", () => {
   it("answers an id the executor omitted", async () => {
     const { client, agent } = setup({
       executeTools: () =>
-        Promise.resolve({ type: "continue", results: new Map() }),
+        toolExecution({ type: "continue", results: new Map() }),
     });
     const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
@@ -612,7 +613,8 @@ describe("OpenAIInferenceManager invariant guards", () => {
 
   it("answers every id when the executor rejects", async () => {
     const { client, agent } = setup({
-      executeTools: () => Promise.reject(new Error("executor blew up")),
+      executeTools: () =>
+        toolExecution(Promise.reject(new Error("executor blew up"))),
     });
     const { turn, stream } = await startTurn(client, agent);
     stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
@@ -627,14 +629,19 @@ describe("OpenAIInferenceManager invariant guards", () => {
     await turn;
   });
 
-  it("rejects a second turn while one is in flight", async () => {
+  it("fails a second turn started while one is in flight", async () => {
     const { client, agent } = setup();
     const { turn, stream } = await startTurn(client, agent);
 
-    await expect(agent.send([{ type: "user", text: "again" }])).rejects.toThrow(
-      /already in flight/,
-    );
-    // The rejected call must not have perturbed the history.
+    expect(
+      await agent.send([{ type: "user", text: "again" }]).promise,
+    ).toMatchObject({
+      type: "failed",
+      error: expect.objectContaining({
+        message: expect.stringContaining("already in flight"),
+      }) as Error,
+    });
+    // The failed call must not have perturbed the history.
     expect(agent.manager.log.messages).toHaveLength(1);
 
     stream.streamText("hi");
@@ -679,7 +686,7 @@ describe("OpenAIInferenceManager clone", () => {
     const { client, agent } = setup({
       executeTools: (requests) => {
         midToolClone = agent.manager.clone();
-        return Promise.resolve({
+        return toolExecution({
           type: "continue",
           results: okResults(requests),
         });
@@ -728,7 +735,7 @@ describe("OpenAIInferenceManager tool result attachments", () => {
   ) {
     const { client, agent } = setup({
       executeTools: (requests) =>
-        Promise.resolve({
+        toolExecution({
           type: "continue" as const,
           results: new Map(
             requests.map((request) => [
@@ -806,7 +813,7 @@ describe("OpenAIInferenceManager stop info", () => {
     });
     second.stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
     await second.stream.settle();
-    agent.abort();
+    agent.abortAndWait();
     second.stream.abortMidstream();
     await second.turn;
 

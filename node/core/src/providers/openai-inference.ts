@@ -31,9 +31,10 @@ import type {
   AgentLog,
   FinalizeReason,
   InferenceOptions,
+  InferenceRequest,
   NativeInferenceManager,
   NativeMessageIdx,
-  OnRequestUpdate,
+  OnStreamEvent,
   ProviderMessage,
   ProviderToolResult,
   RequestedTool,
@@ -113,7 +114,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
   private request: { type: "idle" } | { type: "running"; aborted: boolean } = {
     type: "idle",
   };
-  private onRequestUpdate: OnRequestUpdate | undefined;
+  private onStreamEvent: OnStreamEvent | undefined;
   /** The native Responses input items are the single source of truth. The
    * request body is these items verbatim; `ProviderMessage[]` is derived from
    * them and never converted back. */
@@ -204,7 +205,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
   /** Report the in-progress block, normalized away from the native shape: a
    * fresh `StreamingBlock` every time, never an alias of the live block. */
   private syncStreamingBlock(): void {
-    const report = this.onRequestUpdate;
+    const report = this.onStreamEvent;
     if (!report) return;
     const block =
       this.openIndex === undefined
@@ -483,15 +484,19 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       .map((block) => ({ id: block.id, request: block.request }));
   }
 
+  sendRequest(onEvent: OnStreamEvent): InferenceRequest {
+    return { promise: this.runRequest(onEvent), abort: () => this.abort() };
+  }
+
   /** One provider request, including the retry/backoff budget. */
-  async sendRequest(onUpdate: OnRequestUpdate): Promise<RequestResult> {
+  private async runRequest(onEvent: OnStreamEvent): Promise<RequestResult> {
     if (this.request.type === "running") {
       throw new Error(
         "sendRequest called while a request is already in flight",
       );
     }
     this.request = { type: "running", aborted: false };
-    this.onRequestUpdate = onUpdate;
+    this.onStreamEvent = onEvent;
     try {
       const outcome = await this.streamOneResponse();
       if (outcome.type === "completed") {
@@ -506,15 +511,23 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
                   : outcome.stopReason,
             };
       }
+      this.finalize(
+        outcome.type === "aborted"
+          ? { type: "aborted" }
+          : { type: "error", error: outcome.error },
+      );
       return outcome;
     } finally {
       this.request = { type: "idle" };
-      this.onRequestUpdate = undefined;
+      this.onStreamEvent = undefined;
       this.stream = undefined;
     }
   }
 
-  finalize(reason: FinalizeReason): void {
+  /** A request that ends without the model finishing leaves a half-streamed
+   * assistant message behind, so the manager repairs it before reporting: a
+   * caller is never handed a history it has to fix before its next request. */
+  private finalize(reason: FinalizeReason): void {
     if (reason.type === "aborted") {
       this.update({ type: "stream-aborted" });
     } else {
@@ -589,7 +602,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
 
     let attemptNum = 0;
     while (true) {
-      this.onRequestUpdate?.({ type: "attempt-started" });
+      this.onStreamEvent?.({ type: "attempt-started" });
 
       const result = await attempt();
 
@@ -643,7 +656,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
         nextRetryAt: new Date(Date.now() + delay),
         error: result.error,
       };
-      this.onRequestUpdate?.({ type: "retry-scheduled", retry });
+      this.onStreamEvent?.({ type: "retry-scheduled", retry });
 
       this.retryAbortController = new AbortController();
       const signal = this.retryAbortController.signal;

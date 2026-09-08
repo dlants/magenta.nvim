@@ -5,11 +5,6 @@ import type { ScriptMsg } from "./scripts/script-manager.ts";
 
 export type SidebarMsg =
   | {
-      type: "setup-resubmit";
-      threadId: ThreadId;
-      lastUserMessage: string;
-    }
-  | {
       type: "append-to-input";
       threadId: ThreadId;
       text: string;

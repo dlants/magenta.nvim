@@ -1,9 +1,9 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import {
-  Agent,
   type AgentContext,
-  type AgentDeps,
-  type InputMessage,
+  type AgentTurn,
+  runAgentLoop,
+  type ToolExecution,
 } from "./agent.ts";
 import type { AgentsMap } from "./agents/agents.ts";
 import type {
@@ -17,7 +17,7 @@ import type { LuaExecutor } from "./capabilities/lua-executor.ts";
 import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { Shell } from "./capabilities/shell.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
-import type { ThreadId, ThreadType } from "./chat-types.ts";
+import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
 import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import {
@@ -26,10 +26,15 @@ import {
   type ThreadLoopState,
 } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
+import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
 import type {
+  AgentInput,
   NativeInferenceManager,
   NativeMessageIdx,
+  Provider,
+  ProviderInferenceConfig,
   ProviderMessage,
+  ProviderMessageContent,
   ProviderToolSpec,
   RequestedTool,
   StopReason,
@@ -99,6 +104,9 @@ export type EnvironmentConfig =
 /** Everything a thread and the tools it builds read. A superset of what the
  * agent itself needs. */
 export interface ThreadContext extends AgentContext {
+  profile: ProviderProfile;
+  subagentConfig?: SubagentConfig;
+  getProvider: (profile: ProviderProfile) => Provider;
   /** The shape this thread yields in. The thread's own concern: it decides the
    * tool's spec and reads the yielded input back — the agent never sees a
    * yield. */
@@ -125,6 +133,57 @@ export interface ThreadContext extends AgentContext {
   contextTracker: ContextTracker;
   commentStore?: CommentStore | undefined;
 }
+function inferenceConfig(
+  context: ThreadContext,
+): ProviderInferenceConfig | undefined {
+  const profile = context.profile;
+  if (profile.provider === "openai") {
+    return profile.reasoning
+      ? { type: "reasoning", reasoning: profile.reasoning }
+      : undefined;
+  }
+
+  const effortOverride = context.subagentConfig?.effort;
+  const baseThinking = profile.thinking;
+
+  if (effortOverride) {
+    return {
+      type: "thinking",
+      thinking: {
+        enabled: true,
+        ...(baseThinking?.displayThinking !== undefined
+          ? { displayThinking: baseThinking.displayThinking }
+          : {}),
+        ...(baseThinking?.budgetTokens !== undefined
+          ? { budgetTokens: baseThinking.budgetTokens }
+          : {}),
+        effort: effortOverride,
+      },
+    };
+  }
+
+  if (!baseThinking) return undefined;
+  if (!baseThinking.enabled) {
+    return { type: "thinking", thinking: { enabled: false } };
+  }
+  const { enabled: _enabled, ...rest } = baseThinking;
+  return { type: "thinking", thinking: { enabled: true, ...rest } };
+}
+
+/** The conversation an agent drives, configured from the thread's profile. */
+export function createInferenceManager(
+  context: ThreadContext,
+  tools: ProviderToolSpec[],
+): NativeInferenceManager {
+  const config = inferenceConfig(context);
+  return context.getProvider(context.profile).createInferenceManager({
+    model: context.profile.model,
+    systemPrompt: context.systemPrompt,
+    tools,
+    ...(config ? { config } : {}),
+  });
+}
+
 export function threadToolSpecs(context: ThreadContext): ProviderToolSpec[] {
   return getToolSpecs(
     context.threadType,
@@ -167,9 +226,26 @@ export type ThreadCallbacks = {
   resolve: ResolveSubmission;
 };
 
-/** Holds one `Agent` at a time, swapping it for a fresh one on compaction.
+/** Holds one conversation at a time, swapping it for a fresh one on compaction.
  * Thread 3 is still thread 3 afterwards, which is why the archive keys by
  * thread id survives the swap. */
+/** The thread owns the shape of a submission; the agent takes it already in
+ * the provider-neutral input form. */
+/** One piece of content a caller hands the thread. `system` is the owner's
+ * own voice — a supervisor nudge, a tool-driven follow-up — as distinct from
+ * text the user typed. */
+export type InputMessage =
+  | { type: "user"; text: string }
+  | { type: "system"; text: string };
+
+export function toAgentInput(messages: InputMessage[]): AgentInput[] {
+  return messages.map((m) => ({
+    type: "text" as const,
+    text: m.text,
+    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+  }));
+}
+
 export class Thread {
   #title: string | undefined;
 
@@ -188,7 +264,13 @@ export class Thread {
   edlRegisters: EdlRegisters;
   editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[] = [];
   readonly toolSpecs: ProviderToolSpec[];
-  public agent: Agent;
+  /** The conversation this thread is on, swapped for a fresh one on
+   * compaction. */
+  private manager: NativeInferenceManager;
+  /** The preflight count the last turn took, kept here because it outlives
+   * the turn that took it and is reported at rest. Cleared with the manager
+   * it was counted for. */
+  private preflightTokenCount: number | undefined;
   public hooks: ThreadHooks = {
     onBeforeRequest: [],
     onToolResults: [],
@@ -241,20 +323,11 @@ export class Thread {
       logger: context.logger,
       createTool: (request) => this.invokeTool(request),
       getHooks: () => this.agentHooks(),
-      isAborting: () => this.loop.isAborting(),
       publishTools: (tools) => this.loop.setToolInvocationState(tools),
       onUpdate: () => this.handleUpdate(),
     });
 
-    this.agent = this.createAgent(
-      init.type === "clone"
-        ? {
-            type: "cloned",
-            cloneFrom: init.sourceManager,
-            truncateTo: init.nativeMessageIdx,
-          }
-        : { type: "new" },
-    );
+    this.manager = this.initialManager(init);
   }
 
   /** Build an independent copy of `sourceThread` resuming at
@@ -314,7 +387,7 @@ export class Thread {
   }
 
   get inferenceManager(): NativeInferenceManager {
-    return this.agent.manager;
+    return this.manager;
   }
 
   /** What this thread is doing. The thread sees every edge of it — it calls
@@ -404,29 +477,27 @@ export class Thread {
    * `onToolResults` hooks and aborting them. Handed to each agent it builds. */
   private toolExecutor: ToolExecutorHost;
 
-  private createAgent(runnerInit: AgentDeps["runnerInit"]): Agent {
-    return new Agent(this.context, {
-      systemPrompt: this.systemPrompt,
-      executeTools: (requests) => this.executeTools(requests),
-      toolSpecs: this.toolSpecs,
-      getHooks: () => this.agentHooks(),
-      onRequestUpdate: (update) => this.loop.applyRequestUpdate(update),
-      runnerInit,
-    });
+  /** A fresh conversation, or a copy of the source thread's truncated to the
+   * fork point. */
+  private initialManager(init: ThreadInit): NativeInferenceManager {
+    if (init.type !== "clone") {
+      return createInferenceManager(this.context, this.toolSpecs);
+    }
+    const manager = init.sourceManager.clone();
+    manager.truncateMessages(init.nativeMessageIdx);
+    return manager;
   }
 
   /** Being called is the "tools started" edge and returning is "tools
    * settled": between them the loop is running tools, and on either side of
    * them it is streaming. */
-  private async executeTools(
-    requests: ReadonlyArray<RequestedTool>,
-  ): ReturnType<ToolExecutorHost["execute"]> {
+  private executeTools(requests: ReadonlyArray<RequestedTool>): ToolExecution {
     this.loop.runningTools(requests);
-    try {
-      return await this.toolExecutor.execute(requests);
-    } finally {
-      this.loop.toolsSettled();
-    }
+    const execution = this.toolExecutor.execute(requests);
+    return {
+      ...execution,
+      promise: execution.promise.finally(() => this.loop.toolsSettled()),
+    };
   }
 
   private handleUpdate(): void {
@@ -438,19 +509,48 @@ export class Thread {
   }
 
   getToolSpecs(): ProviderToolSpec[] {
-    return this.agent.getToolSpecs();
+    return this.toolSpecs;
   }
 
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
-    return this.agent.getProviderMessages();
+    return this.manager.log.messages;
+  }
+
+  private get lastAssistantMessage():
+    | ReadonlyArray<ProviderMessageContent>
+    | undefined {
+    const messages = this.manager.log.messages;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") {
+        return messages[i].content;
+      }
+    }
+    return undefined;
+  }
+
+  /** The preflight count the last turn took, for rendering. */
+  get inputTokenCount(): number | undefined {
+    return this.preflightTokenCount;
   }
 
   getMessages(): ProviderMessage[] {
-    return this.agent.getMessages();
+    return [...this.getProviderMessages()];
   }
 
   getLastStopTokenCount(): number {
-    return this.agent.getLastStopTokenCount();
+    if (this.preflightTokenCount !== undefined) {
+      return this.preflightTokenCount;
+    }
+    const latestUsage = this.manager.log.latestUsage;
+    if (!latestUsage) {
+      return 0;
+    }
+    return (
+      latestUsage.inputTokens +
+      latestUsage.outputTokens +
+      (latestUsage.cacheHits || 0) +
+      (latestUsage.cacheMisses || 0)
+    );
   }
 
   /** Content that leads the next submission's user message: a compaction
@@ -492,8 +592,7 @@ export class Thread {
     // A yielded thread has already completed its work.
     if (this.yieldState) return { unsent: [] };
     this.loop.markAborting();
-    this.toolExecutor.abortAll();
-    await this.agent.abort();
+    await this.abortAgentTurn();
     const unsent = this.drainQueues();
     if (unsent.length) this.handleUpdate();
     return { unsent };
@@ -566,10 +665,16 @@ export class Thread {
   private drainQueues(): QueuedMessage[] {
     const unsent: QueuedMessage[] = [
       ...this.nextRequestQueue.map(
-        (message): QueuedMessage => ({ when: "async", message }),
+        (message): QueuedMessage => ({
+          when: "async",
+          message,
+        }),
       ),
       ...this.nextStopQueue.map(
-        (message): QueuedMessage => ({ when: "next", message }),
+        (message): QueuedMessage => ({
+          when: "next",
+          message,
+        }),
       ),
     ];
     this.nextRequestQueue = [];
@@ -664,6 +769,14 @@ export class Thread {
         // immediately before the user's own content.
         { run: (ctx) => Promise.resolve(this.reminderAction(ctx)) },
         { run: (ctx) => this.queueFlushAction(ctx) },
+        // After every hook that might have asked for a count, so it records
+        // the one this request was decided on — and never forces one.
+        {
+          run: (ctx) => {
+            this.preflightTokenCount = ctx.inputTokenCount;
+            return Promise.resolve({ type: "none" as const });
+          },
+        },
       ],
       onToolResults: [
         (results) => this.yieldGate(results),
@@ -708,28 +821,28 @@ export class Thread {
     return this.systemReminders.onBeforeRequest(ctx) ?? { type: "none" };
   }
 
-  /** Only a mid-turn request carries the async queue: at a turn boundary
-   * `flushAtStop` owns both queues, and flushing here as well would deliver
-   * the same entries twice. Which request this is comes from the agent — the
-   * only place that knows — rather than from thread-side bookkeeping that
-   * could drift out of step with it. A suspension leaves the queues intact
-   * and unresolved: their commands must run against the world as it is when
-   * they are finally delivered. */
+  /** Whatever is in the async queue rides the next request, whichever request
+   * that is: flushing takes the entries off the queue, so a later flush finds
+   * nothing and there is no double delivery to guard against. A suspension
+   * leaves the queues intact and unresolved: their commands must run against
+   * the world as it is when they are finally delivered. */
   private async queueFlushAction(
     ctx: AgentRequestContext,
   ): Promise<RequestAction> {
-    if (
-      ctx.status === "suspended" ||
-      ctx.isOpeningRequest ||
-      !this.nextRequestQueue.length
-    )
+    if (ctx.status === "suspended" || !this.nextRequestQueue.length)
       return { type: "none" };
-    return { type: "submissions", messages: await this.flushMidTurn() };
+    return {
+      type: "inject",
+      content: (await this.flushMidTurn()).map(({ text }) => ({
+        type: "text" as const,
+        text,
+      })),
+    };
   }
 
   async send(
     messages: InputMessage[],
-    { queue }: SendOptions = {},
+    { queue, force }: SendOptions = {},
   ): Promise<ThreadSendResult> {
     if (this.yieldState?.tornDown) {
       throw new Error(
@@ -751,15 +864,14 @@ export class Thread {
         return { type: "queued" };
       }
       this.loop.markAborting();
-      this.toolExecutor.abortAll();
-      await this.agent.abortAndWait();
+      await this.abortAgentTurn();
       // Sending now supersedes whatever was waiting on the aborted turn.
       this.drainQueues();
     }
 
-    const result = this.followSubmission(this.runToRest(messages));
+    const result = this.followSubmission(this.runToRest(messages, force));
 
-    if (this.title === undefined) {
+    if (this.title === undefined && messages.length) {
       this.setThreadTitle(messages.map((m) => m.text).join("\n")).catch(
         (err: Error) =>
           this.context.logger.error(
@@ -797,19 +909,66 @@ export class Thread {
    * handed over until the loop gets the thread back; the tool batches inside
    * it announce themselves from `executeTools`. */
   private async runTurn(messages: InputMessage[]): Promise<SendResult> {
-    const send = this.agent.send(messages);
-    this.loop.streaming(send);
+    const turn = runAgentLoop(
+      {
+        logger: this.context.logger,
+        manager: this.manager,
+        executeTools: (requests) => this.executeTools(requests),
+        getHooks: () => this.agentHooks(),
+        onStreamEvent: (event) => this.loop.applyStreamEvent(event),
+      },
+      toAgentInput(messages),
+    );
+    this.agentTurn = turn;
+    this.loop.streaming(turn.promise);
     try {
-      return await send;
+      const result = await turn.promise;
+      if (result.type === "failed") {
+        // The manager has already repaired whatever the failed request left
+        // half-written, so the log stands as it is: the submission is still
+        // in it and a retry re-issues the same request.
+        this.context.logger.error(result.error);
+      }
+      if (result.type === "aborted") {
+        // The single terminal abort transition: leave the history well-formed
+        // and mark why it stops here, before anything renders the log.
+        this.manager.appendUserMessage([
+          {
+            type: "text",
+            text: ABORT_MARKER_TEXT,
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          },
+        ]);
+      }
+      return result;
     } finally {
+      this.agentTurn = undefined;
       this.loop.preparing();
     }
+  }
+
+  /** The agent turn in flight, held so an abort can reach it. Aborting is the
+   * only reason the thread keeps it: everything else about the turn is its
+   * result. */
+  private agentTurn: AgentTurn | undefined;
+
+  /** Wind the agent's turn down and wait for it to settle. Abort enters the
+   * agent through the turn handle, so a thread between turns simply has
+   * nothing to abort — the loop's own `aborting` flag stops it there. */
+  async abortAgentTurn(): Promise<void> {
+    const turn = this.agentTurn;
+    if (!turn) return;
+    turn.abort();
+    await turn.promise.catch(() => {});
   }
 
   /** Drive the agent until nothing more should be sent. The agent stops at
    * every turn boundary; deciding whether a stop is really the end — queued
    * content, a supervisor nudge, a truncated response — is the thread's. */
-  private async runToRest(submitted: InputMessage[]): Promise<SendResult> {
+  private async runToRest(
+    submitted: InputMessage[],
+    force?: true,
+  ): Promise<SendResult> {
     const messages = this.pendingSeed.length
       ? [...this.pendingSeed, ...submitted]
       : submitted;
@@ -822,14 +981,13 @@ export class Thread {
     // only ever exists alongside `idle`. A throw out of the loop is an
     // outcome too, and lands as a failure rather than as an absent result.
     try {
-      const result = await this.runLoop(messages, epoch);
+      const result = await this.runLoop(messages, epoch, force);
       this.loop.finish(epoch, result);
       return result;
     } catch (error) {
       this.loop.finish(epoch, {
         type: "failed",
         error: error instanceof Error ? error : new Error(String(error)),
-        discardedSubmission: false,
       });
       throw error;
     }
@@ -838,9 +996,10 @@ export class Thread {
   private async runLoop(
     messages: InputMessage[],
     epoch: LoopEpoch,
+    force?: true,
   ): Promise<SendResult> {
     const isCurrentLoop = () => this.loop.isCurrent(epoch);
-    if (!messages.length) {
+    if (!messages.length && !force) {
       const pending = await this.hasPendingContent();
       // Probing takes time, and a send that arrived while it ran owns the
       // loop now: this one is over before it touched the agent.
@@ -882,13 +1041,7 @@ export class Thread {
               reason: this.carryOntoSuspension(continued.reason, next.carry),
             };
           }
-          // A continuation rolls back only as far as its own request, so
-          // the originally submitted content is still in the log and must
-          // not be handed back for resubmission.
-          result =
-            continued.type === "failed"
-              ? { ...continued, discardedSubmission: false }
-              : continued;
+          result = continued;
           continue;
         }
         default:
@@ -1037,8 +1190,8 @@ export class Thread {
 
     const action = this.hooks.onEndTurn?.({
       stopReason,
-      inputTokenCount: this.agent.inputTokenCount,
-      lastAssistantMessage: this.agent.lastAssistantMessage,
+      inputTokenCount: this.preflightTokenCount,
+      lastAssistantMessage: this.lastAssistantMessage,
     });
     if (action?.type === "suspend") {
       return { type: "suspend", reason: action.reason };
@@ -1104,9 +1257,9 @@ Come up with a succinct thread title for this prompt. It must be a single line (
       | { type: "none" };
   }): Promise<void> {
     this.toolExecutor.abortAll();
-    const previousAgent = this.agent;
-    this.agent = this.createAgent({ type: "new" });
-    await previousAgent.dispose();
+    await this.abortAgentTurn();
+    this.manager = createInferenceManager(this.context, this.toolSpecs);
+    this.preflightTokenCount = undefined;
 
     if (archive.type === "compaction") {
       this.threadLogger.recordCompaction({
@@ -1134,7 +1287,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     this.destroyed = true;
 
     this.toolExecutor.abortAll();
-    await this.agent.dispose();
+    await this.abortAgentTurn();
 
     this.settleResult({
       type: "aborted",

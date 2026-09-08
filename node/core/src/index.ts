@@ -1,8 +1,6 @@
 export {
-  type ActiveToolEntry,
-  Agent,
   type BeforeRequestDecision,
-  type InputMessage,
+  runAgentLoop,
   type ToolExecutor,
   type ToolOutcome,
 } from "./agent.ts";
@@ -188,7 +186,7 @@ export type {
   InferenceOptions,
   NativeInferenceManager,
   NativeMessageIdx,
-  OnRequestUpdate,
+  OnStreamEvent,
   Provider,
   ProviderBlockDeltaEvent,
   ProviderBlockStartEvent,
@@ -216,13 +214,12 @@ export type {
   ProviderWebSearchToolResult,
   RequestedTool,
   RequestResult,
-  RequestUpdate,
   RetryStatus,
   StopReason,
+  StreamEvent,
   StreamingBlock,
   StreamStopReason,
   ToolResults,
-  TurnResult,
   Usage,
 } from "./providers/provider-types.ts";
 export {
@@ -259,6 +256,7 @@ export {
 } from "./submission/index.ts";
 export {
   type EnvironmentConfig,
+  type InputMessage,
   Thread,
   type ThreadCallbacks,
   type ThreadContext,
@@ -296,6 +294,7 @@ export {
   UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 export type {
+  ActiveToolEntry,
   CompletedToolInfo,
   DisplayContext,
   ExecutedToolResult,

@@ -377,7 +377,7 @@ describe("Agent retry logic", () => {
     }
 
     // Abort during the retry wait
-    void agent.abort();
+    void agent.abortAndWait();
     await vi.advanceTimersByTimeAsync(0);
 
     expect(await turn).toEqual({ type: "aborted" });

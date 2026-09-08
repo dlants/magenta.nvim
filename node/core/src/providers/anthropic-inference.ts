@@ -31,9 +31,10 @@ import type {
   AgentLog,
   FinalizeReason,
   InferenceOptions,
+  InferenceRequest,
   NativeInferenceManager,
   NativeMessageIdx,
-  OnRequestUpdate,
+  OnStreamEvent,
   ProviderMessage,
   ProviderToolResult,
   RequestedTool,
@@ -197,7 +198,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
    * externally-visible state this class has. */
   private requestInFlight = false;
   /** Where stream progress goes while a request is in flight. */
-  private onRequestUpdate: OnRequestUpdate | undefined;
+  private onStreamEvent: OnStreamEvent | undefined;
 
   constructor(
     private options: InferenceOptions,
@@ -349,7 +350,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
    * The `StreamingBlock` is constructed here rather than aliased: nothing
    * native may escape this class. */
   private reportStreamingBlock(): void {
-    const report = this.onRequestUpdate;
+    const report = this.onStreamEvent;
     if (!report) return;
     const block = this.currentAnthropicBlock;
     switch (block?.type) {
@@ -415,14 +416,18 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
   /** One provider request: everything from placing it to accumulating its
    * stream, including the retry budget. Retries are invisible to the caller
    * apart from the `retry` updates. */
-  async sendRequest(onUpdate: OnRequestUpdate): Promise<RequestResult> {
+  sendRequest(onEvent: OnStreamEvent): InferenceRequest {
+    return { promise: this.runRequest(onEvent), abort: () => this.abort() };
+  }
+
+  private async runRequest(onEvent: OnStreamEvent): Promise<RequestResult> {
     if (this.requestInFlight) {
       throw new Error(
         "sendRequest called while a request is already in flight",
       );
     }
     this.requestInFlight = true;
-    this.onRequestUpdate = onUpdate;
+    this.onStreamEvent = onEvent;
     try {
       const outcome = await this.streamOneResponse();
       if (outcome.type === "completed") {
@@ -437,10 +442,15 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
                   : outcome.stopReason,
             };
       }
+      this.finalize(
+        outcome.type === "aborted"
+          ? { type: "aborted" }
+          : { type: "error", error: outcome.error },
+      );
       return outcome;
     } finally {
       this.requestInFlight = false;
-      this.onRequestUpdate = undefined;
+      this.onStreamEvent = undefined;
       this.currentRequest = undefined;
     }
   }
@@ -473,7 +483,10 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       .map((block) => ({ id: block.id, request: block.request }));
   }
 
-  finalize(reason: FinalizeReason): void {
+  /** A request that ends without the model finishing leaves a half-streamed
+   * assistant message behind, so the manager repairs it before reporting: a
+   * caller is never handed a history it has to fix before its next request. */
+  private finalize(reason: FinalizeReason): void {
     this.currentRequest = undefined;
     this.cleanup(reason);
     this.currentAssistantMessage = undefined;
@@ -542,7 +555,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     let attempt = 0;
     while (true) {
       // Clear retry status when starting a new attempt
-      this.onRequestUpdate?.({ type: "attempt-started" });
+      this.onStreamEvent?.({ type: "attempt-started" });
       if (attempt > 0) {
         this.update({ type: "reset-attempt" });
       }
@@ -590,7 +603,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       }
 
       const delay = getRetryDelay(attempt);
-      this.onRequestUpdate?.({
+      this.onStreamEvent?.({
         type: "retry-scheduled",
         retry: {
           attempt: attempt + 1,

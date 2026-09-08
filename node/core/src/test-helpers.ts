@@ -3,10 +3,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
-  Agent,
-  type AgentContext,
-  type AgentDeps,
+  type AgentLoopDeps,
+  type AgentTurn,
+  runAgentLoop,
+  type ToolExecution,
   type ToolExecutor,
+  type ToolOutcome,
 } from "./agent.ts";
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { EdlRegisters } from "./edl/index.ts";
@@ -21,6 +23,7 @@ import {
   AnthropicInferenceManager,
   type AnthropicInferenceOptions,
 } from "./providers/anthropic-inference.ts";
+import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
 import {
   MockAnthropicClient,
   type MockStream,
@@ -36,19 +39,36 @@ import type {
   NativeInferenceManager,
   NativeMessageIdx,
   Provider,
+  ProviderMessage,
   ProviderToolSpec,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
-import { Thread, type ThreadContext, threadToolSpecs } from "./thread.ts";
+import {
+  createInferenceManager,
+  type InputMessage,
+  Thread,
+  type ThreadContext,
+  threadToolSpecs,
+  toAgentInput,
+} from "./thread.ts";
 import type { AgentHooks, SendResult, ThreadHooks } from "./thread-api.ts";
 import { ToolExecutorHost } from "./tool-executor.ts";
+
 import { createTool } from "./tools/create-tool.ts";
 import { validateInput } from "./tools/helpers.ts";
+
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
 import { pollUntil } from "./utils/async.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
+/** Wrap a plain promise as a `ToolExecution`, for the many test executors that
+ * are never aborted. */
+export function toolExecution(
+  promise: Promise<ToolOutcome> | ToolOutcome,
+): ToolExecution {
+  return { promise: Promise.resolve(promise), abort: () => {} };
+}
 export const TEST_ARCHIVE_DIR = path.join(os.tmpdir(), "magenta-test-archive");
 
 export const noopLogger: Logger = {
@@ -81,25 +101,63 @@ export function flatLoop(owner: {
 
 /** The bare-agent harness's stand-in for the thread: it owns the loop state
  * the same way, so what a test observes is what production observes. */
-export class TestAgent extends Agent {
+export class TestAgent {
+  readonly manager: NativeInferenceManager;
+
   constructor(
-    context: AgentContext,
-    deps: AgentDeps,
+    private deps: AgentLoopDeps,
     readonly loop: LoopStateMachine,
   ) {
-    super(context, deps);
+    this.manager = deps.manager;
   }
 
   get loopState(): ThreadLoopState {
     return this.loop.current;
   }
 
-  override send(...args: Parameters<Agent["send"]>): Promise<SendResult> {
+  getProviderMessages(): ReadonlyArray<ProviderMessage> {
+    return this.manager.log.messages;
+  }
+
+  inputTokenCount: number | undefined;
+
+  send(messages?: InputMessage[]): AgentTurn {
     const epoch = this.loop.start();
-    const send = super.send(...args);
-    this.loop.streaming(send);
-    return send.then(
+    const turn = runAgentLoop(
+      {
+        ...this.deps,
+        getHooks: () => {
+          const hooks = this.deps.getHooks();
+          return {
+            ...hooks,
+            onBeforeRequest: [
+              ...hooks.onBeforeRequest,
+              {
+                run: (ctx) => {
+                  this.inputTokenCount = ctx.inputTokenCount;
+                  return Promise.resolve({ type: "none" as const });
+                },
+              },
+            ],
+          };
+        },
+      },
+      messages && toAgentInput(messages),
+    );
+    this.turn = turn;
+    this.loop.streaming(turn.promise);
+    const promise = turn.promise.then(
       (result) => {
+        // Mirrors what `Thread` does around its own turn.
+        if (result.type === "aborted") {
+          this.manager.appendUserMessage([
+            {
+              type: "text",
+              text: ABORT_MARKER_TEXT,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            },
+          ]);
+        }
         this.loop.finish(epoch, result);
         return result;
       },
@@ -107,26 +165,23 @@ export class TestAgent extends Agent {
         this.loop.finish(epoch, {
           type: "failed",
           error: error instanceof Error ? error : new Error(String(error)),
-          discardedSubmission: false,
         });
         throw error;
       },
     );
+    return { ...turn, promise };
   }
 
-  private host: ToolExecutorHost | undefined;
+  private turn: AgentTurn | undefined;
 
-  attachHost(host: ToolExecutorHost): void {
-    this.host = host;
-  }
-
-  /** Aborting is the owner's, exactly as on `Thread`: the flag that decides a
-   * tool batch's outcome lives with the loop, and the live invocations are
-   * its to stop. */
-  override async abortAndWait(): Promise<void> {
+  /** What `Thread.abort` does, for the tests that drive an agent without one:
+   * mark the loop and wind the turn down through its handle. */
+  async abortAndWait(): Promise<void> {
     this.loop.markAborting();
-    this.host?.abortAll();
-    await super.abortAndWait();
+    const turn = this.turn;
+    if (!turn) return;
+    turn.abort();
+    await turn.promise.catch(() => {});
   }
 }
 
@@ -267,6 +322,19 @@ type TestAgentOpts = {
   cloneFrom?: NativeInferenceManager;
 };
 
+function testManager(
+  context: ThreadContext,
+  cloneFrom: NativeInferenceManager | undefined,
+): NativeInferenceManager {
+  if (!cloneFrom)
+    return createInferenceManager(context, threadToolSpecs(context));
+  const manager = cloneFrom.clone();
+  manager.truncateMessages(
+    (cloneFrom.log.messages.length - 1) as NativeMessageIdx,
+  );
+  return manager;
+}
+
 function buildTestAgent(
   provider: Provider,
   opts: TestAgentOpts,
@@ -282,7 +350,6 @@ function buildTestAgent(
   const host = new ToolExecutorHost({
     logger: context.logger,
     getHooks: opts.getHooks ?? (() => agentHooks()),
-    isAborting: () => loop.isAborting(),
     publishTools: (tools) => loop.setToolInvocationState(tools),
     onUpdate: opts.onUpdate ?? (() => {}),
     createTool: (request) =>
@@ -308,35 +375,25 @@ function buildTestAgent(
         getAgents: () => context.getAgents(),
       }),
   });
-  const runBatch = opts.executeTools ?? ((r) => host.execute(r));
-  const executeTools: ToolExecutor = async (requests) => {
+  const runBatch: ToolExecutor = opts.executeTools ?? ((r) => host.execute(r));
+  const executeTools: ToolExecutor = (requests) => {
     loop.runningTools(requests);
-    try {
-      return await runBatch(requests);
-    } finally {
-      loop.toolsSettled();
-    }
+    const execution = runBatch(requests);
+    return {
+      ...execution,
+      promise: execution.promise.finally(() => loop.toolsSettled()),
+    };
   };
   const agent = new TestAgent(
-    context,
     {
-      systemPrompt: context.systemPrompt,
+      logger: context.logger,
+      manager: testManager(context, opts.cloneFrom),
       executeTools,
-      toolSpecs: threadToolSpecs(context),
       getHooks: opts.getHooks ?? (() => agentHooks()),
-      onRequestUpdate: (update) => loop.applyRequestUpdate(update),
-      runnerInit: opts.cloneFrom
-        ? {
-            type: "cloned",
-            cloneFrom: opts.cloneFrom,
-            truncateTo: (opts.cloneFrom.log.messages.length -
-              1) as NativeMessageIdx,
-          }
-        : { type: "new" },
+      onStreamEvent: (event) => loop.applyStreamEvent(event),
     },
     loop,
   );
-  agent.attachHost(host);
   return { agent, toolExecutor: host };
 }
 
@@ -413,8 +470,8 @@ export const userInput = (text: string): AgentInput[] => [
 ];
 
 /** Drive one turn through the agent's only entry point. */
-export const sendText = (agent: Agent, text: string): Promise<SendResult> =>
-  agent.send([{ type: "user", text }]);
+export const sendText = (agent: TestAgent, text: string): Promise<SendResult> =>
+  agent.send([{ type: "user", text }]).promise;
 
 export async function cleanupArchive(threadId: ThreadId): Promise<void> {
   const dir = path.dirname(
