@@ -87,13 +87,10 @@ import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
 import type { AbsFilePath, HomeDir, NvimCwd } from "./utils/files.ts";
-/** How a thread's yield came to rest. */
+
 export type YieldState = {
   value: YieldValue;
-  /** The rendered result, including any `resultPrefix` the accepting owner
-   * added. */
   response: string;
-  /** The accepting owner took the thread's world away with it. */
   tornDown: boolean;
 };
 
@@ -101,15 +98,10 @@ export type EnvironmentConfig =
   | { type: "local"; cwd?: NvimCwd }
   | { type: "docker"; container: string; cwd: string };
 
-/** Everything a thread and the tools it builds read. A superset of what the
- * agent itself needs. */
 export interface ThreadContext extends AgentContext {
   profile: ProviderProfile;
   subagentConfig?: SubagentConfig;
   getProvider: (profile: ProviderProfile) => Provider;
-  /** The shape this thread yields in. The thread's own concern: it decides the
-   * tool's spec and reads the yielded input back — the agent never sees a
-   * yield. */
   yieldSchema?: JSONSchemaType;
   cwd: NvimCwd;
   homeDir: HomeDir;
@@ -133,49 +125,47 @@ export interface ThreadContext extends AgentContext {
   contextTracker: ContextTracker;
   commentStore?: CommentStore | undefined;
 }
-function inferenceConfig(
-  context: ThreadContext,
-): ProviderInferenceConfig | undefined {
-  const profile = context.profile;
-  if (profile.provider === "openai") {
-    return profile.reasoning
-      ? { type: "reasoning", reasoning: profile.reasoning }
-      : undefined;
-  }
-
-  const effortOverride = context.subagentConfig?.effort;
-  const baseThinking = profile.thinking;
-
-  if (effortOverride) {
-    return {
-      type: "thinking",
-      thinking: {
-        enabled: true,
-        ...(baseThinking?.displayThinking !== undefined
-          ? { displayThinking: baseThinking.displayThinking }
-          : {}),
-        ...(baseThinking?.budgetTokens !== undefined
-          ? { budgetTokens: baseThinking.budgetTokens }
-          : {}),
-        effort: effortOverride,
-      },
-    };
-  }
-
-  if (!baseThinking) return undefined;
-  if (!baseThinking.enabled) {
-    return { type: "thinking", thinking: { enabled: false } };
-  }
-  const { enabled: _enabled, ...rest } = baseThinking;
-  return { type: "thinking", thinking: { enabled: true, ...rest } };
-}
 
 /** The conversation an agent drives, configured from the thread's profile. */
 export function createInferenceManager(
   context: ThreadContext,
   tools: ProviderToolSpec[],
 ): NativeInferenceManager {
-  const config = inferenceConfig(context);
+  const profile = context.profile;
+  const config = ((): ProviderInferenceConfig | undefined => {
+    if (profile.provider === "openai") {
+      return profile.reasoning
+        ? { type: "reasoning", reasoning: profile.reasoning }
+        : undefined;
+    }
+
+    const effortOverride = context.subagentConfig?.effort;
+    const baseThinking = profile.thinking;
+
+    if (effortOverride) {
+      return {
+        type: "thinking",
+        thinking: {
+          enabled: true,
+          ...(baseThinking?.displayThinking !== undefined
+            ? { displayThinking: baseThinking.displayThinking }
+            : {}),
+          ...(baseThinking?.budgetTokens !== undefined
+            ? { budgetTokens: baseThinking.budgetTokens }
+            : {}),
+          effort: effortOverride,
+        },
+      };
+    }
+
+    if (!baseThinking) return undefined;
+    if (!baseThinking.enabled) {
+      return { type: "thinking", thinking: { enabled: false } };
+    }
+    const { enabled: _enabled, ...rest } = baseThinking;
+    return { type: "thinking", thinking: { enabled: true, ...rest } };
+  })();
+
   return context.getProvider(context.profile).createInferenceManager({
     model: context.profile.model,
     systemPrompt: context.systemPrompt,
@@ -212,7 +202,6 @@ export type ThreadInit =
       edlRegisters: EdlRegisters;
     };
 
-/** Which of the two deferred queues an entry sits in. */
 type DeferredDelivery = "async" | "next";
 
 /** The result of draining one queue: content for the next request, or a
@@ -229,8 +218,6 @@ export type ThreadCallbacks = {
 /** Holds one conversation at a time, swapping it for a fresh one on compaction.
  * Thread 3 is still thread 3 afterwards, which is why the archive keys by
  * thread id survives the swap. */
-/** The thread owns the shape of a submission; the agent takes it already in
- * the provider-neutral input form. */
 /** One piece of content a caller hands the thread. `system` is the owner's
  * own voice — a supervisor nudge, a tool-driven follow-up — as distinct from
  * text the user typed. */
@@ -277,7 +264,6 @@ export class Thread {
     onYield: [],
     hasPendingContent: () => Promise.resolve(false),
   };
-  /** Kept for the lifetime of the thread, so they outlive any one agent. */
   readonly structuredToolResults = new Map<
     ToolRequestId,
     ToolStructuredResult
@@ -330,9 +316,6 @@ export class Thread {
     this.manager = this.initialManager(init);
   }
 
-  /** Build an independent copy of `sourceThread` resuming at
-   * `nativeMessageIdx`. The source is not aborted and shares no mutable state
-   * with the result. */
   static async clone(args: {
     sourceThread: Thread;
     newId: ThreadId;
@@ -375,7 +358,6 @@ export class Thread {
     });
   }
 
-  /** The reminders currently in force. For rendering and tests. */
   get activeReminders(): ReadonlySet<string> {
     return this.systemReminders.activeReminders;
   }
@@ -473,8 +455,6 @@ export class Thread {
     });
     return { ...invocation, promise };
   }
-  /** Tool execution is the thread's: it owns the live invocations, the
-   * `onToolResults` hooks and aborting them. Handed to each agent it builds. */
   private toolExecutor: ToolExecutorHost;
 
   /** A fresh conversation, or a copy of the source thread's truncated to the
@@ -528,7 +508,6 @@ export class Thread {
     return undefined;
   }
 
-  /** The preflight count the last turn took, for rendering. */
   get inputTokenCount(): number | undefined {
     return this.preflightTokenCount;
   }
@@ -567,7 +546,6 @@ export class Thread {
     this.pendingSeed = [...this.pendingSeed, ...messages];
   }
 
-  /** For tests: await pending best-effort archive writes. */
   async awaitArchiveFlush(): Promise<void> {
     await this.threadLogger.flushed();
   }
@@ -589,7 +567,6 @@ export class Thread {
   }
 
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
-    // A yielded thread has already completed its work.
     if (this.yieldState) return { unsent: [] };
     this.loop.markAborting();
     await this.abortAgentTurn();
@@ -635,9 +612,6 @@ export class Thread {
   /** Flushed in full the next time the thread comes to rest (@next). */
   private nextStopQueue: PendingMessage[] = [];
 
-  /** Everything waiting for a delivery point, grouped by the point it waits
-   * for and in the order it will go out. For rendering; nothing may branch on
-   * it for control flow. */
   get queued(): {
     async: ReadonlyArray<PendingMessage>;
     next: ReadonlyArray<PendingMessage>;
@@ -660,8 +634,6 @@ export class Thread {
     this.queue(delivery).push(...messages);
   }
 
-  /** Empty both queues and hand the debris back. Nothing is broadcast: the
-   * caller gets its own return value. */
   private drainQueues(): QueuedMessage[] {
     const unsent: QueuedMessage[] = [
       ...this.nextRequestQueue.map(
@@ -905,9 +877,6 @@ export class Thread {
    * the loop. */
   private loop = new LoopStateMachine(() => this.handleUpdate());
 
-  /** One turn through the agent. Streaming from the moment the request is
-   * handed over until the loop gets the thread back; the tool batches inside
-   * it announce themselves from `executeTools`. */
   private async runTurn(messages: InputMessage[]): Promise<SendResult> {
     const turn = runAgentLoop(
       {
@@ -973,8 +942,6 @@ export class Thread {
       ? [...this.pendingSeed, ...submitted]
       : submitted;
     this.pendingSeed = [];
-    // An abort can only target a loop that is running, so there is no stale
-    // flag to clear here: `abort` leaves `idle` alone.
     this.editedFilesThisTurn = [];
     const epoch = this.loop.start();
     // How the submission ended is recorded as the loop comes to rest, so it
@@ -1013,15 +980,9 @@ export class Thread {
       if (result.type === "suspended" && result.reason.kind === "yield") {
         const resolved = await this.resolveYield(result.reason.value);
         if (resolved.type === "settled") return resolved.result;
-        // A rejected yield goes back in through the front door, as an
-        // ordinary continuation of this loop.
         result = await this.runTurn(resolved.messages);
         continue;
       }
-      // An abort that arrives while a turn is in flight comes back through
-      // the agent as an `aborted` result, so there is no separate check
-      // here: the only window the loop itself owns is the continuation,
-      // guarded below.
       if (result.type !== "completed") return result;
 
       const stopReason = result.stopReason;
@@ -1242,11 +1203,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
   }
 
   /** Swap in a fresh agent seeded with `seed`. The thread id, context manager,
-   * structured tool results and edl registers survive.
-   *
-   * `archive` exists only because the archive's entry schema has a
-   * `compaction` variant; the caller states its intent rather than relying on
-   * omission. */
+   * structured tool results and edl registers survive. */
   async reset({
     seed,
     archive,

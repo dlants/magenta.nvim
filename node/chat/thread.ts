@@ -588,9 +588,6 @@ export class NvimThread {
     }, RENDER_DEBOUNCE_MS);
   }
 
-  /** The message count when the pending submission was issued, if a send is
-   * waiting to be scrolled into view. The scroll belongs to the actor that
-   * submitted, and has to wait until the message it is scrolling to exists. */
   /** The most recent submission and how it is doing. One field rather than
    * two, so "failed" cannot be represented without the text that failed: the
    * text is kept so a failure can put it back in the input buffer, and the
@@ -600,6 +597,9 @@ export class NvimThread {
     | { type: "failed"; text: string; error: Error }
     | undefined;
 
+  /** The message count when the pending submission was issued, if a send is
+   * waiting to be scrolled into view. The scroll belongs to the actor that
+   * submitted, and has to wait until the message it is scrolling to exists. */
   private scrollAfterMessageCount: number | undefined;
 
   private maybeScrollToSubmission(): void {
