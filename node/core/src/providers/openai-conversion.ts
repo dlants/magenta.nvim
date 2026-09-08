@@ -85,7 +85,7 @@ function convertItem(
   item: Item,
   nativeMessageIdx: NativeMessageIdx,
 ): ProviderMessageContent[] {
-  if ("role" in item && item.role) {
+  if ("role" in item && item.role && "content" in item) {
     return convertMessageItem(item, nativeMessageIdx);
   }
 
@@ -148,19 +148,20 @@ function convertItem(
   }
 }
 
-/** The SDK types `output` as a string, but the API has begun returning a
- * content-part array for some tools. */
-function outputText(
-  output: string | ReadonlyArray<{ text?: string | undefined }>,
-): string {
+/** `output` may be a string or a content-part array; only the text parts have
+ * a display representation. */
+function outputText(output: string | ReadonlyArray<unknown>): string {
   if (typeof output === "string") return output;
   if (!Array.isArray(output)) return "";
   return output
-    .map((part) => (typeof part?.text === "string" ? part.text : ""))
+    .map((part) => {
+      const text = (part as { text?: unknown } | null)?.text;
+      return typeof text === "string" ? text : "";
+    })
     .join("");
 }
 
-type MessageItem = Extract<Item, { role: string }>;
+type MessageItem = Extract<Item, { role: string; content: unknown }>;
 
 function convertMessageItem(
   item: MessageItem,

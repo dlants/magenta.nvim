@@ -62,8 +62,12 @@ export function isGpt5(model: string): boolean {
   return /^gpt-5/i.test(model);
 }
 
+export function isGpt6(model: string): boolean {
+  return /^gpt-6/i.test(model);
+}
+
 export function isReasoningModel(model: string): boolean {
-  return /^(o1|o3|o4|o-)/i.test(model) || isGpt5(model);
+  return /^(o1|o3|o4|o-)/i.test(model) || isGpt5(model) || isGpt6(model);
 }
 
 export function supportsWebSearch(model: string): boolean {
@@ -246,8 +250,7 @@ function toOpenAIReasoningEffort(
     case "high":
       return effort;
     case "xhigh":
-      // The API accepts "xhigh" for gpt-5.x; the SDK's union lags it.
-      return "xhigh" as OpenAI.ReasoningEffort;
+      return effort;
     default:
       return assertUnreachable(effort);
   }
@@ -313,8 +316,7 @@ export function createStreamParameters({
 // Responses stream events -> ProviderStreamEvent
 // ---------------------------------------------------------------------------
 
-/** The installed SDK (5.23.2) omits `action` from `ResponseFunctionWebSearch`,
- * though the API sends it. This is the only place that payload is narrowed. */
+/** The only place the web-search payload is narrowed. */
 type WebSearchAction =
   | OpenAI.Responses.ResponseFunctionWebSearch.Search
   | OpenAI.Responses.ResponseFunctionWebSearch.OpenPage
@@ -392,15 +394,15 @@ export const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
 
 /** The codex backend only serves a subset of the gpt-5.x line: every
  * codex-family model is rejected for ChatGPT-account auth, as are plain
- * `gpt-5` through `gpt-5.3` and anything outside the gpt-5.x line (`gpt-4o` and
- * friends). Caught up front so the user gets an actionable message instead of
- * an opaque 400. Entitlements shift, so this is a blocklist rather than a
- * whitelist -- a newer gpt-5.x is assumed to work until the backend says
- * otherwise. */
+ * `gpt-5` through `gpt-5.3` and anything outside the gpt-5.x / gpt-6 lines
+ * (`gpt-4o` and friends). Caught up front so the user gets an actionable
+ * message instead of an opaque 400. Entitlements shift, so this is a blocklist
+ * rather than a whitelist -- a newer gpt-5.x or gpt-6 is assumed to work until
+ * the backend says otherwise. */
 function isChatGPTRejectedModel(model: string): boolean {
   if (/-codex/i.test(model)) return true;
   if (/^gpt-5(\.[0-3])?$/i.test(model)) return true;
-  return !/^gpt-5\.\d/i.test(model);
+  return !/^gpt-5\.\d/i.test(model) && !isGpt6(model);
 }
 const CHATGPT_KNOWN_GOOD_MODELS = [
   "gpt-5.4",
@@ -409,6 +411,7 @@ const CHATGPT_KNOWN_GOOD_MODELS = [
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
+  "gpt-6-astra",
 ] as const;
 
 export function assertChatGPTModelSupported(model: string): void {

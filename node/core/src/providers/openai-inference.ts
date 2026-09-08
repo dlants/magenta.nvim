@@ -280,11 +280,13 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       }
 
       case "response.output_item.done": {
-        // A completed output item is assignable to an input item, so it is
+        // A completed output item round-trips as an input item, so it is
         // appended verbatim: ids, encrypted_content and summary parts survive
         // byte-for-byte into the next request. Committing each item as it
-        // completes is also what makes the turn render incrementally.
-        this.items.push(event.item);
+        // completes is also what makes the turn render incrementally. The cast
+        // covers `additional_tools`, whose output and input variants disagree
+        // on `role` in the SDK types but not on the wire.
+        this.items.push(event.item as OpenAI.Responses.ResponseInputItem);
         this.updateCache();
         this.blocks.delete(event.output_index);
         if (this.openIndex === event.output_index) {
@@ -348,7 +350,9 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
   private pruneItems(): void {
     const answered = new Set<string>();
     for (const item of this.items) {
-      if (item.type === "function_call_output") answered.add(item.call_id);
+      if (item.type === "function_call_output" && item.call_id) {
+        answered.add(item.call_id);
+      }
     }
 
     const keep = this.items.map(() => true);

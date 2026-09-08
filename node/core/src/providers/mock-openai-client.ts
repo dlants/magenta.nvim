@@ -238,6 +238,7 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
         type: "response.function_call_arguments.done",
         output_index: outputIndex,
         item_id: itemId,
+        name,
         arguments: args,
       });
     });
@@ -355,7 +356,12 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
     this.pushEvent({
       type: "response.output_item.added",
       output_index: outputIndex,
-      item: { type: "web_search_call", id: itemId, status: "in_progress" },
+      item: {
+        type: "web_search_call",
+        id: itemId,
+        status: "in_progress",
+        action: { type: "search" },
+      },
     });
     const searchProgress = [
       "response.web_search_call.in_progress",
@@ -502,7 +508,10 @@ export function mockResponse(
     output_text: "",
     usage: {
       input_tokens: usage.inputTokens + (usage.cacheHits ?? 0),
-      input_tokens_details: { cached_tokens: usage.cacheHits ?? 0 },
+      input_tokens_details: {
+        cached_tokens: usage.cacheHits ?? 0,
+        cache_write_tokens: 0,
+      },
       output_tokens: usage.outputTokens,
       output_tokens_details: { reasoning_tokens: 0 },
       total_tokens:

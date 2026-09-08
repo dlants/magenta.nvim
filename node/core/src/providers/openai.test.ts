@@ -57,6 +57,8 @@ function userItem(text: string): OpenAI.Responses.ResponseInputItem {
 describe("model capability helpers", () => {
   it("classifies reasoning models and web search support", () => {
     expect(isReasoningModel("gpt-5.4")).toBe(true);
+    expect(isReasoningModel("gpt-6-astra")).toBe(true);
+    expect(supportsWebSearch("gpt-6-astra")).toBe(true);
     expect(isReasoningModel("o3-mini")).toBe(true);
     expect(isReasoningModel("gpt-4o")).toBe(false);
     expect(supportsWebSearch("gpt-4o")).toBe(true);

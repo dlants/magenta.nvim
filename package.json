@@ -33,7 +33,7 @@
     "msgpackr": "^1.11.2",
     "ollama": "^0.5.15",
     "open": "^10.2.0",
-    "openai": "^5.12.1",
+    "openai": "^7.10.0",
     "patch-package": "^8.0.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.3.93",
