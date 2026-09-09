@@ -17,7 +17,7 @@
     // "noPropertyAccessFromIndexSignature": true,
     // "noUncheckedIndexedAccess": true
   },
-  "references": [{ "path": "node/core" }],
+  "references": [{ "path": "node/server" }],
   "include": [
     "node/**/*",
     "sdk/**/*",
@@ -29,8 +29,8 @@
     "**/node_modules/**",
     "**/test/fixtures/**",
     "**/test/tmp",
-    "node/nvim/nvim-node/cli/**",
-    "node/core/**",
+    "node/nvimclient/nvim/nvim-node/cli/**",
+    "node/server/**",
     "node/packages/**"
   ]
 }

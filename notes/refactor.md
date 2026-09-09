@@ -63,7 +63,7 @@ case "document":
 
 ### 5. Helper Function Updates
 
-The helper functions in `node/test/preamble.ts` were updated to work with Anthropic's `ToolResultBlockParam` format:
+The helper functions in `node/nvimclient/test/preamble.ts` were updated to work with Anthropic's `ToolResultBlockParam` format:
 
 ```typescript
 // Old signature:
@@ -185,8 +185,8 @@ The `convertBlockToProvider` method detects text blocks with `<system-reminder>`
 
 ## Files Updated
 
-- `node/test/preamble.ts` - Helper functions updated for Anthropic types
-- `node/tools/getFile.spec.ts` - All 26 tests passing
-- `node/chat/chat.spec.ts` - Method renames only
-- `node/chat/thread.spec.ts` - Already using new pattern
-- `node/providers/anthropic-thread.spec.ts` - Already using new pattern
+- `node/nvimclient/test/preamble.ts` - Helper functions updated for Anthropic types
+- `node/nvimclient/tools/getFile.spec.ts` - All 26 tests passing
+- `node/nvimclient/chat/chat.spec.ts` - Method renames only
+- `node/nvimclient/chat/thread.spec.ts` - Already using new pattern
+- `node/nvimclient/providers/anthropic-thread.spec.ts` - Already using new pattern

@@ -193,11 +193,11 @@ dist
 .DS_Store
 .sourcegraph
 
-node/test/tmp
+node/nvimclient/test/tmp
 
 # Test recordings (generated during COPILOT_RECORD=true)
-node/providers/recordings/
-node/test/fixtures/
+node/nvimclient/providers/recordings/
+node/nvimclient/test/fixtures/
 test-plugins/
 
 .pkb/cache.db

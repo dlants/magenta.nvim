@@ -25,7 +25,7 @@ I'd like the two timings to work together, and I want one single summary, printe
 
 ```
 stdout:
-node/index.ts
+node/nvimclient/index.ts
 lua/magenta/init.lua
 exit code 0 (12477ms)
 
@@ -36,7 +36,7 @@ Full output (2 lines): `/tmp/magenta/threads/019d9dc5-84fe-72fa-8695-f38ecc6fd7c
 👀 `lua/magenta/init.lua`
 ✅ 314 lines (~2.0k tok)
 [input: 1, output: 65, cache hits: 19103, cache misses: 282]
-👀 `node/index.ts`
+👀 `node/nvimclient/index.ts`
 ✅ 58 lines (~437 tok)
 [input: 1, output: 60, cache hits: 19385, cache misses: 3344]
 ⚡ `ls ~/src/dotfiles/nvim/`
@@ -96,9 +96,9 @@ lua/magenta/init.lua:19:    vim.notify(string.format("[magenta] after M.start (n
 lua/magenta/init.lua:26:    vim.notify(string.format("[magenta] setup complete (keymaps r...
 lua/magenta/init.lua:51:  env.MAGENTA_TIMINGS = vim.env.MAGENTA_TIMINGS
 lua/magenta/init.lua:96:    vim.notify(string.format("[magenta] bridge called (node proce...
-node/index.ts:1:const TIMINGS = Boolean(process.env.MAGENTA_TIMINGS);
-node/index.ts:51:    `[magenta-timing] node process started, attaching to nvim took ${(pe...
-node/index.ts:56:    `[magenta-timing] Magenta.start() complete, total node startup: ${(p...
+node/nvimclient/index.ts:1:const TIMINGS = Boolean(process.env.MAGENTA_TIMINGS);
+node/nvimclient/index.ts:51:    `[magenta-timing] node process started, attaching to nvim took ${(pe...
+node/nvimclient/index.ts:56:    `[magenta-timing] Magenta.start() complete, total node startup: ${(p...
 exit code 0 (204ms)
 
 ```
@@ -106,10 +106,10 @@ exit code 0 (204ms)
 Full output (14 lines): `/tmp/magenta/threads/019d9dc5-84fe-72fa-8695-f38ecc6fd7c3/tools/toolu_01XJzR42qwTQz2P2DLL5TU4m/bashCommand.log`
 [input: 1, output: 1797, cache hits: 24537, cache misses: 970]
 📋 [System Reminder]
-👀 `node/magenta.ts` (lines 680-809)
+👀 `node/nvimclient/magenta.ts` (lines 680-809)
 ✅ 134 lines (~1.1k tok)
 [input: 6, output: 108, cache hits: 25507, cache misses: 3057]
-⚡ `rg -n "elapsed\\(\\)|const elapsed" node/magenta.ts`
+⚡ `rg -n "elapsed\\(\\)|const elapsed" node/nvimclient/magenta.ts`
 ✅ exit 0, 6 lines (~169 tok)
 
 ```
@@ -126,7 +126,7 @@ exit code 0 (55ms)
 
 Full output (6 lines): `/tmp/magenta/threads/019d9dc5-84fe-72fa-8695-f38ecc6fd7c3/tools/toolu_01P6iFdQR4EwBDahXyyCunMn/bashCommand.log`
 [input: 1, output: 83, cache hits: 25507, cache misses: 4952]
-👀 `node/magenta.ts` (lines 640-699)
+👀 `node/nvimclient/magenta.ts` (lines 640-699)
 ✅ 64 lines (~484 tok)
 [input: 1, output: 108, cache hits: 28564, cache misses: 2324]
 💭 [Thinking]
@@ -288,7 +288,7 @@ Now create the node timings module:
 📝 edl script
 
 ```
-newfile `node/timings.ts`
+newfile `node/nvimclient/timings.ts`
 insert_after <<END
 const ENABLED = Boolean(process.env.MAGENTA_TIMINGS);
 
@@ -302,14 +302,14 @@ const entries: TimingEntry[] = [];
 ```
 
 ✅ edl: 1 mutations in 1 file, +18/-0 lines (~116 tok)
-node/timings.ts: 1 insert (+18/-0)
+node/nvimclient/timings.ts: 1 insert (+18/-0)
 Final selection: 1 range
 [input: 1, output: 251, cache hits: 41324, cache misses: 358]
-Now update `node/index.ts`:
+Now update `node/nvimclient/index.ts`:
 📝 edl script
 
 ```
-file `node/index.ts`
+file `node/nvimclient/index.ts`
 select <<END
 const TIMINGS = Boolean(process.env.MAGENTA_TIMINGS);
 const NODE_START_TIME = performance.now();
@@ -323,21 +323,21 @@ replace <<END
 ```
 
 ✅ edl: 2 mutations in 1 file, +24/-17 lines (~272 tok)
-node/index.ts: 2 replace (+24/-17)
+node/nvimclient/index.ts: 2 replace (+24/-17)
 Final selection: 1 range
 [input: 1, output: 698, cache hits: 41682, cache misses: 469]
-👀 `node/index.ts`
+👀 `node/nvimclient/index.ts`
 ✅ 0 lines (~40 tok)
 [input: 1, output: 60, cache hits: 42151, cache misses: 1178]
-Now update `node/magenta.ts` to use the new timings module:
-👀 `node/magenta.ts` (lines 1-30)
+Now update `node/nvimclient/magenta.ts` to use the new timings module:
+👀 `node/nvimclient/magenta.ts` (lines 1-30)
 ✅ 34 lines (~315 tok)
 [input: 1, output: 130, cache hits: 42151, cache misses: 1290]
 📋 [System Reminder]
 📝 edl script
 
 ```
-file `node/magenta.ts`
+file `node/nvimclient/magenta.ts`
 select <<END
 import { initializeSandbox, type Sandbox } from "./sandbox-manager.ts";
 END
@@ -351,7 +351,7 @@ select <<END
 ```
 
 ✅ edl: 7 mutations in 1 file, +14/-19 lines (~396 tok)
-node/magenta.ts: 6 replace, 1 insert (+14/-19)
+node/nvimclient/magenta.ts: 6 replace, 1 insert (+14/-19)
 Final selection: 1 range
 [input: 6, output: 592, cache hits: 43441, cache misses: 1093]
 Now let me check for type/lint issues:
@@ -365,7 +365,7 @@ exit code 0 (4202ms)
 
 Full output (0 lines): `/tmp/magenta/threads/019d9dc5-84fe-72fa-8695-f38ecc6fd7c3/tools/toolu_01HWjKCXykQQ76iUxSZAzsnH/bashCommand.log`
 [input: 1, output: 75, cache hits: 44534, cache misses: 1239]
-⚡ `npx biome check node/timings.ts node/index.ts node/magenta.ts`
+⚡ `npx biome check node/nvimclient/timings.ts node/nvimclient/index.ts node/nvimclient/magenta.ts`
 ✅ exit 1, 61 lines (~947 tok)
 ❌ Exit code: 1
 
@@ -384,7 +384,7 @@ exit code 1 (2424ms)
 
 Full output (61 lines): `/tmp/magenta/threads/019d9dc5-84fe-72fa-8695-f38ecc6fd7c3/tools/toolu_01TPNJA3sqm1ghKzeqmF5RTc/bashCommand.log`
 [input: 1, output: 79, cache hits: 45773, cache misses: 198]
-⚡ `npx biome check --write node/timings.ts node/index.ts node/magenta.ts`
+⚡ `npx biome check --write node/nvimclient/timings.ts node/nvimclient/index.ts node/nvimclient/magenta.ts`
 ✅ exit 0, 1 lines (~59 tok)
 
 ```
@@ -401,8 +401,8 @@ Full output (1 lines): `/tmp/magenta/threads/019d9dc5-84fe-72fa-8695-f38ecc6fd7c
 
 Context Updates:
 
-- `node/index.ts` [ +6 / -4 ]
-- `node/magenta.ts` [ +1 / -1 ]
+- `node/nvimclient/index.ts` [ +6 / -4 ]
+- `node/nvimclient/magenta.ts` [ +1 / -1 ]
 
 # assistant:
 
@@ -453,7 +453,7 @@ Final selection: 1 range
 [input: 1, output: 779, cache hits: 49110, cache misses: 898]
 📋 [System Reminder]
 Let me do a final sanity check on the files and final type/lint:
-⚡ `npx tsgo -b && npx biome check node/timings.ts node/index.ts node/magenta.ts lua/magenta/init.lua lua/magenta/timings.lua`
+⚡ `npx tsgo -b && npx biome check node/nvimclient/timings.ts node/nvimclient/index.ts node/nvimclient/magenta.ts lua/magenta/init.lua lua/magenta/timings.lua`
 ✅ exit 0, 1 lines (~59 tok)
 
 ```
@@ -472,9 +472,9 @@ Done.
 - `init.lua` (dotfiles) captures `vim.g.nvim_start_time_ms` at the very top using `vim.uv.gettimeofday()` (wall-clock epoch ms).
 - `lua/magenta/timings.lua` — new module that records `{label, time_ms}` entries and prints one merged, sorted summary to `:messages`.
 - `lua/magenta/init.lua` calls `Timings.init()` (reads from `vim.g.nvim_start_time_ms`) and records `setup start`, `after M.start`, `setup complete`, and `bridge called`. It passes `MAGENTA_NVIM_START_TIME_MS` to node via env and exposes `M.report_timings(entries)`.
-- `node/timings.ts` — mirror module that records with `Date.now()` (same epoch as lua).
-- `node/index.ts` records `process started`, `attached to nvim`, `Magenta.start() complete`, then sends all entries back via `nvim_exec_lua` → `require('magenta').report_timings(...)`.
-- `node/magenta.ts` replaces the scattered `nvim.logger.info("[magenta-timing] ...")` calls with `recordTiming(label)`.
+- `node/nvimclient/timings.ts` — mirror module that records with `Date.now()` (same epoch as lua).
+- `node/nvimclient/index.ts` records `process started`, `attached to nvim`, `Magenta.start() complete`, then sends all entries back via `nvim_exec_lua` → `require('magenta').report_timings(...)`.
+- `node/nvimclient/magenta.ts` replaces the scattered `nvim.logger.info("[magenta-timing] ...")` calls with `recordTiming(label)`.
 
 When `MAGENTA_TIMINGS=1`, at the end of startup you'll get one multi-line notification in `:messages` with every event sorted by wall-clock time and labeled `+absolute` / `Δdelta` relative to nvim start — so lua, node, config, and plugin events all line up on one timeline.
 
@@ -538,9 +538,9 @@ Let me make two improvements to narrow it down:
    📝 edl script
 
 ```
-newfile `node/boot.mjs`
+newfile `node/nvimclient/boot.mjs`
 insert_after <<END
-// Bootstrap script loaded via `node --import ./node/boot.mjs` before the
+// Bootstrap script loaded via `node --import ./node/nvimclient/boot.mjs` before the
 // main entry file (index.ts). This runs AFTER node itself is up but BEFORE
 // the TypeScript entry file and all of its transitive imports are loaded
 // and transformed by --experimental-transform-types.
@@ -552,21 +552,21 @@ globalThis.__MAGENTA_BOOT_MS__ = Date.now();
 ```
 
 ✅ edl: 1 mutations in 1 file, +9/-0 lines (~113 tok)
-node/boot.mjs: 1 insert (+9/-0)
+node/nvimclient/boot.mjs: 1 insert (+9/-0)
 Final selection: 1 range
 [input: 1, output: 3681, cache hits: 53490, cache misses: 1400]
 📋 [System Reminder]
-Now update `node/index.ts` to read and record the boot timestamp:
+Now update `node/nvimclient/index.ts` to read and record the boot timestamp:
 📝 edl script
 
 ```
-file `node/index.ts`
+file `node/nvimclient/index.ts`
 select <<END
 recordTiming("node: process started");
 END
 replace <<END
 declare global {
-  // Set by node/boot.mjs via `node --import ./node/boot.mjs` before index.ts
+  // Set by node/nvimclient/boot.mjs via `node --import ./node/nvimclient/boot.mjs` before index.ts
   // imports are loaded and TS-transformed.
   var __MAGENTA_BOOT_MS__: number | undefined;
 }
@@ -574,7 +574,7 @@ declare global {
 ```
 
 ✅ edl: 1 mutations in 1 file, +21/-2 lines (~345 tok)
-node/index.ts: 1 replace (+21/-2)
+node/nvimclient/index.ts: 1 replace (+21/-2)
 Final selection: 1 range
 [input: 6, output: 541, cache hits: 54890, cache misses: 4274]
 💭 [Thinking]
@@ -582,7 +582,7 @@ I violated the no-dynamic-imports rule. Let me redo that properly. Add an `addEn
 📝 edl script
 
 ```
-file `node/timings.ts`
+file `node/nvimclient/timings.ts`
 select <<END
 export const record = (label: string): void => {
   if (!ENABLED) return;
@@ -596,13 +596,13 @@ insert_after <<END
 ```
 
 ✅ edl: 1 mutations in 1 file, +8/-0 lines (~182 tok)
-node/timings.ts: 1 insert (+8/-0)
+node/nvimclient/timings.ts: 1 insert (+8/-0)
 Final selection: 1 range
 [input: 1, output: 346, cache hits: 59164, cache misses: 1105]
 📝 edl script
 
 ```
-file `node/index.ts`
+file `node/nvimclient/index.ts`
 select <<END
 import {
   getEntries as getTimingEntries,
@@ -616,7 +616,7 @@ import {
 ```
 
 ✅ edl: 2 mutations in 1 file, +23/-27 lines (~300 tok)
-node/index.ts: 2 replace (+23/-27)
+node/nvimclient/index.ts: 2 replace (+23/-27)
 Final selection: 1 range
 [input: 1, output: 908, cache hits: 60269, cache misses: 650]
 Now update the lua side to invoke node directly with the boot script:
@@ -642,7 +642,7 @@ Final selection: 1 range
 [input: 1, output: 557, cache hits: 60919, cache misses: 1421]
 📋 [System Reminder]
 Verify it builds clean:
-⚡ `npx tsgo -b && npx biome check --write node/index.ts node/timings.ts node/boot.mjs`
+⚡ `npx tsgo -b && npx biome check --write node/nvimclient/index.ts node/nvimclient/timings.ts node/nvimclient/boot.mjs`
 ✅ exit 0, 1 lines (~59 tok)
 
 ```
@@ -659,7 +659,7 @@ Done. Now when you run nvim with `MAGENTA_TIMINGS=1` you'll get two new data poi
 - `node: boot.mjs loaded (pre-import)` — fires right after node itself has booted, before any TS files are loaded/transformed. The Δ from `lua: after M.start (node job spawned)` is **pure node startup** (no npm, no TS work).
 - `node: index.ts body executing (post-import)` — the Δ from the boot entry is **TS transformation + import side effects** of the whole `index.ts` import graph (every module reachable from `./magenta.ts`, providers, etc.).
 
-**Also eliminated `npm run start -s`** — we now invoke `node --experimental-transform-types --import ./node/boot.mjs node/index.ts` directly. `npm run` wraps scripts in a shell + lifecycle machinery that typically costs ~300–1500ms on its own. Based on the ~6.3s you're seeing, my guess is the bulk will still be in the import-graph phase (that's what `--experimental-transform-types` does synchronously on a cold cache), but the new breakdown will tell us for sure.
+**Also eliminated `npm run start -s`** — we now invoke `node --experimental-transform-types --import ./node/nvimclient/boot.mjs node/nvimclient/index.ts` directly. `npm run` wraps scripts in a shell + lifecycle machinery that typically costs ~300–1500ms on its own. Based on the ~6.3s you're seeing, my guess is the bulk will still be in the import-graph phase (that's what `--experimental-transform-types` does synchronously on a cold cache), but the new breakdown will tell us for sure.
 
 If the "TS transform + imports" Δ turns out to be the dominant chunk, the next steps would be to either (a) precompile to JS and ship built artifacts, or (b) lazy-import heavy modules (e.g. `openai`, `pdfjs-dist`, `@anthropic-ai/sandbox-runtime`) behind their first-use sites rather than at the top of module files.
 
@@ -706,7 +706,7 @@ Full output (1 lines): `/tmp/magenta/threads/019d9dc5-84fe-72fa-8695-f38ecc6fd7c
 📋 [System Reminder]
 💭 [Thinking]
 You're on Node 24. In Node 24, basic type-stripping is on by default — you don't even need the flag. But `--experimental-transform-types` is still opt-in and does more work. Let me measure cold vs warm to see if it's really transform-types vs just disk/module-load cost:
-⚡ `cd /Users/denis.lantsman/src/magenta.nvim && sudo purge 2>/dev/null; time node --experimental-transform-types --import ./node/boot.mjs -e 'import("./node/index.ts").then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})' </dev/null; echo "---warm---"; time node --experimental-transform-types --import ./node/boot.mjs -e 'import("./node/index.ts").then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})' </dev/null`
+⚡ `cd /Users/denis.lantsman/src/magenta.nvim && sudo purge 2>/dev/null; time node --experimental-transform-types --import ./node/nvimclient/boot.mjs -e 'import("./node/nvimclient/index.ts").then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})' </dev/null; echo "---warm---"; time node --experimental-transform-types --import ./node/nvimclient/boot.mjs -e 'import("./node/nvimclient/index.ts").then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})' </dev/null`
 ✅ exit 1, 13 lines (~198 tok)
 ❌ Exit code: 1
 
@@ -768,12 +768,12 @@ If the Δ between boot and post-import drops from ~9.5s → ~1s (or similar), it
 
 - `context.md`
 - `lua/magenta/init.lua`
-- `node/index.ts`
+- `node/nvimclient/index.ts`
 - `lua/magenta/timings.lua`
-- `node/timings.ts`
-- `node/magenta.ts`
+- `node/nvimclient/timings.ts`
+- `node/nvimclient/magenta.ts`
 - `~/src/dotfiles/nvim/init.lua`
 - `~/src/dotfiles/nvim/lua/config/plugins.lua`
-- `node/boot.mjs`
+- `node/nvimclient/boot.mjs`
 
 Stopped (end_turn) [input: 1, output: 273, cache hits: 73999, cache misses: 1215]

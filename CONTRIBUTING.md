@@ -60,11 +60,11 @@ When invoking tests, you can run `npx vitest filter --inspect-wait`. This will p
 
 When neovim starts, the `start` function is run in [init.lua](https://github.com/dlants/magenta.nvim/blob/main/lua/magenta/init.lua). This kicks off the node process. Neovim creates a socket and passes it to the node process via the `NVIM` env var.
 
-The entrypoint for the node process is [index.ts](https://github.com/dlants/magenta.nvim/blob/main/node/index.ts). This checks for the presence of the env variable, establishes the nvim-node connection, and kicks off the static `Magenta.start` method.
+The entrypoint for the node process is [index.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/index.ts). This checks for the presence of the env variable, establishes the nvim-node connection, and kicks off the static `Magenta.start` method.
 
-The start function in [magenta.ts](https://github.com/dlants/magenta.nvim/blob/main/node/magenta.ts) sets up the notification listeners and calls the `require('magenta').bridge` method from `init.lua`. This passes the `channelId` back to the lua side, so that it can finish initializing the magenta lua module, which we can then invoke to communicate back to the plugin.
+The start function in [magenta.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/magenta.ts) sets up the notification listeners and calls the `require('magenta').bridge` method from `init.lua`. This passes the `channelId` back to the lua side, so that it can finish initializing the magenta lua module, which we can then invoke to communicate back to the plugin.
 
-Most commands are defined in `init.lua`, though some are defined on the node side, like [sidebar.ts](https://github.com/dlants/magenta.nvim/blob/main/node/sidebar.ts).
+Most commands are defined in `init.lua`, though some are defined on the node side, like [sidebar.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/sidebar.ts).
 
 ## losing the connection to neovim
 
@@ -72,13 +72,13 @@ The lua and node halves are joined by two independent things: the job (`M.job_id
 
 If neovim drops the channel (it does this if it hits an error decoding a message we wrote, and of course when it exits), the symptom on the lua side is that every autocmd/command calling `safe_rpcnotify` fails with `Invalid channel: N`. `teardown_bridge` then removes the `MagentaBridge` autocmds and the `:Magenta` command so we don't spam errors, which shows up as `E492: Not an editor command: Magenta ...`.
 
-On the node side, the socket handlers in [nvim-node/attach.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvim/nvim-node/attach.ts) record this: a FIN from neovim logs a warning, and the socket closing (when we did not call `detach()`) logs an error and exits the process. Without that exit you get an orphaned node process — alive, burning tokens, unable to talk to nvim. So if you see `lost connection to neovim` in `/tmp/magenta.log`, that is the node side reporting nvim hung up on it; look just above it for a write/pack error, which is the usual cause.
+On the node side, the socket handlers in [nvim-node/attach.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/nvim/nvim-node/attach.ts) record this: a FIN from neovim logs a warning, and the socket closing (when we did not call `detach()`) logs an error and exits the process. Without that exit you get an orphaned node process — alive, burning tokens, unable to talk to nvim. So if you see `lost connection to neovim` in `/tmp/magenta.log`, that is the node side reporting nvim hung up on it; look just above it for a write/pack error, which is the usual cause.
 
 ## testing setup
 
-The startup for tests is a little different, handled in [test/preamble.ts](https://github.com/dlants/magenta.nvim/blob/main/node/test/preamble.ts). Here, the node process starts first. In every tests, it creates an nvim socket, and then starts nvim with the `--listen` flag to attach to that socket. It then proceeds to init the magenta plugin against that socket, as in the normal startup sequence.
+The startup for tests is a little different, handled in [test/preamble.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/test/preamble.ts). Here, the node process starts first. In every tests, it creates an nvim socket, and then starts nvim with the `--listen` flag to attach to that socket. It then proceeds to init the magenta plugin against that socket, as in the normal startup sequence.
 
-Each test gets a fresh neovim instance. Convenience methods for interacting with the nvim/plugin setup live in [test/driver.ts](https://github.com/dlants/magenta.nvim/blob/main/node/test/driver.ts).
+Each test gets a fresh neovim instance. Convenience methods for interacting with the nvim/plugin setup live in [test/driver.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/test/driver.ts).
 
 ## architecture
 
@@ -104,20 +104,20 @@ One key principle: **If you create a class, you're responsible for passing actio
 
 The main architectural files are:
 
-- [root-msg.ts](https://github.com/dlants/magenta.nvim/blob/main/node/root-msg.ts) - Defines the root message type that flows through the system
+- [root-msg.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/root-msg.ts) - Defines the root message type that flows through the system
 - [magenta.ts](https://github.com/dlants/magenta.nvim/blob/main/node/magenta.ts#L21) - Contains the central dispatching loop in the `dispatch` method of the Magenta class
-- [tea/tea.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tea/tea.ts) - Manages the rendering cycle
-- [view.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tea/view.ts) - Implements the VDOM-like declarative rendering template
+- [tea/tea.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/tea/tea.ts) - Manages the rendering cycle
+- [view.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/tea/view.ts) - Implements the VDOM-like declarative rendering template
 
 ## code organization
 
-- [magenta.ts](https://github.com/dlants/magenta.nvim/blob/main/node/magenta.ts) - the entrypoint. Sets up the communication with the neovim process, initializes the app, receives commands from the neovim process.
-- [sidebar.ts](https://github.com/dlants/magenta.nvim/blob/main/node/sidebar.ts) - manages the chat sidebar state. Mostly just for showing/hiding it, managing the keybindings, etc...
-- [chat/chat.ts](https://github.com/dlants/magenta.nvim/blob/main/node/chat/chat.ts) - the top-level chat component that manages the overall chat state and initializes threads.
-- [chat/thread.ts](https://github.com/dlants/magenta.nvim/blob/main/node/chat/thread.ts) - manages the message thread, handling sending messages, displaying responses, and coordinating with tool usage.
-- [chat/message.ts](https://github.com/dlants/magenta.nvim/blob/main/node/chat/message.ts) - represents individual chat messages and manages their parts.
-- [chat/part.ts](https://github.com/dlants/magenta.nvim/blob/main/node/chat/part.ts) - represents different parts of a message (text, tool requests, etc.).
-- [context/context-manager.ts](https://github.com/dlants/magenta.nvim/blob/main/node/context/context-manager.ts) - manages file context that can be added to conversations.
-- [tools/toolManager.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tools/toolManager.ts) - manages tool executions and rendering. Each tool execution has an id, and this contains the state mapping that id to the execution state.
-- [providers/provider.ts](https://github.com/dlants/magenta.nvim/blob/main/node/providers/provider.ts) - abstraction around an LLM provider. Creates general ways of declaring tools, messages and other interactions with various providers.
+- [magenta.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/magenta.ts) - the entrypoint. Sets up the communication with the neovim process, initializes the app, receives commands from the neovim process.
+- [sidebar.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/sidebar.ts) - manages the chat sidebar state. Mostly just for showing/hiding it, managing the keybindings, etc...
+- [chat/chat.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/chat/chat.ts) - the top-level chat component that manages the overall chat state and initializes threads.
+- [chat/thread.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/chat/thread.ts) - manages the message thread, handling sending messages, displaying responses, and coordinating with tool usage.
+- [chat/message.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/chat/message.ts) - represents individual chat messages and manages their parts.
+- [chat/part.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/chat/part.ts) - represents different parts of a message (text, tool requests, etc.).
+- [context/context-manager.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/context/context-manager.ts) - manages file context that can be added to conversations.
+- [tools/toolManager.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/tools/toolManager.ts) - manages tool executions and rendering. Each tool execution has an id, and this contains the state mapping that id to the execution state.
+- [providers/provider.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/providers/provider.ts) - abstraction around an LLM provider. Creates general ways of declaring tools, messages and other interactions with various providers.
 - [inline-edit/inline-edit-manager.ts](https://github.com/dlants/magenta.nvim/blob/main/node/inline-edit/inline-edit-manager.ts) - manages inline editing functionality for making code changes directly in buffers.

@@ -171,8 +171,8 @@ M.start = function(silent)
       "node",
       "--disable-warning=ExperimentalWarning",
       "--experimental-transform-types",
-      "--import", plugin_root .. "node/boot.mjs",
-      plugin_root .. "node/index.ts",
+      "--import", plugin_root .. "node/nvimclient/boot.mjs",
+      plugin_root .. "node/nvimclient/index.ts",
     }
   else
     cmd = { "node", bundle_path }
@@ -299,7 +299,7 @@ M.bridge = function(channelId)
 
   -- Stop the node job early in nvim's shutdown so we're not waiting on
   -- the SIGTERM->SIGKILL timeout while nvim tries to exit. Combined with
-  -- the SIGTERM handler in node/index.ts, this makes :qa near-instant.
+  -- the SIGTERM handler in node/nvimclient/index.ts, this makes :qa near-instant.
   vim.api.nvim_create_autocmd(
     "VimLeavePre",
     {

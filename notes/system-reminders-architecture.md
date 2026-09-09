@@ -8,13 +8,13 @@ This document contains findings on how the system currently handles messages and
 
 ### Message Types
 
-**InputMessage** (`node/chat/thread.ts:58`)
+**InputMessage** (`node/nvimclient/chat/thread.ts:58`)
 
 - Type: `{ type: "user"; text: string } | { type: "system"; text: string }`
 - Purpose: Represents messages that enter the thread from outside (user or system)
 - Usage: Used when creating new threads and sending messages
 
-**ProviderMessage** (`node/providers/provider.ts`)
+**ProviderMessage** (`node/nvimclient/providers/provider.ts`)
 
 - Contains role ("user" or "assistant") and content array
 - Sent to the LLM provider
@@ -30,12 +30,12 @@ This document contains findings on how the system currently handles messages and
 
 ### How User Messages Enter the System
 
-1. **Thread Creation** (`node/chat/chat.ts:450-513`, method `createThreadWithContext`)
+1. **Thread Creation** (`node/nvimclient/chat/chat.ts:450-513`, method `createThreadWithContext`)
    - Accepts `inputMessages?: InputMessage[]` parameter
    - Creates thread with system prompt and context
    - If inputMessages provided, dispatches `send-message` after thread initialization
 
-2. **Sending Messages** (`node/chat/thread.ts:311-340`, method `prepareUserMessage`)
+2. **Sending Messages** (`node/nvimclient/chat/thread.ts:311-340`, method `prepareUserMessage`)
    - Processes `InputMessage[]` array
    - Handles special commands like `@file`, `@fork`, `@async`
    - Creates Message objects with role "user"
@@ -81,7 +81,7 @@ Based on the message flow, system reminders could be injected at several points:
 
 ### Rendering Logic
 
-**Location**: `node/chat/message.ts:322-353`
+**Location**: `node/nvimclient/chat/message.ts:322-353`
 
 **State Management**:
 
@@ -134,7 +134,7 @@ System reminder blocks should work similarly to thinking blocks:
 
 ### Files and Functions
 
-**Location**: `node/providers/system-prompt.ts`
+**Location**: `node/nvimclient/providers/system-prompt.ts`
 
 **Key Function**: `createSystemPrompt(type: ThreadType, context)`
 
@@ -154,7 +154,7 @@ System reminder blocks should work similarly to thinking blocks:
 
 ### Where System Prompt Instructions Are
 
-**Current Location of "Important Instructions"** (`node/providers/system-prompt.ts:60`):
+**Current Location of "Important Instructions"** (`node/nvimclient/providers/system-prompt.ts:60`):
 
 ```typescript
 - If the user asks you a general question and doesn't mention their project, answer the question without looking at the code base. You may still do an internet search
@@ -191,7 +191,7 @@ These should be moved into the first system-reminder.
 
 ### Spawn Mechanism
 
-**Tool**: `spawn_subagent` (`node/tools/spawn-subagent.ts`)
+**Tool**: `spawn_subagent` (`node/nvimclient/tools/spawn-subagent.ts`)
 
 **Input**:
 
@@ -206,7 +206,7 @@ These should be moved into the first system-reminder.
 **Process**:
 
 1. Tool receives request and dispatches `spawn-subagent-thread` message
-2. Chat handler creates new thread via `handleSpawnSubagentThread()` (`node/chat/chat.ts:613-716`)
+2. Chat handler creates new thread via `handleSpawnSubagentThread()` (`node/nvimclient/chat/chat.ts:613-716`)
 3. Thread is created with:
    - `threadType` mapped from agentType (e.g., "learn" → "subagent_learn")
    - `inputMessages: [{ type: "system", text: prompt }]`
@@ -218,7 +218,7 @@ These should be moved into the first system-reminder.
 
 ### Thread Creation
 
-**Method**: `createThreadWithContext()` (`node/chat/chat.ts:450-513`)
+**Method**: `createThreadWithContext()` (`node/nvimclient/chat/chat.ts:450-513`)
 
 **Steps**:
 
@@ -234,14 +234,14 @@ These should be moved into the first system-reminder.
 **Yield Mechanism**: `yield_to_parent` tool
 
 - Subagent calls this tool with result string
-- Parent thread is notified via `notifyParent()` method (`node/chat/chat.ts:718-822`)
+- Parent thread is notified via `notifyParent()` method (`node/nvimclient/chat/chat.ts:718-822`)
 - Parent's `wait_for_subagents` or `spawn_foreach` tool receives completion notification
 
 ## 5. Context Updates Rendering
 
 ### How Context Updates Work
 
-**Location**: `node/context/context-manager.ts:713-799`
+**Location**: `node/nvimclient/context/context-manager.ts:713-799`
 
 **Rendering**:
 
@@ -252,7 +252,7 @@ These should be moved into the first system-reminder.
 - For new files: `[ +X ]`
 - For deleted files: `[ deleted ]`
 
-**In Message View** (`node/chat/message.ts:403-410`):
+**In Message View** (`node/nvimclient/chat/message.ts:403-410`):
 
 ```typescript
 view() {
@@ -371,7 +371,7 @@ There are three sources of reminder text:
 
 1. **Agent-prompt block (static)** — a `<system_reminder>` block in an agent
    definition file. Extracted at thread construction (`extractSystemReminder`
-   in `node/core/src/agents/agents.ts`) and passed via `subagentConfig`. This
+   in `node/server/src/agents/agents.ts`) and passed via `subagentConfig`. This
    path is unchanged by the markdown mechanism below.
 2. **Transient `get_file` reads (dynamic)** — when `get_file` reads a markdown
    file (`.md`, case-insensitive), it extracts a `<system_reminder>` block via
@@ -400,10 +400,10 @@ populated before reminders are built on that same turn.
 
 ## Key Files Reference
 
-- `node/chat/thread.ts` - Thread class, message handling, `prepareUserMessage()`, `sendMessage()`
-- `node/chat/message.ts` - Message class, rendering logic, thinking blocks implementation
-- `node/chat/chat.ts` - Chat class, thread creation, subagent spawning
-- `node/providers/system-prompt.ts` - System prompt construction, thread-specific prompts
-- `node/context/context-manager.ts` - Context updates, file tracking
-- `node/root-msg.ts` - Root message types
-- `node/tools/spawn-subagent.ts` - Subagent spawning tool
+- `node/nvimclient/chat/thread.ts` - Thread class, message handling, `prepareUserMessage()`, `sendMessage()`
+- `node/nvimclient/chat/message.ts` - Message class, rendering logic, thinking blocks implementation
+- `node/nvimclient/chat/chat.ts` - Chat class, thread creation, subagent spawning
+- `node/nvimclient/providers/system-prompt.ts` - System prompt construction, thread-specific prompts
+- `node/nvimclient/context/context-manager.ts` - Context updates, file tracking
+- `node/nvimclient/root-msg.ts` - Root message types
+- `node/nvimclient/tools/spawn-subagent.ts` - Subagent spawning tool

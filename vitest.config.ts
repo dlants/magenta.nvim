@@ -3,8 +3,8 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   test: {
-    globalSetup: ["./node/test/global-setup.ts"],
-    setupFiles: ["./node/test/setup.ts"],
+    globalSetup: ["./node/nvimclient/test/global-setup.ts"],
+    setupFiles: ["./node/nvimclient/test/setup.ts"],
     // Each test file spawns its own nvim process; cap parallelism so we don't
     // exhaust memory by spinning up too many at once.
     pool: "forks",

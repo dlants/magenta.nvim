@@ -37,7 +37,7 @@ I sometimes write about AI, neovim and magenta specifically:
 
 It's neovim, baby! Use your muscle memory to browse agent output, gather context, and edit your prompt. Jump into a buffer to fix errors or redirect the agent — the diff of your edits will be sent to the agent in the next message.
 
-Magenta is fully transparent: you see everything the agent sees — prompts, reminders, tool descriptions — and can customize all of it. Edits use [EDL](https://github.com/dlants/magenta.nvim/blob/main/node/core/src/tools/edl-description.md), a purpose-built DSL that's far more token-efficient than claude code's str_replace. The useful parts of claude code (context management, sub-agents, skills, custom agents) are all present, so you won't miss anything.
+Magenta is fully transparent: you see everything the agent sees — prompts, reminders, tool descriptions — and can customize all of it. Edits use [EDL](https://github.com/dlants/magenta.nvim/blob/main/node/server/src/tools/edl-description.md), a purpose-built DSL that's far more token-efficient than claude code's str_replace. The useful parts of claude code (context management, sub-agents, skills, custom agents) are all present, so you won't miss anything.
 
 And also apparently the code quality is a lot better?
 
@@ -45,16 +45,16 @@ And also apparently the code quality is a lot better?
 
 I haven't actually used other neovim AI plugins in a while, so take this with a grain of salt. My feeling is that magenta provides a richer set of features, nicer UI and more customizability than other plugins. Using a typescript core means we can leverage the anthropic sdk and libraries like anthropic's sandbox-runtime, which greatly speeds up development. The distinguishing features:
 
-- **Edit Description Language (EDL)**: A [small DSL](https://github.com/dlants/magenta.nvim/blob/main/node/core/src/tools/edl-description.md) that's more expressive than string match/replace and often uses far fewer tokens to express edits, since it doesn't have to accurately re-type large swaths of text when making large edits.
+- **Edit Description Language (EDL)**: A [small DSL](https://github.com/dlants/magenta.nvim/blob/main/node/server/src/tools/edl-description.md) that's more expressive than string match/replace and often uses far fewer tokens to express edits, since it doesn't have to accurately re-type large swaths of text when making large edits.
 - **OS-level sandboxing**: By default we use anthropic's sandbox-runtime to run the agent in an OS sandbox (seatbelt on macOS, bubblewrap on Linux) with configurable filesystem and network policies. Fewer operations require manual approval, leading to less alert fatigue.
 - **Docker sub-agents**: Spawn isolated agents in Docker containers for parallel, unsupervised work.
 - **Per-thread buffers**: Each thread is its own buffer, so you can use buffer navigation, jump lists, and pickers to jump between threads.
-- **Declarative TUI rendering**: A VDOM-like / react-like system ([code](https://github.com/dlants/magenta.nvim/blob/main/node/tea/view.ts)) for rendering text into neovim buffers supports a rich display with expanding sections, navigation UI, and in-display-window approval dialogues.
+- **Declarative TUI rendering**: A VDOM-like / react-like system ([code](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/tea/view.ts)) for rendering text into neovim buffers supports a rich display with expanding sections, navigation UI, and in-display-window approval dialogues.
 - **UX polish**: Chimes and terminal bells integrate nicely with things like multiplexing neovim sessions in tmux.
 - **Customizable agents**: Agent system prompts are markdown files on disk (`~/.magenta/agents/` or `.magenta/agents/`). Override or create new agent personalities without touching code.
 - **Auto-compaction**: Chunked incremental summarization with accurate token counting keeps long threads manageable without losing important context.
-- **TEA architecture**: State is managed via an [elm-inspired architecture](https://github.com/evancz/elm-architecture-tutorial) ([code](https://github.com/dlants/magenta.nvim/blob/main/node/tea/tea.ts)), making the plugin easy to understand, extend, and [test](https://github.com/dlants/magenta.nvim/blob/main/node/chat/chat.test.ts).
-- **Full end-to-end testing**: A complete [integration test setup](https://github.com/dlants/magenta.nvim/blob/main/node/magenta.test.ts) with TypeScript async/await makes writing readable tests easy. The plugin is well-tested across unit, integration, and docker levels.
+- **TEA architecture**: State is managed via an [elm-inspired architecture](https://github.com/evancz/elm-architecture-tutorial) ([code](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/tea/tea.ts)), making the plugin easy to understand, extend, and [test](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/chat/chat.test.ts).
+- **Full end-to-end testing**: A complete [integration test setup](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/magenta.test.ts) with TypeScript async/await makes writing readable tests easy. The plugin is well-tested across unit, integration, and docker levels.
 - **TypeScript + official SDKs**: Using the Anthropic SDK directly means streaming, tool use, and caching just work. Async/await makes side-effect chains straightforward.
 - **Smart prompt caching**: Pinned files only move up in message history when they change, maximizing Anthropic's prompt cache hit rate. Cache breakpoints are placed strategically.
 - **Transparency**: Raw tool use requests/responses, stop reasons, and token usage are all visible. You can see everything the agent sees and manipulate it.

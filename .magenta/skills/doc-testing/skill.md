@@ -8,8 +8,8 @@ description: Comprehensive guide for writing tests in magenta.nvim, including te
 To run the full test suite, use `npx vitest run` from the project root. You do not need to cd.
 To run a specific test file, use `npx vitest run <file>`. **Important** You do not need to cd.
 Test files should use the `.test.ts` extension (e.g., `myFeature.test.ts`).
-Tests should make use of the `node/test/preamble.ts` helpers.
-When doing integration-level testing, like user flows, use the `withDriver` helper and the interactions in `node/test/driver.ts`. When performing generic user actions that may be reusable between tests, put them into the NvimDriver class as helpers.
+Tests should make use of the `node/nvimclient/test/preamble.ts` helpers.
+When doing integration-level testing, like user flows, use the `withDriver` helper and the interactions in `node/nvimclient/test/driver.ts`. When performing generic user actions that may be reusable between tests, put them into the NvimDriver class as helpers.
 
 As of July 2025, tests are now run in parallel for improved performance. The test infrastructure has been updated to support concurrent test execution.
 
@@ -18,7 +18,7 @@ As of July 2025, tests are now run in parallel for improved performance. The tes
 **Fixture Files & Directory Structure:**
 
 - Each test gets a fresh temporary directory in `/tmp/magenta-test/{testId}/`
-- Files from `node/test/fixtures/` are copied into this temp directory for each test
+- Files from `node/nvimclient/test/fixtures/` are copied into this temp directory for each test
 - Available fixture files include `poem.txt`, `test.jpg`, `sample2.pdf`, `test.bin`, and others
 - Nvim runs in this temporary directory, so files can be safely mutated during tests
 - The temp directory is automatically cleaned up after each test - no manual cleanup needed

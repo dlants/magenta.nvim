@@ -28,6 +28,6 @@ You are running on the host machine. The project root is the current working dir
 
 - **Run all tests:** `npx vitest run`
 - **Run specific test file:** `npx vitest run path/to/file.test.ts`
-- **Run core tests only:** `npx vitest run node/core/`
+- **Run core tests only:** `npx vitest run node/server/`
 - **Type-check:** `npx tsgo -b`
 - **Lint:** `npx biome check .`

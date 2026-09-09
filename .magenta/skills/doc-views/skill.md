@@ -153,7 +153,7 @@ directly:
 // Define a simple message type for toggling
 export type Msg = { type: "toggle" } | { type: "request-finished" };
 
-// this should be imported from node/root-msg.ts
+// this should be imported from node/nvimclient/root-msg.ts
 export type ToggleRootMsg = {
   type: "toggle-msg";
   id: ToggleId;

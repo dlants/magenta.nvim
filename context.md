@@ -1,10 +1,10 @@
 # Overview
 
-This is a neovim plugin for agentic tool use. The entrypoint is `lua/magenta/init.lua`, which kicks off the `node/magenta.ts` node process. That process establishes a bidirectional bridge, grabbing options from lua and enabling communication between the two halves.
+This is a neovim plugin for agentic tool use. The entrypoint is `lua/magenta/init.lua`, which kicks off the `node/nvimclient/magenta.ts` node process. That process establishes a bidirectional bridge, grabbing options from lua and enabling communication between the two halves.
 
 The node code is organized as npm workspaces:
 
-- `node/core/` (`@magenta/core`) — standalone logic with no neovim dependency (tools, providers, agents, agent/runner, EDL, etc.)
+- `node/server/` (`@magenta/server`) — standalone logic with no neovim dependency (tools, providers, agents, agent/runner, EDL, etc.)
 - Root project — neovim-specific code (sidebar, TEA rendering, buffer-tracker, nvim bindings)
 
 The root `tsconfig.json` uses TypeScript project references to enforce the boundary: core cannot import from the root project.
@@ -13,7 +13,7 @@ Key entry points:
 
 - `lua/magenta/options.lua` — plugin options
 - `lua/magenta/keymaps.lua` — neovim keymaps
-- `node/sidebar.ts` — manages the sidebar (chat/input buffers, keymaps)
+- `node/nvimclient/sidebar.ts` — manages the sidebar (chat/input buffers, keymaps)
 
 # Semantic search (pkb)
 
@@ -29,13 +29,13 @@ Each result is a snippet with its file path — treat it as a pointer and open t
 
 # Architecture
 
-## Core layer (`@magenta/core`)
+## Core layer (`@magenta/server`)
 
-`Agent` is an **event emitter**. It extends a custom type-safe `Emitter<Events>` class (`node/core/src/emitter.ts`) that provides `on()`, `off()`, and `emit()` methods parameterized on a typed event map.
+`Agent` is an **event emitter**. It extends a custom type-safe `Emitter<Events>` class (`node/server/src/emitter.ts`) that provides `on()`, `off()`, and `emit()` methods parameterized on a typed event map.
 
-- **`NativeInferenceManager`** (`node/core/src/providers/provider-types.ts`) — the provider-specific context: it owns the native message array, converts it to `ProviderMessage`s, and issues one request at a time (including retries and stream accumulation). Implemented by `AnthropicInferenceManager` (`providers/anthropic-inference.ts`) and `OpenAIInferenceManager` (`providers/openai-inference.ts`). It is not an emitter — it reports streaming progress through a callback passed to `sendRequest`, whose lifetime is exactly the request's.
+- **`NativeInferenceManager`** (`node/server/src/providers/provider-types.ts`) — the provider-specific context: it owns the native message array, converts it to `ProviderMessage`s, and issues one request at a time (including retries and stream accumulation). Implemented by `AnthropicInferenceManager` (`providers/anthropic-inference.ts`) and `OpenAIInferenceManager` (`providers/openai-inference.ts`). It is not an emitter — it reports streaming progress through a callback passed to `sendRequest`, whose lifetime is exactly the request's.
 
-- **`Agent`** (`node/core/src/agent.ts`) — orchestrates agents and tools. Emits `update`, `playChime`, `scrollToLastMessage`, `setupResubmit`, `aborting`, and `contextUpdatesSent`.
+- **`Agent`** (`node/server/src/agent.ts`) — orchestrates agents and tools. Emits `update`, `playChime`, `scrollToLastMessage`, `setupResubmit`, `aborting`, and `contextUpdatesSent`.
 
 `Agent` owns the turn loop, the tool executor, the hooks and `AgentPhase`; the manager owns only "is a request in flight". The root project therefore only needs to subscribe to `Agent` — all core events are routed through a single point rather than requiring the root to subscribe to multiple emitters.
 
@@ -48,14 +48,14 @@ The manager's native array is the wire format: `Anthropic.MessageParam[]` for an
 
 The root project uses a **single-dispatch TEA architecture**:
 
-- **`RootMsg`** (`node/root-msg.ts`) — a discriminated union of all message types (`ThreadMsg`, `ChatMsg`, `SidebarMsg`).
-- **`dispatch`** (`node/magenta.ts`) — the single state update point. Every message flows through `dispatch`, which forwards it to controllers and triggers a re-render.
+- **`RootMsg`** (`node/nvimclient/root-msg.ts`) — a discriminated union of all message types (`ThreadMsg`, `ChatMsg`, `SidebarMsg`).
+- **`dispatch`** (`node/nvimclient/magenta.ts`) — the single state update point. Every message flows through `dispatch`, which forwards it to controllers and triggers a re-render.
 - **Controllers** (e.g. `Chat`, `Thread`) — each maintains its own state and filters `RootMsg` for messages relevant to it. Each controller has a `myDispatch` that wraps local messages into the appropriate `RootMsg` variant.
 - **`view`** — declarative TUI rendering using the `d` template literal, with `withBindings` for interactive elements.
 
 ## Core → Root bridge
 
-The root `NvimThread` class (`node/chat/thread.ts`) bridges the two layers. In its constructor, it subscribes to `Agent` events and converts them into dispatches:
+The root `NvimThread` class (`node/nvimclient/chat/thread.ts`) bridges the two layers. In its constructor, it subscribes to `Agent` events and converts them into dispatches:
 
 - `core.on("update")` → dispatches `{ type: "tool-progress" }` to trigger re-renders
 - `core.on("scrollToLastMessage")` → dispatches a `sidebar-msg` to scroll the view
@@ -73,10 +73,10 @@ This is the key pattern: **core emits events, the root subscribes at a single po
 
 Key files:
 
-- [root-msg.ts](https://github.com/dlants/magenta.nvim/blob/main/node/root-msg.ts) — root message union
-- [magenta.ts](https://github.com/dlants/magenta.nvim/blob/main/node/magenta.ts) — central dispatch loop
-- [tea/tea.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tea/tea.ts) — render cycle
-- [tea/view.ts](https://github.com/dlants/magenta.nvim/blob/main/node/tea/view.ts) — declarative TUI template
+- [root-msg.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/root-msg.ts) — root message union
+- [magenta.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/magenta.ts) — central dispatch loop
+- [tea/tea.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/tea/tea.ts) — render cycle
+- [tea/view.ts](https://github.com/dlants/magenta.nvim/blob/main/node/nvimclient/tea/view.ts) — declarative TUI template
 
 # View System
 
@@ -95,11 +95,11 @@ Quick reference:
 
 # Type checks
 
-Use `npx tsc -b` to run type checking, from the project root. This uses build mode which handles the workspace project references (building `node/core` declarations first, then checking the root project). You do not need to cd into any subdirectory.
+Use `npx tsc -b` to run type checking, from the project root. This uses build mode which handles the workspace project references (building `node/server` declarations first, then checking the root project). You do not need to cd into any subdirectory.
 
-To type-check just the core package: `npx tsc -p node/core/tsconfig.json --noEmit`
+To type-check just the core package: `npx tsc -p node/server/tsconfig.json --noEmit`
 
-To run just the core tests: `npx vitest run node/core/`
+To run just the core tests: `npx vitest run node/server/`
 
 # Linting and Formatting
 

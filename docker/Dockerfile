@@ -45,7 +45,7 @@ WORKDIR /workspace
 
 # Install deps first (cached when lockfile unchanged)
 COPY package.json package-lock.json ./
-COPY node/core/package.json node/core/
+COPY node/server/package.json node/server/
 RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Copy project files

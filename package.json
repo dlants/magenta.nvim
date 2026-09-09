@@ -3,7 +3,7 @@
   "module": "magenta.ts",
   "type": "module",
   "workspaces": [
-    "node/core"
+    "node/server"
   ],
   "devDependencies": {
     "@biomejs/biome": "2.4.6",
@@ -49,7 +49,7 @@
     }
   },
   "scripts": {
-    "start": "node --experimental-transform-types node/index.ts",
+    "start": "node --experimental-transform-types node/nvimclient/index.ts",
     "build": "npm ci --production && node scripts/build.mjs",
     "bundle": "node scripts/build.mjs",
     "lint": "biome check .",

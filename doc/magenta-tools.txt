@@ -32,7 +32,7 @@ Agent Coordination:~
   - `spawn_subagents` - Delegate tasks to subagents
   - `yield_to_parent` - Return results to parent agent
 
-See https://github.com/dlants/magenta.nvim/tree/main/node/core/src/tools for
+See https://github.com/dlants/magenta.nvim/tree/main/node/server/src/tools for
 the most up-to-date list.
 
 For detailed documentation on specific tools and features:

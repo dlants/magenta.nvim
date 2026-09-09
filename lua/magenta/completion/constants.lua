@@ -1,4 +1,4 @@
--- Must match MAGENTA_INPUT_BUFFER_PREFIX in node/buffer-manager.ts
+-- Must match MAGENTA_INPUT_BUFFER_PREFIX in node/nvimclient/buffer-manager.ts
 local M = {
   INPUT_BUFFER_PREFIX = 'Magenta Input',
 }

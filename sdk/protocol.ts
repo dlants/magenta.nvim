@@ -2,7 +2,7 @@
  * Shared IPC protocol types exchanged over the child-process IPC channel
  * between the script process (SDK) and the magenta process (ScriptManager).
  *
- * This module is fully self-contained: it imports nothing (no node/core, no
+ * This module is fully self-contained: it imports nothing (no node/server, no
  * root project, no third-party package). The root project imports these types
  * FROM here; the SDK never imports back.
  */

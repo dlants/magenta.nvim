@@ -6,7 +6,7 @@ Running `rg "Full output" -t ts` (or just `rg "Full output"`) from the bash_comm
 
 ## What works
 
-- `rg "Full output" "node/tools/bashCommand.ts"` - specifying a file path explicitly
+- `rg "Full output" "node/nvimclient/tools/bashCommand.ts"` - specifying a file path explicitly
 - `rg "Full output" node/` - specifying a directory path
 - `rg "Full output" -t ts .` - adding `.` as explicit path
 - `rg "Full output" -t ts node/` - specifying subdirectory

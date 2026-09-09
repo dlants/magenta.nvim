@@ -25,7 +25,7 @@ const externals = [
 
 const cmd = [
   "esbuild",
-  "node/index.ts",
+  "node/nvimclient/index.ts",
   "--bundle",
   "--platform=node",
   "--format=esm",
@@ -39,21 +39,21 @@ execSync(cmd, { stdio: "inherit", cwd: root });
 
 // Copy runtime assets that get read via import.meta.url at runtime.
 // In the bundle, import.meta.url is dist/magenta.mjs, so:
-//   - edl.ts, spawn-subagents.ts (in node/core/src/tools/) -> dist/*.md
-//   - compaction-manager.ts (in node/core/src/)            -> dist/*.md
-//   - options.ts BUILTIN_AGENTS_PATH (__dirname + "core/src/agents")
-//                                                          -> dist/core/src/agents/*.md
+//   - edl.ts, spawn-subagents.ts (in node/server/src/tools/) -> dist/*.md
+//   - compaction-manager.ts (in node/server/src/)            -> dist/*.md
+//   - options.ts BUILTIN_AGENTS_PATH (__dirname + "server/src/agents")
+//                                                          -> dist/server/src/agents/*.md
 const assetCopies = [
-  ["node/core/src/tools/edl-description.md", "dist/edl-description.md"],
+  ["node/server/src/tools/edl-description.md", "dist/edl-description.md"],
   [
-    "node/core/src/tools/spawn-subagents-description.md",
+    "node/server/src/tools/spawn-subagents-description.md",
     "dist/spawn-subagents-description.md",
   ],
   [
-    "node/core/src/compaction/compact-system-prompt.md",
+    "node/server/src/compaction/compact-system-prompt.md",
     "dist/compact-system-prompt.md",
   ],
-  ["node/chat/logo.txt", "dist/logo.txt"],
+  ["node/nvimclient/chat/logo.txt", "dist/logo.txt"],
 ];
 
 for (const [src, dst] of assetCopies) {
@@ -61,8 +61,8 @@ for (const [src, dst] of assetCopies) {
   copyFileSync(join(root, src), join(root, dst));
 }
 
-const agentsSrc = join(root, "node/core/src/agents");
-const agentsDst = join(dist, "core/src/agents");
+const agentsSrc = join(root, "node/server/src/agents");
+const agentsDst = join(dist, "server/src/agents");
 mkdirSync(agentsDst, { recursive: true });
 for (const entry of readdirSync(agentsSrc)) {
   if (entry.endsWith(".md")) {

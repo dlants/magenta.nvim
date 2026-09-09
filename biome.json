@@ -42,10 +42,10 @@
     },
     "includes": [
       "**",
-      "!**/node/test/fixtures/**",
-      "!**/node/test/tmp/**",
-      "!node/nvim/nvim-node/cli/**",
-      "!**/node/core/dist/**"
+      "!**/node/nvimclient/test/fixtures/**",
+      "!**/node/nvimclient/test/tmp/**",
+      "!node/nvimclient/nvim/nvim-node/cli/**",
+      "!**/node/server/dist/**"
     ]
   },
   "javascript": {
