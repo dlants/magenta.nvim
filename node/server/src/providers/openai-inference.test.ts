@@ -68,7 +68,7 @@ function setup(
 ) {
   const calls: RequestedTool[][] = [];
   const state = { updates: 0 };
-  const executeTools: ToolExecutor = (requests) => {
+  const executeTools: ToolExecutor = (requests, publishTools) => {
     calls.push([...requests]);
     return (
       options.executeTools ??
@@ -77,7 +77,7 @@ function setup(
           type: "continue" as const,
           results: okResults(reqs),
         }))
-    )(requests);
+    )(requests, publishTools);
   };
   const { agent, mockClient: client } = createTestOpenAIAgent({
     ...(options.client ? { mockClient: options.client } : {}),

@@ -5,6 +5,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import {
   type AgentLoopDeps,
   type AgentTurn,
+  type LoopState,
   runAgentLoop,
   type ToolExecution,
   type ToolExecutor,
@@ -13,11 +14,7 @@ import {
 import type { ThreadId, ThreadType } from "./chat-types.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
-import {
-  type LoopActivity,
-  LoopStateMachine,
-  type ThreadLoopState,
-} from "./loop-state.ts";
+import type { ThreadLoopState } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import {
   AnthropicInferenceManager,
@@ -94,7 +91,7 @@ export const defaultAnthropicOptions: AnthropicInferenceOptions = {
  * `lastResult` is asserted on its own. */
 export function flatLoop(owner: {
   loopState: ThreadLoopState;
-}): LoopActivity | { type: "idle" } {
+}): LoopState | { type: "idle" } {
   const state = owner.loopState;
   return state.type === "running" ? state.activity : { type: "idle" };
 }
@@ -104,15 +101,18 @@ export function flatLoop(owner: {
 export class TestAgent {
   readonly manager: NativeInferenceManager;
 
-  constructor(
-    private deps: AgentLoopDeps,
-    readonly loop: LoopStateMachine,
-  ) {
+  constructor(private deps: AgentLoopDeps) {
     this.manager = deps.manager;
   }
 
   get loopState(): ThreadLoopState {
-    return this.loop.current;
+    return this.turn
+      ? {
+          type: "running",
+          activity: this.turn.loopState,
+          aborting: this.turn.loopState.aborting,
+        }
+      : { type: "idle", lastResult: this.lastResult };
   }
 
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
@@ -122,7 +122,6 @@ export class TestAgent {
   inputTokenCount: number | undefined;
 
   send(messages?: InputMessage[]): AgentTurn {
-    const epoch = this.loop.start();
     const turn = runAgentLoop(
       {
         ...this.deps,
@@ -145,7 +144,6 @@ export class TestAgent {
       messages && toAgentInput(messages),
     );
     this.turn = turn;
-    this.loop.streaming(turn.promise);
     const promise = turn.promise.then(
       (result) => {
         // Mirrors what `Thread` does around its own turn.
@@ -158,26 +156,39 @@ export class TestAgent {
             },
           ]);
         }
-        this.loop.finish(epoch, result);
+        if (this.turn === turn) {
+          this.turn = undefined;
+          this.lastResult = result;
+          this.deps.onUpdate?.();
+        }
         return result;
       },
       (error: unknown) => {
-        this.loop.finish(epoch, {
-          type: "failed",
-          error: error instanceof Error ? error : new Error(String(error)),
-        });
+        if (this.turn === turn) {
+          this.turn = undefined;
+          this.lastResult = {
+            type: "failed",
+            error: error instanceof Error ? error : new Error(String(error)),
+          };
+        }
         throw error;
       },
     );
-    return { ...turn, promise };
+    return {
+      get loopState() {
+        return turn.loopState;
+      },
+      abort: () => turn.abort(),
+      promise,
+    };
   }
 
   private turn: AgentTurn | undefined;
+  private lastResult: SendResult | undefined;
 
   /** What `Thread.abort` does, for the tests that drive an agent without one:
    * mark the loop and wind the turn down through its handle. */
   async abortAndWait(): Promise<void> {
-    this.loop.markAborting();
     const turn = this.turn;
     if (!turn) return;
     turn.abort();
@@ -344,13 +355,13 @@ function buildTestAgent(
     ...opts.context,
   };
   const edlRegisters: EdlRegisters = { registers: new Map(), nextSavedId: 0 };
-  const loop = new LoopStateMachine(opts.onUpdate ?? (() => {}));
+  let publishTools: Parameters<ToolExecutor>[1] = () => {};
   // The bare-agent harness stands in for the thread: it owns tool execution
   // the same way, so the loop under test sees production wiring.
   const host = new ToolExecutorHost({
     logger: context.logger,
     getHooks: opts.getHooks ?? (() => agentHooks()),
-    publishTools: (tools) => loop.setToolInvocationState(tools),
+    publishTools: (tools) => publishTools(tools),
     onUpdate: opts.onUpdate ?? (() => {}),
     createTool: (request) =>
       createTool(request, {
@@ -376,24 +387,17 @@ function buildTestAgent(
       }),
   });
   const runBatch: ToolExecutor = opts.executeTools ?? ((r) => host.execute(r));
-  const executeTools: ToolExecutor = (requests) => {
-    loop.runningTools(requests);
-    const execution = runBatch(requests);
-    return {
-      ...execution,
-      promise: execution.promise.finally(() => loop.toolsSettled()),
-    };
+  const executeTools: ToolExecutor = (requests, publish) => {
+    publishTools = publish;
+    return runBatch(requests, publish);
   };
-  const agent = new TestAgent(
-    {
-      logger: context.logger,
-      manager: testManager(context, opts.cloneFrom),
-      executeTools,
-      getHooks: opts.getHooks ?? (() => agentHooks()),
-      onStreamEvent: (event) => loop.applyStreamEvent(event),
-    },
-    loop,
-  );
+  const agent = new TestAgent({
+    logger: context.logger,
+    manager: testManager(context, opts.cloneFrom),
+    executeTools,
+    getHooks: opts.getHooks ?? (() => agentHooks()),
+    onUpdate: opts.onUpdate ?? (() => {}),
+  });
   return { agent, toolExecutor: host };
 }
 

@@ -227,6 +227,16 @@ Do not acknowledge this reminder or mention it to the user.
   {
     "content": [
       {
+        "text": "# Git status update
+
+The git repository state has changed:
+- Repository root: /tmp/magenta-test/<test-id>/cwd
+- Branch: main
+- HEAD: (no commits yet)
+- Changes: 0 staged, 0 unstaged, 13 untracked",
+        "type": "text",
+      },
+      {
         "text": "<system-reminder>
 Remember the skills in <available-skills> and the learn tool for built-in documentation.
 If a skill seems like it could be relevant, use the get_files tool to read the full skill.md file for the skill.
@@ -320,6 +330,16 @@ Do not acknowledge this reminder or mention it to the user.
         "nativeMessageIdx": -1,
         "tool_use_id": "bash-tool",
         "type": "tool_result",
+      },
+      {
+        "text": "# Git status update
+
+The git repository state has changed:
+- Repository root: /tmp/magenta-test/<test-id>/cwd
+- Branch: main
+- HEAD: (no commits yet)
+- Changes: 0 staged, 0 unstaged, 13 untracked",
+        "type": "text",
       },
       {
         "text": "<system-reminder>

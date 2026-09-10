@@ -11,7 +11,7 @@ import {
   displayPath,
   formatToolSpec,
   formatToolSpecs,
-  type LoopActivity,
+  type LoopState,
   loopActiveTools,
   loopStreamingBlock,
   type NativeMessageIdx,
@@ -135,7 +135,7 @@ export const renderStatus = (
   }
 };
 function renderStreaming(
-  activity: Extract<LoopActivity, { type: "streaming" }>,
+  activity: Extract<LoopState, { type: "streaming" }>,
   requestTick: () => void,
 ): VDOMNode {
   requestTick();

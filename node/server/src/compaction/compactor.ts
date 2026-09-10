@@ -74,6 +74,7 @@ export class ThreadCompactor
   /** The current run last. The view renders these. */
   readonly runs: CompactionRunState[] = [];
   private nextRunId = 0;
+  private activeRunId: CompactionRunId | undefined;
 
   constructor(private thread: Thread) {
     super();
@@ -96,90 +97,138 @@ export class ThreadCompactor
     }
 
     const id = this.nextRunId++ as CompactionRunId;
+    this.activeRunId = id;
+    const core = this.thread.core;
+    const signal = this.thread.interruptionSignal;
+    const onAbort = () => this.discardRun(id);
+    signal.addEventListener("abort", onAbort, { once: true });
     const completed: ThreadId[] = [];
     let started = false;
     let summary = "";
 
-    for (const [chunkIndex, chunk] of chunks.entries()) {
-      if (started && !this.isCurrent(id)) return { type: "aborted" };
-
-      const fileIO = new InMemoryFileIO({
-        "/summary.md": summary,
-        "/chunk.md": chunk,
-      });
-      const threadId = await this.thread.context.threadManager.spawnThread({
-        parentThreadId: this.thread.id,
-        threadType: "compact",
-        prompt: buildChunkPrompt({
-          chunk,
-          chunkIndex,
-          totalChunks: chunks.length,
-          summary,
-          nextPrompt,
-        }),
-        subagentConfig: { fastModel: true },
-        fileIO,
-        label: `compact ${chunkIndex + 1}/${chunks.length}`,
-      });
-
-      const running: CompactionRunState = {
-        id,
-        type: "running",
-        totalChunks: chunks.length,
-        completedThreadIds: [...completed],
-        activeThreadId: threadId,
-      };
-      if (started) {
-        if (!this.isCurrent(id)) {
-          this.thread.context.threadManager.deleteThread(threadId);
+    try {
+      for (const [chunkIndex, chunk] of chunks.entries()) {
+        if (
+          signal.aborted ||
+          !this.isCurrent(id) ||
+          this.thread.core !== core ||
+          !core.isActive
+        ) {
+          this.discardRun(id);
           return { type: "aborted" };
         }
-        this.update(id, running);
-      } else {
-        this.runs.push(running);
-        this.emit("transition", running);
-        started = true;
+
+        const fileIO = new InMemoryFileIO({
+          "/summary.md": summary,
+          "/chunk.md": chunk,
+        });
+        const threadId = await this.thread.context.threadManager.spawnThread({
+          parentThreadId: this.thread.id,
+          threadType: "compact",
+          prompt: buildChunkPrompt({
+            chunk,
+            chunkIndex,
+            totalChunks: chunks.length,
+            summary,
+            nextPrompt,
+          }),
+          subagentConfig: { fastModel: true },
+          fileIO,
+          label: `compact ${chunkIndex + 1}/${chunks.length}`,
+        });
+
+        if (
+          signal.aborted ||
+          !this.isCurrent(id) ||
+          this.thread.core !== core ||
+          !core.isActive
+        ) {
+          this.thread.context.threadManager.deleteThread(threadId);
+          this.discardRun(id);
+          return { type: "aborted" };
+        }
+        const running: CompactionRunState = {
+          id,
+          type: "running",
+          totalChunks: chunks.length,
+          completedThreadIds: [...completed],
+          activeThreadId: threadId,
+        };
+        if (started) {
+          this.update(id, running);
+        } else {
+          this.runs.push(running);
+          this.emit("transition", running);
+          started = true;
+        }
+
+        if (!this.isCurrent(id)) return { type: "aborted" };
+        const result =
+          await this.thread.context.threadManager.awaitThreadResult(threadId);
+        if (
+          signal.aborted ||
+          !this.isCurrent(id) ||
+          this.thread.core !== core ||
+          !core.isActive
+        ) {
+          this.discardRun(id);
+          return { type: "aborted" };
+        }
+        if (result.type === "aborted") {
+          this.update(id, {
+            id,
+            type: "aborted",
+            threadIds: [...completed, threadId],
+          });
+          return { type: "aborted" };
+        }
+
+        completed.push(threadId);
+        summary = fileIO.getFileContents("/summary.md") ?? "";
       }
 
-      const result =
-        await this.thread.context.threadManager.awaitThreadResult(threadId);
-      if (!this.isCurrent(id)) return { type: "aborted" };
-      if (result.type === "aborted") {
+      if (summary.trim() === "") {
+        const message = "the compaction finished but /summary.md is empty";
         this.update(id, {
           id,
-          type: "aborted",
-          threadIds: [...completed, threadId],
+          type: "error",
+          threadIds: [...completed],
+          message,
         });
-        return { type: "aborted" };
+        return { type: "error", message };
       }
 
-      completed.push(threadId);
-      summary = fileIO.getFileContents("/summary.md") ?? "";
-    }
-
-    if (summary.trim() === "") {
-      const message = "the compaction finished but /summary.md is empty";
       this.update(id, {
         id,
-        type: "error",
+        type: "done",
         threadIds: [...completed],
-        message,
+        summary,
       });
-      return { type: "error", message };
+      return { type: "complete", summary, chunkCount: chunks.length };
+    } catch (error) {
+      const wasCurrent = this.isCurrent(id);
+      this.discardRun(id);
+      if (
+        signal.aborted ||
+        !wasCurrent ||
+        this.thread.core !== core ||
+        !core.isActive
+      ) {
+        return { type: "aborted" };
+      }
+      return {
+        type: "error",
+        message: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      signal.removeEventListener("abort", onAbort);
     }
-
-    this.update(id, {
-      id,
-      type: "done",
-      threadIds: [...completed],
-      summary,
-    });
-    return { type: "complete", summary, chunkCount: chunks.length };
   }
 
   /** Abandon the run in flight, deleting the child threads it spawned. The
    * `awaitThreadResult` it is parked on settles `aborted` as a result. */
   discard(): void {
+    this.activeRunId = undefined;
     const current = this.current;
     if (!current) return;
     const threadIds = compactionRunThreadIds(current);
@@ -196,14 +245,20 @@ export class ThreadCompactor
   /** A run that is no longer the last one has been superseded by a fresh
    * `run()`; its remaining steps must not write state. */
   private isCurrent(id: CompactionRunId): boolean {
-    const last = this.runs[this.runs.length - 1];
-    return last?.id === id && last.type === "running";
+    return this.activeRunId === id;
+  }
+
+  private discardRun(id: CompactionRunId): void {
+    if (this.isCurrent(id)) this.discard();
   }
 
   private update(id: CompactionRunId, next: CompactionRunState): void {
     const last = this.runs[this.runs.length - 1];
     if (!last || last.id !== id) return;
     this.runs[this.runs.length - 1] = next;
+    if (next.type !== "running" && this.activeRunId === id) {
+      this.activeRunId = undefined;
+    }
     this.emit("transition", next);
   }
 

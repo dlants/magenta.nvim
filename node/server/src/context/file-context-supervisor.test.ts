@@ -117,16 +117,17 @@ describe("FileContextSupervisor", () => {
     expect(image.source.media_type).toBe("image/jpeg");
   });
 
-  it("destroy stops the poller", () => {
+  it("destroy retires the supervisor without destroying shared context", () => {
     const { supervisor, contextManager } = setup({ [TEST_PATH]: "hello" });
     contextManager.start();
     supervisor.destroy();
-    expect(
-      (contextManager as unknown as { pollTimer: unknown }).pollTimer,
-    ).toBeUndefined();
+    expect(contextManager.isDeliveryCurrent(contextManager.delivery)).toBe(
+      true,
+    );
+    contextManager.destroy();
   });
 
-  it("clone re-reads text files so the fork's first update is empty", async () => {
+  it("clone reseeds delivery because fork history may be truncated", async () => {
     const { supervisor, fileIO } = setup({ [TEST_PATH]: "original content" });
     supervisor.onToolApplied(
       TEST_PATH,
@@ -153,7 +154,7 @@ describe("FileContextSupervisor", () => {
           outputTokenCount: 0,
         })
       ).type,
-    ).toBe("none");
+    ).toBe("inject");
 
     // The source still owes the agent the on-disk change.
     expect(
@@ -166,5 +167,100 @@ describe("FileContextSupervisor", () => {
     ).toBe("inject");
     clone.destroy();
     supervisor.destroy();
+  });
+});
+
+describe("FileContextSupervisor conversation lifetime", () => {
+  it("does not send updates or apply old tools after delivery is replaced", async () => {
+    const { supervisor, contextManager, fileIO, onSent } = setup({
+      [TEST_PATH]: "content",
+    });
+    contextManager.addFileContext(
+      TEST_PATH,
+      "file.txt" as RelFilePath,
+      TEXT_FILE_TYPE,
+    );
+    await contextManager.refreshPendingUpdates();
+    let finish!: (text: string) => void;
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    vi.spyOn(fileIO, "readFile").mockImplementationOnce(() => {
+      started();
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    const request = supervisor.onBeforeRequest({
+      inputTokenCount: 0,
+      outputTokenCount: 0,
+    });
+    await reading;
+    contextManager.reset();
+    finish("stale");
+    expect(await request).toEqual({ type: "none" });
+    expect(onSent).not.toHaveBeenCalled();
+    supervisor.onToolApplied(
+      TEST_PATH,
+      { type: "get-file", content: "stale" },
+      TEXT_FILE_TYPE,
+    );
+    expect(contextManager.files[TEST_PATH].agentView).toBeUndefined();
+    expect(await supervisor.hasPendingContent()).toBe(false);
+    const current = new FileContextSupervisor({ contextManager, onSent });
+    expect(
+      (
+        await current.onBeforeRequest({
+          inputTokenCount: 0,
+          outputTokenCount: 0,
+        })
+      ).type,
+    ).toBe("inject");
+    expect(onSent).toHaveBeenCalledTimes(1);
+    contextManager.destroy();
+  });
+
+  it("forks reseed binary and PDF delivery and isolate mutable PDF pages", async () => {
+    const pdf = "/test/doc.pdf" as AbsFilePath;
+    const pdfType = {
+      category: FileCategory.PDF,
+      mimeType: "application/pdf",
+      extension: ".pdf",
+    };
+    const { contextManager, fileIO } = setup({
+      [pdf]: "pdf",
+      [IMAGE_PATH]: "image",
+    });
+    contextManager.toolApplied(
+      pdf,
+      { type: "get-file-pdf", content: { type: "page", pdfPage: 1 } },
+      pdfType,
+    );
+    contextManager.toolApplied(
+      IMAGE_PATH,
+      { type: "get-file-binary", mtime: 1 },
+      IMAGE_FILE_TYPE,
+    );
+    const clone = await cloneContextManager(contextManager, {
+      logger,
+      fileIO,
+      cwd: "/test" as NvimCwd,
+      homeDir: "/home" as HomeDir,
+    });
+    expect(clone.files[pdf].agentView).toBeUndefined();
+    expect(clone.files[IMAGE_PATH].agentView).toBeUndefined();
+    clone.toolApplied(
+      pdf,
+      { type: "get-file-pdf", content: { type: "page", pdfPage: 2 } },
+      pdfType,
+    );
+    expect(contextManager.files[pdf].agentView).toMatchObject({ pages: [1] });
+    expect(clone.files[pdf].agentView).toMatchObject({ pages: [2] });
+    expect(clone.files[pdf].fileTypeInfo).not.toBe(
+      contextManager.files[pdf].fileTypeInfo,
+    );
+    contextManager.destroy();
+    clone.destroy();
   });
 });

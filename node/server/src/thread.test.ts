@@ -18,7 +18,7 @@ import {
   uniqueThreadId,
   userTexts,
 } from "./test-helpers.ts";
-import type { Thread, ThreadContext } from "./thread.ts";
+import { Thread, type ThreadContext } from "./thread.ts";
 import type { QueuedMessage } from "./thread-api.ts";
 import {
   composeSupervisors,
@@ -542,7 +542,10 @@ describe("Thread.send while busy", () => {
 describe("Thread aborts the tools it owns", () => {
   /** A thread mid-way through a `get_files` batch whose stat never settles on
    * its own: the invocations are live until someone aborts them. */
-  async function threadWithLiveTool(threadId: string) {
+  async function threadWithLiveTool(
+    threadId: string,
+    onToolResults: () => undefined = () => undefined,
+  ) {
     let resolveStat!: () => void;
     const statPromise = new Promise<{ mtimeMs: number; size: number }>(
       (resolve) => {
@@ -560,6 +563,7 @@ describe("Thread aborts the tools it owns", () => {
       },
       uniqueThreadId(threadId),
     );
+    core.hooks.onToolResults = [onToolResults];
     const sent = core.send([{ type: "user", text: "start" }]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
@@ -598,6 +602,34 @@ describe("Thread aborts the tools it owns", () => {
     await sent;
   });
 
+  it.each([
+    "abort",
+    "reset",
+    "destroy",
+  ] as const)("reports settling tool results only for the current turn during %s", async (action) => {
+    const onToolResults = vi.fn(() => undefined);
+    const { core, sent, resolveStat } = await threadWithLiveTool(
+      `results-during-${action}`,
+      onToolResults,
+    );
+    const oldCore = core.core;
+    const archive = core.structuredToolResults;
+    const stopping =
+      action === "reset"
+        ? core.reset({ seed: [], archive: { type: "none" } })
+        : action === "destroy"
+          ? core.destroy()
+          : core.abort();
+    resolveStat();
+    await stopping;
+    expect(await sent).toEqual({ type: "aborted" });
+    expect(onToolResults).toHaveBeenCalledTimes(action === "abort" ? 1 : 0);
+    expect(core.structuredToolResults).toBe(archive);
+    expect(archive.size).toBe(0);
+    expect(oldCore.structuredToolResults.size).toBe(0);
+    await core.destroy();
+  });
+
   it("keeps the activity while the abort winds the loop down", async () => {
     const { core, sent, resolveStat } = await threadWithLiveTool(
       "aborting-flag-live-tool",
@@ -623,7 +655,7 @@ describe("Thread aborts the tools it owns", () => {
     for (const spy of abortSpies) expect(spy).toHaveBeenCalled();
     resolveStat();
     await sent;
-    // The new loop is its own epoch, so its tools are not silently aborted.
+    // The new loop owns a new turn, so its tools are not silently aborted.
     await pollUntil(() => {
       const state = core.loopState;
       if (state.type !== "running" || state.aborting) {
@@ -637,7 +669,7 @@ describe("Thread aborts the tools it owns", () => {
 });
 
 describe("Thread loop activity", () => {
-  it("walks preparing → streaming → running_tools → streaming → idle", async () => {
+  it("reports request preparation between tool batches and streaming", async () => {
     const labels: string[] = [];
     const { core, mockClient } = createAgentWithMock(
       {
@@ -679,10 +711,16 @@ describe("Thread loop activity", () => {
     const second = await awaitNextStream(mockClient, stream);
     second.finishResponse("end_turn");
     await sent;
-    expect(labels.slice(0, 4)).toEqual([
+    expect(
+      labels.slice(
+        labels.indexOf("preparing"),
+        labels.indexOf("preparing") + 5,
+      ),
+    ).toEqual([
       "preparing",
       "streaming",
       "running_tools",
+      "preparing",
       "streaming",
     ]);
     expect(labels[labels.length - 1]).toBe("idle");
@@ -742,7 +780,7 @@ describe("Thread.abort between turns", () => {
         return {
           compact: false,
           messages: [{ type: "user" as const, text: renderPending(message) }],
-          reminders: [],
+          reminders: ["aborted reminder"],
         };
       },
     );
@@ -763,6 +801,14 @@ describe("Thread.abort between turns", () => {
     expect(resolved).toEqual(["queued follow-up"]);
     expect(await sent).toEqual({ type: "aborted" });
     expect(mockClient.streams.length).toBe(streamsBefore);
+    expect(core.activeReminders.has("aborted reminder")).toBe(false);
+    expect(userTexts(core)).not.toContain("queued follow-up");
+    const fresh = core.send([{ type: "user", text: "fresh submission" }]);
+    const freshStream = await awaitNextStream(mockClient, stream);
+    expect(core.loopState).toMatchObject({ type: "running", aborting: false });
+    freshStream.streamText("done");
+    freshStream.finishResponse("end_turn");
+    expect(await fresh).toEqual({ type: "completed", stopReason: "end_turn" });
   });
 
   it("issues no continuation when the abort races the stop", async () => {
@@ -806,8 +852,9 @@ describe("Thread.abort between turns", () => {
       aborting = core.abort();
     };
     stream.finishResponse("end_turn");
-    await aborting;
     expect(await sent).toEqual({ type: "aborted" });
+    expect(aborted).toBe(true);
+    await aborting;
     // No stop was ever presented to the supervisors, so nothing decided to
     // follow it.
     expect(stopConsultations).toEqual([]);
@@ -1009,5 +1056,325 @@ describe("empty send gate", () => {
     expect(userTexts(core)).toContain("# context update");
     stream.finishResponse("end_turn");
     await sent;
+  });
+});
+
+describe("replaceable conversation core", () => {
+  it("remains usable when reset is interrupted during disposal", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const original = core.core;
+    const reset = core.reset({ seed: [], archive: { type: "none" } });
+    await core.abort();
+    await reset;
+    expect(core.core).not.toBe(original);
+    expect(core.core.isActive).toBe(true);
+    const sent = core.send([{ type: "user", text: "later request" }]);
+    const stream = await mockClient.awaitStream();
+    stream.finishResponse("end_turn");
+    expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
+    await core.destroy();
+  });
+
+  it("replaces conversation state but preserves the result contract and queues", async () => {
+    const { core } = createAgentWithMock();
+    const original = core.core;
+    const result = core.result;
+    original.edlRegisters.registers.set("old", "old content");
+    original.edlRegisters.nextSavedId = 4;
+    original.preflightTokenCount = 42;
+    const probe = new Defer<boolean>();
+    core.hooks.hasPendingContent = () => probe.promise;
+    const sent = core.send([]);
+    await core.submit(pendingMessage("later"), "next");
+    await core.reset({
+      seed: [{ type: "system", text: "summary" }],
+      archive: { type: "none" },
+    });
+    expect(core.core).not.toBe(original);
+    expect(core.context.contextTracker).toBe(original.context.contextTracker);
+    expect(core.result).toBe(result);
+    expect(core.edlRegisters.registers.size).toBe(0);
+    expect(core.edlRegisters.nextSavedId).toBe(0);
+    expect(core.inputTokenCount).toBeUndefined();
+    expect(core.structuredToolResults.size).toBe(0);
+    expect(core.queued.next).toEqual([pendingMessage("later")]);
+    expect(core.pendingTurnContent).toEqual([
+      { type: "system", text: "summary" },
+    ]);
+    probe.resolve(true);
+    expect(await sent).toEqual({ type: "aborted" });
+    await core.destroy();
+    expect(await result).toEqual({
+      type: "aborted",
+      reason: "thread destroyed before it yielded",
+    });
+  });
+
+  it("an old probe cannot finish the replacement's first loop", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const probe = new Defer<boolean>();
+    core.hooks.hasPendingContent = () => probe.promise;
+    const first = core.send([]);
+    await core.reset({ seed: [], archive: { type: "none" } });
+    const second = core.send([{ type: "user", text: "new generation" }]);
+    const stream = await mockClient.awaitStream();
+    probe.resolve(true);
+    expect(await first).toEqual({ type: "aborted" });
+    expect(core.isBusy).toBe(true);
+    expect(mockClient.streams).toHaveLength(1);
+    stream.finishResponse("end_turn");
+    expect(await second).toEqual({ type: "completed", stopReason: "end_turn" });
+  });
+
+  it.each([
+    "abort",
+    "reset",
+    "destroy",
+  ] as const)("%s invalidates a pending yield decision", async (action) => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    const entered = new Defer<void>();
+    const decision = new Defer<{ type: "accept" }>();
+    core.hooks.onYield = [
+      () => {
+        entered.resolve();
+        return decision.promise;
+      },
+    ];
+    const sent = core.send([{ type: "user", text: "work" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "late-yield" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "done" },
+    );
+    stream.finishResponse("end_turn");
+    await entered.promise;
+    if (action === "reset")
+      await core.reset({ seed: [], archive: { type: "none" } });
+    else await core[action]();
+    decision.resolve({ type: "accept" });
+    expect(await sent).toEqual({ type: "aborted" });
+    expect(core.yielded).toBeUndefined();
+    expect(mockClient.streams).toHaveLength(1);
+    await core.destroy();
+  });
+
+  it("keeps an already yielded result across replacement", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent" as ThreadType,
+    });
+    const result = core.result;
+    const sent = core.send([{ type: "user", text: "work" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "yield-result" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "finished" },
+    );
+    stream.finishResponse("end_turn");
+    expect(await sent).toEqual({
+      type: "yielded",
+      value: { type: "text", text: "finished" },
+    });
+    await core.reset({ seed: [], archive: { type: "none" } });
+    expect(core.result).toBe(result);
+    expect(await result).toEqual({
+      type: "yielded",
+      value: { type: "text", text: "finished" },
+    });
+    expect(core.yielded?.value).toEqual({ type: "text", text: "finished" });
+    expect(core.core.structuredToolResults.size).toBe(0);
+    expect(
+      core.structuredToolResults.get("yield-result" as ToolRequestId),
+    ).toEqual({
+      toolName: "yield_to_parent",
+      input: { result: "finished" },
+    });
+    await core.destroy();
+    expect(await core.result).toEqual(await result);
+  });
+
+  it("deep-copies the durable structured-result archive when forking", async () => {
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent",
+    });
+    const sent = core.send([{ type: "user", text: "work" }]);
+    const stream = await mockClient.awaitStream();
+    const id = "fork-yield" as ToolRequestId;
+    stream.streamToolUse(id, "yield_to_parent" as ToolName, { result: "done" });
+    stream.finishResponse("end_turn");
+    await sent;
+    const original = core.structuredToolResults.get(id);
+    expect(original).toBeDefined();
+    const fork = await Thread.clone({
+      sourceThread: core,
+      newId: uniqueThreadId("fork-result-archive"),
+      nativeMessageIdx:
+        core.getProviderMessages()[0].content[0].nativeMessageIdx,
+      context: core.context,
+      callbacks: core.callbacks,
+    });
+    expect(fork.structuredToolResults).not.toBe(core.structuredToolResults);
+    expect(fork.structuredToolResults.get(id)).toEqual(original);
+    expect(fork.structuredToolResults.get(id)).not.toBe(original);
+    expect(fork.core.structuredToolResults.size).toBe(0);
+    await core.reset({ seed: [], archive: { type: "none" } });
+    expect(core.structuredToolResults.get(id)).toBe(original);
+    await core.destroy();
+    expect(fork.structuredToolResults.get(id)).toEqual(original);
+    await fork.destroy();
+  });
+
+  it("rejects sends, submissions and resets after destruction", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    await core.destroy();
+    await expect(core.send([{ type: "user", text: "late" }])).rejects.toThrow(
+      "destroyed",
+    );
+    await expect(core.submit(pendingMessage("late"), "next")).rejects.toThrow(
+      "destroyed",
+    );
+    await expect(
+      core.reset({ seed: [], archive: { type: "none" } }),
+    ).rejects.toThrow("destroyed");
+    expect(mockClient.streams).toHaveLength(0);
+  });
+});
+
+describe("stale outer submissions", () => {
+  it.each([
+    "send",
+    "reset",
+  ] as const)("%s prevents a stale pending-content probe from finishing the replacement", async (action) => {
+    const entered = new Defer<void>();
+    const pending = new Defer<boolean>();
+    const { core, mockClient } = createAgentWithMock();
+    core.hooks = composeSupervisors(() => [
+      {
+        hasPendingContent: () => {
+          entered.resolve();
+          return pending.promise;
+        },
+      },
+    ]);
+    const first = core.send([]);
+    await entered.promise;
+    if (action === "reset")
+      await core.reset({ seed: [], archive: { type: "none" } });
+    const second = core.send([{ type: "user", text: "replacement" }]);
+    const stream = await mockClient.awaitStream();
+    pending.resolve(true);
+    expect(await first).toEqual({ type: "aborted" });
+    expect(core.isBusy).toBe(true);
+    expect(core.lastResult()).toBeUndefined();
+    expect(mockClient.streams).toHaveLength(1);
+    stream.streamText("done");
+    stream.finishResponse("end_turn");
+    expect(await second).toEqual({ type: "completed", stopReason: "end_turn" });
+  });
+
+  it.each([
+    "send",
+    "reset",
+  ] as const)("%s discards a queued resolution still pending between turns", async (action) => {
+    const entered = new Defer<void>();
+    const gate = new Defer<void>();
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId(`stale-queue-${action}`),
+      async (message) => {
+        entered.resolve();
+        await gate.promise;
+        return {
+          compact: false,
+          messages: [{ type: "user" as const, text: renderPending(message) }],
+          reminders: ["stale reminder"],
+        };
+      },
+    );
+    const first = core.send([{ type: "user", text: "start" }]);
+    const stream = await mockClient.awaitStream();
+    await core.submit(pendingMessage("stale queued message"), "next");
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+    await entered.promise;
+    expect(loopLabel(core.loopState)).toBe("preparing");
+    if (action === "reset")
+      await core.reset({ seed: [], archive: { type: "none" } });
+    const second = core.send([{ type: "user", text: "replacement" }]);
+    const replacement = await awaitNextStream(mockClient, stream);
+    gate.resolve();
+    expect(await first).toEqual({ type: "aborted" });
+    expect(core.isBusy).toBe(true);
+    expect(core.lastResult()).toBeUndefined();
+    expect(core.activeReminders.has("stale reminder")).toBe(false);
+    expect(userTexts(core)).not.toContain("stale queued message");
+    expect(mockClient.streams).toHaveLength(2);
+    replacement.streamText("done");
+    replacement.finishResponse("end_turn");
+    expect(await second).toEqual({ type: "completed", stopReason: "end_turn" });
+  });
+
+  it.each([
+    { action: "send", decision: { type: "accept" as const } },
+    {
+      action: "send",
+      decision: { type: "reject" as const, message: "stale rejection" },
+    },
+    { action: "reset", decision: { type: "accept" as const } },
+    {
+      action: "reset",
+      decision: { type: "reject" as const, message: "stale rejection" },
+    },
+  ])("$action invalidates a pending $decision.type yield decision while replacement runs", async ({
+    action,
+    decision,
+  }) => {
+    const entered = new Defer<void>();
+    const gate = new Defer<typeof decision>();
+    const { core, mockClient } = createAgentWithMock({
+      threadType: "subagent",
+    });
+    core.hooks.onYield = [
+      () => {
+        entered.resolve();
+        return gate.promise;
+      },
+    ];
+    const first = core.send([{ type: "user", text: "work" }]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse(
+      "stale-yield" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "old result" },
+    );
+    stream.finishResponse("tool_use");
+    await entered.promise;
+    if (action === "reset")
+      await core.reset({ seed: [], archive: { type: "none" } });
+    const second = core.send([{ type: "user", text: "replacement" }]);
+    const replacement = await awaitNextStream(mockClient, stream);
+    gate.resolve(decision);
+    expect(await first).toEqual({ type: "aborted" });
+    expect(core.yielded).toBeUndefined();
+    expect(core.isBusy).toBe(true);
+    expect(core.lastResult()).toBeUndefined();
+    expect(userTexts(core)).not.toContain("stale rejection");
+    expect(mockClient.streams).toHaveLength(2);
+    replacement.streamToolUse(
+      "current-yield" as ToolRequestId,
+      "yield_to_parent" as ToolName,
+      { result: "new result" },
+    );
+    core.hooks.onYield = [];
+    replacement.finishResponse("tool_use");
+    const expected = {
+      type: "yielded",
+      value: { type: "text", text: "new result" },
+    };
+    expect(await second).toEqual(expected);
+    expect(await core.result).toEqual(expected);
   });
 });

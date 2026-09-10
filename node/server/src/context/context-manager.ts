@@ -106,14 +106,8 @@ export type ContextManagerEvents = {
   pendingUpdatesChanged: [];
 };
 
-/** Build a `Files` map for a cloned `ContextManager` based on the source's
- * tracked files. For text files, re-read the current on-disk contents and use
- * them as the agentView so the first context update on the cloned thread
- * produces no diff. For binary/pdf files, copy the source's agentView as-is.
- * Files that no longer exist on disk are skipped. */
-/** A fresh `ContextManager` with independent tracked-file state, for a forked
- * thread. Not started — the owner drives polling. */
-export async function cloneContextManager(
+/** Preserve delivery only when the fork retains the complete, quiescent history. */
+export function cloneContextManager(
   source: ContextManager,
   args: {
     logger: Logger;
@@ -121,10 +115,11 @@ export async function cloneContextManager(
     cwd: NvimCwd;
     homeDir: HomeDir;
     pollIntervalMs?: number;
+    delivery?: "preserve" | "reseed";
   },
-): Promise<ContextManager> {
-  const files = await buildClonedFiles(source.files, args.fileIO);
-  return new ContextManager(
+): ContextManager {
+  const files = buildClonedFiles(source.files, args.fileIO, args.delivery);
+  const clone = new ContextManager(
     args.logger,
     args.fileIO,
     args.cwd,
@@ -132,58 +127,76 @@ export async function cloneContextManager(
     files,
     args.pollIntervalMs,
   );
+  if (args.delivery === "preserve") {
+    clone.delivery.pendingUpdates = structuredClone(
+      source.delivery.pendingUpdates,
+    );
+  }
+  return clone;
 }
-export async function buildClonedFiles(
+
+export function buildClonedFiles(
   sourceFiles: Files,
-  fileIO: FileIO,
-): Promise<Files> {
-  const next: Files = {};
-  for (const key of Object.keys(sourceFiles)) {
-    const absFilePath = key as AbsFilePath;
-    const source = sourceFiles[absFilePath];
-    if (!source) continue;
-    if (!(await fileIO.fileExists(absFilePath))) continue;
-    const lastStat = await fileIO.stat(absFilePath);
-    if (source.fileTypeInfo.category === FileCategory.TEXT) {
-      if (source.agentView?.type === "summary") {
-        next[absFilePath] = {
-          relFilePath: source.relFilePath,
-          fileTypeInfo: source.fileTypeInfo,
-          agentView: { type: "summary" },
-          lastStat,
-        };
-        continue;
-      }
-      let currentContent: string;
-      try {
-        currentContent = await fileIO.readFile(absFilePath);
-      } catch {
-        continue;
-      }
-      next[absFilePath] = {
-        relFilePath: source.relFilePath,
-        fileTypeInfo: source.fileTypeInfo,
-        agentView: { type: "text", content: currentContent },
-        lastStat,
-      };
-    } else {
-      next[absFilePath] = {
-        relFilePath: source.relFilePath,
-        fileTypeInfo: source.fileTypeInfo,
-        agentView: source.agentView,
-        lastStat,
-      };
-    }
+  _fileIO: FileIO,
+  delivery: "preserve" | "reseed" = "reseed",
+): Files {
+  const next = structuredClone(sourceFiles);
+  if (delivery === "preserve") return next;
+  for (const file of Object.values(next)) {
+    file.agentView = undefined;
+    file.lastStat = undefined;
   }
   return next;
 }
+
+export type ContextDeliveryState = {
+  files: {
+    [path: AbsFilePath]: Pick<Files[AbsFilePath], "agentView" | "lastStat">;
+  };
+  pendingUpdates: FileUpdates;
+};
 
 export class ContextManager
   extends Emitter<ContextManagerEvents>
   implements ContextTracker
 {
   public files: Files;
-  private pendingUpdates: FileUpdates = {};
+  public delivery: ContextDeliveryState = { files: {}, pendingUpdates: {} };
+  private revision = 0;
+  private refreshSequence = 0;
+
+  isDeliveryCurrent(delivery: ContextDeliveryState): boolean {
+    return !this.destroyed && this.delivery === delivery;
+  }
+
+  private trackFile(absFilePath: AbsFilePath, file: Files[AbsFilePath]): void {
+    this.delivery.files[absFilePath] = {
+      agentView: structuredClone(file.agentView),
+      lastStat: file.lastStat,
+    };
+    // Keep the ContextTracker facade stable while delivery belongs to a conversation.
+    const manager = this;
+    this.files[absFilePath] = {
+      relFilePath: file.relFilePath,
+      fileTypeInfo: structuredClone(file.fileTypeInfo),
+      get agentView() {
+        return manager.delivery.files[absFilePath]?.agentView;
+      },
+      set agentView(value) {
+        (manager.delivery.files[absFilePath] ??= {
+          agentView: undefined,
+        }).agentView = value;
+      },
+      get lastStat() {
+        return manager.delivery.files[absFilePath]?.lastStat;
+      },
+      set lastStat(value) {
+        (manager.delivery.files[absFilePath] ??= {
+          agentView: undefined,
+        }).lastStat = value;
+      },
+    };
+  }
   private pollTimer: ReturnType<typeof setInterval> | undefined;
   private destroyed = false;
   private readonly pollIntervalMs: number | undefined;
@@ -197,7 +210,10 @@ export class ContextManager
     pollIntervalMs?: number,
   ) {
     super();
-    this.files = initialFiles;
+    this.files = {};
+    for (const [path, file] of Object.entries(initialFiles)) {
+      this.trackFile(path as AbsFilePath, file);
+    }
     this.pollIntervalMs = pollIntervalMs;
   }
 
@@ -205,7 +221,7 @@ export class ContextManager
     if (this.destroyed || this.pollTimer) return;
     if (this.pollIntervalMs === undefined) return;
     this.pollTimer = setInterval(() => {
-      void this.refreshPendingUpdates();
+      this.scheduleRefreshPendingUpdates();
     }, this.pollIntervalMs);
   }
 
@@ -224,13 +240,21 @@ export class ContextManager
   }
 
   getPendingUpdates(): FileUpdates {
-    return this.pendingUpdates;
+    return this.delivery.pendingUpdates;
   }
 
   async refreshPendingUpdates(): Promise<void> {
     if (this.destroyed) return;
 
+    const delivery = this.delivery;
+    const revision = this.revision;
+    const sequence = ++this.refreshSequence;
+    const current = () =>
+      this.isDeliveryCurrent(delivery) &&
+      revision === this.revision &&
+      sequence === this.refreshSequence;
     const next: FileUpdates = {};
+    const stats = new Map<AbsFilePath, FileStat | undefined>();
     const keys = Object.keys(this.files) as AbsFilePath[];
 
     for (const absFilePath of keys) {
@@ -239,9 +263,10 @@ export class ContextManager
 
       const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
       const currentStat = await this.fileIO.stat(absFilePath);
+      if (!current()) return;
 
       if (currentStat === undefined) {
-        fileInfo.lastStat = undefined;
+        stats.set(absFilePath, undefined);
         next[absFilePath] = {
           absFilePath,
           relFilePath,
@@ -259,7 +284,7 @@ export class ContextManager
         prevStat.mtimeMs === currentStat.mtimeMs &&
         prevStat.size === currentStat.size
       ) {
-        const existing = this.pendingUpdates[absFilePath];
+        const existing = this.delivery.pendingUpdates[absFilePath];
         if (existing) {
           next[absFilePath] = existing;
         }
@@ -267,17 +292,20 @@ export class ContextManager
       }
 
       const result = await this.peekFileUpdate(absFilePath);
-      fileInfo.lastStat = currentStat;
+      if (!current()) return;
+      stats.set(absFilePath, currentStat);
       if (result?.update) {
         next[absFilePath] = result;
       }
     }
 
-    if (!pendingUpdatesEqual(this.pendingUpdates, next)) {
-      this.pendingUpdates = next;
+    if (!current()) return;
+    for (const [path, stat] of stats) this.files[path].lastStat = stat;
+    if (!pendingUpdatesEqual(this.delivery.pendingUpdates, next)) {
+      this.delivery.pendingUpdates = next;
       this.emit("pendingUpdatesChanged");
     } else {
-      this.pendingUpdates = next;
+      this.delivery.pendingUpdates = next;
     }
   }
 
@@ -294,18 +322,23 @@ export class ContextManager
     if (this.files[absFilePath]) {
       return;
     }
-    this.files[absFilePath] = {
+    if (this.destroyed) return;
+    this.revision++;
+    this.trackFile(absFilePath, {
       relFilePath,
       fileTypeInfo,
       agentView: undefined,
-    };
+    });
     this.emit("fileAdded", absFilePath);
     this.scheduleRefreshPendingUpdates();
   }
 
   removeFileContext(absFilePath: AbsFilePath): void {
+    if (this.destroyed) return;
+    this.revision++;
+    delete this.delivery.files[absFilePath];
     delete this.files[absFilePath];
-    delete this.pendingUpdates[absFilePath];
+    delete this.delivery.pendingUpdates[absFilePath];
     this.emit("fileRemoved", absFilePath);
     this.scheduleRefreshPendingUpdates();
   }
@@ -317,13 +350,15 @@ export class ContextManager
   ): void {
     const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
 
+    if (this.destroyed) return;
+    this.revision++;
     const isNew = !this.files[absFilePath];
     if (isNew) {
-      this.files[absFilePath] = {
+      this.trackFile(absFilePath, {
         relFilePath,
         fileTypeInfo,
         agentView: undefined,
-      };
+      });
     }
 
     this.updateAgentsViewOfFiles(absFilePath, tool);
@@ -345,6 +380,8 @@ export class ContextManager
       const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
 
       const fileTypeInfo = await detectFileType(absFilePath);
+      if (this.destroyed) return;
+      this.revision++;
       if (!fileTypeInfo) {
         this.logger.warn(
           `File ${filePath} does not exist, skipping in context`,
@@ -361,23 +398,20 @@ export class ContextManager
         continue;
       }
 
-      this.files[absFilePath] = {
+      this.trackFile(absFilePath, {
         relFilePath,
         fileTypeInfo,
         agentView: undefined,
-      };
+      });
       this.emit("fileAdded", absFilePath);
     }
     this.scheduleRefreshPendingUpdates();
   }
 
   reset(): void {
-    for (const absFilePath in this.files) {
-      const entry = this.files[absFilePath as AbsFilePath];
-      entry.agentView = undefined;
-      entry.lastStat = undefined;
-    }
-    this.pendingUpdates = {};
+    if (this.destroyed) return;
+    this.delivery = { files: {}, pendingUpdates: {} };
+    this.revision++;
     this.emit("filesReset");
     this.scheduleRefreshPendingUpdates();
   }
@@ -396,7 +430,8 @@ export class ContextManager
   }
 
   async getContextUpdate(): Promise<FileUpdates> {
-    if (this.isContextEmpty()) {
+    const delivery = this.delivery;
+    if (!this.isDeliveryCurrent(delivery) || this.isContextEmpty()) {
       return {};
     }
 
@@ -411,6 +446,7 @@ export class ContextManager
       }),
     );
 
+    if (!this.isDeliveryCurrent(delivery)) return {};
     const results: FileUpdates = {};
     for (const { absFilePath, result } of entries) {
       if (result?.update) {
@@ -424,7 +460,7 @@ export class ContextManager
 
     await this.refreshPendingUpdates();
 
-    return results;
+    return this.isDeliveryCurrent(delivery) ? results : {};
   }
 
   contextUpdatesToContent(contextUpdates: FileUpdates): InjectedContent[] {
@@ -524,42 +560,52 @@ From now on, whenever any of these files are updated by the user, you will get a
     absFilePath: AbsFilePath;
     commit: boolean;
   }): Promise<FileUpdates[keyof FileUpdates] | undefined> {
+    const delivery = this.delivery;
+    const revision = this.revision;
+    const original = this.files[absFilePath];
+    if (!original || !this.isDeliveryCurrent(delivery)) return undefined;
+    const fileInfo = structuredClone(original);
     const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
-    const fileInfo = this.files[absFilePath];
-
-    if (!fileInfo) {
-      return undefined;
-    }
-
+    let result: FileUpdates[AbsFilePath] | undefined;
     if (!(await this.fileIO.fileExists(absFilePath))) {
-      if (commit) {
-        delete this.files[absFilePath];
-      }
-      return {
+      result = {
         absFilePath,
         relFilePath,
-        update: {
-          status: "ok",
-          value: { type: "file-deleted" },
-        },
+        update: { status: "ok", value: { type: "file-deleted" } },
       };
-    }
-
-    if (fileInfo.fileTypeInfo.category === FileCategory.TEXT) {
-      return await this.handleTextFileUpdate(
+    } else if (fileInfo.fileTypeInfo.category === FileCategory.TEXT) {
+      result = await this.handleTextFileUpdate(
         absFilePath,
         relFilePath,
         fileInfo,
         commit,
       );
     } else {
-      return this.handleBinaryFileUpdate(
+      result = await this.handleBinaryFileUpdate(
         absFilePath,
         relFilePath,
         fileInfo,
         commit,
       );
     }
+    if (
+      !this.isDeliveryCurrent(delivery) ||
+      revision !== this.revision ||
+      this.files[absFilePath] !== original
+    )
+      return undefined;
+    if (commit) {
+      if (
+        result?.update.status === "ok" &&
+        result.update.value.type === "file-deleted"
+      ) {
+        delete this.files[absFilePath];
+        delete delivery.files[absFilePath];
+      } else {
+        original.agentView = fileInfo.agentView;
+      }
+    }
+    return result;
   }
 
   async peekFileUpdate(
@@ -582,9 +628,6 @@ From now on, whenever any of these files are updated by the user, you will get a
       currentFileContent = await this.fileIO.readFile(absFilePath);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        if (commit) {
-          delete this.files[absFilePath];
-        }
         return {
           absFilePath,
           relFilePath,

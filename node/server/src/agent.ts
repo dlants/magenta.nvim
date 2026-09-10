@@ -5,13 +5,19 @@ import {
 } from "./providers/inference-shared.ts";
 import type {
   AgentInput,
+  InferenceRequest,
   NativeInferenceManager,
   RequestedTool,
-  StreamEvent,
+  RetryStatus,
+  StreamingBlock,
   ToolResults,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
-import type { AgentHooks, SendResult } from "./thread-api.ts";
+import type {
+  AgentHooks,
+  SendResult,
+  ToolInvocationState,
+} from "./thread-api.ts";
 import type { SuspendReason } from "./thread-supervisor.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 
@@ -31,16 +37,36 @@ export type ToolExecution = {
 
 export type ToolExecutor = (
   requests: ReadonlyArray<RequestedTool>,
+  publishTools: (tools: ToolInvocationState) => void,
 ) => ToolExecution;
 
+export type LoopState = { aborting: boolean } & (
+  | { type: "preparing" }
+  | {
+      type: "streaming";
+      inFlight: InferenceRequest;
+      startedAt: Date;
+      lastEventTime: Date;
+      block: StreamingBlock | undefined;
+      retry: RetryStatus | undefined;
+    }
+  | {
+      type: "running_tools";
+      inFlight: ToolExecution;
+      requested: ReadonlyArray<RequestedTool>;
+      tools: ToolInvocationState;
+    }
+);
+
 export type AgentTurn = {
+  readonly loopState: LoopState;
   promise: Promise<SendResult>;
   abort(): void;
 };
 
 export type AgentLoopDeps = AgentContext & {
   manager: NativeInferenceManager;
-  onStreamEvent: (event: StreamEvent) => void;
+  onUpdate?: () => void;
   executeTools: ToolExecutor;
   getHooks: () => AgentHooks;
 };
@@ -52,15 +78,18 @@ export function runAgentLoop(
   input: AgentInput[] = [],
 ): AgentTurn {
   const { logger, manager } = deps;
-  let aborted = false;
-  // when we send off an inference request or a tool execution, save the abort handle.
-  let inFlight: { abort(): void } | undefined;
+  let loopState: LoopState = { type: "preparing", aborting: false };
+  const updateLoopState = (next: LoopState) => {
+    loopState = next;
+    deps.onUpdate?.();
+  };
 
   const runLoop = async (): Promise<SendResult> => {
     let initialInputPending = true;
     while (true) {
-      if (aborted) return { type: "aborted" };
+      if (loopState.aborting) return { type: "aborted" };
 
+      updateLoopState({ type: "preparing", aborting: loopState.aborting });
       const decision = await runBeforeRequestHooks(deps);
       // Injected content and the caller's own input go into the log even when
       // the loop is suspended, so both are there for the resume.
@@ -75,14 +104,45 @@ export function runAgentLoop(
       if (decision.type === "suspend") {
         return { type: "suspended", reason: decision.reason };
       }
-      if (aborted) return { type: "aborted" };
+      if (loopState.aborting) return { type: "aborted" };
 
-      const request = manager.sendRequest((event) => deps.onStreamEvent(event));
-      inFlight = request;
+      const request = manager.sendRequest((event) => {
+        if (loopState.type !== "streaming") return;
+        loopState.lastEventTime = new Date();
+        switch (event.type) {
+          case "streaming-block":
+            loopState.block = event.streamingBlock;
+            break;
+          case "block-finished":
+            loopState.block = undefined;
+            break;
+          case "retry-scheduled":
+            loopState.retry = event.retry;
+            loopState.block = undefined;
+            break;
+          case "attempt-started":
+            loopState.retry = undefined;
+            loopState.block = undefined;
+            break;
+          default:
+            assertUnreachable(event);
+        }
+        deps.onUpdate?.();
+      });
+      const now = new Date();
+      updateLoopState({
+        type: "streaming",
+        aborting: loopState.aborting,
+        inFlight: request,
+        startedAt: now,
+        lastEventTime: now,
+        block: undefined,
+        retry: undefined,
+      });
       const outcome = await request.promise;
-      inFlight = undefined;
+      loopState = { type: "preparing", aborting: loopState.aborting };
 
-      if (aborted) return { type: "aborted" };
+      if (loopState.aborting) return { type: "aborted" };
       if (outcome.type === "aborted") return { type: "aborted" };
       if (outcome.type === "error")
         return { type: "failed", error: outcome.error };
@@ -92,9 +152,24 @@ export function runAgentLoop(
       const requested = outcome.requested;
 
       let toolOutcome: ToolOutcome;
+      let publishingTools = true;
+      let toolState: ToolInvocationState = { type: "pending" };
       try {
-        const execution = deps.executeTools(requested);
-        inFlight = execution;
+        const execution = deps.executeTools(requested, (tools) => {
+          toolState = tools;
+          if (publishingTools && loopState.type === "running_tools") {
+            loopState.tools = tools;
+            deps.onUpdate?.();
+          }
+        });
+        updateLoopState({
+          type: "running_tools",
+          aborting: loopState.aborting,
+          inFlight: execution,
+          requested,
+          tools: toolState,
+        });
+        if (loopState.aborting) execution.abort();
         toolOutcome = await execution.promise;
       } catch (error) {
         // A rejecting executor is still a turn that must leave every tool_use
@@ -104,7 +179,8 @@ export function runAgentLoop(
         );
         toolOutcome = { type: "continue", results: new Map() };
       } finally {
-        inFlight = undefined;
+        publishingTools = false;
+        loopState = { type: "preparing", aborting: loopState.aborting };
       }
 
       manager.appendToolResults(
@@ -118,8 +194,9 @@ export function runAgentLoop(
         ),
       );
 
-      if (aborted || toolOutcome.type === "aborted") {
-        aborted = true;
+      if (loopState.aborting || toolOutcome.type === "aborted") {
+        loopState.aborting = true;
+        deps.onUpdate?.();
         return { type: "aborted" };
       }
 
@@ -131,16 +208,23 @@ export function runAgentLoop(
     }
   };
 
-  const promise = runLoop().catch((error: unknown) => ({
-    type: "failed" as const,
-    error: error instanceof Error ? error : new Error(String(error)),
-  }));
+  // Hooks and progress callbacks must see the handle installed on its owner.
+  const promise = Promise.resolve()
+    .then(runLoop)
+    .catch((error: unknown) => ({
+      type: "failed" as const,
+      error: error instanceof Error ? error : new Error(String(error)),
+    }));
 
   return {
+    get loopState() {
+      return loopState;
+    },
     promise,
     abort: () => {
-      aborted = true;
-      inFlight?.abort();
+      loopState.aborting = true;
+      deps.onUpdate?.();
+      if (loopState.type !== "preparing") loopState.inFlight.abort();
     },
   };
 }

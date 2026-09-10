@@ -104,6 +104,45 @@ it("<context_update> IS sent if a tracked file changes after fork", async () => 
   });
 });
 
+it("truncated fork reseeds context delivered only after the fork point", async () => {
+  await withDriver({}, async (driver) => {
+    await driver.showSidebar();
+    await driver.inputMagentaText("Start without file context");
+    await driver.send();
+    const first = await driver.mockAnthropic.awaitPendingStream();
+    first.respond({
+      stopReason: "end_turn",
+      text: "Ready for files.",
+      toolRequests: [],
+    });
+    await driver.assertDisplayBufferContains("Ready for files.");
+    const source = driver.magenta.chat.getActiveThread();
+    const forkPoint = source.agent.getNativeMessageIdx();
+    await driver.addContextFiles("poem.txt");
+    await driver.inputMagentaText("Now read the poem");
+    await driver.send();
+    const second = await driver.mockAnthropic.awaitPendingStream();
+    second.respond({
+      stopReason: "end_turn",
+      text: "Read the new context.",
+      toolRequests: [],
+    });
+    await driver.assertDisplayBufferContains("Read the new context.");
+    expect(source.agent.getNativeMessageIdx()).toBeGreaterThan(forkPoint);
+    await driver.magenta.forkAtMessageAndSwitch(source.id, forkPoint);
+    await driver.inputMagentaText("Continue from the earlier point");
+    await driver.send();
+    const stream = await driver.mockAnthropic.awaitPendingStream();
+    const lastUser = [...stream.getProviderMessages()]
+      .reverse()
+      .find((m) => m.role === "user");
+    expect(lastUser?.content.some((c) => c.type === "context_update")).toBe(
+      true,
+    );
+    stream.respond({ stopReason: "end_turn", text: "ok", toolRequests: [] });
+  });
+});
+
 it("tool result map survives the fork", async () => {
   await withDriver({}, async (driver) => {
     driver.mockSandbox.setState({ status: "ready" });

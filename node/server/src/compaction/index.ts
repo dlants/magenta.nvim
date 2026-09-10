@@ -42,9 +42,15 @@ export async function runSubmission(args: {
   start: () => Promise<ThreadSendResult>;
 }): Promise<ThreadSendResult> {
   const { thread, compactor } = args;
-  let result = await args.start();
+  let core = thread.core;
+  const started = args.start();
+  let signal = thread.interruptionSignal;
+  const isCurrent = () =>
+    !signal.aborted && thread.core === core && core.isActive;
+  let result = await started;
 
   while (result.type === "suspended") {
+    if (!isCurrent()) return { type: "aborted" };
     const reason = result.reason;
     if (reason.kind !== "compact" || !compactor) {
       // A suspension nobody claims is just a stop.
@@ -55,7 +61,7 @@ export async function runSubmission(args: {
       thread.getProviderMessages(),
       reason.nextPrompt,
     );
-    if (outcome.type === "aborted") {
+    if (!isCurrent() || outcome.type === "aborted") {
       return { type: "aborted" } satisfies SendResult;
     }
     if (outcome.type === "error") {
@@ -65,16 +71,24 @@ export async function runSubmission(args: {
       } satisfies SendResult;
     }
 
-    await thread.reset({
-      seed: [{ type: "user", text: summaryText(outcome.summary) }],
-      archive: {
-        type: "compaction",
-        summary: outcome.summary,
-        chunkCount: outcome.chunkCount,
-      },
-    });
+    try {
+      const reset = thread.reset({
+        seed: [{ type: "user", text: summaryText(outcome.summary) }],
+        archive: {
+          type: "compaction",
+          summary: outcome.summary,
+          chunkCount: outcome.chunkCount,
+        },
+      });
+      signal = thread.interruptionSignal;
+      core = await reset;
+    } catch (error) {
+      if (!isCurrent()) return { type: "aborted" };
+      throw error;
+    }
+    if (!isCurrent()) return { type: "aborted" };
 
-    result = await thread.send([
+    const sent = thread.send([
       {
         type: "user",
         text:
@@ -82,6 +96,8 @@ export async function runSubmission(args: {
           "Please continue from where you left off.",
       },
     ]);
+    signal = thread.interruptionSignal;
+    result = await sent;
   }
 
   return result;

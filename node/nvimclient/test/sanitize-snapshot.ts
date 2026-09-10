@@ -7,6 +7,10 @@ export function sanitizeMessagesForSnapshot<T>(messages: T): T {
     /\/tmp\/magenta\/threads\/[a-f0-9-]+\//g,
     "/tmp/magenta/threads/<thread-id>/",
   );
+  json = json.replace(
+    /(?:\/private)?\/tmp\/magenta-test\/[^/"\\]+\/cwd/g,
+    "/tmp/magenta-test/<test-id>/cwd",
+  );
   json = json.replace(/\((\d+)ms\)/g, "(<timing>ms)");
   json = json.replace(
     /<system-info>[\s\S]*?<\/system-info>/g,

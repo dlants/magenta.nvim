@@ -1,15 +1,7 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
-import {
-  type AgentContext,
-  type AgentTurn,
-  runAgentLoop,
-  type ToolExecution,
-} from "./agent.ts";
+import type { AgentContext } from "./agent.ts";
 import type { AgentsMap } from "./agents/agents.ts";
-import type {
-  ContextTracker,
-  OnToolApplied,
-} from "./capabilities/context-tracker.ts";
+import type { ContextTracker } from "./capabilities/context-tracker.ts";
 import type { FileIO } from "./capabilities/file-io.ts";
 import type { GitClient } from "./capabilities/git-client.ts";
 import type { LspClient } from "./capabilities/lsp-client.ts";
@@ -20,25 +12,15 @@ import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
 import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
-import {
-  type LoopEpoch,
-  LoopStateMachine,
-  type ThreadLoopState,
-} from "./loop-state.ts";
+import type { ThreadLoopState } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
-import { ABORT_MARKER_TEXT } from "./providers/inference-shared.ts";
 import type {
-  AgentInput,
   NativeInferenceManager,
   NativeMessageIdx,
   Provider,
-  ProviderInferenceConfig,
   ProviderMessage,
-  ProviderMessageContent,
   ProviderToolSpec,
-  RequestedTool,
   StopReason,
-  ToolResults,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemInfo, SystemPrompt } from "./providers/system-prompt.ts";
@@ -50,13 +32,7 @@ import {
   pendingMessage,
   type ResolveSubmission,
 } from "./submission/index.ts";
-import {
-  noReminders,
-  type ReminderSupervisor,
-  SystemReminderSupervisor,
-} from "./system-reminder-supervisor.ts";
 import type {
-  AgentHooks,
   AgentRequestContext,
   OnUpdate,
   QueuedMessage,
@@ -69,35 +45,31 @@ import type {
   YieldValue,
 } from "./thread-api.ts";
 import { renderYieldValue } from "./thread-api.ts";
+import { type ThreadContextDelivery, ThreadCore } from "./thread-core.ts";
+
+export {
+  createInferenceManager,
+  threadToolSpecs,
+  toAgentInput,
+} from "./thread-core.ts";
+
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type { RequestAction, SuspendReason } from "./thread-supervisor.ts";
-import { ToolExecutorHost } from "./tool-executor.ts";
-import type {
-  ToolInvocation,
-  ToolRequest,
-  ToolRequestId,
-  ToolStructuredResult,
-} from "./tool-types.ts";
-import { structuredResultFor } from "./tool-types.ts";
-import { type CreateToolContext, createTool } from "./tools/create-tool.ts";
+import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
-import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
-import type { AbsFilePath, HomeDir, NvimCwd } from "./utils/files.ts";
-
+import type { HomeDir, NvimCwd } from "./utils/files.ts";
 export type YieldState = {
   value: YieldValue;
   response: string;
   tornDown: boolean;
 };
-
 export type EnvironmentConfig =
   | { type: "local"; cwd?: NvimCwd }
   | { type: "docker"; container: string; cwd: string };
-
 export interface ThreadContext extends AgentContext {
   profile: ProviderProfile;
   subagentConfig?: SubagentConfig;
@@ -124,74 +96,12 @@ export interface ThreadContext extends AgentContext {
   getAgents: () => AgentsMap;
   contextTracker: ContextTracker;
   commentStore?: CommentStore | undefined;
+  contextDelivery?: ThreadContextDelivery;
 }
-
-/** The conversation an agent drives, configured from the thread's profile. */
-export function createInferenceManager(
-  context: ThreadContext,
-  tools: ProviderToolSpec[],
-): NativeInferenceManager {
-  const profile = context.profile;
-  const config = ((): ProviderInferenceConfig | undefined => {
-    if (profile.provider === "openai") {
-      return profile.reasoning
-        ? { type: "reasoning", reasoning: profile.reasoning }
-        : undefined;
-    }
-
-    const effortOverride = context.subagentConfig?.effort;
-    const baseThinking = profile.thinking;
-
-    if (effortOverride) {
-      return {
-        type: "thinking",
-        thinking: {
-          enabled: true,
-          ...(baseThinking?.displayThinking !== undefined
-            ? { displayThinking: baseThinking.displayThinking }
-            : {}),
-          ...(baseThinking?.budgetTokens !== undefined
-            ? { budgetTokens: baseThinking.budgetTokens }
-            : {}),
-          effort: effortOverride,
-        },
-      };
-    }
-
-    if (!baseThinking) return undefined;
-    if (!baseThinking.enabled) {
-      return { type: "thinking", thinking: { enabled: false } };
-    }
-    const { enabled: _enabled, ...rest } = baseThinking;
-    return { type: "thinking", thinking: { enabled: true, ...rest } };
-  })();
-
-  return context.getProvider(context.profile).createInferenceManager({
-    model: context.profile.model,
-    systemPrompt: context.systemPrompt,
-    tools,
-    ...(config ? { config } : {}),
-  });
-}
-
-export function threadToolSpecs(context: ThreadContext): ProviderToolSpec[] {
-  return getToolSpecs(
-    context.threadType,
-    context.mcpToolManager,
-    context.availableCapabilities,
-    context.getAgents(),
-    context.subagentConfig,
-    context.yieldSchema,
-    context.getScriptRunner?.()?.getScriptCatalog(),
-    context.subagentDockerfile,
-  );
-}
-
 export type ThreadArchiveOptions = {
   baseDir?: string;
   scriptName?: string;
 };
-
 export type ThreadInit =
   | { type: "fresh" }
   | {
@@ -201,41 +111,26 @@ export type ThreadInit =
       provenance: ForkProvenance;
       edlRegisters: EdlRegisters;
     };
-
 type DeferredDelivery = "async" | "next";
-
 /** The result of draining one queue: content for the next request, or a
  * compaction the flush ran into — never both. */
 type FlushedQueue =
   | { type: "messages"; messages: InputMessage[] }
   | { type: "compact"; nextPrompt: string | undefined };
-
 export type ThreadCallbacks = {
   onUpdate: OnUpdate;
   resolve: ResolveSubmission;
 };
-
-/** Holds one conversation at a time, swapping it for a fresh one on compaction.
- * Thread 3 is still thread 3 afterwards, which is why the archive keys by
- * thread id survives the swap. */
 /** One piece of content a caller hands the thread. `system` is the owner's
  * own voice — a supervisor nudge, a tool-driven follow-up — as distinct from
  * text the user typed. */
 export type InputMessage =
   | { type: "user"; text: string }
   | { type: "system"; text: string };
-
-export function toAgentInput(messages: InputMessage[]): AgentInput[] {
-  return messages.map((m) => ({
-    type: "text" as const,
-    text: m.text,
-    nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-  }));
-}
-
+/** Stable identity, submission queues, yield contract and archive across
+ * replaceable conversation generations. */
 export class Thread {
   #title: string | undefined;
-
   get title(): string | undefined {
     return this.#title;
   }
@@ -248,32 +143,47 @@ export class Thread {
   get systemInfo(): SystemInfo {
     return this.context.systemInfo;
   }
-  edlRegisters: EdlRegisters;
-  editedFilesThisTurn: { path: AbsFilePath; snapshot: string }[] = [];
-  readonly toolSpecs: ProviderToolSpec[];
-  /** The conversation this thread is on, swapped for a fresh one on
-   * compaction. */
-  private manager: NativeInferenceManager;
-  /** The preflight count the last turn took, kept here because it outlives
-   * the turn that took it and is reported at rest. Cleared with the manager
-   * it was counted for. */
-  private preflightTokenCount: number | undefined;
+  private _core: ThreadCore;
+  private interruption = new AbortController();
+  get interruptionSignal(): AbortSignal {
+    return this.interruption.signal;
+  }
+  private interrupt(): void {
+    const previous = this.interruption;
+    this.interruption = new AbortController();
+    previous.abort();
+  }
+
+  get core(): ThreadCore {
+    return this._core;
+  }
+  get edlRegisters(): EdlRegisters {
+    return this.core.edlRegisters;
+  }
+  get editedFilesThisTurn() {
+    return this.core.editedFilesThisTurn;
+  }
+  get toolSpecs(): ProviderToolSpec[] {
+    return this.core.toolSpecs;
+  }
+  readonly structuredToolResults = new Map<
+    ToolRequestId,
+    ToolStructuredResult
+  >();
+  getLastStopTokenCount(): number {
+    return this.core.getLastStopTokenCount();
+  }
+  async abortAgentTurn(): Promise<void> {
+    this.cancelSubmission();
+    await this.core.abortAgentTurn();
+  }
   public hooks: ThreadHooks = {
     onBeforeRequest: [],
     onToolResults: [],
     onYield: [],
     hasPendingContent: () => Promise.resolve(false),
   };
-  readonly structuredToolResults = new Map<
-    ToolRequestId,
-    ToolStructuredResult
-  >();
   private threadLogger: ThreadLogger;
-  /** Owns all reminder state and policy. Lives here rather than in the agent
-   * because the thread is what activates reminders out of message resolution
-   * and what resets state on compaction. Absent for compact threads, whose
-   * content their caller composes exactly. */
-  private systemReminders: ReminderSupervisor;
 
   constructor(
     public id: ThreadId,
@@ -299,21 +209,24 @@ export class Thread {
         ...(forkProvenance ? { forkedFrom: forkProvenance } : {}),
       },
     );
-    this.edlRegisters =
-      init.type === "clone"
-        ? init.edlRegisters
-        : { registers: new Map(), nextSavedId: 0 };
-    this.toolSpecs = threadToolSpecs(context);
-    this.systemReminders = this.createReminderSupervisor();
-    this.toolExecutor = new ToolExecutorHost({
-      logger: context.logger,
-      createTool: (request) => this.invokeTool(request),
-      getHooks: () => this.agentHooks(),
-      publishTools: (tools) => this.loop.setToolInvocationState(tools),
-      onUpdate: () => this.handleUpdate(),
-    });
+    this._core = this.createCore(init);
+    context.contextDelivery?.manager.start();
+  }
 
-    this.manager = this.initialManager(init);
+  private createCore(init: ThreadInit = { type: "fresh" }): ThreadCore {
+    return new ThreadCore(
+      this.id,
+      this.context,
+      {
+        onUpdate: () => this.handleUpdate(),
+        getHooks: () => this.hooks,
+        onStructuredResult: (id, result) => {
+          this.structuredToolResults.set(id, result);
+        },
+        flushQueue: (ctx) => this.queueFlushAction(ctx),
+      },
+      init,
+    );
   }
 
   static async clone(args: {
@@ -344,43 +257,36 @@ export class Thread {
       sourceThread.archiveOptions,
     );
     for (const [id, structured] of sourceThread.structuredToolResults) {
-      cloned.structuredToolResults.set(id, structured);
+      cloned.structuredToolResults.set(id, structuredClone(structured));
     }
     return cloned;
   }
-
-  private createReminderSupervisor(): ReminderSupervisor {
-    if (this.context.threadType === "compact") return noReminders;
-    return new SystemReminderSupervisor({
-      threadType: this.context.threadType,
-      subagentConfig: this.context.subagentConfig,
-      contextTracker: this.context.contextTracker,
-    });
-  }
-
   get activeReminders(): ReadonlySet<string> {
-    return this.systemReminders.activeReminders;
+    return this.core.systemReminders.activeReminders;
   }
-
   /** Busy from the first request of a submission until the loop comes to
    * rest, which spans the gaps between turns. */
   get isBusy(): boolean {
     return this.loopState.type !== "idle";
   }
-
   get inferenceManager(): NativeInferenceManager {
-    return this.manager;
+    return this.core.manager;
   }
-
-  /** What this thread is doing. The thread sees every edge of it — it calls
-   * the agent, it is called back for tool execution, and it is handed the
-   * request-progress updates — so it is the loop's own account, not a mirror
-   * of the agent's. How the last submission ended travels separately, on
-   * `lastResult()`. */
+  /** Render state combines the outer submission's lifetime with progress
+   * reported by its current agent turn. */
   get loopState(): ThreadLoopState {
-    return this.loop.current;
+    const submission = this.submission;
+    return submission
+      ? {
+          type: "running",
+          activity: this.core.activity ?? {
+            type: "preparing",
+            aborting: submission.signal.aborted,
+          },
+          aborting: submission.signal.aborted || this.core.aborting,
+        }
+      : { type: "idle", lastResult: this.lastSubmissionResult };
   }
-
   /** A render-only view of how the most recent submission ended. Nothing may
    * branch on it for control flow. */
   lastResult(): RestResult | undefined {
@@ -393,93 +299,6 @@ export class Thread {
     // A suspension is a handoff, not an outcome anyone renders.
     return last?.type === "suspended" ? undefined : last;
   }
-
-  /** Tool construction is the thread's: the agent only drives invocations.
-   * Rebuilt per tool so a tool always sees the thread's current registers. */
-  private toolContext(): CreateToolContext {
-    return {
-      threadId: this.id,
-      logger: this.context.logger,
-      lspClient: this.context.lspClient,
-      luaExecutor: this.context.luaExecutor,
-      mcpToolManager: this.context.mcpToolManager,
-      cwd: this.context.cwd,
-      homeDir: this.context.homeDir,
-      maxConcurrentSubagents: this.context.maxConcurrentSubagents,
-      maxConcurrentFastSubagents: this.context.maxConcurrentFastSubagents,
-      contextTracker: this.context.contextTracker,
-      onToolApplied: (absFilePath, tool, fileTypeInfo) =>
-        this.onToolApplied(absFilePath, tool, fileTypeInfo),
-      edlRegisters: this.edlRegisters,
-      commentStore: this.context.commentStore,
-      fileIO: this.context.fileIO,
-      shell: this.context.shell,
-      threadManager: this.context.threadManager,
-      scriptRunner: this.context.getScriptRunner?.(),
-      requestRender: () => this.handleUpdate(),
-      getAgents: () => this.context.getAgents(),
-    };
-  }
-
-  private onToolApplied: OnToolApplied = (absFilePath, tool, fileTypeInfo) => {
-    try {
-      this.hooks.onToolApplied?.(absFilePath, tool, fileTypeInfo);
-    } catch (error) {
-      this.context.logger.error(
-        `onToolApplied hook threw: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    if (
-      tool.type === "edl-edit" &&
-      !this.editedFilesThisTurn.some((e) => e.path === absFilePath)
-    ) {
-      this.editedFilesThisTurn.push({
-        path: absFilePath,
-        snapshot: tool.previousContent,
-      });
-    }
-  };
-
-  /** Runs the tool and splits its result: the structured payload is recorded
-   * here, and only the wire result reaches the agent. */
-  private invokeTool(request: ToolRequest): ToolInvocation {
-    const invocation = createTool(request, this.toolContext());
-    const promise = invocation.promise.then((executed) => {
-      const { result } = executed;
-      if (result.status !== "ok") return { ...executed, result };
-      const { structuredResult, ...wireResult } = result;
-      if (structuredResult) {
-        this.structuredToolResults.set(request.id, structuredResult);
-      }
-      return { ...executed, result: wireResult };
-    });
-    return { ...invocation, promise };
-  }
-  private toolExecutor: ToolExecutorHost;
-
-  /** A fresh conversation, or a copy of the source thread's truncated to the
-   * fork point. */
-  private initialManager(init: ThreadInit): NativeInferenceManager {
-    if (init.type !== "clone") {
-      return createInferenceManager(this.context, this.toolSpecs);
-    }
-    const manager = init.sourceManager.clone();
-    manager.truncateMessages(init.nativeMessageIdx);
-    return manager;
-  }
-
-  /** Being called is the "tools started" edge and returning is "tools
-   * settled": between them the loop is running tools, and on either side of
-   * them it is streaming. */
-  private executeTools(requests: ReadonlyArray<RequestedTool>): ToolExecution {
-    this.loop.runningTools(requests);
-    const execution = this.toolExecutor.execute(requests);
-    return {
-      ...execution,
-      promise: execution.promise.finally(() => this.loop.toolsSettled()),
-    };
-  }
-
   private handleUpdate(): void {
     if (this.destroyed) return;
     this.threadLogger.record(
@@ -487,75 +306,35 @@ export class Thread {
     );
     this.callbacks.onUpdate();
   }
-
   getToolSpecs(): ProviderToolSpec[] {
     return this.toolSpecs;
   }
-
   getProviderMessages(): ReadonlyArray<ProviderMessage> {
-    return this.manager.log.messages;
+    return this.core.manager.log.messages;
   }
-
-  private get lastAssistantMessage():
-    | ReadonlyArray<ProviderMessageContent>
-    | undefined {
-    const messages = this.manager.log.messages;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant") {
-        return messages[i].content;
-      }
-    }
-    return undefined;
-  }
-
   get inputTokenCount(): number | undefined {
-    return this.preflightTokenCount;
+    return this.core.preflightTokenCount;
   }
-
   getMessages(): ProviderMessage[] {
     return [...this.getProviderMessages()];
   }
-
-  getLastStopTokenCount(): number {
-    if (this.preflightTokenCount !== undefined) {
-      return this.preflightTokenCount;
-    }
-    const latestUsage = this.manager.log.latestUsage;
-    if (!latestUsage) {
-      return 0;
-    }
-    return (
-      latestUsage.inputTokens +
-      latestUsage.outputTokens +
-      (latestUsage.cacheHits || 0) +
-      (latestUsage.cacheMisses || 0)
-    );
-  }
-
-  /** Content that leads the next submission's user message: a compaction
-   * summary, a fork notification. Held here rather than in the agent, since
-   * it must survive the agent swap in `reset` and an arbitrary wait for the
-   * user's next message. */
-  private pendingSeed: InputMessage[] = [];
+  /** Seed content belongs to the conversation it will lead, not to the
+   * stable thread. Reset supplies the replacement conversation's seed. */
 
   get pendingTurnContent(): ReadonlyArray<InputMessage> {
-    return this.pendingSeed;
+    return this.core.pendingSeed;
   }
-
   prependToNextTurn(messages: InputMessage[]): void {
-    this.pendingSeed = [...this.pendingSeed, ...messages];
+    this.core.pendingSeed = [...this.core.pendingSeed, ...messages];
   }
-
   async awaitArchiveFlush(): Promise<void> {
     await this.threadLogger.flushed();
   }
-
   setTitle(title: string): void {
     this.#title = title;
     this.threadLogger.recordTitle(title);
     this.handleUpdate();
   }
-
   /** Abort the in-flight turn and hand back whatever never went out. The
    * queues are the thread's, so the debris is the thread's to report. */
   /** Set once the thread's yield has been resolved. `tornDown` means an owner
@@ -565,16 +344,14 @@ export class Thread {
   get yielded(): YieldState | undefined {
     return this.yieldState;
   }
-
   async abort(): Promise<{ unsent: ReadonlyArray<QueuedMessage> }> {
+    this.interrupt();
     if (this.yieldState) return { unsent: [] };
-    this.loop.markAborting();
     await this.abortAgentTurn();
     const unsent = this.drainQueues();
     if (unsent.length) this.handleUpdate();
     return { unsent };
   }
-
   get result(): Promise<ThreadResult> {
     return this.resultDefer.promise;
   }
@@ -585,55 +362,62 @@ export class Thread {
     this.resultSettled = true;
     this.resultDefer.resolve(result);
   }
-
   async submit(
     message: PendingMessage,
     delivery: Delivery = "now",
   ): Promise<ThreadSendResult> {
+    this.assertUsable();
+    const core = this.core;
     if (delivery !== "now" && this.isBusy) {
       this.enqueue([message], delivery);
       return { type: "queued" };
     }
+    this.interrupt();
+    const signal = this.interruptionSignal;
     const resolved = await this.callbacks.resolve(message);
+    this.assertUsable();
+    if (signal.aborted || this.core !== core || !core.isActive)
+      return { type: "aborted" };
     if (resolved.compact) {
+      if (this.isBusy) {
+        this.cancelSubmission();
+        await core.abortAgentTurn();
+        if (signal.aborted || this.core !== core || !core.isActive)
+          return { type: "aborted" };
+        this.drainQueues();
+      }
       return {
         type: "suspended",
         reason: { kind: "compact", nextPrompt: compactPrompt(resolved) },
       };
     }
     for (const text of resolved.reminders) {
-      this.systemReminders.activateReminder(text);
+      this.core.systemReminders.activateReminder(text);
     }
-    return this.send(resolved.messages);
+    return this.sendMessages(resolved.messages);
   }
-
   /** Flushed in full when the next provider request is issued (@async). */
   private nextRequestQueue: PendingMessage[] = [];
   /** Flushed in full the next time the thread comes to rest (@next). */
   private nextStopQueue: PendingMessage[] = [];
-
   get queued(): {
     async: ReadonlyArray<PendingMessage>;
     next: ReadonlyArray<PendingMessage>;
   } {
     return { async: this.nextRequestQueue, next: this.nextStopQueue };
   }
-
   get queuedCount(): number {
     return this.nextRequestQueue.length + this.nextStopQueue.length;
   }
-
   private queue(delivery: DeferredDelivery): PendingMessage[] {
     return delivery === "async" ? this.nextRequestQueue : this.nextStopQueue;
   }
-
   private enqueue(
     messages: PendingMessage[],
     delivery: DeferredDelivery,
   ): void {
     this.queue(delivery).push(...messages);
   }
-
   private drainQueues(): QueuedMessage[] {
     const unsent: QueuedMessage[] = [
       ...this.nextRequestQueue.map(
@@ -653,7 +437,6 @@ export class Thread {
     this.nextStopQueue = [];
     return unsent;
   }
-
   /** Drain one queue at a stop, resolving each entry at the moment it is
    * delivered. An entry whose resolution throws is dropped with a visible
    * error rather than wedging the turn loop.
@@ -663,13 +446,16 @@ export class Thread {
    * request left to carry it) and the entries behind it go back on the
    * queue. */
   private async flushAtStop(delivery: DeferredDelivery): Promise<FlushedQueue> {
-    const entries = this.queue(delivery).splice(0);
+    const isCurrent = this.currentLoopGuard();
+    const count = this.queue(delivery).length;
     const messages: InputMessage[] = [];
-    for (let i = 0; i < entries.length; i++) {
-      const resolved = await this.resolveQueued(entries[i]);
+    for (let i = 0; i < count; i++) {
+      const entry = this.queue(delivery).shift();
+      if (entry === undefined) break;
+      const resolved = await this.resolveQueued(entry, isCurrent);
+      if (!isCurrent()) return { type: "messages", messages: [] };
       if (!resolved) continue;
       if (resolved.compact) {
-        this.enqueueFront(entries.slice(i + 1), delivery);
         return {
           type: "compact",
           nextPrompt:
@@ -683,35 +469,50 @@ export class Thread {
     }
     return { type: "messages", messages };
   }
-
   /** Drain the async queue into the request that is about to carry the tool
    * results. A `@compact` cannot ride such a request — there is no place to
    * hand the transcript over from — so it is detected before resolution and
    * genuinely not delivered: it and everything behind it move to the `next`
    * queue, where the following stop picks them up. */
   private async flushMidTurn(): Promise<InputMessage[]> {
-    const entries = this.nextRequestQueue.splice(0);
+    const isCurrent = this.currentLoopGuard();
+    const count = this.nextRequestQueue.length;
     const messages: InputMessage[] = [];
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
+    for (let i = 0; i < count; i++) {
+      const entry = this.nextRequestQueue.shift();
+      if (entry === undefined) break;
       if (parseCompact(entry).compact) {
-        this.nextStopQueue.unshift(...entries.slice(i));
+        this.nextStopQueue.unshift(
+          entry,
+          ...this.nextRequestQueue.splice(0, count - i - 1),
+        );
         return messages;
       }
-      const resolved = await this.resolveQueued(entry);
+      const resolved = await this.resolveQueued(entry, isCurrent);
+      if (!isCurrent()) return [];
       if (resolved) messages.push(...resolved.messages);
     }
     return messages;
   }
-
   /** Resolve one entry, activating its reminders. An entry whose resolution
    * throws is dropped with a visible error rather than wedging the turn
    * loop. */
-  private async resolveQueued(entry: PendingMessage) {
+  private currentLoopGuard(): () => boolean {
+    const core = this.core;
+    const submission = this.submission;
+    return () =>
+      this.core === core &&
+      core.isActive &&
+      submission !== undefined &&
+      this.submission === submission &&
+      !submission.signal.aborted;
+  }
+  private async resolveQueued(entry: PendingMessage, isCurrent: () => boolean) {
     try {
       const resolved = await this.callbacks.resolve(entry);
+      if (!isCurrent()) return undefined;
       for (const text of resolved.reminders) {
-        this.systemReminders.activateReminder(text);
+        this.core.systemReminders.activateReminder(text);
       }
       return resolved;
     } catch (error) {
@@ -721,78 +522,6 @@ export class Thread {
       return undefined;
     }
   }
-
-  private enqueueFront(
-    entries: ReadonlyArray<PendingMessage>,
-    delivery: DeferredDelivery,
-  ): void {
-    if (!entries.length) return;
-    this.queue(delivery).unshift(...entries);
-  }
-
-  /** The agent's view of the owner's hooks. `onEndTurn` is filtered out
-   * structurally by `AgentHooks`; the thread's own two contributions are
-   * appended to the before-request array like any other entry. */
-  private agentHooks(): AgentHooks {
-    return {
-      onBeforeRequest: [
-        ...this.hooks.onBeforeRequest,
-        // Last, so the reminder sits after every other injection and
-        // immediately before the user's own content.
-        { run: (ctx) => Promise.resolve(this.reminderAction(ctx)) },
-        { run: (ctx) => this.queueFlushAction(ctx) },
-        // After every hook that might have asked for a count, so it records
-        // the one this request was decided on — and never forces one.
-        {
-          run: (ctx) => {
-            this.preflightTokenCount = ctx.inputTokenCount;
-            return Promise.resolve({ type: "none" as const });
-          },
-        },
-      ],
-      onToolResults: [
-        (results) => this.yieldGate(results),
-        ...this.hooks.onToolResults,
-        (results) => {
-          this.systemReminders.onToolResults(
-            results,
-            this.structuredToolResults,
-          );
-          return undefined;
-        },
-      ],
-    };
-  }
-
-  /** `yield_to_parent` ran like any other tool; the suspension it raises is
-   * how the agent — which knows nothing about the tool — is told to stop over
-   * a log where every tool_use is answered. Narrowing on the structured result
-   * rather than the request means only a call that actually succeeded fires
-   * it, and only for ids in this step's results, so an earlier yield inherited
-   * by a cloned thread can never re-fire. */
-  private yieldGate(results: ToolResults): SuspendReason | undefined {
-    for (const id of results.keys()) {
-      const structured = structuredResultFor(
-        this.structuredToolResults.get(id),
-        "yield_to_parent",
-      );
-      if (!structured) continue;
-      const value: YieldValue =
-        this.context.yieldSchema !== undefined
-          ? { type: "structured", value: structured.input }
-          : { type: "text", text: structured.input.result ?? "" };
-      return { kind: "yield", value };
-    }
-    return undefined;
-  }
-
-  private reminderAction(ctx: AgentRequestContext): RequestAction {
-    // A suspended request is never issued, so a reminder placed in it would
-    // be marked sent and never delivered.
-    if (ctx.status === "suspended") return { type: "none" };
-    return this.systemReminders.onBeforeRequest(ctx) ?? { type: "none" };
-  }
-
   /** Whatever is in the async queue rides the next request, whichever request
    * that is: flushing takes the entries off the queue, so a later flush finds
    * nothing and there is no double delivery to guard against. A suspension
@@ -811,22 +540,26 @@ export class Thread {
       })),
     };
   }
-
   async send(
+    messages: InputMessage[],
+    options: SendOptions = {},
+  ): Promise<ThreadSendResult> {
+    this.assertUsable();
+    if (!this.isBusy || !options.queue) this.interrupt();
+    return this.sendMessages(messages, options);
+  }
+  private async sendMessages(
     messages: InputMessage[],
     { queue, force }: SendOptions = {},
   ): Promise<ThreadSendResult> {
+    this.assertUsable();
+    if (this.resetting) throw new Error("Thread reset in progress");
     if (this.yieldState?.tornDown) {
       throw new Error(
         "This thread's container has been torn down. No further messages can be sent.",
       );
     }
-    // The compact thread's content is composed by its caller, so it bypasses
-    // context updates, reminders and the queue entirely.
-    if (this.threadType === "compact") {
-      return this.followSubmission(this.runToRest(messages));
-    }
-
+    const signal = this.interruptionSignal;
     if (this.isBusy) {
       if (queue === "async" || queue === "next") {
         this.enqueue(
@@ -835,14 +568,21 @@ export class Thread {
         );
         return { type: "queued" };
       }
-      this.loop.markAborting();
-      await this.abortAgentTurn();
+      this.cancelSubmission();
+      const core = this.core;
+      await core.abortAgentTurn();
+      this.assertUsable();
+      if (signal.aborted || this.core !== core || this.resetting)
+        return { type: "aborted" };
       // Sending now supersedes whatever was waiting on the aborted turn.
       this.drainQueues();
     }
-
+    // The compact thread's content is composed by its caller, so it bypasses
+    // context updates, reminders and the queue entirely.
+    if (this.threadType === "compact") {
+      return this.followSubmission(this.runToRest(messages));
+    }
     const result = this.followSubmission(this.runToRest(messages, force));
-
     if (this.title === undefined && messages.length) {
       this.setThreadTitle(messages.map((m) => m.text).join("\n")).catch(
         (err: Error) =>
@@ -851,121 +591,71 @@ export class Thread {
           ),
       );
     }
-
     return result;
   }
-
   private followSubmission(outcome: Promise<SendResult>): Promise<SendResult> {
     return outcome.then((r) => {
       if (r.type === "yielded") this.settleResult(r);
       return r;
     });
   }
-
   /** Whether a send with no user content is worth a request: only if a
    * supervisor has something to deliver. Standing content — the system
    * reminder, the system-info preamble — does not count, and the probe must
    * not consume anything, since the request may never be issued. */
   private async hasPendingContent(): Promise<boolean> {
-    return await this.hooks.hasPendingContent();
+    const core = this.core;
+    const hooks = this.hooks;
+    const isCurrent = this.currentLoopGuard();
+    const pending = await core.hasPendingContext();
+    if (!isCurrent()) return false;
+    return pending || (await hooks.hasPendingContent());
   }
-
-  /** The turn loop's lifecycle. Non-idle from the moment `runToRest` takes
-   * over until it settles: the agent settles at every stop, so busyness is
-   * the loop's to report. `aborting` is how an abort landing between turns —
-   * when the agent itself has nothing in flight to interrupt — still stops
-   * the loop. */
-  private loop = new LoopStateMachine(() => this.handleUpdate());
-
-  private async runTurn(messages: InputMessage[]): Promise<SendResult> {
-    const turn = runAgentLoop(
-      {
-        logger: this.context.logger,
-        manager: this.manager,
-        executeTools: (requests) => this.executeTools(requests),
-        getHooks: () => this.agentHooks(),
-        onStreamEvent: (event) => this.loop.applyStreamEvent(event),
-      },
-      toAgentInput(messages),
-    );
-    this.agentTurn = turn;
-    this.loop.streaming(turn.promise);
-    try {
-      const result = await turn.promise;
-      if (result.type === "failed") {
-        // The manager has already repaired whatever the failed request left
-        // half-written, so the log stands as it is: the submission is still
-        // in it and a retry re-issues the same request.
-        this.context.logger.error(result.error);
-      }
-      if (result.type === "aborted") {
-        // The single terminal abort transition: leave the history well-formed
-        // and mark why it stops here, before anything renders the log.
-        this.manager.appendUserMessage([
-          {
-            type: "text",
-            text: ABORT_MARKER_TEXT,
-            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
-          },
-        ]);
-      }
-      return result;
-    } finally {
-      this.agentTurn = undefined;
-      this.loop.preparing();
-    }
+  /** Outer hooks may outlive cancellation. Each submission captures its own
+   * signal so a late continuation cannot act on the replacement submission. */
+  private submission: AbortController | undefined;
+  private lastSubmissionResult: SendResult | undefined;
+  private cancelSubmission(): void {
+    if (!this.submission || this.submission.signal.aborted) return;
+    this.submission.abort();
+    this.handleUpdate();
   }
-
-  /** The agent turn in flight, held so an abort can reach it. Aborting is the
-   * only reason the thread keeps it: everything else about the turn is its
-   * result. */
-  private agentTurn: AgentTurn | undefined;
-
-  /** Wind the agent's turn down and wait for it to settle. Abort enters the
-   * agent through the turn handle, so a thread between turns simply has
-   * nothing to abort — the loop's own `aborting` flag stops it there. */
-  async abortAgentTurn(): Promise<void> {
-    const turn = this.agentTurn;
-    if (!turn) return;
-    turn.abort();
-    await turn.promise.catch(() => {});
-  }
-
-  /** Drive the agent until nothing more should be sent. The agent stops at
-   * every turn boundary; deciding whether a stop is really the end — queued
-   * content, a supervisor nudge, a truncated response — is the thread's. */
-  private async runToRest(
+  private runToRest(
     submitted: InputMessage[],
     force?: true,
   ): Promise<SendResult> {
-    const messages = this.pendingSeed.length
-      ? [...this.pendingSeed, ...submitted]
-      : submitted;
-    this.pendingSeed = [];
-    this.editedFilesThisTurn = [];
-    const epoch = this.loop.start();
-    // How the submission ended is recorded as the loop comes to rest, so it
-    // only ever exists alongside `idle`. A throw out of the loop is an
-    // outcome too, and lands as a failure rather than as an absent result.
-    try {
-      const result = await this.runLoop(messages, epoch, force);
-      this.loop.finish(epoch, result);
+    this.cancelSubmission();
+    const submission = new AbortController();
+    this.submission = submission;
+    const core = this.core;
+    const messages = core.beginSubmission(submitted);
+    const isCurrent = this.currentLoopGuard();
+    this.handleUpdate();
+    const finish = (result: SendResult) => {
+      if (this.submission === submission && this.core === core) {
+        this.submission = undefined;
+        this.lastSubmissionResult = result;
+        this.handleUpdate();
+      }
       return result;
-    } catch (error) {
-      this.loop.finish(epoch, {
-        type: "failed",
-        error: error instanceof Error ? error : new Error(String(error)),
-      });
-      throw error;
-    }
+    };
+    return this.runLoop(messages, isCurrent, force).then(
+      finish,
+      (error: unknown) => {
+        finish({
+          type: "failed",
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
+        throw error;
+      },
+    );
   }
-
   private async runLoop(
     messages: InputMessage[],
-    epoch: LoopEpoch,
+    isCurrentLoop: () => boolean,
     force?: true,
   ): Promise<SendResult> {
-    const isCurrentLoop = () => this.loop.isCurrent(epoch);
+    const core = this.core;
     if (!messages.length && !force) {
       const pending = await this.hasPendingContent();
       // Probing takes time, and a send that arrived while it ran owns the
@@ -973,21 +663,25 @@ export class Thread {
       if (!isCurrentLoop()) return { type: "aborted" };
       if (!pending) return { type: "empty" };
     }
-    let result = await this.runTurn(messages);
+    let result = await core.runTurn(messages);
     for (;;) {
+      if (!isCurrentLoop()) return { type: "aborted" };
       // A yield suspension is the thread's own, raised by `yieldGate`, and
       // must never escape: an owner would read it as an unclaimed stop.
       if (result.type === "suspended" && result.reason.kind === "yield") {
-        const resolved = await this.resolveYield(result.reason.value);
+        const resolved = await this.resolveYield(
+          result.reason.value,
+          isCurrentLoop,
+        );
+        if (!isCurrentLoop()) return { type: "aborted" };
         if (resolved.type === "settled") return resolved.result;
-        result = await this.runTurn(resolved.messages);
+        result = await core.runTurn(resolved.messages);
         continue;
       }
       if (result.type !== "completed") return result;
-
       const stopReason = result.stopReason;
       const next = await this.continuation(stopReason);
-      if (this.loop.isEpochAborting(epoch)) return { type: "aborted" };
+      if (!isCurrentLoop()) return { type: "aborted" };
       switch (next.type) {
         case "rest":
           return result;
@@ -995,7 +689,8 @@ export class Thread {
           return { type: "suspended", reason: next.reason };
         case "messages":
         case "flushed": {
-          const continued = await this.runTurn(next.messages);
+          const continued = await core.runTurn(next.messages);
+          if (!isCurrentLoop()) return { type: "aborted" };
           if (continued.type === "suspended" && next.type === "flushed") {
             return {
               type: "suspended",
@@ -1010,13 +705,13 @@ export class Thread {
       }
     }
   }
-
   /** The agent has yielded and settled; the supervisors decide whether that
    * stands. The first `accept`/`reject` wins outright — later hooks are not
    * consulted, since the decision is made — and `send-message` texts
    * concatenate. */
   private async resolveYield(
     value: YieldValue,
+    isCurrent: () => boolean,
   ): Promise<
     | { type: "settled"; result: SendResult }
     | { type: "resubmit"; messages: InputMessage[] }
@@ -1025,6 +720,7 @@ export class Thread {
     const texts: string[] = [];
     for (const hook of this.hooks.onYield) {
       const action = await hook(value);
+      if (!isCurrent()) return { type: "settled", result: { type: "aborted" } };
       if (action.type === "accept") {
         const response = action.resultPrefix
           ? `${action.resultPrefix}\n\n${rendered}`
@@ -1072,21 +768,21 @@ export class Thread {
      * out, `carry` (always non-empty) has to travel on the suspension. */
     | { type: "flushed"; messages: InputMessage[]; carry: string }
   > {
+    const isCurrent = this.currentLoopGuard();
     const planned = this.plannedContinuation(stopReason);
     if (planned.type === "suspend") {
       return { type: "suspended", reason: planned.reason };
     }
     if (planned.type === "rest") return { type: "rest" };
-
     if (planned.type === "messages") {
       return { type: "messages", messages: planned.messages };
     }
-
     // Both queues are flushed in full, in insertion order: anything enqueued
     // while this resolution is running lands in the next flush.
     const messages: InputMessage[] = [];
     for (const delivery of ["async", "next"] as const) {
       const flushed = await this.flushAtStop(delivery);
+      if (!isCurrent()) return { type: "rest" };
       if (flushed.type === "compact") {
         return {
           type: "suspended",
@@ -1129,7 +825,6 @@ export class Thread {
         return assertUnreachable(reason);
     }
   }
-
   /** Decided before anything is resolved or drained, because a stop that ends
    * the turn issues no request and the queues must not run their effects into
    * a message nothing is about to send. The supervisors' own injections are no
@@ -1148,11 +843,10 @@ export class Thread {
     ) {
       return { type: "queues" };
     }
-
     const action = this.hooks.onEndTurn?.({
       stopReason,
-      inputTokenCount: this.preflightTokenCount,
-      lastAssistantMessage: this.lastAssistantMessage,
+      inputTokenCount: this.core.preflightTokenCount,
+      lastAssistantMessage: this.core.lastAssistantMessage,
     });
     if (action?.type === "suspend") {
       return { type: "suspend", reason: action.reason };
@@ -1165,14 +859,12 @@ export class Thread {
     }
     return { type: "rest" };
   }
-
   async setThreadTitle(userMessage: string): Promise<void> {
     const profileForRequest: ProviderProfile = {
       ...this.context.profile,
       thinking: undefined,
       reasoning: undefined,
     };
-
     const request = this.context.getProvider(profileForRequest).forceToolUse({
       model: this.context.profile.fastModel,
       input: [
@@ -1181,7 +873,6 @@ export class Thread {
           text: `\
 The user has provided the following prompt:
 ${userMessage}
-
 Come up with a succinct thread title for this prompt. It must be a single line (no newlines) and a few words long (ideally around 40 characters or fewer).
 `,
           nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
@@ -1201,9 +892,8 @@ Come up with a succinct thread title for this prompt. It must be a single line (
       }
     }
   }
-
-  /** Swap in a fresh agent seeded with `seed`. The thread id, context manager,
-   * structured tool results and edl registers survive. */
+  /** Preserve thread identity, queues, yield/result and tracked context; discard
+   * conversation-local state; the structured-result display archive survives. */
   async reset({
     seed,
     archive,
@@ -1212,40 +902,52 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     archive:
       | { type: "compaction"; summary: string; chunkCount: number }
       | { type: "none" };
-  }): Promise<void> {
-    this.toolExecutor.abortAll();
-    await this.abortAgentTurn();
-    this.manager = createInferenceManager(this.context, this.toolSpecs);
-    this.preflightTokenCount = undefined;
-
-    if (archive.type === "compaction") {
-      this.threadLogger.recordCompaction({
-        summary: archive.summary,
-        chunkCount: archive.chunkCount,
-      });
+  }): Promise<ThreadCore> {
+    this.assertUsable();
+    if (this.yieldState?.tornDown)
+      throw new Error(
+        "This thread's container has been torn down. Cannot reset.",
+      );
+    if (this.resetting) throw new Error("Thread reset already in progress");
+    this.resetting = true;
+    this.interrupt();
+    this.cancelSubmission();
+    try {
+      await this.core.dispose();
+      this.assertUsable();
+      // Disposal is irreversible: cancellation prevents the caller's follow-up,
+      // but must not leave this thread pointing at a permanently disposed core.
+      if (archive.type === "compaction")
+        this.threadLogger.recordCompaction({
+          summary: archive.summary,
+          chunkCount: archive.chunkCount,
+        });
+      this.context.contextDelivery?.manager.reset();
+      const core = this.createCore();
+      this._core = core;
+      this.submission = undefined;
+      this.lastSubmissionResult = undefined;
+      core.pendingSeed = [...seed];
+      this.threadLogger.resetCursor();
+      this.hooks.onReset?.();
+      this.handleUpdate();
+      return core;
+    } finally {
+      this.resetting = false;
     }
-    this.threadLogger.resetCursor();
-
-    this.edlRegisters = { registers: new Map(), nextSavedId: 0 };
-    this.editedFilesThisTurn = [];
-    this.handleUpdate();
-    this.systemReminders = this.createReminderSupervisor();
-    this.hooks.onReset?.();
-
-    // The swap discards the message list the old seed was queued for, so it
-    // goes with it.
-    this.pendingSeed = seed;
   }
 
+  private resetting = false;
+  private assertUsable(): void {
+    if (this.destroyed) throw new Error("Thread has been destroyed");
+  }
   private destroyed = false;
-
   async destroy(): Promise<void> {
     if (this.destroyed) return;
     this.destroyed = true;
-
-    this.toolExecutor.abortAll();
-    await this.abortAgentTurn();
-
+    this.interrupt();
+    await this.core.dispose();
+    this.context.contextDelivery?.manager.destroy();
     this.settleResult({
       type: "aborted",
       reason: "thread destroyed before it yielded",

@@ -1,5 +1,6 @@
 export {
   type BeforeRequestDecision,
+  type LoopState,
   runAgentLoop,
   type ToolExecutor,
   type ToolOutcome,
@@ -137,8 +138,6 @@ export type { FileMutationSummary } from "./edl/types.ts";
 export { Emitter, type EventMap } from "./emitter.ts";
 export type { Logger } from "./logger.ts";
 export {
-  type LoopActivity,
-  type LoopEpoch,
   loopActiveTools,
   loopLabel,
   loopStreamingBlock,
@@ -273,6 +272,11 @@ export type {
   ThreadSendResult,
   YieldValue,
 } from "./thread-api.ts";
+export {
+  type ThreadContextDelivery,
+  ThreadCore,
+  type ThreadCoreCallbacks,
+} from "./thread-core.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {
   EndTurnAction,

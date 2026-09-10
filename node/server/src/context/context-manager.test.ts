@@ -9,7 +9,7 @@ import {
   type RelFilePath,
 } from "../utils/files.ts";
 import type { DiffUpdate, WholeFileUpdate } from "./context-manager.ts";
-import { ContextManager } from "./context-manager.ts";
+import { ContextManager, cloneContextManager } from "./context-manager.ts";
 
 vi.mock("../utils/pdf-pages.ts", () => ({
   getSummaryAsProviderContent: vi.fn().mockResolvedValue({
@@ -39,7 +39,7 @@ function createTestContextManager(files: Record<string, string>) {
     "/home" as HomeDir,
   );
 
-  return { cm, fileIO };
+  return { cm, fileIO, mockLogger };
 }
 
 const TEST_PATH = "/test/file.txt" as AbsFilePath;
@@ -51,6 +51,65 @@ const TEXT_FILE_TYPE = {
 };
 
 describe("ContextManager unit tests", () => {
+  it("full-history clones retain independent delivered baselines, not current disk content", async () => {
+    const { cm, fileIO, mockLogger } = createTestContextManager({
+      [TEST_PATH]: "delivered content\n",
+    });
+    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    await cm.getContextUpdate();
+    await fileIO.writeFile(TEST_PATH, "not delivered yet\n");
+    await cm.refreshPendingUpdates();
+    const clone = cloneContextManager(cm, {
+      logger: mockLogger,
+      fileIO,
+      cwd: "/test" as NvimCwd,
+      homeDir: "/home" as HomeDir,
+      delivery: "preserve",
+    });
+    expect(clone.files[TEST_PATH].agentView).toEqual({
+      type: "text",
+      content: "delivered content\n",
+    });
+    expect(clone.files[TEST_PATH].agentView).not.toBe(
+      cm.files[TEST_PATH].agentView,
+    );
+    expect(clone.getPendingUpdates()).toEqual(cm.getPendingUpdates());
+    expect(clone.getPendingUpdates()).not.toBe(cm.getPendingUpdates());
+    await cm.getContextUpdate();
+    const updates = await clone.getContextUpdate();
+    expect(updates[TEST_PATH].update).toMatchObject({
+      status: "ok",
+      value: { type: "diff" },
+    });
+    const update = updates[TEST_PATH].update;
+    if (update.status !== "ok" || update.value.type !== "diff")
+      throw new Error("Expected diff");
+    expect(update.value.patch).toContain("-delivered content");
+    expect(update.value.patch).toContain("+not delivered yet");
+    expect(await clone.getContextUpdate()).toEqual({});
+  });
+
+  it("truncated-history clones reseed delivered files", async () => {
+    const { cm, fileIO, mockLogger } = createTestContextManager({
+      [TEST_PATH]: "delivered content",
+    });
+    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    await cm.getContextUpdate();
+    const clone = cloneContextManager(cm, {
+      logger: mockLogger,
+      fileIO,
+      cwd: "/test" as NvimCwd,
+      homeDir: "/home" as HomeDir,
+      delivery: "reseed",
+    });
+    expect(clone.files[TEST_PATH].agentView).toBeUndefined();
+    expect((await clone.getContextUpdate())[TEST_PATH].update).toMatchObject({
+      status: "ok",
+      value: { type: "whole-file" },
+    });
+    expect(await cm.getContextUpdate()).toEqual({});
+  });
+
   it("addFileContext is idempotent for already-tracked files", async () => {
     const { cm } = createTestContextManager({
       [TEST_PATH]: "hello world",
@@ -755,6 +814,123 @@ describe("ContextManager - background poll", () => {
       expect(spy.mock.calls.length).toBeGreaterThanOrEqual(1);
 
       cm.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("ContextManager conversation delivery lifetime", () => {
+  it("reset replaces delivery but retains membership and prior delivery state", async () => {
+    const { cm } = createTestContextManager({ [TEST_PATH]: "content" });
+    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    await cm.getContextUpdate();
+    const files = cm.files;
+    const file = cm.files[TEST_PATH];
+    const delivery = cm.delivery;
+    const snapshot = structuredClone(delivery);
+
+    cm.reset();
+
+    expect(cm.files).toBe(files);
+    expect(cm.files[TEST_PATH]).toBe(file);
+    expect(cm.delivery).not.toBe(delivery);
+    expect(delivery).toEqual(snapshot);
+    expect(file.agentView).toBeUndefined();
+    expect((await cm.getContextUpdate())[TEST_PATH].update).toMatchObject({
+      status: "ok",
+      value: { type: "whole-file" },
+    });
+    expect(delivery).toEqual(snapshot);
+    cm.destroy();
+  });
+
+  it.each([
+    "reset",
+    "destroy",
+  ] as const)("ignores a pending file read after %s", async (operation) => {
+    const { cm, fileIO } = createTestContextManager({ [TEST_PATH]: "content" });
+    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    await cm.refreshPendingUpdates();
+    const delivery = cm.delivery;
+    const snapshot = structuredClone(delivery);
+    let finish!: (content: string) => void;
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    vi.spyOn(fileIO, "readFile").mockImplementationOnce(() => {
+      started();
+      return new Promise<string>((resolve) => {
+        finish = resolve;
+      });
+    });
+    const update = cm.getContextUpdate();
+    await reading;
+    cm[operation]();
+    finish("stale content");
+    expect(await update).toEqual({});
+    expect(delivery).toEqual(snapshot);
+    expect(cm.files[TEST_PATH].agentView).toBeUndefined();
+    cm.destroy();
+  });
+
+  it.each([
+    "reset",
+    "destroy",
+  ] as const)("does not publish a stale poll after %s", async (operation) => {
+    const { cm, fileIO } = createTestContextManager({ [TEST_PATH]: "content" });
+    cm.toolApplied(
+      TEST_PATH,
+      { type: "get-file", content: "content" },
+      TEXT_FILE_TYPE,
+    );
+    await cm.refreshPendingUpdates();
+    const delivery = cm.delivery;
+    const snapshot = structuredClone(delivery);
+    let finish!: (stat: undefined) => void;
+    vi.spyOn(fileIO, "stat").mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const refresh = cm.refreshPendingUpdates();
+    cm[operation]();
+    const onPending = vi.fn();
+    cm.on("pendingUpdatesChanged", onPending);
+    finish(undefined);
+    await refresh;
+    expect(delivery).toEqual(snapshot);
+    expect(onPending).not.toHaveBeenCalled();
+    expect(cm.getPendingUpdates()[TEST_PATH]?.update).not.toMatchObject({
+      status: "ok",
+      value: { type: "file-deleted" },
+    });
+    cm.destroy();
+  });
+
+  it("keeps a single timer across resets and stops it exactly once", () => {
+    vi.useFakeTimers();
+    try {
+      const cm = new ContextManager(
+        { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+        new InMemoryFileIO({}),
+        "/test" as NvimCwd,
+        "/home" as HomeDir,
+        {},
+        100,
+      );
+      cm.start();
+      cm.start();
+      cm.reset();
+      cm.reset();
+      cm.start();
+      expect(vi.getTimerCount()).toBe(1);
+      cm.destroy();
+      cm.destroy();
+      cm.start();
+      expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
     }

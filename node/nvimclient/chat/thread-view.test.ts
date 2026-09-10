@@ -1,10 +1,4 @@
-import type {
-  LoopActivity,
-  LoopEpoch,
-  RestResult,
-  SendResult,
-  ThreadLoopState,
-} from "@magenta/server";
+import type { LoopState, RestResult, ThreadLoopState } from "@magenta/server";
 import { describe, expect, it } from "vitest";
 import { type Line, NvimBuffer } from "../nvim/buffer.ts";
 import type { Row0Indexed } from "../nvim/window.ts";
@@ -13,14 +7,13 @@ import { withNvimClient } from "../test/preamble.ts";
 import { renderStatus } from "./thread-view.ts";
 
 async function renderStatusToString(
-  state: ThreadLoopState | Extract<LoopActivity, { type: "streaming" }>,
+  state: ThreadLoopState | Extract<LoopState, { type: "streaming" }>,
   lastTurnResult?: RestResult,
 ): Promise<string> {
   const loopState: ThreadLoopState =
     state.type === "streaming"
       ? {
           type: "running",
-          epoch: 1 as LoopEpoch,
           activity: state,
           aborting: false,
         }
@@ -56,16 +49,16 @@ async function renderStatusToString(
   return text;
 }
 
-/** The activities carry the submission they belong to; these render-only
- * tests never observe it. */
-const neverSettles = new Promise<SendResult>(() => {});
-
 describe("thread-view renderStatus streaming", () => {
   it("shows no waiting timer when last event was recent", async () => {
     const now = new Date();
     const text = await renderStatusToString({
       type: "streaming",
-      send: neverSettles,
+      aborting: false,
+      inFlight: {
+        promise: Promise.resolve({ type: "aborted" }),
+        abort: () => {},
+      },
       startedAt: now,
       lastEventTime: new Date(now.getTime() - 1000),
       block: undefined,
@@ -79,7 +72,11 @@ describe("thread-view renderStatus streaming", () => {
     const now = new Date();
     const text = await renderStatusToString({
       type: "streaming",
-      send: neverSettles,
+      aborting: false,
+      inFlight: {
+        promise: Promise.resolve({ type: "aborted" }),
+        abort: () => {},
+      },
       startedAt: new Date(now.getTime() - 4000),
       lastEventTime: new Date(now.getTime() - 4000),
       block: undefined,
@@ -93,7 +90,11 @@ describe("thread-view renderStatus streaming", () => {
     const now = new Date();
     const text = await renderStatusToString({
       type: "streaming",
-      send: neverSettles,
+      aborting: false,
+      inFlight: {
+        promise: Promise.resolve({ type: "aborted" }),
+        abort: () => {},
+      },
       startedAt: new Date(now.getTime() - 2000),
       lastEventTime: new Date(now.getTime() - 2000),
       block: undefined,
@@ -111,8 +112,7 @@ describe("thread-view renderStatus streaming", () => {
   it("renders the preparing activity", async () => {
     const text = await renderStatusToString({
       type: "running",
-      epoch: 1 as LoopEpoch,
-      activity: { type: "preparing" },
+      activity: { type: "preparing", aborting: false },
       aborting: false,
     });
     expect(text).toContain("Preparing...");
@@ -122,10 +122,13 @@ describe("thread-view renderStatus streaming", () => {
     const now = new Date();
     const text = await renderStatusToString({
       type: "running",
-      epoch: 1 as LoopEpoch,
       activity: {
         type: "streaming",
-        send: neverSettles,
+        aborting: false,
+        inFlight: {
+          promise: Promise.resolve({ type: "aborted" }),
+          abort: () => {},
+        },
         startedAt: now,
         lastEventTime: now,
         block: undefined,

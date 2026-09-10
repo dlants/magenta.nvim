@@ -10,7 +10,7 @@ import type {
 import {
   type CommentId,
   CommentStore,
-  CommentSupervisor,
+  type CommentSupervisor,
   type CommentUpdateEntry,
   type CompactionRunId,
   type ContextFiles,
@@ -18,9 +18,8 @@ import {
   cloneContextManager,
   composeSupervisors,
   extractPartialReplies,
-  FileContextSupervisor,
-  GitSupervisor,
-  GitTracker,
+  type FileContextSupervisor,
+  type GitSupervisor,
   type InputMessage,
   loadAgents,
   loopActiveTools,
@@ -35,10 +34,10 @@ import {
   resolveAsText,
   runSubmission,
   type Submission,
-  SystemInfoSupervisor,
   Thread,
   type ThreadCallbacks,
   ThreadCompactor,
+  type ThreadContextDelivery,
   type ThreadId,
   type ThreadSendResult,
   type ThreadType,
@@ -303,16 +302,13 @@ export class NvimThread {
   }
   public sandboxBypassed = false;
 
-  /** The three context trackers, wrapped as supervisors. They are durable —
-   * compaction swaps the agent, not the thread — and they own the two
-   * capabilities the agent reads synchronously (`contextTracker`,
-   * `commentStore`). */
-  public readonly fileSupervisor: FileContextSupervisor;
-  public readonly gitSupervisor: GitSupervisor;
-
-  get contextManager(): ContextManager {
-    return this.fileSupervisor.contextManager;
+  get fileSupervisor(): FileContextSupervisor {
+    return this.core.core.fileSupervisor!;
   }
+  get gitSupervisor(): GitSupervisor {
+    return this.core.core.gitSupervisor!;
+  }
+  public readonly contextManager: ContextManager;
 
   get agent(): NativeInferenceManager {
     return this.core.inferenceManager;
@@ -392,30 +388,27 @@ export class NvimThread {
     const cwd = isDocker ? env.cwd : context.cwd;
     const homeDir = isDocker ? env.homeDir : context.homeDir;
 
-    this.fileSupervisor = new FileContextSupervisor({
-      contextManager:
-        preBuilt?.contextManager ??
-        new ContextManager(
-          context.nvim.logger,
-          env.fileIO,
-          cwd,
-          homeDir,
-          context.initialFiles,
-          CONTEXT_MANAGER_POLL_INTERVAL_MS,
-        ),
-      onSent: (updates) =>
-        this.recordMessageViewState({ contextUpdates: updates }),
-    });
-    this.fileSupervisor.contextManager.start();
-
-    this.gitSupervisor = new GitSupervisor({
-      gitTracker: new GitTracker(
-        env.gitClient,
-        context.initialGitState,
+    this.contextManager =
+      preBuilt?.contextManager ??
+      new ContextManager(
         context.nvim.logger,
-      ),
-      onSent: (update) => this.recordMessageViewState({ gitUpdate: update }),
-    });
+        env.fileIO,
+        cwd,
+        homeDir,
+        context.initialFiles,
+        CONTEXT_MANAGER_POLL_INTERVAL_MS,
+      );
+    const contextDelivery: ThreadContextDelivery = preBuilt?.core.context
+      .contextDelivery ?? {
+      manager: this.contextManager,
+      initialGitState: context.initialGitState,
+    };
+    contextDelivery.onFilesSent = (updates) =>
+      this.recordMessageViewState({ contextUpdates: updates });
+    contextDelivery.onGitSent = (update) =>
+      this.recordMessageViewState({ gitUpdate: update });
+    contextDelivery.onCommentsSent = (entries) =>
+      this.recordMessageViewState({ commentUpdates: entries });
 
     const commentStore = preBuilt
       ? preBuilt.commentStore
@@ -430,22 +423,16 @@ export class NvimThread {
         commentStore,
         () => this.commentActivity(),
       );
+      const thread = this;
       this.comments = {
         store: commentStore,
         controller,
-        supervisor: new CommentSupervisor({
-          store: commentStore,
-          // Extmark positions are the comment locations the store reports, so
-          // they have to be current before *every* request, not just the
-          // opening one.
-          beforeRead: async () => {
-            if (controller.hasComments()) {
-              await controller.refresh();
-            }
-          },
-          onSent: (entries) =>
-            this.recordMessageViewState({ commentUpdates: entries }),
-        }),
+        get supervisor() {
+          return thread.core.core.commentSupervisor!;
+        },
+      };
+      contextDelivery.beforeReadComments = async () => {
+        if (controller.hasComments()) await controller.refresh();
       };
     }
 
@@ -461,7 +448,8 @@ export class NvimThread {
           cwd,
           homeDir,
           threadType,
-          contextTracker: this.fileSupervisor.contextManager,
+          contextTracker: this.contextManager,
+          contextDelivery,
           commentStore: this.comments?.store,
           ...(context.subagentConfig
             ? { subagentConfig: context.subagentConfig }
@@ -519,27 +507,8 @@ export class NvimThread {
       this.contextManager.on(event, () => this.onCoreUpdate());
     }
 
-    // The compact thread's content is composed exactly by the compactor, so it
-    // gets no preamble; a forked thread starts from a log that already carries
-    // one. The trackers lead, so no injection can follow a compaction in the
-    // plan. Built once: supervisor state is per-instance, and the composed
-    // list is rebuilt on every hook consultation.
-    this.contextSupervisors = [
-      this.gitSupervisor,
-      this.fileSupervisor,
-      ...(this.comments ? [this.comments.supervisor] : []),
-      ...(this.core.threadType === "compact"
-        ? []
-        : [
-            new SystemInfoSupervisor(this.core.systemInfo, {
-              alreadyInjected: this.core.getProviderMessages().length > 0,
-            }),
-          ]),
-    ];
-
     this.core.hooks = composeSupervisors(() => [
       new MaxTokensSupervisor(),
-      ...this.contextSupervisors,
       ...this.supervisors,
     ]);
 
@@ -637,11 +606,6 @@ export class NvimThread {
     }
     return { type: "thinking" };
   }
-
-  /** Built once in the constructor rather than per hook invocation: the
-   * supervisor tracks for itself whether it has already injected the preamble,
-   * so a fresh instance would inject it on every request. */
-  private readonly contextSupervisors: ThreadSupervisor[];
 
   /** Attach a tracker's structured record to the message its injection is
    * about to produce. */
@@ -821,25 +785,30 @@ export class NvimThread {
     const sourceCore = sourceThread.core;
     const profile = sourceThread.context.profile;
     const sourceCoreState = sourceCore;
+    const preserveDelivery =
+      !sourceCore.isBusy &&
+      nativeMessageIdx === sourceCore.inferenceManager.getNativeMessageIdx();
+    const initialGitState = preserveDelivery
+      ? structuredClone(sourceThread.gitSupervisor.gitTracker.getAgentView())
+      : undefined;
 
     // Independent tracked-file state for the fork; comments are root-only and
     // are deliberately not cloned.
-    const contextManager = await cloneContextManager(
-      sourceThread.contextManager,
-      {
-        logger: nvim.logger,
-        fileIO: environment.fileIO,
-        cwd: environment.cwd,
-        homeDir: environment.homeDir,
-        pollIntervalMs: CONTEXT_MANAGER_POLL_INTERVAL_MS,
-      },
-    );
+    const contextManager = cloneContextManager(sourceThread.contextManager, {
+      logger: nvim.logger,
+      fileIO: environment.fileIO,
+      cwd: environment.cwd,
+      homeDir: environment.homeDir,
+      pollIntervalMs: CONTEXT_MANAGER_POLL_INTERVAL_MS,
+      delivery: preserveDelivery ? "preserve" : "reseed",
+    });
     const threadType = sourceCoreState.threadType;
     const commentStore =
       threadType === "root" || threadType === "docker_root"
         ? new CommentStore()
         : undefined;
 
+    // No awaits above: native history and delivery must describe the same instant.
     const core = await Thread.clone({
       sourceThread: sourceCore,
       newId: newThreadId,
@@ -851,6 +820,10 @@ export class NvimThread {
         homeDir: environment.homeDir,
         threadType,
         contextTracker: contextManager,
+        contextDelivery: {
+          manager: contextManager,
+          initialGitState,
+        },
         commentStore,
         ...(sourceThread.context.subagentConfig
           ? { subagentConfig: sourceThread.context.subagentConfig }
@@ -904,7 +877,7 @@ export class NvimThread {
         getDisplayWidth,
         environment,
         systemInfo: sourceCoreState.systemInfo,
-        initialGitState: sourceThread.gitSupervisor.gitTracker.getAgentView(),
+        initialGitState,
         ...(sourceThread.context.subagentConfig
           ? { subagentConfig: sourceThread.context.subagentConfig }
           : {}),
@@ -956,9 +929,8 @@ export class NvimThread {
       this.animationTimer = undefined;
     }
 
-    await this.comments?.controller.destroy();
     await this.core.destroy();
-    this.fileSupervisor.destroy();
+    await this.comments?.controller.destroy();
   }
 
   get loopState(): ThreadLoopState {

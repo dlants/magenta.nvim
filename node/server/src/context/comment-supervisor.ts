@@ -17,18 +17,24 @@ export class CommentSupervisor implements ThreadSupervisor {
     | ((entries: CommentUpdateEntry[]) => void)
     | undefined;
 
+  private readonly isCurrent: () => boolean;
+
   constructor(args: {
     store: CommentStore;
+    isCurrent?: () => boolean;
     beforeRead: () => Promise<void>;
     onSent?: (entries: CommentUpdateEntry[]) => void;
   }) {
     this.store = args.store;
+    this.isCurrent = args.isCurrent ?? (() => true);
     this.beforeRead = args.beforeRead;
     this.onSent = args.onSent;
   }
 
   async onBeforeRequest(_context: RequestContext): Promise<SupervisorAction> {
+    if (!this.isCurrent()) return { type: "none" };
     await this.beforeRead();
+    if (!this.isCurrent()) return { type: "none" };
     const text = this.store.getPendingUpdate();
     if (text === undefined) return { type: "none" };
     const entries = this.store.commitPending();
@@ -39,6 +45,6 @@ export class CommentSupervisor implements ThreadSupervisor {
   /** Deliberately skips `beforeRead`: positions only matter for content that
    * is actually going out, and the probe must stay cheap. */
   async hasPendingContent(): Promise<boolean> {
-    return this.store.hasPendingUpdates();
+    return this.isCurrent() && this.store.hasPendingUpdates();
   }
 }
