@@ -1,4 +1,5 @@
-import type { InputMessage } from "../thread.ts";
+import type { AgentInput } from "../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 
 /** When a parsed submission is delivered.
  * - `now`: abort whatever is running and send immediately
@@ -17,8 +18,12 @@ export function pendingMessage(text: string): PendingMessage {
 }
 
 /** The display string for a queued entry whose commands have not run yet. */
-export function renderPending(message: PendingMessage): string {
-  return message;
+export function renderPending(message: PendingMessage | AgentInput): string {
+  return typeof message === "string"
+    ? message
+    : message.type === "text"
+      ? message.text
+      : `[${message.type}]`;
 }
 
 /** When a submission should be delivered, and what to deliver. */
@@ -29,7 +34,7 @@ export type Submission = {
 
 export type ResolvedSubmission = {
   compact: boolean;
-  messages: InputMessage[];
+  messages: AgentInput[];
   reminders: string[];
 };
 
@@ -37,6 +42,7 @@ export function compactPrompt(
   resolved: ResolvedSubmission,
 ): string | undefined {
   const text = resolved.messages
+    .filter((m) => m.type === "text")
     .map((m) => m.text)
     .join("\n")
     .trim();
@@ -51,7 +57,15 @@ export type ResolveSubmission = (
 export const resolveAsText: ResolveSubmission = (message) =>
   Promise.resolve({
     compact: false,
-    messages: message.length ? [{ type: "user", text: message }] : [],
+    messages: message.length
+      ? [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: message,
+          },
+        ]
+      : [],
     reminders: [],
   });
 

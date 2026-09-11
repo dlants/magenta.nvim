@@ -1,6 +1,7 @@
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 import type { ToolName, ToolRequestId } from "@magenta/server";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "@magenta/server";
 import { expect, it } from "vitest";
 import { BUILTIN_SDK_PATH } from "../options.ts";
 import { pollForToolResult, withDriver } from "../test/preamble.ts";
@@ -201,7 +202,11 @@ it("does not resolve a script's createThread() await on a subagent error", async
       // A failed thread is parked, with its log already rolled back, so a
       // fresh send is all the recovery it needs.
       void threadWrapper.thread.core.send([
-        { type: "user", text: "work on thing" },
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "work on thing",
+        },
       ]);
 
       const retryStream = await driver.mockAnthropic.awaitPendingStream({

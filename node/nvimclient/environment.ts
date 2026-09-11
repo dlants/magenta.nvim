@@ -98,7 +98,6 @@ export function createLocalEnvironment({
       "file-io",
       "scripts",
       "nvim",
-      "comments",
     ]),
     environmentConfig: { type: "local" },
   };
@@ -139,9 +138,7 @@ export async function createDockerEnvironment({
     lspClient,
     cwd: resolvedCwd as NvimCwd,
     homeDir: resolvedHome as HomeDir,
-    // comments live in the host neovim, not in the execution environment, so a
-    // docker root thread still has them
-    availableCapabilities: new Set(["file-io", "shell", "threads", "comments"]),
+    availableCapabilities: new Set(["file-io", "shell", "threads"]),
     environmentConfig: { type: "docker", container, cwd: resolvedCwd },
   };
 }

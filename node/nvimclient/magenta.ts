@@ -23,8 +23,6 @@ import { Lsp } from "./capabilities/lsp.ts";
 import { StraceUnavailableError } from "./capabilities/strace.ts";
 import { Chat } from "./chat/chat.ts";
 import { CommandRegistry } from "./chat/commands/registry.ts";
-import type { CommentController } from "./comments/comment-controller.ts";
-import { CommentInput } from "./comments/comment-input.ts";
 import {
   type BufNr,
   type Line,
@@ -88,36 +86,6 @@ const MAGENTA_BUF_DELETE = "magentaBufDelete";
 const MAGENTA_OPEN_ARCHIVED_THREAD_LOG = "magentaOpenArchivedThreadLog";
 const MAGENTA_CLIPBOARD_IMAGE_PASTE = "magentaClipboardImagePaste";
 const MAGENTA_CLIPBOARD_TEXT_PASTE = "magentaClipboardTextPaste";
-const MAGENTA_COMMENT = "magentaComment";
-const MAGENTA_COMMENT_DELETE = "magentaCommentDelete";
-const MAGENTA_COMMENT_JUMP = "magentaCommentJump";
-const MAGENTA_COMMENT_INPUT = "magentaCommentInput";
-
-/** The lua half sends exactly one table per comment notification, with the
- * rows and handles already in the form node uses. Declaring the payloads here
- * keeps the casting to one place instead of one double-cast per handler. */
-type CommentNotificationPayloads = {
-  [MAGENTA_COMMENT]: {
-    bufnr: BufNr;
-    winid: WindowId;
-    startRow: Row0Indexed;
-    endRow: Row0Indexed;
-  };
-  [MAGENTA_COMMENT_DELETE]: { bufnr: BufNr; row: Row0Indexed };
-  [MAGENTA_COMMENT_JUMP]: {
-    bufnr: BufNr;
-    row: Row0Indexed;
-    direction: "next" | "prev";
-  };
-  [MAGENTA_COMMENT_INPUT]: { action: "submit" | "cancel" };
-};
-
-function commentPayload<K extends keyof CommentNotificationPayloads>(
-  _event: K,
-  args: unknown[],
-): CommentNotificationPayloads[K] {
-  return args[0] as CommentNotificationPayloads[K];
-}
 
 function decodeArchivedThreadLogNotification(args: unknown[]): ThreadId {
   const payload = args[0];
@@ -147,7 +115,6 @@ export class Magenta {
   public commandRegistry: CommandRegistry;
   public optionsLoader: DynamicOptionsLoader;
   public activeBuffers: { displayBuffer: NvimBuffer; inputBuffer: NvimBuffer };
-  private commentInput: CommentInput | undefined;
   private suppressDispatchRender = false;
 
   constructor(
@@ -657,48 +624,6 @@ export class Magenta {
         );
       }
     }
-
-    await this.syncCommentVisibility();
-  }
-
-  /** Comments live in the user's own buffers, so only the active root thread's
-   * decorations may be stamped. Overview and archive views leave the current
-   * visibility alone: they don't select a different conversation, they just
-   * stop displaying one. */
-  private async syncCommentVisibility(): Promise<void> {
-    if (this.chat.state.state !== "thread-selected") return;
-
-    const activeRoot = this.chat.getActiveRootThreadOrUndefined();
-    if (!activeRoot) return;
-
-    // Hide first: the render namespace is shared, so showing the active thread
-    // before clearing the others would wipe the stamps we just made in any
-    // buffer both threads comment on.
-    const rootThreads = Object.values(this.chat.threadWrappers).flatMap(
-      (wrapper) =>
-        wrapper?.state === "initialized" && wrapper.thread.isRootThread()
-          ? [wrapper.thread]
-          : [],
-    );
-
-    for (const thread of rootThreads) {
-      if (thread.id === activeRoot.id) continue;
-      try {
-        await thread.comments.controller.hide();
-      } catch (e) {
-        this.nvim.logger.error(
-          `Error hiding comments for thread ${thread.id}: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
-    }
-
-    try {
-      await activeRoot.comments.controller.show();
-    } catch (e) {
-      this.nvim.logger.error(
-        `Error showing comments for thread ${activeRoot.id}: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
   }
 
   async command(input: string): Promise<void> {
@@ -750,7 +675,7 @@ export class Magenta {
             continue;
           }
 
-          thread.contextManager.addFileContext(
+          thread.fileSupervisor.addFileContext(
             absFilePath,
             relFilePath,
             fileTypeInfo,
@@ -954,7 +879,6 @@ ${lines.join("\n")}
    */
   async onBufEnter(bufNr: BufNr, winId: WindowId): Promise<void> {
     if (this.handlingBufEnter) return;
-    await this.stampCommentsOnBufEnter(bufNr);
     if (this.sidebar.state.state !== "visible") return;
 
     const { displayWindow, inputWindow } = this.sidebar.state;
@@ -976,121 +900,8 @@ ${lines.join("\n")}
     }
   }
 
-  /** The comment controller of the active root thread. Root threads own their
-   * comments: the store they hold is the one the agent drains. */
-  getCommentController(): CommentController {
-    return this.chat.getActiveRootThread().comments.controller;
-  }
-
-  /** A buffer that comes back into view may have been hidden while a different
-   * root thread was active, so re-stamp the active thread's comments on it. */
-  private async stampCommentsOnBufEnter(bufNr: BufNr): Promise<void> {
-    if (this.chat.state.state !== "thread-selected") return;
-    const activeRoot = this.chat.getActiveRootThreadOrUndefined();
-    if (!activeRoot?.comments.controller.hasComments()) return;
-    await activeRoot.comments.controller.refreshBuffer(bufNr);
-  }
-
-  /** `<leader>mc`: open the authoring float over the cursor line or selection. */
-  async onComment({
-    bufnr,
-    winid,
-    startRow,
-    endRow,
-  }: {
-    bufnr: BufNr;
-    winid: WindowId;
-    startRow: Row0Indexed;
-    endRow: Row0Indexed;
-  }): Promise<void> {
-    if (this.commentInput) {
-      await this.commentInput.cancel();
-      this.commentInput = undefined;
-    }
-    this.commentInput = await CommentInput.open({
-      nvim: this.nvim,
-      controller: this.getCommentController(),
-      bufnr,
-      winid,
-      rows: { start: startRow, end: endRow },
-    });
-  }
-
-  async onCommentInput(action: "submit" | "cancel"): Promise<void> {
-    const input = this.commentInput;
-    if (!input) return;
-    this.commentInput = undefined;
-    if (action === "cancel") {
-      await input.cancel();
-      return;
-    }
-    const commentId = await input.submit();
-    if (commentId) {
-      await this.nvim.call("nvim_exec_lua", [
-        `require("magenta.keymaps").set_comment_navigation_keymaps(...)`,
-        [input.target.bufnr],
-      ]);
-    }
-
-    // An idle thread has no upcoming request to piggyback the comment on, so
-    // send an empty turn: CommentSupervisor injects the pending update.
-    const thread = this.chat.getActiveRootThreadOrUndefined();
-    if (commentId && thread && !thread.core.isBusy) {
-      this.dispatch({
-        type: "thread-msg",
-        id: thread.id,
-        msg: { type: "send-message", messages: [] },
-      });
-    }
-  }
-
-  /** `<leader>mD`: delete the comment under the cursor. */
-  async onCommentDelete({
-    bufnr,
-    row,
-  }: {
-    bufnr: BufNr;
-    row: Row0Indexed;
-  }): Promise<void> {
-    const controller = this.getCommentController();
-    const id = await controller.at(bufnr, row);
-    if (id) {
-      await controller.deleteComment(id);
-    }
-  }
-
-  /** `]c` / `[c`: jump between the comments in a buffer. */
-  async onCommentJump({
-    bufnr,
-    row,
-    direction,
-  }: {
-    bufnr: BufNr;
-    row: Row0Indexed;
-    direction: "next" | "prev";
-  }): Promise<void> {
-    const extents = await this.getCommentController().extentsInBuffer(bufnr);
-    const target =
-      direction === "next"
-        ? extents.find((e) => e.extent.startRow > row)
-        : [...extents].reverse().find((e) => e.extent.startRow < row);
-    if (target) {
-      await this.nvim.call("nvim_win_set_cursor", [
-        0,
-        [target.extent.startRow + 1, 0],
-      ]);
-    }
-  }
-
   /** Recover or unregister the view identity associated with a deleted buffer. */
   async onBufDelete(bufNr: BufNr): Promise<void> {
-    // A comment cannot outlive its buffer, and every root thread has to hear
-    // about it — not just the active one.
-    for (const wrapper of Object.values(this.chat.threadWrappers)) {
-      if (wrapper.state === "initialized") {
-        await wrapper.thread.comments?.controller.closeBuffer(bufNr);
-      }
-    }
     const bufInfo = this.bufferManager.lookupBuffer(bufNr);
     if (!bufInfo) return;
 
@@ -1426,40 +1237,6 @@ ${lines.join("\n")}
         }
       },
     );
-    nvim.onNotification(MAGENTA_COMMENT, async (args) => {
-      try {
-        await getMagenta().onComment(commentPayload(MAGENTA_COMMENT, args));
-      } catch (err) {
-        notifyErr(nvim, "comment", err);
-      }
-    });
-    nvim.onNotification(MAGENTA_COMMENT_INPUT, async (args) => {
-      try {
-        await getMagenta().onCommentInput(
-          commentPayload(MAGENTA_COMMENT_INPUT, args).action,
-        );
-      } catch (err) {
-        notifyErr(nvim, "comment input", err);
-      }
-    });
-    nvim.onNotification(MAGENTA_COMMENT_DELETE, async (args) => {
-      try {
-        await getMagenta().onCommentDelete(
-          commentPayload(MAGENTA_COMMENT_DELETE, args),
-        );
-      } catch (err) {
-        notifyErr(nvim, "comment delete", err);
-      }
-    });
-    nvim.onNotification(MAGENTA_COMMENT_JUMP, async (args) => {
-      try {
-        await getMagenta().onCommentJump(
-          commentPayload(MAGENTA_COMMENT_JUMP, args),
-        );
-      } catch (err) {
-        notifyErr(nvim, "comment jump", err);
-      }
-    });
     nvim.onNotification(MAGENTA_BUF_DELETE, async (args) => {
       try {
         const data = (args as unknown as { bufnr: number }[])[0];

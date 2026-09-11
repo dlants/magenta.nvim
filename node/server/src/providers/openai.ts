@@ -37,6 +37,7 @@ import { getRetryDelay, MAX_RETRY_DURATION } from "./inference-shared.ts";
 import { OpenAIInferenceManager } from "./openai-inference.ts";
 import {
   type AgentInput,
+  type CreateInferenceManagerOptions,
   type InferenceOptions,
   type NativeInferenceManager,
   type Provider,
@@ -770,7 +771,10 @@ export class OpenAIProvider implements Provider {
     };
   }
 
-  createInferenceManager(options: InferenceOptions): NativeInferenceManager {
+  createInferenceManager(
+    input: CreateInferenceManagerOptions,
+  ): NativeInferenceManager {
+    const options = openaiInferenceOptions(input);
     if (this.authType === "chatgpt") {
       assertChatGPTModelSupported(options.model);
     }
@@ -785,3 +789,18 @@ export class OpenAIProvider implements Provider {
 }
 
 export type { StopReason };
+
+export function openaiInferenceOptions({
+  profile,
+  systemPrompt,
+  tools,
+}: CreateInferenceManagerOptions): InferenceOptions {
+  return {
+    model: profile.model,
+    systemPrompt,
+    tools,
+    ...(profile.reasoning
+      ? { config: { type: "reasoning", reasoning: profile.reasoning } as const }
+      : {}),
+  };
+}

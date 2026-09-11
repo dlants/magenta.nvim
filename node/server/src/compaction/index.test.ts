@@ -17,7 +17,13 @@ const compactStart = () =>
 describe("compaction generation ownership", () => {
   it("settles a busy turn before taking the compaction snapshot", async () => {
     const { core: thread, mockClient } = createAgentWithMock();
-    const previous = thread.send([{ type: "user", text: "work" }]);
+    const previous = thread.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "work",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
     thread.callbacks.resolve = async () => ({
@@ -175,7 +181,13 @@ describe("compaction generation ownership", () => {
     await entered.promise;
     if (action === "reset")
       await thread.reset({
-        seed: [{ type: "user", text: "newer seed" }],
+        seed: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: "newer seed",
+          },
+        ],
         archive: { type: "none" },
       });
     else if (action === "abort") await thread.abort();
@@ -323,7 +335,13 @@ it.each([
     uniqueThreadId("compact-parent-destroy"),
   );
   if (action === "destroy-after-yield") {
-    const sent = thread.send([{ type: "user", text: "yield" }]);
+    const sent = thread.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "yield",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(
       "prior-yield" as ToolRequestId,

@@ -1,7 +1,6 @@
 import type { JSONSchemaType } from "openai/lib/jsonschema.mjs";
 import type { AgentContext } from "./agent.ts";
 import type { AgentsMap } from "./agents/agents.ts";
-import type { ContextTracker } from "./capabilities/context-tracker.ts";
 import type { FileIO } from "./capabilities/file-io.ts";
 import type { GitClient } from "./capabilities/git-client.ts";
 import type { LspClient } from "./capabilities/lsp-client.ts";
@@ -10,11 +9,11 @@ import type { ScriptRunner } from "./capabilities/script-runner.ts";
 import type { Shell } from "./capabilities/shell.ts";
 import type { ThreadManager } from "./capabilities/thread-manager.ts";
 import type { SubagentConfig, ThreadId, ThreadType } from "./chat-types.ts";
-import type { CommentStore } from "./context/comment-store.ts";
 import type { EdlRegisters } from "./edl/index.ts";
 import type { ThreadLoopState } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
 import type {
+  AgentInput,
   NativeInferenceManager,
   NativeMessageIdx,
   Provider,
@@ -29,9 +28,9 @@ import {
   type Delivery,
   type PendingMessage,
   parseCompact,
-  pendingMessage,
   type ResolveSubmission,
 } from "./submission/index.ts";
+import { buildClonedFiles, type Files } from "./supervisors/file-supervisor.ts";
 import type {
   AgentRequestContext,
   OnUpdate,
@@ -47,18 +46,13 @@ import type {
 import { renderYieldValue } from "./thread-api.ts";
 import { type ThreadContextDelivery, ThreadCore } from "./thread-core.ts";
 
-export {
-  createInferenceManager,
-  threadToolSpecs,
-  toAgentInput,
-} from "./thread-core.ts";
-
 import { type ForkProvenance, ThreadLogger } from "./thread-logger.ts";
 import type { RequestAction, SuspendReason } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
 import type { MCPToolManager as MCPToolManagerImpl } from "./tools/mcp/manager.ts";
 import * as ThreadTitle from "./tools/thread-title.ts";
 import type { ToolCapability } from "./tools/tool-registry.ts";
+import { getToolSpecs } from "./tools/toolManager.ts";
 import { assertUnreachable } from "./utils/assertUnreachable.ts";
 import { Defer } from "./utils/async.ts";
 import type { HomeDir, NvimCwd } from "./utils/files.ts";
@@ -70,10 +64,11 @@ export type YieldState = {
 export type EnvironmentConfig =
   | { type: "local"; cwd?: NvimCwd }
   | { type: "docker"; container: string; cwd: string };
+
 export interface ThreadContext extends AgentContext {
   profile: ProviderProfile;
   subagentConfig?: SubagentConfig;
-  getProvider: (profile: ProviderProfile) => Provider;
+  provider: Provider;
   yieldSchema?: JSONSchemaType;
   cwd: NvimCwd;
   homeDir: HomeDir;
@@ -94,39 +89,23 @@ export interface ThreadContext extends AgentContext {
   maxConcurrentSubagents: number;
   maxConcurrentFastSubagents: number;
   getAgents: () => AgentsMap;
-  contextTracker: ContextTracker;
-  commentStore?: CommentStore | undefined;
   contextDelivery?: ThreadContextDelivery;
 }
 export type ThreadArchiveOptions = {
+  forkedFrom?: ForkProvenance;
   baseDir?: string;
   scriptName?: string;
 };
-export type ThreadInit =
-  | { type: "fresh" }
-  | {
-      type: "clone";
-      sourceManager: NativeInferenceManager;
-      nativeMessageIdx: NativeMessageIdx;
-      provenance: ForkProvenance;
-      edlRegisters: EdlRegisters;
-    };
 type DeferredDelivery = "async" | "next";
 /** The result of draining one queue: content for the next request, or a
  * compaction the flush ran into — never both. */
 type FlushedQueue =
-  | { type: "messages"; messages: InputMessage[] }
+  | { type: "messages"; messages: AgentInput[] }
   | { type: "compact"; nextPrompt: string | undefined };
 export type ThreadCallbacks = {
   onUpdate: OnUpdate;
   resolve: ResolveSubmission;
 };
-/** One piece of content a caller hands the thread. `system` is the owner's
- * own voice — a supervisor nudge, a tool-driven follow-up — as distinct from
- * text the user typed. */
-export type InputMessage =
-  | { type: "user"; text: string }
-  | { type: "system"; text: string };
 /** Stable identity, submission queues, yield contract and archive across
  * replaceable conversation generations. */
 export class Thread {
@@ -189,10 +168,9 @@ export class Thread {
     public id: ThreadId,
     public readonly context: ThreadContext,
     public callbacks: ThreadCallbacks,
-    init: ThreadInit = { type: "fresh" },
     private archiveOptions: ThreadArchiveOptions = {},
+    core?: ThreadCore,
   ) {
-    const forkProvenance = init.type === "clone" ? init.provenance : undefined;
     this.threadLogger = new ThreadLogger(
       id,
       context.threadType,
@@ -206,17 +184,37 @@ export class Thread {
           ? { scriptName: archiveOptions.scriptName }
           : {}),
         cwd: context.cwd,
-        ...(forkProvenance ? { forkedFrom: forkProvenance } : {}),
+        ...(archiveOptions.forkedFrom
+          ? { forkedFrom: archiveOptions.forkedFrom }
+          : {}),
       },
     );
-    this._core = this.createCore(init);
-    context.contextDelivery?.manager.start();
+    this._core = core ?? this.createCore();
   }
 
-  private createCore(init: ThreadInit = { type: "fresh" }): ThreadCore {
+  private createCore(initialFiles?: Files): ThreadCore {
+    const context = this.context;
+    const toolSpecs = getToolSpecs(
+      context.threadType,
+      context.mcpToolManager,
+      context.availableCapabilities,
+      context.getAgents(),
+      context.subagentConfig,
+      context.yieldSchema,
+      context.getScriptRunner?.()?.getScriptCatalog(),
+      context.subagentDockerfile,
+    );
+    const manager = context.provider.createInferenceManager({
+      profile: context.profile,
+      systemPrompt: context.systemPrompt,
+      tools: toolSpecs,
+      ...(context.subagentConfig?.effort
+        ? { effortOverride: context.subagentConfig.effort }
+        : {}),
+    });
     return new ThreadCore(
       this.id,
-      this.context,
+      context,
       {
         onUpdate: () => this.handleUpdate(),
         getHooks: () => this.hooks,
@@ -225,7 +223,10 @@ export class Thread {
         },
         flushQueue: (ctx) => this.queueFlushAction(ctx),
       },
-      init,
+      manager,
+      toolSpecs,
+      undefined,
+      initialFiles,
     );
   }
 
@@ -237,24 +238,33 @@ export class Thread {
     callbacks: ThreadCallbacks;
   }): Promise<Thread> {
     const { sourceThread, newId, nativeMessageIdx, context, callbacks } = args;
+    const core = ThreadCore.clone({
+      source: sourceThread.core,
+      id: newId,
+      context,
+      nativeMessageIdx,
+      sourceBusy: sourceThread.isBusy,
+      callbacks: {
+        onUpdate: () => cloned.handleUpdate(),
+        getHooks: () => cloned.hooks,
+        onStructuredResult: (id, result) => {
+          cloned.structuredToolResults.set(id, result);
+        },
+        flushQueue: (ctx) => cloned.queueFlushAction(ctx),
+      },
+    });
     const cloned = new Thread(
       newId,
       context,
       callbacks,
       {
-        type: "clone",
-        sourceManager: sourceThread.inferenceManager,
-        nativeMessageIdx,
-        provenance: {
+        ...sourceThread.archiveOptions,
+        forkedFrom: {
           fromThreadId: sourceThread.id,
           nativeMessageIdx,
         },
-        edlRegisters: {
-          registers: new Map(sourceThread.edlRegisters.registers),
-          nextSavedId: sourceThread.edlRegisters.nextSavedId,
-        },
       },
-      sourceThread.archiveOptions,
+      core,
     );
     for (const [id, structured] of sourceThread.structuredToolResults) {
       cloned.structuredToolResults.set(id, structuredClone(structured));
@@ -321,10 +331,10 @@ export class Thread {
   /** Seed content belongs to the conversation it will lead, not to the
    * stable thread. Reset supplies the replacement conversation's seed. */
 
-  get pendingTurnContent(): ReadonlyArray<InputMessage> {
+  get pendingTurnContent(): ReadonlyArray<AgentInput> {
     return this.core.pendingSeed;
   }
-  prependToNextTurn(messages: InputMessage[]): void {
+  prependToNextTurn(messages: AgentInput[]): void {
     this.core.pendingSeed = [...this.core.pendingSeed, ...messages];
   }
   async awaitArchiveFlush(): Promise<void> {
@@ -397,23 +407,23 @@ export class Thread {
     return this.sendMessages(resolved.messages);
   }
   /** Flushed in full when the next provider request is issued (@async). */
-  private nextRequestQueue: PendingMessage[] = [];
+  private nextRequestQueue: (PendingMessage | AgentInput)[] = [];
   /** Flushed in full the next time the thread comes to rest (@next). */
-  private nextStopQueue: PendingMessage[] = [];
+  private nextStopQueue: (PendingMessage | AgentInput)[] = [];
   get queued(): {
-    async: ReadonlyArray<PendingMessage>;
-    next: ReadonlyArray<PendingMessage>;
+    async: ReadonlyArray<PendingMessage | AgentInput>;
+    next: ReadonlyArray<PendingMessage | AgentInput>;
   } {
     return { async: this.nextRequestQueue, next: this.nextStopQueue };
   }
   get queuedCount(): number {
     return this.nextRequestQueue.length + this.nextStopQueue.length;
   }
-  private queue(delivery: DeferredDelivery): PendingMessage[] {
+  private queue(delivery: DeferredDelivery): (PendingMessage | AgentInput)[] {
     return delivery === "async" ? this.nextRequestQueue : this.nextStopQueue;
   }
   private enqueue(
-    messages: PendingMessage[],
+    messages: (PendingMessage | AgentInput)[],
     delivery: DeferredDelivery,
   ): void {
     this.queue(delivery).push(...messages);
@@ -448,7 +458,7 @@ export class Thread {
   private async flushAtStop(delivery: DeferredDelivery): Promise<FlushedQueue> {
     const isCurrent = this.currentLoopGuard();
     const count = this.queue(delivery).length;
-    const messages: InputMessage[] = [];
+    const messages: AgentInput[] = [];
     for (let i = 0; i < count; i++) {
       const entry = this.queue(delivery).shift();
       if (entry === undefined) break;
@@ -460,6 +470,7 @@ export class Thread {
           type: "compact",
           nextPrompt:
             [...messages, ...resolved.messages]
+              .filter((m) => m.type === "text")
               .map((m) => m.text)
               .join("\n")
               .trim() || undefined,
@@ -474,14 +485,14 @@ export class Thread {
    * hand the transcript over from — so it is detected before resolution and
    * genuinely not delivered: it and everything behind it move to the `next`
    * queue, where the following stop picks them up. */
-  private async flushMidTurn(): Promise<InputMessage[]> {
+  private async flushMidTurn(): Promise<AgentInput[]> {
     const isCurrent = this.currentLoopGuard();
     const count = this.nextRequestQueue.length;
-    const messages: InputMessage[] = [];
+    const messages: AgentInput[] = [];
     for (let i = 0; i < count; i++) {
       const entry = this.nextRequestQueue.shift();
       if (entry === undefined) break;
-      if (parseCompact(entry).compact) {
+      if (typeof entry === "string" && parseCompact(entry).compact) {
         this.nextStopQueue.unshift(
           entry,
           ...this.nextRequestQueue.splice(0, count - i - 1),
@@ -507,7 +518,12 @@ export class Thread {
       this.submission === submission &&
       !submission.signal.aborted;
   }
-  private async resolveQueued(entry: PendingMessage, isCurrent: () => boolean) {
+  private async resolveQueued(
+    entry: PendingMessage | AgentInput,
+    isCurrent: () => boolean,
+  ) {
+    if (typeof entry !== "string")
+      return { compact: false, messages: [entry], reminders: [] };
     try {
       const resolved = await this.callbacks.resolve(entry);
       if (!isCurrent()) return undefined;
@@ -534,14 +550,11 @@ export class Thread {
       return { type: "none" };
     return {
       type: "inject",
-      content: (await this.flushMidTurn()).map(({ text }) => ({
-        type: "text" as const,
-        text,
-      })),
+      content: await this.flushMidTurn(),
     };
   }
   async send(
-    messages: InputMessage[],
+    messages: AgentInput[],
     options: SendOptions = {},
   ): Promise<ThreadSendResult> {
     this.assertUsable();
@@ -549,7 +562,7 @@ export class Thread {
     return this.sendMessages(messages, options);
   }
   private async sendMessages(
-    messages: InputMessage[],
+    messages: AgentInput[],
     { queue, force }: SendOptions = {},
   ): Promise<ThreadSendResult> {
     this.assertUsable();
@@ -562,10 +575,7 @@ export class Thread {
     const signal = this.interruptionSignal;
     if (this.isBusy) {
       if (queue === "async" || queue === "next") {
-        this.enqueue(
-          messages.map((m) => pendingMessage(m.text)),
-          queue,
-        );
+        this.enqueue(messages, queue);
         return { type: "queued" };
       }
       this.cancelSubmission();
@@ -584,11 +594,15 @@ export class Thread {
     }
     const result = this.followSubmission(this.runToRest(messages, force));
     if (this.title === undefined && messages.length) {
-      this.setThreadTitle(messages.map((m) => m.text).join("\n")).catch(
-        (err: Error) =>
-          this.context.logger.error(
-            `Error getting thread title: ${err.message}\n${err.stack}`,
-          ),
+      this.setThreadTitle(
+        messages
+          .filter((m) => m.type === "text")
+          .map((m) => m.text)
+          .join("\n"),
+      ).catch((err: Error) =>
+        this.context.logger.error(
+          `Error getting thread title: ${err.message}\n${err.stack}`,
+        ),
       );
     }
     return result;
@@ -621,7 +635,7 @@ export class Thread {
     this.handleUpdate();
   }
   private runToRest(
-    submitted: InputMessage[],
+    submitted: AgentInput[],
     force?: true,
   ): Promise<SendResult> {
     this.cancelSubmission();
@@ -651,7 +665,7 @@ export class Thread {
     );
   }
   private async runLoop(
-    messages: InputMessage[],
+    messages: AgentInput[],
     isCurrentLoop: () => boolean,
     force?: true,
   ): Promise<SendResult> {
@@ -714,7 +728,7 @@ export class Thread {
     isCurrent: () => boolean,
   ): Promise<
     | { type: "settled"; result: SendResult }
-    | { type: "resubmit"; messages: InputMessage[] }
+    | { type: "resubmit"; messages: AgentInput[] }
   > {
     const rendered = renderYieldValue(value);
     const texts: string[] = [];
@@ -738,7 +752,13 @@ export class Thread {
       if (action.type === "reject") {
         return {
           type: "resubmit",
-          messages: [{ type: "system", text: action.message }],
+          messages: [
+            {
+              type: "text",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: action.message,
+            },
+          ],
         };
       }
       if (action.type === "send-message") texts.push(action.text);
@@ -753,7 +773,13 @@ export class Thread {
     }
     return {
       type: "resubmit",
-      messages: [{ type: "system", text: texts.join("\n\n") }],
+      messages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: texts.join("\n\n"),
+        },
+      ],
     };
   }
   /** What follows this stop, if anything. A stop that issues no request never
@@ -762,11 +788,11 @@ export class Thread {
   private async continuation(stopReason: StopReason): Promise<
     | { type: "rest" }
     | { type: "suspended"; reason: SuspendReason }
-    | { type: "messages"; messages: InputMessage[] }
+    | { type: "messages"; messages: AgentInput[] }
     /** Messages drained from a queue. Resolving them ran their effects and
      * emptied the queue, so if the request they were flushed for never goes
      * out, `carry` (always non-empty) has to travel on the suspension. */
-    | { type: "flushed"; messages: InputMessage[]; carry: string }
+    | { type: "flushed"; messages: AgentInput[]; carry: string }
   > {
     const isCurrent = this.currentLoopGuard();
     const planned = this.plannedContinuation(stopReason);
@@ -779,7 +805,7 @@ export class Thread {
     }
     // Both queues are flushed in full, in insertion order: anything enqueued
     // while this resolution is running lands in the next flush.
-    const messages: InputMessage[] = [];
+    const messages: AgentInput[] = [];
     for (const delivery of ["async", "next"] as const) {
       const flushed = await this.flushAtStop(delivery);
       if (!isCurrent()) return { type: "rest" };
@@ -796,6 +822,7 @@ export class Thread {
     // suspended, it has to travel on the handoff rather than be resolved a
     // second time, so it is handed back for that.
     const carry = messages
+      .filter((m) => m.type === "text")
       .map((m) => m.text)
       .join("\n")
       .trim();
@@ -833,7 +860,7 @@ export class Thread {
   private plannedContinuation(
     stopReason: StopReason,
   ):
-    | { type: "messages"; messages: InputMessage[] }
+    | { type: "messages"; messages: AgentInput[] }
     | { type: "queues" }
     | { type: "suspend"; reason: SuspendReason }
     | { type: "rest" } {
@@ -854,18 +881,19 @@ export class Thread {
     if (action?.type === "send-message") {
       return {
         type: "messages",
-        messages: [{ type: "system", text: action.text }],
+        messages: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: action.text,
+          },
+        ],
       };
     }
     return { type: "rest" };
   }
   async setThreadTitle(userMessage: string): Promise<void> {
-    const profileForRequest: ProviderProfile = {
-      ...this.context.profile,
-      thinking: undefined,
-      reasoning: undefined,
-    };
-    const request = this.context.getProvider(profileForRequest).forceToolUse({
+    const request = this.context.provider.forceToolUse({
       model: this.context.profile.fastModel,
       input: [
         {
@@ -898,7 +926,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     seed,
     archive,
   }: {
-    seed: InputMessage[];
+    seed: AgentInput[];
     archive:
       | { type: "compaction"; summary: string; chunkCount: number }
       | { type: "none" };
@@ -913,6 +941,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     this.interrupt();
     this.cancelSubmission();
     try {
+      const initialFiles = buildClonedFiles(this.core.fileSupervisor.files);
       await this.core.dispose();
       this.assertUsable();
       // Disposal is irreversible: cancellation prevents the caller's follow-up,
@@ -922,8 +951,7 @@ Come up with a succinct thread title for this prompt. It must be a single line (
           summary: archive.summary,
           chunkCount: archive.chunkCount,
         });
-      this.context.contextDelivery?.manager.reset();
-      const core = this.createCore();
+      const core = this.createCore(initialFiles);
       this._core = core;
       this.submission = undefined;
       this.lastSubmissionResult = undefined;
@@ -947,7 +975,6 @@ Come up with a succinct thread title for this prompt. It must be a single line (
     this.destroyed = true;
     this.interrupt();
     await this.core.dispose();
-    this.context.contextDelivery?.manager.destroy();
     this.settleResult({
       type: "aborted",
       reason: "thread destroyed before it yielded",

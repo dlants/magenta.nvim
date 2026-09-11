@@ -15,7 +15,7 @@ import type { MCPToolManager } from "../tools/mcp/manager.ts";
 import { pollUntil } from "../utils/async.ts";
 import { CodexAuthError } from "./codex-auth.ts";
 import { MockOpenAIClient, mockResponse } from "./mock-openai-client.ts";
-import { OpenAIProvider } from "./openai.ts";
+import { OpenAIProvider, openaiInferenceOptions } from "./openai.ts";
 import { anthropicAuthType, getProvider } from "./provider.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./provider-types.ts";
 import type { SystemPrompt } from "./system-prompt.ts";
@@ -51,7 +51,6 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
     cwd: "/tmp" as ThreadContext["cwd"],
     homeDir: "/home" as ThreadContext["homeDir"],
     threadType: "subagent" as ThreadType,
-    contextTracker: { files: {} },
     systemPrompt: "test system prompt" as unknown as SystemPrompt,
     systemInfo: {
       timestamp: "Mon Jan 01 2024 00:00:00 GMT+0000",
@@ -84,14 +83,13 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
     maxConcurrentSubagents: 1,
     maxConcurrentFastSubagents: 8,
     getAgents: () => ({}),
-    getProvider: () => provider,
+    provider,
   };
   return {
     core: new Thread(
       "openai-thread" as ThreadId,
       context,
       { onUpdate: () => {}, resolve: resolveAsText },
-      { type: "fresh" },
       {
         baseDir: path.join(os.tmpdir(), "magenta-test-archive"),
       },
@@ -101,6 +99,43 @@ function createTestAgent(): { core: Thread; client: MockOpenAIClient } {
 }
 
 describe("OpenAI provider wiring", () => {
+  it.each([
+    "openai",
+    "copilot",
+    "ollama",
+    "bedrock",
+  ] as const)("derives reasoning for %s without applying thinking overrides", (provider) => {
+    const options = openaiInferenceOptions({
+      profile: {
+        provider,
+        model: "gpt-5.4",
+        reasoning: { effort: "high", summary: "concise" },
+        thinking: { enabled: true, effort: "low" },
+      } as ProviderProfile,
+      systemPrompt: "test",
+      tools: [],
+      effortOverride: "max",
+    });
+    expect(options.config).toEqual({
+      type: "reasoning",
+      reasoning: { effort: "high", summary: "concise" },
+    });
+  });
+
+  it("leaves reasoning unset when the profile only has thinking settings", () => {
+    expect(
+      openaiInferenceOptions({
+        profile: {
+          model: "gpt-5.4",
+          thinking: { enabled: true },
+        } as ProviderProfile,
+        systemPrompt: "test",
+        tools: [],
+        effortOverride: "max",
+      }).config,
+    ).toBeUndefined();
+  });
+
   beforeEach(() => {
     process.env.MAGENTA_TEST_OPENAI_KEY = "test-key";
   });
@@ -110,7 +145,13 @@ describe("OpenAI provider wiring", () => {
     // A titled thread doesn't fire the title request, which would otherwise be
     // the most recent stream when the turn's own request is awaited below.
     core.setTitle("test thread");
-    void core.send([{ type: "user", text: "do the task" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "do the task",
+      },
+    ]);
 
     const stream = await client.awaitStream();
     expect(stream.instructions).toBeTruthy();
@@ -367,7 +408,7 @@ describe("OpenAI provider wiring", () => {
 
       expect(() =>
         provider.createInferenceManager({
-          model: "gpt-5.1-codex",
+          profile: { model: "gpt-5.1-codex" } as ProviderProfile,
           systemPrompt: "hi",
           tools: [],
         }),

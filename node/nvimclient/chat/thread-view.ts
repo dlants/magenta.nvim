@@ -5,10 +5,10 @@ import {
   type AbsFilePath,
   type CompactionRunState,
   type CompletedToolInfo,
-  type ContextManager,
   compactionRunChunkIndex,
   compactionRunThreadIds,
   displayPath,
+  type FileSupervisor,
   formatToolSpec,
   formatToolSpecs,
   type LoopState,
@@ -22,11 +22,6 @@ import {
   type ToolRequestId,
   type YieldState,
 } from "@magenta/server";
-import {
-  jumpToComment,
-  pendingCommentsView,
-  renderCommentUpdate,
-} from "../comments/comment-update-view.ts";
 import {
   type ContextViewContext,
   contextFilesView,
@@ -207,10 +202,10 @@ function renderUsage(usage: Usage): VDOMNode {
  */
 const shouldShowContextFiles = (
   loopState: ThreadLoopState,
-  contextManager: ContextManager,
+  fileSupervisor: FileSupervisor,
 ): boolean => {
   return (
-    loopState.type === "idle" && Object.keys(contextManager.files).length > 0
+    loopState.type === "idle" && Object.keys(fileSupervisor.files).length > 0
   );
 };
 
@@ -467,19 +462,6 @@ export const view: View<{
   const messages = thread.getProviderMessages();
   const loopState = thread.loopState;
 
-  const pendingComments = thread.comments?.store.getPendingEntries() ?? [];
-  const pendingCommentsNode = pendingComments.length
-    ? d`\n${pendingCommentsView(pendingComments, {
-        expanded: thread.state.expandedPendingComments,
-        onToggle: (commentId) =>
-          dispatch({ type: "toggle-pending-comment", commentId }),
-        onJump: (entry) => {
-          jumpToComment(thread.context.nvim, entry).catch((e: Error) =>
-            thread.context.nvim.logger.error(e.message),
-          );
-        },
-      })}`
-    : d``;
   // Show logo when empty and not busy
   const isIdle = loopState.type === "idle";
   if (messages.length === 0 && isIdle && thread.submission?.type !== "failed") {
@@ -492,10 +474,10 @@ ${LOGO}
 
 magenta is for agentic flow
 
-${contextFilesView(thread.contextManager, contextViewCtx(thread), {
+${contextFilesView(thread.fileSupervisor, contextViewCtx(thread), {
   expanded: thread.state.contextFilesExpanded,
   onToggle: () => dispatch({ type: "toggle-context-files-expanded" }),
-})}${pendingCommentsNode}`;
+})}`;
   }
 
   const latestUsage = thread.agent.log.latestUsage;
@@ -508,11 +490,11 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     thread.core.yielded,
   );
 
-  const contextManagerView = shouldShowContextFiles(
+  const fileSupervisorView = shouldShowContextFiles(
     loopState,
-    thread.contextManager,
+    thread.fileSupervisor,
   )
-    ? d`\n${contextFilesView(thread.contextManager, contextViewCtx(thread), {
+    ? d`\n${contextFilesView(thread.fileSupervisor, contextViewCtx(thread), {
         expanded: thread.state.contextFilesExpanded,
         onToggle: () => dispatch({ type: "toggle-context-files-expanded" }),
       })}`
@@ -601,7 +583,6 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
         c.type === "system_reminder" ||
         c.type === "system_info" ||
         c.type === "context_update" ||
-        c.type === "comment_update" ||
         c.type === "fork_notification",
     );
 
@@ -627,7 +608,6 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
           c.type === "system_reminder" ||
           c.type === "system_info" ||
           c.type === "context_update" ||
-          c.type === "comment_update" ||
           c.type === "fork_notification",
       );
 
@@ -656,7 +636,7 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
     const contextUpdateView = viewState?.contextUpdates
       ? renderContextUpdate(
           viewState.contextUpdates,
-          thread.contextManager,
+          thread.fileSupervisor,
           contextViewCtx(thread),
           {
             expandedUpdates: viewState.expandedUpdates ?? {},
@@ -670,20 +650,6 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
         )
       : d``;
 
-    const commentUpdateView = renderCommentUpdate(viewState?.commentUpdates, {
-      expanded: viewState?.expandedCommentUpdates ?? {},
-      onToggle: (commentId) =>
-        dispatch({
-          type: "toggle-expand-comment-update",
-          messageIdx,
-          commentId,
-        }),
-      onJump: (entry) => {
-        jumpToComment(thread.context.nvim, entry).catch((err: Error) =>
-          thread.context.nvim.logger.error(err),
-        );
-      },
-    });
     const gitUpdateView = renderGitUpdate(viewState?.gitUpdate);
 
     // Render content blocks. For user messages we render auto-generated meta
@@ -721,7 +687,6 @@ ${contextFilesView(thread.contextManager, contextViewCtx(thread), {
 ${roleHeader}\
 ${gitUpdateView}\
 ${contextUpdateView}\
-${commentUpdateView}\
 ${contentView}`;
 
     const renderedBody = isUserBlock
@@ -760,8 +725,7 @@ ${compactionHistoryView}
 ${messagesView}\
 ${failedSubmitView}\
 ${streamingBlockView}\
-${contextManagerView}\
-${pendingCommentsNode}\
+${fileSupervisorView}\
 ${sandboxView}\
 ${pendingMessagesView}${pendingNextMessagesView}\
 ${trailingForkedToView}\
@@ -1194,7 +1158,6 @@ function renderMessageContentBlock(
     }
 
     case "context_update":
-    case "comment_update":
       // Rendered via thread.state.messageViewState
       return d``;
 

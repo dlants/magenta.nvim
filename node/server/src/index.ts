@@ -87,39 +87,6 @@ export type {
   ProvisionResult,
   TeardownResult,
 } from "./container/types.ts";
-export {
-  type BufNr,
-  type Comment,
-  type CommentCloseReason,
-  type CommentId,
-  type CommentLocation,
-  type CommentMessage,
-  CommentStore,
-  type CommentStoreEvents,
-  type CommentUpdateEntry,
-  commentUpdatesToText,
-} from "./context/comment-store.ts";
-export { CommentSupervisor } from "./context/comment-supervisor.ts";
-export {
-  buildClonedFiles,
-  ContextManager,
-  type ContextManagerEvents,
-  cloneContextManager,
-  type DiffUpdate,
-  type FileDeletedUpdate,
-  type Files as ContextFiles,
-  type FileUpdate,
-  type FileUpdates,
-  type Patch,
-  type WholeFileUpdate,
-} from "./context/context-manager.ts";
-export { FileContextSupervisor } from "./context/file-context-supervisor.ts";
-export { GitSupervisor } from "./context/git-supervisor.ts";
-export {
-  type GitContextUpdate,
-  GitTracker,
-  gitUpdateToText,
-} from "./context/git-tracker.ts";
 export type { Dispatch } from "./dispatch.ts";
 export {
   Executor,
@@ -150,7 +117,10 @@ export type {
   ProviderOptions,
   ProviderProfile,
 } from "./provider-options.ts";
-export { AnthropicProvider } from "./providers/anthropic.ts";
+export {
+  AnthropicProvider,
+  anthropicInferenceOptions,
+} from "./providers/anthropic.ts";
 export { withCacheControl } from "./providers/anthropic-cache.ts";
 export { convertAnthropicMessagesToProvider } from "./providers/anthropic-conversion.ts";
 export type { AnthropicInferenceOptions } from "./providers/anthropic-inference.ts";
@@ -172,7 +142,7 @@ export {
   MockOpenAIClient,
   MockResponseStream,
 } from "./providers/mock-openai-client.ts";
-export { OpenAIProvider } from "./providers/openai.ts";
+export { OpenAIProvider, openaiInferenceOptions } from "./providers/openai.ts";
 export {
   OpenAIInferenceManager,
   type OpenAIStreamingClient,
@@ -181,6 +151,7 @@ export { getProvider, setMockProvider } from "./providers/provider.ts";
 export type {
   AgentInput,
   AgentLog,
+  CreateInferenceManagerOptions,
   FinalizeReason,
   InferenceOptions,
   NativeInferenceManager,
@@ -254,8 +225,25 @@ export {
   type Submission,
 } from "./submission/index.ts";
 export {
+  buildClonedFiles,
+  type DiffUpdate,
+  type FileDeletedUpdate,
+  FileSupervisor,
+  type FileSupervisorEvents,
+  type Files as ContextFiles,
+  type FileUpdate,
+  type FileUpdates,
+  type Patch,
+  type WholeFileUpdate,
+} from "./supervisors/file-supervisor.ts";
+export {
+  type GitContextUpdate,
+  GitSupervisor,
+  GitTracker,
+  gitUpdateToText,
+} from "./supervisors/git-supervisor.ts";
+export {
   type EnvironmentConfig,
-  type InputMessage,
   Thread,
   type ThreadCallbacks,
   type ThreadContext,
@@ -321,8 +309,6 @@ export { formatToolSpec, formatToolSpecs } from "./tools/format-tool-spec.ts";
 export * as GetFile from "./tools/getFile.ts";
 export {
   extractPartialJsonStringValue,
-  extractPartialReplies,
-  type PartialReply,
   validateInput,
 } from "./tools/helpers.ts";
 export * as Hover from "./tools/hover.ts";
@@ -355,7 +341,6 @@ export {
   validateServerName,
 } from "./tools/mcp/types.ts";
 export * as NvimLua from "./tools/nvimLua.ts";
-export * as Reply from "./tools/reply.ts";
 export * as RunScript from "./tools/run-script.ts";
 export * as SpawnSubagents from "./tools/spawn-subagents.ts";
 export * as ThreadTitle from "./tools/thread-title.ts";

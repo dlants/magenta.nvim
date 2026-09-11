@@ -187,7 +187,13 @@ describe("onBeforeRequest", () => {
       getHooks: () =>
         agentHooks({ onBeforeRequest: [holdSecond(() => ++calls)] }),
     });
-    const { promise: sendPromise } = agent.send([{ type: "user", text: "go" }]);
+    const { promise: sendPromise } = agent.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "go",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -206,7 +212,13 @@ describe("onBeforeRequest", () => {
       getHooks: () =>
         agentHooks({ onBeforeRequest: [holdSecond(() => ++calls)] }),
     });
-    const { promise: sendPromise } = agent.send([{ type: "user", text: "go" }]);
+    const { promise: sendPromise } = agent.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "go",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamToolCall("tool-1", "get_files", {
       files: [{ filePath: "/tmp/a.txt" }],
@@ -227,7 +239,13 @@ describe("abort parity", () => {
     start: () => { agent: TestAgent; abortStream: () => void },
   ) {
     const { agent, abortStream } = start();
-    const { promise: turn } = agent.send([{ type: "user", text: "go" }]);
+    const { promise: turn } = agent.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "go",
+      },
+    ]);
     await pollUntil(() => {
       if (flatLoop(agent).type !== "streaming")
         throw new Error("not streaming");
@@ -290,7 +308,15 @@ describe("preflight token count parity", () => {
       executeTools: noExecutor,
     });
     mockClient.mockInputTokenCount = 100;
-    expect(await agent.send([{ type: "user", text: "go" }]).promise).toEqual({
+    expect(
+      await agent.send([
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "go",
+        },
+      ]).promise,
+    ).toEqual({
       type: "suspended",
       reason: { kind: "compact", nextPrompt: "wrap up" },
     });
@@ -300,7 +326,11 @@ describe("preflight token count parity", () => {
       executeTools: noExecutor,
     });
     const { promise: sendPromise } = openai.agent.send([
-      { type: "user", text: "go" },
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "go",
+      },
     ]);
     const stream = await openai.mockClient.awaitStream();
     stream.finishResponse("end_turn", { inputTokens: 100, outputTokens: 1 });

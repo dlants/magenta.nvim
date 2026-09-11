@@ -4,7 +4,6 @@ import * as FindReferences from "./findReferences.ts";
 import * as GetFile from "./getFile.ts";
 import * as Hover from "./hover.ts";
 import * as NvimLua from "./nvimLua.ts";
-import * as Reply from "./reply.ts";
 import * as RunScript from "./run-script.ts";
 import * as SpawnSubagents from "./spawn-subagents.ts";
 import * as ThreadTitle from "./thread-title.ts";
@@ -45,8 +44,6 @@ export function validateInput(
       return RunScript.validateInput(input);
     case "nvim_lua":
       return NvimLua.validateInput(input);
-    case "reply":
-      return Reply.validateInput(input);
     default:
       return {
         status: "error" as const,
@@ -64,32 +61,6 @@ export function extractPartialJsonStringValue(
   fromIndex = 0,
 ): string | undefined {
   return readStringValue(inputJson, key, fromIndex)?.value;
-}
-
-/** One reply as it appears mid-stream: `text` grows as deltas arrive, and is
- * empty until the model starts emitting it. */
-export type PartialReply = { commentId: string; text: string };
-
-/** Parse the `reply` tool's input while it is still streaming, so the UI can
- * show a reply landing in its comment as it is written. Assumes the schema
- * order (`commentId` before `text`) that the model emits; a reversed pair is
- * reported with an empty text rather than mis-attributed. */
-export function extractPartialReplies(inputJson: string): PartialReply[] {
-  const replies: PartialReply[] = [];
-  let cursor = 0;
-  for (;;) {
-    const idField = readStringValue(inputJson, "commentId", cursor);
-    if (!idField) break;
-    const nextId = readStringValue(inputJson, "commentId", idField.end);
-    const textField = readStringValue(inputJson, "text", idField.end);
-    const text =
-      textField && (!nextId || textField.end <= nextId.end)
-        ? textField.value
-        : "";
-    replies.push({ commentId: idField.value, text });
-    cursor = idField.end;
-  }
-  return replies;
 }
 
 function readStringValue(

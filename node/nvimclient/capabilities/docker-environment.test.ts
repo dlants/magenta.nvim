@@ -12,8 +12,8 @@ import type {
   UnresolvedFilePath,
 } from "@magenta/server";
 import {
-  ContextManager,
   FileCategory,
+  FileSupervisor,
   GetFile,
   getToolSpecs,
 } from "@magenta/server";
@@ -291,7 +291,7 @@ describe("Docker Environment", () => {
     });
   });
 
-  describe("ContextManager with DockerFileIO", () => {
+  describe("FileSupervisor with DockerFileIO", () => {
     const CONTAINER_FILE = "/tmp/context-test.txt" as AbsFilePath;
 
     const TEXT_FILE_TYPE = {
@@ -300,7 +300,7 @@ describe("Docker Environment", () => {
       extension: ".txt",
     };
 
-    function createDockerContextManager(fileIO: DockerFileIO) {
+    function createDockerFileSupervisor(fileIO: DockerFileIO) {
       const mockLogger = {
         error: vi.fn(),
         warn: vi.fn(),
@@ -308,7 +308,7 @@ describe("Docker Environment", () => {
         debug: vi.fn(),
       };
 
-      const cm = new ContextManager(
+      const cm = new FileSupervisor(
         mockLogger,
         fileIO,
         "/tmp" as NvimCwd,
@@ -323,7 +323,7 @@ describe("Docker Environment", () => {
 
       await fileIO.writeFile(CONTAINER_FILE, "container content");
 
-      const cm = createDockerContextManager(fileIO);
+      const cm = createDockerFileSupervisor(fileIO);
 
       cm.toolApplied(
         CONTAINER_FILE,
@@ -340,7 +340,7 @@ describe("Docker Environment", () => {
 
       await fileIO.writeFile(CONTAINER_FILE, "original content");
 
-      const cm = createDockerContextManager(fileIO);
+      const cm = createDockerFileSupervisor(fileIO);
 
       cm.toolApplied(
         CONTAINER_FILE,
@@ -364,7 +364,7 @@ describe("Docker Environment", () => {
 
       await fileIO.writeFile(CONTAINER_FILE, "soon to be deleted");
 
-      const cm = createDockerContextManager(fileIO);
+      const cm = createDockerFileSupervisor(fileIO);
 
       cm.toolApplied(
         CONTAINER_FILE,

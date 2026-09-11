@@ -25,11 +25,13 @@ import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
 import { getRetryDelay, MAX_RETRY_DURATION } from "./inference-shared.ts";
 import type {
   AgentInput,
+  CreateInferenceManagerOptions,
   InferenceOptions,
   NativeInferenceManager,
   Provider,
   ProviderToolSpec,
   ProviderToolUseRequest,
+  ThinkingConfig,
   Usage,
 } from "./provider-types.ts";
 
@@ -427,16 +429,22 @@ export class AnthropicProvider implements Provider {
     };
   }
 
-  createInferenceManager(options: InferenceOptions): NativeInferenceManager {
-    return new AnthropicInferenceManager(options, this.client, {
-      authType: this.authType,
-      includeWebSearch: this.includeWebSearch,
-      disableParallelToolUseFlag: this.disableParallelToolUseFlag,
-      logger: this.logger,
-      validateInput: this.validateInput,
-      bedrock: this.isBedrock,
-      refreshAuth: this.refreshAuth,
-    });
+  createInferenceManager(
+    options: CreateInferenceManagerOptions,
+  ): NativeInferenceManager {
+    return new AnthropicInferenceManager(
+      anthropicInferenceOptions(options),
+      this.client,
+      {
+        authType: this.authType,
+        includeWebSearch: this.includeWebSearch,
+        disableParallelToolUseFlag: this.disableParallelToolUseFlag,
+        logger: this.logger,
+        validateInput: this.validateInput,
+        bedrock: this.isBedrock,
+        refreshAuth: this.refreshAuth,
+      },
+    );
   }
 }
 
@@ -464,4 +472,26 @@ function loadApiKeyFromKeychain(logger: Logger): string | undefined {
     logger.error(`Error loading from keychain: ${e as Error}`);
     return undefined;
   }
+}
+
+export function anthropicInferenceOptions({
+  profile,
+  systemPrompt,
+  tools,
+  effortOverride,
+}: CreateInferenceManagerOptions): InferenceOptions {
+  const baseThinking = profile.thinking;
+  const thinking: ThinkingConfig | undefined = effortOverride
+    ? { ...baseThinking, enabled: true, effort: effortOverride }
+    : baseThinking?.enabled
+      ? { ...baseThinking, enabled: true }
+      : baseThinking
+        ? { enabled: false }
+        : undefined;
+  return {
+    model: profile.model,
+    systemPrompt,
+    tools,
+    ...(thinking ? { config: { type: "thinking", thinking } as const } : {}),
+  };
 }

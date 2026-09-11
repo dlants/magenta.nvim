@@ -16,6 +16,7 @@ import type { EdlRegisters } from "./edl/index.ts";
 import type { Logger } from "./logger.ts";
 import type { ThreadLoopState } from "./loop-state.ts";
 import type { ProviderProfile } from "./provider-options.ts";
+import { anthropicInferenceOptions } from "./providers/anthropic.ts";
 import {
   AnthropicInferenceManager,
   type AnthropicInferenceOptions,
@@ -26,13 +27,14 @@ import {
   type MockStream,
 } from "./providers/mock-anthropic-client.ts";
 import { MockOpenAIClient } from "./providers/mock-openai-client.ts";
+import { openaiInferenceOptions } from "./providers/openai.ts";
 import {
   OpenAIInferenceManager,
   type OpenAIInferenceOptions,
 } from "./providers/openai-inference.ts";
 import type {
   AgentInput,
-  InferenceOptions,
+  CreateInferenceManagerOptions,
   NativeInferenceManager,
   NativeMessageIdx,
   Provider,
@@ -42,21 +44,13 @@ import type {
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { SystemPrompt } from "./providers/system-prompt.ts";
 import { type ResolveSubmission, resolveAsText } from "./submission/index.ts";
-import {
-  createInferenceManager,
-  type InputMessage,
-  Thread,
-  type ThreadContext,
-  threadToolSpecs,
-  toAgentInput,
-} from "./thread.ts";
+import { Thread, type ThreadContext } from "./thread.ts";
 import type { AgentHooks, SendResult, ThreadHooks } from "./thread-api.ts";
 import { ToolExecutorHost } from "./tool-executor.ts";
-
 import { createTool } from "./tools/create-tool.ts";
 import { validateInput } from "./tools/helpers.ts";
-
 import type { MCPToolManager } from "./tools/mcp/manager.ts";
+import { getToolSpecs } from "./tools/toolManager.ts";
 import { pollUntil } from "./utils/async.ts";
 import { threadConversationLogPath } from "./utils/files.ts";
 /** Wrap a plain promise as a `ToolExecution`, for the many test executors that
@@ -121,7 +115,7 @@ export class TestAgent {
 
   inputTokenCount: number | undefined;
 
-  send(messages?: InputMessage[]): AgentTurn {
+  send(messages?: AgentInput[]): AgentTurn {
     const turn = runAgentLoop(
       {
         ...this.deps,
@@ -141,7 +135,7 @@ export class TestAgent {
           };
         },
       },
-      messages && toAgentInput(messages),
+      messages,
     );
     this.turn = turn;
     const promise = turn.promise.then(
@@ -201,9 +195,11 @@ export function createMockProvider(
   anthropicOptions?: Partial<AnthropicInferenceOptions>,
 ): Provider {
   return {
-    createInferenceManager(options: InferenceOptions): NativeInferenceManager {
+    createInferenceManager(
+      options: CreateInferenceManagerOptions,
+    ): NativeInferenceManager {
       return new AnthropicInferenceManager(
-        options,
+        anthropicInferenceOptions(options),
         mockClient as unknown as Anthropic,
         { ...defaultAnthropicOptions, ...anthropicOptions },
       );
@@ -262,6 +258,7 @@ function baseTestContext(provider: Provider): ThreadContext {
       readFile: async () => "",
       writeFile: async () => {},
       fileExists: async () => false,
+      stat: async () => undefined,
     }),
     shell: stub<ThreadContext["shell"]>({}),
     gitClient: stub<ThreadContext["gitClient"]>({
@@ -273,8 +270,7 @@ function baseTestContext(provider: Provider): ThreadContext {
     maxConcurrentSubagents: 1,
     maxConcurrentFastSubagents: 8,
     getAgents: () => ({}),
-    getProvider: () => provider,
-    contextTracker: { files: {} },
+    provider,
   };
 }
 
@@ -311,7 +307,6 @@ export function createAgentWithMock(
       threadId,
       context,
       { onUpdate: onUpdate ?? (() => {}), resolve: resolve ?? resolveAsText },
-      { type: "fresh" },
       {
         baseDir: TEST_ARCHIVE_DIR,
       },
@@ -338,7 +333,23 @@ function testManager(
   cloneFrom: NativeInferenceManager | undefined,
 ): NativeInferenceManager {
   if (!cloneFrom)
-    return createInferenceManager(context, threadToolSpecs(context));
+    return context.provider.createInferenceManager({
+      profile: context.profile,
+      systemPrompt: context.systemPrompt,
+      tools: getToolSpecs(
+        context.threadType,
+        context.mcpToolManager,
+        context.availableCapabilities,
+        context.getAgents(),
+        context.subagentConfig,
+        context.yieldSchema,
+        context.getScriptRunner?.()?.getScriptCatalog(),
+        context.subagentDockerfile,
+      ),
+      ...(context.subagentConfig?.effort
+        ? { effortOverride: context.subagentConfig.effort }
+        : {}),
+    });
   const manager = cloneFrom.clone();
   manager.truncateMessages(
     (cloneFrom.log.messages.length - 1) as NativeMessageIdx,
@@ -374,10 +385,9 @@ function buildTestAgent(
         homeDir: context.homeDir,
         maxConcurrentSubagents: context.maxConcurrentSubagents,
         maxConcurrentFastSubagents: context.maxConcurrentFastSubagents,
-        contextTracker: context.contextTracker,
+        contextTracker: { files: context.contextDelivery?.initialFiles ?? {} },
         onToolApplied: () => {},
         edlRegisters,
-        commentStore: context.commentStore,
         fileIO: context.fileIO,
         shell: context.shell,
         threadManager: context.threadManager,
@@ -442,9 +452,11 @@ export function createTestOpenAIAgent(
   const mockClient = opts?.mockClient ?? new MockOpenAIClient();
   const tools = opts?.tools;
   const provider: Provider = {
-    createInferenceManager(options: InferenceOptions): NativeInferenceManager {
+    createInferenceManager(
+      options: CreateInferenceManagerOptions,
+    ): NativeInferenceManager {
       return new OpenAIInferenceManager(
-        tools ? { ...options, tools } : options,
+        openaiInferenceOptions(tools ? { ...options, tools } : options),
         mockClient,
         { ...defaultOpenAIOptions, ...opts?.openaiOptions },
       );
@@ -475,7 +487,9 @@ export const userInput = (text: string): AgentInput[] => [
 
 /** Drive one turn through the agent's only entry point. */
 export const sendText = (agent: TestAgent, text: string): Promise<SendResult> =>
-  agent.send([{ type: "user", text }]).promise;
+  agent.send([
+    { type: "text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX, text },
+  ]).promise;
 
 export async function cleanupArchive(threadId: ThreadId): Promise<void> {
   const dir = path.dirname(

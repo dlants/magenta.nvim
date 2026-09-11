@@ -16,6 +16,7 @@ export type { ProviderName } from "../provider-options.ts";
 
 import type {
   ProviderName,
+  ProviderProfile,
   ReasoningEffort,
   ReasoningSummary,
 } from "../provider-options.ts";
@@ -212,7 +213,9 @@ export interface Provider {
     };
   }): ProviderToolUseRequest;
 
-  createInferenceManager(options: InferenceOptions): NativeInferenceManager;
+  createInferenceManager(
+    options: CreateInferenceManagerOptions,
+  ): NativeInferenceManager;
 }
 
 export type ProviderToolUseBlockStart = {
@@ -364,6 +367,13 @@ export type ReasoningConfig = {
 export type ProviderInferenceConfig =
   | { type: "thinking"; thinking: ThinkingConfig }
   | { type: "reasoning"; reasoning: ReasoningConfig };
+
+export interface CreateInferenceManagerOptions {
+  profile: ProviderProfile;
+  systemPrompt: string;
+  tools: ProviderToolSpec[];
+  effortOverride?: ThinkingEffort;
+}
 
 export interface InferenceOptions {
   model: string;

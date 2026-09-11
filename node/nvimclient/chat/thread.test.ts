@@ -1047,8 +1047,8 @@ it("handles @file commands", { timeout: 10000 }, async () => {
 
     // Verify both files were added to context manager
     const thread = driver.magenta.chat.getActiveThread();
-    const contextManager = thread.contextManager;
-    const files = contextManager.files;
+    const fileSupervisor = thread.fileSupervisor;
+    const files = fileSupervisor.files;
 
     // Check that both files are in the context
     const hasPoem1 = Object.keys(files).some((path) =>
@@ -1724,7 +1724,7 @@ it("expands a queued message's commands at delivery, not when it was typed", asy
     const thread = driver.magenta.chat.getActiveThread();
     expect(thread.core.queued.next).toHaveLength(1);
     // The command has not run yet: the file is not in context.
-    expect(Object.keys(thread.contextManager.files)).toHaveLength(0);
+    expect(Object.keys(thread.fileSupervisor.files)).toHaveLength(0);
 
     const cwd = await getcwd(driver.nvim);
     const poemPath = `${cwd}/poem.txt`;
@@ -1739,7 +1739,7 @@ it("expands a queued message's commands at delivery, not when it was typed", asy
     const request2 = await driver.mockAnthropic.awaitPendingStream();
     expect(thread.core.queued.next).toHaveLength(0);
     // The @file: command ran at delivery, not when the message was typed.
-    expect(Object.keys(thread.contextManager.files)).toHaveLength(1);
+    expect(Object.keys(thread.fileSupervisor.files)).toHaveLength(1);
     request2.respond({
       stopReason: "end_turn",
       text: "will do",

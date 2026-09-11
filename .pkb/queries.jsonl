@@ -54,3 +54,4 @@
 {"timestamp":"2026-09-02T16:10:42Z","query":"ThreadState type definition fields -k 10","commit":"d1ac72909fd7d566b4504191eeea9eda6ac569b6"}
 {"timestamp":"2026-09-09T03:27:05Z","query":"buffer reloaded from disk after agent edit checktime -k 4","commit":"07ce798c4d8cc7b8de6ca49c136d419ff58fd488"}
 {"timestamp":"2026-09-09T03:46:52Z","query":"node process logging log file uncaught exception rpc socket disconnect -k 5","commit":"07ce798c4d8cc7b8de6ca49c136d419ff58fd488"}
+{"timestamp":"2026-09-11T02:22:56Z","query":"ContextManager thread-core cloning context tracker ownership nvimclient -k 8","commit":"bfcdb71a03c28d585f99d368fa9a95937f5ace14"}

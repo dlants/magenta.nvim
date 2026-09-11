@@ -1,5 +1,9 @@
 import type { OnToolApplied } from "./capabilities/context-tracker.ts";
-import type { StopReason, ToolResults } from "./providers/provider-types.ts";
+import type {
+  AgentInput,
+  StopReason,
+  ToolResults,
+} from "./providers/provider-types.ts";
 import type { PendingMessage } from "./submission/index.ts";
 import type {
   EndTurnAction,
@@ -84,8 +88,8 @@ export type ThreadResult =
  * them as two labelled sections of one list. */
 export type QueuedMessage = {
   when: "async" | "next";
-  /** unresolved: its commands run when (and if) it is finally delivered */
-  message: PendingMessage;
+  /** Raw submissions resolve at delivery; programmatic inputs are already resolved. */
+  message: PendingMessage | AgentInput;
 };
 
 /** What the agent tells its owner about the request it is about to issue. */

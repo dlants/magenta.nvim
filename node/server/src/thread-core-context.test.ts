@@ -5,18 +5,14 @@ import { describe, expect, it, vi } from "vitest";
 import { FsFileIO } from "./capabilities/file-io.ts";
 import type { GitState } from "./capabilities/git-client.ts";
 import { runSubmission } from "./compaction/index.ts";
-import { type BufNr, CommentStore } from "./context/comment-store.ts";
-import {
-  ContextManager,
-  cloneContextManager,
-} from "./context/context-manager.ts";
 import type { MockStream } from "./providers/mock-anthropic-client.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import { resolveAsText } from "./submission/index.ts";
+import { FileSupervisor } from "./supervisors/file-supervisor.ts";
 import {
   awaitNextStream,
   cleanupArchive,
   createAgentWithMock,
-  noopLogger,
   uniqueThreadId,
 } from "./test-helpers.ts";
 import { Thread } from "./thread.ts";
@@ -36,24 +32,6 @@ async function fixture() {
   const file = path.join(cwd, "tracked.txt") as AbsFilePath;
   await fs.writeFile(file, "original tracked content\n");
   const fileIO = new FsFileIO();
-  const manager = new ContextManager(
-    noopLogger,
-    fileIO,
-    cwd,
-    homeDir,
-    {},
-    60_000,
-  );
-  manager.addFileContext(file, "tracked.txt" as RelFilePath, {
-    category: FileCategory.TEXT,
-    mimeType: "text/plain",
-    extension: "txt",
-  });
-  const store = new CommentStore();
-  const comment = store.addComment(
-    { bufferLabel: "tracked.txt", bufnr: 1 as BufNr, state: "stale" },
-    "already delivered comment",
-  );
   let git: GitState = {
     repoRoot: cwd,
     branch: "initial-branch",
@@ -64,28 +42,39 @@ async function fixture() {
     untrackedCount: 0,
   };
   const onFilesSent = vi.fn();
-  const start = vi.spyOn(manager, "start");
-  const stop = vi.spyOn(manager, "stop");
-  const changed = vi.fn();
-  manager.on("pendingUpdatesChanged", changed);
+  const start = vi.spyOn(FileSupervisor.prototype, "start");
   const { core: thread, mockClient } = createAgentWithMock(
     {
       cwd,
       homeDir,
       fileIO,
-      contextTracker: manager,
-      contextDelivery: { manager, initialGitState: git, onFilesSent },
-      commentStore: store,
+      contextDelivery: {
+        initialGitState: git,
+        onFilesSent,
+        pollIntervalMs: 60_000,
+      },
       gitClient: { getState: async () => git },
     },
     uniqueThreadId("core-context"),
   );
+  const manager = thread.core.fileSupervisor;
+  manager.addFileContext(file, "tracked.txt" as RelFilePath, {
+    category: FileCategory.TEXT,
+    mimeType: "text/plain",
+    extension: "txt",
+  });
+  const stop = vi.spyOn(manager, "stop");
+  const changed = vi.fn();
+  manager.on("pendingUpdatesChanged", changed);
   thread.setTitle("context integration");
   let previous: MockStream | undefined;
   async function request(target = thread, text = "continue") {
-    const sent = target.send([{ type: "user", text }]);
+    const sent = target.send([
+      { type: "text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX, text },
+    ]);
     const stream = await awaitNextStream(mockClient, previous);
     previous = stream;
+    stream.streamText("done");
     stream.finishResponse("end_turn");
     await sent;
     return JSON.stringify(stream.messages);
@@ -96,8 +85,6 @@ async function fixture() {
     file,
     fileIO,
     manager,
-    store,
-    comment,
     thread,
     mockClient,
     start,
@@ -113,6 +100,7 @@ async function fixture() {
       await thread.awaitArchiveFlush();
       await cleanupArchive(thread.id);
       await fs.rm(cwd, { recursive: true, force: true });
+      vi.restoreAllMocks();
     },
   };
 }
@@ -121,23 +109,25 @@ describe("Thread-owned context delivery", () => {
   it.each([
     "reset",
     "compaction",
-  ] as const)("%s reseeds files and preamble without restarting tracking or replaying delivered comments", async (operation) => {
+  ] as const)("%s reseeds files and preamble with a fresh tracker without replaying delivered comments", async (operation) => {
     const f = await fixture();
     try {
       const first = await f.request();
       expect(first).toContain("original tracked content");
-      expect(first).toContain("already delivered comment");
       expect(first).toContain("<system-info>");
-      expect(f.store.hasPendingUpdates()).toBe(false);
       const oldCore = f.thread.core;
-      const oldDelivery = f.manager.delivery;
       f.setGit();
       await fs.writeFile(f.file, "replacement tracked content\n");
-      f.store.addUserMessage(f.comment, "pending comment survives replacement");
       let replacement: string;
       if (operation === "reset") {
         await f.thread.reset({
-          seed: [{ type: "user", text: "replacement summary" }],
+          seed: [
+            {
+              type: "text",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: "replacement summary",
+            },
+          ],
           archive: { type: "none" },
         });
         replacement = await f.request();
@@ -164,26 +154,26 @@ describe("Thread-owned context delivery", () => {
       }
       expect(f.thread.core).not.toBe(oldCore);
       expect(oldCore.isActive).toBe(false);
-      expect(f.thread.context.contextTracker).toBe(f.manager);
-      expect(f.thread.core.fileSupervisor?.contextManager).toBe(f.manager);
-      expect(f.manager.delivery).not.toBe(oldDelivery);
-      expect(f.start).toHaveBeenCalledTimes(1);
-      expect(f.stop).not.toHaveBeenCalled();
+      expect(f.thread.core.fileSupervisor).not.toBe(f.manager);
+      expect(f.start).toHaveBeenCalledTimes(2);
+      expect(f.stop).toHaveBeenCalledTimes(1);
       expect(replacement).toContain("replacement summary");
       expect(replacement).toContain("replacement tracked content");
       expect(replacement).not.toContain("original tracked content");
       expect(replacement).not.toContain("```diff");
       expect(replacement).toContain("replacement-branch");
       expect(replacement).toContain("<system-info>");
-      expect(replacement).not.toContain("already delivered comment");
-      expect(replacement).toContain("pending comment survives replacement");
-      expect(f.store.comments[f.comment].messages).toHaveLength(2);
-      expect(f.store.hasPendingUpdates()).toBe(false);
+      expect(replacement).toContain("replacement-branch");
       expect(f.onFilesSent).toHaveBeenCalledTimes(2);
       f.changed.mockClear();
       await fs.writeFile(f.file, "a later tracked edit\n");
-      await f.manager.refreshPendingUpdates();
-      expect(f.changed).toHaveBeenCalled();
+      const replacementChanged = vi.fn();
+      f.thread.core.fileSupervisor.on(
+        "pendingUpdatesChanged",
+        replacementChanged,
+      );
+      await f.thread.core.fileSupervisor.refreshPendingUpdates();
+      expect(replacementChanged).toHaveBeenCalled();
       await f.thread.destroy();
       expect(f.stop).toHaveBeenCalledTimes(1);
       f.changed.mockClear();
@@ -209,25 +199,17 @@ describe("Thread-owned context delivery", () => {
       });
       await fs.writeFile(f.file, "source-only later content\n");
       await f.request(f.thread, "source-only later request");
-      const manager = await cloneContextManager(f.manager, {
-        logger: noopLogger,
-        fileIO: f.fileIO,
-        cwd: f.cwd,
-        homeDir: f.homeDir,
-        pollIntervalMs: 60_000,
-      });
       fork = await Thread.clone({
         sourceThread: f.thread,
         newId: uniqueThreadId("context-fork"),
         nativeMessageIdx: forkPoint,
         context: {
           ...f.thread.context,
-          contextTracker: manager,
-          contextDelivery: { manager },
-          commentStore: new CommentStore(),
+          contextDelivery: { pollIntervalMs: 60_000 },
         },
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
+      const manager = fork.core.fileSupervisor;
       fork.setTitle("fork context integration");
       expect(JSON.stringify(fork.getProviderMessages())).not.toContain(
         "source-only later request",
@@ -239,11 +221,11 @@ describe("Thread-owned context delivery", () => {
       expect(f.manager.files[f.file].agentView).toEqual(sourceView);
       await fork.reset({ seed: [], archive: { type: "none" } });
       expect(f.manager.files[f.file].agentView).toEqual(sourceView);
-      expect(manager.files[f.file].agentView).toBeUndefined();
+      expect(fork.core.fileSupervisor.files[f.file].agentView).toBeUndefined();
       await f.thread.destroy();
       await fs.writeFile(f.file, "fork after source destruction\n");
       expect(await f.request(fork)).toContain("fork after source destruction");
-      manager.removeFileContext(f.file);
+      fork.core.fileSupervisor.removeFileContext(f.file);
       expect(f.manager.files[f.file]).toBeDefined();
     } finally {
       if (fork) {
@@ -251,6 +233,100 @@ describe("Thread-owned context delivery", () => {
         await fork.awaitArchiveFlush();
         await cleanupArchive(fork.id);
       }
+      await f.cleanup();
+    }
+  });
+  it.each([
+    false,
+    true,
+  ])("tip fork preserves delivery only while idle (busy=%s)", async (busy) => {
+    const f = await fixture();
+    let fork: Thread | undefined;
+    try {
+      await f.request();
+      await fs.writeFile(f.file, "pending external edit\n");
+      await f.manager.refreshPendingUpdates();
+      let sent: ReturnType<Thread["send"]> | undefined;
+      if (busy) {
+        sent = f.thread.send([
+          {
+            type: "text",
+            text: "in flight",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          },
+        ]);
+        await awaitNextStream(f.mockClient, f.mockClient.streams.at(-1));
+      }
+      fork = await Thread.clone({
+        sourceThread: f.thread,
+        newId: uniqueThreadId("tip-fork"),
+        nativeMessageIdx: f.thread.inferenceManager.getNativeMessageIdx(),
+        context: {
+          ...f.thread.context,
+          contextDelivery: { pollIntervalMs: 60_000 },
+        },
+        callbacks: { onUpdate: () => {}, resolve: resolveAsText },
+      });
+      const tracker = fork.core.fileSupervisor;
+      expect(tracker).not.toBe(f.manager);
+      if (busy) {
+        expect(tracker.files[f.file].agentView).toBeUndefined();
+        await f.thread.abort();
+        await sent;
+      } else {
+        expect(tracker.files[f.file].agentView).toEqual(
+          f.manager.files[f.file].agentView,
+        );
+        expect(tracker.getPendingUpdates()).toEqual(
+          f.manager.getPendingUpdates(),
+        );
+        expect(tracker.getPendingUpdates()).not.toBe(
+          f.manager.getPendingUpdates(),
+        );
+        expect(await tracker.hasPendingContent()).toBe(true);
+      }
+    } finally {
+      if (fork) {
+        await fork.destroy();
+        await fork.awaitArchiveFlush();
+        await cleanupArchive(fork.id);
+      }
+      await f.cleanup();
+    }
+  });
+
+  it("reset retires a pending file read before it can mutate or notify the replacement", async () => {
+    const f = await fixture();
+    try {
+      await f.request();
+      const originalView = structuredClone(f.manager.files[f.file].agentView);
+      let release!: (content: string) => void;
+      let entered!: () => void;
+      const reading = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const read = vi
+        .spyOn(f.fileIO, "readFile")
+        .mockImplementationOnce(async () => {
+          entered();
+          return new Promise<string>((resolve) => {
+            release = resolve;
+          });
+        });
+      const pending = f.manager.getContextUpdate();
+      await reading;
+      await f.thread.reset({ seed: [], archive: { type: "none" } });
+      const replacement = f.thread.core.fileSupervisor;
+      f.changed.mockClear();
+      release("stale read content\n");
+      expect(await pending).toEqual({});
+      expect(f.manager.files[f.file].agentView).toEqual(originalView);
+      expect(replacement.files[f.file].agentView).toBeUndefined();
+      expect(f.changed).not.toHaveBeenCalled();
+      expect(f.onFilesSent).toHaveBeenCalledTimes(1);
+      read.mockRestore();
+      expect(await f.request()).toContain("original tracked content");
+    } finally {
       await f.cleanup();
     }
   });

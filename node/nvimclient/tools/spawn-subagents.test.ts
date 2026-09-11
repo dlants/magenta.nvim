@@ -3,6 +3,7 @@ import * as path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
   type EndTurnAction,
+  PLACEHOLDER_NATIVE_MESSAGE_IDX,
   pollUntil,
   type ThreadId,
   type ThreadSupervisor,
@@ -787,7 +788,11 @@ describe("foreach-style parallel agents", () => {
         // A failed thread is parked, with its log already rolled back, so a
         // fresh send is all the recovery it needs.
         void childWrapper.thread.core.send([
-          { type: "user", text: "error_task" },
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: "error_task",
+          },
         ]);
 
         const retryStream = await driver.mockAnthropic.awaitPendingStream({

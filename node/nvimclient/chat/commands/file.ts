@@ -32,13 +32,13 @@ export const fileCommand: Command = {
         throw new Error(`File ${filePath} does not exist`);
       }
 
-      context.contextManager.addFileContext(
+      context.fileSupervisor.addFileContext(
         absFilePath,
         relFilePath,
         fileTypeInfo,
       );
 
-      return []; // File context is handled by contextManager
+      return []; // File context is handled by fileSupervisor
     } catch (error) {
       context.nvim.logger.error(
         `Failed to add file to context for ${filePath}: ${error instanceof Error ? error.message : String(error)}`,

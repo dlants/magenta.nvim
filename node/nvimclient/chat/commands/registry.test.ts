@@ -1,5 +1,5 @@
 import os from "node:os";
-import type { ContextManager } from "@magenta/server";
+import type { FileSupervisor } from "@magenta/server";
 import { describe, expect, it, vi } from "vitest";
 import type { Nvim } from "../../nvim/nvim-node/index.ts";
 import type { MagentaOptions } from "../../options.ts";
@@ -58,9 +58,9 @@ const createMockContext = (): MessageContext => {
     } as unknown as Nvim,
     cwd: "/test" as NvimCwd,
     homeDir: os.homedir() as HomeDir,
-    contextManager: {
+    fileSupervisor: {
       addFileContext: updateFn,
-    } as unknown as ContextManager,
+    } as unknown as FileSupervisor,
     options: {
       customCommands: [],
     } as unknown as MagentaOptions,
@@ -130,7 +130,7 @@ describe("CommandRegistry", () => {
     expect(result.processedText).toBe("@file:test.ts more text");
     // Context manager should have been called
     // Should also add file to context
-    expect(context.contextManager.addFileContext).toHaveBeenCalled();
+    expect(context.fileSupervisor.addFileContext).toHaveBeenCalled();
   });
 
   it("leaves delivery prefixes alone; parseSubmission strips them", async () => {

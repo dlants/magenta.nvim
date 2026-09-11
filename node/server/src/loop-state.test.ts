@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ToolOutcome } from "./agent.ts";
 import { loopLabel, loopStreamingBlock } from "./loop-state.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import {
   agentHooks,
   awaitNextStream,
@@ -22,7 +23,13 @@ describe("AgentTurn lifecycle and progress", () => {
         return { promise: tools.promise, abort: () => {} };
       },
     });
-    const turn = agent.send([{ type: "user", text: "read the file" }]);
+    const turn = agent.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "read the file",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     expect(turn.loopState).toMatchObject({
       type: "streaming",
@@ -94,7 +101,13 @@ describe("AgentTurn lifecycle and progress", () => {
         return { promise: tools.promise, abort };
       },
     });
-    const first = agent.send([{ type: "user", text: "read" }]);
+    const first = agent.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "read",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("read" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/test.txt" }],
@@ -117,7 +130,13 @@ describe("AgentTurn lifecycle and progress", () => {
     expect(abort).toHaveBeenCalledTimes(1);
     expect(loopLabel(agent.loopState)).toBe("idle");
 
-    const second = agent.send([{ type: "user", text: "try again" }]);
+    const second = agent.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "try again",
+      },
+    ]);
     const next = await awaitNextStream(mockClient, stream);
     expect(second.loopState.aborting).toBe(false);
     next.streamText("done");
@@ -145,7 +164,13 @@ describe("AgentTurn lifecycle and progress", () => {
           ],
         }),
     });
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const turn = agent.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "hello",
+      },
+    ]);
     await entered.promise;
     turn.abort();
     expect(turn.loopState.aborting).toBe(true);
@@ -156,7 +181,13 @@ describe("AgentTurn lifecycle and progress", () => {
 
   it("aborts the streaming request through its turn handle", async () => {
     const { agent, mockClient } = createTestAgent();
-    const turn = agent.send([{ type: "user", text: "hello" }]);
+    const turn = agent.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "hello",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     turn.abort();
     await pollUntil(() => {

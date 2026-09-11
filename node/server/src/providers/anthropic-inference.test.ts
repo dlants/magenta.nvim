@@ -59,7 +59,9 @@ class AgentUnderTest {
   }
 
   runTurn(text: string): Promise<SendResult> {
-    return this.agent.send([{ type: "user", text }]).promise;
+    return this.agent.send([
+      { type: "text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX, text },
+    ]).promise;
   }
 
   /** Non-text input reaches the manager from a hook, not from a submission,

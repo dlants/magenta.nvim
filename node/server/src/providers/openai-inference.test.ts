@@ -99,7 +99,9 @@ async function startTurn(
   text = "hello",
 ): Promise<{ turn: Promise<SendResult>; stream: MockResponseStream }> {
   const next = client.streams.length;
-  const turn = agent.send([{ type: "user", text }]);
+  const turn = agent.send([
+    { type: "text", nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX, text },
+  ]);
   const stream = await client.awaitStreamAt(next);
   return { turn: turn.promise, stream };
 }
@@ -634,7 +636,13 @@ describe("OpenAIInferenceManager invariant guards", () => {
     const { turn, stream } = await startTurn(client, agent);
 
     expect(
-      await agent.send([{ type: "user", text: "again" }]).promise,
+      await agent.send([
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "again",
+        },
+      ]).promise,
     ).toMatchObject({
       type: "failed",
       error: expect.objectContaining({

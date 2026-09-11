@@ -158,7 +158,7 @@ it("getFile adds file to context after reading", async () => {
     await driver.showSidebar();
 
     // Make sure context is empty initially
-    expect(driver.magenta.chat.getActiveThread().contextManager.files).toEqual(
+    expect(driver.magenta.chat.getActiveThread().fileSupervisor.files).toEqual(
       {},
     );
 
@@ -199,7 +199,7 @@ it("getFile adds file to context after reading", async () => {
     });
 
     const relativeFiles = Object.values(
-      driver.magenta.chat.getActiveThread().contextManager.files,
+      driver.magenta.chat.getActiveThread().fileSupervisor.files,
     ).map((f) => f.relFilePath);
     expect(relativeFiles).toContain("poem.txt");
   });
@@ -317,7 +317,7 @@ it("should add images to context manager", async () => {
     await driver.showSidebar();
 
     // Verify context is empty initially
-    expect(driver.magenta.chat.getActiveThread().contextManager.files).toEqual(
+    expect(driver.magenta.chat.getActiveThread().fileSupervisor.files).toEqual(
       {},
     );
 
@@ -362,7 +362,7 @@ it("should add images to context manager", async () => {
 
     // Context should contain the image
     const contextFiles =
-      driver.magenta.chat.getActiveThread().contextManager.files;
+      driver.magenta.chat.getActiveThread().fileSupervisor.files;
     expect(Object.keys(contextFiles)).toHaveLength(1);
     const fileEntry = Object.values(contextFiles)[0];
     expect(fileEntry.relFilePath).toBe("test.jpg");
@@ -375,7 +375,7 @@ it("should add PDFs to context manager", async () => {
     await driver.showSidebar();
 
     // Verify context is empty initially
-    expect(driver.magenta.chat.getActiveThread().contextManager.files).toEqual(
+    expect(driver.magenta.chat.getActiveThread().fileSupervisor.files).toEqual(
       {},
     );
 
@@ -420,7 +420,7 @@ it("should add PDFs to context manager", async () => {
 
     // Context should contain the PDF
     const contextFiles =
-      driver.magenta.chat.getActiveThread().contextManager.files;
+      driver.magenta.chat.getActiveThread().fileSupervisor.files;
     expect(Object.keys(contextFiles)).toHaveLength(1);
     const fileEntry = Object.values(contextFiles)[0];
     expect(fileEntry.relFilePath).toBe("sample2.pdf");
@@ -469,7 +469,7 @@ it("should continue to add text files to context normally", async () => {
     });
 
     const relativeFiles = Object.values(
-      driver.magenta.chat.getActiveThread().contextManager.files,
+      driver.magenta.chat.getActiveThread().fileSupervisor.files,
     ).map((f) => f.relFilePath);
     expect(relativeFiles).toContain("poem.txt");
   });
@@ -592,7 +592,7 @@ it("should handle mixed content types in a single conversation", async () => {
     // All files should be in context
 
     const relativeFiles = Object.values(
-      driver.magenta.chat.getActiveThread().contextManager.files,
+      driver.magenta.chat.getActiveThread().fileSupervisor.files,
     )
       .map((f) => f.relFilePath)
       .sort();

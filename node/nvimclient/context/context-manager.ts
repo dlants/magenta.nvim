@@ -1,5 +1,5 @@
 import {
-  type ContextManager,
+  type FileSupervisor,
   type FileUpdates,
   formatGitHead,
   type GitContextUpdate,
@@ -39,7 +39,7 @@ export type ContextViewContext = {
 
 export function openFile(
   absFilePath: AbsFilePath,
-  core: ContextManager,
+  core: FileSupervisor,
   context: ContextViewContext,
 ): void {
   const fileInfo = core.files[absFilePath];
@@ -100,7 +100,7 @@ function renderUpdateIndicator(
 }
 
 export function contextFilesView(
-  core: ContextManager,
+  core: FileSupervisor,
   context: ContextViewContext,
   view: { expanded: boolean; onToggle: () => void },
 ) {
@@ -179,7 +179,7 @@ export function renderGitUpdate(
 
 export function renderContextUpdate(
   contextUpdates: FileUpdates | undefined,
-  core: ContextManager,
+  core: FileSupervisor,
   context: ContextViewContext,
   view: {
     expandedUpdates: { [absFilePath: string]: boolean };

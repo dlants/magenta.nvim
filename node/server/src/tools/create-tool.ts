@@ -10,7 +10,6 @@ import type { ScriptRunner } from "../capabilities/script-runner.ts";
 import type { Shell } from "../capabilities/shell.ts";
 import type { ThreadManager } from "../capabilities/thread-manager.ts";
 import type { ThreadId } from "../chat-types.ts";
-import type { CommentStore } from "../context/comment-store.ts";
 import type { EdlRegisters } from "../edl/index.ts";
 import type { Logger } from "../logger.ts";
 import type { ExecutingToolInvocation, ToolRequest } from "../tool-types.ts";
@@ -25,7 +24,6 @@ import type { MCPToolManager } from "./mcp/manager.ts";
 import * as MCPTool from "./mcp/tool.ts";
 import { parseToolName } from "./mcp/types.ts";
 import * as NvimLua from "./nvimLua.ts";
-import * as Reply from "./reply.ts";
 import * as RunScript from "./run-script.ts";
 import * as SpawnSubagents from "./spawn-subagents.ts";
 import * as ThreadTitle from "./thread-title.ts";
@@ -45,7 +43,6 @@ export type CreateToolContext = {
   contextTracker: ContextTracker;
   onToolApplied: OnToolApplied;
   edlRegisters: EdlRegisters;
-  commentStore?: CommentStore | undefined;
   fileIO: FileIO;
   shell: Shell;
   threadManager: ThreadManager;
@@ -160,15 +157,6 @@ export function createTool(
       }
       return NvimLua.execute(staticRequest, {
         luaExecutor: context.luaExecutor,
-      });
-    }
-
-    case "reply": {
-      if (!context.commentStore) {
-        throw new Error("reply tool requires a comments capability");
-      }
-      return Reply.execute(staticRequest, {
-        commentStore: context.commentStore,
       });
     }
 

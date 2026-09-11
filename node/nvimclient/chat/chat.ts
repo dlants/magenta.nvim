@@ -1,6 +1,6 @@
 import type {
+  AgentInput,
   FileIO,
-  InputMessage,
   NativeMessageIdx,
   RestResult,
   ScriptRunner,
@@ -63,7 +63,7 @@ import { shortenPath } from "../utils/files.ts";
 import { formatTokenCount } from "../utils/tokens.ts";
 import type { CommandRegistry } from "./commands/registry.ts";
 import type { SandboxRoot } from "./thread.ts";
-import { NvimThread, type RootNvimThread } from "./thread.ts";
+import { NvimThread } from "./thread.ts";
 import { DockerSupervisor } from "./thread-supervisor.ts";
 import { view as threadView } from "./thread-view.ts";
 
@@ -606,7 +606,7 @@ export class Chat implements ThreadManager {
     })
       .then((discovered) => {
         for (const file of discovered) {
-          thread.contextManager.addFileContext(
+          thread.fileSupervisor.addFileContext(
             file.absFilePath,
             file.relFilePath,
             file.fileTypeInfo,
@@ -643,7 +643,7 @@ export class Chat implements ThreadManager {
     profile: Profile;
     contextFiles?: UnresolvedFilePath[];
     parent?: ThreadId;
-    inputMessages?: InputMessage[];
+    inputMessages?: AgentInput[];
     threadType: ThreadType;
     subagentConfig?: SubagentConfig;
     fileIO?: FileIO;
@@ -758,18 +758,18 @@ export class Chat implements ThreadManager {
 
     bypassRef.get = () => thread.isSandboxBypassed;
 
-    thread.contextManager.on("fileAdded", (absFilePath) => {
+    thread.fileSupervisor.on("fileAdded", (absFilePath) => {
       this.triggerHierarchyDiscovery(thread, absFilePath);
     });
 
     for (const absFilePath of Object.keys(
-      thread.contextManager.files,
+      thread.fileSupervisor.files,
     ) as AbsFilePath[]) {
       this.triggerHierarchyDiscovery(thread, absFilePath);
     }
 
     if (contextFiles.length > 0) {
-      await thread.contextManager.addFiles(contextFiles);
+      await thread.fileSupervisor.addFiles(contextFiles);
     }
 
     const autoCompact =
@@ -1366,15 +1366,15 @@ ${rows}${loadMore}`;
     });
   }
 
-  /** The root of the active thread's ancestry — the thread comments belong to. */
+  /** The root of the active thread's ancestry. */
   getActiveRootThreadId(): ThreadId {
     return this.getRootAncestorId(this.getActiveThread().id);
   }
 
   /** The active root thread, or `undefined` while the chat has no active
    * thread, that thread hasn't finished initializing, or its root ancestor
-   * owns no comments (script threads are parentless subagents). */
-  getActiveRootThreadOrUndefined(): RootNvimThread | undefined {
+   * is not a root thread (script threads are parentless subagents). */
+  getActiveRootThreadOrUndefined(): NvimThread | undefined {
     if (!this.state.activeThreadId) return undefined;
     const threadWrapper =
       this.threadWrappers[this.getRootAncestorId(this.state.activeThreadId)];
@@ -1382,20 +1382,16 @@ ${rows}${loadMore}`;
       return undefined;
     }
     const thread = threadWrapper.thread;
-    return thread.isRootThread() ? thread : undefined;
+    return thread;
   }
 
-  /** The root ancestor of the active thread — the thread that owns the
-   * comment store, since comments belong to a root conversation. */
-  getActiveRootThread(): RootNvimThread {
+  /** The root ancestor of the active thread. */
+  getActiveRootThread(): NvimThread {
     const threadWrapper = this.threadWrappers[this.getActiveRootThreadId()];
     if (!(threadWrapper && threadWrapper.state === "initialized")) {
       throw new Error(`Root thread not initialized yet...`);
     }
     const thread = threadWrapper.thread;
-    if (!thread.isRootThread()) {
-      throw new Error(`Thread ${thread.id} is not a root thread`);
-    }
     return thread;
   }
 
@@ -1453,14 +1449,15 @@ ${rows}${loadMore}`;
       getDisplayWidth: this.context.getDisplayWidth,
     });
 
-    thread.contextManager.on("fileAdded", (absFilePath) => {
+    thread.fileSupervisor.on("fileAdded", (absFilePath) => {
       this.triggerHierarchyDiscovery(thread, absFilePath);
     });
 
     const markerIdx = thread.core.getProviderMessages().length;
     thread.core.prependToNextTurn([
       {
-        type: "user",
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text: "<fork-notification>The user forked this thread at this point. They may want to switch gears or ask follow-up questions from here.</fork-notification>",
       },
     ]);
@@ -1682,7 +1679,13 @@ ${rows}${loadMore}`;
       profile: subagentProfile,
       contextFiles: opts.contextFiles || [],
       parent: parentThreadId,
-      inputMessages: [{ type: "system", text: opts.prompt }],
+      inputMessages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: opts.prompt,
+        },
+      ],
       threadType: opts.threadType,
       ...(opts.subagentConfig ? { subagentConfig: opts.subagentConfig } : {}),
       environmentConfig,
@@ -1734,7 +1737,13 @@ ${rows}${loadMore}`;
       ...(opts.contextFiles
         ? { contextFiles: opts.contextFiles as UnresolvedFilePath[] }
         : {}),
-      inputMessages: [{ type: "system", text: opts.prompt }],
+      inputMessages: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: opts.prompt,
+        },
+      ],
       threadType: "subagent",
       environmentConfig,
       ...(opts.systemReminder

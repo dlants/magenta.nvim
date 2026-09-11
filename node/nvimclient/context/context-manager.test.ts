@@ -25,7 +25,7 @@ it("returns diff when file is edited on disk", async () => {
     await driver.showSidebar();
 
     // Get the context manager from the driver
-    const contextManager = driver.magenta.chat.getActiveThread().contextManager;
+    const fileSupervisor = driver.magenta.chat.getActiveThread().fileSupervisor;
 
     const cwd = await getcwd(driver.nvim);
     const absFilePath = resolveFilePath(
@@ -39,7 +39,7 @@ it("returns diff when file is edited on disk", async () => {
 
     // Open the file to track the buffer
     await driver.editFile("poem.txt");
-    await contextManager.getContextUpdate();
+    await fileSupervisor.getContextUpdate();
 
     // Edit the file on disk (disk-first approach means agent reads from disk)
     const filePath = `${cwd}/poem.txt`;
@@ -51,7 +51,7 @@ it("returns diff when file is edited on disk", async () => {
     fs.writeFileSync(filePath, edited);
 
     // Get context updates after the edit
-    const updates = await contextManager.getContextUpdate();
+    const updates = await fileSupervisor.getContextUpdate();
     const update = updates[absFilePath];
     // Check that it's a diff update
     expect(update).toBeDefined();
@@ -71,7 +71,7 @@ it("returns diff when disk changes even if buffer has unsaved changes", async ()
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
 
-    const contextManager = driver.magenta.chat.getActiveThread().contextManager;
+    const fileSupervisor = driver.magenta.chat.getActiveThread().fileSupervisor;
 
     const cwd = await getcwd(driver.nvim);
     const absFilePath = resolveFilePath(
@@ -84,14 +84,14 @@ it("returns diff when disk changes even if buffer has unsaved changes", async ()
     await driver.editFile("poem.txt");
 
     // Initial read to establish agentView
-    await contextManager.getContextUpdate();
+    await fileSupervisor.getContextUpdate();
 
     // Modify the file on disk directly (agent reads from disk)
     const filePath = `${cwd}/poem.txt`;
     fs.writeFileSync(filePath, "Disk edit\n");
 
     // Context update should return a diff (disk-first reads from disk)
-    const updates = await contextManager.getContextUpdate();
+    const updates = await fileSupervisor.getContextUpdate();
     const update = updates[absFilePath];
     expect(update).toBeDefined();
     expect(update.update.status).toBe("ok");
@@ -277,7 +277,7 @@ it("handles file deletion during buffer tracking", async () => {
     await driver.showSidebar();
 
     // Get the context manager from the driver
-    const contextManager = driver.magenta.chat.getActiveThread().contextManager;
+    const fileSupervisor = driver.magenta.chat.getActiveThread().fileSupervisor;
 
     const cwd = await getcwd(driver.nvim);
     const tempFilePath = resolveFilePath(
@@ -296,17 +296,17 @@ it("handles file deletion during buffer tracking", async () => {
     await driver.editFile("temp-tracked.txt");
 
     // Get initial context update to establish buffer tracking
-    const firstUpdates = await contextManager.getContextUpdate();
+    const firstUpdates = await fileSupervisor.getContextUpdate();
     expect(firstUpdates[tempFilePath]).toBeDefined();
 
     // Delete the file while it's being tracked
     await fs.promises.unlink(tempFilePath);
 
     // Get context updates after deletion
-    const secondUpdates = await contextManager.getContextUpdate();
+    const secondUpdates = await fileSupervisor.getContextUpdate();
 
     // File should be removed from context and file-deleted update should be returned
-    expect(contextManager.files[tempFilePath]).toBeUndefined();
+    expect(fileSupervisor.files[tempFilePath]).toBeUndefined();
     expect(secondUpdates[tempFilePath]).toBeDefined();
     expect(secondUpdates[tempFilePath].update.status).toBe("ok");
     if (secondUpdates[tempFilePath].update.status === "ok") {
@@ -322,10 +322,10 @@ it("issuing a getFile request adds the file to the context but doesn't send its 
     await driver.showSidebar();
 
     // Get the context manager from the driver
-    const contextManager = driver.magenta.chat.getActiveThread().contextManager;
+    const fileSupervisor = driver.magenta.chat.getActiveThread().fileSupervisor;
 
     // Verify context is empty initially
-    expect(contextManager.files).toEqual({});
+    expect(fileSupervisor.files).toEqual({});
 
     // Issue a getFile request for a binary file
     await driver.inputMagentaText(`Please analyze the image test.jpg`);
@@ -380,8 +380,8 @@ it("issuing a getFile request adds the file to the context but doesn't send its 
       "test.jpg" as UnresolvedFilePath,
       os.homedir() as HomeDir,
     );
-    expect(contextManager.files[absFilePath]).toBeDefined();
-    expect(contextManager.files[absFilePath].fileTypeInfo.category).toBe(
+    expect(fileSupervisor.files[absFilePath]).toBeDefined();
+    expect(fileSupervisor.files[absFilePath].fileTypeInfo.category).toBe(
       "image",
     );
   });
@@ -552,8 +552,8 @@ it("large context files are summarized and rendered with a (summary) badge", asy
         toolRequests: [],
       });
 
-      const contextManager =
-        driver.magenta.chat.getActiveThread().contextManager;
+      const fileSupervisor =
+        driver.magenta.chat.getActiveThread().fileSupervisor;
       const cwd = await getcwd(driver.nvim);
       const absHuge = resolveFilePath(
         cwd,
@@ -561,7 +561,7 @@ it("large context files are summarized and rendered with a (summary) badge", asy
         os.homedir() as HomeDir,
       );
       await pollUntil(() => {
-        if (contextManager.files[absHuge]?.agentView?.type !== "summary") {
+        if (fileSupervisor.files[absHuge]?.agentView?.type !== "summary") {
           throw new Error("agentView not yet set to summary");
         }
       });
@@ -597,7 +597,7 @@ it("large context files are summarized and rendered with a (summary) badge", asy
 it("out-of-process file change surfaces in the pending-context view", async () => {
   await withDriver({}, async (driver) => {
     await driver.showSidebar();
-    const contextManager = driver.magenta.chat.getActiveThread().contextManager;
+    const fileSupervisor = driver.magenta.chat.getActiveThread().fileSupervisor;
 
     const cwd = await getcwd(driver.nvim);
     const absFilePath = resolveFilePath(
@@ -607,7 +607,7 @@ it("out-of-process file change surfaces in the pending-context view", async () =
     );
 
     await driver.addContextFiles("poem.txt");
-    await contextManager.getContextUpdate();
+    await fileSupervisor.getContextUpdate();
 
     await fs.promises.writeFile(
       absFilePath,
@@ -658,10 +658,10 @@ describe("hierarchy context discovery", () => {
           toolRequests: [],
         });
 
-        const contextManager =
-          driver.magenta.chat.getActiveThread().contextManager;
+        const fileSupervisor =
+          driver.magenta.chat.getActiveThread().fileSupervisor;
         await pollUntil(() => {
-          const paths = Object.values(contextManager.files).map(
+          const paths = Object.values(fileSupervisor.files).map(
             (f) => f.relFilePath as string,
           );
           if (!paths.includes("nested/dir/file.txt")) {
@@ -686,8 +686,8 @@ describe("hierarchy context discovery", () => {
       },
       async (driver) => {
         await driver.showSidebar();
-        const contextManager =
-          driver.magenta.chat.getActiveThread().contextManager;
+        const fileSupervisor =
+          driver.magenta.chat.getActiveThread().fileSupervisor;
 
         await driver.inputMagentaText("Please read the leaf file");
         await driver.send();
@@ -713,7 +713,7 @@ describe("hierarchy context discovery", () => {
         });
 
         await pollUntil(() => {
-          const paths = Object.values(contextManager.files).map(
+          const paths = Object.values(fileSupervisor.files).map(
             (f) => f.relFilePath as string,
           );
           if (!paths.includes("nested/dir/file.txt")) {
@@ -777,9 +777,9 @@ describe("hierarchy context discovery", () => {
           throw new Error("expected subagent thread to be initialized");
         }
 
-        const subContextManager = childWrapper.thread.contextManager;
+        const subFileSupervisor = childWrapper.thread.fileSupervisor;
         await pollUntil(() => {
-          const paths = Object.values(subContextManager.files).map(
+          const paths = Object.values(subFileSupervisor.files).map(
             (f) => f.relFilePath as string,
           );
           if (!paths.includes("nested/dir/file.txt")) {
@@ -801,10 +801,10 @@ describe("hierarchy context discovery", () => {
       },
       async (driver) => {
         await driver.showSidebar();
-        const contextManager =
-          driver.magenta.chat.getActiveThread().contextManager;
+        const fileSupervisor =
+          driver.magenta.chat.getActiveThread().fileSupervisor;
         await pollUntil(() => {
-          const paths = Object.values(contextManager.files).map(
+          const paths = Object.values(fileSupervisor.files).map(
             (f) => f.relFilePath as string,
           );
           if (!paths.includes("nested/dir/file.txt")) {
@@ -829,7 +829,7 @@ describe("hierarchy context discovery", () => {
 
         const parentThread = driver.magenta.chat.getActiveThread();
         await pollUntil(() => {
-          const paths = Object.values(parentThread.contextManager.files).map(
+          const paths = Object.values(parentThread.fileSupervisor.files).map(
             (f) => f.relFilePath as string,
           );
           if (!paths.includes("nested/context.md")) {
@@ -848,7 +848,7 @@ describe("hierarchy context discovery", () => {
         }
 
         const forkedFiles = Object.values(
-          forkedWrapper.thread.contextManager.files,
+          forkedWrapper.thread.fileSupervisor.files,
         ).map((f) => f.relFilePath as string);
         expect(forkedFiles).toContain("nested/dir/file.txt");
         expect(forkedFiles).toContain("nested/context.md");
@@ -879,18 +879,18 @@ describe("hierarchy context discovery", () => {
       },
       async (driver) => {
         await driver.showSidebar();
-        const contextManager =
-          driver.magenta.chat.getActiveThread().contextManager;
+        const fileSupervisor =
+          driver.magenta.chat.getActiveThread().fileSupervisor;
 
         const addedEvents: string[] = [];
-        contextManager.on("fileAdded", (absFilePath) => {
+        fileSupervisor.on("fileAdded", (absFilePath) => {
           addedEvents.push(absFilePath);
         });
 
         await driver.addContextFiles("a/b/c/leaf.txt");
 
         await pollUntil(() => {
-          const paths = Object.values(contextManager.files).map(
+          const paths = Object.values(fileSupervisor.files).map(
             (f) => f.relFilePath as string,
           );
           if (
@@ -918,9 +918,9 @@ describe("hierarchy context discovery", () => {
         await driver.showSidebar();
         await driver.addContextFiles("nested/dir/file.txt");
 
-        const contextManager =
-          driver.magenta.chat.getActiveThread().contextManager;
-        const paths = Object.values(contextManager.files).map(
+        const fileSupervisor =
+          driver.magenta.chat.getActiveThread().fileSupervisor;
+        const paths = Object.values(fileSupervisor.files).map(
           (f) => f.relFilePath,
         );
         expect(paths).toContain("nested/dir/file.txt");

@@ -1,7 +1,10 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import {
+  anthropicInferenceOptions,
+  type CreateInferenceManagerOptions,
   MockOpenAIClient,
   OpenAIInferenceManager,
+  openaiInferenceOptions,
   type ToolRequest,
   validateInput,
 } from "@magenta/server";
@@ -16,7 +19,6 @@ import {
 import { setMockProvider } from "./provider.ts";
 import type {
   AgentInput,
-  InferenceOptions,
   NativeInferenceManager,
   Provider,
   ProviderMessage,
@@ -368,16 +370,22 @@ Streams: ${this.mockClient.streams.length}`);
     });
   }
 
-  createInferenceManager(options: InferenceOptions): NativeInferenceManager {
+  createInferenceManager(
+    options: CreateInferenceManagerOptions,
+  ): NativeInferenceManager {
     if (this.agentKind === "openai") {
-      return new OpenAIInferenceManager(options, this.mockOpenAIClient, {
-        includeWebSearch: true,
-        logger: winston.createLogger(),
-        validateInput,
-      });
+      return new OpenAIInferenceManager(
+        openaiInferenceOptions(options),
+        this.mockOpenAIClient,
+        {
+          includeWebSearch: true,
+          logger: winston.createLogger(),
+          validateInput,
+        },
+      );
     }
     return new AnthropicInferenceManager(
-      options,
+      anthropicInferenceOptions(options),
       this.mockClient as unknown as Anthropic,
       {
         authType: "max",

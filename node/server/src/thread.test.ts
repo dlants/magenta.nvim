@@ -7,6 +7,10 @@ import {
   loopStreamingBlock,
 } from "./loop-state.ts";
 import {
+  type AgentInput,
+  PLACEHOLDER_NATIVE_MESSAGE_IDX,
+} from "./providers/provider-types.ts";
+import {
   parseCompact,
   pendingMessage,
   renderPending,
@@ -29,6 +33,57 @@ import type { ToolName, ToolRequestId } from "./tool-types.ts";
 import { Defer, pollUntil } from "./utils/async.ts";
 
 describe("deferred submissions", () => {
+  it.each([
+    "async",
+    "next",
+  ] as const)("preserves programmatic inputs queued for %s without resolving them", async (queue) => {
+    const resolve = vi.fn();
+    const { core, mockClient } = createAgentWithMock(
+      undefined,
+      uniqueThreadId("queued-input"),
+      resolve,
+    );
+    core.setTitle("test");
+    const sent = core.send([
+      {
+        type: "text",
+        text: "start",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ]);
+    const first = await mockClient.awaitStream();
+    const inputs: AgentInput[] = [
+      {
+        type: "text",
+        text: "@compact is literal input",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+      {
+        type: "image",
+        source: { type: "base64", media_type: "image/png", data: "aW1hZ2U=" },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+      {
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: "cGRm" },
+        title: "attachment",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ];
+    expect(await core.send(inputs, { queue })).toEqual({ type: "queued" });
+    first.finishResponse("end_turn");
+    const next = await awaitNextStream(mockClient, first);
+    expect(resolve).not.toHaveBeenCalled();
+    const content = core
+      .getProviderMessages()
+      .flatMap((message) => message.content);
+    for (const { nativeMessageIdx: _, ...input } of inputs) {
+      expect(content).toContainEqual(expect.objectContaining(input));
+    }
+    next.finishResponse("end_turn");
+    await sent;
+  });
+
   it("resolves a queued message at delivery, not when it was queued", async () => {
     let fileContents = "before";
     const calls: string[] = [];
@@ -40,13 +95,23 @@ describe("deferred submissions", () => {
         return Promise.resolve({
           compact: false,
           messages: [
-            { type: "user" as const, text: `${message} [${fileContents}]` },
+            {
+              type: "text" as const,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: `${message} [${fileContents}]`,
+            },
           ],
           reminders: [],
         });
       },
     );
-    void core.send([{ type: "user", text: "start" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     expect(
       await core.submit(pendingMessage("look at the file"), "next"),
@@ -64,7 +129,13 @@ describe("deferred submissions", () => {
 
   it("flushes the whole queue, in order, at one delivery point", async () => {
     const { core, mockClient } = createAgentWithMock();
-    void core.send([{ type: "user", text: "start" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     for (const text of ["one", "two", "three"]) {
       await core.submit(pendingMessage(text), "async");
@@ -88,11 +159,23 @@ describe("deferred submissions", () => {
           ? Promise.reject(new Error("resolution failed"))
           : Promise.resolve({
               compact: false,
-              messages: [{ type: "user" as const, text: message }],
+              messages: [
+                {
+                  type: "text" as const,
+                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                  text: message,
+                },
+              ],
               reminders: [],
             }),
     );
-    void core.send([{ type: "user", text: "start" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     await core.submit(pendingMessage("bad"), "next");
     await core.submit(pendingMessage("good"), "next");
@@ -124,11 +207,23 @@ describe("deferred submissions", () => {
       (message) =>
         Promise.resolve({
           compact: false,
-          messages: [{ type: "user" as const, text: message }],
+          messages: [
+            {
+              type: "text" as const,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: message,
+            },
+          ],
           reminders: ["remember the file"],
         }),
     );
-    void core.send([{ type: "user", text: "start" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     await core.submit(pendingMessage("queued"), "next");
     expect(core.activeReminders.has("remember the file")).toBe(false);
@@ -141,7 +236,13 @@ describe("deferred submissions", () => {
 
   it("still carries the standing reminder on the submission after a resting turn-end", async () => {
     const { core, mockClient } = createAgentWithMock();
-    void core.send([{ type: "user", text: "hello" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "hello",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamText("working");
     // Enough output tokens to arm the standing reminder. Nothing is queued, so
@@ -152,7 +253,13 @@ describe("deferred submissions", () => {
       if (!core.isBusy) return true;
       throw new Error("waiting for the thread to come to rest");
     });
-    void core.send([{ type: "user", text: "again" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "again",
+      },
+    ]);
     const second = await awaitNextStream(mockClient, stream);
     const lastMessage = second.messages[second.messages.length - 1];
     expect(JSON.stringify(lastMessage.content)).toContain("<system-reminder>");
@@ -164,7 +271,13 @@ describe("deferred submissions", () => {
       uniqueThreadId("deferred-all-fail"),
       () => Promise.reject(new Error("resolution failed")),
     );
-    const sent = core.send([{ type: "user", text: "start" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     await core.submit(pendingMessage("bad"), "next");
     const streamsBefore = mockClient.streams.length;
@@ -190,7 +303,13 @@ describe("deferred submissions", () => {
         stat: async () => statPromise,
       } as unknown as ThreadContext["fileIO"],
     });
-    void core.send([{ type: "user", text: "start" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(
       "tool-midturn" as ToolRequestId,
@@ -250,7 +369,13 @@ describe("deferred submissions", () => {
         },
       },
     ]);
-    void core.send([{ type: "user", text: "do the task" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "do the task",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     expect(
       await core.submit(pendingMessage("also check this"), "async"),
@@ -290,12 +415,26 @@ describe("deferred submissions", () => {
         const { compact, rest } = parseCompact(message);
         return Promise.resolve({
           compact,
-          messages: rest.length ? [{ type: "user" as const, text: rest }] : [],
+          messages: rest.length
+            ? [
+                {
+                  type: "text" as const,
+                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                  text: rest,
+                },
+              ]
+            : [],
           reminders: [],
         });
       },
     );
-    const sent = core.send([{ type: "user", text: "start" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(
       "tool-async-compact" as ToolRequestId,
@@ -338,12 +477,26 @@ describe("deferred submissions", () => {
         const { compact, rest } = parseCompact(message);
         return Promise.resolve({
           compact,
-          messages: rest.length ? [{ type: "user" as const, text: rest }] : [],
+          messages: rest.length
+            ? [
+                {
+                  type: "text" as const,
+                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                  text: rest,
+                },
+              ]
+            : [],
           reminders: [],
         });
       },
     );
-    const sent = core.send([{ type: "user", text: "start" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     for (const text of ["first", "@compact wrap up", "third"]) {
       await core.submit(pendingMessage(text), "next");
@@ -381,7 +534,13 @@ describe("deferred submissions", () => {
             ),
         },
       ]);
-      const first = core.send([{ type: "user", text: "start" }]);
+      const first = core.send([
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "start",
+        },
+      ]);
       const stream = await mockClient.awaitStream();
       await core.submit(pendingMessage("queued"), "next");
       stream.finishResponse("end_turn");
@@ -395,7 +554,13 @@ describe("deferred submissions", () => {
       expect(core.queued.next).toEqual([]);
       expect(userTexts(core)).toContain("queued");
       suspend = false;
-      void core.send([{ type: "user", text: "resume" }]);
+      void core.send([
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "resume",
+        },
+      ]);
       const resumed = await awaitNextStream(mockClient, stream);
       expect(userTexts(core).filter((t) => t === "queued")).toHaveLength(1);
       resumed.finishResponse("end_turn");
@@ -422,7 +587,15 @@ describe("deferred submissions", () => {
             ),
         },
       ]);
-      expect(await core.send([{ type: "user", text: "start" }])).toEqual({
+      expect(
+        await core.send([
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: "start",
+          },
+        ]),
+      ).toEqual({
         type: "suspended",
         reason: { kind: "stop", message: "halt" },
       });
@@ -433,7 +606,13 @@ describe("deferred submissions", () => {
         "system-reminder",
       );
       suspend = false;
-      void core.send([{ type: "user", text: "resume" }]);
+      void core.send([
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "resume",
+        },
+      ]);
       const stream = await mockClient.awaitStream();
       expect(JSON.stringify(stream.messages)).toContain("Remember the skills");
       stream.finishResponse("end_turn");
@@ -452,7 +631,13 @@ describe("deferred submissions", () => {
         calls.push(message);
         return Promise.resolve({
           compact: false,
-          messages: [{ type: "user" as const, text: message }],
+          messages: [
+            {
+              type: "text" as const,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: message,
+            },
+          ],
           reminders: [],
         });
       },
@@ -491,7 +676,14 @@ describe("deferred submissions", () => {
       void runSubmission({
         thread: core,
         compactor,
-        start: () => core.send([{ type: "user", text: "start" }]),
+        start: () =>
+          core.send([
+            {
+              type: "text",
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: "start",
+            },
+          ]),
       });
       const stream = await mockClient.awaitStream();
       await core.submit(pendingMessage("queued"), "next");
@@ -520,14 +712,26 @@ describe("deferred submissions", () => {
 describe("Thread.send while busy", () => {
   it("discards the queues when the caller sends now instead", async () => {
     const { core, mockClient } = createAgentWithMock();
-    void core.send([{ type: "user", text: "start" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamText("working");
     await core.submit(pendingMessage("queued async"), "async");
     await core.submit(pendingMessage("queued next"), "next");
 
     // Sending now supersedes whatever was waiting on the aborted turn.
-    void core.send([{ type: "user", text: "never mind, do this" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "never mind, do this",
+      },
+    ]);
     const second = await awaitNextStream(mockClient, stream);
     expect(core.queued.async).toEqual([]);
     expect(core.queued.next).toEqual([]);
@@ -564,7 +768,13 @@ describe("Thread aborts the tools it owns", () => {
       uniqueThreadId(threadId),
     );
     core.hooks.onToolResults = [onToolResults];
-    const sent = core.send([{ type: "user", text: "start" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse("tool-1" as ToolRequestId, "get_files" as ToolName, {
       files: [{ filePath: "/tmp/test.txt" }],
@@ -651,7 +861,13 @@ describe("Thread aborts the tools it owns", () => {
     const { core, sent, abortSpies, resolveStat } = await threadWithLiveTool(
       "supersede-live-tool",
     );
-    const resent = core.send([{ type: "user", text: "never mind, do this" }]);
+    const resent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "never mind, do this",
+      },
+    ]);
     for (const spy of abortSpies) expect(spy).toHaveBeenCalled();
     resolveStat();
     await sent;
@@ -687,7 +903,13 @@ describe("Thread loop activity", () => {
         if (labels[labels.length - 1] !== label) labels.push(label);
       },
     );
-    const sent = core.send([{ type: "user", text: "read the file" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "read the file",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.emitEvent({
       type: "content_block_start",
@@ -740,12 +962,24 @@ describe("Thread loop activity", () => {
         await gate.promise;
         return {
           compact: false,
-          messages: [{ type: "user" as const, text: renderPending(message) }],
+          messages: [
+            {
+              type: "text" as const,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: renderPending(message),
+            },
+          ],
           reminders: [],
         };
       },
     );
-    const sent = core.send([{ type: "user", text: "start" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     await core.submit(pendingMessage("queued follow-up"), "next");
     stream.streamText("ok");
@@ -779,12 +1013,24 @@ describe("Thread.abort between turns", () => {
         resolved.push(renderPending(message));
         return {
           compact: false,
-          messages: [{ type: "user" as const, text: renderPending(message) }],
+          messages: [
+            {
+              type: "text" as const,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: renderPending(message),
+            },
+          ],
           reminders: ["aborted reminder"],
         };
       },
     );
-    const sent = core.send([{ type: "user", text: "start" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     await core.submit(pendingMessage("queued follow-up"), "next");
     stream.streamText("ok");
@@ -803,7 +1049,13 @@ describe("Thread.abort between turns", () => {
     expect(mockClient.streams.length).toBe(streamsBefore);
     expect(core.activeReminders.has("aborted reminder")).toBe(false);
     expect(userTexts(core)).not.toContain("queued follow-up");
-    const fresh = core.send([{ type: "user", text: "fresh submission" }]);
+    const fresh = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "fresh submission",
+      },
+    ]);
     const freshStream = await awaitNextStream(mockClient, stream);
     expect(core.loopState).toMatchObject({ type: "running", aborting: false });
     freshStream.streamText("done");
@@ -829,7 +1081,13 @@ describe("Thread.abort between turns", () => {
         },
       },
     ]);
-    const sent = core.send([{ type: "user", text: "start" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamText("ok");
     const streamsBefore = mockClient.streams.length;
@@ -868,7 +1126,13 @@ describe("Thread.abort returns the unsent queue", () => {
 
   it("drains the queue and hands it back to whoever aborted", async () => {
     const { core, mockClient } = createAgentWithMock();
-    void core.send([{ type: "user", text: "hello" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "hello",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
     for (const text of [
@@ -884,7 +1148,13 @@ describe("Thread.abort returns the unsent queue", () => {
 
   it("returns an empty list when nothing was queued", async () => {
     const { core, mockClient } = createAgentWithMock();
-    void core.send([{ type: "user", text: "hello" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "hello",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
     const { unsent } = await core.abort();
@@ -894,7 +1164,13 @@ describe("Thread.abort returns the unsent queue", () => {
 
   it("returns every queued entry; filtering is the consumer's policy", async () => {
     const { core, mockClient } = createAgentWithMock();
-    void core.send([{ type: "user", text: "hello" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "hello",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
     for (const text of [
@@ -913,7 +1189,13 @@ describe("Thread.abort returns the unsent queue", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    void core.send([{ type: "user", text: "do the task" }]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "do the task",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamText("partial response");
     for (const text of [pendingMessage("queued")]) {
@@ -944,13 +1226,25 @@ describe("system-info preamble", () => {
       alreadyInjected: false,
     });
     core.hooks = composeSupervisors(() => [systemInfo]);
-    const first = core.send([{ type: "user", text: "one" }]);
+    const first = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "one",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.finishResponse("end_turn");
     await first;
     expect(preambles(core)).toBe(1);
 
-    const second = core.send([{ type: "user", text: "two" }]);
+    const second = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "two",
+      },
+    ]);
     const stream2 = await awaitNextStream(mockClient, stream);
     stream2.finishResponse("end_turn");
     await second;
@@ -959,7 +1253,13 @@ describe("system-info preamble", () => {
     // The replacement agent starts from an empty log, so the preamble is due
     // again — the supervisor list survives the swap and has to be re-armed.
     await core.reset({ seed: [], archive: { type: "none" } });
-    const third = core.send([{ type: "user", text: "three" }]);
+    const third = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "three",
+      },
+    ]);
     const stream3 = await awaitNextStream(mockClient, stream2);
     stream3.finishResponse("end_turn");
     await third;
@@ -999,7 +1299,15 @@ describe("empty send gate", () => {
       (message) =>
         Promise.resolve({
           compact: false,
-          messages: message ? [{ type: "user" as const, text: message }] : [],
+          messages: message
+            ? [
+                {
+                  type: "text" as const,
+                  nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+                  text: message,
+                },
+              ]
+            : [],
           reminders: ["stay on task"],
         }),
     );
@@ -1009,7 +1317,13 @@ describe("empty send gate", () => {
     expect(await core.submit(pendingMessage(""))).toEqual({ type: "empty" });
     expect(mockClient.streams.length).toBe(0);
 
-    const sent = core.send([{ type: "user", text: "now do it" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "now do it",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     const request = stream.messages[stream.messages.length - 1];
     expect(JSON.stringify(request.content)).toContain("stay on task");
@@ -1024,7 +1338,13 @@ describe("empty send gate", () => {
       { hasPendingContent: () => probe.promise },
     ]);
     const first = core.send([]);
-    const second = core.send([{ type: "user", text: "go" }]);
+    const second = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "go",
+      },
+    ]);
     probe.resolve(true);
     expect(await first).toEqual({ type: "aborted" });
     const stream = await mockClient.awaitStream();
@@ -1051,7 +1371,13 @@ describe("empty send gate", () => {
     expect(mockClient.streams.length).toBe(0);
 
     available = true;
-    const sent = core.send([{ type: "user", text: "go" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "go",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     expect(userTexts(core)).toContain("# context update");
     stream.finishResponse("end_turn");
@@ -1068,7 +1394,13 @@ describe("replaceable conversation core", () => {
     await reset;
     expect(core.core).not.toBe(original);
     expect(core.core.isActive).toBe(true);
-    const sent = core.send([{ type: "user", text: "later request" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "later request",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.finishResponse("end_turn");
     expect(await sent).toEqual({ type: "completed", stopReason: "end_turn" });
@@ -1087,11 +1419,20 @@ describe("replaceable conversation core", () => {
     const sent = core.send([]);
     await core.submit(pendingMessage("later"), "next");
     await core.reset({
-      seed: [{ type: "system", text: "summary" }],
+      seed: [
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "summary",
+        },
+      ],
       archive: { type: "none" },
     });
     expect(core.core).not.toBe(original);
-    expect(core.context.contextTracker).toBe(original.context.contextTracker);
+    expect(core.core.fileSupervisor).not.toBe(original.fileSupervisor);
+    expect(core.core.fileSupervisor.files).toEqual(
+      original.fileSupervisor.files,
+    );
     expect(core.result).toBe(result);
     expect(core.edlRegisters.registers.size).toBe(0);
     expect(core.edlRegisters.nextSavedId).toBe(0);
@@ -1099,7 +1440,11 @@ describe("replaceable conversation core", () => {
     expect(core.structuredToolResults.size).toBe(0);
     expect(core.queued.next).toEqual([pendingMessage("later")]);
     expect(core.pendingTurnContent).toEqual([
-      { type: "system", text: "summary" },
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "summary",
+      },
     ]);
     probe.resolve(true);
     expect(await sent).toEqual({ type: "aborted" });
@@ -1116,7 +1461,13 @@ describe("replaceable conversation core", () => {
     core.hooks.hasPendingContent = () => probe.promise;
     const first = core.send([]);
     await core.reset({ seed: [], archive: { type: "none" } });
-    const second = core.send([{ type: "user", text: "new generation" }]);
+    const second = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "new generation",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     probe.resolve(true);
     expect(await first).toEqual({ type: "aborted" });
@@ -1142,7 +1493,13 @@ describe("replaceable conversation core", () => {
         return decision.promise;
       },
     ];
-    const sent = core.send([{ type: "user", text: "work" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "work",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(
       "late-yield" as ToolRequestId,
@@ -1166,7 +1523,13 @@ describe("replaceable conversation core", () => {
       threadType: "subagent" as ThreadType,
     });
     const result = core.result;
-    const sent = core.send([{ type: "user", text: "work" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "work",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(
       "yield-result" as ToolRequestId,
@@ -1200,7 +1563,13 @@ describe("replaceable conversation core", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent",
     });
-    const sent = core.send([{ type: "user", text: "work" }]);
+    const sent = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "work",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     const id = "fork-yield" as ToolRequestId;
     stream.streamToolUse(id, "yield_to_parent" as ToolName, { result: "done" });
@@ -1230,9 +1599,15 @@ describe("replaceable conversation core", () => {
   it("rejects sends, submissions and resets after destruction", async () => {
     const { core, mockClient } = createAgentWithMock();
     await core.destroy();
-    await expect(core.send([{ type: "user", text: "late" }])).rejects.toThrow(
-      "destroyed",
-    );
+    await expect(
+      core.send([
+        {
+          type: "text",
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+          text: "late",
+        },
+      ]),
+    ).rejects.toThrow("destroyed");
     await expect(core.submit(pendingMessage("late"), "next")).rejects.toThrow(
       "destroyed",
     );
@@ -1263,7 +1638,13 @@ describe("stale outer submissions", () => {
     await entered.promise;
     if (action === "reset")
       await core.reset({ seed: [], archive: { type: "none" } });
-    const second = core.send([{ type: "user", text: "replacement" }]);
+    const second = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "replacement",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     pending.resolve(true);
     expect(await first).toEqual({ type: "aborted" });
@@ -1289,12 +1670,24 @@ describe("stale outer submissions", () => {
         await gate.promise;
         return {
           compact: false,
-          messages: [{ type: "user" as const, text: renderPending(message) }],
+          messages: [
+            {
+              type: "text" as const,
+              nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+              text: renderPending(message),
+            },
+          ],
           reminders: ["stale reminder"],
         };
       },
     );
-    const first = core.send([{ type: "user", text: "start" }]);
+    const first = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "start",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     await core.submit(pendingMessage("stale queued message"), "next");
     stream.streamText("ok");
@@ -1303,7 +1696,13 @@ describe("stale outer submissions", () => {
     expect(loopLabel(core.loopState)).toBe("preparing");
     if (action === "reset")
       await core.reset({ seed: [], archive: { type: "none" } });
-    const second = core.send([{ type: "user", text: "replacement" }]);
+    const second = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "replacement",
+      },
+    ]);
     const replacement = await awaitNextStream(mockClient, stream);
     gate.resolve();
     expect(await first).toEqual({ type: "aborted" });
@@ -1343,7 +1742,13 @@ describe("stale outer submissions", () => {
         return gate.promise;
       },
     ];
-    const first = core.send([{ type: "user", text: "work" }]);
+    const first = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "work",
+      },
+    ]);
     const stream = await mockClient.awaitStream();
     stream.streamToolUse(
       "stale-yield" as ToolRequestId,
@@ -1354,7 +1759,13 @@ describe("stale outer submissions", () => {
     await entered.promise;
     if (action === "reset")
       await core.reset({ seed: [], archive: { type: "none" } });
-    const second = core.send([{ type: "user", text: "replacement" }]);
+    const second = core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "replacement",
+      },
+    ]);
     const replacement = await awaitNextStream(mockClient, stream);
     gate.resolve(decision);
     expect(await first).toEqual({ type: "aborted" });

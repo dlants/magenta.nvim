@@ -4,6 +4,7 @@ import type { ToolName, ToolRequestId } from "@magenta/server";
 import {
   AutoCompactSupervisor,
   compactionRunThreadIds,
+  PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ThreadCompactor,
 } from "@magenta/server";
 import { expect, it } from "vitest";
@@ -255,7 +256,7 @@ it("does not seed a compact chunk thread with auto-context files", async () => {
       const chunkWrapper = driver.magenta.chat.threadWrappers[chunkThreadId];
       if (chunkWrapper?.state !== "initialized")
         throw new Error("expected an initialized chunk thread");
-      expect(Object.keys(chunkWrapper.thread.contextManager.files)).toEqual([]);
+      expect(Object.keys(chunkWrapper.thread.fileSupervisor.files)).toEqual([]);
     },
   );
 });
@@ -404,7 +405,13 @@ it("lets the user rescue a chunk thread whose turn failed", async () => {
       id: chunkThreadId,
       msg: {
         type: "send-message",
-        messages: [{ type: "user", text: "try again" }],
+        messages: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: "try again",
+          },
+        ],
       },
     });
     const retryStream = await driver.mockAnthropic.awaitPendingStream({
@@ -563,7 +570,7 @@ it("compact flow does not process @file commands in subagent or summary", async 
 
     // The context manager belongs to the thread, not to the agent compaction
     // replaces, so files the user put in context stay in context.
-    const contextFiles = Object.keys(thread.contextManager.files);
+    const contextFiles = Object.keys(thread.fileSupervisor.files);
     expect(contextFiles.some((f) => f.includes("poem.txt"))).toBe(true);
 
     afterCompactStream.respond({
@@ -1374,12 +1381,13 @@ it("compact keeps context files after compaction", async () => {
       const thread = driver.magenta.chat.getActiveThread();
 
       await pollUntil(() => {
-        const files = Object.keys(thread.contextManager.files);
+        const files = Object.keys(thread.fileSupervisor.files);
         if (files.length < 1) throw new Error("expected 1 file");
       });
 
-      expect(Object.keys(thread.contextManager.files)).toHaveLength(1);
+      expect(Object.keys(thread.fileSupervisor.files)).toHaveLength(1);
 
+      const originalFileSupervisor = thread.fileSupervisor;
       // Trigger compaction
       await driver.inputMagentaText("@compact Continue working");
       await driver.send();
@@ -1435,9 +1443,12 @@ it("compact keeps context files after compaction", async () => {
 
       await driver.assertDisplayBufferContains("Starting fresh!");
 
-      // The context manager is a thread-level collaborator and survives the
-      // agent swap, so the user's context files are still watched.
-      expect(Object.keys(thread.contextManager.files)).toHaveLength(1);
+      // The replacement core inherits tracked files without retaining the
+      // old conversation's delivery state.
+      expect(Object.keys(thread.fileSupervisor.files)).toHaveLength(1);
+      expect(thread.fileSupervisor).not.toBe(originalFileSupervisor);
+      await driver.addContextFiles("poem.txt");
+      await driver.assertDisplayBufferContains("- `poem.txt`");
     },
   );
 });

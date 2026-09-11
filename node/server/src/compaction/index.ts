@@ -1,4 +1,5 @@
 import type { ProviderMessage } from "../providers/provider-types.ts";
+import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type { Thread } from "../thread.ts";
 import type { SendResult, ThreadSendResult } from "../thread-api.ts";
 
@@ -73,7 +74,13 @@ export async function runSubmission(args: {
 
     try {
       const reset = thread.reset({
-        seed: [{ type: "user", text: summaryText(outcome.summary) }],
+        seed: [
+          {
+            type: "text",
+            nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+            text: summaryText(outcome.summary),
+          },
+        ],
         archive: {
           type: "compaction",
           summary: outcome.summary,
@@ -90,7 +97,8 @@ export async function runSubmission(args: {
 
     const sent = thread.send([
       {
-        type: "user",
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
         text:
           reason.nextPrompt?.trim() ||
           "Please continue from where you left off.",
