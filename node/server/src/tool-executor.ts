@@ -2,8 +2,8 @@ import type { ToolExecution, ToolOutcome } from "./agent.ts";
 import type { Logger } from "./logger.ts";
 import type {
   NativeMessageIdx,
+  NonEmptyRequestedTools,
   ProviderToolResult,
-  RequestedTool,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import type { AgentHooks, ToolInvocationState } from "./thread-api.ts";
@@ -21,7 +21,9 @@ export type ToolExecutorDeps = {
   getHooks: () => AgentHooks;
   /** The idx of the last message this batch's results will occupy. Read when
    * the batch settles, just before the results are written. */
-  getPendingResultMessageIdx: (toolCount: number) => NativeMessageIdx;
+  getPendingResultMessageIdx: (
+    requested: NonEmptyRequestedTools,
+  ) => NativeMessageIdx;
   /** Where the invocations are, for whoever renders them. */
   publishTools: (tools: ToolInvocationState) => void;
   onUpdate: () => void;
@@ -52,12 +54,12 @@ export class ToolExecutorHost {
 
   /** Mirrors `NativeInferenceManager.sendRequest`: the batch starts here and
    * the handle aborts this batch and nothing else. */
-  execute(requests: ReadonlyArray<RequestedTool>): ToolExecution {
+  execute(requests: NonEmptyRequestedTools): ToolExecution {
     return { promise: this.runBatch(requests), abort: () => this.abortAll() };
   }
 
   private async runBatch(
-    requests: ReadonlyArray<RequestedTool>,
+    requests: NonEmptyRequestedTools,
   ): Promise<ToolOutcome> {
     this.aborting = false;
     const activeTools = new Map<ToolRequestId, ActiveToolEntry>();
@@ -129,7 +131,7 @@ export class ToolExecutorHost {
       try {
         const asked = hook(
           results,
-          this.deps.getPendingResultMessageIdx(requests.length),
+          this.deps.getPendingResultMessageIdx(requests),
         );
         suspend ??= asked;
       } catch (err) {

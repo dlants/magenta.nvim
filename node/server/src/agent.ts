@@ -7,6 +7,7 @@ import type {
   AgentInput,
   InferenceRequest,
   NativeInferenceManager,
+  NonEmptyRequestedTools,
   RequestedTool,
   RetryStatus,
   StreamingBlock,
@@ -36,7 +37,7 @@ export type ToolExecution = {
 };
 
 export type ToolExecutor = (
-  requests: ReadonlyArray<RequestedTool>,
+  requests: NonEmptyRequestedTools,
   publishTools: (tools: ToolInvocationState) => void,
 ) => ToolExecution;
 
@@ -53,7 +54,7 @@ export type LoopState = { aborting: boolean } & (
   | {
       type: "running_tools";
       inFlight: ToolExecution;
-      requested: ReadonlyArray<RequestedTool>;
+      requested: NonEmptyRequestedTools;
       tools: ToolInvocationState;
     }
 );

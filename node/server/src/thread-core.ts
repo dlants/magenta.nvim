@@ -32,9 +32,9 @@ import type {
   AgentInput,
   NativeInferenceManager,
   NativeMessageIdx,
+  NonEmptyRequestedTools,
   ProviderMessageContent,
   ProviderToolSpec,
-  RequestedTool,
   ToolResults,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
@@ -257,7 +257,7 @@ export class ThreadCore {
     if (this.disposed) return;
     this.disposed = true;
     this.fileSupervisor.destroy();
-    this.toolExecutor?.abortAll();
+    if (this.toolBatch.type === "running") this.toolBatch.executor.abortAll();
     await this.abortAgentTurn();
   }
 
@@ -338,28 +338,38 @@ export class ThreadCore {
     });
     return { ...invocation, promise };
   }
-  private toolExecutor: ToolExecutorHost | undefined;
+  private toolBatch:
+    | { type: "idle" }
+    | {
+        type: "running";
+        executor: ToolExecutorHost;
+        requested: NonEmptyRequestedTools;
+      } = { type: "idle" };
 
   private executeTools(
-    requests: ReadonlyArray<RequestedTool>,
+    requests: NonEmptyRequestedTools,
     publishTools: (tools: ToolInvocationState) => void,
   ): ToolExecution {
-    this.liveBatchToolCount = requests.length;
     const executor = new ToolExecutorHost({
       logger: this.context.logger,
       createTool: (request) => this.invokeTool(request),
       getHooks: () => this.agentHooks(),
-      getPendingResultMessageIdx: (toolCount) =>
-        this.manager.getPendingResultMessageIdx(toolCount),
+      getPendingResultMessageIdx: (requested) =>
+        this.manager.getPendingResultMessageIdx(requested),
       publishTools,
       onUpdate: () => this.handleUpdate(),
     });
-    this.toolExecutor = executor;
+    this.toolBatch = { type: "running", executor, requested: requests };
     const execution = executor.execute(requests);
     return {
       ...execution,
       promise: execution.promise.finally(() => {
-        if (this.toolExecutor === executor) this.toolExecutor = undefined;
+        if (
+          this.toolBatch.type === "running" &&
+          this.toolBatch.executor === executor
+        ) {
+          this.toolBatch = { type: "idle" };
+        }
       }),
     };
   }
@@ -391,16 +401,14 @@ export class ThreadCore {
   }
 
   /** The idx of the last message that will hold the results of the tools
-   * running right now. The provider owns the formula: both write one message
-   * per result, so a parallel batch spans several messages. */
+   * running right now. The active batch owns both its executor and its
+   * non-empty request list, so this cannot fall back to stale metadata. */
   private get pendingResultMessageIdx(): NativeMessageIdx {
-    return this.manager.getPendingResultMessageIdx(this.liveBatchToolCount);
+    if (this.toolBatch.type !== "running") {
+      throw new Error("onToolApplied called without a running tool batch");
+    }
+    return this.manager.getPendingResultMessageIdx(this.toolBatch.requested);
   }
-
-  /** How many tools the batch in flight requested, so `onToolApplied` — which
-   * fires mid-batch, with no access to the request list — can ask the manager
-   * where the batch will end. */
-  private liveBatchToolCount = 1;
 
   private agentHooks(): AgentHooks {
     if (this.disposed) return { onBeforeRequest: [], onToolResults: [] };

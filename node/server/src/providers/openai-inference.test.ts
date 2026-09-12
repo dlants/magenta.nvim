@@ -5,11 +5,13 @@ import {
   agentHooks,
   createTestOpenAIAgent,
   flatLoop,
+  noopLogger,
   type TestAgent,
   toolExecution,
 } from "../test-helpers.ts";
 import type { SendResult } from "../thread-api.ts";
 import { injectText } from "../thread-supervisor.ts";
+import { ToolExecutorHost } from "../tool-executor.ts";
 import type { ToolName } from "../tool-types.ts";
 import {
   ABORT_TOOL_RESULT_TEXT,
@@ -51,6 +53,24 @@ function okResult(text: string): ProviderToolResult["result"] {
   return {
     status: "ok",
     value: [userText(text)],
+  };
+}
+
+function imageResult(): ProviderToolResult["result"] {
+  return {
+    status: "ok",
+    value: [
+      userText("image output"),
+      {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: "image/png",
+          data: "aW1hZ2U=",
+        },
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ],
   };
 }
 
@@ -889,10 +909,10 @@ describe("OpenAIInferenceManager truncation", () => {
 describe("OpenAIInferenceManager pending message indices", () => {
   /** Where the block carrying `text` actually landed, as the wire recorded it. */
   const idxOfText = (
-    agent: TestAgent,
+    manager: NativeInferenceManager,
     text: string,
   ): NativeMessageIdx | undefined => {
-    for (const message of agent.manager.log.messages) {
+    for (const message of manager.log.messages) {
       for (const block of message.content) {
         if (block.type === "text" && block.text.includes(text)) {
           return block.nativeMessageIdx;
@@ -905,6 +925,11 @@ describe("OpenAIInferenceManager pending message indices", () => {
     agent.manager.log.messages
       .flatMap((message) => message.content)
       .filter((block) => block.type === "tool_result")
+      .map((block) => block.nativeMessageIdx);
+  const imageIdxs = (manager: NativeInferenceManager): NativeMessageIdx[] =>
+    manager.log.messages
+      .flatMap((message) => message.content)
+      .filter((block) => block.type === "image")
       .map((block) => block.nativeMessageIdx);
   it("reports where an injection lands and where a parallel batch of results ends", async () => {
     const requestIdx: NativeMessageIdx[] = [];
@@ -946,8 +971,8 @@ describe("OpenAIInferenceManager pending message indices", () => {
     const followup = await mockClient.awaitStreamAt(1);
     followup.finishResponse();
     await turn;
-    expect(idxOfText(agent, "INJECTED-0")).toBe(requestIdx[0]);
-    expect(idxOfText(agent, "INJECTED-1")).toBe(requestIdx[1]);
+    expect(idxOfText(agent.manager, "INJECTED-0")).toBe(requestIdx[0]);
+    expect(idxOfText(agent.manager, "INJECTED-1")).toBe(requestIdx[1]);
     // Unlike anthropic, openai answers tools with `function_call_output`
     // items rather than user messages, so the continuation's injection cannot
     // merge into them: it starts a message of its own after the batch.
@@ -957,5 +982,89 @@ describe("OpenAIInferenceManager pending message indices", () => {
     const results = toolResultIdxs(agent);
     expect(results).toHaveLength(2);
     expect(Math.max(...results)).toBe(resultIdx[0]);
+  });
+
+  it("reports the result item before an attachment message and truncates at that boundary", async () => {
+    const requestIdx: NativeMessageIdx[] = [];
+    const resultIdx: NativeMessageIdx[] = [];
+    const hooks = agentHooks({
+      onBeforeRequest: [
+        {
+          run: (ctx) => {
+            requestIdx.push(ctx.nativeMessageIdx);
+            return Promise.resolve(
+              injectText(`ATTACHMENT-INJECTION-${requestIdx.length - 1}`),
+            );
+          },
+        },
+      ],
+      onToolResults: [
+        (_results, nativeMessageIdx) => {
+          resultIdx.push(nativeMessageIdx);
+          return undefined;
+        },
+      ],
+    });
+    let agent!: TestAgent;
+    const host = new ToolExecutorHost({
+      logger: noopLogger,
+      createTool: (request) => ({
+        promise: Promise.resolve({
+          type: "tool_result",
+          id: request.id,
+          result: imageResult(),
+          nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        }),
+        abort: () => {},
+      }),
+      getHooks: () => hooks,
+      getPendingResultMessageIdx: (requested) =>
+        agent.manager.getPendingResultMessageIdx(requested),
+      publishTools: () => {},
+      onUpdate: () => {},
+    });
+    const created = createTestOpenAIAgent({
+      tools: [spec],
+      executeTools: (requested) => host.execute(requested),
+      getHooks: () => hooks,
+    });
+    agent = created.agent;
+    const { mockClient } = created;
+    const turn = agent.send([userText("hello")]).promise;
+    const stream = await mockClient.awaitStreamAt(0);
+    stream.streamToolCall("call_1", "get_files", {
+      files: [{ filePath: "image.png" }],
+    });
+    await stream.settle();
+    stream.finishResponse();
+    const followup = await mockClient.awaitStreamAt(1);
+    followup.finishResponse();
+    await turn;
+
+    const results = toolResultIdxs(agent);
+    const attachments = imageIdxs(agent.manager);
+    expect(results).toHaveLength(1);
+    expect(attachments).toHaveLength(1);
+    expect(resultIdx).toEqual([results[0]]);
+    expect(attachments[0]).toBe(resultIdx[0] + 1);
+    // The continuation injection coalesces into the attachment-bearing user
+    // message, while the supervisor index deliberately names the result item.
+    expect(requestIdx[1]).toBe(attachments[0]);
+
+    const throughResult = agent.manager.clone();
+    throughResult.truncateMessages(resultIdx[0]);
+    expect(imageIdxs(throughResult)).toHaveLength(0);
+    expect(
+      throughResult.log.messages
+        .flatMap((message) => message.content)
+        .filter((block) => block.type === "tool_result"),
+    ).toHaveLength(1);
+
+    const throughAttachment = agent.manager.clone();
+    throughAttachment.truncateMessages(attachments[0]);
+    expect(imageIdxs(throughAttachment)).toEqual([attachments[0]]);
+    expect(idxOfText(throughAttachment, "ATTACHMENT-INJECTION-1")).toBe(
+      attachments[0],
+    );
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
   NativeMessageIdx,
-  RequestedTool,
+  NonEmptyRequestedTools,
 } from "./providers/provider-types.ts";
 import { agentHooks, noopLogger } from "./test-helpers.ts";
 import { ToolExecutorHost } from "./tool-executor.ts";
@@ -43,7 +43,7 @@ describe("ToolExecutorHost", () => {
       toolName: "get_files" as ToolName,
       input: { files: [{ filePath: "/tmp/a.txt" }] },
     } as ToolRequest;
-    const requests: RequestedTool[] = [
+    const requests: NonEmptyRequestedTools = [
       { id: request.id, request: { status: "ok", value: request } },
     ];
 

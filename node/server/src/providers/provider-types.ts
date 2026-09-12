@@ -300,6 +300,17 @@ export type RequestedTool = {
   request: Result<ToolRequest, { rawRequest: unknown }>;
 };
 
+export type NonEmptyRequestedTools = readonly [
+  RequestedTool,
+  ...RequestedTool[],
+];
+
+export function isNonEmptyRequestedTools(
+  requested: ReadonlyArray<RequestedTool>,
+): requested is NonEmptyRequestedTools {
+  return requested.length > 0;
+}
+
 export type ToolResults = ReadonlyMap<
   ToolManager.ToolRequestId,
   ProviderToolResult["result"]
@@ -311,7 +322,7 @@ export type AgentLog = {
 };
 
 export type RequestResult =
-  | { type: "tool_use"; requested: RequestedTool[] }
+  | { type: "tool_use"; requested: NonEmptyRequestedTools }
   | { type: "stopped"; stopReason: StopReason }
   | { type: "aborted" }
   | { type: "error"; error: Error };
@@ -343,13 +354,15 @@ export interface NativeInferenceManager {
    * `onBeforeRequest` injection on a continuation lands *on* the last message
    * rather than after it. Supervisors key their history on this. */
   getPendingUserMessageIdx(): NativeMessageIdx;
-  /** The idx of the *last* message the results of a batch of `toolCount`
-   * tools will occupy. Both providers write one message per result, so a
-   * parallel batch spans several messages and `getNativeMessageIdx() + 1`
-   * names only the first of them. Supervisors key their history on this, so
-   * that truncating anywhere inside the batch drops the entry along with the
-   * messages that revealed it. */
-  getPendingResultMessageIdx(toolCount: number): NativeMessageIdx;
+  /** The idx of the *last* message the results of a non-empty tool batch will
+   * occupy. Both providers write one message per result, so a parallel batch
+   * spans several messages and `getNativeMessageIdx() + 1` names only the
+   * first of them. Supervisors key their history on this, so that truncating
+   * anywhere inside the batch drops the entry along with the messages that
+   * revealed it. */
+  getPendingResultMessageIdx(
+    requested: NonEmptyRequestedTools,
+  ): NativeMessageIdx;
   getNativeMessageIdx(): NativeMessageIdx;
   truncateMessages(messageIdx: NativeMessageIdx): void;
   clone(): NativeInferenceManager;

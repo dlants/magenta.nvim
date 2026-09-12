@@ -34,6 +34,7 @@ import type {
   InferenceRequest,
   NativeInferenceManager,
   NativeMessageIdx,
+  NonEmptyRequestedTools,
   OnStreamEvent,
   ProviderMessage,
   ProviderToolResult,
@@ -45,6 +46,7 @@ import type {
   ToolResults,
   Usage,
 } from "./provider-types.ts";
+import { isNonEmptyRequestedTools } from "./provider-types.ts";
 
 type Item = OpenAI.Responses.ResponseInputItem;
 
@@ -404,12 +406,13 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
         : this.items.length
     ) as NativeMessageIdx;
   }
-  /** One `function_call_output` item per tool result, so a batch ends
-   * `toolCount - 1` past its first item. Image/document attachments follow as
-   * one further user message; it is not counted, since the results themselves
-   * are what supervisors key on. */
-  getPendingResultMessageIdx(toolCount: number): NativeMessageIdx {
-    return (this.items.length + Math.max(toolCount, 1) - 1) as NativeMessageIdx;
+  /** One `function_call_output` item per tool result. Image/document
+   * attachments follow as one further user message; it is not counted, since
+   * the results themselves are what supervisors key on. */
+  getPendingResultMessageIdx(
+    requested: NonEmptyRequestedTools,
+  ): NativeMessageIdx {
+    return (this.items.length + requested.length - 1) as NativeMessageIdx;
   }
 
   appendUserMessage(content: AgentInput[]): void {
@@ -520,7 +523,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       const outcome = await this.streamOneResponse();
       if (outcome.type === "completed") {
         const requested = this.collectRequestedTools();
-        return requested.length
+        return isNonEmptyRequestedTools(requested)
           ? { type: "tool_use", requested }
           : {
               type: "stopped",

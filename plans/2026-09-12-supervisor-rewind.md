@@ -235,6 +235,34 @@ SystemInfoSupervisor.clone({ source, nativeMessageIdx });
   points while adding nothing the "pending" name and doc comments do not
   already say.
 
+### Review follow-ups (stage 1, second pass)
+
+- Replaced the unconstrained tool count with `NonEmptyRequestedTools`, carried
+  from `RequestResult` through `ToolExecutor` and `ToolExecutorHost` into
+  `NativeInferenceManager.getPendingResultMessageIdx`. Provider request loops
+  narrow their collected arrays with `isNonEmptyRequestedTools`, so negative,
+  fractional, and empty counts are unrepresentable and the `Math.max` fallback
+  is gone.
+- Replaced `ThreadCore.toolExecutor` plus the independently stored default/stale
+  count with a discriminated `toolBatch` state. The running variant owns the
+  executor and exact non-empty request batch; `onToolApplied` can only compute
+  its pending result idx while that state is active, and cleanup returns the
+  state to `idle` only for the matching executor.
+- Added OpenAI coverage for an image-bearing `get_files` result. It pins that
+  the supervisor idx names the `function_call_output`, not the following
+  attachment user message; that the continuation injection coalesces into the
+  attachment message; and that truncating at either side of that boundary
+  respectively drops or preserves the attachment.
+
+### Validation (stage 1, second pass)
+
+- Focused provider, executor, and agent suites pass (188 tests).
+- `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.
+- The full suite excluding the previously documented, independently failing
+  `node/nvimclient/nvim/buffer-reload.test.ts` passes 1,656 tests. An unfiltered
+  full run again had only that file's existing "an agent edit is undone in a
+  single undo" failure, which also fails by itself on the clean stage-1 base.
+
 ### Validation (stage 1)
 
 - Focused stage suites pass: `agent.test.ts`, both inference-manager suites,
