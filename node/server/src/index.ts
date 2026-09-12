@@ -22,6 +22,7 @@ export type { AuthUI } from "./auth-ui.ts";
 export type {
   ContextTracker,
   OnToolApplied,
+  OnToolAppliedHook,
   ToolApplied,
   TrackedFileInfo,
 } from "./capabilities/context-tracker.ts";

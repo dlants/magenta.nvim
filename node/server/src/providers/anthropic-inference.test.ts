@@ -2004,6 +2004,10 @@ File context here
       expect(agent.log.messages).toHaveLength(3);
       expect(agent.log.messages[1].role).toBe("assistant");
       expect(agent.log.messages[2].role).toBe("user");
+      // The effective cut is *past* the requested idx, so anything keyed on a
+      // message index must read the boundary back rather than trust its own
+      // request.
+      expect(agent.manager.getNativeMessageIdx()).toBe(2);
     });
 
     it("drops orphan tool_use blocks when no matching tool_result follows", async () => {

@@ -1,3 +1,4 @@
+import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import type { AbsFilePath, FileTypeInfo } from "../utils/files.ts";
 
 export interface TrackedFileInfo {
@@ -37,6 +38,17 @@ export type OnToolApplied = (
   absFilePath: AbsFilePath,
   tool: ToolApplied,
   fileTypeInfo: FileTypeInfo,
+) => void;
+
+/** The observer-facing form. Tools call `OnToolApplied` and never learn about
+ * message indices; `ThreadCore` adds the idx of the message that will hold the
+ * tool result before forwarding to supervisors, which key their view history
+ * on it. */
+export type OnToolAppliedHook = (
+  absFilePath: AbsFilePath,
+  tool: ToolApplied,
+  fileTypeInfo: FileTypeInfo,
+  nativeMessageIdx: NativeMessageIdx,
 ) => void;
 
 export interface ContextTracker {

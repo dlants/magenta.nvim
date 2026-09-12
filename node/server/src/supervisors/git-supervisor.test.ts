@@ -6,6 +6,7 @@ import type {
 } from "../capabilities/git-client.ts";
 import { parseGitState } from "../capabilities/git-client.ts";
 import type { Logger } from "../logger.ts";
+import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import {
   type GitContextUpdate,
   GitSupervisor,
@@ -52,6 +53,7 @@ describe("GitSupervisor", () => {
     const action = await supervisor.onBeforeRequest({
       inputTokenCount: 0,
       outputTokenCount: 0,
+      nativeMessageIdx: 0 as NativeMessageIdx,
     });
     expect(action.type).toBe("inject");
     if (action.type !== "inject") throw new Error("expected inject");
@@ -67,6 +69,7 @@ describe("GitSupervisor", () => {
         await supervisor.onBeforeRequest({
           inputTokenCount: 0,
           outputTokenCount: 0,
+          nativeMessageIdx: 0 as NativeMessageIdx,
         })
       ).type,
     ).toBe("none");
@@ -80,6 +83,7 @@ describe("GitSupervisor", () => {
         await supervisor.onBeforeRequest({
           inputTokenCount: 0,
           outputTokenCount: 0,
+          nativeMessageIdx: 0 as NativeMessageIdx,
         })
       ).type,
     ).toBe("none");

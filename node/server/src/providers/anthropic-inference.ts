@@ -401,6 +401,15 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     this.currentRequest?.abort();
   }
 
+  getPendingUserMessageIdx(): NativeMessageIdx {
+    const last = this.messages[this.messages.length - 1];
+    return (
+      last && last.role === "user"
+        ? this.messages.length - 1
+        : this.messages.length
+    ) as NativeMessageIdx;
+  }
+
   appendUserMessage(content: AgentInput[]): void {
     if (content.length === 0) return;
     const native = this.convertInputToNative(content);

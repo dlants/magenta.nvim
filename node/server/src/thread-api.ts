@@ -1,6 +1,7 @@
-import type { OnToolApplied } from "./capabilities/context-tracker.ts";
+import type { OnToolAppliedHook } from "./capabilities/context-tracker.ts";
 import type {
   AgentInput,
+  NativeMessageIdx,
   StopReason,
   ToolResults,
 } from "./providers/provider-types.ts";
@@ -125,6 +126,7 @@ export type BeforeRequestHook = {
  * the turn here, over a well-formed log. The first `suspend` wins. */
 export type ToolResultsHook = (
   results: ToolResults,
+  nativeMessageIdx: NativeMessageIdx,
 ) => SuspendReason | undefined;
 
 /** The model called yield_to_parent and the tool result is already in the log.
@@ -154,7 +156,7 @@ export type ThreadHooks = AgentHooks & {
   /** A file-touching tool (edl, get_files) finished. Fire-and-forget. Fires
    * per file from inside a tool, not at a turn-loop boundary; the thread owns
    * tool construction, so it never reaches the agent. */
-  onToolApplied?: OnToolApplied;
+  onToolApplied?: OnToolAppliedHook;
   /** The agent stopped without yielding. */
   onEndTurn?: (ctx: EndTurnContext) => EndTurnAction;
   /** The thread's log was thrown away and it starts over. */

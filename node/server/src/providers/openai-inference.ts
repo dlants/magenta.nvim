@@ -397,6 +397,13 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     return (this.items.length - 1) as NativeMessageIdx;
   }
 
+  getPendingUserMessageIdx(): NativeMessageIdx {
+    return (
+      userMessageContent(this.items[this.items.length - 1])
+        ? this.items.length - 1
+        : this.items.length
+    ) as NativeMessageIdx;
+  }
   appendUserMessage(content: AgentInput[]): void {
     if (content.length === 0) return;
     // Tagged text is stored on the wire as plain input_text and re-tagged by

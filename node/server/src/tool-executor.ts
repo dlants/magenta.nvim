@@ -1,6 +1,7 @@
 import type { ToolExecution, ToolOutcome } from "./agent.ts";
 import type { Logger } from "./logger.ts";
 import type {
+  NativeMessageIdx,
   ProviderToolResult,
   RequestedTool,
 } from "./providers/provider-types.ts";
@@ -18,6 +19,9 @@ export type ToolExecutorDeps = {
   logger: Logger;
   createTool: (request: ToolRequest) => ToolInvocation;
   getHooks: () => AgentHooks;
+  /** The idx of the message that will hold this batch's results. Read when the
+   * batch settles, just before the results are written. */
+  getPendingResultMessageIdx: () => NativeMessageIdx;
   /** Where the invocations are, for whoever renders them. */
   publishTools: (tools: ToolInvocationState) => void;
   onUpdate: () => void;
@@ -123,7 +127,7 @@ export class ToolExecutorHost {
     let suspend: SuspendReason | undefined;
     for (const hook of this.deps.getHooks().onToolResults) {
       try {
-        const asked = hook(results);
+        const asked = hook(results, this.deps.getPendingResultMessageIdx());
         suspend ??= asked;
       } catch (err) {
         this.deps.logger.error(

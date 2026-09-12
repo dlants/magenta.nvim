@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RequestedTool } from "./providers/provider-types.ts";
+import type {
+  NativeMessageIdx,
+  RequestedTool,
+} from "./providers/provider-types.ts";
 import { agentHooks, noopLogger } from "./test-helpers.ts";
 import { ToolExecutorHost } from "./tool-executor.ts";
 import type {
@@ -31,6 +34,7 @@ describe("ToolExecutorHost", () => {
       logger: noopLogger,
       createTool: () => invocation,
       getHooks: () => agentHooks(),
+      getPendingResultMessageIdx: () => 0 as NativeMessageIdx,
       publishTools: () => {},
       onUpdate: () => {},
     });

@@ -272,9 +272,23 @@ export class ThreadCore {
 
   private onToolApplied: OnToolApplied = (absFilePath, tool, fileTypeInfo) => {
     if (!this.isActive) return;
+    // Tools do not know about message indices: the assistant message holding
+    // the tool_use is already written, and the result message is not, so the
+    // fact this tool established will be revealed by the next message.
+    const nativeMessageIdx = this.pendingResultMessageIdx;
     try {
-      this.contextHooks.onToolApplied?.(absFilePath, tool, fileTypeInfo);
-      this.hooks.onToolApplied?.(absFilePath, tool, fileTypeInfo);
+      this.contextHooks.onToolApplied?.(
+        absFilePath,
+        tool,
+        fileTypeInfo,
+        nativeMessageIdx,
+      );
+      this.hooks.onToolApplied?.(
+        absFilePath,
+        tool,
+        fileTypeInfo,
+        nativeMessageIdx,
+      );
     } catch (error) {
       this.context.logger.error(
         `onToolApplied hook threw: ${error instanceof Error ? error.message : String(error)}`,
@@ -334,6 +348,7 @@ export class ThreadCore {
       logger: this.context.logger,
       createTool: (request) => this.invokeTool(request),
       getHooks: () => this.agentHooks(),
+      getPendingResultMessageIdx: () => this.pendingResultMessageIdx,
       publishTools,
       onUpdate: () => this.handleUpdate(),
     });
@@ -371,6 +386,13 @@ export class ThreadCore {
       (latestUsage.cacheHits || 0) +
       (latestUsage.cacheMisses || 0)
     );
+  }
+
+  /** The idx of the message that will hold the results of the tools running
+   * right now. `appendToolResults` always pushes, so it is one past the
+   * assistant message that requested them. */
+  private get pendingResultMessageIdx(): NativeMessageIdx {
+    return (this.manager.getNativeMessageIdx() + 1) as NativeMessageIdx;
   }
 
   private agentHooks(): AgentHooks {

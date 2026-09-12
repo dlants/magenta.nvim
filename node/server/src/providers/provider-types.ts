@@ -337,6 +337,12 @@ export interface NativeInferenceManager {
     requested: ReadonlyArray<RequestedTool>,
     results: ToolResults,
   ): void;
+  /** The idx user content appended right now would land at. Not always
+   * `getNativeMessageIdx() + 1`: `appendUserMessage` merges into a trailing
+   * user message (the tool-result messages of the turn that just ran), so an
+   * `onBeforeRequest` injection on a continuation lands *on* the last message
+   * rather than after it. Supervisors key their history on this. */
+  getPendingUserMessageIdx(): NativeMessageIdx;
   getNativeMessageIdx(): NativeMessageIdx;
   truncateMessages(messageIdx: NativeMessageIdx): void;
   clone(): NativeInferenceManager;

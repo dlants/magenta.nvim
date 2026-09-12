@@ -1,5 +1,6 @@
 import {
   AutoCompactSupervisor,
+  type NativeMessageIdx,
   SubagentSupervisor,
   type ThreadId,
   type ToolName,
@@ -136,6 +137,7 @@ it("script-spawned thread honors per-thread autoCompactThreshold override", asyn
           await sup.onBeforeRequest({
             inputTokenCount,
             outputTokenCount: 0,
+            nativeMessageIdx: 0 as NativeMessageIdx,
           })
         ).type;
       expect(await ask(overridden, 100_000)).toBe("suspend");

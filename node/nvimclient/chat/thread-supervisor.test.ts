@@ -1,3 +1,4 @@
+import type { NativeMessageIdx } from "@magenta/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@magenta/server", async (importOriginal) => {
@@ -26,6 +27,7 @@ describe("DockerSupervisor", () => {
         stopReason: "end_turn",
         inputTokenCount: undefined,
         lastAssistantMessage: undefined,
+        nativeMessageIdx: 0 as NativeMessageIdx,
       });
       expect(action.type).toBe("send-message");
       if (action.type === "send-message") {
@@ -47,6 +49,7 @@ describe("DockerSupervisor", () => {
           stopReason: "end_turn",
           inputTokenCount: undefined,
           lastAssistantMessage: undefined,
+          nativeMessageIdx: 0 as NativeMessageIdx,
         }).type,
       ).toBe("send-message");
       expect(
@@ -54,6 +57,7 @@ describe("DockerSupervisor", () => {
           stopReason: "end_turn",
           inputTokenCount: undefined,
           lastAssistantMessage: undefined,
+          nativeMessageIdx: 0 as NativeMessageIdx,
         }).type,
       ).toBe("send-message");
       expect(
@@ -61,6 +65,7 @@ describe("DockerSupervisor", () => {
           stopReason: "end_turn",
           inputTokenCount: undefined,
           lastAssistantMessage: undefined,
+          nativeMessageIdx: 0 as NativeMessageIdx,
         }).type,
       ).toBe("none");
     });
@@ -76,6 +81,7 @@ describe("DockerSupervisor", () => {
         stopReason: "max_tokens",
         inputTokenCount: undefined,
         lastAssistantMessage: undefined,
+        nativeMessageIdx: 0 as NativeMessageIdx,
       });
       expect(action.type).toBe("none");
     });

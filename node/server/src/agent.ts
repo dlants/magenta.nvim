@@ -257,6 +257,7 @@ async function runBeforeRequestHooks(
     const action = await hook.run({
       inputTokenCount: tokenCount,
       outputTokenCount: outputTokenCount(manager),
+      nativeMessageIdx: manager.getPendingUserMessageIdx(),
       ...(suspend === undefined
         ? ({ status: "pending" } as const)
         : ({ status: "suspended", reason: suspend } as const)),

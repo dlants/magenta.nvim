@@ -367,11 +367,14 @@ function buildTestAgent(
   };
   const edlRegisters: EdlRegisters = { registers: new Map(), nextSavedId: 0 };
   let publishTools: Parameters<ToolExecutor>[1] = () => {};
+  const manager = testManager(context, opts.cloneFrom);
   // The bare-agent harness stands in for the thread: it owns tool execution
   // the same way, so the loop under test sees production wiring.
   const host = new ToolExecutorHost({
     logger: context.logger,
     getHooks: opts.getHooks ?? (() => agentHooks()),
+    getPendingResultMessageIdx: () =>
+      (manager.getNativeMessageIdx() + 1) as NativeMessageIdx,
     publishTools: (tools) => publishTools(tools),
     onUpdate: opts.onUpdate ?? (() => {}),
     createTool: (request) =>
@@ -403,7 +406,7 @@ function buildTestAgent(
   };
   const agent = new TestAgent({
     logger: context.logger,
-    manager: testManager(context, opts.cloneFrom),
+    manager,
     executeTools,
     getHooks: opts.getHooks ?? (() => agentHooks()),
     onUpdate: opts.onUpdate ?? (() => {}),

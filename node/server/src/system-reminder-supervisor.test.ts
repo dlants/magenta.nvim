@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ContextTracker } from "./capabilities/context-tracker.ts";
-import type { ToolResults } from "./providers/provider-types.ts";
+import type {
+  NativeMessageIdx,
+  ToolResults,
+} from "./providers/provider-types.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
 import type { RequestContext } from "./thread-supervisor.ts";
 import type { ToolRequestId, ToolStructuredResult } from "./tool-types.ts";
@@ -19,6 +22,7 @@ function request(outputTokenCount: number): RequestContext {
   return {
     inputTokenCount: 0,
     outputTokenCount,
+    nativeMessageIdx: 0 as NativeMessageIdx,
   };
 }
 

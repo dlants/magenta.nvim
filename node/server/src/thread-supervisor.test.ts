@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { NativeMessageIdx } from "./providers/provider-types.ts";
 import type { SystemInfo } from "./providers/system-prompt.ts";
 import {
   AutoCompactSupervisor,
@@ -13,6 +14,7 @@ import {
 const context: RequestContext = {
   inputTokenCount: 400000,
   outputTokenCount: 0,
+  nativeMessageIdx: 0 as NativeMessageIdx,
 };
 
 const requestContext = {
@@ -78,6 +80,7 @@ describe("composeSupervisors onEndTurn", () => {
     stopReason: "end_turn",
     inputTokenCount: 400000,
     lastAssistantMessage: undefined,
+    nativeMessageIdx: 0 as NativeMessageIdx,
   };
 
   it("lets a suspension win over an accumulated nudge", () => {
@@ -139,6 +142,7 @@ describe("AutoCompactSupervisor", () => {
       await sup.onBeforeRequest({
         inputTokenCount: 300000,
         outputTokenCount: 0,
+        nativeMessageIdx: 0 as NativeMessageIdx,
       }),
     ).toEqual({
       type: "suspend",
@@ -148,6 +152,7 @@ describe("AutoCompactSupervisor", () => {
       await sup.onBeforeRequest({
         inputTokenCount: 400000,
         outputTokenCount: 0,
+        nativeMessageIdx: 0 as NativeMessageIdx,
       }),
     ).toEqual({
       type: "suspend",
@@ -164,12 +169,14 @@ describe("AutoCompactSupervisor", () => {
       await sup.onBeforeRequest({
         inputTokenCount: 299999,
         outputTokenCount: 0,
+        nativeMessageIdx: 0 as NativeMessageIdx,
       }),
     ).toEqual({ type: "none" });
     expect(
       await sup.onBeforeRequest({
         inputTokenCount: undefined,
         outputTokenCount: 0,
+        nativeMessageIdx: 0 as NativeMessageIdx,
       }),
     ).toEqual({ type: "none" });
   });
@@ -183,6 +190,7 @@ describe("AutoCompactSupervisor", () => {
       stopReason: "end_turn",
       inputTokenCount,
       lastAssistantMessage: undefined,
+      nativeMessageIdx: 0 as NativeMessageIdx,
     });
     expect(sup.onEndTurnWithoutYield(at(300000))).toEqual({
       type: "suspend",
@@ -198,6 +206,7 @@ describe("AutoCompactSupervisor", () => {
       await sup.onBeforeRequest({
         inputTokenCount: 300000,
         outputTokenCount: 0,
+        nativeMessageIdx: 0 as NativeMessageIdx,
       }),
     ).toEqual({
       type: "suspend",
@@ -207,6 +216,7 @@ describe("AutoCompactSupervisor", () => {
       await sup.onBeforeRequest({
         inputTokenCount: 299999,
         outputTokenCount: 0,
+        nativeMessageIdx: 0 as NativeMessageIdx,
       }),
     ).toEqual({ type: "none" });
   });

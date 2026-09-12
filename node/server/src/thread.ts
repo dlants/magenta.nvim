@@ -873,6 +873,7 @@ export class Thread {
       stopReason,
       inputTokenCount: this.core.preflightTokenCount,
       lastAssistantMessage: this.core.lastAssistantMessage,
+      nativeMessageIdx: this.core.manager.getNativeMessageIdx(),
     });
     if (action?.type === "suspend") {
       return { type: "suspend", reason: action.reason };

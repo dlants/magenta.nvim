@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
 import type { Logger } from "../logger.ts";
+import type { NativeMessageIdx } from "../providers/provider-types.ts";
 import {
   type AbsFilePath,
   FileCategory,
@@ -61,6 +62,7 @@ describe("FileSupervisor", () => {
     const action = await supervisor.onBeforeRequest({
       inputTokenCount: 0,
       outputTokenCount: 0,
+      nativeMessageIdx: 0 as NativeMessageIdx,
     });
     if (action.type !== "inject") throw new Error("expected inject");
     const block = action.content[0];
@@ -73,6 +75,7 @@ describe("FileSupervisor", () => {
         await supervisor.onBeforeRequest({
           inputTokenCount: 0,
           outputTokenCount: 0,
+          nativeMessageIdx: 0 as NativeMessageIdx,
         })
       ).type,
     ).toBe("none");
@@ -86,6 +89,7 @@ describe("FileSupervisor", () => {
         await supervisor.onBeforeRequest({
           inputTokenCount: 0,
           outputTokenCount: 0,
+          nativeMessageIdx: 0 as NativeMessageIdx,
         })
       ).type,
     ).toBe("none");
@@ -101,6 +105,7 @@ describe("FileSupervisor", () => {
     const action = await supervisor.onBeforeRequest({
       inputTokenCount: 0,
       outputTokenCount: 0,
+      nativeMessageIdx: 0 as NativeMessageIdx,
     });
     if (action.type !== "inject") throw new Error("expected inject");
     expect(action.content.map((c) => c.type)).toEqual(["text", "image"]);
@@ -129,6 +134,7 @@ describe("FileSupervisor", () => {
         await supervisor.onBeforeRequest({
           inputTokenCount: 0,
           outputTokenCount: 0,
+          nativeMessageIdx: 0 as NativeMessageIdx,
         }),
       ).toEqual({ type: "none" });
       expect(onSent).not.toHaveBeenCalled();
@@ -157,6 +163,7 @@ describe("FileSupervisor", () => {
         await clone.onBeforeRequest({
           inputTokenCount: 0,
           outputTokenCount: 0,
+          nativeMessageIdx: 0 as NativeMessageIdx,
         })
       ).type,
     ).toBe("inject");
@@ -167,6 +174,7 @@ describe("FileSupervisor", () => {
         await supervisor.onBeforeRequest({
           inputTokenCount: 0,
           outputTokenCount: 0,
+          nativeMessageIdx: 0 as NativeMessageIdx,
         })
       ).type,
     ).toBe("inject");
@@ -200,6 +208,7 @@ describe("FileSupervisor conversation lifetime", () => {
     const request = supervisor.onBeforeRequest({
       inputTokenCount: 0,
       outputTokenCount: 0,
+      nativeMessageIdx: 0 as NativeMessageIdx,
     });
     await reading;
     supervisor.reset();
@@ -213,6 +222,7 @@ describe("FileSupervisor conversation lifetime", () => {
         await supervisor.onBeforeRequest({
           inputTokenCount: 0,
           outputTokenCount: 0,
+          nativeMessageIdx: 0 as NativeMessageIdx,
         })
       ).type,
     ).toBe("inject");

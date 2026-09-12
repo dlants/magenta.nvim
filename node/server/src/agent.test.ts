@@ -20,7 +20,9 @@ import type {
   CreateInferenceManagerOptions,
   InferenceOptions,
   NativeInferenceManager,
+  NativeMessageIdx,
   Provider,
+  ProviderMessage,
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import {
@@ -4100,5 +4102,147 @@ describe("Agent turn loop", () => {
     // provider will accept on the next request.
     expect(flatLoop(agent)).toEqual({ type: "idle" });
     expect(mockClient.streams).toHaveLength(1);
+  });
+});
+
+describe("nativeMessageIdx plumbing", () => {
+  /** Where the block carrying `text` actually landed, as the wire recorded it. */
+  const idxOfText = (
+    core: { getProviderMessages(): ReadonlyArray<ProviderMessage> },
+    text: string,
+  ): NativeMessageIdx | undefined => {
+    for (const message of core.getProviderMessages()) {
+      for (const block of message.content) {
+        if (block.type === "text" && block.text.includes(text)) {
+          return block.nativeMessageIdx;
+        }
+      }
+    }
+    return undefined;
+  };
+
+  it("onBeforeRequest reports the idx its injection lands at, on the opening request", async () => {
+    const { core, mockClient } = createAgentWithMock();
+    const seen: NativeMessageIdx[] = [];
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: (ctx) => {
+          seen.push(ctx.nativeMessageIdx);
+          return Promise.resolve(injectText("INJECTED-OPENING"));
+        },
+      },
+    ]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "hello",
+      },
+    ]);
+    const stream = await mockClient.awaitStream();
+    stream.streamText("ok");
+    stream.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (idxOfText(core, "INJECTED-OPENING") !== undefined) return true;
+      throw new Error("waiting for the injection to land");
+    });
+    expect(seen).toEqual([0]);
+    expect(idxOfText(core, "INJECTED-OPENING")).toBe(seen[0]);
+    // The caller's own input merges into the same user message.
+    expect(idxOfText(core, "hello")).toBe(seen[0]);
+  });
+
+  it("onBeforeRequest reports the tool-result message on a continuation, because the injection merges into it", async () => {
+    const fileIO = new InMemoryFileIO({ "/tmp/b.txt": "other" });
+    const { core, mockClient } = createAgentWithMock({
+      fileIO: fileIO as unknown as ThreadContext["fileIO"],
+    });
+    const requestIdx: NativeMessageIdx[] = [];
+    const resultIdx: NativeMessageIdx[] = [];
+    core.hooks = composeSupervisors(() => [
+      {
+        onBeforeRequest: (ctx) => {
+          requestIdx.push(ctx.nativeMessageIdx);
+          return Promise.resolve(
+            injectText(`INJECTED-${requestIdx.length - 1}`),
+          );
+        },
+        onToolResults: (_results, nativeMessageIdx) => {
+          resultIdx.push(nativeMessageIdx);
+        },
+      },
+    ]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "hello",
+      },
+    ]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("get-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/b.txt" }],
+    });
+    stream.finishResponse("tool_use");
+    const stream2 = await awaitNextStream(mockClient, stream);
+    stream2.streamText("done");
+    stream2.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (idxOfText(core, "INJECTED-1") !== undefined) return true;
+      throw new Error("waiting for the continuation injection to land");
+    });
+    expect(idxOfText(core, "INJECTED-0")).toBe(requestIdx[0]);
+    expect(idxOfText(core, "INJECTED-1")).toBe(requestIdx[1]);
+    // `appendUserMessage` merges into the trailing tool-result user message,
+    // so the continuation's injection lands *on* it rather than after it.
+    expect(requestIdx[1]).toBe(resultIdx[0]);
+  });
+
+  it("onToolResults and onToolApplied report the idx of the message that holds the tool result", async () => {
+    const fileIO = new InMemoryFileIO({ "/tmp/b.txt": "other" });
+    const { core, mockClient } = createAgentWithMock({
+      fileIO: fileIO as unknown as ThreadContext["fileIO"],
+    });
+    const appliedIdx: NativeMessageIdx[] = [];
+    const resultIdx: NativeMessageIdx[] = [];
+    core.hooks = composeSupervisors(() => [
+      {
+        onToolApplied: (_path, _tool, _info, nativeMessageIdx) => {
+          appliedIdx.push(nativeMessageIdx);
+        },
+        onToolResults: (_results, nativeMessageIdx) => {
+          resultIdx.push(nativeMessageIdx);
+        },
+      },
+    ]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "hello",
+      },
+    ]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("get-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/b.txt" }],
+    });
+    stream.finishResponse("tool_use");
+    const stream2 = await awaitNextStream(mockClient, stream);
+    stream2.streamText("done");
+    stream2.finishResponse("end_turn");
+    await pollUntil(() => {
+      if (resultIdx.length === 1) return true;
+      throw new Error("waiting for tool results");
+    });
+    expect(appliedIdx).toEqual(resultIdx);
+    const landed = core
+      .getProviderMessages()
+      .flatMap((message) => message.content)
+      .find(
+        (block) =>
+          block.type === "tool_result" &&
+          block.id === ("get-1" as ToolRequestId),
+      );
+    expect(landed?.nativeMessageIdx).toBe(resultIdx[0]);
   });
 });

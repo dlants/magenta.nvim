@@ -1,6 +1,7 @@
-import type { OnToolApplied } from "./capabilities/context-tracker.ts";
+import type { OnToolAppliedHook } from "./capabilities/context-tracker.ts";
 import type { CompactSuspendReason } from "./compaction/index.ts";
 import type {
+  NativeMessageIdx,
   ProviderMessageContent,
   StopReason,
   ToolResults,
@@ -109,8 +110,8 @@ export function composeSupervisors(
         // Supervisors observe tool results; only the thread's own yield gate
         // stops a turn here.
         if (hook)
-          hooks.push((results) => {
-            hook(results);
+          hooks.push((results, nativeMessageIdx) => {
+            hook(results, nativeMessageIdx);
             return undefined;
           });
       }
@@ -159,9 +160,9 @@ export function composeSupervisors(
       }
       return false;
     },
-    onToolApplied: (absFilePath, tool, fileTypeInfo) => {
+    onToolApplied: (absFilePath, tool, fileTypeInfo, nativeMessageIdx) => {
       for (const sup of getSupervisors()) {
-        sup.onToolApplied?.(absFilePath, tool, fileTypeInfo);
+        sup.onToolApplied?.(absFilePath, tool, fileTypeInfo, nativeMessageIdx);
       }
     },
   };
@@ -173,12 +174,17 @@ export type EndTurnContext = {
    * supervisor can answer the same question `onBeforeRequest` answers. */
   inputTokenCount: number | undefined;
   lastAssistantMessage: ReadonlyArray<ProviderMessageContent> | undefined;
+  /** The last message of the log. Nothing further will be written, so this is
+   * the idx a supervisor records any state it commits here against. */
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export type RequestContext = {
   inputTokenCount: number | undefined;
   /** Cumulative output tokens across the agent's message log. */
   outputTokenCount: number;
+  /** The idx of the message that will carry this request's injections. */
+  nativeMessageIdx: NativeMessageIdx;
 };
 
 export interface ThreadSupervisor {
@@ -186,7 +192,11 @@ export interface ThreadSupervisor {
   onYield?(result: string): Promise<YieldAction>;
   /** Every requested tool has settled and its results are about to be
    * written. Fire-and-forget. */
-  onToolResults?(results: ToolResults): void;
+  onToolResults?(
+    results: ToolResults,
+    /** The idx of the message that will hold these results. */
+    nativeMessageIdx: NativeMessageIdx,
+  ): void;
   /** This supervisor reads `context.inputTokenCount` in `onBeforeRequest` and
    * needs it to describe the request it is deciding about, so the agent
    * counts the conversation before consulting it. Declaring it is what makes
@@ -202,7 +212,7 @@ export interface ThreadSupervisor {
    * system-info preamble) answers `false`: standing content alone is not
    * worth a request. */
   hasPendingContent?(): Promise<boolean>;
-  onToolApplied?: OnToolApplied;
+  onToolApplied?: OnToolAppliedHook;
 }
 
 function containsYieldTag(
