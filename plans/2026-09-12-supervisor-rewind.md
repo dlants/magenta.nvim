@@ -273,7 +273,44 @@ SystemInfoSupervisor.clone({ source, nativeMessageIdx });
   single undo"). The same failure reproduces in a clean detached worktree at
   the pre-follow-up `80f66146b4` HEAD, so it was not introduced by this stage.
 
-## FileSupervisor history + create/clone
+## FileSupervisor history + create/clone — **DONE**
+
+### What was done
+
+- `Files` entries now own append-only `FileViewEntry[]` histories keyed by
+  `NativeMessageIdx`; `agentView` and `lastStat` are derived from the last entry.
+- File deliveries from `onBeforeRequest` and tool-applied views both append at
+  the idx supplied by the Stage 1 hook plumbing. PDF view values and histories
+  are deep-copied so source and clone page lists remain isolated.
+- `FileSupervisor.clone({ source, nativeMessageIdx })` truncates each file's
+  copied history through the requested inclusive index while preserving context
+  membership. Its `pendingUpdates` and stat-observation cache start empty and
+  are rebuilt from the restored view and live disk state.
+- Reset still retains context membership but clears all histories. Auto-context
+  seeds now initialize the history-bearing `Files` shape.
+- Added coverage for a head clone, a pre-delivery clone, restoring an older
+  text baseline for a diff, retaining a later-added context file as unseen,
+  and reporting a deletion against the restored snapshot.
+
+### Decisions and deviations
+
+- `lastStat` is recorded with each delivered view, while a separate
+  clone-local `observedStats` cache handles polling between deliveries. Polls
+  cannot append history because they have no message idx, and mutating an old
+  history entry's stat could make a rewind incorrectly skip a disk diff.
+- Stage 3 still owns removal of `ThreadCore.clone`'s `sourceBusy`/head-preserve
+  heuristic. For this stage, that existing decision is translated to an index
+  when calling the new FileSupervisor API; pending updates are no longer copied
+  because they are derived state.
+
+### Validation (stage 2)
+
+- Focused file-supervisor and thread-context suites pass (49 tests).
+- `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.
+- The full suite excluding the previously documented, independently failing
+  `node/nvimclient/nvim/buffer-reload.test.ts` passes 1,659 tests. The unfiltered
+  run passes 1,669 tests and again has only that file's existing "an agent edit
+  is undone in a single undo" failure; the failure also reproduces by itself.
 
 - Goal: `Files` entries carry per-file view history; `clone({ source, nativeMessageIdx })` replaces `delivery: "preserve" | "reseed"`.
 - Tests:

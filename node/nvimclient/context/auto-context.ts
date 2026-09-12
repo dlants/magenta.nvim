@@ -226,7 +226,9 @@ export function autoContextFilesToInitialFiles(
     result[file.absFilePath] = {
       relFilePath: file.relFilePath,
       fileTypeInfo: file.fileTypeInfo,
+      history: [],
       agentView: undefined,
+      lastStat: undefined,
     };
   }
   return result;

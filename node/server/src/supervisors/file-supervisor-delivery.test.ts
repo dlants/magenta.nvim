@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { InMemoryFileIO } from "../edl/in-memory-file-io.ts";
-import type { ProviderImageContent } from "../providers/provider-types.ts";
+import type {
+  NativeMessageIdx,
+  ProviderImageContent,
+} from "../providers/provider-types.ts";
 import {
   type AbsFilePath,
   FileCategory,
@@ -61,14 +64,17 @@ describe("FileSupervisor unit tests", () => {
     await cm.refreshPendingUpdates();
     const clone = FileSupervisor.clone({
       source: cm,
-      delivery: "preserve",
+      nativeMessageIdx: -1 as NativeMessageIdx,
     });
     await clone.refreshPendingUpdates();
     expect(clone.files[TEST_PATH].agentView).toEqual({
       type: "text",
       content: "delivered content\n",
     });
-    expect(clone.getPendingUpdates()).toEqual(cm.getPendingUpdates());
+    expect(clone.getPendingUpdates()[TEST_PATH].update).toMatchObject({
+      status: "ok",
+      value: { type: "diff" },
+    });
     expect(clone.getPendingUpdates()).not.toBe(cm.getPendingUpdates());
     await cm.getContextUpdate();
     const updates = await clone.getContextUpdate();
@@ -92,7 +98,7 @@ describe("FileSupervisor unit tests", () => {
     await cm.getContextUpdate();
     const clone = FileSupervisor.clone({
       source: cm,
-      delivery: "reseed",
+      nativeMessageIdx: -2 as NativeMessageIdx,
     });
     expect(clone.files[TEST_PATH].agentView).toBeUndefined();
     expect((await clone.getContextUpdate())[TEST_PATH].update).toMatchObject({
@@ -100,6 +106,73 @@ describe("FileSupervisor unit tests", () => {
       value: { type: "whole-file" },
     });
     expect(await cm.getContextUpdate()).toEqual({});
+  });
+
+  it("restores the delivered baseline at the clone index", async () => {
+    const { cm, fileIO } = createTestFileSupervisor({
+      [TEST_PATH]: "version one\n",
+    });
+    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    await cm.getContextUpdate(2 as NativeMessageIdx);
+    await fileIO.writeFile(TEST_PATH, "version two\n");
+    await cm.getContextUpdate(5 as NativeMessageIdx);
+    await fileIO.writeFile(TEST_PATH, "current disk content\n");
+
+    const clone = FileSupervisor.clone({
+      source: cm,
+      nativeMessageIdx: 2 as NativeMessageIdx,
+    });
+    const update = (await clone.getContextUpdate(6 as NativeMessageIdx))[
+      TEST_PATH
+    ].update;
+    if (update.status !== "ok" || update.value.type !== "diff") {
+      throw new Error("Expected historical diff");
+    }
+    expect(update.value.patch).toContain("-version one");
+    expect(update.value.patch).toContain("+current disk content");
+    expect(update.value.patch).not.toContain("version two");
+    expect(cm.files[TEST_PATH].agentView).toEqual({
+      type: "text",
+      content: "version two\n",
+    });
+  });
+
+  it("keeps files added after the clone index but sends them whole", async () => {
+    const { cm } = createTestFileSupervisor({
+      [TEST_PATH]: "later context file",
+    });
+    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    await cm.getContextUpdate(5 as NativeMessageIdx);
+
+    const clone = FileSupervisor.clone({
+      source: cm,
+      nativeMessageIdx: 2 as NativeMessageIdx,
+    });
+    expect(clone.files[TEST_PATH]).toBeDefined();
+    expect(clone.files[TEST_PATH].agentView).toBeUndefined();
+    expect(
+      (await clone.getContextUpdate(6 as NativeMessageIdx))[TEST_PATH].update,
+    ).toMatchObject({ status: "ok", value: { type: "whole-file" } });
+  });
+
+  it("reports deletion against the restored historical snapshot", async () => {
+    const { cm, fileIO } = createTestFileSupervisor({
+      [TEST_PATH]: "historical content",
+    });
+    cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
+    await cm.getContextUpdate(2 as NativeMessageIdx);
+    await fileIO.writeFile(TEST_PATH, "later delivered content");
+    await cm.getContextUpdate(5 as NativeMessageIdx);
+
+    const clone = FileSupervisor.clone({
+      source: cm,
+      nativeMessageIdx: 2 as NativeMessageIdx,
+    });
+    fileIO.deleteFile(TEST_PATH);
+    expect(
+      (await clone.getContextUpdate(6 as NativeMessageIdx))[TEST_PATH].update,
+    ).toMatchObject({ status: "ok", value: { type: "file-deleted" } });
+    expect(clone.files[TEST_PATH]).toBeUndefined();
   });
 
   it("addFileContext is idempotent for already-tracked files", async () => {

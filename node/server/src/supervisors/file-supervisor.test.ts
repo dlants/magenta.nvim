@@ -157,7 +157,7 @@ describe("FileSupervisor", () => {
 
     const clone = FileSupervisor.clone({
       source: supervisor,
-      delivery: "reseed",
+      nativeMessageIdx: -1 as NativeMessageIdx,
     });
     expect(clone).not.toBe(supervisor);
     expect(clone.files[TEST_PATH]).toBeDefined();
@@ -256,7 +256,7 @@ describe("FileSupervisor conversation lifetime", () => {
     );
     const clone = FileSupervisor.clone({
       source: supervisor,
-      delivery: "reseed",
+      nativeMessageIdx: -2 as NativeMessageIdx,
     });
     expect(clone.files[pdf].agentView).toBeUndefined();
     expect(clone.files[IMAGE_PATH].agentView).toBeUndefined();

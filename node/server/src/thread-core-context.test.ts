@@ -277,13 +277,14 @@ describe("Thread-owned context delivery", () => {
         expect(tracker.files[f.file].agentView).toEqual(
           f.manager.files[f.file].agentView,
         );
+        expect(tracker.getPendingUpdates()).toEqual({});
+        expect(await tracker.hasPendingContent()).toBe(true);
         expect(tracker.getPendingUpdates()).toEqual(
           f.manager.getPendingUpdates(),
         );
         expect(tracker.getPendingUpdates()).not.toBe(
           f.manager.getPendingUpdates(),
         );
-        expect(await tracker.hasPendingContent()).toBe(true);
       }
     } finally {
       if (fork) {

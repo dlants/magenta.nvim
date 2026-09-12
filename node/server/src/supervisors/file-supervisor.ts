@@ -8,7 +8,10 @@ import type {
 import type { FileIO } from "../capabilities/file-io.ts";
 import { Emitter } from "../emitter.ts";
 import type { Logger } from "../logger.ts";
-import type { ProviderMessageContent } from "../providers/provider-types.ts";
+import type {
+  NativeMessageIdx,
+  ProviderMessageContent,
+} from "../providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "../providers/provider-types.ts";
 import type {
   InjectedContent,
@@ -96,13 +99,24 @@ function pendingUpdatesEqual(a: FileUpdates, b: FileUpdates): boolean {
 
 export type FileStat = { mtimeMs: number; size: number };
 
-export type Files = {
-  [absFilePath: AbsFilePath]: {
-    relFilePath: RelFilePath;
-    fileTypeInfo: FileTypeInfo;
-    agentView: TrackedFileInfo["agentView"];
-    lastStat?: FileStat | undefined;
-  };
+export type FileViewEntry = {
+  nativeMessageIdx: NativeMessageIdx;
+  agentView: TrackedFileInfo["agentView"];
+  lastStat: FileStat | undefined;
+};
+
+type TrackedFile = {
+  relFilePath: RelFilePath;
+  fileTypeInfo: FileTypeInfo;
+  history: FileViewEntry[];
+  readonly agentView: TrackedFileInfo["agentView"];
+  readonly lastStat: FileStat | undefined;
+};
+
+export type Files = { [absFilePath: AbsFilePath]: TrackedFile };
+
+type WorkingFile = Pick<TrackedFile, "relFilePath" | "fileTypeInfo"> & {
+  agentView: TrackedFileInfo["agentView"];
 };
 
 export type FileSupervisorDeps = {
@@ -121,30 +135,58 @@ export type FileSupervisorEvents = {
   pendingUpdatesChanged: [];
 };
 
-function cloneFile(file: Files[AbsFilePath]): Files[AbsFilePath] {
-  const agentView = file.agentView;
+function cloneAgentView(
+  agentView: TrackedFileInfo["agentView"],
+): TrackedFileInfo["agentView"] {
+  return agentView?.type === "pdf"
+    ? { ...agentView, pages: [...agentView.pages] }
+    : agentView?.type === "text"
+      ? { ...agentView }
+      : agentView;
+}
+
+function trackedFile(
+  file: Pick<TrackedFile, "relFilePath" | "fileTypeInfo">,
+  history: FileViewEntry[],
+): TrackedFile {
   return {
     ...file,
-    agentView:
-      agentView?.type === "pdf"
-        ? { ...agentView, pages: [...agentView.pages] }
-        : agentView,
-    lastStat: file.lastStat ? { ...file.lastStat } : undefined,
+    history,
+    get agentView() {
+      return history.at(-1)?.agentView;
+    },
+    get lastStat() {
+      return history.at(-1)?.lastStat;
+    },
   };
 }
 
-export function buildClonedFiles(
-  sourceFiles: Files,
-  delivery: "preserve" | "reseed" = "reseed",
-): Files {
+function cloneFile(
+  file: Files[AbsFilePath],
+  nativeMessageIdx?: NativeMessageIdx,
+): Files[AbsFilePath] {
+  return trackedFile(
+    file,
+    file.history
+      .filter(
+        (entry) =>
+          nativeMessageIdx === undefined ||
+          entry.nativeMessageIdx <= nativeMessageIdx,
+      )
+      .map((entry) => ({
+        nativeMessageIdx: entry.nativeMessageIdx,
+        agentView: cloneAgentView(entry.agentView),
+        lastStat: entry.lastStat ? { ...entry.lastStat } : undefined,
+      })),
+  );
+}
+
+/** Copy context membership while clearing conversation-local delivery state. */
+export function buildClonedFiles(sourceFiles: Files): Files {
   const next: Files = {};
   for (const path in sourceFiles) {
     const absFilePath = path as AbsFilePath;
-    const file = sourceFiles[absFilePath];
-    next[absFilePath] =
-      delivery === "preserve"
-        ? cloneFile(file)
-        : { ...file, agentView: undefined, lastStat: undefined };
+    next[absFilePath] = trackedFile(sourceFiles[absFilePath], []);
   }
   return next;
 }
@@ -155,6 +197,7 @@ export class FileSupervisor
 {
   public files: Files;
   private pendingUpdates: FileUpdates = {};
+  private readonly observedStats = new Map<AbsFilePath, FileStat | undefined>();
   private revision = 0;
   private refreshSequence = 0;
 
@@ -162,8 +205,30 @@ export class FileSupervisor
     return !this.destroyed && this.revision === revision;
   }
 
-  private trackFile(absFilePath: AbsFilePath, file: Files[AbsFilePath]): void {
-    this.files[absFilePath] = cloneFile(file);
+  private trackFile(
+    absFilePath: AbsFilePath,
+    file: Pick<TrackedFile, "relFilePath" | "fileTypeInfo">,
+  ): void {
+    this.files[absFilePath] = trackedFile(file, []);
+  }
+
+  private recordView(
+    file: TrackedFile,
+    nativeMessageIdx: NativeMessageIdx,
+    agentView: TrackedFileInfo["agentView"],
+    lastStat: FileStat | undefined,
+  ): void {
+    const previousIdx = file.history.at(-1)?.nativeMessageIdx;
+    if (previousIdx !== undefined && nativeMessageIdx < previousIdx) {
+      throw new Error(
+        `File view history must be monotonic: ${nativeMessageIdx} < ${previousIdx}`,
+      );
+    }
+    file.history.push({
+      nativeMessageIdx,
+      agentView: cloneAgentView(agentView),
+      lastStat: lastStat ? { ...lastStat } : undefined,
+    });
   }
   private pollTimer: ReturnType<typeof setInterval> | undefined;
   private destroyed = false;
@@ -197,40 +262,46 @@ export class FileSupervisor
       fileIO,
       cwd,
       homeDir,
-      buildClonedFiles(initialFiles, "preserve"),
+      Object.fromEntries(
+        Object.entries(initialFiles).map(([path, file]) => [
+          path,
+          cloneFile(file),
+        ]),
+      ) as Files,
       pollIntervalMs,
       onSent,
     );
   }
 
-  /** Fork a supervisor's tracked files, optionally carrying over undelivered updates. */
   static clone({
     source,
-    delivery,
+    nativeMessageIdx,
     onSent,
   }: {
     source: FileSupervisor;
-    delivery: "preserve" | "reseed";
+    nativeMessageIdx: NativeMessageIdx;
     onSent?: (updates: FileUpdates) => void;
   }): FileSupervisor {
-    const clone = new FileSupervisor(
+    const files = Object.fromEntries(
+      Object.entries(source.files).map(([path, file]) => [
+        path,
+        cloneFile(file, nativeMessageIdx),
+      ]),
+    ) as Files;
+    return new FileSupervisor(
       source.logger,
       source.fileIO,
       source.cwd,
       source.homeDir,
-      buildClonedFiles(source.files, delivery),
+      files,
       source.pollIntervalMs,
       onSent,
     );
-    if (delivery === "preserve") {
-      clone.pendingUpdates = { ...source.pendingUpdates };
-    }
-    return clone;
   }
 
-  async onBeforeRequest(_context: RequestContext): Promise<SupervisorAction> {
+  async onBeforeRequest(context: RequestContext): Promise<SupervisorAction> {
     const revision = this.revision;
-    const updates = await this.getContextUpdate();
+    const updates = await this.getContextUpdate(context.nativeMessageIdx);
     if (!this.isCurrent(revision) || Object.keys(updates).length === 0)
       return { type: "none" };
     const content = this.contextUpdatesToContent(updates);
@@ -247,8 +318,13 @@ export class FileSupervisor
     );
   }
 
-  onToolApplied: OnToolAppliedHook = ({ absFilePath, tool, fileTypeInfo }) => {
-    this.toolApplied(absFilePath, tool, fileTypeInfo);
+  onToolApplied: OnToolAppliedHook = ({
+    absFilePath,
+    tool,
+    fileTypeInfo,
+    nativeMessageIdx,
+  }) => {
+    this.toolApplied(absFilePath, tool, fileTypeInfo, nativeMessageIdx);
   };
 
   start(): void {
@@ -308,7 +384,7 @@ export class FileSupervisor
         continue;
       }
 
-      const prevStat = fileInfo.lastStat;
+      const prevStat = this.observedStats.get(absFilePath);
       if (
         prevStat !== undefined &&
         prevStat.mtimeMs === currentStat.mtimeMs &&
@@ -330,7 +406,7 @@ export class FileSupervisor
     }
 
     if (!current()) return;
-    for (const [path, stat] of stats) this.files[path].lastStat = stat;
+    for (const [path, stat] of stats) this.observedStats.set(path, stat);
     if (!pendingUpdatesEqual(this.pendingUpdates, next)) {
       this.pendingUpdates = next;
       this.emit("pendingUpdatesChanged");
@@ -357,7 +433,6 @@ export class FileSupervisor
     this.trackFile(absFilePath, {
       relFilePath,
       fileTypeInfo,
-      agentView: undefined,
     });
     this.emit("fileAdded", absFilePath);
     this.scheduleRefreshPendingUpdates();
@@ -376,6 +451,7 @@ export class FileSupervisor
     absFilePath: AbsFilePath,
     tool: ToolApplied,
     fileTypeInfo: FileTypeInfo,
+    nativeMessageIdx: NativeMessageIdx = PLACEHOLDER_NATIVE_MESSAGE_IDX,
   ): void {
     const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
 
@@ -386,16 +462,11 @@ export class FileSupervisor
       this.trackFile(absFilePath, {
         relFilePath,
         fileTypeInfo,
-        agentView: undefined,
       });
     }
 
-    this.updateAgentsViewOfFiles(absFilePath, tool);
-
-    const fileInfo = this.files[absFilePath];
-    if (fileInfo) {
-      fileInfo.lastStat = undefined;
-    }
+    this.updateAgentsViewOfFiles(absFilePath, tool, nativeMessageIdx);
+    this.observedStats.delete(absFilePath);
 
     if (isNew) {
       this.emit("fileAdded", absFilePath);
@@ -430,7 +501,6 @@ export class FileSupervisor
       this.trackFile(absFilePath, {
         relFilePath,
         fileTypeInfo,
-        agentView: undefined,
       });
       this.emit("fileAdded", absFilePath);
     }
@@ -441,6 +511,7 @@ export class FileSupervisor
     if (this.destroyed) return;
     this.files = buildClonedFiles(this.files);
     this.pendingUpdates = {};
+    this.observedStats.clear();
     this.revision++;
     this.emit("filesReset");
     this.scheduleRefreshPendingUpdates();
@@ -459,7 +530,9 @@ export class FileSupervisor
     return Object.keys(this.files).length === 0;
   }
 
-  async getContextUpdate(): Promise<FileUpdates> {
+  async getContextUpdate(
+    nativeMessageIdx: NativeMessageIdx = PLACEHOLDER_NATIVE_MESSAGE_IDX,
+  ): Promise<FileUpdates> {
     const revision = this.revision;
     if (!this.isCurrent(revision) || this.isContextEmpty()) {
       return {};
@@ -471,6 +544,7 @@ export class FileSupervisor
         const result = await this.getFileMessageAndUpdateAgentViewOfFile({
           absFilePath,
           commit: true,
+          nativeMessageIdx,
         });
         return { absFilePath, result };
       }),
@@ -481,10 +555,7 @@ export class FileSupervisor
     for (const { absFilePath, result } of entries) {
       if (result?.update) {
         results[absFilePath] = result;
-        const fileInfo = this.files[absFilePath];
-        if (fileInfo) {
-          fileInfo.lastStat = undefined;
-        }
+        delete this.pendingUpdates[absFilePath];
       }
     }
 
@@ -586,14 +657,20 @@ From now on, whenever any of these files are updated by the user, you will get a
   private async getFileMessageAndUpdateAgentViewOfFile({
     absFilePath,
     commit,
+    nativeMessageIdx,
   }: {
     absFilePath: AbsFilePath;
     commit: boolean;
+    nativeMessageIdx: NativeMessageIdx;
   }): Promise<FileUpdates[keyof FileUpdates] | undefined> {
     const revision = this.revision;
     const original = this.files[absFilePath];
     if (!original || !this.isCurrent(revision)) return undefined;
-    const fileInfo = cloneFile(original);
+    const fileInfo: WorkingFile = {
+      relFilePath: original.relFilePath,
+      fileTypeInfo: original.fileTypeInfo,
+      agentView: cloneAgentView(original.agentView),
+    };
     const relFilePath = relativePath(this.cwd, absFilePath, this.homeDir);
     let result: FileUpdates[AbsFilePath] | undefined;
     if (!(await this.fileIO.fileExists(absFilePath))) {
@@ -625,8 +702,17 @@ From now on, whenever any of these files are updated by the user, you will get a
         result.update.value.type === "file-deleted"
       ) {
         delete this.files[absFilePath];
-      } else {
-        original.agentView = fileInfo.agentView;
+      } else if (result) {
+        const currentStat = await this.fileIO.stat(absFilePath);
+        if (!this.isCurrent(revision) || this.files[absFilePath] !== original)
+          return undefined;
+        this.recordView(
+          original,
+          nativeMessageIdx,
+          fileInfo.agentView,
+          currentStat,
+        );
+        this.observedStats.set(absFilePath, currentStat);
       }
     }
     return result;
@@ -638,13 +724,14 @@ From now on, whenever any of these files are updated by the user, you will get a
     return this.getFileMessageAndUpdateAgentViewOfFile({
       absFilePath,
       commit: false,
+      nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
     });
   }
 
   private async handleTextFileUpdate(
     absFilePath: AbsFilePath,
     relFilePath: RelFilePath,
-    fileInfo: Files[AbsFilePath],
+    fileInfo: WorkingFile,
     commit: boolean,
   ): Promise<FileUpdates[keyof FileUpdates] | undefined> {
     let currentFileContent: string;
@@ -773,7 +860,7 @@ From now on, whenever any of these files are updated by the user, you will get a
   private async handleBinaryFileUpdate(
     absFilePath: AbsFilePath,
     relFilePath: RelFilePath,
-    fileInfo: Files[AbsFilePath],
+    fileInfo: WorkingFile,
     commit: boolean,
   ): Promise<FileUpdates[keyof FileUpdates] | undefined> {
     try {
@@ -938,12 +1025,14 @@ From now on, whenever any of these files are updated by the user, you will get a
   private updateAgentsViewOfFiles(
     absFilePath: AbsFilePath,
     tool: ToolApplied,
+    nativeMessageIdx: NativeMessageIdx,
   ): void {
     const fileInfo = this.files[absFilePath];
     if (!fileInfo) {
       throw new Error(`File ${absFilePath} not found in context`);
     }
 
+    let agentView = cloneAgentView(fileInfo.agentView);
     switch (tool.type) {
       case "get-file":
         if (fileInfo.fileTypeInfo.category === FileCategory.PDF) {
@@ -951,41 +1040,42 @@ From now on, whenever any of these files are updated by the user, you will get a
             `PDF file ${absFilePath} should use get-file-pdf action`,
           );
         } else {
-          fileInfo.agentView = { type: "text", content: tool.content };
+          agentView = { type: "text", content: tool.content };
         }
-        return;
+        break;
 
       case "get-file-binary":
-        fileInfo.agentView = { type: "binary" };
-        return;
+        agentView = { type: "binary" };
+        break;
 
       case "get-file-pdf": {
-        if (fileInfo.agentView?.type === "pdf") {
+        if (agentView?.type === "pdf") {
           if (tool.content.type === "summary") {
-            fileInfo.agentView.summary = true;
+            agentView.summary = true;
           } else {
-            if (!fileInfo.agentView.pages.includes(tool.content.pdfPage)) {
-              fileInfo.agentView.pages.push(tool.content.pdfPage);
-              fileInfo.agentView.pages.sort((a, b) => a - b);
+            if (!agentView.pages.includes(tool.content.pdfPage)) {
+              agentView.pages.push(tool.content.pdfPage);
+              agentView.pages.sort((a, b) => a - b);
             }
           }
         } else {
-          fileInfo.agentView = {
+          agentView = {
             type: "pdf",
             summary: tool.content.type === "summary",
             pages: tool.content.type === "page" ? [tool.content.pdfPage] : [],
             supportsPageExtraction: true,
           };
         }
-        return;
+        break;
       }
 
       case "edl-edit":
-        fileInfo.agentView = { type: "text", content: tool.content };
-        return;
+        agentView = { type: "text", content: tool.content };
+        break;
 
       default:
         assertUnreachable(tool);
     }
+    this.recordView(fileInfo, nativeMessageIdx, agentView, undefined);
   }
 }
