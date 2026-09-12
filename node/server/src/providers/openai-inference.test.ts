@@ -2,12 +2,14 @@ import type OpenAI from "openai";
 import { describe, expect, it } from "vitest";
 import type { ToolExecutor } from "../agent.ts";
 import {
+  agentHooks,
   createTestOpenAIAgent,
   flatLoop,
   type TestAgent,
   toolExecution,
 } from "../test-helpers.ts";
 import type { SendResult } from "../thread-api.ts";
+import { injectText } from "../thread-supervisor.ts";
 import type { ToolName } from "../tool-types.ts";
 import {
   ABORT_TOOL_RESULT_TEXT,
@@ -19,6 +21,7 @@ import type {
 } from "./mock-openai-client.ts";
 import {
   type NativeInferenceManager,
+  type NativeMessageIdx,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
   type ProviderMessage,
   type ProviderToolResult,
@@ -880,5 +883,79 @@ describe("OpenAIInferenceManager truncation", () => {
     expect(next.stream.inputItemsOfType("function_call")).toHaveLength(0);
     next.stream.finishResponse();
     await next.turn;
+  });
+});
+
+describe("OpenAIInferenceManager pending message indices", () => {
+  /** Where the block carrying `text` actually landed, as the wire recorded it. */
+  const idxOfText = (
+    agent: TestAgent,
+    text: string,
+  ): NativeMessageIdx | undefined => {
+    for (const message of agent.manager.log.messages) {
+      for (const block of message.content) {
+        if (block.type === "text" && block.text.includes(text)) {
+          return block.nativeMessageIdx;
+        }
+      }
+    }
+    return undefined;
+  };
+  const toolResultIdxs = (agent: TestAgent): NativeMessageIdx[] =>
+    agent.manager.log.messages
+      .flatMap((message) => message.content)
+      .filter((block) => block.type === "tool_result")
+      .map((block) => block.nativeMessageIdx);
+  it("reports where an injection lands and where a parallel batch of results ends", async () => {
+    const requestIdx: NativeMessageIdx[] = [];
+    const resultIdx: NativeMessageIdx[] = [];
+    const { agent, mockClient } = createTestOpenAIAgent({
+      tools: [spec],
+      getHooks: () =>
+        agentHooks({
+          onBeforeRequest: [
+            {
+              run: (ctx) => {
+                requestIdx.push(ctx.nativeMessageIdx);
+                return Promise.resolve(
+                  injectText(`INJECTED-${requestIdx.length - 1}`),
+                );
+              },
+            },
+          ],
+          onToolResults: [
+            (_results, nativeMessageIdx) => {
+              resultIdx.push(nativeMessageIdx);
+              return undefined;
+            },
+          ],
+        }),
+    });
+    const turn = agent.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "hello",
+      },
+    ]).promise;
+    const stream = await mockClient.awaitStreamAt(0);
+    stream.streamToolCall("call_1", "get_files", { filePath: "a.ts" });
+    stream.streamToolCall("call_2", "get_files", { filePath: "b.ts" });
+    await stream.settle();
+    stream.finishResponse();
+    const followup = await mockClient.awaitStreamAt(1);
+    followup.finishResponse();
+    await turn;
+    expect(idxOfText(agent, "INJECTED-0")).toBe(requestIdx[0]);
+    expect(idxOfText(agent, "INJECTED-1")).toBe(requestIdx[1]);
+    // Unlike anthropic, openai answers tools with `function_call_output`
+    // items rather than user messages, so the continuation's injection cannot
+    // merge into them: it starts a message of its own after the batch.
+    expect(requestIdx[1]).toBeGreaterThan(resultIdx[0]);
+    // One item per result: the batch spans two messages, and the reported idx
+    // is the last of them, so truncating inside the batch drops it.
+    const results = toolResultIdxs(agent);
+    expect(results).toHaveLength(2);
+    expect(Math.max(...results)).toBe(resultIdx[0]);
   });
 });

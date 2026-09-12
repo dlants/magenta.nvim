@@ -373,8 +373,9 @@ function buildTestAgent(
   const host = new ToolExecutorHost({
     logger: context.logger,
     getHooks: opts.getHooks ?? (() => agentHooks()),
-    getPendingResultMessageIdx: () =>
-      (manager.getNativeMessageIdx() + 1) as NativeMessageIdx,
+    // The production formula, not a copy of it: a wrong one must fail here.
+    getPendingResultMessageIdx: (toolCount) =>
+      manager.getPendingResultMessageIdx(toolCount),
     publishTools: (tools) => publishTools(tools),
     onUpdate: opts.onUpdate ?? (() => {}),
     createTool: (request) =>

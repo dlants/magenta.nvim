@@ -2380,7 +2380,7 @@ describe("ThreadHooks.onToolApplied", () => {
       type: ToolApplied["type"];
     }[] = [];
     const collector = (supervisor: number): ThreadSupervisor => ({
-      onToolApplied: (absFilePath, tool) => {
+      onToolApplied: ({ absFilePath, tool }) => {
         applied.push({ supervisor, path: absFilePath, type: tool.type });
       },
     });
@@ -4207,7 +4207,7 @@ describe("nativeMessageIdx plumbing", () => {
     const resultIdx: NativeMessageIdx[] = [];
     core.hooks = composeSupervisors(() => [
       {
-        onToolApplied: (_path, _tool, _info, nativeMessageIdx) => {
+        onToolApplied: ({ nativeMessageIdx }) => {
           appliedIdx.push(nativeMessageIdx);
         },
         onToolResults: (_results, nativeMessageIdx) => {
@@ -4244,5 +4244,56 @@ describe("nativeMessageIdx plumbing", () => {
           block.id === ("get-1" as ToolRequestId),
       );
     expect(landed?.nativeMessageIdx).toBe(resultIdx[0]);
+  });
+
+  it("reports the end of a parallel batch, which spans one message per result", async () => {
+    const fileIO = new InMemoryFileIO({
+      "/tmp/b.txt": "other",
+      "/tmp/c.txt": "more",
+    });
+    const { core, mockClient } = createAgentWithMock({
+      fileIO: fileIO as unknown as ThreadContext["fileIO"],
+    });
+    const appliedIdx: NativeMessageIdx[] = [];
+    const resultIdx: NativeMessageIdx[] = [];
+    core.hooks = composeSupervisors(() => [
+      {
+        onToolApplied: ({ nativeMessageIdx }) => {
+          appliedIdx.push(nativeMessageIdx);
+        },
+        onToolResults: (_results, nativeMessageIdx) => {
+          resultIdx.push(nativeMessageIdx);
+        },
+      },
+    ]);
+    void core.send([
+      {
+        type: "text",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+        text: "hello",
+      },
+    ]);
+    const stream = await mockClient.awaitStream();
+    stream.streamToolUse("get-1" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/b.txt" }],
+    });
+    stream.streamToolUse("get-2" as ToolRequestId, "get_files" as ToolName, {
+      files: [{ filePath: "/tmp/c.txt" }],
+    });
+    stream.finishResponse("tool_use");
+    await pollUntil(() => {
+      if (resultIdx.length === 1) return true;
+      throw new Error("waiting for tool results");
+    });
+    const landed = core
+      .getProviderMessages()
+      .flatMap((message) => message.content)
+      .filter((block) => block.type === "tool_result")
+      .map((block) => block.nativeMessageIdx);
+    expect(landed).toHaveLength(2);
+    // One user message per result: the reported idx is the last of them, so
+    // truncating inside the batch drops whatever a supervisor keyed on it.
+    expect(Math.max(...landed)).toBe(resultIdx[0]);
+    expect(new Set(appliedIdx)).toEqual(new Set([resultIdx[0]]));
   });
 });

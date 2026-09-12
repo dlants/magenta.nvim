@@ -410,6 +410,14 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     ) as NativeMessageIdx;
   }
 
+  /** One user message per tool result, so a batch ends `toolCount - 1` past
+   * its first message. */
+  getPendingResultMessageIdx(toolCount: number): NativeMessageIdx {
+    return (this.messages.length +
+      Math.max(toolCount, 1) -
+      1) as NativeMessageIdx;
+  }
+
   appendUserMessage(content: AgentInput[]): void {
     if (content.length === 0) return;
     const native = this.convertInputToNative(content);

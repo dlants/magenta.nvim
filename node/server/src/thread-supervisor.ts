@@ -160,9 +160,9 @@ export function composeSupervisors(
       }
       return false;
     },
-    onToolApplied: (absFilePath, tool, fileTypeInfo, nativeMessageIdx) => {
+    onToolApplied: (event) => {
       for (const sup of getSupervisors()) {
-        sup.onToolApplied?.(absFilePath, tool, fileTypeInfo, nativeMessageIdx);
+        sup.onToolApplied?.(event);
       }
     },
   };

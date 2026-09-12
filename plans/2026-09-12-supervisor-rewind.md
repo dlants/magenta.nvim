@@ -205,6 +205,46 @@ SystemInfoSupervisor.clone({ source, nativeMessageIdx });
   and `ThreadHooks.onToolApplied` use it, and `ThreadCore` bridges the two.
 - `status` has not moved onto `RequestContext` yet — that belongs to Stage 4.
 
+### Review follow-ups (stage 1)
+
+- **`+1` for tool results was wrong for both providers, not just openai.** Both
+  write one message per result (anthropic a user message each, openai a
+  `function_call_output` item each), so a parallel batch spans several messages.
+  The formula moved onto the manager as
+  `getPendingResultMessageIdx(toolCount)`, returning the *last* message of the
+  batch — the conservative choice, since truncating anywhere inside the batch
+  then drops whatever a supervisor keyed on it. `ToolExecutorDeps`'
+  `getPendingResultMessageIdx` takes the count (the executor has the request
+  list); `ThreadCore` records `liveBatchToolCount` when it builds the executor
+  so `onToolApplied`, which fires mid-batch, can ask too.
+- `test-helpers.ts` now calls `manager.getPendingResultMessageIdx` rather than
+  restating the formula, so a wrong production value cannot be agreed with by
+  construction.
+- `OnToolAppliedHook` takes a single `ToolAppliedEvent` object, so an
+  `OnToolApplied` (which ignores the trailing idx) is no longer silently
+  assignable to it.
+- New tests: `openai-inference.test.ts` →
+  `describe("OpenAIInferenceManager pending message indices")` pins that an
+  openai continuation's injection starts a *new* message after the batch
+  (unlike anthropic, where it merges into the tool-result message) and that the
+  reported result idx is the last of a two-tool batch; `agent.test.ts` gained
+  the anthropic parallel-batch case.
+- **Declined**: a separate `PendingNativeMessageIdx` brand. Stages 2-4 compare
+  pending idxs against recorded ones and hand them to `truncateMessages`
+  directly, so a second brand would need a conversion at every one of those
+  points while adding nothing the "pending" name and doc comments do not
+  already say.
+
+### Validation (stage 1)
+
+- Focused stage suites pass: `agent.test.ts`, both inference-manager suites,
+  and `file-supervisor.test.ts` (193 tests).
+- `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.
+- The full `npx vitest run` passes 1,665 tests but has one unrelated failure in
+  `node/nvimclient/nvim/buffer-reload.test.ts` ("an agent edit is undone in a
+  single undo"). The same failure reproduces in a clean detached worktree at
+  the pre-follow-up `80f66146b4` HEAD, so it was not introduced by this stage.
+
 ## FileSupervisor history + create/clone
 
 - Goal: `Files` entries carry per-file view history; `clone({ source, nativeMessageIdx })` replaces `delivery: "preserve" | "reseed"`.

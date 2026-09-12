@@ -19,9 +19,9 @@ export type ToolExecutorDeps = {
   logger: Logger;
   createTool: (request: ToolRequest) => ToolInvocation;
   getHooks: () => AgentHooks;
-  /** The idx of the message that will hold this batch's results. Read when the
-   * batch settles, just before the results are written. */
-  getPendingResultMessageIdx: () => NativeMessageIdx;
+  /** The idx of the last message this batch's results will occupy. Read when
+   * the batch settles, just before the results are written. */
+  getPendingResultMessageIdx: (toolCount: number) => NativeMessageIdx;
   /** Where the invocations are, for whoever renders them. */
   publishTools: (tools: ToolInvocationState) => void;
   onUpdate: () => void;
@@ -127,7 +127,10 @@ export class ToolExecutorHost {
     let suspend: SuspendReason | undefined;
     for (const hook of this.deps.getHooks().onToolResults) {
       try {
-        const asked = hook(results, this.deps.getPendingResultMessageIdx());
+        const asked = hook(
+          results,
+          this.deps.getPendingResultMessageIdx(requests.length),
+        );
         suspend ??= asked;
       } catch (err) {
         this.deps.logger.error(

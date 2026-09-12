@@ -51,11 +51,12 @@ describe("FileSupervisor", () => {
     const { supervisor, fileIO, onSent } = setup({
       [TEST_PATH]: "original content",
     });
-    supervisor.onToolApplied(
-      TEST_PATH,
-      { type: "get-file", content: "original content" },
-      TEXT_FILE_TYPE,
-    );
+    supervisor.onToolApplied({
+      absFilePath: TEST_PATH,
+      tool: { type: "get-file", content: "original content" },
+      fileTypeInfo: TEXT_FILE_TYPE,
+      nativeMessageIdx: 0 as NativeMessageIdx,
+    });
     expect(supervisor.files[TEST_PATH]).toBeDefined();
 
     await fileIO.writeFile(TEST_PATH, "formatted content");
@@ -123,11 +124,12 @@ describe("FileSupervisor", () => {
       supervisor.destroy();
       supervisor.destroy();
       expect(vi.getTimerCount()).toBe(0);
-      supervisor.onToolApplied(
-        TEST_PATH,
-        { type: "get-file", content: "hello" },
-        TEXT_FILE_TYPE,
-      );
+      supervisor.onToolApplied({
+        absFilePath: TEST_PATH,
+        tool: { type: "get-file", content: "hello" },
+        fileTypeInfo: TEXT_FILE_TYPE,
+        nativeMessageIdx: 0 as NativeMessageIdx,
+      });
       expect(supervisor.files[TEST_PATH]).toBeUndefined();
       expect(await supervisor.hasPendingContent()).toBe(false);
       expect(
@@ -145,11 +147,12 @@ describe("FileSupervisor", () => {
 
   it("clone reseeds delivery because fork history may be truncated", async () => {
     const { supervisor, fileIO } = setup({ [TEST_PATH]: "original content" });
-    supervisor.onToolApplied(
-      TEST_PATH,
-      { type: "get-file", content: "original content" },
-      TEXT_FILE_TYPE,
-    );
+    supervisor.onToolApplied({
+      absFilePath: TEST_PATH,
+      tool: { type: "get-file", content: "original content" },
+      fileTypeInfo: TEXT_FILE_TYPE,
+      nativeMessageIdx: 0 as NativeMessageIdx,
+    });
     await fileIO.writeFile(TEST_PATH, "changed on disk");
 
     const clone = FileSupervisor.clone({

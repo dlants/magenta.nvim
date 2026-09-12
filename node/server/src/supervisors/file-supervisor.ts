@@ -1,7 +1,7 @@
 import * as diff from "diff";
 import type {
   ContextTracker,
-  OnToolApplied,
+  OnToolAppliedHook,
   ToolApplied,
   TrackedFileInfo,
 } from "../capabilities/context-tracker.ts";
@@ -247,7 +247,7 @@ export class FileSupervisor
     );
   }
 
-  onToolApplied: OnToolApplied = (absFilePath, tool, fileTypeInfo) => {
+  onToolApplied: OnToolAppliedHook = ({ absFilePath, tool, fileTypeInfo }) => {
     this.toolApplied(absFilePath, tool, fileTypeInfo);
   };
 

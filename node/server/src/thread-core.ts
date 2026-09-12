@@ -277,18 +277,18 @@ export class ThreadCore {
     // fact this tool established will be revealed by the next message.
     const nativeMessageIdx = this.pendingResultMessageIdx;
     try {
-      this.contextHooks.onToolApplied?.(
+      this.contextHooks.onToolApplied?.({
         absFilePath,
         tool,
         fileTypeInfo,
         nativeMessageIdx,
-      );
-      this.hooks.onToolApplied?.(
+      });
+      this.hooks.onToolApplied?.({
         absFilePath,
         tool,
         fileTypeInfo,
         nativeMessageIdx,
-      );
+      });
     } catch (error) {
       this.context.logger.error(
         `onToolApplied hook threw: ${error instanceof Error ? error.message : String(error)}`,
@@ -344,11 +344,13 @@ export class ThreadCore {
     requests: ReadonlyArray<RequestedTool>,
     publishTools: (tools: ToolInvocationState) => void,
   ): ToolExecution {
+    this.liveBatchToolCount = requests.length;
     const executor = new ToolExecutorHost({
       logger: this.context.logger,
       createTool: (request) => this.invokeTool(request),
       getHooks: () => this.agentHooks(),
-      getPendingResultMessageIdx: () => this.pendingResultMessageIdx,
+      getPendingResultMessageIdx: (toolCount) =>
+        this.manager.getPendingResultMessageIdx(toolCount),
       publishTools,
       onUpdate: () => this.handleUpdate(),
     });
@@ -388,12 +390,17 @@ export class ThreadCore {
     );
   }
 
-  /** The idx of the message that will hold the results of the tools running
-   * right now. `appendToolResults` always pushes, so it is one past the
-   * assistant message that requested them. */
+  /** The idx of the last message that will hold the results of the tools
+   * running right now. The provider owns the formula: both write one message
+   * per result, so a parallel batch spans several messages. */
   private get pendingResultMessageIdx(): NativeMessageIdx {
-    return (this.manager.getNativeMessageIdx() + 1) as NativeMessageIdx;
+    return this.manager.getPendingResultMessageIdx(this.liveBatchToolCount);
   }
+
+  /** How many tools the batch in flight requested, so `onToolApplied` — which
+   * fires mid-batch, with no access to the request list — can ask the manager
+   * where the batch will end. */
+  private liveBatchToolCount = 1;
 
   private agentHooks(): AgentHooks {
     if (this.disposed) return { onBeforeRequest: [], onToolResults: [] };

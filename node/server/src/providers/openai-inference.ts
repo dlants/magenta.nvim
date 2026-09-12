@@ -404,6 +404,14 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
         : this.items.length
     ) as NativeMessageIdx;
   }
+  /** One `function_call_output` item per tool result, so a batch ends
+   * `toolCount - 1` past its first item. Image/document attachments follow as
+   * one further user message; it is not counted, since the results themselves
+   * are what supervisors key on. */
+  getPendingResultMessageIdx(toolCount: number): NativeMessageIdx {
+    return (this.items.length + Math.max(toolCount, 1) - 1) as NativeMessageIdx;
+  }
+
   appendUserMessage(content: AgentInput[]): void {
     if (content.length === 0) return;
     // Tagged text is stored on the wire as plain input_text and re-tagged by
