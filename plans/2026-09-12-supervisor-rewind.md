@@ -385,10 +385,19 @@ SystemInfoSupervisor.clone({ source, nativeMessageIdx });
   supervisor use, but `ThreadCore.clone` no longer uses it; thread forks always
   truncate against the manager's effective index.
 
+### Review follow-ups (stage 3)
+
+- Added GitTracker coverage proving that an unreported count-only refresh updates
+  the retained agent view: a later branch/HEAD delivery uses the refreshed counts
+  in `previous`, and a clone through the refresh retains the same state.
+- Added coverage for the monotonic-history guard: after a coarse change is
+  recorded at a higher native message index, a second coarse change at a lower
+  index rejects with the invariant error.
+
 ### Validation (stage 3)
 
 - Focused supervisor, context, and fork suites pass.
-- The full `npx vitest run` passes 1,675 tests (2 skipped, 1 todo).
+- The full `npx vitest run` passes 1,677 tests (2 skipped, 1 todo).
 - `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.
 
 ## SystemReminderSupervisor

@@ -184,6 +184,29 @@ describe("GitTracker", () => {
     expect(await tracker.getUpdate(1 as NativeMessageIdx)).toBeUndefined();
   });
 
+  it("retains refreshed counts for a later coarse update and clone", async () => {
+    const refreshed = { ...base, stagedCount: 2, untrackedCount: 5 };
+    const changed = {
+      ...refreshed,
+      branch: "feature",
+      headSha: "sha2",
+      headSubject: "second",
+    };
+    const tracker = trackerFor([refreshed, changed]);
+
+    expect(await tracker.getUpdate(1 as NativeMessageIdx)).toBeUndefined();
+
+    const clone = GitTracker.clone({
+      source: tracker,
+      nativeMessageIdx: 1 as NativeMessageIdx,
+    });
+    expect(clone.getAgentView()).toEqual(refreshed);
+
+    const update = await tracker.getUpdate(2 as NativeMessageIdx);
+    expect(update?.previous).toEqual(refreshed);
+    expect(update?.current).toEqual(changed);
+  });
+
   it("reports when the branch changes", async () => {
     const tracker = trackerFor([{ ...base, branch: "feature" }]);
     const update = await tracker.getUpdate(1 as NativeMessageIdx);
@@ -196,6 +219,18 @@ describe("GitTracker", () => {
       { ...base, headSha: "sha2", headSubject: "second" },
     ]);
     expect(await tracker.getUpdate(1 as NativeMessageIdx)).toBeDefined();
+  });
+
+  it("rejects a coarse change recorded before the latest history entry", async () => {
+    const tracker = trackerFor([
+      { ...base, branch: "feature" },
+      { ...base, branch: "other" },
+    ]);
+    await tracker.getUpdate(5 as NativeMessageIdx);
+
+    await expect(tracker.getUpdate(4 as NativeMessageIdx)).rejects.toThrow(
+      "Git view history must be monotonic: 4 < 5",
+    );
   });
 
   it("reports leaving a repository", async () => {
