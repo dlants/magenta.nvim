@@ -1,6 +1,5 @@
 import type { GitState } from "./capabilities/git-client.ts";
 import {
-  buildClonedFiles,
   FileSupervisor,
   type Files,
   type FileUpdates,
@@ -83,7 +82,6 @@ export class ThreadCore {
   readonly systemReminders: ReminderSupervisor;
   pendingSeed: AgentInput[] = [];
   private disposed = false;
-  readonly fileSupervisor: FileSupervisor;
   readonly gitSupervisor: GitSupervisor | undefined;
   private readonly contextHooks: ThreadHooks;
 
@@ -91,30 +89,16 @@ export class ThreadCore {
     return this.isActive && (await this.contextHooks.hasPendingContent());
   }
 
-  constructor(
+  private constructor(
     readonly id: ThreadId,
     readonly context: ThreadContext,
     private callbacks: ThreadCoreCallbacks,
     readonly manager: NativeInferenceManager,
     readonly toolSpecs: ProviderToolSpec[],
-    readonly edlRegisters: EdlRegisters = {
-      registers: new Map(),
-      nextSavedId: 0,
-    },
-    initialFiles: Files = context.contextDelivery?.initialFiles ?? {},
+    readonly edlRegisters: EdlRegisters,
+    readonly fileSupervisor: FileSupervisor,
   ) {
     const delivery = context.contextDelivery;
-    this.fileSupervisor = new FileSupervisor(
-      context.logger,
-      context.fileIO,
-      context.cwd,
-      context.homeDir,
-      initialFiles,
-      delivery?.pollIntervalMs,
-      (updates) => {
-        if (this.isActive) delivery?.onFilesSent?.(updates);
-      },
-    );
     for (const event of [
       "fileAdded",
       "fileRemoved",
@@ -151,6 +135,50 @@ export class ThreadCore {
     this.contextHooks = composeSupervisors(() => supervisors);
   }
 
+  static create({
+    id,
+    context,
+    callbacks,
+    manager,
+    toolSpecs,
+    edlRegisters = { registers: new Map(), nextSavedId: 0 },
+    initialFiles,
+  }: {
+    id: ThreadId;
+    context: ThreadContext;
+    callbacks: ThreadCoreCallbacks;
+    manager: NativeInferenceManager;
+    toolSpecs: ProviderToolSpec[];
+    edlRegisters?: EdlRegisters;
+    initialFiles?: Files;
+  }): ThreadCore {
+    const delivery = context.contextDelivery;
+    let core: ThreadCore | undefined;
+    const fileSupervisor = FileSupervisor.create({
+      logger: context.logger,
+      fileIO: context.fileIO,
+      cwd: context.cwd,
+      homeDir: context.homeDir,
+      initialFiles: initialFiles ?? delivery?.initialFiles ?? {},
+      ...(delivery?.pollIntervalMs !== undefined
+        ? { pollIntervalMs: delivery.pollIntervalMs }
+        : {}),
+      onSent: (updates) => {
+        if (core?.isActive) delivery?.onFilesSent?.(updates);
+      },
+    });
+    core = new ThreadCore(
+      id,
+      context,
+      callbacks,
+      manager,
+      toolSpecs,
+      edlRegisters,
+      fileSupervisor,
+    );
+    return core;
+  }
+
   static clone({
     source,
     id,
@@ -184,7 +212,16 @@ export class ThreadCore {
       !source.activity &&
       nativeMessageIdx === source.manager.getNativeMessageIdx() &&
       manager.getNativeMessageIdx() === source.manager.getNativeMessageIdx();
-    const clone = new ThreadCore(
+    const delivery = context.contextDelivery;
+    let clone: ThreadCore | undefined;
+    const fileSupervisor = FileSupervisor.clone({
+      source: source.fileSupervisor,
+      delivery: preserve ? "preserve" : "reseed",
+      onSent: (updates) => {
+        if (clone?.isActive) delivery?.onFilesSent?.(updates);
+      },
+    });
+    clone = new ThreadCore(
       id,
       context,
       callbacks,
@@ -194,16 +231,8 @@ export class ThreadCore {
         registers: new Map(source.edlRegisters.registers),
         nextSavedId: source.edlRegisters.nextSavedId,
       },
-      buildClonedFiles(
-        source.fileSupervisor.files,
-        preserve ? "preserve" : "reseed",
-      ),
+      fileSupervisor,
     );
-    if (preserve) {
-      clone.fileSupervisor.seedPendingUpdates(
-        source.fileSupervisor.getPendingUpdates(),
-      );
-    }
     return clone;
   }
 

@@ -8,11 +8,7 @@ import {
   type NvimCwd,
   type RelFilePath,
 } from "../utils/files.ts";
-import {
-  buildClonedFiles,
-  FileSupervisor,
-  type FileUpdates,
-} from "./file-supervisor.ts";
+import { FileSupervisor, type FileUpdates } from "./file-supervisor.ts";
 
 const TEST_PATH = "/test/file.txt" as AbsFilePath;
 const TEXT_FILE_TYPE = {
@@ -38,15 +34,14 @@ const logger = {
 function setup(files: Record<string, string>) {
   const fileIO = new InMemoryFileIO(files);
   const onSent = vi.fn<(updates: FileUpdates) => void>();
-  const supervisor = new FileSupervisor(
+  const supervisor = FileSupervisor.create({
     logger,
     fileIO,
-    "/test" as NvimCwd,
-    "/home" as HomeDir,
-    {},
-    undefined,
+    cwd: "/test" as NvimCwd,
+    homeDir: "/home" as HomeDir,
+    initialFiles: {},
     onSent,
-  );
+  });
   return { fileIO, onSent, supervisor };
 }
 
@@ -151,13 +146,10 @@ describe("FileSupervisor", () => {
     );
     await fileIO.writeFile(TEST_PATH, "changed on disk");
 
-    const clone = new FileSupervisor(
-      logger,
-      fileIO,
-      "/test" as NvimCwd,
-      "/home" as HomeDir,
-      buildClonedFiles(supervisor.files),
-    );
+    const clone = FileSupervisor.clone({
+      source: supervisor,
+      delivery: "reseed",
+    });
     expect(clone).not.toBe(supervisor);
     expect(clone.files[TEST_PATH]).toBeDefined();
     expect(
@@ -235,7 +227,7 @@ describe("FileSupervisor conversation lifetime", () => {
       mimeType: "application/pdf",
       extension: ".pdf",
     };
-    const { supervisor, fileIO } = setup({
+    const { supervisor } = setup({
       [pdf]: "pdf",
       [IMAGE_PATH]: "image",
     });
@@ -249,13 +241,10 @@ describe("FileSupervisor conversation lifetime", () => {
       { type: "get-file-binary", mtime: 1 },
       IMAGE_FILE_TYPE,
     );
-    const clone = new FileSupervisor(
-      logger,
-      fileIO,
-      "/test" as NvimCwd,
-      "/home" as HomeDir,
-      buildClonedFiles(supervisor.files),
-    );
+    const clone = FileSupervisor.clone({
+      source: supervisor,
+      delivery: "reseed",
+    });
     expect(clone.files[pdf].agentView).toBeUndefined();
     expect(clone.files[IMAGE_PATH].agentView).toBeUndefined();
     clone.toolApplied(

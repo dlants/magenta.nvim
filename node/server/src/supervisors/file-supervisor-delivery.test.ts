@@ -9,7 +9,7 @@ import {
   type RelFilePath,
 } from "../utils/files.ts";
 import type { DiffUpdate, WholeFileUpdate } from "./file-supervisor.ts";
-import { buildClonedFiles, FileSupervisor } from "./file-supervisor.ts";
+import { FileSupervisor } from "./file-supervisor.ts";
 
 vi.mock("../utils/pdf-pages.ts", () => ({
   getSummaryAsProviderContent: vi.fn().mockResolvedValue({
@@ -32,12 +32,12 @@ function createTestFileSupervisor(files: Record<string, string>) {
     debug: vi.fn(),
   };
 
-  const cm = new FileSupervisor(
-    mockLogger,
+  const cm = FileSupervisor.create({
+    logger: mockLogger,
     fileIO,
-    "/test" as NvimCwd,
-    "/home" as HomeDir,
-  );
+    cwd: "/test" as NvimCwd,
+    homeDir: "/home" as HomeDir,
+  });
 
   return { cm, fileIO, mockLogger };
 }
@@ -52,20 +52,17 @@ const TEXT_FILE_TYPE = {
 
 describe("FileSupervisor unit tests", () => {
   it("full-history clones retain independent delivered baselines, not current disk content", async () => {
-    const { cm, fileIO, mockLogger } = createTestFileSupervisor({
+    const { cm, fileIO } = createTestFileSupervisor({
       [TEST_PATH]: "delivered content\n",
     });
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
     await cm.getContextUpdate();
     await fileIO.writeFile(TEST_PATH, "not delivered yet\n");
     await cm.refreshPendingUpdates();
-    const clone = new FileSupervisor(
-      mockLogger,
-      fileIO,
-      "/test" as NvimCwd,
-      "/home" as HomeDir,
-      buildClonedFiles(cm.files, "preserve"),
-    );
+    const clone = FileSupervisor.clone({
+      source: cm,
+      delivery: "preserve",
+    });
     await clone.refreshPendingUpdates();
     expect(clone.files[TEST_PATH].agentView).toEqual({
       type: "text",
@@ -88,18 +85,15 @@ describe("FileSupervisor unit tests", () => {
   });
 
   it("truncated-history clones reseed delivered files", async () => {
-    const { cm, fileIO, mockLogger } = createTestFileSupervisor({
+    const { cm } = createTestFileSupervisor({
       [TEST_PATH]: "delivered content",
     });
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
     await cm.getContextUpdate();
-    const clone = new FileSupervisor(
-      mockLogger,
-      fileIO,
-      "/test" as NvimCwd,
-      "/home" as HomeDir,
-      buildClonedFiles(cm.files, "reseed"),
-    );
+    const clone = FileSupervisor.clone({
+      source: cm,
+      delivery: "reseed",
+    });
     expect(clone.files[TEST_PATH].agentView).toBeUndefined();
     expect((await clone.getContextUpdate())[TEST_PATH].update).toMatchObject({
       status: "ok",
@@ -741,14 +735,14 @@ describe("FileSupervisor - background poll", () => {
         info: vi.fn(),
         debug: vi.fn(),
       };
-      const cm = new FileSupervisor(
-        mockLogger,
+      const cm = FileSupervisor.create({
+        logger: mockLogger,
         fileIO,
-        "/test" as NvimCwd,
-        "/home" as HomeDir,
-        {},
-        100,
-      );
+        cwd: "/test" as NvimCwd,
+        homeDir: "/home" as HomeDir,
+        initialFiles: {},
+        pollIntervalMs: 100,
+      });
 
       cm.toolApplied(
         TEST_PATH,
@@ -782,14 +776,14 @@ describe("FileSupervisor - background poll", () => {
         info: vi.fn(),
         debug: vi.fn(),
       };
-      const cm = new FileSupervisor(
-        mockLogger,
+      const cm = FileSupervisor.create({
+        logger: mockLogger,
         fileIO,
-        "/test" as NvimCwd,
-        "/home" as HomeDir,
-        {},
-        100,
-      );
+        cwd: "/test" as NvimCwd,
+        homeDir: "/home" as HomeDir,
+        initialFiles: {},
+        pollIntervalMs: 100,
+      });
 
       cm.toolApplied(
         TEST_PATH,
@@ -901,14 +895,19 @@ describe("FileSupervisor conversation delivery lifetime", () => {
   it("keeps a single timer across resets and stops it exactly once", () => {
     vi.useFakeTimers();
     try {
-      const cm = new FileSupervisor(
-        { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
-        new InMemoryFileIO({}),
-        "/test" as NvimCwd,
-        "/home" as HomeDir,
-        {},
-        100,
-      );
+      const cm = FileSupervisor.create({
+        logger: {
+          error: vi.fn(),
+          warn: vi.fn(),
+          info: vi.fn(),
+          debug: vi.fn(),
+        },
+        fileIO: new InMemoryFileIO({}),
+        cwd: "/test" as NvimCwd,
+        homeDir: "/home" as HomeDir,
+        initialFiles: {},
+        pollIntervalMs: 100,
+      });
       cm.start();
       cm.start();
       cm.reset();

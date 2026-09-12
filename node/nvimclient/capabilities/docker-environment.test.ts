@@ -308,12 +308,12 @@ describe("Docker Environment", () => {
         debug: vi.fn(),
       };
 
-      const cm = new FileSupervisor(
-        mockLogger,
+      const cm = FileSupervisor.create({
+        logger: mockLogger,
         fileIO,
-        "/tmp" as NvimCwd,
-        "/root" as HomeDir,
-      );
+        cwd: "/tmp" as NvimCwd,
+        homeDir: "/root" as HomeDir,
+      });
 
       return cm;
     }

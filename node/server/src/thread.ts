@@ -212,10 +212,10 @@ export class Thread {
         ? { effortOverride: context.subagentConfig.effort }
         : {}),
     });
-    return new ThreadCore(
-      this.id,
+    return ThreadCore.create({
+      id: this.id,
       context,
-      {
+      callbacks: {
         onUpdate: () => this.handleUpdate(),
         getHooks: () => this.hooks,
         onStructuredResult: (id, result) => {
@@ -225,9 +225,8 @@ export class Thread {
       },
       manager,
       toolSpecs,
-      undefined,
-      initialFiles,
-    );
+      ...(initialFiles ? { initialFiles } : {}),
+    });
   }
 
   static async clone(args: {

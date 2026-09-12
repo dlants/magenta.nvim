@@ -105,6 +105,15 @@ export type Files = {
   };
 };
 
+export type FileSupervisorDeps = {
+  logger: Logger;
+  fileIO: FileIO;
+  cwd: NvimCwd;
+  homeDir: HomeDir;
+  pollIntervalMs?: number;
+  onSent?: (updates: FileUpdates) => void;
+};
+
 export type FileSupervisorEvents = {
   fileAdded: [absFilePath: AbsFilePath];
   fileRemoved: [absFilePath: AbsFilePath];
@@ -160,18 +169,63 @@ export class FileSupervisor
   private destroyed = false;
   private readonly pollIntervalMs: number;
 
-  constructor(
+  private constructor(
     private logger: Logger,
     private fileIO: FileIO,
     private cwd: NvimCwd,
     private homeDir: HomeDir,
-    initialFiles: Files = {},
-    pollIntervalMs = 1000,
+    files: Files,
+    pollIntervalMs: number,
     private readonly onSent?: (updates: FileUpdates) => void,
   ) {
     super();
-    this.files = buildClonedFiles(initialFiles, "preserve");
+    this.files = files;
     this.pollIntervalMs = pollIntervalMs;
+  }
+
+  static create({
+    logger,
+    fileIO,
+    cwd,
+    homeDir,
+    initialFiles = {},
+    pollIntervalMs = 1000,
+    onSent,
+  }: FileSupervisorDeps & { initialFiles?: Files }): FileSupervisor {
+    return new FileSupervisor(
+      logger,
+      fileIO,
+      cwd,
+      homeDir,
+      buildClonedFiles(initialFiles, "preserve"),
+      pollIntervalMs,
+      onSent,
+    );
+  }
+
+  /** Fork a supervisor's tracked files, optionally carrying over undelivered updates. */
+  static clone({
+    source,
+    delivery,
+    onSent,
+  }: {
+    source: FileSupervisor;
+    delivery: "preserve" | "reseed";
+    onSent?: (updates: FileUpdates) => void;
+  }): FileSupervisor {
+    const clone = new FileSupervisor(
+      source.logger,
+      source.fileIO,
+      source.cwd,
+      source.homeDir,
+      buildClonedFiles(source.files, delivery),
+      source.pollIntervalMs,
+      onSent,
+    );
+    if (delivery === "preserve") {
+      clone.pendingUpdates = { ...source.pendingUpdates };
+    }
+    return clone;
   }
 
   async onBeforeRequest(_context: RequestContext): Promise<SupervisorAction> {
@@ -216,11 +270,6 @@ export class FileSupervisor
     this.destroyed = true;
     this.stop();
     this.removeAllListeners();
-  }
-
-  /** Seed a forked supervisor with the pending updates its source had not yet delivered. */
-  seedPendingUpdates(updates: FileUpdates): void {
-    this.pendingUpdates = { ...updates };
   }
 
   getPendingUpdates(): FileUpdates {
