@@ -303,14 +303,35 @@ SystemInfoSupervisor.clone({ source, nativeMessageIdx });
   when calling the new FileSupervisor API; pending updates are no longer copied
   because they are derived state.
 
+### Review follow-ups (stage 2)
+
+- Replaced `FileSupervisor.clone`'s sentinel-index reseed convention with a
+  `FileHistoryClone` discriminated union: `{ type: "reseed" }` or
+  `{ type: "truncate", nativeMessageIdx }`. `ThreadCore` translates its
+  temporary stage-2 preserve heuristic into that operation, so reseeding can
+  never retain placeholder-indexed entries and tests no longer cast magic
+  negative values to `NativeMessageIdx`.
+- Moved file histories out of the public `Files` representation into a
+  module-private `WeakMap`. Public tracked files expose only cloned readonly
+  `agentView` / `lastStat` snapshots, while all construction and monotonic
+  appends continue through `FileSupervisor` helpers. Auto-context seeds no
+  longer manufacture a mutable `history` property.
+- Added retained PDF-history coverage: page 1 is recorded at idx N, retained by
+  an inclusive clone at N, and page 2 is applied to the clone without mutating
+  the source's `[1]` page snapshot.
+- The required full-suite run exposed the already-documented Neovim 0.8 undo
+  failure in `buffer-reload.test.ts`. `reloadFromDisk` now refreshes Neovim's
+  file timestamp by writing the already-matching buffer with `noautocmd write!`
+  instead of `checktime`; the latter silently reloaded the buffer and discarded
+  the agent edit's undo entry on older Neovim.
+
 ### Validation (stage 2)
 
-- Focused file-supervisor and thread-context suites pass (49 tests).
+- Focused file-supervisor suites pass (43 tests), including the retained PDF
+  history isolation case.
+- The full `npx vitest run` passes 1,670 tests (2 skipped, 1 todo), including
+  `buffer-reload.test.ts` on Neovim 0.8.
 - `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.
-- The full suite excluding the previously documented, independently failing
-  `node/nvimclient/nvim/buffer-reload.test.ts` passes 1,659 tests. The unfiltered
-  run passes 1,669 tests and again has only that file's existing "an agent edit
-  is undone in a single undo" failure; the failure also reproduces by itself.
 
 - Goal: `Files` entries carry per-file view history; `clone({ source, nativeMessageIdx })` replaces `delivery: "preserve" | "reseed"`.
 - Tests:

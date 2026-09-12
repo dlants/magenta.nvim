@@ -59,12 +59,12 @@ describe("FileSupervisor unit tests", () => {
       [TEST_PATH]: "delivered content\n",
     });
     cm.addFileContext(TEST_PATH, TEST_REL, TEXT_FILE_TYPE);
-    await cm.getContextUpdate();
+    await cm.getContextUpdate(2 as NativeMessageIdx);
     await fileIO.writeFile(TEST_PATH, "not delivered yet\n");
     await cm.refreshPendingUpdates();
     const clone = FileSupervisor.clone({
       source: cm,
-      nativeMessageIdx: -1 as NativeMessageIdx,
+      history: { type: "truncate", nativeMessageIdx: 2 as NativeMessageIdx },
     });
     await clone.refreshPendingUpdates();
     expect(clone.files[TEST_PATH].agentView).toEqual({
@@ -76,8 +76,8 @@ describe("FileSupervisor unit tests", () => {
       value: { type: "diff" },
     });
     expect(clone.getPendingUpdates()).not.toBe(cm.getPendingUpdates());
-    await cm.getContextUpdate();
-    const updates = await clone.getContextUpdate();
+    await cm.getContextUpdate(3 as NativeMessageIdx);
+    const updates = await clone.getContextUpdate(3 as NativeMessageIdx);
     expect(updates[TEST_PATH].update).toMatchObject({
       status: "ok",
       value: { type: "diff" },
@@ -98,7 +98,7 @@ describe("FileSupervisor unit tests", () => {
     await cm.getContextUpdate();
     const clone = FileSupervisor.clone({
       source: cm,
-      nativeMessageIdx: -2 as NativeMessageIdx,
+      history: { type: "reseed" },
     });
     expect(clone.files[TEST_PATH].agentView).toBeUndefined();
     expect((await clone.getContextUpdate())[TEST_PATH].update).toMatchObject({
@@ -120,7 +120,7 @@ describe("FileSupervisor unit tests", () => {
 
     const clone = FileSupervisor.clone({
       source: cm,
-      nativeMessageIdx: 2 as NativeMessageIdx,
+      history: { type: "truncate", nativeMessageIdx: 2 as NativeMessageIdx },
     });
     const update = (await clone.getContextUpdate(6 as NativeMessageIdx))[
       TEST_PATH
@@ -146,7 +146,7 @@ describe("FileSupervisor unit tests", () => {
 
     const clone = FileSupervisor.clone({
       source: cm,
-      nativeMessageIdx: 2 as NativeMessageIdx,
+      history: { type: "truncate", nativeMessageIdx: 2 as NativeMessageIdx },
     });
     expect(clone.files[TEST_PATH]).toBeDefined();
     expect(clone.files[TEST_PATH].agentView).toBeUndefined();
@@ -166,7 +166,7 @@ describe("FileSupervisor unit tests", () => {
 
     const clone = FileSupervisor.clone({
       source: cm,
-      nativeMessageIdx: 2 as NativeMessageIdx,
+      history: { type: "truncate", nativeMessageIdx: 2 as NativeMessageIdx },
     });
     fileIO.deleteFile(TEST_PATH);
     expect(

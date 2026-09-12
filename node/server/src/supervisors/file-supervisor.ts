@@ -99,21 +99,32 @@ function pendingUpdatesEqual(a: FileUpdates, b: FileUpdates): boolean {
 
 export type FileStat = { mtimeMs: number; size: number };
 
-export type FileViewEntry = {
-  nativeMessageIdx: NativeMessageIdx;
-  agentView: TrackedFileInfo["agentView"];
-  lastStat: FileStat | undefined;
+type FileViewEntry = {
+  readonly nativeMessageIdx: NativeMessageIdx;
+  readonly agentView: TrackedFileInfo["agentView"];
+  readonly lastStat: FileStat | undefined;
 };
 
 type TrackedFile = {
   relFilePath: RelFilePath;
   fileTypeInfo: FileTypeInfo;
-  history: FileViewEntry[];
   readonly agentView: TrackedFileInfo["agentView"];
   readonly lastStat: FileStat | undefined;
 };
 
 export type Files = { [absFilePath: AbsFilePath]: TrackedFile };
+
+export type FileHistoryClone =
+  | { type: "reseed" }
+  | { type: "truncate"; nativeMessageIdx: NativeMessageIdx };
+
+const fileHistories = new WeakMap<TrackedFile, FileViewEntry[]>();
+
+function historyOf(file: TrackedFile): FileViewEntry[] {
+  const history = fileHistories.get(file);
+  if (!history) throw new Error("Tracked file is missing private history");
+  return history;
+}
 
 type WorkingFile = Pick<TrackedFile, "relFilePath" | "fileTypeInfo"> & {
   agentView: TrackedFileInfo["agentView"];
@@ -149,35 +160,40 @@ function trackedFile(
   file: Pick<TrackedFile, "relFilePath" | "fileTypeInfo">,
   history: FileViewEntry[],
 ): TrackedFile {
-  return {
+  const result: TrackedFile = {
     ...file,
-    history,
     get agentView() {
-      return history.at(-1)?.agentView;
+      return cloneAgentView(history.at(-1)?.agentView);
     },
     get lastStat() {
-      return history.at(-1)?.lastStat;
+      const lastStat = history.at(-1)?.lastStat;
+      return lastStat ? { ...lastStat } : undefined;
     },
   };
+  fileHistories.set(result, history);
+  return result;
 }
 
 function cloneFile(
   file: Files[AbsFilePath],
-  nativeMessageIdx?: NativeMessageIdx,
+  historyClone?: FileHistoryClone,
 ): Files[AbsFilePath] {
+  const sourceHistory = fileHistories.get(file) ?? [];
+  const retainedHistory =
+    historyClone?.type === "reseed"
+      ? []
+      : sourceHistory.filter(
+          (entry) =>
+            historyClone === undefined ||
+            entry.nativeMessageIdx <= historyClone.nativeMessageIdx,
+        );
   return trackedFile(
     file,
-    file.history
-      .filter(
-        (entry) =>
-          nativeMessageIdx === undefined ||
-          entry.nativeMessageIdx <= nativeMessageIdx,
-      )
-      .map((entry) => ({
-        nativeMessageIdx: entry.nativeMessageIdx,
-        agentView: cloneAgentView(entry.agentView),
-        lastStat: entry.lastStat ? { ...entry.lastStat } : undefined,
-      })),
+    retainedHistory.map((entry) => ({
+      nativeMessageIdx: entry.nativeMessageIdx,
+      agentView: cloneAgentView(entry.agentView),
+      lastStat: entry.lastStat ? { ...entry.lastStat } : undefined,
+    })),
   );
 }
 
@@ -218,13 +234,14 @@ export class FileSupervisor
     agentView: TrackedFileInfo["agentView"],
     lastStat: FileStat | undefined,
   ): void {
-    const previousIdx = file.history.at(-1)?.nativeMessageIdx;
+    const history = historyOf(file);
+    const previousIdx = history.at(-1)?.nativeMessageIdx;
     if (previousIdx !== undefined && nativeMessageIdx < previousIdx) {
       throw new Error(
         `File view history must be monotonic: ${nativeMessageIdx} < ${previousIdx}`,
       );
     }
-    file.history.push({
+    history.push({
       nativeMessageIdx,
       agentView: cloneAgentView(agentView),
       lastStat: lastStat ? { ...lastStat } : undefined,
@@ -275,17 +292,17 @@ export class FileSupervisor
 
   static clone({
     source,
-    nativeMessageIdx,
+    history,
     onSent,
   }: {
     source: FileSupervisor;
-    nativeMessageIdx: NativeMessageIdx;
+    history: FileHistoryClone;
     onSent?: (updates: FileUpdates) => void;
   }): FileSupervisor {
     const files = Object.fromEntries(
       Object.entries(source.files).map(([path, file]) => [
         path,
-        cloneFile(file, nativeMessageIdx),
+        cloneFile(file, history),
       ]),
     ) as Files;
     return new FileSupervisor(

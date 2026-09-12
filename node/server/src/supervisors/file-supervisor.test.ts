@@ -157,7 +157,7 @@ describe("FileSupervisor", () => {
 
     const clone = FileSupervisor.clone({
       source: supervisor,
-      nativeMessageIdx: -1 as NativeMessageIdx,
+      history: { type: "reseed" },
     });
     expect(clone).not.toBe(supervisor);
     expect(clone.files[TEST_PATH]).toBeDefined();
@@ -233,40 +233,32 @@ describe("FileSupervisor conversation lifetime", () => {
     supervisor.destroy();
   });
 
-  it("forks reseed binary and PDF delivery and isolate mutable PDF pages", async () => {
+  it("retains tool-applied PDF history inclusively without sharing pages", () => {
     const pdf = "/test/doc.pdf" as AbsFilePath;
     const pdfType = {
       category: FileCategory.PDF,
       mimeType: "application/pdf",
       extension: ".pdf",
     };
-    const { supervisor } = setup({
-      [pdf]: "pdf",
-      [IMAGE_PATH]: "image",
-    });
+    const { supervisor } = setup({ [pdf]: "pdf" });
     supervisor.toolApplied(
       pdf,
       { type: "get-file-pdf", content: { type: "page", pdfPage: 1 } },
       pdfType,
-    );
-    supervisor.toolApplied(
-      IMAGE_PATH,
-      { type: "get-file-binary", mtime: 1 },
-      IMAGE_FILE_TYPE,
+      3 as NativeMessageIdx,
     );
     const clone = FileSupervisor.clone({
       source: supervisor,
-      nativeMessageIdx: -2 as NativeMessageIdx,
+      history: { type: "truncate", nativeMessageIdx: 3 as NativeMessageIdx },
     });
-    expect(clone.files[pdf].agentView).toBeUndefined();
-    expect(clone.files[IMAGE_PATH].agentView).toBeUndefined();
     clone.toolApplied(
       pdf,
       { type: "get-file-pdf", content: { type: "page", pdfPage: 2 } },
       pdfType,
+      4 as NativeMessageIdx,
     );
     expect(supervisor.files[pdf].agentView).toMatchObject({ pages: [1] });
-    expect(clone.files[pdf].agentView).toMatchObject({ pages: [2] });
+    expect(clone.files[pdf].agentView).toMatchObject({ pages: [1, 2] });
     supervisor.destroy();
     clone.destroy();
   });

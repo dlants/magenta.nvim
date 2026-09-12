@@ -216,9 +216,12 @@ export class ThreadCore {
     let clone: ThreadCore | undefined;
     const fileSupervisor = FileSupervisor.clone({
       source: source.fileSupervisor,
-      nativeMessageIdx: preserve
-        ? source.manager.getNativeMessageIdx()
-        : PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      history: preserve
+        ? {
+            type: "truncate",
+            nativeMessageIdx: source.manager.getNativeMessageIdx(),
+          }
+        : { type: "reseed" },
       onSent: (updates) => {
         if (clone?.isActive) delivery?.onFilesSent?.(updates);
       },
