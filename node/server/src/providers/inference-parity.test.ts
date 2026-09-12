@@ -299,7 +299,7 @@ describe("preflight token count parity", () => {
   const compactHooks = () =>
     agentHooks({
       onBeforeRequest: composeSupervisors(() => [
-        new AutoCompactSupervisor({ nextPrompt: "wrap up", threshold: 1 }),
+        AutoCompactSupervisor.create({ nextPrompt: "wrap up", threshold: 1 }),
       ]).onBeforeRequest,
     });
   it("suspends for compaction on anthropic and not on openai", async () => {

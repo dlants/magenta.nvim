@@ -9,6 +9,7 @@ import {
   type RequestContext,
   SystemInfoSupervisor,
   type ThreadSupervisor,
+  UnsupervisedSupervisor,
 } from "./thread-supervisor.ts";
 
 const context: RequestContext = {
@@ -41,7 +42,7 @@ describe("composeSupervisors onBeforeRequest", () => {
   it("declares the preflight token count only for supervisors that ask", () => {
     const hooks = composeSupervisors(() => [
       { onBeforeRequest: () => Promise.resolve({ type: "none" as const }) },
-      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
+      AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "go" }),
     ]);
     expect(
       hooks.onBeforeRequest.map((h) => h.requestPreflightTokenCount ?? false),
@@ -93,7 +94,7 @@ describe("composeSupervisors onEndTurn", () => {
     };
     const hooks = composeSupervisors(() => [
       nudger,
-      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
+      AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "go" }),
     ]);
     expect(hooks.onEndTurn?.(endTurnContext)).toEqual({
       type: "suspend",
@@ -103,8 +104,8 @@ describe("composeSupervisors onEndTurn", () => {
 
   it("keeps only the first suspension", () => {
     const hooks = composeSupervisors(() => [
-      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "go" }),
-      new AutoCompactSupervisor({ threshold: 300000, nextPrompt: "stop" }),
+      AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "go" }),
+      AutoCompactSupervisor.create({ threshold: 300000, nextPrompt: "stop" }),
     ]);
     expect(hooks.onEndTurn?.(endTurnContext)).toEqual({
       type: "suspend",
@@ -155,9 +156,39 @@ describe("SystemInfoSupervisor", () => {
   });
 });
 
+describe("UnsupervisedSupervisor", () => {
+  it("clones the restart count and configuration independently", () => {
+    const source = UnsupervisedSupervisor.create({ maxRestarts: 2 });
+    const endTurnContext: EndTurnContext = {
+      stopReason: "end_turn",
+      inputTokenCount: undefined,
+      lastAssistantMessage: undefined,
+      nativeMessageIdx: 0 as NativeMessageIdx,
+    };
+
+    expect(source.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+      type: "send-message",
+      text: expect.stringContaining("1/2"),
+    });
+
+    const clone = UnsupervisedSupervisor.clone({ source });
+    expect(clone.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+      type: "send-message",
+      text: expect.stringContaining("2/2"),
+    });
+    expect(source.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+      type: "send-message",
+      text: expect.stringContaining("2/2"),
+    });
+    expect(clone.onEndTurnWithoutYield(endTurnContext)).toEqual({
+      type: "none",
+    });
+  });
+});
+
 describe("AutoCompactSupervisor", () => {
   it("suspends for compaction at or over the threshold", async () => {
-    const sup = new AutoCompactSupervisor({
+    const sup = AutoCompactSupervisor.create({
       threshold: 300000,
       nextPrompt: "go",
     });
@@ -186,7 +217,7 @@ describe("AutoCompactSupervisor", () => {
   });
 
   it("returns none below the threshold or without a token count", async () => {
-    const sup = new AutoCompactSupervisor({
+    const sup = AutoCompactSupervisor.create({
       threshold: 300000,
       nextPrompt: "go",
     });
@@ -209,7 +240,7 @@ describe("AutoCompactSupervisor", () => {
   });
 
   it("suspends at a resting end turn only over the threshold", () => {
-    const sup = new AutoCompactSupervisor({
+    const sup = AutoCompactSupervisor.create({
       threshold: 300000,
       nextPrompt: "go",
     });
@@ -228,7 +259,7 @@ describe("AutoCompactSupervisor", () => {
   });
 
   it("defaults the threshold to 300000", async () => {
-    const sup = new AutoCompactSupervisor({ nextPrompt: "go" });
+    const sup = AutoCompactSupervisor.create({ nextPrompt: "go" });
     expect(
       await sup.onBeforeRequest({
         status: "pending",

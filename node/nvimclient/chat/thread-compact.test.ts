@@ -781,7 +781,7 @@ it("auto-compact triggers when inputTokenCount breaches the supervisor threshold
     // turn's handoff already ran) with a threshold below the current count and
     // a configured nextPrompt so the next handoff triggers compaction.
     originalThread.supervisors = [
-      new AutoCompactSupervisor({
+      AutoCompactSupervisor.create({
         threshold: 160_000,
         nextPrompt: "Now help me with multiplication",
       }),

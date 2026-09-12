@@ -284,6 +284,15 @@ export class SystemInfoSupervisor implements ThreadSupervisor {
  * consulted before any other end-turn supervisor can read the stop as a
  * refusal to yield. */
 export class MaxTokensSupervisor implements ThreadSupervisor {
+  static create(): MaxTokensSupervisor {
+    return new MaxTokensSupervisor();
+  }
+
+  static clone(_args: { source: MaxTokensSupervisor }): MaxTokensSupervisor {
+    return new MaxTokensSupervisor();
+  }
+
+  private constructor() {}
   onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
     if (context.stopReason !== "max_tokens") return { type: "none" };
     return {
@@ -296,6 +305,15 @@ export class MaxTokensSupervisor implements ThreadSupervisor {
  *  `<yield>` XML tag instead of calling the tool. Otherwise allows
  *  the agent to stop normally. */
 export class SubagentSupervisor implements ThreadSupervisor {
+  static create(): SubagentSupervisor {
+    return new SubagentSupervisor();
+  }
+
+  static clone(_args: { source: SubagentSupervisor }): SubagentSupervisor {
+    return new SubagentSupervisor();
+  }
+
+  private constructor() {}
   onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
     if (context.stopReason !== "end_turn") return { type: "none" };
     if (containsYieldTag(context.lastAssistantMessage)) {
@@ -315,12 +333,23 @@ export class SubagentSupervisor implements ThreadSupervisor {
 /** For unsupervised threads (e.g. docker_unsupervised). Always prompts
  *  the agent to resume work when it stops without yielding. */
 export class UnsupervisedSupervisor implements ThreadSupervisor {
-  private restartCount = 0;
-  private readonly maxRestarts: number;
-
-  constructor(opts?: { maxRestarts?: number }) {
-    this.maxRestarts = opts?.maxRestarts ?? 5;
+  static create(opts?: { maxRestarts?: number }): UnsupervisedSupervisor {
+    return new UnsupervisedSupervisor(opts?.maxRestarts ?? 5, 0);
   }
+
+  static clone(args: {
+    source: UnsupervisedSupervisor;
+  }): UnsupervisedSupervisor {
+    return new UnsupervisedSupervisor(
+      args.source.maxRestarts,
+      args.source.restartCount,
+    );
+  }
+
+  private constructor(
+    private readonly maxRestarts: number,
+    private restartCount: number,
+  ) {}
 
   onEndTurnWithoutYield(context: EndTurnContext): EndTurnAction {
     if (
@@ -353,13 +382,25 @@ export class UnsupervisedSupervisor implements ThreadSupervisor {
  *  a configurable threshold. Only implements the handoff hook. */
 export class AutoCompactSupervisor implements ThreadSupervisor {
   readonly requestPreflightTokenCount = true;
-  private readonly threshold: number;
-  private readonly nextPrompt: string;
 
-  constructor(opts: { nextPrompt: string; threshold?: number }) {
-    this.threshold = opts.threshold ?? 300000;
-    this.nextPrompt = opts.nextPrompt;
+  static create(opts: {
+    nextPrompt: string;
+    threshold?: number;
+  }): AutoCompactSupervisor {
+    return new AutoCompactSupervisor(opts.nextPrompt, opts.threshold ?? 300000);
   }
+
+  static clone(args: { source: AutoCompactSupervisor }): AutoCompactSupervisor {
+    return new AutoCompactSupervisor(
+      args.source.nextPrompt,
+      args.source.threshold,
+    );
+  }
+
+  private constructor(
+    private readonly nextPrompt: string,
+    private readonly threshold: number,
+  ) {}
 
   private breached(inputTokenCount: number | undefined): boolean {
     return inputTokenCount !== undefined && inputTokenCount >= this.threshold;

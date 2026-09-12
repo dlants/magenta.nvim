@@ -466,7 +466,7 @@ describe("Thread turn loop", () => {
       undefined,
       uniqueThreadId("continuation-failure"),
     );
-    core.hooks = composeSupervisors(() => [new MaxTokensSupervisor()]);
+    core.hooks = composeSupervisors(() => [MaxTokensSupervisor.create()]);
     const sent = core.send([
       {
         type: "text",
@@ -1061,7 +1061,7 @@ describe("MaxTokensSupervisor", () => {
 
   it("continues a truncated text-only response", async () => {
     const { core, mockClient } = createAgentWithMock();
-    core.hooks = composeSupervisors(() => [new MaxTokensSupervisor()]);
+    core.hooks = composeSupervisors(() => [MaxTokensSupervisor.create()]);
 
     void core.send([
       {
@@ -1080,9 +1080,9 @@ describe("MaxTokensSupervisor", () => {
 
   it("is the only supervisor to speak on max_tokens, and spends no restart", async () => {
     const { core, mockClient } = createAgentWithMock();
-    const unsupervised = new UnsupervisedSupervisor();
+    const unsupervised = UnsupervisedSupervisor.create();
     core.hooks = composeSupervisors(() => [
-      new MaxTokensSupervisor(),
+      MaxTokensSupervisor.create(),
       unsupervised,
     ]);
 
@@ -1114,8 +1114,8 @@ describe("MaxTokensSupervisor", () => {
       threadType: "subagent" as ThreadType,
     });
     core.hooks = composeSupervisors(() => [
-      new MaxTokensSupervisor(),
-      new SubagentSupervisor(),
+      MaxTokensSupervisor.create(),
+      SubagentSupervisor.create(),
     ]);
     void core.send([
       {
@@ -1211,7 +1211,7 @@ describe("yield_to_parent as an ordinary tool", () => {
       threadType: "subagent" as ThreadType,
     });
     core.hooks = composeSupervisors(() => [
-      new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
+      AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
     ]);
     mockClient.mockInputTokenCount = 50;
     const compactions = trackCompactions(core);
@@ -1452,7 +1452,7 @@ describe("SubagentSupervisor yield tag detection", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    core.hooks = composeSupervisors(() => [new SubagentSupervisor()]);
+    core.hooks = composeSupervisors(() => [SubagentSupervisor.create()]);
 
     void core.send([
       {
@@ -1492,7 +1492,7 @@ describe("SubagentSupervisor yield tag detection", () => {
     const { core, mockClient } = createAgentWithMock({
       threadType: "subagent" as ThreadType,
     });
-    core.hooks = composeSupervisors(() => [new SubagentSupervisor()]);
+    core.hooks = composeSupervisors(() => [SubagentSupervisor.create()]);
 
     void core.send([
       {
@@ -1521,7 +1521,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("compacts at the gate of the request whose conversation breaches the threshold", async () => {
     const { core, mockClient } = createAgentWithMock();
     core.hooks = composeSupervisors(() => [
-      new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
+      AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
     ]);
     mockClient.mockInputTokenCount = 50;
 
@@ -1567,7 +1567,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("does not trigger compaction when input tokens are below the threshold", async () => {
     const { core, mockClient } = createAgentWithMock();
     core.hooks = composeSupervisors(() => [
-      new AutoCompactSupervisor({ threshold: 100000, nextPrompt: "go" }),
+      AutoCompactSupervisor.create({ threshold: 100000, nextPrompt: "go" }),
     ]);
     mockClient.mockInputTokenCount = 50;
 
@@ -1598,7 +1598,7 @@ describe("AutoCompactSupervisor integration", () => {
       fileIO: fileIO as unknown as ThreadContext["fileIO"],
     });
     core.hooks = composeSupervisors(() => [
-      new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
+      AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
     ]);
     mockClient.mockInputTokenCount = 50;
 
@@ -1630,8 +1630,8 @@ describe("AutoCompactSupervisor integration", () => {
   it("compacts at the gate of the continuation a max_tokens stop asks for", async () => {
     const { core, mockClient } = createAgentWithMock();
     core.hooks = composeSupervisors(() => [
-      new MaxTokensSupervisor(),
-      new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
+      MaxTokensSupervisor.create(),
+      AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
     ]);
     mockClient.mockInputTokenCount = 50;
 
@@ -1758,7 +1758,7 @@ describe("AutoCompactSupervisor integration", () => {
     core.hooks = composeSupervisors(() => [
       // max_tokens plans a continuation, so the stop reaches the
       // before-request supervisors at all.
-      new MaxTokensSupervisor(),
+      MaxTokensSupervisor.create(),
       {
         onBeforeRequest: () => {
           // The opening request of the send is skipped; the note rides the
@@ -2056,7 +2056,7 @@ describe("AutoCompactSupervisor integration", () => {
     const { core, mockClient } = createAgentWithMock();
     let requests = 0;
     core.hooks = composeSupervisors(() => [
-      new MaxTokensSupervisor(),
+      MaxTokensSupervisor.create(),
       {
         onBeforeRequest: () => {
           requests++;
@@ -2340,7 +2340,7 @@ describe("AutoCompactSupervisor integration", () => {
   it("compacts from a plain send, exactly once, when already over threshold", async () => {
     const { core, mockClient } = createAgentWithMock();
     core.hooks = composeSupervisors(() => [
-      new AutoCompactSupervisor({ threshold: 100, nextPrompt: "go" }),
+      AutoCompactSupervisor.create({ threshold: 100, nextPrompt: "go" }),
     ]);
     mockClient.mockInputTokenCount = 200;
 

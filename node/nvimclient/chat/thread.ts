@@ -402,7 +402,7 @@ export class NvimThread {
     this.compactor?.on("transition", () => this.onCoreUpdate());
 
     this.core.hooks = composeSupervisors(() => [
-      new MaxTokensSupervisor(),
+      MaxTokensSupervisor.create(),
       ...this.supervisors,
     ]);
 

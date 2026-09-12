@@ -17,11 +17,11 @@ import { DockerSupervisor } from "./thread-supervisor.ts";
 describe("DockerSupervisor", () => {
   describe("onEndTurnWithoutYield", () => {
     it("returns send-message for auto-restart", () => {
-      const supervisor = new DockerSupervisor(
-        "test-container",
-        "/workspace",
-        "/host/dir",
-      );
+      const supervisor = DockerSupervisor.create({
+        containerName: "test-container",
+        workspacePath: "/workspace",
+        hostDir: "/host/dir",
+      });
 
       const action = supervisor.onEndTurnWithoutYield({
         stopReason: "end_turn",
@@ -37,12 +37,12 @@ describe("DockerSupervisor", () => {
     });
 
     it("stops auto-restarting after max retries", () => {
-      const supervisor = new DockerSupervisor(
-        "test-container",
-        "/workspace",
-        "/host/dir",
-        { maxRestarts: 2 },
-      );
+      const supervisor = DockerSupervisor.create({
+        containerName: "test-container",
+        workspacePath: "/workspace",
+        hostDir: "/host/dir",
+        maxRestarts: 2,
+      });
 
       expect(
         supervisor.onEndTurnWithoutYield({
@@ -71,11 +71,11 @@ describe("DockerSupervisor", () => {
     });
 
     it("does not restart when the turn did not end normally", () => {
-      const supervisor = new DockerSupervisor(
-        "test-container",
-        "/workspace",
-        "/host/dir",
-      );
+      const supervisor = DockerSupervisor.create({
+        containerName: "test-container",
+        workspacePath: "/workspace",
+        hostDir: "/host/dir",
+      });
 
       const action = supervisor.onEndTurnWithoutYield({
         stopReason: "max_tokens",
@@ -89,11 +89,11 @@ describe("DockerSupervisor", () => {
 
   describe("onYield", () => {
     it("calls teardownContainer and returns accept", async () => {
-      const supervisor = new DockerSupervisor(
-        "test-container",
-        "/workspace",
-        "/host/dir",
-      );
+      const supervisor = DockerSupervisor.create({
+        containerName: "test-container",
+        workspacePath: "/workspace",
+        hostDir: "/host/dir",
+      });
 
       const action = await supervisor.onYield("done");
       expect(action.type).toBe("accept");
@@ -111,12 +111,12 @@ describe("DockerSupervisor", () => {
 
     it("forwards onProgress to teardownContainer", async () => {
       const onProgress = vi.fn();
-      const supervisor = new DockerSupervisor(
-        "test-container",
-        "/workspace",
-        "/host/dir",
-        { onProgress },
-      );
+      const supervisor = DockerSupervisor.create({
+        containerName: "test-container",
+        workspacePath: "/workspace",
+        hostDir: "/host/dir",
+        onProgress,
+      });
 
       await supervisor.onYield("done");
 
@@ -128,11 +128,11 @@ describe("DockerSupervisor", () => {
     });
 
     it("does not pass onProgress when not provided", async () => {
-      const supervisor = new DockerSupervisor(
-        "test-container",
-        "/workspace",
-        "/host/dir",
-      );
+      const supervisor = DockerSupervisor.create({
+        containerName: "test-container",
+        workspacePath: "/workspace",
+        hostDir: "/host/dir",
+      });
 
       await supervisor.onYield("done");
 

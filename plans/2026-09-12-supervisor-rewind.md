@@ -468,7 +468,32 @@ SystemInfoSupervisor.clone({ source, nativeMessageIdx });
   the Docker sync suite after restarting the local OrbStack daemon.
 - `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.
 
-## Uniform create/clone for the remaining supervisors
+## Uniform create/clone for the remaining supervisors — **DONE**
 
-- Goal: `MaxTokens`, `Subagent`, `Unsupervised`, `AutoCompact`, `Docker` expose `static create` / `static clone`; constructors go private; call sites in `chat.ts` / `thread.ts` updated.
-- Tests: existing suites; a smoke test that `clone` of a stateful one (`Unsupervised`) carries its counter.
+### What was done
+
+- `MaxTokensSupervisor`, `SubagentSupervisor`, `UnsupervisedSupervisor`,
+  `AutoCompactSupervisor`, and `DockerSupervisor` now expose `static create`
+  and `static clone` factories and have private constructors.
+- Stateless clones construct equivalent fresh supervisors. `AutoCompactSupervisor`
+  retains its threshold and continuation prompt, while `UnsupervisedSupervisor`
+  retains both its restart limit and consumed restart count.
+- Root thread wiring and direct test construction now use the factories.
+- Added a clone smoke test proving an `UnsupervisedSupervisor` clone resumes at
+  the source's restart count, preserves the configured limit, and advances
+  independently.
+
+### Decisions and deviations
+
+- A private `UnsupervisedSupervisor` constructor cannot support subclassing, so
+  `DockerSupervisor` now implements `ThreadSupervisor` by composing an
+  `UnsupervisedSupervisor` rather than extending it. Its clone copies the
+  composed restart state, Docker paths/callback configuration, and any teardown
+  result already recorded.
+
+### Validation (stage 5)
+
+- The full `npx vitest run` passes 1,685 tests (2 skipped, 1 todo). An initial
+  full run had three transient Neovim socket-startup failures; all three passed
+  together on retry, and the subsequent full run passed.
+- `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.

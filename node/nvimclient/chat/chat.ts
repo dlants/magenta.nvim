@@ -776,7 +776,7 @@ export class Chat implements ThreadManager {
       threadType === "compact"
         ? []
         : [
-            new AutoCompactSupervisor({
+            AutoCompactSupervisor.create({
               threshold:
                 autoCompactThreshold ??
                 this.context.getOptions().autoCompactThreshold,
@@ -788,21 +788,19 @@ export class Chat implements ThreadManager {
 
     if (dockerSpawnConfig?.supervised) {
       thread.supervisors = [
-        new DockerSupervisor(
-          dockerSpawnConfig.containerName,
-          dockerSpawnConfig.workspacePath,
-          dockerSpawnConfig.hostDir,
-          {
-            onProgress: (message) => {
-              this.teardownMessages.set(thread.id, message);
-              this.context.dispatch({
-                type: "thread-msg",
-                id: thread.id,
-                msg: { type: "tool-progress" },
-              });
-            },
+        DockerSupervisor.create({
+          containerName: dockerSpawnConfig.containerName,
+          workspacePath: dockerSpawnConfig.workspacePath,
+          hostDir: dockerSpawnConfig.hostDir,
+          onProgress: (message) => {
+            this.teardownMessages.set(thread.id, message);
+            this.context.dispatch({
+              type: "thread-msg",
+              id: thread.id,
+              msg: { type: "tool-progress" },
+            });
           },
-        ),
+        }),
       ];
       thread.supervisors.push(...autoCompact);
     } else if (
@@ -810,7 +808,7 @@ export class Chat implements ThreadManager {
       threadType === "docker_root" ||
       threadType === "compact"
     ) {
-      thread.supervisors = [new SubagentSupervisor(), ...autoCompact];
+      thread.supervisors = [SubagentSupervisor.create(), ...autoCompact];
     } else {
       thread.supervisors = autoCompact;
     }
