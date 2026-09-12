@@ -21,6 +21,7 @@ export class MockStream {
   private blockCounter = 0;
   private messageStartEmitted = false;
   private _resolved = false;
+  private _ignoreAbort = false;
   private _abortController = new AbortController();
   private _pushedEventCount = 0;
   private _processedEventCount = 0;
@@ -72,6 +73,19 @@ export class MockStream {
     return this;
   }
 
+  off(
+    event: "streamEvent",
+    callback: (
+      event: Anthropic.Messages.MessageStreamEvent,
+      snapshot: Anthropic.Message,
+    ) => void,
+  ): this {
+    if (event === "streamEvent") {
+      this.realStream.off("streamEvent", callback);
+    }
+    return this;
+  }
+
   finalMessage(): Promise<Anthropic.Message> {
     return this.realStream.finalMessage();
   }
@@ -79,12 +93,17 @@ export class MockStream {
   abort(): void {
     this._resolved = true;
     this._abortController.abort();
+    if (this._ignoreAbort) return;
     try {
       this.readableController.close();
     } catch {
       // already closed
     }
     this.realStream.abort();
+  }
+
+  ignoreAbort(): void {
+    this._ignoreAbort = true;
   }
 
   get controller(): AbortController {

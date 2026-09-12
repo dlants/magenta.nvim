@@ -7,6 +7,7 @@ import {
   toolExecution,
 } from "../test-helpers.ts";
 import type { ToolName } from "../tool-types.ts";
+import { ABORT_GRACE_PERIOD_MS } from "./inference-shared.ts";
 import type { MockOpenAIClient } from "./mock-openai-client.ts";
 import {
   type NativeInferenceManager,
@@ -282,18 +283,30 @@ describe("OpenAIInferenceManager sendRequest", () => {
       stopReason: "end_turn",
     });
   });
-  it("aborts an in-flight request and leaves the runner reusable", async () => {
+  it("forces a hung stream to abort and leaves the runner reusable", async () => {
     const { client, agent } = setup();
     const manager = agent.manager;
     const { request, abort, stream } = send(client, manager);
     stream.streamText("half an answer");
     await tick();
+    stream.ignoreAbort();
+
+    let settled = false;
+    void request.then(() => {
+      settled = true;
+    });
     abort();
-    // The backend signals a cancellation only by closing the connection.
-    stream.abortMidstream();
+    await vi.advanceTimersByTimeAsync(ABORT_GRACE_PERIOD_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
     await tick();
     expect(await request).toEqual({ type: "aborted" });
-    // A second request must be issuable: the first one released the manager.
+
+    const messagesAfterAbort = structuredClone(manager.log.messages);
+    stream.streamText("late response");
+    await tick();
+    expect(manager.log.messages).toEqual(messagesAfterAbort);
+
     const second = manager.sendRequest(() => {}).promise;
     await tick();
     streamAt(client, 1).finishResponse();

@@ -41,6 +41,36 @@ export function assertCompleteToolResults(
 
 export const RETRY_DELAYS = [1000, 5000, 10000, 30000] as const;
 
+/** After asking the SDK to abort, stop waiting even if its stream never settles. */
+export const ABORT_GRACE_PERIOD_MS = 2_000;
+
+export const ABORT_TIMED_OUT = Symbol("abort-timed-out");
+
+export async function wrapStreamAbortSignalWithTimeout<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T | typeof ABORT_TIMED_OUT> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  const abortTimeout = new Promise<typeof ABORT_TIMED_OUT>((resolve) => {
+    onAbort = () => {
+      timeout = setTimeout(
+        () => resolve(ABORT_TIMED_OUT),
+        ABORT_GRACE_PERIOD_MS,
+      );
+    };
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  });
+
+  try {
+    return await Promise.race([promise, abortTimeout]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
+
 export const MAX_RETRY_DURATION = 300_000;
 
 export function getRetryDelay(attempt: number): number {

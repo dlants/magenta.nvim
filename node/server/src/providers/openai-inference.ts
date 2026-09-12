@@ -11,9 +11,11 @@ import {
   type RefreshAuth,
 } from "./auth-refresh.ts";
 import {
+  ABORT_TIMED_OUT,
   assertCompleteToolResults,
   getRetryDelay,
   MAX_RETRY_DURATION,
+  wrapStreamAbortSignalWithTimeout,
 } from "./inference-shared.ts";
 import {
   convertInputToNativeItems,
@@ -139,6 +141,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
     | (AsyncIterable<ResponseStreamEvent> & { controller: AbortController })
     | undefined;
   private retryAbortController: AbortController | undefined;
+  private requestAbortController: AbortController | undefined;
 
   /** Stable for the life of this agent (and its clones) so every turn of the
    * conversation routes to the same prompt-cache shard. */
@@ -463,6 +466,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
   abort(): void {
     if (this.request.type !== "running") return;
     this.request.aborted = true;
+    this.requestAbortController?.abort();
     this.retryAbortController?.abort();
     this.stream?.controller.abort();
   }
@@ -518,6 +522,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       );
     }
     this.request = { type: "running", aborted: false };
+    this.requestAbortController = new AbortController();
     this.onStreamEvent = onEvent;
     try {
       const outcome = await this.streamOneResponse();
@@ -541,6 +546,7 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       return outcome;
     } finally {
       this.request = { type: "idle" };
+      this.requestAbortController = undefined;
       this.onStreamEvent = undefined;
       this.stream = undefined;
     }
@@ -577,11 +583,29 @@ export class OpenAIInferenceManager implements NativeInferenceManager {
       });
 
       try {
-        const stream = await this.client.responses.create(params);
+        const signal = this.requestAbortController?.signal;
+        if (!signal) return { type: "aborted" };
+        const created = await wrapStreamAbortSignalWithTimeout(
+          this.client.responses.create(params, { signal }),
+          signal,
+        );
+        if (created === ABORT_TIMED_OUT) return { type: "aborted" };
+        const stream = created;
         this.stream = stream;
         let usage: Usage | undefined;
         let incompleteReason: ResponseIncompleteReason | undefined;
-        for await (const event of stream) {
+        const iterator = stream[Symbol.asyncIterator]();
+        while (true) {
+          const next = await wrapStreamAbortSignalWithTimeout(
+            iterator.next(),
+            signal,
+          );
+          if (next === ABORT_TIMED_OUT) {
+            void Promise.resolve(iterator.return?.()).catch(() => {});
+            return { type: "aborted" };
+          }
+          if (next.done) break;
+          const event = next.value;
           this.update({ type: "stream-event", event });
           if (event.type === "response.completed") {
             usage = usageFromResponse(event.response);

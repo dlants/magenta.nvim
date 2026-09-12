@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolExecutor } from "../agent.ts";
 import type { Logger } from "../logger.ts";
 import type { ProviderProfile } from "../provider-options.ts";
@@ -14,7 +14,10 @@ import type { SendResult } from "../thread-api.ts";
 import type { ToolName, ToolRequestId } from "../tool-types.ts";
 import { delay, pollUntil } from "../utils/async.ts";
 import type { AnthropicInferenceManager } from "./anthropic-inference.ts";
-import { ABORT_MARKER_TEXT } from "./inference-shared.ts";
+import {
+  ABORT_GRACE_PERIOD_MS,
+  ABORT_MARKER_TEXT,
+} from "./inference-shared.ts";
 import { MockAnthropicClient } from "./mock-anthropic-client.ts";
 import type {
   AgentInput,
@@ -498,6 +501,54 @@ describe("onUpdate", () => {
     expect(await turn).toEqual({ type: "completed", stopReason: "end_turn" });
     await delay(0);
     expect(tracked.updates).toBeGreaterThan(beforeStop);
+  });
+});
+
+describe("hung stream abort", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("stops waiting after the abort grace period", async () => {
+    const mockClient = new MockAnthropicClient();
+    const agent = createAgent(mockClient);
+    const manager = agent.manager;
+    manager.appendUserMessage([
+      {
+        type: "text",
+        text: "Hello",
+        nativeMessageIdx: PLACEHOLDER_NATIVE_MESSAGE_IDX,
+      },
+    ]);
+    const request = manager.sendRequest(() => {});
+    const stream = mockClient.streams[0];
+    if (!stream) throw new Error("stream was not created");
+    stream.ignoreAbort();
+
+    let settled = false;
+    void request.promise.then(() => {
+      settled = true;
+    });
+    request.abort();
+    await vi.advanceTimersByTimeAsync(ABORT_GRACE_PERIOD_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await request.promise).toEqual({ type: "aborted" });
+
+    const messagesAfterAbort = structuredClone(manager.log.messages);
+    stream.streamText("late response");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(manager.log.messages).toEqual(messagesAfterAbort);
+
+    const second = manager.sendRequest(() => {}).promise;
+    const secondStream = mockClient.streams[1];
+    if (!secondStream) throw new Error("second stream was not created");
+    secondStream.finishResponse("end_turn");
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await second).type).toBe("stopped");
   });
 });
 

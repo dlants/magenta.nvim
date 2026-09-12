@@ -21,10 +21,12 @@ import {
 } from "./anthropic-models.ts";
 import { isAuthError, type RefreshAuth } from "./auth-refresh.ts";
 import {
+  ABORT_TIMED_OUT,
   ABORT_TOOL_RESULT_TEXT,
   assertCompleteToolResults,
   getRetryDelay,
   MAX_RETRY_DURATION,
+  wrapStreamAbortSignalWithTimeout,
 } from "./inference-shared.ts";
 import type {
   AgentInput,
@@ -196,6 +198,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
   /** Stored for cloning */
   private anthropicOptions: AnthropicInferenceOptions;
   private retryAbortController: AbortController | undefined;
+  private requestAbortController: AbortController | undefined;
   /** True between the start and the settling of a `sendRequest` call; the only
    * externally-visible state this class has. */
   private requestInFlight = false;
@@ -399,6 +402,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     if (!this.requestInFlight) return;
     // Cancel a pending retry wait and/or the in-flight request. Whether the
     // turn unwinds is `Agent`'s business, not ours.
+    this.requestAbortController?.abort();
     this.retryAbortController?.abort();
     this.currentRequest?.abort();
   }
@@ -446,6 +450,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       );
     }
     this.requestInFlight = true;
+    this.requestAbortController = new AbortController();
     this.onStreamEvent = onEvent;
     try {
       const outcome = await this.streamOneResponse();
@@ -469,6 +474,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       return outcome;
     } finally {
       this.requestInFlight = false;
+      this.requestAbortController = undefined;
       this.onStreamEvent = undefined;
       this.currentRequest = undefined;
     }
@@ -522,7 +528,7 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
     this.currentBlockIndex = -1;
     this.currentAssistantMessage = undefined;
 
-    const attemptStream = (): Promise<
+    const attemptStream = async (): Promise<
       | { type: "completed"; response: Anthropic.Message }
       | { type: "aborted" }
       | { type: "error"; error: Error }
@@ -530,12 +536,15 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
       const messagesWithCache = withCacheControl(
         stripTrailingThinkingBlocks(this.messages),
       );
-      this.currentRequest = this.client.messages.stream({
+      const signal = this.requestAbortController?.signal;
+      if (!signal) return { type: "aborted" };
+      const request = this.client.messages.stream({
         ...this.params,
         messages: messagesWithCache,
       });
+      this.currentRequest = request;
 
-      this.currentRequest.on("streamEvent", (event) => {
+      const onStreamEvent = (event: Anthropic.Messages.MessageStreamEvent) => {
         switch (event.type) {
           case "content_block_start":
             this.update({
@@ -557,18 +566,29 @@ export class AnthropicInferenceManager implements NativeInferenceManager {
             this.update({ type: "block-finished", index: event.index });
             break;
         }
-      });
+      };
+      request.on("streamEvent", onStreamEvent);
 
-      return this.currentRequest
-        .finalMessage()
-        .then((response) => ({ type: "completed" as const, response }))
-        .catch((error: Error) => {
-          const aborted = this.currentRequest?.controller.signal.aborted;
-          if (aborted) {
-            return { type: "aborted" as const };
-          }
-          return { type: "error" as const, error };
-        });
+      try {
+        const result = await wrapStreamAbortSignalWithTimeout(
+          request.finalMessage(),
+          signal,
+        );
+        if (result === ABORT_TIMED_OUT || signal.aborted) {
+          return { type: "aborted" };
+        }
+        return { type: "completed", response: result };
+      } catch (error) {
+        if (signal.aborted || request.controller.signal.aborted) {
+          return { type: "aborted" };
+        }
+        return {
+          type: "error",
+          error: error instanceof Error ? error : new Error(String(error)),
+        };
+      } finally {
+        request.off("streamEvent", onStreamEvent);
+      }
     };
 
     let attempt = 0;

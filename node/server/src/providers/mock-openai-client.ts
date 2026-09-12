@@ -26,6 +26,8 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
   private readableController!: ReadableStreamDefaultController<Uint8Array>;
   private realStream: Stream<ResponseStreamEvent>;
   private _abortController = new AbortController();
+  private _ignoredAbortController = new AbortController();
+  private _ignoreAbort = false;
   private _resolved = false;
   private outputIndex = 0;
   private sequenceNumber = 0;
@@ -52,7 +54,13 @@ export class MockResponseStream implements AsyncIterable<ResponseStreamEvent> {
   }
 
   get controller(): AbortController {
-    return this._abortController;
+    return this._ignoreAbort
+      ? this._ignoredAbortController
+      : this._abortController;
+  }
+
+  ignoreAbort(): void {
+    this._ignoreAbort = true;
   }
 
   get aborted(): boolean {
