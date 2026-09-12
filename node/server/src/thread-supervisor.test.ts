@@ -187,6 +187,31 @@ describe("UnsupervisedSupervisor", () => {
 });
 
 describe("AutoCompactSupervisor", () => {
+  it("clones the configured threshold and continuation prompt", async () => {
+    const source = AutoCompactSupervisor.create({
+      threshold: 123456,
+      nextPrompt: "continue after compacting",
+    });
+    const clone = AutoCompactSupervisor.clone({ source });
+    const context = (inputTokenCount: number) => ({
+      status: "pending" as const,
+      inputTokenCount,
+      outputTokenCount: 0,
+      nativeMessageIdx: 0 as NativeMessageIdx,
+    });
+
+    expect(await clone.onBeforeRequest(context(123455))).toEqual({
+      type: "none",
+    });
+    expect(await clone.onBeforeRequest(context(123456))).toEqual({
+      type: "suspend",
+      reason: {
+        kind: "compact",
+        nextPrompt: "continue after compacting",
+      },
+    });
+  });
+
   it("suspends for compaction at or over the threshold", async () => {
     const sup = AutoCompactSupervisor.create({
       threshold: 300000,

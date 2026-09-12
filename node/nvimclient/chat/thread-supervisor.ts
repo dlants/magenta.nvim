@@ -14,11 +14,18 @@ type DockerSupervisorArgs = {
   maxRestarts?: number;
   onProgress?: (message: string) => void;
 };
+type DockerTeardownConfig = Readonly<Omit<DockerSupervisorArgs, "maxRestarts">>;
 
 export class DockerSupervisor implements ThreadSupervisor {
   static create(args: DockerSupervisorArgs): DockerSupervisor {
+    const teardownConfig: DockerTeardownConfig = {
+      containerName: args.containerName,
+      workspacePath: args.workspacePath,
+      hostDir: args.hostDir,
+      ...(args.onProgress ? { onProgress: args.onProgress } : {}),
+    };
     return new DockerSupervisor(
-      args,
+      teardownConfig,
       UnsupervisedSupervisor.create(
         args.maxRestarts !== undefined
           ? { maxRestarts: args.maxRestarts }
@@ -30,14 +37,16 @@ export class DockerSupervisor implements ThreadSupervisor {
 
   static clone(args: { source: DockerSupervisor }): DockerSupervisor {
     return new DockerSupervisor(
-      args.source.args,
+      { ...args.source.teardownConfig },
       UnsupervisedSupervisor.clone({ source: args.source.unsupervised }),
-      args.source.teardownResult,
+      args.source.teardownResult
+        ? { ...args.source.teardownResult }
+        : undefined,
     );
   }
 
   private constructor(
-    private readonly args: DockerSupervisorArgs,
+    private readonly teardownConfig: DockerTeardownConfig,
     private readonly unsupervised: UnsupervisedSupervisor,
     public teardownResult: TeardownResult | undefined,
   ) {}
@@ -48,15 +57,17 @@ export class DockerSupervisor implements ThreadSupervisor {
 
   async onYield(_result: string): Promise<YieldAction> {
     this.teardownResult = await teardownContainer({
-      containerName: this.args.containerName,
-      workspacePath: this.args.workspacePath,
-      hostDir: this.args.hostDir,
-      ...(this.args.onProgress ? { onProgress: this.args.onProgress } : {}),
+      containerName: this.teardownConfig.containerName,
+      workspacePath: this.teardownConfig.workspacePath,
+      hostDir: this.teardownConfig.hostDir,
+      ...(this.teardownConfig.onProgress
+        ? { onProgress: this.teardownConfig.onProgress }
+        : {}),
     });
 
     return {
       type: "accept",
-      resultPrefix: `[Changes synced to ${this.args.hostDir}]`,
+      resultPrefix: `[Changes synced to ${this.teardownConfig.hostDir}]`,
     };
   }
 }

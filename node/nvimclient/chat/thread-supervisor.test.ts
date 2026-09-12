@@ -87,6 +87,71 @@ describe("DockerSupervisor", () => {
     });
   });
 
+  it("clones restart, teardown, and copied configuration independently", async () => {
+    const onProgress = vi.fn();
+    const laterOnProgress = vi.fn();
+    const factoryArgs = {
+      containerName: "test-container",
+      workspacePath: "/workspace",
+      hostDir: "/host/dir",
+      maxRestarts: 2,
+      onProgress,
+    };
+    const source = DockerSupervisor.create(factoryArgs);
+    const endTurnContext = {
+      stopReason: "end_turn" as const,
+      inputTokenCount: undefined,
+      lastAssistantMessage: undefined,
+      nativeMessageIdx: 0 as NativeMessageIdx,
+    };
+
+    factoryArgs.containerName = "mutated-container";
+    factoryArgs.workspacePath = "/mutated-workspace";
+    factoryArgs.hostDir = "/mutated-host";
+    factoryArgs.onProgress = laterOnProgress;
+
+    expect(source.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+      type: "send-message",
+      text: expect.stringContaining("1/2"),
+    });
+    vi.mocked(teardownContainer).mockResolvedValueOnce({ syncedFiles: 5 });
+    await source.onYield("source done");
+
+    const clone = DockerSupervisor.clone({ source });
+    expect(clone.teardownResult).toEqual({ syncedFiles: 5 });
+    expect(clone.teardownResult).not.toBe(source.teardownResult);
+
+    expect(source.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+      type: "send-message",
+      text: expect.stringContaining("2/2"),
+    });
+    expect(clone.onEndTurnWithoutYield(endTurnContext)).toMatchObject({
+      type: "send-message",
+      text: expect.stringContaining("2/2"),
+    });
+    expect(source.onEndTurnWithoutYield(endTurnContext)).toEqual({
+      type: "none",
+    });
+    expect(clone.onEndTurnWithoutYield(endTurnContext)).toEqual({
+      type: "none",
+    });
+
+    vi.mocked(teardownContainer).mockResolvedValueOnce({ syncedFiles: 9 });
+    const action = await clone.onYield("clone done");
+    expect(action).toEqual({
+      type: "accept",
+      resultPrefix: "[Changes synced to /host/dir]",
+    });
+    expect(teardownContainer).toHaveBeenLastCalledWith({
+      containerName: "test-container",
+      workspacePath: "/workspace",
+      hostDir: "/host/dir",
+      onProgress,
+    });
+    expect(clone.teardownResult).toEqual({ syncedFiles: 9 });
+    expect(source.teardownResult).toEqual({ syncedFiles: 5 });
+  });
+
   describe("onYield", () => {
     it("calls teardownContainer and returns accept", async () => {
       const supervisor = DockerSupervisor.create({
@@ -136,7 +201,7 @@ describe("DockerSupervisor", () => {
 
       await supervisor.onYield("done");
 
-      const call = vi.mocked(teardownContainer).mock.calls[0][0];
+      const call = vi.mocked(teardownContainer).mock.lastCall?.[0];
       expect(call).not.toHaveProperty("onProgress");
     });
   });

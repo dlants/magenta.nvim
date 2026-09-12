@@ -491,9 +491,23 @@ SystemInfoSupervisor.clone({ source, nativeMessageIdx });
   composed restart state, Docker paths/callback configuration, and any teardown
   result already recorded.
 
+### Review follow-ups (stage 5)
+
+- `DockerSupervisor` now snapshots a teardown-only configuration at creation,
+  excluding `maxRestarts`, so later mutation of the caller-owned factory object
+  cannot alter the source or its clones. Cloning also copies the retained
+  teardown result rather than sharing its mutable object.
+- Added Docker clone coverage that consumes restart state before cloning,
+  verifies source/clone restart independence and the copied limit, exercises
+  the clone's yield path with the original Docker paths/callback, and proves a
+  later clone teardown does not alter the source's retained result.
+- Added focused `AutoCompactSupervisor.clone` coverage for a non-default
+  threshold and continuation prompt, including the below-boundary and exact-
+  boundary behavior.
+
 ### Validation (stage 5)
 
-- The full `npx vitest run` passes 1,685 tests (2 skipped, 1 todo). An initial
-  full run had three transient Neovim socket-startup failures; all three passed
-  together on retry, and the subsequent full run passed.
+- The full `npx vitest run` passes 1,687 tests (2 skipped, 1 todo). The first
+  review-follow-up run had two transient subagent stream-startup failures; both
+  files passed together on retry, and the subsequent full run passed.
 - `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.
