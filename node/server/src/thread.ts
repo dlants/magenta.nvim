@@ -65,14 +65,13 @@ export type EnvironmentConfig =
   | { type: "local"; cwd?: NvimCwd }
   | { type: "docker"; container: string; cwd: string };
 
-export interface ThreadContext extends AgentContext {
+interface ThreadContextBase extends AgentContext {
   profile: ProviderProfile;
   subagentConfig?: SubagentConfig;
   provider: Provider;
   yieldSchema?: JSONSchemaType;
   cwd: NvimCwd;
   homeDir: HomeDir;
-  threadType: ThreadType;
   systemPrompt: SystemPrompt;
   systemInfo: SystemInfo;
   mcpToolManager: MCPToolManagerImpl;
@@ -90,6 +89,25 @@ export interface ThreadContext extends AgentContext {
   maxConcurrentFastSubagents: number;
   getAgents: () => AgentsMap;
   contextDelivery?: ThreadContextDelivery;
+}
+
+type ReminderBearingThreadType = Exclude<ThreadType, "compact">;
+
+export type CompactThreadContext = ThreadContextBase & {
+  threadType: "compact";
+};
+export type ReminderThreadContext = ThreadContextBase & {
+  threadType: ReminderBearingThreadType;
+};
+export type ThreadContext = CompactThreadContext | ReminderThreadContext;
+
+/** Clone callers replace environment collaborators, but conversation kind is
+ * inherited from the source so supervisor presence cannot diverge from it. */
+export type ThreadCloneContext = ThreadContextBase & { threadType?: never };
+
+export function threadCloneContext(context: ThreadContext): ThreadCloneContext {
+  const { threadType: _threadType, ...cloneContext } = context;
+  return cloneContext;
 }
 export type ThreadArchiveOptions = {
   forkedFrom?: ForkProvenance;
@@ -233,7 +251,7 @@ export class Thread {
     sourceThread: Thread;
     newId: ThreadId;
     nativeMessageIdx: NativeMessageIdx;
-    context: ThreadContext;
+    context: ThreadCloneContext;
     callbacks: ThreadCallbacks;
   }): Promise<Thread> {
     const { sourceThread, newId, nativeMessageIdx, context, callbacks } = args;
@@ -253,7 +271,7 @@ export class Thread {
     });
     const cloned = new Thread(
       newId,
-      context,
+      core.context,
       callbacks,
       {
         ...sourceThread.archiveOptions,
@@ -270,7 +288,21 @@ export class Thread {
     return cloned;
   }
   get activeReminders(): ReadonlySet<string> {
-    return this.core.systemReminders?.activeReminders ?? new Set();
+    return this.core.supervision.type === "enabled"
+      ? this.core.supervision.systemReminders.activeReminders
+      : new Set();
+  }
+
+  private activateReminder(
+    text: string,
+    nativeMessageIdx: NativeMessageIdx,
+  ): void {
+    if (this.core.supervision.type === "enabled") {
+      this.core.supervision.systemReminders.activateReminder(
+        text,
+        nativeMessageIdx,
+      );
+    }
   }
   /** Busy from the first request of a submission until the loop comes to
    * rest, which spans the gaps between turns. */
@@ -400,10 +432,7 @@ export class Thread {
       };
     }
     for (const text of resolved.reminders) {
-      this.core.systemReminders?.activateReminder(
-        text,
-        this.core.manager.getPendingUserMessageIdx(),
-      );
+      this.activateReminder(text, this.core.manager.getPendingUserMessageIdx());
     }
     return this.sendMessages(resolved.messages);
   }
@@ -540,7 +569,7 @@ export class Thread {
       const resolved = await this.callbacks.resolve(entry);
       if (!isCurrent()) return undefined;
       for (const text of resolved.reminders) {
-        this.core.systemReminders?.activateReminder(text, nativeMessageIdx);
+        this.activateReminder(text, nativeMessageIdx);
       }
       return resolved;
     } catch (error) {

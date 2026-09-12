@@ -43,7 +43,8 @@ import {
   uniqueThreadId,
 } from "./test-helpers.ts";
 import type { ThreadContext, YieldState } from "./thread.ts";
-import { Thread } from "./thread.ts";
+import { Thread, threadCloneContext } from "./thread.ts";
+
 import type {
   BeforeRequestHook,
   SendResult,
@@ -3391,7 +3392,7 @@ describe("Agent conversation archive", () => {
         sourceThread: parent,
         newId: childId,
         nativeMessageIdx,
-        context,
+        context: threadCloneContext(context),
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
 
@@ -3474,7 +3475,7 @@ describe("Agent thread state", () => {
         sourceThread: parent,
         newId: childId,
         nativeMessageIdx,
-        context,
+        context: threadCloneContext(context),
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
 

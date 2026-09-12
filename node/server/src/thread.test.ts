@@ -8,6 +8,7 @@ import {
 } from "./loop-state.ts";
 import {
   type AgentInput,
+  type NativeMessageIdx,
   PLACEHOLDER_NATIVE_MESSAGE_IDX,
 } from "./providers/provider-types.ts";
 import {
@@ -22,7 +23,7 @@ import {
   uniqueThreadId,
   userTexts,
 } from "./test-helpers.ts";
-import { Thread, type ThreadContext } from "./thread.ts";
+import { Thread, type ThreadContext, threadCloneContext } from "./thread.ts";
 import type { QueuedMessage } from "./thread-api.ts";
 import {
   composeSupervisors,
@@ -231,7 +232,28 @@ describe("deferred submissions", () => {
     stream.finishResponse("end_turn");
     const second = await awaitNextStream(mockClient, stream);
     expect(core.activeReminders.has("remember the file")).toBe(true);
+
+    const deliveredAt = core.inferenceManager.getNativeMessageIdx();
+    const before = await Thread.clone({
+      sourceThread: core,
+      newId: uniqueThreadId("deferred-reminder-before"),
+      nativeMessageIdx: (deliveredAt - 1) as NativeMessageIdx,
+      context: threadCloneContext(core.context),
+      callbacks: core.callbacks,
+    });
+    const through = await Thread.clone({
+      sourceThread: core,
+      newId: uniqueThreadId("deferred-reminder-through"),
+      nativeMessageIdx: deliveredAt,
+      context: threadCloneContext(core.context),
+      callbacks: core.callbacks,
+    });
+    expect(before.activeReminders.has("remember the file")).toBe(false);
+    expect(through.activeReminders.has("remember the file")).toBe(true);
+
     second.finishResponse("end_turn");
+    await before.destroy();
+    await through.destroy();
   });
 
   it("still carries the standing reminder on the submission after a resting turn-end", async () => {
@@ -1583,7 +1605,7 @@ describe("replaceable conversation core", () => {
       newId: uniqueThreadId("fork-result-archive"),
       nativeMessageIdx:
         core.getProviderMessages()[0].content[0].nativeMessageIdx,
-      context: core.context,
+      context: threadCloneContext(core.context),
       callbacks: core.callbacks,
     });
     expect(fork.structuredToolResults).not.toBe(core.structuredToolResults);

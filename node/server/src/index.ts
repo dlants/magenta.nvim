@@ -244,10 +244,14 @@ export {
   gitUpdateToText,
 } from "./supervisors/git-supervisor.ts";
 export {
+  type CompactThreadContext,
   type EnvironmentConfig,
+  type ReminderThreadContext,
   Thread,
   type ThreadCallbacks,
+  type ThreadCloneContext,
   type ThreadContext,
+  threadCloneContext,
   type YieldState,
 } from "./thread.ts";
 export type {
@@ -265,6 +269,7 @@ export {
   type ThreadContextDelivery,
   ThreadCore,
   type ThreadCoreCallbacks,
+  type ThreadCoreSupervision,
 } from "./thread-core.ts";
 export type { ForkProvenance, ThreadLogEntry } from "./thread-logger.ts";
 export type {

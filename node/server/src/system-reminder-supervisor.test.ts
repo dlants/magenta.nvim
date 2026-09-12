@@ -125,6 +125,45 @@ describe("SystemReminderSupervisor bash latch", () => {
     ).toBeUndefined();
   });
 
+  it("retains an arm through its index and a firing through later clone points", async () => {
+    const { structured, supervisor } = makeSupervisor();
+    await reminderText(supervisor, 0, 0 as NativeMessageIdx);
+    structured.set(TOOL_ID, {
+      toolName: "bash_command",
+      exitCode: 0,
+      signal: undefined,
+      logFilePath: "/tmp/log",
+      logFileLineCount: 100,
+      logFileCharCount: 1000,
+      outputText: "trimmed",
+      wasAbbreviated: true,
+    });
+    supervisor.onToolResults(results(), 2 as NativeMessageIdx);
+    await reminderText(supervisor, 1, 4 as NativeMessageIdx);
+
+    const throughArm = SystemReminderSupervisor.clone({
+      source: supervisor,
+      nativeMessageIdx: 2 as NativeMessageIdx,
+      contextTracker: { files: {} },
+      getStructuredResults: () => new Map(),
+    });
+    expect(await reminderText(throughArm, 1, 5 as NativeMessageIdx)).toContain(
+      "bash_summarizer",
+    );
+
+    for (const clonePoint of [4, 5]) {
+      const throughFire = SystemReminderSupervisor.clone({
+        source: supervisor,
+        nativeMessageIdx: clonePoint as NativeMessageIdx,
+        contextTracker: { files: {} },
+        getStructuredResults: () => new Map(),
+      });
+      expect(
+        await reminderText(throughFire, 1, 6 as NativeMessageIdx),
+      ).toBeUndefined();
+    }
+  });
+
   it("drops a bash reminder armed after the clone point", async () => {
     const { structured, supervisor } = makeSupervisor();
     await reminderText(supervisor, 0, 0 as NativeMessageIdx);

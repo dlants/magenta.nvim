@@ -38,7 +38,12 @@ import type {
 } from "./providers/provider-types.ts";
 import { PLACEHOLDER_NATIVE_MESSAGE_IDX } from "./providers/provider-types.ts";
 import { SystemReminderSupervisor } from "./system-reminder-supervisor.ts";
-import type { ThreadContext } from "./thread.ts";
+import type {
+  CompactThreadContext,
+  ReminderThreadContext,
+  ThreadCloneContext,
+  ThreadContext,
+} from "./thread.ts";
 import type {
   AgentHooks,
   AgentRequestContext,
@@ -60,6 +65,45 @@ import { createTool } from "./tools/create-tool.ts";
 import { getToolSpecs } from "./tools/toolManager.ts";
 import type { AbsFilePath } from "./utils/files.ts";
 
+export type ThreadCoreSupervision =
+  | {
+      readonly type: "compact";
+      readonly context: CompactThreadContext;
+    }
+  | {
+      readonly type: "enabled";
+      readonly context: ReminderThreadContext;
+      readonly systemReminders: SystemReminderSupervisor;
+    };
+
+type ClonedSupervisionContext =
+  | {
+      readonly type: "compact";
+      readonly context: CompactThreadContext;
+    }
+  | {
+      readonly type: "enabled";
+      readonly context: ReminderThreadContext;
+      readonly sourceSystemReminders: SystemReminderSupervisor;
+    };
+
+function supervisionContextForClone(
+  source: ThreadCoreSupervision,
+  cloneContext: ThreadCloneContext,
+): ClonedSupervisionContext {
+  if (source.type === "compact") {
+    return {
+      type: "compact",
+      context: { ...cloneContext, threadType: "compact" },
+    };
+  }
+  return {
+    type: "enabled",
+    context: { ...cloneContext, threadType: source.context.threadType },
+    sourceSystemReminders: source.systemReminders,
+  };
+}
+
 export interface ThreadCoreCallbacks {
   onUpdate: () => void;
   getHooks: () => ThreadHooks;
@@ -74,7 +118,6 @@ export class ThreadCore {
     ToolRequestId,
     ToolStructuredResult
   >();
-  readonly systemReminders: SystemReminderSupervisor | undefined;
   pendingSeed: AgentInput[] = [];
   private disposed = false;
   readonly gitSupervisor: GitSupervisor | undefined;
@@ -87,7 +130,7 @@ export class ThreadCore {
 
   private constructor(
     readonly id: ThreadId,
-    readonly context: ThreadContext,
+    readonly supervision: ThreadCoreSupervision,
     private callbacks: ThreadCoreCallbacks,
     readonly manager: NativeInferenceManager,
     readonly toolSpecs: ProviderToolSpec[],
@@ -95,7 +138,6 @@ export class ThreadCore {
     readonly fileSupervisor: FileSupervisor,
     gitSupervisor: GitSupervisor | undefined,
     systemInfoSupervisor: SystemInfoSupervisor | undefined,
-    systemReminders: SystemReminderSupervisor | undefined,
   ) {
     for (const event of [
       "fileAdded",
@@ -106,16 +148,21 @@ export class ThreadCore {
       this.fileSupervisor.on(event, () => this.handleUpdate());
     }
     this.fileSupervisor.start();
-    this.systemReminders = systemReminders;
     this.gitSupervisor = gitSupervisor;
     this.systemInfoSupervisor = systemInfoSupervisor;
     const supervisors = [
       ...(this.gitSupervisor ? [this.gitSupervisor] : []),
-      ...(context.threadType !== "compact" ? [this.fileSupervisor] : []),
+      ...(this.supervision.type === "enabled" ? [this.fileSupervisor] : []),
       ...(this.systemInfoSupervisor ? [this.systemInfoSupervisor] : []),
-      ...(this.systemReminders ? [this.systemReminders] : []),
+      ...(this.supervision.type === "enabled"
+        ? [this.supervision.systemReminders]
+        : []),
     ];
     this.contextHooks = composeSupervisors(() => supervisors);
+  }
+
+  get context(): ThreadContext {
+    return this.supervision.context;
   }
 
   static create({
@@ -167,19 +214,23 @@ export class ThreadCore {
             alreadyInjected: manager.log.messages.length > 0,
           })
         : undefined;
-    const systemReminders =
+    const supervision: ThreadCoreSupervision =
       context.threadType === "compact"
-        ? undefined
-        : SystemReminderSupervisor.create({
-            threadType: context.threadType,
-            subagentConfig: context.subagentConfig,
-            contextTracker: fileSupervisor,
-            getStructuredResults: () =>
-              core?.structuredToolResults ?? new Map(),
-          });
+        ? { type: "compact", context }
+        : {
+            type: "enabled",
+            context,
+            systemReminders: SystemReminderSupervisor.create({
+              threadType: context.threadType,
+              subagentConfig: context.subagentConfig,
+              contextTracker: fileSupervisor,
+              getStructuredResults: () =>
+                core?.structuredToolResults ?? new Map(),
+            }),
+          };
     core = new ThreadCore(
       id,
-      context,
+      supervision,
       callbacks,
       manager,
       toolSpecs,
@@ -187,7 +238,6 @@ export class ThreadCore {
       fileSupervisor,
       gitSupervisor,
       systemInfoSupervisor,
-      systemReminders,
     );
     return core;
   }
@@ -201,24 +251,29 @@ export class ThreadCore {
   }: {
     source: ThreadCore;
     id: ThreadId;
-    context: ThreadContext;
+    context: ThreadCloneContext;
     callbacks: ThreadCoreCallbacks;
     nativeMessageIdx: NativeMessageIdx;
   }): ThreadCore {
+    const clonedSupervisionContext = supervisionContextForClone(
+      source.supervision,
+      context,
+    );
+    const clonedContext = clonedSupervisionContext.context;
     const toolSpecs = getToolSpecs(
-      context.threadType,
-      context.mcpToolManager,
-      context.availableCapabilities,
-      context.getAgents(),
-      context.subagentConfig,
-      context.yieldSchema,
-      context.getScriptRunner?.()?.getScriptCatalog(),
-      context.subagentDockerfile,
+      clonedContext.threadType,
+      clonedContext.mcpToolManager,
+      clonedContext.availableCapabilities,
+      clonedContext.getAgents(),
+      clonedContext.subagentConfig,
+      clonedContext.yieldSchema,
+      clonedContext.getScriptRunner?.()?.getScriptCatalog(),
+      clonedContext.subagentDockerfile,
     );
     const manager = source.manager.clone();
     manager.truncateMessages(nativeMessageIdx);
     const effectiveNativeMessageIdx = manager.getNativeMessageIdx();
-    const delivery = context.contextDelivery;
+    const delivery = clonedContext.contextDelivery;
     let clone: ThreadCore | undefined;
     const fileSupervisor = FileSupervisor.clone({
       source: source.fileSupervisor,
@@ -245,17 +300,23 @@ export class ThreadCore {
           nativeMessageIdx: effectiveNativeMessageIdx,
         })
       : undefined;
-    const systemReminders = source.systemReminders
-      ? SystemReminderSupervisor.clone({
-          source: source.systemReminders,
-          nativeMessageIdx: effectiveNativeMessageIdx,
-          contextTracker: fileSupervisor,
-          getStructuredResults: () => clone?.structuredToolResults ?? new Map(),
-        })
-      : undefined;
+    const supervision: ThreadCoreSupervision =
+      clonedSupervisionContext.type === "compact"
+        ? clonedSupervisionContext
+        : {
+            type: "enabled",
+            context: clonedSupervisionContext.context,
+            systemReminders: SystemReminderSupervisor.clone({
+              source: clonedSupervisionContext.sourceSystemReminders,
+              nativeMessageIdx: effectiveNativeMessageIdx,
+              contextTracker: fileSupervisor,
+              getStructuredResults: () =>
+                clone?.structuredToolResults ?? new Map(),
+            }),
+          };
     clone = new ThreadCore(
       id,
-      context,
+      supervision,
       callbacks,
       manager,
       toolSpecs,
@@ -266,7 +327,6 @@ export class ThreadCore {
       fileSupervisor,
       gitSupervisor,
       systemInfoSupervisor,
-      systemReminders,
     );
     return clone;
   }

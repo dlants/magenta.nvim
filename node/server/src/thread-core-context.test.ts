@@ -18,7 +18,7 @@ import {
   createAgentWithMock,
   uniqueThreadId,
 } from "./test-helpers.ts";
-import { Thread } from "./thread.ts";
+import { Thread, threadCloneContext } from "./thread.ts";
 import { composeSupervisors } from "./thread-supervisor.ts";
 import {
   type AbsFilePath,
@@ -208,7 +208,7 @@ describe("Thread-owned context delivery", () => {
         newId: uniqueThreadId("context-fork"),
         nativeMessageIdx: forkPoint,
         context: {
-          ...f.thread.context,
+          ...threadCloneContext(f.thread.context),
           contextDelivery: { pollIntervalMs: 60_000 },
         },
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },
@@ -254,7 +254,7 @@ describe("Thread-owned context delivery", () => {
         sourceThread: f.thread,
         newId: uniqueThreadId("git-rewind"),
         nativeMessageIdx: forkPoint,
-        context: f.thread.context,
+        context: threadCloneContext(f.thread.context),
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
       expect(await f.request(fork, "continue before git update")).toContain(
@@ -279,7 +279,7 @@ describe("Thread-owned context delivery", () => {
         sourceThread: f.thread,
         newId: uniqueThreadId("system-info-head"),
         nativeMessageIdx: f.thread.inferenceManager.getNativeMessageIdx(),
-        context: f.thread.context,
+        context: threadCloneContext(f.thread.context),
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
       forks.push(head);
@@ -290,7 +290,7 @@ describe("Thread-owned context delivery", () => {
         sourceThread: f.thread,
         newId: uniqueThreadId("system-info-before"),
         nativeMessageIdx: -1 as NativeMessageIdx,
-        context: f.thread.context,
+        context: threadCloneContext(f.thread.context),
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
       forks.push(before);
@@ -313,7 +313,11 @@ describe("Thread-owned context delivery", () => {
       const sourceText = await f.request();
       expect(sourceText.match(/Remember the skills/g)).toHaveLength(1);
       const forkPoint = f.thread.inferenceManager.getNativeMessageIdx();
-      f.thread.core.systemReminders?.activateReminder(
+      expect(f.thread.core.supervision.type).toBe("enabled");
+      if (f.thread.core.supervision.type !== "enabled") {
+        throw new Error("Expected reminders for a root thread");
+      }
+      f.thread.core.supervision.systemReminders.activateReminder(
         "retain this reminder",
         forkPoint,
       );
@@ -322,7 +326,7 @@ describe("Thread-owned context delivery", () => {
         sourceThread: f.thread,
         newId: uniqueThreadId("reminder-head"),
         nativeMessageIdx: forkPoint,
-        context: f.thread.context,
+        context: threadCloneContext(f.thread.context),
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },
       });
       expect(fork.activeReminders).toEqual(new Set(["retain this reminder"]));
@@ -422,7 +426,7 @@ describe("Thread-owned context delivery", () => {
         newId: uniqueThreadId("tip-fork"),
         nativeMessageIdx: f.thread.inferenceManager.getNativeMessageIdx(),
         context: {
-          ...f.thread.context,
+          ...threadCloneContext(f.thread.context),
           contextDelivery: { pollIntervalMs: 60_000 },
         },
         callbacks: { onUpdate: () => {}, resolve: resolveAsText },

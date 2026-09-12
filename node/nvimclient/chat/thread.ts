@@ -677,7 +677,6 @@ export class NvimThread {
       ? structuredClone(sourceThread.gitSupervisor.gitTracker.getAgentView())
       : undefined;
 
-    const threadType = sourceCoreState.threadType;
     // No awaits above: native history and delivery must describe the same instant.
     const core = await Thread.clone({
       sourceThread: sourceCore,
@@ -688,7 +687,6 @@ export class NvimThread {
         profile,
         cwd: environment.cwd,
         homeDir: environment.homeDir,
-        threadType,
         contextDelivery: {
           initialGitState,
         },

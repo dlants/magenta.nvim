@@ -446,9 +446,26 @@ SystemInfoSupervisor.clone({ source, nativeMessageIdx });
   supervisor starts empty and re-derives markdown reminders from the newly
   reset file supervisor.
 
+### Review follow-ups (stage 4)
+
+- Added inclusive bash-latch rewind coverage: a clone through the `armed` entry
+  still fires the reminder, while clones through and after the `fired` entry
+  keep it consumed.
+- Extended the deferred-reminder Thread test to fork immediately before and
+  through the user message that carries the resolved queued submission. The
+  earlier fork drops the activation and the inclusive fork retains it, pinning
+  the stop-time `getPendingUserMessageIdx()` wiring.
+- Replaced the independently optional reminder field with
+  `ThreadCoreSupervision`, a discriminated union that owns both the concrete
+  compact/reminder-bearing context and, for the latter, its required
+  `SystemReminderSupervisor`. `Thread.clone` now accepts a `ThreadCloneContext`
+  that cannot specify `threadType`; clone construction inherits the source
+  discriminant, so compactness and reminder presence cannot diverge.
+
 ### Validation (stage 4)
 
-- The full `npx vitest run` passes 1,683 tests (2 skipped, 1 todo).
+- The full `npx vitest run` passes 1,684 tests (2 skipped, 1 todo), including
+  the Docker sync suite after restarting the local OrbStack daemon.
 - `npx tsc -b`, `npx biome check .`, and `git diff --check` pass.
 
 ## Uniform create/clone for the remaining supervisors
